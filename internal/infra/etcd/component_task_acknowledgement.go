@@ -67,24 +67,14 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		zones = append(zones, zoneID)
 	}
 	sort.Strings(zones)
-	var authority componentTaskAcknowledgementAuthority
-	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
-		authority, err = componentTaskBlueprintChildAuthority(
-			ctx, repository.store, task, intent, zones, revision,
-		)
-	} else {
-		authority, err = componentTaskDesiredProjectionZones(ctx, repository.store, task, intent, zones)
-	}
+	authority, err := componentTaskDesiredProjectionZones(ctx, repository.store, task, intent, zones)
 	if err != nil {
 		return componentTaskChange{}, err
 	}
 	keys := make([]string, 0, 3+len(intent.Candidates)+(2*len(zones)))
 	keys = append(keys, environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID))
-	headOffset := -1
-	if authority.child == nil {
-		headOffset = len(keys)
-		keys = append(keys, blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID))
-	}
+	headOffset := len(keys)
+	keys = append(keys, blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID))
 	rootOffset := len(keys)
 	rootKey := blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, authority.revisionID)
 	keys = append(keys, rootKey)
@@ -109,29 +99,12 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		string(state.Values[0].Value) != task.ID {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate ownership changed")
 	}
-	if headOffset >= 0 {
-		if state.Values[headOffset] == nil {
-			return componentTaskChange{}, errs.New(
-				errs.KindStateConflict,
-				"Component candidate Environment head changed",
-			)
-		}
-		headRevisionID, decodeErr := idempotencyrecord.DecodeTaskReference(state.Values[headOffset].Value)
-		if decodeErr != nil || headRevisionID != authority.revisionID {
-			return componentTaskChange{}, errs.New(
-				errs.KindStateConflict,
-				"Component candidate Environment head changed",
-			)
-		}
-	} else {
-		seal, decodeErr := blueprints.DecodeEnvironmentBlueprintSeal(state.Values[rootOffset].Value)
-		if decodeErr != nil || seal.EnvironmentID != intent.EnvironmentID ||
-			seal.RevisionID != authority.revisionID || seal.RenderGeneration != uint64(task.RenderGeneration) {
-			return componentTaskChange{}, errs.New(
-				errs.KindStateConflict,
-				"Blueprint Component parent root changed",
-			)
-		}
+	if state.Values[headOffset] == nil {
+		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Environment head changed")
+	}
+	headRevisionID, decodeErr := idempotencyrecord.DecodeTaskReference(state.Values[headOffset].Value)
+	if decodeErr != nil || headRevisionID != authority.revisionID {
+		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Environment head changed")
 	}
 	change := componentTaskChange{
 		applies: true,
@@ -143,22 +116,13 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 			},
 		},
 	}
-	if headOffset >= 0 {
-		change.conditions = append(change.conditions, etcdstore.Condition{
-			Key:         blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
-			ModRevision: state.Values[headOffset].ModRevision,
-		})
-	}
-	if authority.requireRootCAS ||
-		componentTaskAcknowledgementRequiresBlueprintRootCondition(task, terminalStatus, intent.EnvironmentID) {
+	change.conditions = append(change.conditions, etcdstore.Condition{
+		Key:         blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
+		ModRevision: state.Values[headOffset].ModRevision,
+	})
+	if componentTaskAcknowledgementRequiresBlueprintRootCondition(task, terminalStatus, intent.EnvironmentID) {
 		change.conditions = append(change.conditions, etcdstore.Condition{
 			Key: rootKey, ModRevision: state.Values[rootOffset].ModRevision,
-		})
-	}
-	if authority.child != nil {
-		change.conditions = append(change.conditions, etcdstore.Condition{
-			Key:         componentplanning.ChildExecutionKey(task.ID),
-			ModRevision: authority.child.Revision,
 		})
 	}
 	for index, candidate := range intent.Candidates {

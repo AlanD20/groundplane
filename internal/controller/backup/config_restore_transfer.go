@@ -17,10 +17,7 @@ import (
 type configRestoreTransferStore interface {
 	ReadConfigTransferCursor(
 		context.Context,
-		string,
-		string,
-		string,
-		string,
+		backupconfigtransfer.Binding,
 		int64,
 	) (etcdstore.Versioned[backupconfiguration.ConfigTransferCursor], bool, error)
 	VisitConfigTransferCredits(
@@ -87,10 +84,7 @@ func OpenConfigRestoreReceiver(
 	binding := owner.Transfer.Binding
 	cursor, found, err := store.ReadConfigTransferCursor(
 		ctx,
-		binding.TaskID,
-		binding.AssignmentID,
-		binding.StepID,
-		binding.ExecutionID,
+		binding,
 		0,
 	)
 	if err != nil {

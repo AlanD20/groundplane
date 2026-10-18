@@ -14,7 +14,7 @@ import (
 func AttachRemovalRecoveryStepIDs(plan *agentpb.ExecutionPlan) ([]string, error) {
 	if plan == nil || plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_DETACH ||
 		len(plan.GetSteps()) == 0 || len(plan.GetSteps()) > 10 ||
-		plan.GetCandidateReleaseProcedure() != nil || plan.GetComponentRecoveryProcedure() != nil ||
+		plan.GetCandidateReleaseProcedure() != nil ||
 		plan.GetServiceAbsenceRecoveryProcedure() != nil || plan.GetManagedNetworkRecoveryProcedure() != nil {
 		return nil, errs.New(errs.KindStateConflict, "Detach recovery requires its original compiled cleanup plan")
 	}

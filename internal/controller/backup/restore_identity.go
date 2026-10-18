@@ -16,6 +16,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupsecrets"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // restoreIdentitySessions owns request-only private bytes. Durable authority
@@ -89,7 +90,8 @@ func (resolver *BackupSecretResolver) RetainRestoreIdentity(ctx context.Context,
 }
 
 // ReleaseRestoreIdentity is idempotent and clears only this Task's volatile
-// value. Channel callers invoke it after proving a durable terminal receipt.
+// value. Native completion callers invoke it only after durable settlement;
+// failed attempts retain it for recovery until its original expiry.
 func (resolver *BackupSecretResolver) ReleaseRestoreIdentity(ctx context.Context, taskID string) error {
 	if ctx == nil || resolver == nil || resolver.identities == nil {
 		return errs.New(errs.KindInternal, "Restore identity owner is not configured")
@@ -104,30 +106,30 @@ func (resolver *BackupSecretResolver) ReleaseRestoreIdentity(ctx context.Context
 	return nil
 }
 
-func (sessions *restoreIdentitySessions) copy(ctx context.Context, request backupsecret.Request,
+func (sessions *restoreIdentitySessions) copy(ctx context.Context, taskID string, deadline time.Time, step *agentpb.BackupStepAuthority,
 	evidence backupsecrets.Evidence,
 ) ([]byte, error) {
 	if sessions == nil || evidence.Restore == nil || !evidence.Restore.UsesOldIdentity {
 		return nil, errs.New(errs.KindStateConflict, "Restore identity lacks durable request authority")
 	}
 	restore := evidence.Restore
-	encryption := request.Step.GetBackupStep().GetRestore().GetEncryption()
+	encryption := step.GetRestore().GetEncryption()
 	recipient := sha256.Sum256([]byte(restore.Point.Recipient))
 	sessions.mu.Lock()
 	defer sessions.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	session := sessions.sessions[request.TaskID]
+	session := sessions.sessions[taskID]
 	if sessions.closed || sessions.lifetime.Err() != nil || session == nil || !time.Now().Before(session.deadline) {
 		return nil, errs.New(
 			errs.KindStateConflict,
 			"old-era identity is unavailable; submit a new Restore request with its identity",
 		)
 	}
-	if restore.TaskID != request.TaskID || session.operationID != restore.OperationID ||
+	if restore.TaskID != taskID || session.operationID != restore.OperationID ||
 		session.environmentID != restore.EnvironmentID || session.pointID != restore.Point.ID ||
-		session.keyEra != restore.Point.KeyEra || !session.deadline.Equal(request.Deadline) ||
+		session.keyEra != restore.Point.KeyEra || !session.deadline.Equal(deadline) ||
 		!session.deadline.Equal(restore.CreatedAt.Add(6*time.Hour)) ||
 		encryption.GetSecretSlotId() != backupsecret.OperatorOldAgeIdentitySlotID || encryption.SecretSlot != nil ||
 		encryption.GetKeyEra() != uint64(session.keyEra) ||

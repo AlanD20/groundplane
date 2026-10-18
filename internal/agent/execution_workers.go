@@ -5,9 +5,16 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
+	"github.com/AlanD20/groundplane/internal/agent/backupruntime"
+
+	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
+	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
+	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
 	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
+	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
 	"github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
@@ -21,6 +28,13 @@ import (
 )
 
 type executionOutput struct {
+	backup             *workexecution.Attempt
+	removalRecovery    *workexecution.Attempt
+	lifecycle          *workexecution.Attempt
+	provisionRecovery  *workexecution.Attempt
+	provision          *attachruntime.Execution
+	entry              *workexecution.Attempt
+	component          *workexecution.Attempt
 	network            *workexecution.Attempt
 	volume             *workexecution.Attempt
 	attachRecovery     *workexecution.Attempt
@@ -38,6 +52,12 @@ type executionOutput struct {
 }
 
 type executionExchange interface {
+	backupruntime.Exchange
+	removalruntime.RecoveryExchange
+	lifecycleruntime.Exchange
+	attachruntime.Exchange
+	entryruntime.Exchange
+	componentruntime.Exchange
 	networkruntime.Exchange
 	volumeruntime.Exchange
 	hierarchyruntime.AttachExchange
@@ -48,16 +68,24 @@ type executionExchange interface {
 }
 
 type activeExecution struct {
-	network        *agentpb.NetworkWorkAssignment
-	volume         *agentpb.VolumeWorkAssignment
-	attachRecovery *agentpb.AttachRecoveryAssignment
-	attach         *agentpb.AttachRemovalAssignment
-	environment    *agentpb.EnvironmentRemovalAssignment
-	scriptRecovery *agentpb.ScriptRecoveryAssignment
-	attempt        workexecution.Attempt
-	forward        *agentpb.ReleaseWorkAssignment
-	recovery       *agentpb.ReleaseRecoveryAssignment
-	script         bool
+	backup            *agentpb.BackupWorkAssignment
+	backupRecovery    *agentpb.BackupRecoveryAssignment
+	removalRecovery   *agentpb.ServiceRemovalRecoveryAssignment
+	lifecycle         *agentpb.ServiceLifecycleAssignment
+	provisionRecovery *agentpb.AttachProvisionRecoveryAssignment
+	provision         *agentpb.AttachProvisionAssignment
+	entry             *agentpb.EntryConfigurationWorkAssignment
+	component         *agentpb.ComponentWorkAssignment
+	network           *agentpb.NetworkWorkAssignment
+	volume            *agentpb.VolumeWorkAssignment
+	attachRecovery    *agentpb.AttachRecoveryAssignment
+	attach            *agentpb.AttachRemovalAssignment
+	environment       *agentpb.EnvironmentRemovalAssignment
+	scriptRecovery    *agentpb.ScriptRecoveryAssignment
+	attempt           workexecution.Attempt
+	forward           *agentpb.ReleaseWorkAssignment
+	recovery          *agentpb.ReleaseRecoveryAssignment
+	script            bool
 }
 
 // executionWorkers owns shared in-process exclusivity and capacity. The Controller
@@ -65,27 +93,39 @@ type activeExecution struct {
 // a failed action. Closing a stream cancels and joins every local execution
 // before another stream can begin reconciling the same attempts.
 type executionWorkers struct {
-	mu            sync.Mutex
-	wait          sync.WaitGroup
-	ctx           context.Context
-	cancel        context.CancelFunc
-	identity      workexecution.Identity
-	executor      *releaseruntime.Executor
-	recovery      *releaseruntime.RecoveryExecutor
-	scripts       *scriptruntime.Executor
-	hierarchy     *hierarchyruntime.Executor
-	networks      *networkruntime.Executor
-	volumes       *volumeruntime.Executor
-	attachRemoval *hierarchyruntime.AttachExecutor
-	exchange      executionExchange
-	ownership     *agentownership.Lease
-	limit         int
-	closed        bool
-	active        map[string]activeExecution
-	outputs       chan executionOutput
+	backups         *backupruntime.Executor
+	removalRecovery *removalruntime.Runtime
+	lifecycles      *lifecycleruntime.Executor
+	mu              sync.Mutex
+	wait            sync.WaitGroup
+	ctx             context.Context
+	cancel          context.CancelFunc
+	identity        workexecution.Identity
+	executor        *releaseruntime.Executor
+	recovery        *releaseruntime.RecoveryExecutor
+	scripts         *scriptruntime.Executor
+	hierarchy       *hierarchyruntime.Executor
+	networks        *networkruntime.Executor
+	components      *componentruntime.Executor
+	entries         *entryruntime.Executor
+	volumes         *volumeruntime.Executor
+	attachRemoval   *hierarchyruntime.AttachExecutor
+	attachProvision *attachruntime.Executor
+	exchange        executionExchange
+	ownership       *agentownership.Lease
+	limit           int
+	closed          bool
+	active          map[string]activeExecution
+	outputs         chan executionOutput
 }
 
-func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.Identity, executor *releaseruntime.Executor, recovery *releaseruntime.RecoveryExecutor, scripts *scriptruntime.Executor, hierarchy *hierarchyruntime.Executor, attachRemoval *hierarchyruntime.AttachExecutor, volumes *volumeruntime.Executor, networks *networkruntime.Executor, exchange executionExchange, ownership *agentownership.Lease) (*executionWorkers, error) {
+func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.Identity, executor *releaseruntime.Executor, recovery *releaseruntime.RecoveryExecutor, scripts *scriptruntime.Executor, hierarchy *hierarchyruntime.Executor, attachRemoval *hierarchyruntime.AttachExecutor, volumes *volumeruntime.Executor, networks *networkruntime.Executor, components *componentruntime.Executor, entries *entryruntime.Executor, attachProvision *attachruntime.Executor, lifecycles *lifecycleruntime.Executor, removalRecovery *removalruntime.Runtime, backups *backupruntime.Executor, exchange executionExchange, ownership *agentownership.Lease) (*executionWorkers, error) {
+	if backups == nil {
+		return nil, errs.New(errs.KindInternal, "Agent Backup executor is required")
+	}
+	if removalRecovery == nil || lifecycles == nil || components == nil || entries == nil || attachProvision == nil {
+		return nil, errs.New(errs.KindInternal, "Agent Component executor is required")
+	}
 	if ctx == nil || limit < 1 || limit > 256 || identity.Validate() != nil || identity.Executor != workexecution.Agent || executor == nil || recovery == nil || scripts == nil || hierarchy == nil || attachRemoval == nil || volumes == nil || networks == nil || exchange == nil {
 		return nil, errs.New(errs.KindInternal, "Agent execution workers require authenticated operation handlers and bounded capacity")
 	}
@@ -93,8 +133,8 @@ func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.
 		return nil, err
 	}
 	workerContext, cancel := context.WithCancel(ctx)
-	return &executionWorkers{ctx: workerContext, cancel: cancel, identity: identity, executor: executor, recovery: recovery, scripts: scripts, hierarchy: hierarchy, attachRemoval: attachRemoval, volumes: volumes, networks: networks, exchange: exchange,
-		limit: limit, ownership: ownership, active: make(map[string]activeExecution), outputs: make(chan executionOutput, limit)}, nil
+	return &executionWorkers{backups: backups, removalRecovery: removalRecovery, lifecycles: lifecycles, ctx: workerContext, cancel: cancel, identity: identity, executor: executor, recovery: recovery, scripts: scripts, hierarchy: hierarchy, attachRemoval: attachRemoval, volumes: volumes, networks: networks, exchange: exchange,
+		components: components, entries: entries, attachProvision: attachProvision, limit: limit, ownership: ownership, active: make(map[string]activeExecution), outputs: make(chan executionOutput, limit)}, nil
 }
 
 func (workers *executionWorkers) submit(delivery *agentpb.ReleaseWorkAssignment, available int) error {
@@ -152,6 +192,69 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	if !workexecution.SameAssignment(active.attempt, output.attempt) {
 		return errs.New(errs.KindStateConflict, "operation result differs from its local execution slot")
 	}
+	if active.backup != nil || active.backupRecovery != nil {
+		return workers.consumeBackup(output)
+	}
+	if output.backup != nil {
+		return errs.New(errs.KindStateConflict, "Backup result belongs to another active operation")
+	}
+	if active.provisionRecovery != nil {
+		if output.err == nil {
+			if output.provisionRecovery == nil || output.provisionRecovery.Validate() != nil || output.provisionRecovery.FinishedAt == nil ||
+				output.provisionRecovery.Result == nil || !workexecution.SameAssignment(*output.provisionRecovery, output.attempt) {
+				return errs.New(errs.KindStateConflict, "Attach inspection result requires a saved terminal acknowledgement")
+			}
+			if err := workers.attachProvision.RetireRecovery(workers.ctx, *output.provisionRecovery); err != nil {
+				return err
+			}
+		}
+		delete(workers.active, output.attempt.WorkItemID)
+		return nil
+	}
+	if output.provisionRecovery != nil {
+		return errs.New(errs.KindStateConflict, "Attach inspection result belongs to another active operation")
+	}
+	if active.provision != nil {
+		if err := workers.consumeAttachProvision(active, output); err != nil {
+			return err
+		}
+		delete(workers.active, output.attempt.WorkItemID)
+		return nil
+	}
+	if output.provision != nil {
+		return errs.New(errs.KindStateConflict, "Attach provisioning result belongs to another active operation")
+	}
+	if active.entry != nil {
+		if output.err == nil {
+			if output.entry == nil || output.entry.Validate() != nil || output.entry.FinishedAt == nil ||
+				output.entry.Result == nil || !workexecution.SameAssignment(*output.entry, output.attempt) {
+				return errs.New(errs.KindStateConflict, "Entry result requires a saved terminal acknowledgement")
+			}
+			if err := workers.entries.Retire(workers.ctx, *output.entry); err != nil {
+				return err
+			}
+		}
+		delete(workers.active, output.attempt.WorkItemID)
+		return nil
+	}
+	if output.entry != nil {
+		return errs.New(errs.KindStateConflict, "Entry result belongs to another active operation")
+	}
+	if active.component != nil {
+		if output.err == nil {
+			if output.component == nil || output.component.Validate() != nil || output.component.FinishedAt == nil || output.component.Result == nil || !workexecution.SameAssignment(*output.component, output.attempt) {
+				return errs.New(errs.KindStateConflict, "Component result requires a saved terminal acknowledgement")
+			}
+			if err := workers.components.Retire(workers.ctx, *output.component); err != nil {
+				return err
+			}
+		}
+		delete(workers.active, output.attempt.WorkItemID)
+		return nil
+	}
+	if output.component != nil {
+		return errs.New(errs.KindStateConflict, "Component result belongs to another active operation")
+	}
 	if active.network != nil {
 		if output.err == nil {
 			if output.network == nil || output.network.Validate() != nil || output.network.FinishedAt == nil || output.network.Result == nil ||
@@ -167,6 +270,37 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	}
 	if output.network != nil {
 		return errs.New(errs.KindStateConflict, "Network result belongs to another active operation")
+	}
+	if active.removalRecovery != nil {
+		if output.err == nil {
+			if output.removalRecovery == nil || output.removalRecovery.Validate() != nil || output.removalRecovery.FinishedAt == nil || output.removalRecovery.Result == nil || !workexecution.SameAssignment(*output.removalRecovery, output.attempt) {
+				return errs.New(errs.KindStateConflict, "service removal recovery requires a saved terminal acknowledgement")
+			}
+			if err := workers.removalRecovery.Retire(workers.ctx, *output.removalRecovery); err != nil {
+				return err
+			}
+		}
+		delete(workers.active, output.attempt.WorkItemID)
+		return nil
+	}
+	if output.removalRecovery != nil {
+		return errs.New(errs.KindStateConflict, "service removal recovery result belongs to another active operation")
+	}
+	if active.lifecycle != nil {
+		if output.err == nil {
+			if output.lifecycle == nil || output.lifecycle.Validate() != nil || output.lifecycle.FinishedAt == nil || output.lifecycle.Result == nil ||
+				!workexecution.SameAssignment(*output.lifecycle, output.attempt) {
+				return errs.New(errs.KindStateConflict, "Service lifecycle result requires a saved terminal acknowledgement")
+			}
+			if err := workers.lifecycles.Retire(workers.ctx, *output.lifecycle); err != nil {
+				return err
+			}
+		}
+		delete(workers.active, output.attempt.WorkItemID)
+		return nil
+	}
+	if output.lifecycle != nil {
+		return errs.New(errs.KindStateConflict, "Service lifecycle result belongs to another active operation")
 	}
 	if active.volume != nil {
 		if output.err == nil {
@@ -282,6 +416,7 @@ func (workers *executionWorkers) close() {
 	defer workers.mu.Unlock()
 	for _, active := range workers.active {
 		attachexecution.ClearRemoval(active.attach.GetRemoval())
+		attachexecution.ClearProvision(active.provision.GetProvision())
 		attachexecution.ClearRecoveryAssignment(active.attachRecovery)
 	}
 }

@@ -2,244 +2,93 @@ package etcd
 
 import (
 	"context"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// BeginRunnerRemovalWithTask atomically fences the Runner and publishes the
-// finalizer Task. The record and every allocation stay durable until a
-// successful terminal acknowledgement.
-func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
-	ctx context.Context,
-	current etcdstore.Versioned[runnerrecord.RunnerRecord],
-	tombstone deletionrecord.DeletionTombstoneRecord,
-	task TaskRecord,
-	marker idempotencyrecord.IdempotencyMarker,
+// PublishRunnerRemoval fences the captured allocation and publishes one native
+// work item. Neither acceptance nor a failed cleanup releases host reservations.
+func (repository *RunnerRepository) PublishRunnerRemoval(ctx context.Context,
+	source RunnerRemovalSource, task workexecution.Task, marker idempotency.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := runnerrecord.ValidateRunnerRecord(current.Record); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
-		current.Record.ProvisioningState == runnerrecord.RunnerProvisioningProvisioning {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "runner is not available for removal")
-	}
-	if err := validateRunnerDeletionTask(current, tombstone, task); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := validateRunnerDeleteMarker(current.Record.Desired, task, marker); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	sourceResult, err := repository.store.Get(ctx, taskjournal.TaskStorageKey(current.Record.CreateTaskID))
+	input := source.input
+	desired := input.Desired
+	ref, err := input.Reference()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if sourceResult == nil || sourceResult.Entry == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "runner create task is missing")
+	if len(source.conditions) == 0 || input.Removal == nil || task.Validate() != nil ||
+		task.ID != input.TaskID || task.Action != workexecution.ActionRemove || task.Actor != workexecution.OperatorActor ||
+		task.TargetID != desired.ID || task.ExpectedItems != 1 || task.Intent != ref ||
+		task.Scope != (workexecution.Scope{TenantID: desired.TenantID, ProjectID: desired.ProjectID(), EnvironmentID: desired.EnvironmentID()}) ||
+		!task.CreatedAt.Equal(input.CreatedAt) {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Runner removal Task differs from its captured runtime")
 	}
-	source, err := DecodeTaskRecord(sourceResult.Entry.Value)
+	target := idempotency.IdempotencyReplayTarget{Kind: idempotency.IdempotencyReplayTargetRunner, ID: desired.ID}
+	if idempotency.ValidateIdempotencyMarker(marker) != nil || validateRunnerMarkerScope(desired, marker) != nil ||
+		marker.Kind != idempotency.IdempotencyMarkerTask || marker.State != idempotency.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.Method != "DELETE" || marker.Locator.Route != "/runners/{id}" ||
+		!runnerReplayTargetsEqual(marker.ReplayTarget, &target) || !idempotency.ValidTaskResponse(marker.Response, task.ID) ||
+		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(task.CreatedAt) {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Runner removal replay marker is invalid")
+	}
+	item := workexecution.Item{ID: input.WorkItemID, TaskID: task.ID, Operation: workexecution.Runner,
+		TargetID: desired.ID, Placement: workexecution.Placement{Executor: workexecution.Controller},
+		Claims: []workexecution.Claim{{ScopeID: desired.ID}}, Input: &task.Intent,
+		Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
+		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
+	work, err := workqueue.PrepareSingleTask(task, item, marker)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	applies, sourceErr := taskOwnsRunnerCreation(source)
-	if sourceErr != nil || !applies || !runnerTerminal(source.Status) || source.Target != current.Record.Desired.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "runner create task is not terminal")
-	}
-	parents, err := repository.ResolveRunnerParents(ctx, current.Record.Desired)
+	defer keyvalue.ClearMutationValues(work.Mutations)
+	captureConditions, captureMutations, err := runnerwork.PreparePublication(input)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	allocation, err := repository.ReadRunnerAllocationEvidence(ctx, current.Record, current.ReadRevision)
+	defer keyvalue.ClearMutationValues(captureMutations)
+	tombstone := deletions.DeletionTombstoneRecord{TargetKind: deletions.DeletionTargetRunner, TargetID: desired.ID,
+		TargetRevision: input.Removal.DesiredRevision, TaskID: task.ID, Phase: deletions.DeletionPhaseFinalizing,
+		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt}
+	tombstoneValue, err := runners.EncodeRunnerDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	runtimeEvidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{
-			runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID),
-		}, Revision: current.ReadRevision,
-	})
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if runtimeEvidence == nil || len(runtimeEvidence.Values) != 1 {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindInternal,
-			"runner runtime ownership evidence is incomplete",
-		)
-	}
-	if runtimeEvidence.Values[0] != nil {
-		ownership, decodeErr := runnerrecord.DecodeRunnerRuntimeOwnership(runtimeEvidence.Values[0].Value)
-		if decodeErr != nil || ownership.RunnerID != current.Record.Desired.ID ||
-			ownership.RuntimeEpoch != current.Record.RuntimeEpoch || current.Record.ContainerID == "" {
-			return IdempotencyTransactionResult{}, errs.New(
-				errs.KindInternal,
-				"runner runtime ownership does not match lifecycle",
-			)
+	conditions := append(work.Conditions, source.conditions...)
+	conditions = append(conditions, captureConditions...)
+	mutations := append(work.Mutations, captureMutations...)
+	mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut,
+		Key: deletions.TombstoneKey(string(deletions.DeletionTargetRunner), desired.ID), Value: tombstoneValue})
+	publicationConditions := conditions
+	classify := func(_ int64, values []*keyvalue.KeyValue) error {
+		if len(values) != len(publicationConditions) {
+			return errs.New(errs.KindInternal, "Runner removal publication evidence is incomplete")
 		}
-	} else if current.Record.ContainerID != "" {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "runner lifecycle lost runtime ownership")
+		return errs.New(errs.KindStateConflict, "Runner runtime, allocation or another operation changed before removal; refresh and submit again")
 	}
-	cleanupLifecycle, err := runnerrecord.TakeRunnerRuntimeCleanupOwnership(current.Record)
+	initiation, err := newRunnerTaskInitiation(desired, source.parents, taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	lifecycleValue, err := runnerrecord.EncodeRunnerLifecycleRecord(cleanupLifecycle.RunnerLifecycleRecord)
+	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clear(lifecycleValue)
-	intent := runnerrecord.RunnerRemovalIntent{
-		RunnerID: current.Record.Desired.ID, TaskID: task.ID,
-		OwnerKind: current.Record.Desired.OwnerKind, OwnerID: current.Record.Desired.OwnerID,
-		TenantID: current.Record.Desired.TenantID, Allocation: current.Record.Allocation,
-		ParentProjectID: current.Record.Desired.ParentProjectID,
-		CreatedAt:       task.CreatedAt,
-	}
-	task = bindRunnerTaskMarker(task, marker)
-	if err := ValidateTaskRecord(task); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	taskValue, err := EncodeTaskRecord(task)
+	publication, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clear(taskValue)
-	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
+	receipts, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clear(reference)
-	tombstoneValue, err := runnerrecord.EncodeRunnerDeletionTombstone(tombstone)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(tombstoneValue)
-	intentValue, err := runnerrecord.EncodeRunnerRemovalIntent(intent)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(intentValue)
-	conditions := []etcdstore.Condition{
-		{Key: taskjournal.TaskStorageKey(task.ID)},
-		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
-		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
-		{Key: runnerrecord.RunnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{
-			Key:         runnerrecord.RunnerLifecycleKey(current.Record.Desired.ID),
-			ModRevision: current.Record.LifecycleRevision,
-		},
-		{
-			Key:         runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID),
-			ModRevision: etcdstore.RevisionOf(runtimeEvidence.Values[0]),
-		},
-		{
-			Key: runnerrecord.RunnerOwnerKey(
-				current.Record.Desired.OwnerKind,
-				current.Record.Desired.OwnerID,
-				current.Record.Desired.ID,
-			),
-			ModRevision: allocation.Owner.ModRevision,
-		},
-		{
-			Key:         runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
-			ModRevision: allocation.Slug.ModRevision,
-		},
-		{
-			Key:         runnerrecord.RunnerTenantQuotaKey(current.Record.Desired.TenantID),
-			ModRevision: allocation.Quota.ModRevision,
-		},
-		{Key: runnerrecord.RunnerHostSlotKey(current.Record.Allocation.Slot), ModRevision: allocation.Host.ModRevision},
-		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},
-		{Key: taskjournal.TaskStorageKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
-		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
-		{Key: runnerrecord.RunnerRemovalIntentKey(current.Record.Desired.ID)},
-	}
-	conditions = append(conditions, parents.AdmissionConditions()...)
-	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
-			Value: reference,
-		},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
-		{
-			Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID),
-			Value: tombstoneValue,
-		},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   runnerrecord.RunnerRemovalIntentKey(current.Record.Desired.ID),
-			Value: intentValue,
-		},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   runnerrecord.RunnerLifecycleKey(current.Record.Desired.ID),
-			Value: lifecycleValue,
-		},
-	}
-	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
-		if len(values) != len(conditions) {
-			return errs.New(errs.KindInternal, "runner removal compare evidence is incomplete")
-		}
-		if values[2] != nil {
-			activeTaskID, decodeErr := idempotencyrecord.DecodeTaskReference(values[2].Value)
-			if decodeErr != nil {
-				return decodeErr
-			}
-			return errs.Newf(
-				errs.KindStateConflict,
-				"operation %s already has active task %s",
-				task.OperationID,
-				activeTaskID,
-			)
-		}
-		if values[13] != nil || values[14] != nil {
-			return errs.New(errs.KindResourceInUse, "runner removal is already in progress")
-		}
-		return recordcodec.StateConflict("runner", current.Record.Desired.ID)
-	}
-	initiation, err := newRunnerTaskInitiation(current.Record.Desired, parents, taskjournal.TaskActorOperator)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classifier)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
-}
-
-func validateRunnerDeletionTask(
-	current etcdstore.Versioned[runnerrecord.RunnerRecord],
-	tombstone deletionrecord.DeletionTombstoneRecord,
-	task TaskRecord,
-) error {
-	evidence, evidenceErr := decodeRunnerRemovalTaskEvidence(task)
-	if runnerrecord.ValidateRunnerDeletionTombstone(tombstone) != nil ||
-		tombstone.TargetID != current.Record.Desired.ID || tombstone.TargetRevision != current.Revision ||
-		tombstone.TaskID != task.ID || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
-		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) ||
-		task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove ||
-		task.Target != current.Record.Desired.ID || task.Status != taskjournal.TaskStatusPending ||
-		evidenceErr != nil || !evidence.matchesRecord(current.Record) {
-		return errs.New(errs.KindValidationFailed, "runner removal task and tombstone do not match")
-	}
-	return nil
+	return receipts.Apply(ctx, marker, publication)
 }

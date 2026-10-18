@@ -2,24 +2,14 @@ package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/backupobject"
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// The sealed point retains all four evidence fields. Its deletion checkpoint
-// must name that exact immutable object, never a later object at the same key.
-func BackupPruneCheckpointMatchesObject(
-	input BackupCheckpointInput,
-	ordinal uint32,
-	pointID string,
-	object BackupObjectIdentity,
+// BackupPruneDeletedMatchesObject compares the exact resource-owned object;
+// transport identity is checked by the operation's checkpoint admission.
+func BackupPruneDeletedMatchesObject(deleted *agentpb.BackupPruneObjectDeleted, ordinal uint32,
+	pointID string, object BackupObjectIdentity,
 ) bool {
-	request, err := executionplan.ValidateBackupCheckpointRequest(input.Request, input.Sequence)
-	if err != nil || request.TaskId != input.TaskID || request.AssignmentId != input.AssignmentID ||
-		request.StepId != input.StepID || request.ExecutionId != input.ExecutionID {
-		return false
-	}
-	deleted := request.GetPruneObjectDeleted()
 	if deleted == nil || uint64(deleted.Ordinal) != uint64(ordinal)+1 || deleted.PointId != pointID {
 		return false
 	}

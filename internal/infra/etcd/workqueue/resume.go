@@ -23,13 +23,21 @@ type ResumeView struct {
 func (repository *Repository) ReadResume(ctx context.Context, taskID, workID, attemptID string,
 	identity workexecution.Identity,
 ) (ResumeView, error) {
+	return repository.ReadResumeAt(ctx, taskID, workID, attemptID, identity, 0)
+}
+
+// ReadResumeAt joins operation-owned ledgers to execution state at one MVCC
+// revision. Zero selects a fresh snapshot, as for ordinary channel reports.
+func (repository *Repository) ReadResumeAt(ctx context.Context, taskID, workID, attemptID string,
+	identity workexecution.Identity, revision int64,
+) (ResumeView, error) {
 	if err := identity.Validate(); err != nil {
 		return ResumeView{}, err
 	}
 	if ids.Validate(ids.KindAttempt, attemptID) != nil {
 		return ResumeView{}, invalid("execution resume identity is invalid")
 	}
-	work, err := repository.ReadWork(ctx, taskID, workID, 0)
+	work, err := repository.ReadWork(ctx, taskID, workID, revision)
 	if err != nil {
 		return ResumeView{}, err
 	}

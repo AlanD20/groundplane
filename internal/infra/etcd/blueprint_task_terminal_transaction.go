@@ -94,11 +94,6 @@ func bindTaskLifecycleEnvironment(
 	mutations []etcdstore.Mutation,
 	advanceEpoch bool,
 ) (*environmentfence.MutationBinding, error) {
-	if isVolumeRemovalTerminalTask(task) {
-		// Volume completion binds its held removal lock and ancestry in the
-		// terminal owner; it is not a new ordinary desired-state mutation.
-		return nil, nil
-	}
 	if !isBlueprintCandidateTerminalTask(task) {
 		return mutationContext.Bind(ctx, store, conditions, mutations, advanceEpoch)
 	}
@@ -230,13 +225,6 @@ func (repository *TaskRepository) transactTaskTerminal(
 	mutations []etcdstore.Mutation,
 	sourceAdvance *blueprintTerminalSourceAdvance,
 ) (etcdstore.TransactionResult, error) {
-	if isVolumeRemovalTerminalTask(task) {
-		return repository.transactVolumeRemovalTerminal(ctx, task, conditions, mutations)
-	}
-	if task.Type == taskjournal.TaskRemove &&
-		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
-		return repository.transactVolumeRemovalAttemptTerminal(ctx, task, conditions, mutations)
-	}
 	if !isBlueprintCandidateTerminalTask(task) {
 		return repository.transactZoneRemovalTaskLifecycle(ctx, task, phase, conditions, mutations)
 	}

@@ -137,6 +137,7 @@ func PrepareAttachRemoval(
 			Key:  AttachBackingProjectKey(current.Record.BackingProjectID, current.Record.ID),
 		},
 		{Type: etcdstore.MutationDelete, Key: AttachFactsKey(current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: AppliedBindingKey(current.Record.ID)},
 	}
 	mutations = append(mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationDelete, Key: AttachServiceKey(current.Record.ServiceID, current.Record.ID),

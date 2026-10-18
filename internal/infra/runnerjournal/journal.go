@@ -16,16 +16,16 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"golang.org/x/sys/unix"
 )
 
 const (
-	Schema                   = "groundplane.runner-journal/v2"
+	Schema                   = "groundplane.runner-journal/v3"
 	maximumRevisionBytes     = 64 << 10
 	maximumJournalRevisions  = 32768
 	maximumOwnershipNonceLen = 64
-	controllerExecutor       = "controller"
 )
 
 type revisionRecord struct {
@@ -81,6 +81,7 @@ func (journal *Journal) Begin(
 	digest := attempt.Plan.Digest()
 	if exists {
 		if current.RunnerID != attempt.Plan.RunnerID || current.TaskID != attempt.TaskID ||
+			current.WorkItemID != attempt.WorkItemID || current.AttemptID != attempt.AttemptID || current.AttemptNumber != attempt.AttemptNumber ||
 			current.Executor != attempt.Executor || current.Operation != operation ||
 			current.PlanDigest != digest || current.RuntimeEpoch != attempt.Plan.RuntimeEpoch ||
 			current.OwnershipNonce != attempt.OwnershipNonce || current.BootID != bootID {
@@ -94,6 +95,7 @@ func (journal *Journal) Begin(
 	created := runnerallocation.RunnerRuntimeProgress{
 		Plan: attempt.Plan.Clone(), BootID: bootID,
 		RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID, Executor: attempt.Executor,
+		WorkItemID: attempt.WorkItemID, AttemptID: attempt.AttemptID, AttemptNumber: attempt.AttemptNumber,
 		PlanDigest: digest, IdentityDigest: attempt.Plan.IdentityDigest(),
 		RuntimeEpoch: attempt.Plan.RuntimeEpoch, Operation: operation,
 		Status: runnerallocation.RuntimeStatusRunning, Revision: -1,
@@ -207,7 +209,7 @@ func (journal *Journal) operationDirectory(attempt runnerallocation.RunnerRuntim
 		journal.root,
 		attempt.Plan.RunnerID,
 		attempt.Plan.RuntimeEpoch,
-		attempt.TaskID,
+		attempt.AttemptID,
 		attempt.OwnershipNonce,
 	)
 }
@@ -217,19 +219,19 @@ func (journal *Journal) progressDirectory(progress runnerallocation.RunnerRuntim
 		journal.root,
 		progress.RunnerID,
 		progress.RuntimeEpoch,
-		progress.TaskID,
+		progress.AttemptID,
 		progress.OwnershipNonce,
 	)
 }
 
-func operationDirectory(root, runnerID string, epoch uint64, taskID, nonce string) (string, error) {
-	if ids.Validate(ids.KindRunner, runnerID) != nil || ids.Validate(ids.KindTask, taskID) != nil ||
+func operationDirectory(root, runnerID string, epoch uint64, attemptID, nonce string) (string, error) {
+	if ids.Validate(ids.KindRunner, runnerID) != nil || ids.Validate(ids.KindAttempt, attemptID) != nil ||
 		epoch == 0 || !validLowerHex(nonce, maximumOwnershipNonceLen) {
 		return "", errs.New(errs.KindInternal, "runner journal path identity is invalid")
 	}
-	// Plan or nonce drift must find the existing Task journal and conflict, not
+	// Plan or nonce drift must find the existing attempt journal and conflict, not
 	// select a new empty directory and grant another host-effect attempt.
-	return filepath.Join(root, "v1", runnerID, strconv.FormatUint(epoch, 10), taskID), nil
+	return filepath.Join(root, "v3", runnerID, strconv.FormatUint(epoch, 10), attemptID), nil
 }
 
 func readLongestChain(directory string) (runnerallocation.RunnerRuntimeProgress, bool, error) {
@@ -316,7 +318,8 @@ func validateAttempt(
 	operation runnerallocation.RuntimeOperation,
 ) error {
 	if ctx == nil || ctx.Err() != nil || ids.Validate(ids.KindTask, attempt.TaskID) != nil ||
-		attempt.Executor != controllerExecutor || ids.Validate(ids.KindRunner, attempt.Plan.RunnerID) != nil ||
+		ids.Validate(ids.KindWorkItem, attempt.WorkItemID) != nil || ids.Validate(ids.KindAttempt, attempt.AttemptID) != nil || attempt.AttemptNumber == 0 ||
+		attempt.Executor.Validate() != nil || attempt.Executor.Executor != workexecution.Controller || ids.Validate(ids.KindRunner, attempt.Plan.RunnerID) != nil ||
 		attempt.Plan.RuntimeEpoch == 0 || attempt.Plan.Digest() == "" ||
 		!validLowerHex(attempt.OwnershipNonce, maximumOwnershipNonceLen) ||
 		(operation != runnerallocation.RuntimeOperationCreate && operation != runnerallocation.RuntimeOperationRemove) {
@@ -327,10 +330,11 @@ func validateAttempt(
 
 func validateProgress(progress runnerallocation.RunnerRuntimeProgress) error {
 	if ids.Validate(ids.KindRunner, progress.RunnerID) != nil || ids.Validate(ids.KindTask, progress.TaskID) != nil ||
+		ids.Validate(ids.KindWorkItem, progress.WorkItemID) != nil || ids.Validate(ids.KindAttempt, progress.AttemptID) != nil || progress.AttemptNumber == 0 ||
 		!validBootID(progress.BootID) || progress.Plan.RunnerID != progress.RunnerID ||
 		progress.Plan.RuntimeEpoch != progress.RuntimeEpoch || progress.Plan.Digest() != progress.PlanDigest ||
 		progress.Plan.IdentityDigest() != progress.IdentityDigest ||
-		progress.Executor != controllerExecutor || !validDigest(progress.PlanDigest) ||
+		progress.Executor.Validate() != nil || progress.Executor.Executor != workexecution.Controller || !validDigest(progress.PlanDigest) ||
 		!validDigest(progress.IdentityDigest) || progress.RuntimeEpoch == 0 ||
 		!validLowerHex(progress.OwnershipNonce, maximumOwnershipNonceLen) || progress.Revision < 0 ||
 		progress.Revision >= maximumJournalRevisions ||

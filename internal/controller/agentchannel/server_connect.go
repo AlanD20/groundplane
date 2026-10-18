@@ -200,7 +200,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			if !ready || capacity == 0 {
 				continue
 			}
-			if err := s.dispatchWork(stream, session, authorization.Generation, capacity, authorization.Config.MaxConcurrentTasks, workDelivered); err != nil {
+			if err := s.dispatchWork(stream, session, authorization.Generation, capacity, authorization.Config.MaxConcurrentTasks, workDelivered, payloads); err != nil {
 				return taskStoreStatus(err)
 			}
 		case connectReceived:
@@ -397,7 +397,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					authorization.Config = nextConfig
 					continue
 				}
-				if err := s.dispatchWork(stream, session, authorization.Generation, ready.Capacity, authorization.Config.MaxConcurrentTasks, workDelivered); err != nil {
+				if err := s.dispatchWork(stream, session, authorization.Generation, ready.Capacity, authorization.Config.MaxConcurrentTasks, workDelivered, payloads); err != nil {
 					return taskStoreStatus(err)
 				}
 				continue
@@ -488,25 +488,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
-			if request := result.message.GetBackupCheckpointRequest(); request != nil {
-				if s.checkpoints == nil {
-					return status.Error(codes.Internal, "Backup checkpoint service is not configured")
-				}
-				acknowledgement, err := s.checkpoints.CheckpointBackup(
-					stream.Context(), authenticate.AgentId, authorization.Generation, request,
-				)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{
-					Payload: &agentpb.ControllerMessage_BackupCheckpointAck{
-						BackupCheckpointAck: acknowledgement,
-					},
-				}); err != nil {
-					return err
-				}
-				continue
-			}
+
 			if request := result.message.GetWorkStartRequest(); request != nil {
 				ack, err := s.startWork(session.ctx, session, authorization.Generation, request)
 				if err != nil {
@@ -514,6 +496,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				if err := stream.Send(ack); err != nil {
 					return err
+				}
+				if err := payloads.startBackupPayloads(ack.GetWorkStartAck()); err != nil {
+					return taskStoreStatus(err)
 				}
 				continue
 			}
@@ -610,6 +595,34 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
+			if handled, reply, err := s.entryReport(session, authorization.Generation, result.message); handled {
+				if err != nil {
+					return err
+				}
+				sendErr := stream.Send(reply)
+				if delivery := reply.GetEntryConfigurationFileDelivery(); delivery != nil {
+					clear(delivery.Content)
+					delivery.Content = nil
+				}
+				if sendErr != nil {
+					return sendErr
+				}
+				continue
+			}
+			if handled, reply, err := s.componentReport(session, authorization.Generation, result.message); handled {
+				if err != nil {
+					return err
+				}
+				sendErr := stream.Send(reply)
+				if delivery := reply.GetComponentConfigurationFileDelivery(); delivery != nil {
+					clear(delivery.Content)
+					delivery.Content = nil
+				}
+				if sendErr != nil {
+					return sendErr
+				}
+				continue
+			}
 			if handled, reply, err := s.networkReport(session, authorization.Generation, result.message); handled {
 				if err != nil {
 					return err
@@ -624,6 +637,47 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					return err
 				}
 				if err := stream.Send(reply); err != nil {
+					return err
+				}
+				continue
+			}
+			if handled, reply, err := s.removalRecoveryReport(session, authorization.Generation, result.message); handled {
+				if err != nil {
+					return err
+				}
+				err = stream.Send(reply)
+				if delivery := reply.GetServiceRemovalConfigurationFileDelivery(); delivery != nil {
+					clear(delivery.Content)
+					delivery.Content = nil
+				}
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetBackupWorkSecretRequest(); request != nil {
+				if err := s.deliverBackupWorkSecrets(stream, session, authorization.Generation, request); err != nil {
+					return taskStoreStatus(err)
+				}
+				continue
+			}
+			if handled, reply, err := s.backupWorkReport(session, authorization.Generation, result.message); handled {
+				if err != nil {
+					return err
+				}
+				payloads.finishBackupPayloads(result.message)
+				if err := stream.Send(reply); err != nil {
+					return err
+				}
+				continue
+			}
+			if handled, reply, err := s.lifecycleReport(session, authorization.Generation, result.message); handled {
+				if err != nil {
+					return err
+				}
+				err = stream.Send(reply)
+				clearLifecycleHookReply(reply)
+				if err != nil {
 					return err
 				}
 				continue

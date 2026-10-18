@@ -3,12 +3,14 @@ package etcd
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
+	"slices"
+	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -39,13 +41,13 @@ func (repository *TaskRepository) ReadBackupStagingDelivery(
 	}, true, err
 }
 
-// PublishBackupStagingDelivery seals decisions under the actual native Tasks.
-// At most 32 distinct Task compares plus native Volume compares fit one transaction;
-// the immutable claim-time index and procedure cannot change in place.
+// PublishBackupStagingDelivery seals decisions with their observed revisions.
+// Volume decisions retain every native work guard; the transaction budget is
+// checked without dropping guards or splitting authority across commits.
 func (repository *TaskRepository) PublishBackupStagingDelivery(
 	ctx context.Context,
 	record backupruntime.BackupStagingDeliveryRecord,
-	sources []BackupStagingSource,
+	guards []etcdstore.Condition,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
@@ -53,151 +55,32 @@ func (repository *TaskRepository) PublishBackupStagingDelivery(
 	if record.Ack != nil || executionplan.ValidateBackupStagingRecoveryPlan(record.Inventory, record.Plan) != nil {
 		return backupStagingConflict()
 	}
+	var err error
+	record.Guards, err = normalizeBackupStagingGuards(guards)
+	if err != nil {
+		return err
+	}
 	current, found, err := repository.ReadBackupStagingDelivery(ctx, record.AgentID)
 	if err != nil {
 		return err
 	}
+	if found && current.Record.HostID != record.HostID {
+		return backupStagingConflict()
+	}
 	if found && current.Record.AgentGeneration == record.AgentGeneration &&
 		proto.Equal(current.Record.Inventory, record.Inventory) &&
-		proto.Equal(current.Record.Plan, record.Plan) && sameBackupStagingTaskRevisions(current.Record.Tasks, sources) {
+		proto.Equal(current.Record.Plan, record.Plan) && slices.Equal(current.Record.Guards, record.Guards) {
 		// A retained plan may resume files only while the same native Task
 		// authority still exists. A timeout cannot reuse an earlier Ready grant.
 		conditions := []etcdstore.Condition{
 			{Key: backupruntime.BackupStagingDeliveryKey(record.AgentID), ModRevision: current.Revision},
 		}
-		for _, reference := range current.Record.Tasks {
-			if reference.RequiresTaskAuthority {
-				conditions = append(
-					conditions,
-					etcdstore.Condition{
-						Key:         taskjournal.TaskStorageKey(reference.TaskID),
-						ModRevision: reference.Revision,
-					},
-				)
-			}
-		}
-		for index, disposition := range current.Record.Plan.VolumeDispositions {
-			if index >= len(current.Record.Inventory.VolumeRestores) {
-				return backupStagingConflict()
-			}
-			source, err := repository.ReadBackupStagingSource(ctx, record.AgentID, record.AgentGeneration,
-				current.Record.Inventory.VolumeRestores[index].RecoveryKeySha256)
-			if err != nil || source.VolumeRestore == nil {
-				return backupStagingConflict()
-			}
-			var revision int64
-			switch {
-			case disposition.GetResume() != nil:
-				revision = disposition.GetResume().NativeRestoreModRevision
-			case disposition.GetHold() != nil:
-				revision = disposition.GetHold().NativeRestoreModRevision
-			case disposition.GetCleanup() != nil:
-				revision = disposition.GetCleanup().NativeRestoreModRevision
-			default:
-				return backupStagingConflict()
-			}
-			if source.VolumeRestore.Revision != revision {
-				return backupStagingConflict()
-			}
-			conditions = append(conditions, etcdstore.Condition{
-				Key: backupruntime.BackupRestoreKey(source.Task.Record.ID), ModRevision: revision})
-		}
+		conditions = append(conditions, record.Guards...)
 		current.Record.ProcessGeneration = record.ProcessGeneration
 		return repository.writeBackupStagingDelivery(ctx, current.Record, conditions)
 	}
-	stageCount := len(record.Inventory.GetEntries())
-	if len(sources) != stageCount+len(record.Inventory.GetVolumeRestores()) {
-		return backupStagingConflict()
-	}
 	conditions := []etcdstore.Condition{{Key: backupruntime.BackupStagingDeliveryKey(record.AgentID)}}
-	record.Tasks = nil
-	seen := make(map[string]int)
-	for index, source := range sources {
-		key, err := source.Index.Record.RecoveryKey()
-		var inventoriedKey []byte
-		var volumeDisposition *agentpb.BackupVolumeRestoreRecoveryDisposition
-		if index < stageCount {
-			inventoriedKey = record.Inventory.Entries[index].RecoveryKeySha256
-		} else {
-			inventoriedKey = record.Inventory.VolumeRestores[index-stageCount].RecoveryKeySha256
-			volumeDisposition = record.Plan.VolumeDispositions[index-stageCount]
-		}
-		terminal := taskjournal.IsTerminalTaskStatus(source.Task.Record.Status)
-		if err != nil || source.Index.Revision <= 0 || source.Task.Revision <= 0 ||
-			source.Index.Record.AgentID != record.AgentID ||
-			!source.Index.Record.AllowsAgentGeneration(record.AgentGeneration, terminal) ||
-			!bytes.Equal(key, inventoriedKey) ||
-			source.Task.Record.ID != source.Index.Record.TaskID ||
-			source.Task.Record.PlanHash != source.Index.Record.PlanSHA256 {
-			return backupStagingConflict()
-		}
-		requiresAuthority := false
-		var required *agentpb.BackupRecoveryRequired
-		if index < stageCount {
-			required = record.Plan.Dispositions[index].GetRecoveryRequired()
-			requiresAuthority = record.Plan.Dispositions[index].GetResumePrepared() != nil || required != nil
-		}
-		if required != nil {
-			if source.TerminalRestore == nil ||
-				source.TerminalRestore.State != backupruntime.BackupRestoreRecoveryRequired ||
-				required.NativeRestoreModRevision != source.Task.Revision {
-				return backupStagingConflict()
-			}
-			digest, err := backupruntime.BackupRestoreTerminalDomainDigest(*source.TerminalRestore)
-			if err != nil || digest != hex.EncodeToString(required.NativeRestoreSha256) {
-				return backupStagingConflict()
-			}
-			// The immutable terminal Restore and its Task share this revision.
-			// Keeping the Task compare retains their receipt/procedure authority
-			// without duplicating compares for every recovered representation.
-		}
-		if volumeDisposition != nil {
-			if source.VolumeRestore == nil || source.VolumeRestore.Revision <= 0 {
-				return backupStagingConflict()
-			}
-			digest, err := backupruntime.BackupRestoreTerminalDomainDigest(source.VolumeRestore.Record)
-			if err != nil {
-				return err
-			}
-			var revision int64
-			var expected []byte
-			switch {
-			case volumeDisposition.GetResume() != nil:
-				revision = volumeDisposition.GetResume().NativeRestoreModRevision
-				expected = volumeDisposition.GetResume().NativeRestoreSha256
-				requiresAuthority = true
-			case volumeDisposition.GetHold() != nil:
-				revision = volumeDisposition.GetHold().NativeRestoreModRevision
-				expected = volumeDisposition.GetHold().NativeRestoreSha256
-				requiresAuthority = true
-			case volumeDisposition.GetCleanup() != nil:
-				revision = volumeDisposition.GetCleanup().NativeRestoreModRevision
-				expected = volumeDisposition.GetCleanup().NativeRestoreSha256
-				requiresAuthority = !terminal
-			default:
-				return backupStagingConflict()
-			}
-			if revision != source.VolumeRestore.Revision || digest != hex.EncodeToString(expected) {
-				return backupStagingConflict()
-			}
-			conditions = append(conditions, etcdstore.Condition{
-				Key: backupruntime.BackupRestoreKey(source.Task.Record.ID), ModRevision: revision})
-		}
-		if referenceIndex, exists := seen[source.Task.Record.ID]; exists {
-			if record.Tasks[referenceIndex].Revision != source.Task.Revision {
-				return backupStagingConflict()
-			}
-			record.Tasks[referenceIndex].RequiresTaskAuthority = record.Tasks[referenceIndex].RequiresTaskAuthority ||
-				requiresAuthority
-		} else {
-			seen[source.Task.Record.ID] = len(record.Tasks)
-			record.Tasks = append(record.Tasks, backupruntime.BackupStagingTaskReference{
-				TaskID: source.Task.Record.ID, Revision: source.Task.Revision,
-				RequiresTaskAuthority: requiresAuthority,
-			})
-			conditions = append(conditions, etcdstore.Condition{Key: taskjournal.TaskStorageKey(source.Task.Record.ID), ModRevision: source.Task.Revision})
-		}
-	}
+	conditions = append(conditions, record.Guards...)
 	if found {
 		conditions[0].ModRevision = current.Revision
 		if current.Record.AgentGeneration != record.AgentGeneration &&
@@ -217,27 +100,6 @@ func (repository *TaskRepository) PublishBackupStagingDelivery(
 	return repository.writeBackupStagingDelivery(ctx, record, conditions)
 }
 
-func sameBackupStagingTaskRevisions(
-	references []backupruntime.BackupStagingTaskReference,
-	sources []BackupStagingSource,
-) bool {
-	for _, reference := range references {
-		found := false
-		for _, source := range sources {
-			if source.Task.Record.ID == reference.TaskID {
-				if source.Task.Revision != reference.Revision {
-					return false
-				}
-				found = true
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-
 func (repository *TaskRepository) writeBackupStagingDelivery(
 	ctx context.Context,
 	record backupruntime.BackupStagingDeliveryRecord,
@@ -248,10 +110,14 @@ func (repository *TaskRepository) writeBackupStagingDelivery(
 		return err
 	}
 	defer clear(encoded)
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: backupruntime.BackupStagingDeliveryKey(record.AgentID), Value: encoded}}
+	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
+		return err
+	}
 	result, err := repository.store.Transact(
 		ctx,
 		conditions,
-		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: conditions[0].Key, Value: encoded}},
+		mutations,
 	)
 	etcdstore.ClearValues(result.FailureReads)
 	if err != nil {
@@ -265,11 +131,14 @@ func (repository *TaskRepository) writeBackupStagingDelivery(
 
 func (repository *TaskRepository) ApplyBackupStagingDelivery(
 	ctx context.Context,
-	agentID string,
-	agentGeneration uint64,
+	identity workexecution.Identity,
 	process [16]byte,
 	ack *agentpb.BackupStagingRecoveryAck,
 ) (*agentpb.BackupStagingRecoveryAckReceipt, error) {
+	if identity.Validate() != nil || identity.Executor != workexecution.Agent {
+		return nil, backupStagingConflict()
+	}
+	agentID := identity.AgentID
 	digest, err := executionplan.BackupStagingRecoveryAckSHA256(ack)
 	if err != nil {
 		return nil, err
@@ -278,7 +147,7 @@ func (repository *TaskRepository) ApplyBackupStagingDelivery(
 	if err != nil {
 		return nil, err
 	}
-	if !found || current.Record.AgentGeneration != agentGeneration || current.Record.ProcessGeneration != process {
+	if !found || current.Record.HostID != identity.HostID || current.Record.AgentGeneration != identity.Generation || current.Record.ProcessGeneration != process {
 		return nil, backupStagingConflict()
 	}
 	next := current.Record
@@ -300,7 +169,12 @@ func (repository *TaskRepository) ApplyBackupStagingDelivery(
 		conditions := []etcdstore.Condition{
 			{Key: backupruntime.BackupStagingDeliveryKey(agentID), ModRevision: current.Revision},
 		}
+		conditions = append(conditions, current.Record.Guards...)
 		conditions = append(conditions, cleanup.Conditions...)
+		conditions, err = normalizeBackupStagingGuards(conditions)
+		if err != nil {
+			return nil, err
+		}
 		mutations := []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: backupruntime.BackupStagingDeliveryKey(agentID), Value: encoded},
 		}
@@ -327,4 +201,27 @@ func (repository *TaskRepository) ApplyBackupStagingDelivery(
 		AppliedPlanSha256: append([]byte(nil), ack.AppliedPlanSha256...),
 		RecoveryAckSha256: digest,
 	}, nil
+}
+
+func normalizeBackupStagingGuards(guards []etcdstore.Condition) ([]etcdstore.Condition, error) {
+	owned := append([]etcdstore.Condition(nil), guards...)
+	sort.Slice(owned, func(i, j int) bool { return owned[i].Key < owned[j].Key })
+	result := owned[:0]
+	for _, guard := range owned {
+		if guard.Key == "" || guard.ModRevision < 0 || guard.Prefix {
+			return nil, backupStagingConflict()
+		}
+		if len(result) > 0 && result[len(result)-1].Key == guard.Key {
+			if result[len(result)-1] != guard {
+				return nil, backupStagingConflict()
+			}
+			continue
+		}
+		result = append(result, guard)
+	}
+	return result, nil
+}
+
+func backupStagingConflict() error {
+	return errs.New(errs.KindStateConflict, "Backup staging native authority is unavailable or changed")
 }

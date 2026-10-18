@@ -64,7 +64,8 @@ func (repository *InputRepository) LoadDetachCapture(ctx context.Context, view w
 
 func matchesDetachCaptureSource(view workqueue.View, input DetachInput, capture WorkCapture) bool {
 	digest, err := Digest(input.Snapshot.Source)
-	return err == nil && view.Item.Item.Input != nil && capture.TaskID == input.TaskID &&
+	return err == nil && view.Item.Item.Input != nil && input.TaskID == view.Task.Task.ID &&
+		input.WorkItemID == view.Item.Item.ID && view.Item.Item.TaskID == view.Task.Task.ID && capture.TaskID == input.TaskID &&
 		capture.WorkItemID == input.WorkItemID && capture.OperationID == DetachOperation(view) &&
 		capture.Action == *view.Item.Item.Input && capture.FrozenSHA256 == digest &&
 		capture.BackingProjectID == input.Snapshot.Source.Attach.BackingProjectID

@@ -3,14 +3,13 @@ package blueprintrelease
 import (
 	"bytes"
 	"context"
-	"maps"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -18,21 +17,23 @@ import (
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
-// PrepareServiceUnitInput carries only immutable authored inputs and the child
+// PrepareServiceUnitInput carries only immutable authored inputs and the work
 // identity. PrepareServiceUnit reads current runtime and predecessor authority
 // itself from one fixed Release-planning revision.
 type PrepareServiceUnitInput struct {
 	ServiceID     string
 	Projection    projectionrecord.EnvironmentComposeProjection
 	Scripts       []scriptrecord.Record
-	Task          etcd.TaskRecord
-	PrefixSteps   []*agentpb.ExecutionStep
+	Files         []taskmaterialization.Record
+	Work          workqueue.View
+	OperationID   string
+	PlanID        string
 	AllocateNamed func(ids.Kind, string) string
 	CreatedAt     time.Time
 }
@@ -43,11 +44,25 @@ type PrepareServiceUnitInput struct {
 func (service *Service) PrepareServiceUnit(
 	ctx context.Context,
 	input PrepareServiceUnitInput,
-) (Prepared, error) {
+) (prepared Prepared, resultErr error) {
 	if err := validateServiceUnitInput(ctx, service, input); err != nil {
 		return Prepared{}, err
 	}
-	scope, err := service.ledger.LoadPlanningScope(ctx, input.Projection.EnvironmentID)
+	conditions, err := service.ledger.BlueprintWorkProjectionConditions(ctx, input.Work, input.Projection)
+	if err != nil {
+		return Prepared{}, err
+	}
+	prerequisites, err := service.ledger.BlueprintWorkPrerequisiteConditions(ctx, input.Work, input.Projection.BlueprintRequirements)
+	if err != nil {
+		return Prepared{}, err
+	}
+	conditions = append(conditions, prerequisites...)
+	defer func() {
+		if resultErr == nil {
+			prepared.sourceConditions = append(prepared.sourceConditions, conditions...)
+		}
+	}()
+	scope, err := service.ledger.LoadPlanningScopeForCapturedInput(ctx, input.Projection, input.Work.ReadRevision)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -67,14 +82,8 @@ func (service *Service) PrepareServiceUnit(
 	if err != nil {
 		return Prepared{}, err
 	}
-	// Waiting for another file writer is normal coordinator scheduling. Check
-	// before staging a new rollout so each waiting pass cannot leave an unused
-	// Release manifest and render inputs. Final preparation still rechecks the
-	// captured configuration head before publication.
-	input.Task, err = service.prepareTaskConfiguration(ctx, input.Task, scope.ReadRevision)
-	if err != nil {
-		return Prepared{}, err
-	}
+	// File ownership is acquired with native work publication, not by making a
+	// hidden pending Task. Final preparation captures restoration at that boundary.
 	preparedInput, err := service.prepareServiceUnitInput(ctx, input, scope, replacement)
 	if err != nil {
 		return Prepared{}, err
@@ -89,11 +98,9 @@ func (service *Service) prepareServiceUnitInput(ctx context.Context,
 	input PrepareServiceUnitInput, scope releasequeries.ReleasePlanningScope,
 	replacement *componentplanning.ProxyReplacementImage,
 ) (prepareInput, error) {
-	expectedOwner, err := taskjournal.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
-	if err != nil {
-		return prepareInput{}, err
-	}
-	if input.Task.Owner != expectedOwner || input.Task.Target != scope.Environment.Record.ID {
+	expectedScope := workexecution.Scope{TenantID: scope.Project.Record.TenantID,
+		ProjectID: scope.Project.Record.ID, EnvironmentID: scope.Environment.Record.ID}
+	if input.Work.Task.Task.Scope != expectedScope || input.Work.Item.Item.TargetID != input.ServiceID {
 		return prepareInput{}, errs.New(errs.KindStateConflict, "Blueprint Service unit hierarchy changed")
 	}
 	planning, err := service.ledger.LoadPlanningServices(ctx, scope, []string{input.ServiceID})
@@ -129,12 +136,10 @@ func (service *Service) prepareServiceUnitInput(ctx context.Context,
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(
 		input.Projection.ComposeArtifact,
 		artifact,
-	); err != nil || artifact.GetArtifactId() != input.Task.Params[taskcontract.EnvironmentBlueprintArtifactParam] ||
+	); err != nil || ids.Validate(ids.KindConfig, artifact.GetArtifactId()) != nil ||
 		artifact.GetOwnerId() != input.Projection.EnvironmentID {
 		return prepareInput{}, errs.New(errs.KindStateConflict, "Blueprint Service unit artifact is invalid")
 	}
-	task := input.Task
-	task.Params = maps.Clone(input.Task.Params)
 	preparedInput := prepareInput{
 		DesiredRevisionID: input.Projection.RevisionID,
 		IntendedAttaches:  attaches,
@@ -145,8 +150,10 @@ func (service *Service) prepareServiceUnitInput(ctx context.Context,
 		Projection:        projectionrecord.CloneEnvironmentComposeProjection(input.Projection),
 		ServiceChanges:    []blueprints.EnvironmentBlueprintServiceChange{change},
 		Scripts:           append([]scriptrecord.Record(nil), input.Scripts...),
-		Task:              task,
-		PrefixSteps:       append([]*agentpb.ExecutionStep(nil), input.PrefixSteps...),
+		Files:             taskmaterialization.Clone(input.Files),
+		Work:              input.Work,
+		OperationID:       input.OperationID,
+		PlanID:            input.PlanID,
 		Artifact:          proto.Clone(artifact).(*agentpb.ComposeArtifact),
 		AllocateNamed:     input.AllocateNamed,
 		CreatedAt:         input.CreatedAt,
@@ -179,15 +186,19 @@ func serviceUnitDesiredChange(projection projectionrecord.EnvironmentComposeProj
 }
 
 func validateServiceUnitInput(ctx context.Context, service *Service, input PrepareServiceUnitInput) error {
-	parentID := input.Task.Params[taskjournal.TaskBlueprintParentParam]
+	task, item := input.Work.Task.Task, input.Work.Item.Item
 	if ctx == nil || service == nil || service.ledger == nil || input.AllocateNamed == nil ||
 		ids.Validate(ids.KindService, input.ServiceID) != nil ||
-		ids.Validate(ids.KindTask, parentID) != nil || parentID == input.Task.ID ||
-		parentID != input.Projection.RevisionID ||
-		input.Task.Params[blueprints.EnvironmentDesiredRevisionParam] != input.Projection.RevisionID ||
-		input.Task.Actor != taskjournal.TaskActorSystem || input.Task.Executor != taskjournal.TaskExecutorAgent ||
-		input.Task.Status != taskjournal.TaskStatusPending ||
-		input.Task.RenderGeneration <= 0 || uint64(input.Task.RenderGeneration) != input.Projection.RenderGeneration ||
+		task.Validate() != nil || item.Validate() != nil || input.Work.ReadRevision <= 0 ||
+		input.Work.Task.Revision <= 0 || input.Work.Item.Revision <= 0 ||
+		task.Action != workexecution.ActionApply || task.ID != input.Projection.RevisionID ||
+		task.Scope.EnvironmentID != input.Projection.EnvironmentID || item.TaskID != task.ID ||
+		item.Operation != workexecution.Release || item.TargetID != input.ServiceID ||
+		item.Placement.Executor != workexecution.Agent || item.AttemptNumber != 0 ||
+		(item.Phase != workexecution.Waiting && item.Phase != workexecution.Ready) ||
+		task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil || item.ForwardRevoked ||
+		ids.Validate(ids.KindOperation, input.OperationID) != nil || ids.Validate(ids.KindPlan, input.PlanID) != nil ||
+		input.CreatedAt.Before(task.CreatedAt) || !input.CreatedAt.Before(item.Deadline) ||
 		!input.CreatedAt.Equal(input.CreatedAt.UTC()) {
 		return errs.New(errs.KindValidationFailed, "Blueprint Service unit preparation is invalid")
 	}

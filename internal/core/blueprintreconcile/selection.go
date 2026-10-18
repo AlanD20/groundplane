@@ -60,18 +60,18 @@ func Select(input Snapshot) (Selection, error) {
 		switch execution.State {
 		case Pending:
 			if !required || trusted[execution.Unit.Target] || conflictsAny(execution.Unit, held) {
-				result.CancelPending = append(result.CancelPending, execution.PlanID)
+				result.CancelPending = append(result.CancelPending, execution.WorkItemID)
 			} else {
-				result.ContinuePending = append(result.ContinuePending, execution.PlanID)
+				result.ContinuePending = append(result.ContinuePending, execution.WorkItemID)
 				continuingPending[execution.Unit.Target] = true
 				held = append(held, execution.Unit)
 			}
 		case Running:
 			if required {
-				result.ContinueRunning = append(result.ContinueRunning, execution.PlanID)
+				result.ContinueRunning = append(result.ContinueRunning, execution.WorkItemID)
 				continuing[execution.Unit.Target] = true
 			} else {
-				result.CancelRunning = append(result.CancelRunning, execution.PlanID)
+				result.CancelRunning = append(result.CancelRunning, execution.WorkItemID)
 			}
 		}
 	}

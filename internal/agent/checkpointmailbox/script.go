@@ -10,11 +10,14 @@ import (
 )
 
 type scriptCheckpointKey struct {
-	taskID       string
-	assignmentID string
-	stepID       string
-	executionID  string
-	state        agentpb.ScriptExecutionState
+	taskID      string
+	attemptID   string
+	workItemID  string
+	executionID string
+	state       agentpb.ScriptExecutionState
+	operationID string
+	stageID     string
+	sequence    uint64
 }
 
 type scriptCheckpointWaiter struct {
@@ -84,14 +87,16 @@ func (inbox *ScriptInbox) Accept(ack *agentpb.ScriptCheckpointAck) error {
 
 func scriptCheckpointRequestKey(request *agentpb.ScriptCheckpointRequest) scriptCheckpointKey {
 	return scriptCheckpointKey{
-		taskID: request.GetTaskId(), assignmentID: request.GetAssignmentId(), stepID: request.GetStepId(),
+		taskID: request.GetTaskId(), attemptID: request.GetAttemptId(), workItemID: request.GetWorkItemId(),
 		executionID: request.GetScriptExecutionId(), state: request.GetState(),
+		operationID: request.GetOperationId(), stageID: request.GetStageId(), sequence: request.GetSequence(),
 	}
 }
 
 func scriptCheckpointAckKey(ack *agentpb.ScriptCheckpointAck) scriptCheckpointKey {
 	return scriptCheckpointKey{
-		taskID: ack.GetTaskId(), assignmentID: ack.GetAssignmentId(), stepID: ack.GetStepId(),
+		taskID: ack.GetTaskId(), attemptID: ack.GetAttemptId(), workItemID: ack.GetWorkItemId(),
 		executionID: ack.GetScriptExecutionId(), state: ack.GetState(),
+		operationID: ack.GetOperationId(), stageID: ack.GetStageId(), sequence: ack.GetSequence(),
 	}
 }

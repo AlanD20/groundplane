@@ -223,7 +223,7 @@ func validateInitialAbsenceAuthority(snapshot Snapshot, desired DesiredPlan) err
 		if versioned.Record.EnvironmentID != snapshot.EnvironmentID ||
 			validateApplied(versioned.Record) != nil || versioned.Revision < 0 ||
 			(versioned.Revision == 0 && (!seeded[versioned.Record.Target] ||
-				versioned.Record.State != Absent || versioned.Record.SourceTaskID != "")) ||
+				versioned.Record.State != Absent || hasAppliedEffectSource(versioned.Record))) ||
 			(versioned.Revision > 0 && !hasAppliedEffectSource(versioned.Record)) ||
 			knownApplied[versioned.Record.Target] {
 			return invalidRecord()

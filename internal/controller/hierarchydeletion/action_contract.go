@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -170,12 +169,11 @@ func (k ActionTargetKind) Valid() bool {
 type ProcedureKind string
 
 const (
-	ProcedureAgentChild          ProcedureKind = "agent-child"
+	ProcedureAgentWork           ProcedureKind = "agent-work"
 	ProcedureControllerFinalizer ProcedureKind = "controller-finalizer"
 )
 
-type AgentChildInput struct {
-	TaskType       string
+type AgentWorkInput struct {
 	TypedProcedure string
 	InputDigest    string
 	Timeout        time.Duration
@@ -191,16 +189,14 @@ type ControllerFinalizerInput struct {
 }
 type ProcedureInput struct {
 	Kind                ProcedureKind
-	AgentChild          *AgentChildInput
+	AgentWork           *AgentWorkInput
 	ControllerFinalizer *ControllerFinalizerInput
 }
 
-type AgentChildProcedure struct {
-	ChildOperationID string
-	TaskType         string
-	TypedProcedure   string
-	InputDigest      string
-	Timeout          time.Duration
+type AgentWorkProcedure struct {
+	TypedProcedure string
+	InputDigest    string
+	Timeout        time.Duration
 }
 type ControllerFinalizerProcedure struct {
 	Finalizer                   string
@@ -211,7 +207,7 @@ type ControllerFinalizerProcedure struct {
 }
 type Procedure struct {
 	Kind                ProcedureKind
-	AgentChild          *AgentChildProcedure
+	AgentWork           *AgentWorkProcedure
 	ControllerFinalizer *ControllerFinalizerProcedure
 }
 
@@ -265,19 +261,16 @@ func (p ProcedureInput) Validate(
 	agentName, isAgent := agentProcedures[action]
 	finalizer, isFinalizer := controllerFinalizers[action]
 	switch p.Kind {
-	case ProcedureAgentChild:
-		if !isAgent || p.AgentChild == nil || p.ControllerFinalizer != nil {
-			return errs.Newf(errs.KindInternal, "action %q requires exactly one agent-child input", action)
+	case ProcedureAgentWork:
+		if !isAgent || p.AgentWork == nil || p.ControllerFinalizer != nil {
+			return errs.Newf(errs.KindInternal, "action %q requires exactly one agent-work input", action)
 		}
-		v := p.AgentChild
+		v := p.AgentWork
 		if v.TypedProcedure != agentName || !canonicalDigest(v.InputDigest) || v.Timeout <= 0 {
-			return errs.Newf(errs.KindInternal, "agent-child input for %q is incomplete", action)
-		}
-		if v.TaskType != "remove" {
-			return errs.Newf(errs.KindInternal, "action %q requires remove task", action)
+			return errs.Newf(errs.KindInternal, "agent-work input for %q is incomplete", action)
 		}
 	case ProcedureControllerFinalizer:
-		if !isFinalizer || p.ControllerFinalizer == nil || p.AgentChild != nil {
+		if !isFinalizer || p.ControllerFinalizer == nil || p.AgentWork != nil {
 			return errs.Newf(errs.KindInternal, "action %q requires exactly one controller-finalizer input", action)
 		}
 		v := p.ControllerFinalizer
@@ -299,21 +292,18 @@ func (p Procedure) Validate(action ActionKind) error {
 	agentName, isAgent := agentProcedures[action]
 	finalizer, isFinalizer := controllerFinalizers[action]
 	switch p.Kind {
-	case ProcedureAgentChild:
-		if !isAgent || p.AgentChild == nil || p.ControllerFinalizer != nil {
-			return errs.Newf(errs.KindInternal, "action %q requires exactly one agent-child procedure", action)
+	case ProcedureAgentWork:
+		if !isAgent || p.AgentWork == nil || p.ControllerFinalizer != nil {
+			return errs.Newf(errs.KindInternal, "action %q requires exactly one agent-work procedure", action)
 		}
-		v := p.AgentChild
-		if ids.Validate(ids.KindOperation, v.ChildOperationID) != nil || v.TypedProcedure != agentName ||
+		v := p.AgentWork
+		if v.TypedProcedure != agentName ||
 			!canonicalDigest(v.InputDigest) ||
 			v.Timeout <= 0 {
-			return errs.Newf(errs.KindInternal, "agent-child evidence for %q is incomplete", action)
-		}
-		if v.TaskType != "remove" {
-			return errs.Newf(errs.KindInternal, "action %q requires remove task", action)
+			return errs.Newf(errs.KindInternal, "agent-work evidence for %q is incomplete", action)
 		}
 	case ProcedureControllerFinalizer:
-		if !isFinalizer || p.ControllerFinalizer == nil || p.AgentChild != nil {
+		if !isFinalizer || p.ControllerFinalizer == nil || p.AgentWork != nil {
 			return errs.Newf(errs.KindInternal, "action %q requires exactly one controller-finalizer procedure", action)
 		}
 		v := p.ControllerFinalizer
@@ -358,9 +348,9 @@ func validateBoundAction(planned PlannedAction, bound Action) error {
 	if planned.ProcedureInput.Kind != bound.Procedure.Kind {
 		return errs.Newf(errs.KindInternal, "bound hierarchy deletion action %s changed executor kind", planned.ID)
 	}
-	if planned.ProcedureInput.Kind == ProcedureAgentChild {
-		input, procedure := planned.ProcedureInput.AgentChild, bound.Procedure.AgentChild
-		if input.TaskType != procedure.TaskType || input.TypedProcedure != procedure.TypedProcedure ||
+	if planned.ProcedureInput.Kind == ProcedureAgentWork {
+		input, procedure := planned.ProcedureInput.AgentWork, bound.Procedure.AgentWork
+		if input.TypedProcedure != procedure.TypedProcedure ||
 			input.InputDigest != procedure.InputDigest ||
 			input.Timeout != procedure.Timeout {
 			return errs.Newf(errs.KindInternal, "bound hierarchy deletion action %s changed agent input", planned.ID)
@@ -370,71 +360,6 @@ func validateBoundAction(planned PlannedAction, bound Action) error {
 	input, procedure := planned.ProcedureInput.ControllerFinalizer, bound.Procedure.ControllerFinalizer
 	if input.Finalizer != procedure.Finalizer || input.FixedInputRevision != procedure.FixedInputRevision {
 		return errs.Newf(errs.KindInternal, "bound hierarchy deletion action %s changed controller input", planned.ID)
-	}
-	return nil
-}
-
-type AgentTerminalProof struct {
-	ChildOperationID   string
-	AttemptID          string
-	TaskID             string
-	AssignmentID       string
-	AttemptGeneration  int64
-	ReceiptRevision    int64
-	ReceiptDigest      string
-	ProgressKey        string
-	ProgressDigest     string
-	TerminalTaskDigest string
-	Terminal           AgentTerminal
-	ResultDigest       string
-	ErrorDigest        string
-	CheckpointDigest   string
-}
-
-type AgentTerminal string
-
-const (
-	AgentTerminalCompleted AgentTerminal = "completed"
-	AgentTerminalFailed    AgentTerminal = "failed"
-	AgentTerminalAborted   AgentTerminal = "aborted"
-	AgentTerminalTimedOut  AgentTerminal = "timed_out"
-)
-
-func (terminal AgentTerminal) Valid() bool {
-	switch terminal {
-	case AgentTerminalCompleted, AgentTerminalFailed, AgentTerminalAborted, AgentTerminalTimedOut:
-		return true
-	default:
-		return false
-	}
-}
-
-func (p AgentTerminalProof) Validate(action Action) error {
-	if action.Procedure.Kind != ProcedureAgentChild || action.Procedure.AgentChild == nil {
-		return errs.Newf(errs.KindInternal, "action %s is not agent-child", action.ID)
-	}
-	if p.ChildOperationID != action.Procedure.AgentChild.ChildOperationID || p.AttemptID == "" || p.TaskID == "" ||
-		p.AssignmentID == "" ||
-		p.AttemptGeneration <= 0 ||
-		p.ReceiptRevision <= 0 ||
-		p.ProgressKey == "" ||
-		!p.Terminal.Valid() ||
-		!canonicalDigest(p.ReceiptDigest) ||
-		!canonicalDigest(p.ProgressDigest) ||
-		!canonicalDigest(p.TerminalTaskDigest) ||
-		!canonicalDigest(p.CheckpointDigest) {
-		return errs.Newf(errs.KindInternal, "agent terminal proof for action %s is incomplete", action.ID)
-	}
-	if p.Terminal == AgentTerminalCompleted {
-		if !canonicalDigest(p.ResultDigest) || p.ErrorDigest != "" {
-			return errs.Newf(
-				errs.KindInternal,
-				"completed agent proof for action %s requires only result digest",
-				action.ID,
-			)
-		}
-	} else if !canonicalDigest(p.ErrorDigest) || p.ResultDigest != "" {
-		return errs.Newf(errs.KindInternal, "non-success agent proof for action %s requires only error digest", action.ID)
 	}
 	return nil
 }

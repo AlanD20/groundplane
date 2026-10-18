@@ -23,7 +23,6 @@ type blueprintBackupPolicySourceEvidence struct {
 	identityIndex    *etcdstore.KeyValue
 	attach           *etcdstore.Versioned[attachrecord.Record]
 	attachOwner      *etcdstore.KeyValue
-	candidateAttach  bool
 }
 
 type blueprintBackupPolicyPreparationState struct {
@@ -127,10 +126,6 @@ func (repository *BackupPolicyPlanner) PrepareEnvironmentBlueprintBackupPolicy(
 		return BlueprintBackupPolicyPreparation{}, errs.New(
 			errs.KindValidationFailed, "retained Blueprint Backup input cannot replace policy decisions",
 		)
-	}
-	if err := validateBlueprintAttachTaskPreparation(input.AttachPreparation); err != nil &&
-		!BlueprintAttachTaskPreparationIsZero(input.AttachPreparation) {
-		return BlueprintBackupPolicyPreparation{}, err
 	}
 	current, coordination, key, err := repository.loadBlueprintBackupBase(
 		ctx, input.EnvironmentID, input.ReadRevision, input.CreatedAt,

@@ -6,7 +6,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
-	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
@@ -19,8 +18,8 @@ import (
 // boundary. Planning has no dependency on the public Attach mutation service.
 type RemovalFacts interface {
 	SealBackingHookInputsAtRevision(context.Context, string, string, backinghook.Configuration, int64) (*taskconfiguration.BackingHookEncryptedInputs, error)
-	ResolveCapturedDetachHook(context.Context, attachremoval.Input, taskplanning.BackingHookInputConsumer) error
-	ResolveDeletionIdentity(context.Context, attachremoval.Input, taskplanning.AttachPlanIdentityConsumer) error
+	ResolveCapturedDetachHook(context.Context, attachremoval.Input, HookInputConsumer) error
+	ResolveDeletionIdentity(context.Context, attachremoval.Input, IdentityConsumer) error
 }
 
 type RemovalPlanner struct{ facts RemovalFacts }
@@ -94,7 +93,7 @@ func (planner *RemovalPlanner) Build(ctx context.Context, source attachremoval.I
 	if err != nil || authentication != source.Backing.Desired.Authentication || authentication == core.BackingAuthenticationNone {
 		return nil, errs.New(errs.KindStateConflict, "captured Attach removal authentication is invalid")
 	}
-	err = planner.facts.ResolveDeletionIdentity(ctx, source, func(identity taskplanning.AttachPlanIdentity) error {
+	err = planner.facts.ResolveDeletionIdentity(ctx, source, func(identity Identity) error {
 		if identity.Authentication != authentication || len(identity.Grants) != len(source.Attach.GrantAttachIDs) {
 			return errs.New(errs.KindStateConflict, "captured Attach credential identity changed")
 		}

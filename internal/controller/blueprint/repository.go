@@ -2,7 +2,7 @@ package blueprint
 
 import (
 	"context"
-	"net/netip"
+	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -10,6 +10,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
@@ -17,26 +18,35 @@ import (
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
+	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type environmentBlueprintRepository interface {
-	StageBlueprintProxyCandidateInput(context.Context, componentplanning.ChildExecution,
+	ValidateAgentProxyPublication(context.Context, workqueue.View, componentplanning.ProxyServicePreflight, workqueue.Change) error
+	LoadComponentWorkConfiguration(context.Context, runtimeconfiguration.Reference) (runtimeconfiguration.Snapshot, error)
+	PrepareComponentWorkSecretPins(context.Context, workqueue.View, string, runtimeconfiguration.WorkCapture) (tasksecretpins.Prepared, error)
+	PrepareComponentWorkConfiguration(context.Context, workqueue.View, string, uint64, []taskmaterialization.Record) (runtimeconfiguration.WorkCapture, error)
+	ComponentWorkConfigurationConditions(context.Context, workqueue.View, runtimeconfiguration.WorkCapture) ([]etcdstore.Condition, error)
+	PrepareBlueprintDisabledComponent(context.Context, workqueue.View, blueprintunits.Unit,
+		etcd.BlueprintDisabledComponentSelection, *componentplanning.ProxyServicePreflight, workqueue.Change, time.Time,
+	) (workqueue.Change, error)
+	LoadBlueprintAdmissionSnapshot(context.Context, string, int64) (blueprintunits.Snapshot, error)
+	StageBlueprintProxyCandidateInput(context.Context, workqueue.View,
 		projectionrecord.EnvironmentComposeProjection, int64,
 	) (etcdstore.Versioned[componentplanning.ProxyCandidateInputReference], error)
-	StageBlueprintDisabledProxyCandidateInput(context.Context, etcd.TaskRecord, string,
+	StageBlueprintDisabledProxyCandidateInput(context.Context, workqueue.View,
 		componentrecord.Record, projectionrecord.EnvironmentComposeProjection, int64,
 	) (etcdstore.Versioned[componentplanning.ProxyCandidateInputReference], error)
 	ReadZoneDNSActivation(context.Context, []string) (etcd.ZoneDNSActivation, error)
-	HasActiveEnvironmentBlueprintApply(context.Context, string) (bool, error)
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
@@ -118,39 +128,16 @@ type environmentBlueprintRepository interface {
 		string,
 		int64,
 	) ([]etcd.BlueprintRuntimeComponent, error)
-	PrepareEnvironmentComponentTask(
-		context.Context,
-		string,
-		string,
-		[]blueprints.EnvironmentBlueprintZoneChange,
-		[]componentplanning.EnvironmentComponentCandidateInput,
-		time.Time,
-		componentplanning.FrozenProjectionAuthority,
-	) (componentplanning.ComponentTaskPreparation, error)
-	ReadCurrentProjectionAuthority(
-		context.Context,
-		string,
-		int64,
-	) (componentplanning.FrozenProjectionAuthority, error)
-	PrepareFrozenProjectionAuthority(
-		context.Context,
-		componentplanning.FrozenProjectionAuthorityInput,
-	) (componentplanning.FrozenProjectionAuthority, error)
 	PrepareFrozenComponentUnitAuthority(
 		context.Context,
 		componentplanning.FrozenProjectionAuthorityInput,
 		etcdstore.Versioned[componentrecord.Record],
 	) (componentplanning.FrozenProjectionAuthority, error)
+	PrepareWorkPlacement(context.Context, workqueue.View, etcdstore.Versioned[componentrecord.Record],
+		core.Component, componentplanning.FrozenProjectionAuthority) (componentrecord.Record, workqueue.Change, error)
 	PrepareFrozenProxyServicePreflight(context.Context, componentplanning.FrozenProjectionAuthority,
 		string, core.ComponentKind, []core.Service) (componentplanning.FrozenProjectionAuthority, error)
 	ValidateBlueprintProxyServiceSource(context.Context, string, string, string, int64) error
-	PrepareComponentTaskPublication(
-		context.Context,
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		componentplanning.TaskIdentity,
-		[]blueprints.EnvironmentBlueprintZoneChange,
-		componentplanning.ComponentTaskPreparation,
-	) (componentplanning.Publication, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		blueprints.EnvironmentBlueprintStageClaimRequest,
@@ -163,34 +150,11 @@ type environmentBlueprintRepository interface {
 	PublishEnvironmentBlueprintAuthoredRevision(
 		context.Context,
 		etcd.BlueprintAuthoredPublication,
-	) (etcd.IdempotencyTransactionResult, error)
+	) (etcdstore.TransactionResult, error)
 	SealEnvironmentBlueprintRuntimeProjection(
 		context.Context,
 		etcd.BlueprintRuntimeProjectionSeal,
 	) error
-	PublishEnvironmentBlueprintDesiredRevision(
-		context.Context,
-		netip.Prefix,
-		string,
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		int64,
-		blueprints.EnvironmentBlueprintStageClaim,
-		blueprints.EnvironmentDesiredRevisionIdentity,
-		projectionrecord.EnvironmentComposeProjection,
-		[]blueprints.EnvironmentBlueprintZoneChange,
-		[]blueprints.EnvironmentBlueprintServiceChange,
-		[]blueprints.EnvironmentBlueprintRouteChange,
-		groupstore.ReleaseGroupBlueprintPreparedMutation,
-		componentplanning.ComponentTaskPreparation,
-		blueprintplanning.BlueprintAttachTaskPreparation,
-		blueprintplanning.BlueprintBackupPolicyPreparation,
-		etcd.BlueprintScriptPublication,
-		etcd.BlueprintReleasePublication,
-		etcd.BlueprintRequirementGate,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
 	ListScripts(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[scriptrecord.Record], error)
 	PrepareBlueprintScriptPublication(
 		context.Context,
@@ -271,11 +235,6 @@ func (repository *durableRepository) GetEnvironmentDesiredInput(
 	ctx context.Context, environmentID string,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error) {
 	return repository.desired.GetEnvironmentDesiredInput(ctx, environmentID)
-}
-func (repository *durableRepository) HasActiveEnvironmentBlueprintApply(
-	ctx context.Context, environmentID string,
-) (bool, error) {
-	return repository.desired.HasActiveEnvironmentBlueprintApply(ctx, environmentID)
 }
 func (repository *durableRepository) CreateBlueprintEntryValueGeneration(
 	ctx context.Context,
@@ -398,37 +357,5 @@ func (repository *durableRepository) PrepareBlueprintScriptPublication(
 ) (etcd.BlueprintScriptPublication, error) {
 	return repository.scripts.PrepareBlueprintScriptPublication(
 		ctx, environmentID, readRevision, nextGenerationID, current, desired, generations,
-	)
-}
-
-func (repository *durableRepository) PublishEnvironmentBlueprintDesiredRevision(
-	ctx context.Context,
-	environmentPool netip.Prefix,
-	desiredNetworkPool string,
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	expectedHeadRevision int64,
-	claim blueprints.EnvironmentBlueprintStageClaim,
-	revision blueprints.EnvironmentDesiredRevisionIdentity,
-	projection projectionrecord.EnvironmentComposeProjection,
-	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
-	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
-	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
-	releaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation,
-	componentPreparation componentplanning.ComponentTaskPreparation,
-	attachPreparation blueprintplanning.BlueprintAttachTaskPreparation,
-	backupPreparation blueprintplanning.BlueprintBackupPolicyPreparation,
-	scriptPublication etcd.BlueprintScriptPublication,
-	releasePublication etcd.BlueprintReleasePublication,
-	requirementGate etcd.BlueprintRequirementGate,
-	task etcd.TaskRecord,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.EnvironmentBlueprintRepository.PublishEnvironmentBlueprintDesiredRevision(
-		ctx, environmentPool, desiredNetworkPool, project, environment, expectedHeadRevision,
-		claim, revision, projection, zoneChanges, serviceChanges, routeChanges,
-		releaseGroupPreparation, componentPreparation, attachPreparation,
-		backupPreparation,
-		scriptPublication, releasePublication, requirementGate, task, marker,
 	)
 }

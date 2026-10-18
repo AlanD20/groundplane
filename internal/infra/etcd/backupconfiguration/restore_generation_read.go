@@ -28,9 +28,6 @@ func (repository *ConfigTransferRepository) ReadConfigRestoreGeneration(ctx cont
 	}
 	defer etcdstore.ClearValues(read.Values)
 	zero.ReadRevision = read.ReadRevision
-	if _, err := repository.guard(ctx, owner.Transfer, read.ReadRevision); err != nil {
-		return zero, false, err
-	}
 	if _, err := repository.restoreGuard(ctx, owner, read.ReadRevision); err != nil {
 		return zero, false, err
 	}

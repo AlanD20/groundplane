@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -29,7 +30,7 @@ func prepareConfigRestoreMetadata(generation etcdstore.Versioned[backupconfigura
 	var result configRestoreMetadata
 	owner := generation.Record.Owner
 	if generation.Revision <= 0 || generation.Record.Completed.GetContent() == nil ||
-		projection.EnvironmentID != owner.EnvironmentID || projection.RevisionID != owner.Transfer.Binding.TaskID ||
+		projection.EnvironmentID != owner.EnvironmentID || projection.RevisionID != owner.Transfer.Binding.Attempt.TaskID ||
 		projection.RenderGeneration != owner.RenderGeneration ||
 		identities.EnvironmentID != projection.EnvironmentID || identities.RevisionID != projection.RevisionID ||
 		identities.RenderGeneration != projection.RenderGeneration ||
@@ -62,16 +63,17 @@ func prepareConfigRestoreMetadata(generation etcdstore.Versioned[backupconfigura
 // The native receipt pins both encodings; a resumed writer cannot replace them.
 func (repository *BackupRuntimeRepository) stageConfigRestoreMetadata(ctx context.Context,
 	generation etcdstore.Versioned[backupconfiguration.ConfigRestoreGenerationRecord], metadata configRestoreMetadata,
+	recovery *workexecution.Attempt,
 ) error {
 	owner := generation.Record.Owner
 	for _, item := range []struct {
 		key   string
 		value []byte
 	}{
-		{blueprints.EnvironmentBlueprintEffectiveProjectionKey(owner.EnvironmentID, owner.Transfer.Binding.TaskID), metadata.projection},
-		{blueprints.EnvironmentBlueprintOwnedIdentitiesKey(owner.EnvironmentID, owner.Transfer.Binding.TaskID), metadata.identities},
+		{blueprints.EnvironmentBlueprintEffectiveProjectionKey(owner.EnvironmentID, owner.Transfer.Binding.Attempt.TaskID), metadata.projection},
+		{blueprints.EnvironmentBlueprintOwnedIdentitiesKey(owner.EnvironmentID, owner.Transfer.Binding.Attempt.TaskID), metadata.identities},
 	} {
-		authority, err := repository.loadConfigRestorePublication(ctx, generation)
+		authority, err := repository.loadConfigRestorePublication(ctx, generation, recovery)
 		if err != nil {
 			return err
 		}

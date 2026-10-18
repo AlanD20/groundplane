@@ -3,24 +3,15 @@ package desiredrevision
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
-	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
-	"net/http"
-	"net/netip"
 	"sync"
 	"time"
 
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -31,77 +22,29 @@ type ClaimRepository interface {
 	) (blueprints.EnvironmentBlueprintStageClaim, error)
 }
 
+type AbandonmentRepository interface {
+	AbandonEnvironmentBlueprintStage(context.Context, blueprints.EnvironmentBlueprintStageClaim) error
+}
+
 type PublicationRepository interface {
+	AbandonmentRepository
 	StageEnvironmentBlueprintRevision(
 		context.Context,
 		blueprints.EnvironmentBlueprintStageRequest,
 	) (blueprints.EnvironmentBlueprintSeal, error)
-	AbandonEnvironmentBlueprintStage(context.Context, blueprints.EnvironmentBlueprintStageClaim) error
 	PublishEnvironmentBlueprintAuthoredRevision(
 		context.Context,
 		etcd.BlueprintAuthoredPublication,
-	) (etcd.IdempotencyTransactionResult, error)
-	PublishEnvironmentBlueprintDesiredRevision(
-		context.Context,
-		netip.Prefix,
-		string,
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		int64,
-		blueprints.EnvironmentBlueprintStageClaim,
-		blueprints.EnvironmentDesiredRevisionIdentity,
-		projectionrecord.EnvironmentComposeProjection,
-		[]blueprints.EnvironmentBlueprintZoneChange,
-		[]blueprints.EnvironmentBlueprintServiceChange,
-		[]blueprints.EnvironmentBlueprintRouteChange,
-		groupstore.ReleaseGroupBlueprintPreparedMutation,
-		componentplanning.ComponentTaskPreparation,
-		blueprintplanning.BlueprintAttachTaskPreparation,
-		blueprintplanning.BlueprintBackupPolicyPreparation,
-		etcd.BlueprintScriptPublication,
-		etcd.BlueprintReleasePublication,
-		etcd.BlueprintRequirementGate,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	) (etcdstore.TransactionResult, error)
 }
 
-type PublicationIdempotency interface {
-	ResolveKnown(context.Context, Evidence, etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		Evidence,
-		error,
-	) (requestidempotency.Resolution, error)
-}
-
-// Repository is the aggregate used by mutation services that both stage and
-// publish direct desired revisions. Claim-only and Blueprint publication
-// boundaries use the narrower interfaces above.
+// Repository stages captured desired input for resource-owned publication.
 type Repository interface {
 	ClaimRepository
 	StageEnvironmentBlueprintRevision(
 		context.Context,
 		blueprints.EnvironmentBlueprintStageRequest,
 	) (blueprints.EnvironmentBlueprintSeal, error)
-	PublishEnvironmentDesiredRevisionWithTask(
-		context.Context,
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		int64,
-		blueprints.EnvironmentBlueprintStageClaim,
-		blueprints.EnvironmentDesiredRevisionIdentity,
-		projectionrecord.EnvironmentComposeProjection,
-		[]blueprints.EnvironmentBlueprintZoneChange,
-		[]blueprints.EnvironmentBlueprintServiceChange,
-		[]blueprints.EnvironmentBlueprintRouteChange,
-		groupstore.ReleaseGroupBlueprintPreparedMutation,
-		componentplanning.ComponentTaskPreparation,
-		blueprintplanning.BlueprintAttachTaskPreparation,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type ClaimInput struct {
@@ -178,28 +121,6 @@ func Claim(
 		)
 	}
 	return claim, nil
-}
-
-type PublishInput struct {
-	Project                 etcdstore.Versioned[hierarchyrecord.ProjectRecord]
-	Environment             etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	EnvironmentPool         netip.Prefix
-	NetworkPool             string
-	ExpectedHeadRevision    int64
-	Staged                  StagedPublication
-	Evidence                Evidence
-	Locator                 idempotencyrecord.IdempotencyLocator
-	ZoneChanges             []blueprints.EnvironmentBlueprintZoneChange
-	ServiceChanges          []blueprints.EnvironmentBlueprintServiceChange
-	RouteChanges            []blueprints.EnvironmentBlueprintRouteChange
-	ReleaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation
-	ComponentPreparation    componentplanning.ComponentTaskPreparation
-	AttachPreparation       blueprintplanning.BlueprintAttachTaskPreparation
-	BackupPreparation       blueprintplanning.BlueprintBackupPolicyPreparation
-	ScriptPublication       etcd.BlueprintScriptPublication
-	ReleasePublication      etcd.BlueprintReleasePublication
-	RequirementGate         etcd.BlueprintRequirementGate
-	Task                    etcd.TaskRecord
 }
 
 type ProjectionEvidence struct {
@@ -372,7 +293,7 @@ func (publication StagedPublication) reserveAbandonment() (blueprints.Environmen
 
 func abandonKnownFailure(
 	ctx context.Context,
-	repository PublicationRepository,
+	repository AbandonmentRepository,
 	claim blueprints.EnvironmentBlueprintStageClaim,
 	cause error,
 ) error {
@@ -389,7 +310,7 @@ func abandonKnownFailure(
 // transaction has been attempted, because that outcome may be unknown.
 func AbandonClaim(
 	ctx context.Context,
-	repository PublicationRepository,
+	repository AbandonmentRepository,
 	claim blueprints.EnvironmentBlueprintStageClaim,
 	cause error,
 ) error {
@@ -402,7 +323,7 @@ func AbandonClaim(
 // Abandon releases a sealed candidate after a known pre-publication failure.
 func Abandon(
 	ctx context.Context,
-	repository PublicationRepository,
+	repository AbandonmentRepository,
 	publication StagedPublication,
 	cause error,
 ) error {
@@ -439,114 +360,6 @@ func PreflightAndClaim(
 		return blueprints.EnvironmentBlueprintStageClaim{}, ProjectionEvidence{}, err
 	}
 	return claim, evidence, nil
-}
-
-func Publish(
-	ctx context.Context,
-	repository PublicationRepository,
-	idempotency PublicationIdempotency,
-	input PublishInput,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil || repository == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Environment desired revision publication is not configured",
-		)
-	}
-	claim, projection, err := input.Staged.consume(input.Environment.Record.ID, input.Task.ID, input.Locator)
-	if err != nil {
-		if claim.DescriptorID != "" {
-			return idempotencyrecord.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, err)
-		}
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if idempotency == nil {
-		return idempotencyrecord.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, errs.New(
-			errs.KindInternal, "Environment Blueprint idempotency is not configured",
-		))
-	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: input.Task.ID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, abandonKnownFailure(
-			ctx, repository, claim, errs.Wrap(errs.KindInternal, err),
-		)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: append([]byte(nil), responseBody...),
-	}
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: input.Locator, Intent: claim.Intent, Response: response,
-		TaskID: input.Task.ID, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
-	}
-	identity := blueprints.EnvironmentDesiredRevisionIdentity{
-		EnvironmentID: input.Environment.Record.ID,
-		RevisionID:    input.Task.ID,
-	}
-	result, publicationErr := repository.PublishEnvironmentBlueprintDesiredRevision(
-		ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
-		claim, identity, projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
-		input.ReleaseGroupPreparation, input.ComponentPreparation, input.AttachPreparation,
-		input.BackupPreparation,
-		input.ScriptPublication, input.ReleasePublication, input.RequirementGate, input.Task, marker,
-	)
-	var resolution requestidempotency.Resolution
-	if publicationErr != nil {
-		if !unknownOutcome(publicationErr) {
-			return idempotencyrecord.IdempotencyResponse{}, abandonBlueprintKnownFailure(
-				ctx, repository, claim, input.ReleasePublication, publicationErr,
-			)
-		}
-		resolution, err = idempotency.ResolveUnknown(ctx, input.Locator, input.Evidence, publicationErr)
-	} else {
-		resolution, err = idempotency.ResolveKnown(ctx, input.Evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return cloneResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		return cloneResponse(resolution.Response), nil
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Environment Blueprint resolution is invalid",
-		)
-	}
-}
-
-func abandonBlueprintKnownFailure(
-	ctx context.Context,
-	repository PublicationRepository,
-	claim blueprints.EnvironmentBlueprintStageClaim,
-	release etcd.BlueprintReleasePublication,
-	cause error,
-) error {
-	releaseErr := release.Abandon(ctx)
-	desiredErr := abandonKnownFailure(ctx, repository, claim, cause)
-	if releaseErr != nil {
-		return errors.Join(desiredErr, releaseErr)
-	}
-	return desiredErr
-}
-
-// AbandonBlueprint abandons both exact prepublication authorities after a
-// known failure. It is never used for an unknown final transaction outcome.
-func AbandonBlueprint(
-	ctx context.Context,
-	repository PublicationRepository,
-	staged StagedPublication,
-	release etcd.BlueprintReleasePublication,
-	cause error,
-) error {
-	if err := release.Abandon(ctx); err != nil {
-		cause = errors.Join(cause, err)
-	}
-	return Abandon(ctx, repository, staged, cause)
 }
 
 func unknownOutcome(err error) bool {

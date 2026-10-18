@@ -28,7 +28,7 @@ func blueprintVolumeChildTaskMatches(task TaskRecord, unit blueprintunits.Unit) 
 		validBlueprintVolumeIntentDigest(intent) && len(task.Params) == 5 &&
 		(len(task.Steps) == 1 || len(task.Steps) == 2) &&
 		blueprintVolumeChildStepsMatch(task.Steps) &&
-		len(task.Materializations) == 0 && task.EntryRuntime == nil && task.Configuration == nil &&
+		len(task.Materializations) == 0 && task.Configuration == nil &&
 		len(task.ComponentActionStepIDs) == 0 && len(task.ManagedComponentTeardownSources) == 0
 }
 

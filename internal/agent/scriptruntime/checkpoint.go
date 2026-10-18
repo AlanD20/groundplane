@@ -2,7 +2,8 @@ package scriptruntime
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -106,10 +107,32 @@ func newScriptCheckpointRequest(
 	expected agentpb.ScriptExecutionState,
 	state agentpb.ScriptExecutionState,
 ) *agentpb.ScriptCheckpointRequest {
+	// Input was validated when the invocation was opened. The transport owns
+	// the attempt-wide sequence and persists this report before sending it.
+	digest, _ := hex.DecodeString(request.Input.SHA256)
 	return &agentpb.ScriptCheckpointRequest{
-		TaskId: request.TaskID, OperationId: request.OperationID, AssignmentId: request.AssignmentID,
-		StepId: request.StepID, ScriptExecutionId: request.ExecutionID,
-		PlanHash: append([]byte(nil), request.PlanHash...), ExpectedState: expected, State: state,
+		TaskId: request.TaskID, OperationId: request.OperationID, AttemptId: request.AttemptID,
+		WorkItemId: request.WorkItemID, ScriptExecutionId: request.ExecutionID,
+		InputId: request.Input.ID, InputSha256: digest, ExpectedState: expected, State: state,
+		StageId: ids.DeriveAt(ids.KindStep, request.AssignedAt, request.AttemptID,
+			"script/"+request.ExecutionID+"/"+scriptCheckpointStage(state)), RecordedAt: timestamppb.Now(),
+	}
+}
+
+func scriptCheckpointStage(state agentpb.ScriptExecutionState) string {
+	switch state {
+	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_START_AUTHORIZED:
+		return "authorize-start"
+	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_BODY_PREPARED:
+		return "prepare-body"
+	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CONTAINER_CREATED:
+		return "create-container"
+	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED:
+		return "record-outcome"
+	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN:
+		return "prove-cleanup"
+	default:
+		return ""
 	}
 }
 
@@ -117,11 +140,6 @@ func sendScriptCheckpoint(
 	checkpoint func(context.Context, *agentpb.ScriptCheckpointRequest) error,
 	request *agentpb.ScriptCheckpointRequest,
 ) error {
-	digest, err := executionplan.ComputeScriptCheckpointPayloadDigest(request)
-	if err != nil {
-		return err
-	}
-	request.ControlPayloadSha256 = digest
 	controlCtx, cancel := context.WithTimeout(context.Background(), scriptCheckpointTimeout)
 	defer cancel()
 	return checkpoint(controlCtx, request)

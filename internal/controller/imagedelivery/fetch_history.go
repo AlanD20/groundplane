@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
@@ -13,7 +12,7 @@ type retainedFetch struct {
 	plan        imagefetch.Plan
 	taskID      string
 	requestedAt time.Time
-	status      taskjournal.TaskStatus
+	status      apiTypes.TaskStatus
 }
 
 // Match immutable content, never a mutable tag. Multiple manifests can share a
@@ -30,7 +29,7 @@ func (retention imageRetention) history(image imagefetch.LocalImage) []apiTypes.
 		}
 		result = append(result, apiTypes.ImageFetchRecord{
 			Requested: fetch.plan.Requested, Image: fetch.plan.Reference(), TaskID: fetch.taskID,
-			RequestedAt: fetch.requestedAt.Format(time.RFC3339Nano), Status: apiTypes.TaskStatus(fetch.status),
+			RequestedAt: fetch.requestedAt.Format(time.RFC3339Nano), Status: fetch.status,
 		})
 	}
 	slices.SortFunc(result, func(left, right apiTypes.ImageFetchRecord) int {

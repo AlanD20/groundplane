@@ -17,7 +17,10 @@ func (repository *TaskRepository) backupStagingPruneIndexes(
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	keys := make([]string, 0, len(sealed.Steps))
 	for _, step := range sealed.Steps {
-		pointID := backupStagingStepPoint(step.GetBackupStep())
+		pointID := step.GetBackupStep().GetCapture().GetPointId()
+		if pointID == "" {
+			pointID = step.GetBackupStep().GetRestore().GetPointId()
+		}
 		if pointID == "" {
 			continue
 		}

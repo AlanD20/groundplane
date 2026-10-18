@@ -10,11 +10,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/dnsconnectioncheck"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnschecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -89,6 +89,7 @@ func (service *ConnectionCheckService) CheckConnections(ctx context.Context, com
 	now := time.Now().UTC()
 	owner := dnschecks.Owner{
 		TaskID:      ids.New(ids.KindTask),
+		WorkItemID:  ids.New(ids.KindWorkItem),
 		PlanID:      ids.New(ids.KindPlan),
 		OperationID: ids.New(ids.KindOperation),
 	}
@@ -100,12 +101,9 @@ func (service *ConnectionCheckService) CheckConnections(ctx context.Context, com
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
-	task := etcd.TaskRecord{ID: owner.TaskID, OperationID: owner.OperationID, PlanID: owner.PlanID, PlanHash: hash,
-		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
-		RenderGeneration: 1, Type: taskjournal.TaskCheck, Target: componentID, TargetName: "CoreDNS", IdempotencyKey: key,
-		Params: map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceComponent,
-			taskjournal.TaskDNSCheckInputParam: record.ConfigurationSHA256}, TimeoutSeconds: 90,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now}
+	task := workexecution.Task{ID: owner.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionCheck,
+		TargetID: componentID, TargetName: "CoreDNS", Intent: workexecution.Input{ID: owner.PlanID, SHA256: hash},
+		ExpectedItems: 1, CreatedAt: now, UpdatedAt: now, Deadline: now.Add(90 * time.Second)}
 	return service.publish(ctx, source, record, task, locator, evidence)
 }
 
@@ -150,7 +148,7 @@ func dnsCheckName(value string) string {
 }
 
 func (service *ConnectionCheckService) publish(ctx context.Context, source etcd.DNSCheckSource, record dnschecks.Record,
-	task etcd.TaskRecord, locator idempotency.IdempotencyLocator, evidence requestidempotency.ProtectedEvidence,
+	task workexecution.Task, locator idempotency.IdempotencyLocator, evidence requestidempotency.ProtectedEvidence,
 ) (idempotency.IdempotencyResponse, error) {
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {

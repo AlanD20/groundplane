@@ -31,7 +31,7 @@ export function useImageInventory() {
   }, []);
   useEffect(() => {
     void refresh();
-    const unsubscribe = subscribeTerminalTasks((task) => {
+    const unsubscribe = subscribeTerminalTasks(({ task }) => {
       if (
         [
           "image",
@@ -41,7 +41,7 @@ export function useImageInventory() {
           "runner",
           "release_group",
         ].includes(task.resource_kind ?? "") ||
-        ["deploy", "rollback", "destroy"].includes(task.type)
+        ["deploy", "rollback", "destroy"].includes(task.action)
       )
         void refresh();
     });

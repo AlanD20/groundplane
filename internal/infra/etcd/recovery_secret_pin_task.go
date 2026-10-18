@@ -246,7 +246,7 @@ func (repository *TaskRepository) loadTaskSecretPinRoot(
 	if err != nil {
 		return tasksecretpins.ActiveRoot{}, err
 	}
-	root, found, err := pins.LoadActive(ctx, task.OperationID)
+	root, found, err := pins.LoadActive(ctx, task.OperationID, 0)
 	if err != nil {
 		return tasksecretpins.ActiveRoot{}, err
 	}

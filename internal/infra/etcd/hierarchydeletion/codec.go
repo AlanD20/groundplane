@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"regexp"
 	"slices"
 	"strings"
@@ -183,8 +182,6 @@ func ValidateHierarchyDeletionAction(action HierarchyDeletionAction) error {
 	switch action.ProcedureKind {
 	case HierarchyDeletionProcedureAgent:
 		if action.AgentProcedure == nil || action.ControllerProcedure != nil ||
-			ids.Validate(ids.KindOperation, action.AgentProcedure.ChildOperationID) != nil ||
-			(action.AgentProcedure.TaskType != taskjournal.TaskRemove && action.AgentProcedure.TaskType != taskjournal.TaskDetach) ||
 			action.AgentProcedure.TypedProcedure == "" ||
 			!ValidHierarchyDeletionDigest(action.AgentProcedure.InputDigest) ||
 			action.AgentProcedure.TimeoutSeconds <= 0 {

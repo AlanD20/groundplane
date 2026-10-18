@@ -72,8 +72,8 @@ func (journal *Journal) readCleanupReceipt(ctx context.Context) (*agentpb.Backup
 
 func (journal *Journal) validateCleanupReceipt(completion *agentpb.BackupStepResume) error {
 	if completion == nil || executionplan.RejectUnknown(completion) != nil ||
-		completion.StepId != journal.binding.StepID ||
-		completion.ExecutionId != journal.binding.ExecutionID {
+		completion.StepId != journal.step.StepId ||
+		completion.ExecutionId != journal.step.ExecutionId {
 		return invalidRecord()
 	}
 	switch journal.binding.Direction {

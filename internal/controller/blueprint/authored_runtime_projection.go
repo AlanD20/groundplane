@@ -2,25 +2,26 @@ package blueprint
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"math"
 	"slices"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"google.golang.org/protobuf/proto"
 )
@@ -37,19 +38,23 @@ type authoredRuntimeProjectionSource struct {
 // one complete runtime projection and atomically settles its Backup policy.
 func (service *Service) sealAuthoredRuntimeProjection(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	parent workexecution.Task,
 	snapshot blueprintunits.Snapshot,
 ) error {
 	if service == nil || service.repository == nil || ctx == nil ||
 		validateAuthoredRuntimeProjectionParent(parent, snapshot) != nil {
 		return errs.New(errs.KindStateConflict, "Blueprint runtime projection authority changed")
 	}
+	source, err := service.loadAuthoredRuntimeProjectionSource(ctx, parent)
+	if err != nil {
+		return err
+	}
 	if current, found, err := service.repository.GetEnvironmentComposeProjectionRevision(
-		ctx, parent.Owner.EnvironmentID, parent.ID,
+		ctx, parent.Scope.EnvironmentID, parent.ID,
 	); err == nil && found {
-		if current.Record.EnvironmentID != parent.Owner.EnvironmentID ||
+		if current.Record.EnvironmentID != parent.Scope.EnvironmentID ||
 			current.Record.RevisionID != parent.ID ||
-			current.Record.RenderGeneration != uint64(parent.RenderGeneration) {
+			current.Record.RenderGeneration != source.desired.Record.RenderGeneration {
 			return errs.New(errs.KindStateConflict, "Blueprint runtime projection changed")
 		}
 		return nil
@@ -58,10 +63,6 @@ func (service *Service) sealAuthoredRuntimeProjection(
 		if !known || kind != errs.KindStateConflict {
 			return err
 		}
-	}
-	source, err := service.loadAuthoredRuntimeProjectionSource(ctx, parent)
-	if err != nil {
-		return err
 	}
 	if err := requireAuthoredRuntimeProjectionInputs(
 		source.desired.Record, source.identities.Record, snapshot,
@@ -73,7 +74,7 @@ func (service *Service) sealAuthoredRuntimeProjection(
 		return err
 	}
 	attaches, err := service.loadAuthoredRuntimeAttaches(
-		ctx, parent.Owner.EnvironmentID, source.identities.Record, snapshot,
+		ctx, parent.Scope.EnvironmentID, source.identities.Record, snapshot,
 	)
 	if err != nil {
 		return err
@@ -113,20 +114,17 @@ func (service *Service) sealAuthoredRuntimeProjection(
 }
 
 func validateAuthoredRuntimeProjectionParent(
-	parent etcd.TaskRecord,
+	parent workexecution.Task,
 	snapshot blueprintunits.Snapshot,
 ) error {
-	if etcd.ValidateTaskRecord(parent) != nil ||
-		parent.Executor != taskjournal.TaskExecutorBlueprint ||
-		parent.Status != taskjournal.TaskStatusRunning ||
-		parent.RenderGeneration <= 0 ||
-		parent.Params[blueprints.EnvironmentDesiredRevisionParam] != parent.ID ||
-		snapshot.EnvironmentID != parent.Owner.EnvironmentID ||
+	if parent.Validate() != nil || parent.Action != workexecution.ActionApply ||
+		parent.Stop != nil || parent.FinishedAt != nil || parent.CollectionStartedAt != nil ||
+		snapshot.EnvironmentID != parent.Scope.EnvironmentID ||
 		snapshot.HeadTaskID != parent.ID || snapshot.HeadRevision <= 0 ||
 		snapshot.ReadRevision < snapshot.HeadRevision || snapshot.EpochRevision < 0 ||
 		(snapshot.EpochRevision == 0 && snapshot.Epoch.Sequence != 0) ||
 		(snapshot.EpochRevision > 0 &&
-			(snapshot.Epoch.EnvironmentID != parent.Owner.EnvironmentID ||
+			(snapshot.Epoch.EnvironmentID != parent.Scope.EnvironmentID ||
 				snapshot.Epoch.Sequence == 0 || snapshot.Epoch.Sequence == math.MaxUint64)) {
 		return errs.New(errs.KindStateConflict, "Blueprint runtime projection parent changed")
 	}
@@ -135,9 +133,9 @@ func validateAuthoredRuntimeProjectionParent(
 
 func (service *Service) loadAuthoredRuntimeProjectionSource(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	parent workexecution.Task,
 ) (authoredRuntimeProjectionSource, error) {
-	environmentID := parent.Owner.EnvironmentID
+	environmentID := parent.Scope.EnvironmentID
 	desired, found, err := service.repository.GetEnvironmentDesiredInputRevision(ctx, environmentID, parent.ID)
 	if err != nil {
 		return authoredRuntimeProjectionSource{}, err
@@ -156,12 +154,19 @@ func (service *Service) loadAuthoredRuntimeProjectionSource(
 	if !found || desired.Revision <= 0 || identities.Revision <= 0 ||
 		desired.Record.EnvironmentID != environmentID || desired.Record.RevisionID != parent.ID ||
 		identities.Record.EnvironmentID != environmentID || identities.Record.RevisionID != parent.ID ||
-		desired.Record.RenderGeneration != identities.Record.RenderGeneration ||
-		desired.Record.RenderGeneration > math.MaxInt32 ||
-		int32(desired.Record.RenderGeneration) != parent.RenderGeneration {
+		desired.Record.RenderGeneration != identities.Record.RenderGeneration {
 		return authoredRuntimeProjectionSource{}, errs.New(
 			errs.KindStateConflict, "Blueprint parent desired input changed",
 		)
+	}
+	encoded, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(desired.Record)
+	if err != nil {
+		return authoredRuntimeProjectionSource{}, err
+	}
+	digest := sha256.Sum256(encoded)
+	clear(encoded)
+	if hex.EncodeToString(digest[:]) != parent.Intent.SHA256 {
+		return authoredRuntimeProjectionSource{}, errs.New(errs.KindStateConflict, "Blueprint captured desired input changed")
 	}
 	if _, err := authoredOwnedIdentitySnapshot(ctx, desired.Record, identities.Record); err != nil {
 		return authoredRuntimeProjectionSource{}, err
@@ -177,11 +182,8 @@ func (service *Service) loadAuthoredRuntimeProjectionSource(
 	if err != nil {
 		return authoredRuntimeProjectionSource{}, err
 	}
-	expectedOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return authoredRuntimeProjectionSource{}, err
-	}
-	if expectedOwner != parent.Owner ||
+	if parent.Scope.EnvironmentID != environment.Record.ID || parent.Scope.ProjectID != project.Record.ID ||
+		parent.Scope.TenantID != project.Record.TenantID ||
 		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return authoredRuntimeProjectionSource{}, errs.New(
 			errs.KindStateConflict, "Blueprint runtime projection hierarchy changed",
@@ -199,7 +201,7 @@ func (service *Service) loadAuthoredRuntimeProjectionSource(
 
 func (service *Service) compileAuthoredRuntimeProjection(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	parent workexecution.Task,
 	source authoredRuntimeProjectionSource,
 	unitSnapshot blueprintunits.Snapshot,
 	attaches []etcdstore.Versioned[attachrecord.Record],
@@ -220,7 +222,7 @@ func (service *Service) compileAuthoredRuntimeProjection(
 // decisions belong to the receipt-checking caller and atomic runtime seal.
 func (service *Service) compileAuthoredEnvironmentInput(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	parent workexecution.Task,
 	source authoredRuntimeProjectionSource,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 	components authoredComponentCompileInput,

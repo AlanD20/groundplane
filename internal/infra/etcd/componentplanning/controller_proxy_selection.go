@@ -5,9 +5,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,6 +19,7 @@ import (
 // existing reference retention and protected cleanup lifetime.
 type ControllerProxySelection struct {
 	ComponentID string                `json:"component_id"`
+	WorkItemID  string                `json:"work_item_id"`
 	OperationID string                `json:"operation_id"`
 	Preflight   ProxyServicePreflight `json:"preflight"`
 }
@@ -30,7 +33,7 @@ func ControllerProxySelectionKey(environmentID, parentID, componentID string) st
 
 func (selection ControllerProxySelection) validate() error {
 	if ids.Validate(ids.KindComponent, selection.ComponentID) != nil ||
-		ids.Validate(ids.KindOperation, selection.OperationID) != nil {
+		ids.Validate(ids.KindOperation, selection.OperationID) != nil || ids.Validate(ids.KindWorkItem, selection.WorkItemID) != nil {
 		return errs.New(errs.KindStateConflict, "Controller proxy selection identity is invalid")
 	}
 	if input := selection.Preflight.CandidateInput; input != nil &&
@@ -63,52 +66,78 @@ func (authority FrozenProjectionAuthority) HasProxyServicePreflight() bool {
 	return authority.proxyServicePreflight != nil
 }
 
-func (authority FrozenProjectionAuthority) PrepareControllerProxySelection(ctx context.Context, store planningStore,
-	componentID, operationID, parentOperationID string,
+func PrepareControllerProxySelection(ctx context.Context, store planningStore,
+	work workqueue.View, preflight ProxyServicePreflight, sourceChange workqueue.Change,
+	runtimeCondition keyvalue.Condition, headRevision int64,
 ) (ControllerProxyPublication, error) {
-	if authority.proxyServicePreflight == nil || authority.unitRuntimeCondition == nil ||
-		authority.unitRuntimeCondition.Key != RuntimeKey(componentID) {
-		return ControllerProxyPublication{}, errs.New(
-			errs.KindStateConflict,
-			"disabled proxy selection has no captured Service authority",
-		)
-	}
-	preparation := ComponentTaskPreparation{proxyServicePreflight: authority.proxyServicePreflight,
-		proxyServiceConditions: authority.proxyServiceConditions, proxySourceMutations: authority.proxySourceMutations,
-		proxyServiceConditionCount: authority.proxyServiceConditionCount}
-	if err := validateProxyRolloutPublication(ctx, store, preparation); err != nil {
+	task, item := work.Task.Task, work.Item.Item
+	operationID, err := ControllerProxyOperationID(task, item)
+	if err != nil {
 		return ControllerProxyPublication{}, err
 	}
-	if hold := authority.proxyServicePreflight.SourceHold; hold != nil && hold.OperationID != parentOperationID {
-		return ControllerProxyPublication{}, errs.New(
-			errs.KindStateConflict,
-			"disabled proxy hook inputs belong to another Apply",
-		)
+	parentOperationID, err := ProxySourceOperationID(task)
+	if err != nil {
+		return ControllerProxyPublication{}, err
 	}
-	record := ControllerProxySelection{ComponentID: componentID, OperationID: operationID,
-		Preflight: *cloneProxyServicePreflight(authority.proxyServicePreflight)}
+	if work.ReadRevision <= 0 || work.Task.Revision <= 0 || work.Item.Revision <= 0 ||
+		task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
+		item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.ForwardRevoked ||
+		(item.Phase != workexecution.Waiting && item.Phase != workexecution.Ready) ||
+		headRevision <= 0 || runtimeCondition.Key != RuntimeKey(item.TargetID) || runtimeCondition.ModRevision < 0 ||
+		preflight.ParentTaskID != task.ID || preflight.EnvironmentID != task.Scope.EnvironmentID {
+		return ControllerProxyPublication{}, errs.New(errs.KindStateConflict, "Disabled proxy publication differs from captured work")
+	}
+	if hold := preflight.SourceHold; hold != nil && hold.OperationID != parentOperationID {
+		return ControllerProxyPublication{}, errs.New(errs.KindStateConflict, "Disabled proxy hook inputs belong to another Apply")
+	}
+	publicationRevision, err := proxyPublicationRevision(preflight, sourceChange, work.ReadRevision)
+	if err != nil {
+		return ControllerProxyPublication{}, err
+	}
+	if err := validateProxyRolloutPublication(ctx, store, &preflight, sourceChange.Mutations, publicationRevision); err != nil {
+		return ControllerProxyPublication{}, err
+	}
+	record := ControllerProxySelection{ComponentID: item.TargetID, WorkItemID: item.ID,
+		OperationID: operationID, Preflight: *cloneProxyServicePreflight(&preflight)}
 	if err := record.validate(); err != nil {
+		return ControllerProxyPublication{}, err
+	}
+	if preflight.CandidateInput == nil {
+		return ControllerProxyPublication{}, errs.New(errs.KindStateConflict, "Disabled proxy publication has no captured input")
+	}
+	inputCompared := false
+	for _, condition := range sourceChange.Conditions {
+		if condition.Key == ProxyCandidateInputKey(*preflight.CandidateInput) && condition.ModRevision > 0 && condition.ModRevision <= publicationRevision {
+			inputCompared = true
+		}
+	}
+	if !inputCompared {
+		return ControllerProxyPublication{}, errs.New(errs.KindStateConflict, "Disabled proxy publication must compare its captured input")
+	}
+	var rollouts []ProxyServiceRolloutReference
+	for _, source := range preflight.Services {
+		if source.ReplacementRequired && source.Rollout != nil {
+			rollouts = append(rollouts, *source.Rollout)
+		}
+	}
+	_, comparisons, err := BindProxyServiceRollouts(preflight, rollouts)
+	if err != nil {
 		return ControllerProxyPublication{}, err
 	}
 	value, err := recordcodec.Encode("controller-proxy-selection", record)
 	if err != nil {
 		return ControllerProxyPublication{}, err
 	}
-	key := ControllerProxySelectionKey(record.Preflight.EnvironmentID, record.Preflight.ParentTaskID, componentID)
-	conditions := append([]keyvalue.Condition(nil), authority.proxyServiceConditions...)
-	conditions = append(
-		conditions,
-		*authority.unitRuntimeCondition,
-		keyvalue.Condition{
-			Key:         blueprints.EnvironmentBlueprintHeadKey(authority.environmentID),
-			ModRevision: authority.desiredHeadRevision,
-		},
-		keyvalue.Condition{Key: key},
-	)
-	mutations := append(
-		cloneProxySourceMutations(authority.proxySourceMutations),
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value},
-	)
+	key := ControllerProxySelectionKey(preflight.EnvironmentID, task.ID, item.TargetID)
+	conditions := append([]keyvalue.Condition(nil), sourceChange.Conditions...)
+	conditions = append(conditions, comparisons...)
+	conditions = append(conditions, runtimeCondition,
+		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(preflight.EnvironmentID), ModRevision: headRevision},
+		keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: work.Task.Revision},
+		keyvalue.Condition{Key: workqueue.ItemKey(item.ID), ModRevision: work.Item.Revision},
+		keyvalue.Condition{Key: key})
+	mutations := append(cloneProxySourceMutations(sourceChange.Mutations),
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
 	return ControllerProxyPublication{record: record, value: value, conditions: conditions, mutations: mutations}, nil
 }
 

@@ -70,10 +70,10 @@ func normalizeSnapshot(input Snapshot) (Snapshot, error) {
 		if err != nil {
 			return Snapshot{}, err
 		}
-		if plans[execution.PlanID] {
-			return Snapshot{}, invalidSnapshot("blueprint reconciliation repeats an execution plan")
+		if plans[execution.WorkItemID] {
+			return Snapshot{}, invalidSnapshot("blueprint reconciliation repeats a work item")
 		}
-		plans[execution.PlanID] = true
+		plans[execution.WorkItemID] = true
 		result.Executions[index] = execution
 		unit := execution.Unit
 		if execution.State != Pending {
@@ -91,15 +91,16 @@ func normalizeSnapshot(input Snapshot) (Snapshot, error) {
 	slices.SortFunc(result.Desired, func(left, right Unit) int { return compareKey(left.Target, right.Target) })
 	slices.SortFunc(
 		result.Executions,
-		func(left, right Execution) int { return strings.Compare(left.PlanID, right.PlanID) },
+		func(left, right Execution) int { return strings.Compare(left.WorkItemID, right.WorkItemID) },
 	)
 	return result, nil
 }
 
 func normalizeExecution(input Execution) (Execution, error) {
-	if ids.Validate(ids.KindPlan, input.PlanID) != nil || ids.Validate(ids.KindTask, input.TaskID) != nil ||
+	if ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil || ids.Validate(ids.KindTask, input.TaskID) != nil ||
 		input.State != Pending && input.State != Running && input.State != Draining ||
-		input.State == Pending && input.Epoch != 0 || input.State != Pending && input.Epoch <= 0 {
+		input.State == Pending && (input.AttemptNumber != 0 || input.AttemptID != "") ||
+		input.State != Pending && (input.AttemptNumber == 0 || ids.Validate(ids.KindAttempt, input.AttemptID) != nil) {
 		return Execution{}, invalidSnapshot("blueprint reconciliation execution identity or state is invalid")
 	}
 	unit, err := normalizeUnit(input.Unit)

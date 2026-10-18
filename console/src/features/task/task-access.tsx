@@ -39,7 +39,9 @@ export function TaskNotifications() {
       await Promise.all(
         pending.map(async ({ id }) => {
           try {
-            const task = taskFromAPI(await requestTask(id, controller.signal));
+            const task = taskFromAPI(
+              (await requestTask(id, controller.signal)).task,
+            );
             if (controller.signal.aborted) return;
             taskCache.current[id] = task;
             setTasks((current) => ({ ...current, [id]: task }));
@@ -166,7 +168,7 @@ function TaskToast({ id, children }: { id: string; children: ReactNode }) {
 }
 
 function isTerminal(task: ActivityEntry) {
-  return ["completed", "failed", "timed_out", "aborted"].includes(task.status);
+  return !!task.finishedAt;
 }
 
 function TaskNotificationRow({

@@ -17,7 +17,7 @@ func (reader *Reader) decodeSourceDynamicEvidence(
 	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
 	evidence *Evidence,
-	plan *agentpb.ExecutionPlan,
+	authority *agentpb.BackupStepAuthority,
 	stepIndex int,
 	sourceIDs map[string]int,
 ) error {
@@ -27,7 +27,7 @@ func (reader *Reader) decodeSourceDynamicEvidence(
 	if evidence.Run == nil {
 		return nil
 	}
-	if stepIndex >= len(evidence.Run.Sources) {
+	if stepIndex < 0 || stepIndex >= len(evidence.Run.Sources) {
 		return errs.New(errs.KindStateConflict, "backup source evidence is unavailable")
 	}
 	source := evidence.Run.Sources[stepIndex]
@@ -42,7 +42,7 @@ func (reader *Reader) decodeSourceDynamicEvidence(
 	}
 	evidence.Source = stored
 	evidence.SourceRevision = value.ModRevision
-	step := plan.Steps[stepIndex].GetBackupStep().GetCapture()
+	step := authority.GetCapture()
 	if step == nil {
 		return errs.New(errs.KindStateConflict, "backup source step evidence changed")
 	}

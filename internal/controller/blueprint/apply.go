@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
@@ -33,10 +34,11 @@ type Service struct {
 	materials         materializationResolver
 	releaseGroups     *releasegroup.ReleaseGroupBlueprintPlanner
 	blueprintReleases *blueprintrelease.Service
-	plans             *taskplanning.TaskPlanResolver
+	configuration     *taskplanning.ComponentConfigurationCapture
 	entryGeneration   *entrygeneration.EntryGenerationService
 	attachFacts       *attachments.FactService
 	componentCatalog  []componentrender.EnvironmentComponentRegistration
+	workAdmission     *blueprintcoordinator.Admission
 	backups           environmentBlueprintBackupRepository
 	backupKeys        environmentBlueprintBackupKeyFactory
 	executionTimeout  time.Duration
@@ -55,7 +57,8 @@ func NewService(
 	entryGeneration *entrygeneration.EntryGenerationService,
 	attachFacts *attachments.FactService,
 	componentCatalog []componentrender.EnvironmentComponentRegistration,
-	plans *taskplanning.TaskPlanResolver,
+	configuration *taskplanning.ComponentConfigurationCapture,
+	workAdmission *blueprintcoordinator.Admission,
 	backups environmentBlueprintBackupRepository,
 	backupKeys environmentBlueprintBackupKeyFactory,
 	executionTimeout time.Duration,
@@ -69,7 +72,7 @@ func NewService(
 		releaseGroups == nil ||
 		entryGeneration == nil ||
 		attachFacts == nil ||
-		blueprintReleases == nil || plans == nil {
+		blueprintReleases == nil || configuration == nil || workAdmission == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
 	}
 	if executionTimeout < 40*time.Minute || executionTimeout > 24*time.Hour || executionTimeout%time.Second != 0 {
@@ -81,7 +84,8 @@ func NewService(
 	return &Service{
 		volumeRoot: volumeRoot, environmentPool: parsedEnvironmentPool, repository: repository, idempotency: idempotency,
 		materials: materials, releaseGroups: releaseGroups, blueprintReleases: blueprintReleases,
-		plans:            plans,
+		configuration:    configuration,
+		workAdmission:    workAdmission,
 		entryGeneration:  entryGeneration,
 		attachFacts:      attachFacts,
 		componentCatalog: componentrender.CloneEnvironmentComponentCatalog(componentCatalog),

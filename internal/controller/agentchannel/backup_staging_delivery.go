@@ -31,11 +31,15 @@ func (s *Server) handleBackupStagingDelivery(
 	if err != nil {
 		return true, err
 	}
+	authorization, err := s.authenticatedWorkIdentity(stream.Context(), session, agentGeneration)
+	if err != nil {
+		return true, err
+	}
 	if inventory != nil {
 		if staging.ready {
 			return true, errs.New(errs.KindStateConflict, "Backup startup inventory arrived after Ready")
 		}
-		plan, err := s.resolveBackupStagingPlan(stream.Context(), store, process, agentID, agentGeneration, inventory)
+		plan, err := s.resolveBackupStagingPlan(stream.Context(), store, process, agentID, agentGeneration, authorization.Identity(), inventory)
 		if err != nil {
 			return true, err
 		}
@@ -47,8 +51,7 @@ func (s *Server) handleBackupStagingDelivery(
 	}
 	receipt, err := store.ApplyBackupStagingDelivery(
 		stream.Context(),
-		agentID,
-		agentGeneration,
+		authorization.Identity(),
 		process.ProcessGeneration,
 		acknowledgement,
 	)

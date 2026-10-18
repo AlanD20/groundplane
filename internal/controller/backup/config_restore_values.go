@@ -37,7 +37,7 @@ func (publication *ConfigRestorePublication) StageValues(ctx context.Context,
 	if ctx == nil || publication == nil || generation == nil || store == nil || protector == nil ||
 		createdAt.IsZero() ||
 		publication.Projection.EnvironmentID != generation.owner.EnvironmentID ||
-		publication.Projection.RevisionID != generation.owner.Transfer.Binding.TaskID ||
+		publication.Projection.RevisionID != generation.owner.Transfer.Binding.Attempt.TaskID ||
 		publication.Projection.RenderGeneration != generation.owner.RenderGeneration ||
 		len(publication.Projection.Entries) != int(generation.seal.Record.Completed.Content.EntryCount) {
 		return configSnapshotGuardConflict()

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { newULID } from "@/lib/utils";
 import { ControllerRequestError } from "@/lib/controller-request-errors";
-import { retryTask } from "@/features/task/api";
+import { retryTask, type TaskRetryRequest } from "@/features/task/api";
+import { captureCleanupRetry } from "@/features/task/cleanup-retry";
 import {
   checkConnectorConnection,
   getConnectorCheck,
@@ -38,7 +39,11 @@ export function useConnectorCheck(
   const testedIdentity = useRef(identity);
   const generation = useRef(0);
   const submitting = useRef(false);
-  const cleanupIntent = useRef<{ taskId: string; key: string } | null>(null);
+  const cleanupIntent = useRef<{
+    taskId: string;
+    key: string;
+    input?: TaskRetryRequest;
+  } | null>(null);
   useEffect(() => {
     const current = ++generation.current;
     const controller = new AbortController();
@@ -174,7 +179,10 @@ export function useConnectorCheck(
     if (cleanupIntent.current?.taskId !== taskId)
       cleanupIntent.current = { taskId, key: newULID() };
     try {
-      const next = await retryTask(taskId, cleanupIntent.current.key);
+      const captured = cleanupIntent.current;
+      captured.input ??= await captureCleanupRetry(taskId, "connector_check");
+      if (generation.current !== runGeneration) return;
+      const next = await retryTask(taskId, captured.input, captured.key);
       if (generation.current === runGeneration) {
         cleanupIntent.current = null;
         setResult(null);

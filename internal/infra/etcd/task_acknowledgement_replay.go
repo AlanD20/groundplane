@@ -49,26 +49,6 @@ func (repository *TaskRepository) validateTaskAcknowledgementReplay(
 	); err != nil {
 		return err
 	}
-	if err := repository.validateSecretTaskAcknowledgementReplay(
-		ctx, task, terminalStatus, readRevision,
-	); err != nil {
-		return err
-	}
-	if err := repository.validateResourceTaskAcknowledgementReplay(
-		ctx, task, terminalStatus, readRevision,
-	); err != nil {
-		return err
-	}
-	if err := repository.validateRunnerTaskAcknowledgementReplay(
-		ctx, task, terminalStatus, readRevision,
-	); err != nil {
-		return err
-	}
-	if err := repository.validateScriptTaskAcknowledgementReplay(
-		ctx, task, terminalStatus, readRevision,
-	); err != nil {
-		return err
-	}
 	if err := repository.validateReleaseGroupTaskAcknowledgementReplay(
 		ctx, task, terminalStatus, readRevision,
 	); err != nil {

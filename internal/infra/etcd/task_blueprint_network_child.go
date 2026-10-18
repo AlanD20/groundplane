@@ -20,6 +20,6 @@ func blueprintNetworkChildTaskMatches(task TaskRecord, unit blueprintunits.Unit)
 		ids.Validate(ids.KindTask, parentID) == nil && parentID != task.ID &&
 		len(task.Params) == 3 && len(task.Steps) == 1 &&
 		task.Steps[0].Kind == taskjournal.TaskStepOperation &&
-		len(task.Materializations) == 0 && task.EntryRuntime == nil && task.Configuration == nil &&
+		len(task.Materializations) == 0 && task.Configuration == nil &&
 		len(task.ComponentActionStepIDs) == 0 && len(task.ManagedComponentTeardownSources) == 0
 }

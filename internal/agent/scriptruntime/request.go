@@ -3,110 +3,106 @@ package scriptruntime
 import (
 	"bytes"
 	"context"
-	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
+// Invocation is one captured Script operation within native work. Release hooks
+// carry their own Script input while retaining the parent work attempt.
+type Invocation struct {
+	Attempt     workexecution.Attempt
+	OperationID string
+	Input       workexecution.Input
+	Run         *agentpb.RunScript
+	Snapshot    *agentpb.ResolvedRunnerSnapshot
+	Projection  *agentpb.ScriptRunnerProjection
+	Body        *agentpb.ScriptBodyArtifact
+	Entries     []*agentpb.ScriptEntryArtifact
+	Checkpoint  *agentpb.ScriptExecutionCheckpoint
+}
+
 func scriptExecutionRequest(
 	ctx context.Context,
-	assignment taskassignment.Assignment,
-	step *agentpb.ExecutionStep,
+	invocation Invocation,
 	checkpoint func(context.Context, *agentpb.ScriptCheckpointRequest) error,
 ) (scriptexecution.Request, *agentpb.ScriptExecutionCheckpoint, error) {
-	if ctx == nil || checkpoint == nil || step == nil || step.GetRunScript() == nil || assignment.Plan == nil ||
-		assignment.ScriptArtifacts == nil {
-		return scriptexecution.Request{}, nil, errs.New(
-			errs.KindInternal,
-			"agent: Script execution request is incomplete",
-		)
+	if ctx == nil || checkpoint == nil || invocation.Attempt.Validate() != nil ||
+		invocation.Attempt.Executor.Executor != workexecution.Agent || invocation.Attempt.FinishedAt != nil ||
+		ids.Validate(ids.KindOperation, invocation.OperationID) != nil || invocation.Input.Validate() != nil {
+		return scriptexecution.Request{}, nil, errs.New(errs.KindValidationFailed, "agent: Script work identity is invalid")
 	}
-	run := step.GetRunScript()
-	var projection *agentpb.ScriptRunnerProjection
-	var snapshot *agentpb.ResolvedRunnerSnapshot
-	for _, candidate := range assignment.Plan.ScriptRunnerProjections {
-		if candidate != nil && candidate.SnapshotId == run.RunnerSnapshotId {
-			projection = candidate
-			break
-		}
-	}
-	for _, candidate := range assignment.Plan.ScriptRunnerSnapshots {
-		if candidate != nil && candidate.SnapshotId == run.RunnerSnapshotId {
-			snapshot = candidate
-			break
-		}
-	}
-	var body *agentpb.ScriptBodyArtifact
-	for _, candidate := range assignment.ScriptArtifacts.Bodies {
-		if candidate != nil && candidate.Metadata != nil &&
-			candidate.Metadata.ScriptExecutionId == run.ScriptExecutionId {
-			body = candidate
-			break
-		}
-	}
-	if projection == nil || snapshot == nil || body == nil || body.Metadata == nil ||
-		projection.SnapshotId != run.RunnerSnapshotId ||
+	run, snapshot, projection, body := invocation.Run, invocation.Snapshot, invocation.Projection, invocation.Body
+	if run == nil || snapshot == nil || projection == nil || body == nil || body.Metadata == nil ||
+		snapshot.SnapshotId != run.RunnerSnapshotId || projection.SnapshotId != run.RunnerSnapshotId ||
 		body.Metadata.ScriptExecutionId != run.ScriptExecutionId || body.Metadata.ScriptId != run.ScriptId ||
 		body.Metadata.Generation != run.ScriptGeneration {
-		return scriptexecution.Request{}, nil, errs.New(
-			errs.KindInternal,
-			"agent: Script execution artifacts do not match RunScript",
-		)
+		return scriptexecution.Request{}, nil, errs.New(errs.KindValidationFailed, "agent: captured Script artifacts do not match execution")
 	}
-	var durable *agentpb.ScriptExecutionCheckpoint
-	for _, candidate := range assignment.ScriptCheckpoints {
-		if candidate != nil && candidate.ScriptExecutionId == run.ScriptExecutionId {
-			durable = candidate
-			break
-		}
-	}
-	durable, err := executionplan.ValidateScriptExecutionCheckpoint(durable)
+	durable, err := executionplan.ValidateScriptExecutionCheckpoint(invocation.Checkpoint)
 	if err != nil {
-		return scriptexecution.Request{}, nil, errs.Wrap(errs.KindInternal, err)
+		return scriptexecution.Request{}, nil, err
+	}
+	if durable.ScriptExecutionId != run.ScriptExecutionId {
+		return scriptexecution.Request{}, nil, errs.New(errs.KindValidationFailed, "agent: Script checkpoint belongs to another execution")
+	}
+	entries, err := cloneScriptEntriesForSnapshot(invocation.Entries, snapshot)
+	if err != nil {
+		return scriptexecution.Request{}, nil, err
 	}
 	return scriptexecution.Request{
-		TaskID: assignment.TaskID, OperationID: assignment.OperationID, AssignmentID: assignment.AssignmentID,
-		StepID: step.StepId, ExecutionID: run.ScriptExecutionId,
-		PlanHash:     append([]byte(nil), assignment.Plan.PlanHash...),
-		Projection:   projection,
+		TaskID: invocation.Attempt.TaskID, WorkItemID: invocation.Attempt.WorkItemID,
+		AttemptID: invocation.Attempt.ID, AssignedAt: invocation.Attempt.AssignedAt, OperationID: invocation.OperationID,
+		ExecutionID: run.ScriptExecutionId, Input: invocation.Input,
+		Projection:   proto.Clone(projection).(*agentpb.ScriptRunnerProjection),
 		BodyMetadata: proto.Clone(body.Metadata).(*agentpb.ScriptBodyArtifactMetadata),
-		Body:         append([]byte(nil), body.Body...),
-		Entries: cloneScriptEntriesForSnapshot(
-			assignment.ScriptArtifacts.Entries,
-			assignment.Plan,
-			run.RunnerSnapshotId,
-		),
+		Body:         append([]byte(nil), body.Body...), Entries: entries,
 	}, durable, nil
 }
 
 func cloneScriptEntriesForSnapshot(
 	entries []*agentpb.ScriptEntryArtifact,
-	plan *agentpb.ExecutionPlan,
-	snapshotID string,
-) []*agentpb.ScriptEntryArtifact {
-	wanted := make(map[string]struct{})
-	for _, snapshot := range plan.ScriptRunnerSnapshots {
-		if snapshot == nil || snapshot.SnapshotId != snapshotID {
-			continue
+	snapshot *agentpb.ResolvedRunnerSnapshot,
+) ([]*agentpb.ScriptEntryArtifact, error) {
+	wanted := make(map[string]*agentpb.ScriptRunnerEntryBinding, len(snapshot.EntryBindings))
+	for _, binding := range snapshot.EntryBindings {
+		if binding == nil {
+			return nil, errs.New(errs.KindValidationFailed, "agent: Script entry binding is missing")
 		}
-		for _, binding := range snapshot.EntryBindings {
-			wanted[binding.EntryId+"\x00"+binding.ValueGenerationId] = struct{}{}
+		key := binding.EntryId + "\x00" + binding.ValueGenerationId
+		if _, duplicate := wanted[key]; duplicate {
+			return nil, errs.New(errs.KindValidationFailed, "agent: captured Script entry binding is duplicated")
 		}
+		wanted[key] = binding
 	}
 	selected := make([]*agentpb.ScriptEntryArtifact, 0, len(wanted))
+	seen := make(map[string]struct{}, len(wanted))
 	for _, entry := range entries {
 		if entry == nil || entry.Binding == nil {
-			continue
+			return nil, errs.New(errs.KindValidationFailed, "agent: Script entry artifact is missing")
 		}
 		key := entry.Binding.EntryId + "\x00" + entry.Binding.ValueGenerationId
-		if _, exists := wanted[key]; exists {
-			selected = append(selected, entry)
+		binding, needed := wanted[key]
+		if !needed {
+			continue
 		}
+		if !proto.Equal(binding, entry.Binding) {
+			return nil, errs.New(errs.KindValidationFailed, "agent: Script entry binding differs from captured input")
+		}
+		if _, duplicate := seen[key]; duplicate {
+			return nil, errs.New(errs.KindValidationFailed, "agent: Script entry artifact is duplicated")
+		}
+		seen[key] = struct{}{}
+		selected = append(selected, entry)
 	}
-	return cloneScriptEntries(selected)
+	if len(seen) != len(wanted) {
+		return nil, errs.New(errs.KindValidationFailed, "agent: captured Script entry values are incomplete")
+	}
+	return cloneScriptEntries(selected), nil
 }
 
 func bodyEvidenceFromCheckpoint(value *agentpb.ScriptBodyPreparedCheckpoint) scriptexecution.BodyEvidence {

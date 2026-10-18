@@ -11,7 +11,7 @@ import (
 
 func prepareDirectDesiredPublication(ctx context.Context, store hierarchyStore, environmentID string,
 	marker idempotencyrecord.IdempotencyMarker, mutate func(*core.BlueprintDesiredInput) error,
-) (routeHeadPublication, error) {
+) (desiredMutationFragment, error) {
 	return prepareDirectDesiredProjectionPublication(ctx, store, environmentID, marker,
 		func(input *core.BlueprintDesiredInput, _ *projectionrecord.EnvironmentComposeProjection) error {
 			return mutate(input)
@@ -21,19 +21,19 @@ func prepareDirectDesiredPublication(ctx context.Context, store hierarchyStore, 
 func prepareDirectDesiredProjectionPublication(ctx context.Context, store hierarchyStore, environmentID string,
 	marker idempotencyrecord.IdempotencyMarker,
 	mutate func(*core.BlueprintDesiredInput, *projectionrecord.EnvironmentComposeProjection) error,
-) (routeHeadPublication, error) {
+) (desiredMutationFragment, error) {
 	publication, err := desiredauthoring.Prepare(ctx, store, environmentID, marker, mutate)
 	if err != nil {
-		return routeHeadPublication{}, err
+		return desiredMutationFragment{}, err
 	}
-	result := routeHeadPublication{conditions: publication.Conditions, mutations: publication.Mutations}
+	result := desiredMutationFragment{conditions: publication.Conditions, mutations: publication.Mutations}
 	for _, mutation := range publication.Mutations {
 		result.values = append(result.values, mutation.Value)
 	}
 	return result, nil
 }
 
-func (publication routeHeadPublication) bindDirectDesired(
+func (publication desiredMutationFragment) bindDirectDesired(
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 	previous idempotencyPlanClassifier,

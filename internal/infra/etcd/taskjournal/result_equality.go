@@ -18,8 +18,7 @@ func TaskResultsEqual(left, right TaskResultRecord) bool {
 		len(left.ProxyEvidence) != len(right.ProxyEvidence) ||
 		len(left.RecreateEvidence) != len(right.RecreateEvidence) ||
 		!slices.Equal(left.RollingEvidence, right.RollingEvidence) ||
-		!TaskCandidateAbsenceEvidenceEqual(left.CandidateAbsenceEvidence, right.CandidateAbsenceEvidence) ||
-		!TaskComponentRestorationEvidenceEqual(left.ComponentRestorationEvidence, right.ComponentRestorationEvidence) {
+		!TaskCandidateAbsenceEvidenceEqual(left.CandidateAbsenceEvidence, right.CandidateAbsenceEvidence) {
 
 		return false
 	}
@@ -52,21 +51,6 @@ func TaskServiceAbsenceEvidenceEqual(left, right *TaskServiceAbsenceEvidence) bo
 	return left == nil || left.ServiceID == right.ServiceID && left.ArtifactID == right.ArtifactID &&
 		left.ComposeProjectName == right.ComposeProjectName && left.AbsenceProven == right.AbsenceProven &&
 		slices.Equal(left.ComposeNames, right.ComposeNames)
-}
-
-func TaskComponentRestorationEvidenceEqual(left, right *TaskComponentRestorationEvidence) bool {
-	if (left == nil) != (right == nil) {
-		return false
-	}
-	return left == nil || *left == *right
-}
-
-func CloneTaskComponentRestorationEvidence(value *TaskComponentRestorationEvidence) *TaskComponentRestorationEvidence {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
 }
 
 func TaskCandidateAbsenceEvidenceEqual(left, right *TaskCandidateAbsenceEvidence) bool {

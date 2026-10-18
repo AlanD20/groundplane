@@ -3,7 +3,6 @@ package scriptruntime
 import (
 	"context"
 	"errors"
-	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -23,11 +22,10 @@ func New(engine scriptexecution.Engine) (*Runtime, error) {
 
 func (runtime *Runtime) ExecuteScript(
 	ctx context.Context,
-	assignment taskassignment.Assignment,
-	step *agentpb.ExecutionStep,
+	invocation Invocation,
 	checkpoint func(context.Context, *agentpb.ScriptCheckpointRequest) error,
 ) (int32, error) {
-	request, durable, err := scriptExecutionRequest(ctx, assignment, step, checkpoint)
+	request, durable, err := scriptExecutionRequest(ctx, invocation, checkpoint)
 	if err != nil {
 		return 0, err
 	}
@@ -37,9 +35,9 @@ func (runtime *Runtime) ExecuteScript(
 	}
 
 	if durable.State == agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED {
-		if ctx.Err() != nil || !time.Now().Before(assignment.Deadline) {
+		if ctx.Err() != nil || !time.Now().Before(invocation.Attempt.Deadline) {
 			reason := agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_ABORT_BEFORE_START
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) || !time.Now().Before(assignment.Deadline) {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) || !time.Now().Before(invocation.Attempt.Deadline) {
 				reason = agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_EXPIRY_BEFORE_START
 			}
 			if err := checkpointOutcome(checkpoint, request, durable, reason, nil); err != nil {
@@ -146,8 +144,7 @@ func (runtime *Runtime) ExecuteScript(
 // container creation.
 func (runtime *Runtime) CompleteScriptWithoutStart(
 	ctx context.Context,
-	assignment taskassignment.Assignment,
-	step *agentpb.ExecutionStep,
+	invocation Invocation,
 	reason agentpb.ScriptOutcomeReason,
 	checkpoint func(context.Context, *agentpb.ScriptCheckpointRequest) error,
 ) error {
@@ -155,7 +152,7 @@ func (runtime *Runtime) CompleteScriptWithoutStart(
 		reason != agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE {
 		return errs.New(errs.KindValidationFailed, "agent: Script no-start outcome reason is invalid")
 	}
-	request, durable, err := scriptExecutionRequest(ctx, assignment, step, checkpoint)
+	request, durable, err := scriptExecutionRequest(ctx, invocation, checkpoint)
 	if err != nil {
 		return err
 	}

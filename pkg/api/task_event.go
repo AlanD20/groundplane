@@ -1,22 +1,19 @@
 package api
 
 import (
-	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"time"
 )
 
-// TaskEvent is one durable, Controller-sequenced step transition. Output
-// chunks use resource log streams and never enter this public journal shape.
+// TaskEvent is a bounded, Task-ordered stage observation. Execution authority
+// and workload output are separate from this diagnostic timeline.
 type TaskEvent struct {
-	ControllerOperation *TaskControllerOperation `json:"controller_operation,omitempty"`
-	Sequence            uint64                   `json:"sequence" minimum:"1"`
-	StepID              string                   `json:"step_id"`
-	State               TaskStatus               `json:"state" enum:"pending,running,completed,failed,aborted,timed_out"`
-	Attempt             uint32                   `json:"attempt" minimum:"1"`
-	Ordinal             uint64                   `json:"ordinal" minimum:"1"`
-	ReceivedAt          time.Time                `json:"received_at"`
-	HealthWait          *taskprogress.Readiness  `json:"health_wait,omitempty"`
-	Failure             *TaskFailure             `json:"failure,omitempty"`
+	Sequence        uint64              `json:"sequence" minimum:"1"`
+	WorkItemID      string              `json:"work_item_id"`
+	AttemptID       string              `json:"attempt_id"`
+	AttemptSequence uint64              `json:"attempt_sequence" minimum:"1"`
+	RecordedAt      time.Time           `json:"recorded_at"`
+	Stage           workexecution.Stage `json:"stage"`
 }
 
 type TaskControllerOperation struct {

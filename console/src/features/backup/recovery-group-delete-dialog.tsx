@@ -68,11 +68,11 @@ export function RecoveryGroupDeleteDialog({
           if (signal.aborted) return;
           setTasks((prior) =>
             prior.map((item) =>
-              item.id === id ? { ...item, status: task.status } : item,
+              item.id === id ? { ...item, status: task.task.status } : item,
             ),
           );
-          if (task.status === "completed") break;
-          if (["failed", "aborted", "timed_out"].includes(task.status)) {
+          if (task.task.finished_at && task.task.status === "succeeded") break;
+          if (task.task.finished_at) {
             throw new Error(
               "Deletion stopped. Inspect the linked Task; no further archives were selected.",
             );

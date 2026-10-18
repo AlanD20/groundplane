@@ -3,6 +3,8 @@ import type {
   PendingResourceRemoval,
 } from "@/features/environment/environment-removal-model";
 
+import type { TaskRetryRequest } from "@/features/task/api";
+
 export type PendingResourceRemovalIntent = {
   removal: PendingResourceRemoval;
   idempotencyKey: string;
@@ -11,6 +13,7 @@ export type PendingResourceRemovalIntent = {
 export type ResourceRemovalRetryIntent = {
   removal: PendingResourceRemoval;
   idempotencyKey: string;
+  input: TaskRetryRequest;
 };
 
 export type EnvironmentMutationIntent = {
@@ -183,15 +186,34 @@ export function loadResourceRemovalRetryIntents(): Map<
       const candidate = value as {
         removal?: unknown;
         idempotencyKey?: unknown;
+        input?: { work_item_id?: unknown; attempt?: unknown };
       };
       const removal = decodeRemoval(candidate.removal);
       if (
         !removal ||
         typeof candidate.idempotencyKey !== "string" ||
-        candidate.idempotencyKey.length === 0
+        candidate.idempotencyKey.length === 0 ||
+        !candidate.input ||
+        typeof candidate.input.work_item_id !== "string" ||
+        !/^work_[0-9A-HJKMNP-TV-Z]{26}$/.test(candidate.input.work_item_id) ||
+        typeof candidate.input.attempt !== "number" ||
+        !Number.isSafeInteger(candidate.input.attempt) ||
+        candidate.input.attempt < 1
       )
         return [];
-      return [[taskId, { removal, idempotencyKey: candidate.idempotencyKey }]];
+      return [
+        [
+          taskId,
+          {
+            removal,
+            idempotencyKey: candidate.idempotencyKey,
+            input: {
+              work_item_id: candidate.input.work_item_id,
+              attempt: candidate.input.attempt,
+            },
+          },
+        ],
+      ];
     }),
   );
 }

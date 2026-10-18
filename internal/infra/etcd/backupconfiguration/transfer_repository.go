@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -14,6 +13,8 @@ import (
 // timeout and Environment-lock compares for this exact source at one MVCC view.
 type ConfigTransferGuard func(context.Context, ConfigTransferOwner, int64) ([]etcdstore.Condition, error)
 
+// ConfigRestoreTransferGuard includes the live transfer guards as well as the
+// captured destination generation. Callers must not append the same guards twice.
 type ConfigRestoreTransferGuard func(context.Context, ConfigRestoreTransferOwner, int64) ([]etcdstore.Condition, error)
 
 type ConfigTransferRepository struct {
@@ -32,20 +33,12 @@ func NewConfigTransferRepository(
 
 func (repository *ConfigTransferRepository) ReadConfigTransferCursor(
 	ctx context.Context,
-	taskID, assignmentID, stepID, executionID string,
+	binding backupconfigtransfer.Binding,
 	revision int64,
 ) (etcdstore.Versioned[ConfigTransferCursor], bool, error) {
 	var zero etcdstore.Versioned[ConfigTransferCursor]
-	if etcdstore.ValidateContext(ctx) != nil || ids.Validate(ids.KindTask, taskID) != nil ||
-		ids.Validate(ids.KindAssignment, assignmentID) != nil || ids.Validate(ids.KindStep, stepID) != nil ||
-		ids.Validate(ids.KindOperation, "op_"+executionID) != nil || revision < 0 {
+	if etcdstore.ValidateContext(ctx) != nil || binding.Validate() != nil || revision < 0 {
 		return zero, false, captureSnapshotConflict()
-	}
-	binding := backupconfigtransfer.Binding{
-		TaskID:       taskID,
-		AssignmentID: assignmentID,
-		StepID:       stepID,
-		ExecutionID:  executionID,
 	}
 	key := ConfigTransferCursorKey(binding)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
@@ -64,7 +57,7 @@ func (repository *ConfigTransferRepository) ReadConfigTransferCursor(
 	}
 	cursor, err := DecodeConfigTransferCursor(value.Value)
 	if err != nil || value.Key != key || value.ModRevision <= 0 ||
-		ConfigTransferCursorKey(cursor.Owner.Binding) != key {
+		ConfigTransferCursorKey(cursor.Owner.Binding) != key || cursor.Owner.Binding != binding {
 		return zero, false, captureSnapshotConflict()
 	}
 	return etcdstore.Versioned[ConfigTransferCursor]{
@@ -105,27 +98,24 @@ func (repository *ConfigTransferRepository) commitConfigTransferCredit(
 	if err != nil {
 		return 0, err
 	}
-	current, found, err := repository.ReadConfigTransferCursor(ctx, owner.Binding.TaskID, owner.Binding.AssignmentID,
-		owner.Binding.StepID, owner.Binding.ExecutionID, 0)
+	current, found, err := repository.ReadConfigTransferCursor(ctx, owner.Binding, 0)
 	if err != nil {
 		return 0, err
 	}
 	if found && current.Record.Owner != owner {
 		return 0, captureSnapshotConflict()
 	}
-	conditions, err := repository.guard(ctx, owner, current.ReadRevision)
-	if err != nil {
-		return 0, err
-	}
+	var conditions []etcdstore.Condition
 	if restore != nil {
 		if repository.restoreGuard == nil || restore.Owner.Transfer != owner {
 			return 0, captureSnapshotConflict()
 		}
-		more, err := repository.restoreGuard(ctx, restore.Owner, current.ReadRevision)
-		if err != nil {
-			return 0, err
-		}
-		conditions = append(conditions, more...)
+		conditions, err = repository.restoreGuard(ctx, restore.Owner, current.ReadRevision)
+	} else {
+		conditions, err = repository.guard(ctx, owner, current.ReadRevision)
+	}
+	if err != nil {
+		return 0, err
 	}
 	key := ConfigTransferCreditKey(owner.Binding, owned.CreditSequence)
 	keys := []string{key}

@@ -6,7 +6,6 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -29,61 +28,6 @@ type EnvironmentManagedConfigApplyInput struct {
 type EnvironmentManagedConfigApply struct {
 	action             *agentpb.ComponentApply
 	prerequisiteStepID string
-}
-
-// EnvironmentComponentTaskContributionInput supplies the immutable Blueprint
-// evidence needed to optionally contribute the managed-config action step.
-type EnvironmentComponentTaskContributionInput struct {
-	Apply          EnvironmentManagedConfigApplyInput
-	AllocateStep   func() string
-	TimeoutSeconds uint32
-}
-
-// BuildEnvironmentComponentTaskContribution resolves the managed-config candidate and
-// returns the complete optional task contribution. The caller only appends
-// the returned generic steps and records; managed-config-specific branching stays in
-// this controller capability module.
-func BuildEnvironmentComponentTaskContribution(
-	input EnvironmentComponentTaskContributionInput,
-) ([]*agentpb.ExecutionStep, []taskjournal.TaskStepRecord, error) {
-	if input.AllocateStep == nil || input.TimeoutSeconds == 0 {
-		return nil, nil, errs.New(errs.KindInternal, "Blueprint managed-config task contribution input is invalid")
-	}
-	apply, found, err := ResolveEnvironmentManagedConfigApply(input.Apply)
-	if err != nil || !found {
-		return nil, nil, err
-	}
-	stepID := input.AllocateStep()
-	step, err := apply.ExecutionStep(stepID, input.TimeoutSeconds)
-	if err != nil {
-		return nil, nil, err
-	}
-	steps := []*agentpb.ExecutionStep{step}
-	records := []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}
-	return steps, records, nil
-}
-
-// AppendEnvironmentComponentTaskContribution preserves the deploy invariant
-// that runtime reconciliation completes before managed configuration activates.
-func AppendEnvironmentComponentTaskContribution(
-	steps []*agentpb.ExecutionStep,
-	records []taskjournal.TaskStepRecord,
-	contribution []*agentpb.ExecutionStep,
-	contributionRecords []taskjournal.TaskStepRecord,
-) ([]*agentpb.ExecutionStep, []taskjournal.TaskStepRecord, error) {
-	if len(contribution) != len(contributionRecords) {
-		return nil, nil, errs.New(errs.KindInternal, "Component task contribution is inconsistent")
-	}
-	if len(contribution) == 0 {
-		return steps, records, nil
-	}
-	if len(steps) == 0 || steps[len(steps)-1].GetComposeApply() == nil {
-		return nil, nil, errs.New(
-			errs.KindInternal,
-			"managed configuration must follow Compose apply",
-		)
-	}
-	return append(steps, contribution...), append(records, contributionRecords...), nil
 }
 
 func ResolveEnvironmentManagedConfigApply(
@@ -320,7 +264,7 @@ func validateEnvironmentManagedConfigMaterialization(
 		reference.Source.EntryValue != nil || reference.Source.GeneratedEnvironment != nil ||
 		componentFile.RevisionID != revisionID ||
 		componentFile.ComponentID != candidate.Desired.ID ||
-		componentFile.Path != managed.SourcePath || componentFile.RouteTaskID != "" {
+		componentFile.Path != managed.SourcePath {
 		return [sha256.Size]byte{}, errs.New(
 			errs.KindInternal,
 			"Blueprint managed configuration materialization identity is invalid",

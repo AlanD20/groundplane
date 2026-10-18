@@ -6,11 +6,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -24,16 +22,6 @@ func (service *Service) retainTaskImages(
 	task etcd.TaskRecord,
 	revision int64,
 ) (bool, error) {
-	if task.Type == taskjournal.TaskCheck && task.Executor == taskjournal.TaskExecutorController {
-		switch task.Params[taskjournal.TaskResourceKindParam] {
-		case taskjournal.TaskResourceConnector:
-			return true, nil // Controller storage checks use no host image.
-		case taskjournal.TaskResourceAttach:
-			return true, service.retainBackingCheckImages(ctx, retention, task, revision)
-		case taskjournal.TaskResourceRoute:
-			return true, service.retainEdgeCheckImages(ctx, retention, task, revision)
-		}
-	}
 	if !taskjournal.IsTerminalTaskStatus(task.Status) {
 		return false, nil
 	}
@@ -41,11 +29,6 @@ func (service *Service) retainTaskImages(
 		resource == taskjournal.TaskResourceSoftware {
 		// Durable preparation/activation records retain exact outputs and
 		// predecessors independently, including terminal partial failures.
-		return true, nil
-	}
-	if task.Executor == taskjournal.TaskExecutorController && task.Type == taskjournal.TaskCreate &&
-		task.Params[taskjournal.TaskResourceKindParam] == runners.TaskResourceRunner {
-		// Fresh-token retry uses the retained Runner, scanned independently.
 		return true, nil
 	}
 	if task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate {
@@ -60,52 +43,6 @@ func (service *Service) retainTaskImages(
 		}
 	}
 	return false, nil
-}
-
-func (service *Service) retainBackingCheckImages(
-	ctx context.Context,
-	retention *imageRetention,
-	task etcd.TaskRecord,
-	revision int64,
-) error {
-	keys := []string{backingchecks.Key(task.ID), backingchecks.OperationKey(task.OperationID)}
-	read, err := service.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
-	if err != nil {
-		return err
-	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		if read != nil {
-			keyvalue.ClearValues(read.Values)
-		}
-		return errs.New(errs.KindInternal, "Backing check image authority read is incomplete")
-	}
-	defer keyvalue.ClearValues(read.Values)
-	if read.Values[0] == nil {
-		if taskjournal.IsTerminalTaskStatus(task.Status) && read.Values[1] == nil {
-			return nil
-		}
-		return errs.New(errs.KindStateConflict, "Backing check still requires its captured helper image authority")
-	}
-	record, err := backingchecks.Decode(read.Values[0].Value)
-	if err != nil {
-		return err
-	}
-	defer record.Clear()
-	hash, err := backingchecks.PlanHash(record)
-	if err != nil || record.Owner.TaskID != task.ID || record.Owner.PlanID != task.PlanID ||
-		record.Owner.OperationID != task.OperationID ||
-		record.Owner.EnvironmentID != task.Owner.EnvironmentID ||
-		record.Source.Parameters.AttachID != task.Target ||
-		record.ConfigurationSHA256 != task.Params[taskjournal.TaskBackingCheckInputParam] ||
-		hash != task.PlanHash {
-		return errs.New(errs.KindStateConflict, "Backing check image authority differs from its Task")
-	}
-	if record.Phase != backingchecks.Finished && record.Phase != backingchecks.Transferred {
-		reason := "Access check helper retained by Task " + task.ID
-		retention.retain(record.Source.HelperImageID, reason)
-		retention.retain(record.Source.HelperImage, reason)
-	}
-	return nil
 }
 
 func (service *Service) retainComponentTaskImages(

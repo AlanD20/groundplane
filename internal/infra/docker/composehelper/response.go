@@ -18,8 +18,7 @@ func validateResponse(response *agentpb.ComposeHelperResponse) error {
 	}
 	evidenceCount := 0
 	for _, present := range []bool{response.ProxyEvidence != nil, response.RecreateEvidence != nil,
-		response.CandidateAbsenceEvidence != nil, response.RollingEvidence != nil, response.RollingProxyEvidence != nil,
-		response.ComponentRestorationEvidence != nil} {
+		response.CandidateAbsenceEvidence != nil, response.RollingEvidence != nil, response.RollingProxyEvidence != nil} {
 		if present {
 			evidenceCount++
 		}
@@ -63,14 +62,6 @@ func validateResponse(response *agentpb.ComposeHelperResponse) error {
 			(evidence.GetServiceId() == "" || evidence.GetChangeOrdinal() == 0 || evidence.GetProxyGeneration() == 0 ||
 				len(evidence.GetConfigSha256()) != sha256.Size) {
 			return errs.New(errs.KindValidationFailed, "completed Compose helper rolling proxy evidence is invalid")
-		}
-		if evidence := response.GetComponentRestorationEvidence(); evidence != nil &&
-			(evidence.GetComponentId() == "" || evidence.GetArtifactId() == "" || evidence.GetServiceId() == "" ||
-				evidence.GetComposeProjectName() == "" || evidence.GetTarget() != agentpb.ComponentRestorationTarget_COMPONENT_RESTORATION_TARGET_PREDECESSOR) {
-			return errs.New(
-				errs.KindValidationFailed,
-				"completed Component configuration restoration evidence is invalid",
-			)
 		}
 	case agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_RESTORATION_REQUIRED:
 		if response.ExitCode != 0 ||

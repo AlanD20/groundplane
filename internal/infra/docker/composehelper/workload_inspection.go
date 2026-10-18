@@ -28,6 +28,13 @@ func inspectCapturedWorkloads(ctx context.Context, taskRunner runner.Runner, art
 	if selected == nil || selected.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 		return nil, errs.New(errs.KindValidationFailed, "operation must select a captured workload")
 	}
+	return inspectCapturedContainers(ctx, taskRunner, artifact, selected)
+}
+
+// Lifecycle operations also own stable proxy members. Their caller selects the
+// exact captured member; workload-only operations retain the restriction above.
+func inspectCapturedContainers(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact, selected *agentpb.ComposeService) ([]string, error) {
+	name := selected.ComposeName
 	listed, err := taskRunner.Run(ctx, runner.RunCmdOpts{
 		Name: DockerExecutable, Args: []string{"container", "ls", "--all", "--quiet", "--no-trunc",
 			"--filter", "label=com.docker.compose.project=" + artifact.ProjectName,

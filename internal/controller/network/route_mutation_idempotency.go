@@ -2,13 +2,10 @@ package network
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
@@ -22,7 +19,9 @@ type routeMutationIntent struct {
 }
 
 type routeMutationIdempotency interface {
+	ResolveReplayLocator(context.Context, idempotencyrecord.IdempotencyReplayTarget, string, string, string) (idempotencyrecord.IdempotencyLocator, bool, error)
 	Prepare(context.Context, routeMutationIntent) (routeMutationEvidence, error)
+	MatchesStaged(context.Context, routeMutationEvidence, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 	ResolveExisting(
 		context.Context,
 		idempotencyrecord.IdempotencyLocator,
@@ -43,12 +42,12 @@ type routeMutationIdempotency interface {
 
 type durableRouteMutationIdempotency struct {
 	coordinator *requestidempotency.Coordinator
-	repository  requestidempotency.EvidenceRepository
+	repository  idempotencyEvidenceRepository
 }
 
 func newDurableRouteMutationIdempotency(
 	coordinator *requestidempotency.Coordinator,
-	repository requestidempotency.EvidenceRepository,
+	repository idempotencyEvidenceRepository,
 ) (*durableRouteMutationIdempotency, error) {
 	if coordinator == nil || repository == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutation idempotency is not configured")
@@ -60,6 +59,10 @@ func (service *durableRouteMutationIdempotency) Prepare(
 	ctx context.Context,
 	intent routeMutationIntent,
 ) (routeMutationEvidence, error) {
+	body := requestidempotency.JSONBody(intent.body)
+	if intent.method == http.MethodDelete {
+		body = requestidempotency.NoBody()
+	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: intent.method,
 		Route:  intent.route,
@@ -69,7 +72,7 @@ func (service *durableRouteMutationIdempotency) Prepare(
 		},
 		Path:  intent.path,
 		Query: requestidempotency.Object(),
-		Body:  requestidempotency.JSONBody(intent.body),
+		Body:  body,
 	})
 	if err != nil {
 		return routeMutationEvidence{}, err
@@ -94,6 +97,20 @@ func (service *durableRouteMutationIdempotency) ResolveExisting(
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
+func (service *durableRouteMutationIdempotency) ResolveReplayLocator(ctx context.Context,
+	target idempotencyrecord.IdempotencyReplayTarget, method, route, key string,
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
+	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
+}
+
+func (service *durableRouteMutationIdempotency) MatchesStaged(
+	ctx context.Context,
+	evidence routeMutationEvidence,
+	existing idempotencyrecord.ProtectedIntentRecord,
+) (bool, error) {
+	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
+}
+
 func (service *durableRouteMutationIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence routeMutationEvidence,
@@ -109,36 +126,6 @@ func (service *durableRouteMutationIdempotency) ResolveUnknown(
 	original error,
 ) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
-}
-
-func (service *routeMutationService) routeResponseMarker(
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence routeMutationEvidence,
-	record routerecord.Record,
-	taskID string,
-) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
-	body, err := json.Marshal(apiTypes.RouteTaskAccepted{Route: routeAPIResponse(record), TaskID: taskID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(
-			errs.KindInternal,
-			err,
-		)
-	}
-	defer clear(body)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...),
-	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
-		locator,
-		evidence.durable,
-		response,
-		service.now().UTC(),
-	)
-	if err != nil {
-		clear(response.Body)
-		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, err
-	}
-	return response, marker, nil
 }
 
 func (service *routeMutationService) resolveRouteMutation(

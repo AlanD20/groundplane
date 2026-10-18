@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
@@ -247,13 +246,6 @@ func (service *Service) applyAuthoredOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	parent, err := authoredApplyParent(
-		claim, baseline.taskOwner, taskTarget, idempotencyKey, desired, allocator.Named,
-		int64(service.executionTimeout/time.Second),
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
 	zoneReservations, err := authoredZoneReservations(ctx, desired, owned, baseline.project.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -266,6 +258,21 @@ func (service *Service) applyAuthoredOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clearAuthoredAttachInputGenerations(attachInputGenerations)
+	admission, err := service.planAuthoredAdmission(ctx, baseline, desired, owned, attachInputGenerations)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	plan := admission.Plan
+	parent, err := authoredApplyParent(
+		claim, baseline.scope, taskTarget, desired, uint32(len(plan.Units)), service.executionTimeout,
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	graph, err := service.workAdmission.Prepare(ctx, parent, plan, baseline.ledger, desired.Input.Components)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	staged, err := desiredrevision.Stage(ctx, service.repository, desiredrevision.StageInput{
 		Claim: claim, Blueprint: desiredrevision.BlueprintRevision(environmentID, claim.TaskID, claim.CreatedAt, bundle),
 		DesiredInput: desired,
@@ -281,11 +288,14 @@ func (service *Service) applyAuthoredOnce(
 		desiredrevision.PublishAuthoredInput{
 			Project: baseline.project, Environment: baseline.environment,
 			ExpectedHeadRevision: baseline.expectedHeadRevision,
+			Baseline:             baseline.ledger,
+			Graph:                graph,
 			Staged:               staged, OwnedIdentities: owned,
-			ZoneReservations:       zoneReservations,
-			PrerequisiteAuthority:  prerequisiteAuthority,
-			AttachInputGenerations: attachInputGenerations,
-			Evidence:               evidence, Locator: locator, Parent: parent,
+			ZoneReservations:         zoneReservations,
+			PrerequisiteAuthority:    prerequisiteAuthority,
+			AttachInputGenerations:   attachInputGenerations,
+			RetainedAttachConditions: admission.Conditions,
+			Evidence:                 evidence, Locator: locator, Parent: parent,
 			ScriptPublication: scriptPublication,
 		},
 	)

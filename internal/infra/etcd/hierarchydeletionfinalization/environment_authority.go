@@ -113,10 +113,6 @@ func environmentDeletionAuthorityConditions(environmentID, operationID string, k
 	for _, prefix := range environmentDeletionLiveAuthorityPrefixes(environmentID, operationID) {
 		conditions = append(conditions, etcdstore.Condition{Key: prefix, Prefix: true})
 	}
-	conditions = append(
-		conditions,
-		etcdstore.Condition{Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(environmentID), Prefix: true},
-	)
 	return conditions
 }
 
@@ -131,6 +127,7 @@ func environmentDeletionChildAuthorityKeys(environmentID string) []string {
 
 func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID string) []string {
 	return []string{
+		scriptrecord.ScriptEnvironmentLocatorPrefixFor(environmentID),
 		runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerEnvironment, environmentID),
 		blueprints.EnvironmentBlueprintRevisionsPrefix(environmentID),
 		routerecord.OwnerPrefix(environmentID),

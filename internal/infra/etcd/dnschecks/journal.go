@@ -1,49 +1,64 @@
 package dnschecks
 
 import (
-	"bytes"
 	"context"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type Journal struct {
-	repository   *Repository
-	owner        Owner
-	assignmentID string
+	repository *Repository
+	owner      Owner
+	attemptID  string
+	identity   workexecution.Identity
 }
 
-func NewJournal(repository *Repository, owner Owner, assignmentID string) (*Journal, error) {
+func NewJournal(repository *Repository, owner Owner, attemptID string, identity workexecution.Identity) (*Journal, error) {
 	if repository == nil || ids.Validate(ids.KindTask, owner.TaskID) != nil ||
 		ids.Validate(ids.KindPlan, owner.PlanID) != nil ||
 		ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
-		ids.Validate(ids.KindAssignment, assignmentID) != nil {
+		ids.Validate(ids.KindWorkItem, owner.WorkItemID) != nil || ids.Validate(ids.KindAttempt, attemptID) != nil ||
+		identity.Validate() != nil || identity.Executor != workexecution.Controller {
 		return nil, errs.New(errs.KindValidationFailed, "DNS check journal requires its exact Controller assignment")
 	}
-	return &Journal{repository: repository, owner: owner, assignmentID: assignmentID}, nil
+	return &Journal{repository: repository, owner: owner, attemptID: attemptID, identity: identity}, nil
 }
 
 func (journal *Journal) Start(ctx context.Context, now time.Time) error {
-	return journal.mutate(ctx, func(record *Record, deadline time.Time) error { return record.Start(now, deadline) })
+	return journal.mutate(ctx, true, func(record *Record, deadline time.Time) error { return record.Start(now, deadline) })
 }
 
 func (journal *Journal) Finish(ctx context.Context, result *agentpb.DNSConnectionResult, now time.Time) error {
-	return journal.mutate(ctx, func(record *Record, _ time.Time) error { return record.Finish(result, now) })
+	return journal.mutate(ctx, false, func(record *Record, _ time.Time) error { return record.Finish(result, now) })
 }
 
 func (journal *Journal) Stop(ctx context.Context, failure string, now time.Time) error {
-	return journal.mutate(ctx, func(record *Record, _ time.Time) error { return record.Stop(failure, now) })
+	return journal.mutate(ctx, false, func(record *Record, _ time.Time) error { return record.Stop(failure, now) })
 }
 
-func (journal *Journal) mutate(ctx context.Context, change func(*Record, time.Time) error) error {
-	keys := []string{RecordKey(journal.owner.TaskID), taskjournal.ControllerTaskClaimKey(journal.owner.TaskID),
-		taskjournal.TaskAssignmentIndexKey(journal.owner.TaskID), OperationKey(journal.owner.OperationID)}
+func (journal *Journal) mutate(ctx context.Context, forward bool, change func(*Record, time.Time) error) error {
+	return journal.mutateState(ctx, forward, false, change)
+}
+
+func (journal *Journal) RejectAssigned(ctx context.Context, failure string, at time.Time) error {
+	return journal.mutateState(ctx, false, true, func(record *Record, _ time.Time) error {
+		if record.Phase != Ready {
+			return errs.New(errs.KindStateConflict, "DNS check already started")
+		}
+		return record.Stop(failure, at)
+	})
+}
+
+func (journal *Journal) mutateState(ctx context.Context, forward, assignedOnly bool, change func(*Record, time.Time) error) error {
+	keys := []string{RecordKey(journal.owner.TaskID), workqueue.AttemptKey(journal.attemptID),
+		workqueue.ItemKey(journal.owner.WorkItemID), OperationKey(journal.owner.OperationID),
+		workqueue.TaskKey(journal.owner.TaskID), workqueue.ExecutorKey(journal.identity)}
 	read, err := journal.repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		return err
@@ -64,15 +79,33 @@ func (journal *Journal) mutate(ctx context.Context, change func(*Record, time.Ti
 	if err != nil {
 		return err
 	}
-	assignment, err := taskassignments.DecodeTaskAssignment(read.Values[1].Value)
+	assignment, err := workqueue.DecodeAttempt(read.Values[1].Value)
 	if err != nil || record.Owner != journal.owner || assignment.TaskID != journal.owner.TaskID ||
-		assignment.AssignmentID != journal.assignmentID || assignment.Executor != taskjournal.TaskExecutorController ||
-		assignment.ExecutionMode != taskassignments.TaskExecutionModeForward ||
-		!bytes.Equal(
-			read.Values[1].Value,
-			read.Values[2].Value,
-		) || string(read.Values[3].Value) != record.Owner.TaskID {
+		assignment.ID != journal.attemptID || assignment.Executor != journal.identity ||
+		assignment.WorkItemID != journal.owner.WorkItemID || assignment.Direction != workexecution.Forward ||
+		(assignment.StartedAt == nil) != assignedOnly || assignment.FinishedAt != nil || string(read.Values[3].Value) != record.Owner.TaskID {
 		return errs.New(errs.KindStateConflict, "DNS check Controller ownership changed")
+	}
+	item, err := workqueue.DecodeItem(read.Values[2].Value)
+	if err != nil || item.ID != journal.owner.WorkItemID || item.TaskID != journal.owner.TaskID ||
+		(!assignedOnly && item.Phase != workexecution.Running || assignedOnly && item.Phase != workexecution.Assigned) ||
+		item.ActiveAttemptID != assignment.ID || item.Input == nil || *item.Input != assignment.Input {
+		return errs.New(errs.KindStateConflict, "DNS check work ownership changed")
+	}
+	digest, err := PlanHash(record)
+	if err != nil || assignment.Input.ID != record.Owner.PlanID || digest != assignment.Input.SHA256 {
+		return errs.New(errs.KindStateConflict, "DNS check captured input changed")
+	}
+	task, err := workqueue.DecodeTask(read.Values[4].Value)
+	if err != nil || task.ID != journal.owner.TaskID {
+		return errs.New(errs.KindStateConflict, "DNS check Task ownership changed")
+	}
+	executor, err := workqueue.DecodeExecutor(read.Values[5].Value)
+	if err != nil || executor.Identity != journal.identity {
+		return errs.New(errs.KindStateConflict, "DNS check executor was replaced")
+	}
+	if forward && (task.Stop != nil || item.ForwardRevoked || !time.Now().UTC().Before(assignment.Deadline)) {
+		return errs.New(errs.KindStateConflict, "DNS check no longer permits queries")
 	}
 	activeKey := ActiveKey(record.Source.ComponentID)
 	active, err := journal.repository.store.GetMany(

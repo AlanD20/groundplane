@@ -76,29 +76,3 @@ func mysqlDumpMatches(value *agentpb.BackupMySQLDumpStart, step *agentpb.BackupS
 		value.RoleName == mysql.RoleName && value.MaxPlaintextBytes == mysql.MaxPlaintextBytes &&
 		bytes.Equal(value.ImageReferenceSha256, mysql.DatabaseImageReferenceSha256)
 }
-
-func (replay *BackupStepResumeReplay) mysqlCaptureCheckpoint(request *agentpb.BackupCheckpointRequest) error {
-	if replay.step.GetCapture().GetMysql() == nil || replay.prepared != nil || replay.uploaded != nil {
-		return backupResumeHistoryInvalid()
-	}
-	if value := request.GetMysqlContainerObserved(); value != nil {
-		if replay.sequence != 0 || replay.mysqlObserved != nil ||
-			!mysqlObservationMatchesService(value, replay.step, replay.authority.Services) {
-			return backupResumeHistoryInvalid()
-		}
-		replay.mysqlObserved = value
-		replay.capture.Checkpoint = &agentpb.BackupCaptureResume_MysqlContainerObserved{MysqlContainerObserved: value}
-		return nil
-	}
-	value, observed := request.GetMysqlDumpStart(), replay.mysqlObserved
-	if observed == nil || replay.mysqlDumpStart != nil || !mysqlDumpMatches(value, replay.step) ||
-		value.ContainerId != observed.ContainerId ||
-		!bytes.Equal(value.ImageReferenceSha256, observed.ImageReferenceSha256) ||
-		!bytes.Equal(value.ExpectedLabelsSha256, observed.ObservedLabelsSha256) {
-		return backupResumeHistoryInvalid()
-	}
-	replay.mysqlDumpStart = value
-	replay.capture.MysqlDumpStart = value
-	replay.capture.Checkpoint = &agentpb.BackupCaptureResume_MysqlDumpStartCheckpoint{MysqlDumpStartCheckpoint: value}
-	return nil
-}

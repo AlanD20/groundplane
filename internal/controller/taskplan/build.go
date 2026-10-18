@@ -22,11 +22,9 @@ type BuildInput struct {
 	ComponentLifecycleMode          agentpb.ComponentLifecycleMode
 	ComponentRollbackObservation    *agentpb.ComponentApply
 	CandidateReleaseProcedure       *agentpb.CandidateReleaseProcedure
-	ComponentRecoveryProcedure      *agentpb.ComponentRecoveryProcedure
 	ServiceAbsenceRecoveryProcedure *agentpb.ServiceAbsenceRecoveryProcedure
 	ManagedComponentProcedure       *agentpb.ManagedComponentProcedure
 	ServiceLifecycleProcedure       *agentpb.ServiceLifecycleProcedure
-	EntryMutationProcedure          *agentpb.EntryMutationProcedure
 }
 
 // Build owns schema selection, defensive copying, deterministic hashing,
@@ -44,11 +42,9 @@ func Build(input BuildInput) (*agentpb.ExecutionPlan, error) {
 		ComponentLifecycleMode:          input.ComponentLifecycleMode,
 		ComponentRollbackObservation:    input.ComponentRollbackObservation,
 		CandidateReleaseProcedure:       input.CandidateReleaseProcedure,
-		ComponentRecoveryProcedure:      input.ComponentRecoveryProcedure,
 		ServiceAbsenceRecoveryProcedure: input.ServiceAbsenceRecoveryProcedure,
 		ManagedComponentProcedure:       input.ManagedComponentProcedure,
 		ServiceLifecycleProcedure:       input.ServiceLifecycleProcedure,
-		EntryMutationProcedure:          input.EntryMutationProcedure,
 	})
 	if err != nil {
 		return nil, err

@@ -29,7 +29,7 @@ func (repository *ConfigTransferRepository) StageConfigRestoreRevision(ctx conte
 	audit := blueprints.EnvironmentConfigRestoreAudit{BaseRevisionID: owner.BaselineRevisionID,
 		PointID: pointID, GenerationID: owner.GenerationID}
 	copy(audit.SourceSHA256[:], digest)
-	if err := revision.Validate(owner.EnvironmentID, owner.Transfer.Binding.TaskID,
+	if err := revision.Validate(owner.EnvironmentID, owner.Transfer.Binding.Attempt.TaskID,
 		owner.RenderGeneration, owner.BaselineHeadRevision, generation.Record.Completed.Content.EntryCount, audit); err != nil {
 		return 0, err
 	}
@@ -43,7 +43,7 @@ func (repository *ConfigTransferRepository) StageConfigRestoreRevision(ctx conte
 		return 0, err
 	}
 	defer etcdstore.ClearMutationValues(chunks)
-	rootKey := blueprints.EnvironmentBlueprintRootKey(owner.EnvironmentID, owner.Transfer.Binding.TaskID)
+	rootKey := blueprints.EnvironmentBlueprintRootKey(owner.EnvironmentID, owner.Transfer.Binding.Attempt.TaskID)
 	read, _, err := repository.restoreRevisionAuthority(ctx, generation, rootKey)
 	if err != nil {
 		return 0, err
@@ -171,15 +171,11 @@ func (repository *ConfigTransferRepository) restoreRevisionAuthority(ctx context
 	} else if count != 0 {
 		return fail(captureSnapshotConflict())
 	}
-	conditions, err := repository.guard(ctx, owner.Transfer, read.ReadRevision)
+	conditions, err := repository.restoreGuard(ctx, owner, read.ReadRevision)
 	if err != nil {
 		return fail(err)
 	}
-	more, err := repository.restoreGuard(ctx, owner, read.ReadRevision)
-	if err != nil {
-		return fail(err)
-	}
-	conditions = append(conditions, more...)
+
 	for index, key := range keys {
 		condition := etcdstore.Condition{Key: key}
 		if value := read.Values[index]; value != nil {

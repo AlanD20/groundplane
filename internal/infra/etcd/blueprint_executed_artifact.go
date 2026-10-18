@@ -9,36 +9,9 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
-
-func blueprintExecutedArtifact(evidence BlueprintReleasePublicationEvidence) ([]byte, error) {
-	if err := executionplan.CandidateReleaseDescriptorMatchesPlan(evidence.CandidateReleaseDescriptor, evidence.Plan); err != nil {
-		return nil, err
-	}
-	if evidence.Plan.GetTargetId() != evidence.EnvironmentID ||
-		evidence.Plan.GetRenderGeneration() != uint64(evidence.Task.RenderGeneration) {
-		return nil, errs.New(errs.KindValidationFailed, "Blueprint executed artifact scope differs from Task")
-	}
-	for _, artifact := range evidence.Plan.GetArtifacts() {
-		if artifact.GetArtifactId() != evidence.Task.Params[taskjournal.TaskComposeArtifactParam] {
-			continue
-		}
-		if artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-			artifact.GetOwnerId() != evidence.EnvironmentID {
-			return nil, errs.New(errs.KindValidationFailed, "Blueprint executed artifact owner differs from Task")
-		}
-		value, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-		if err != nil {
-			return nil, errs.Wrap(errs.KindInternal, err)
-		}
-		return value, nil
-	}
-	return nil, errs.New(errs.KindValidationFailed, "Blueprint executed artifact is absent from prepared plan")
-}
 
 func (repository *TaskRepository) blueprintAcknowledgedArtifact(
 	ctx context.Context,

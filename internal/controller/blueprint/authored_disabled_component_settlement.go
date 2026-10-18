@@ -4,104 +4,69 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type authoredDisabledComponentSettlementRepository interface {
-	SettleBlueprintDisabledComponent(
-		context.Context,
-		etcd.TaskRecord,
-		blueprintunits.Unit,
-		etcd.BlueprintDisabledComponentSelection,
-	) error
+type disabledComponentPreparation struct {
+	Selection etcd.BlueprintDisabledComponentSelection
+	Proxy     *componentplanning.ProxyServicePreflight
+	Sources   workqueue.Change
 }
 
-// TrySettleDisabledComponent settles disabled singleton settings or omission
-// only when exact retained authority proves no workload remains. Metadata edits
-// have no Agent effect; other cases use protected Component execution.
-func (service *Service) TrySettleDisabledComponent(
+// Preparation returns metadata and source-retention writes, not an independent
+// commit. The Component owner must join these with native work settlement.
+func (service *Service) prepareDisabledComponentSelection(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	work workqueue.View,
+	services []workqueue.View,
 	unit blueprintunits.Unit,
 	snapshot blueprintunits.Snapshot,
-) (bool, error) {
+) (*disabledComponentPreparation, error) {
+	parent := work.Task.Task
+	item := work.Item.Item
 	if service == nil || ctx == nil || unit.Target.Kind != ids.KindComponent ||
+		work.Task.Revision <= 0 || work.Item.Revision <= 0 || work.ReadRevision != snapshot.ReadRevision ||
+		work.ReadRevision < work.Task.Revision || work.ReadRevision < work.Item.Revision ||
+		item.Validate() != nil || item.TaskID != parent.ID || item.TargetID != unit.Target.ID ||
+		item.Operation != workexecution.Component || item.Placement.Executor != workexecution.Controller ||
+		item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.ForwardRevoked ||
+		(item.Phase != workexecution.Waiting && item.Phase != workexecution.Ready) ||
+		blueprintunits.ValidateUnit(unit) != nil ||
 		validateAuthoredRuntimeProjectionParent(parent, snapshot) != nil {
-		return false, errs.New(errs.KindValidationFailed, "Blueprint disabled Component request is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "Blueprint disabled Component request is invalid")
 	}
-	settler, ok := service.repository.(authoredDisabledComponentSettlementRepository)
-	if !ok {
-		return false, errs.New(errs.KindInternal, "Blueprint disabled Component repository is not configured")
-	}
-	source, err := service.loadAuthoredRuntimeProjectionSource(ctx, parent)
+	selected, err := service.selectComponentWork(ctx, work, unit, snapshot)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	capability, spec, found := authoredComponentSpec(
-		source.identities.Record.Components, source.desired.Record.Input.Components, unit.Target.ID,
-	)
-	if !found && !unit.Removal || found && unit.Removal {
-		return false, errs.New(errs.KindStateConflict, "Blueprint Component is absent from the sealed input")
-	}
-	if !unit.Removal && spec.Enabled {
-		return false, nil
-	}
-	authorities, err := service.repository.ReadEnvironmentBlueprintRuntimeComponents(
-		ctx, parent.Owner.EnvironmentID, snapshot.ReadRevision,
-	)
-	if err != nil {
-		return false, err
-	}
-	var current *etcd.BlueprintRuntimeComponent
-	for index := range authorities {
-		if authorities[index].Component.Record.Desired.ID == unit.Target.ID {
-			current = &authorities[index]
-			break
-		}
-	}
-	if current == nil {
-		return false, errs.New(errs.KindStateConflict, "Blueprint Component singleton is unavailable")
-	}
+	source, capability, spec := selected.Source, selected.Capability, selected.Spec
+	current := &selected.Current
 	record := current.Component.Record
-	if unit.Removal {
-		capability, spec, err = omittedComponentSelection(record)
-		if err != nil {
-			return false, err
-		}
+	if !unit.Removal && spec.Enabled {
+		return nil, nil
 	}
 	if !authoredDisabledComponentAcknowledged(snapshot, *current) {
-		return false, nil
+		return nil, nil
 	}
 	if record.Desired.Enabled || len(record.Runtime.GeneratedServices) != 0 ||
 		record.Runtime.PinnedIPv4 != "" || record.Runtime.Healthy {
-		return false, nil
+		return nil, nil
 	}
-	projected, err := componentrecord.ProjectRecord(record)
+	effective, err := componentrecord.NewRecord(selected.Candidate)
 	if err != nil {
-		return false, err
-	}
-	changes, err := taskplanning.ReconcileBlueprintComponent(
-		capability, spec, projected, func(ids.Kind) string { return "" },
-	)
-	if err != nil {
-		return false, err
-	}
-	if len(changes.Effective) != 1 {
-		return false, nil
-	}
-	effective, err := componentrecord.NewRecord(changes.Effective[0])
-	if err != nil {
-		return false, err
+		return nil, err
 	}
 	if unit.Removal && (effective.Desired.Enabled || len(effective.Runtime.GeneratedServices) != 0 ||
 		effective.Runtime.PinnedIPv4 != "" || !core.EqualComponentConfig(effective.Desired.Config, core.ComponentConfig{})) {
-		return false, errs.New(errs.KindStateConflict, "omitted Component did not resolve to disabled absence")
+		return nil, errs.New(errs.KindStateConflict, "omitted Component did not resolve to disabled absence")
 	}
 	var identityFound bool
 	selection := etcd.BlueprintDisabledComponentSelection{
@@ -119,10 +84,11 @@ func (service *Service) TrySettleDisabledComponent(
 		}
 	}
 	if !identityFound {
-		return false, errs.New(errs.KindStateConflict, "Blueprint Component identity changed")
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Component identity changed")
 	}
+	result := &disabledComponentPreparation{Selection: selection}
 	if record.Desired.Kind != spec.Implementation {
-		selection.ProxyAuthority, err = service.prepareDisabledProxyServiceCapture(
+		result.Selection.ProxyAuthority, err = service.prepareDisabledProxyServiceCapture(
 			ctx,
 			parent,
 			snapshot,
@@ -131,24 +97,22 @@ func (service *Service) TrySettleDisabledComponent(
 			spec.Implementation,
 		)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
-		selection.ProxyAuthority, err = service.prepareDisabledProxyRollouts(
+		result.Proxy, result.Sources, err = service.prepareComponentProxyRollouts(
 			ctx,
-			parent,
+			work,
+			services,
 			snapshot,
 			source,
 			effective,
-			selection.ProxyAuthority,
+			result.Selection.ProxyAuthority,
 		)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 	}
-	if err := settler.SettleBlueprintDisabledComponent(ctx, parent, unit, selection); err != nil {
-		return false, err
-	}
-	return true, nil
+	return result, nil
 }
 
 func authoredDisabledComponentAcknowledged(

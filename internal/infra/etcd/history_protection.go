@@ -6,7 +6,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/storagemaintenance"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -80,7 +79,7 @@ func (s *store) validateHistoricalPublication(mutations []keyvalue.Mutation) err
 
 func (s *store) protectedHistoryFloor(ctx context.Context, revision int64) (*storagemaintenance.Pin, error) {
 	var oldest *storagemaintenance.Pin
-	for _, prefix := range []string{"/v1/runtime/backup-config-snapshots/", "/v1/runtime/deletions/", componentplanning.ChildExecutionPrefix, blueprintHistorySourcePrefix} {
+	for _, prefix := range []string{"/v1/runtime/backup-config-snapshots/", "/v1/runtime/deletions/", blueprintHistorySourcePrefix} {
 		start := ""
 		for {
 			page, err := s.Range(

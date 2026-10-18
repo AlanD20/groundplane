@@ -24,6 +24,15 @@ func (repository *InputRepository) PrepareDetachRetention(ctx context.Context, v
 		item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete {
 		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach history requires expired, fully settled execution")
 	}
+	active, err := repository.read(ctx, []string{WorkCaptureKey(item.ID)}, view.ReadRevision)
+	if err != nil {
+		return false, workqueue.Change{}, err
+	}
+	hasActiveCapture := active.Values[0] != nil
+	keyvalue.ClearValues(active.Values)
+	if !hasActiveCapture {
+		return repository.prepareUnactivatedCascadeRetention(ctx, view, final)
+	}
 	capture, err := repository.LoadDetachCapture(ctx, view)
 	if err != nil {
 		return false, workqueue.Change{}, err

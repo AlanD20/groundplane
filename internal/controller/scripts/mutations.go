@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/scriptdefinition"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -53,11 +54,12 @@ type scriptMutationRepository interface {
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	LoadExecutionSources(context.Context, string) (scriptsourcequeries.ScriptExecutionSources, error)
-	PublishExecutionWithTask(
+	PublishScriptWork(
 		context.Context,
 		scriptsourcequeries.ScriptExecutionSources,
 		scriptexecutions.ScriptExecutionRecord,
-		etcd.TaskRecord,
+		workexecution.Task,
+		workexecution.Item,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -90,14 +92,15 @@ func (repository *MutationRepository) LoadExecutionSources(
 	return repository.scripts.LoadExecutionSources(ctx, repository.releases.Reader, scriptID)
 }
 
-func (repository *MutationRepository) PublishExecutionWithTask(
+func (repository *MutationRepository) PublishScriptWork(
 	ctx context.Context,
 	sources scriptsourcequeries.ScriptExecutionSources,
 	execution scriptexecutions.ScriptExecutionRecord,
-	task etcd.TaskRecord,
+	task workexecution.Task,
+	item workexecution.Item,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.scripts.PublishExecutionWithTask(ctx, sources, execution, task, marker)
+	return repository.scripts.PublishScriptWork(ctx, sources, execution, task, item, marker)
 }
 
 func (repository *MutationRepository) GetEnvironment(
@@ -249,6 +252,7 @@ type scriptMutationService struct {
 	deletions   *scriptDeletionService
 	now         func() time.Time
 	preparation *taskplanning.ScriptRunnerPreparationService
+	placement   workexecution.Placement
 }
 
 func NewMutationService(
@@ -256,12 +260,14 @@ func NewMutationService(
 	idempotency scriptMutationIdempotency,
 	preparation *taskplanning.ScriptRunnerPreparationService,
 	deletions *scriptDeletionService,
+	placement workexecution.Placement,
 ) (*scriptMutationService, error) {
-	if repository == nil || idempotency == nil || preparation == nil {
+	if repository == nil || idempotency == nil || preparation == nil ||
+		placement.Validate() != nil || placement.Executor != workexecution.Agent {
 		return nil, errs.New(errs.KindInternal, "Script mutation service is not configured")
 	}
 	return &scriptMutationService{
-		repository: repository, idempotency: idempotency, preparation: preparation, deletions: deletions, now: time.Now,
+		repository: repository, idempotency: idempotency, preparation: preparation, deletions: deletions, placement: placement, now: time.Now,
 	}, nil
 }
 

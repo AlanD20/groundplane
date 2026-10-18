@@ -134,13 +134,19 @@ export default function EnvironmentPage() {
     <EnvironmentDeletionFence
       inProgress={deleting}
       failure={deletionFailure}
-      onRetry={() =>
-        deletionFailure?.kind === "task"
-          ? store.retryTask(deletionFailure.taskId)
-          : store.refreshEnvironmentDeletion(env.id)
-      }
+      onRetry={async () => {
+        if (deletionFailure?.kind === "task") {
+          setSearch((current) => {
+            const next = new URLSearchParams(current);
+            next.set("task", deletionFailure.taskId);
+            return next;
+          });
+        } else await store.refreshEnvironmentDeletion(env.id);
+      }}
       retryLabel={
-        deletionFailure?.kind === "task" ? "Retry deletion" : "Retry refresh"
+        deletionFailure?.kind === "task"
+          ? "Inspect deletion Task"
+          : "Retry refresh"
       }
     />
   );

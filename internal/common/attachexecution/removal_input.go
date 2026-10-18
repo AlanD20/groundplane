@@ -29,7 +29,7 @@ func ValidateRemoval(input *agentpb.AttachRemovalInput) error {
 		return invalid("Attach removal identity or captured source is invalid")
 	}
 	if input.Consumer != nil {
-		if input.Consumer.EnvironmentId != input.EnvironmentId || input.Consumer.ServiceId != input.ServiceId {
+		if input.Consumer.EnvironmentId != input.EnvironmentId || input.Consumer.ServiceId != input.ServiceId || input.Consumer.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT {
 			return invalid("Detach consumer belongs to a different Attach")
 		}
 		if err := executionplan.ValidateAttachConsumerTransition(context.Background(), input.Consumer); err != nil {

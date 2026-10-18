@@ -1,17 +1,20 @@
 package backup
 
 import (
+	"bytes"
 	"context"
-	"encoding/hex"
 
 	"github.com/AlanD20/groundplane/internal/common/backupconfigmaterialization"
+	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -83,6 +86,31 @@ func (producer *ConfigRestoreProducer) PrepareCandidate(ctx context.Context,
 	owner backupconfiguration.ConfigRestoreTransferOwner, expected *agentpb.BackupConfigContentAuthority,
 	pointID string,
 ) (*ConfigRestorePublication, error) {
+	return producer.prepareCandidate(ctx, owner, expected, pointID, false)
+}
+
+// PrepareRecoveryCandidate reconstructs the same immutable generation even
+// after forward cancellation. It grants no publication permission; every write
+// must still be fenced by the active recovery attempt.
+func (producer *ConfigRestoreProducer) PrepareRecoveryCandidate(ctx context.Context,
+	owner backupconfiguration.ConfigRestoreTransferOwner, expected *agentpb.BackupConfigContentAuthority,
+	pointID string, assignment *agentpb.BackupRecoveryAssignment, identity workexecution.Identity,
+) (*ConfigRestorePublication, error) {
+	binding, err := backupconfigtransfer.BindRecoverySource(assignment, identity, owner.Transfer.Binding.SourceOrdinal,
+		agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_RESTORE)
+	if err != nil {
+		return nil, err
+	}
+	if binding != owner.Transfer.Binding {
+		return nil, configSnapshotGuardConflict()
+	}
+	return producer.prepareCandidate(ctx, owner, expected, pointID, true)
+}
+
+func (producer *ConfigRestoreProducer) prepareCandidate(ctx context.Context,
+	owner backupconfiguration.ConfigRestoreTransferOwner, expected *agentpb.BackupConfigContentAuthority,
+	pointID string, recovering bool,
+) (*ConfigRestorePublication, error) {
 	if ctx == nil || producer == nil || backupconfiguration.ValidateConfigRestoreTransferOwner(owner) != nil {
 		return nil, configSnapshotInvalid()
 	}
@@ -90,8 +118,9 @@ func (producer *ConfigRestoreProducer) PrepareCandidate(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	key := taskjournal.TaskStorageKey(owner.Transfer.Binding.TaskID)
-	planKey := backupruntime.BackupExecutionPlanKey(owner.Transfer.Binding.TaskID)
+	binding := owner.Transfer.Binding
+	key := workqueue.TaskKey(binding.Attempt.TaskID)
+	planKey := backupwork.InputKey(binding.Attempt.WorkItemID)
 	read, err := producer.sources.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key, planKey}})
 	if err != nil {
 		return nil, err
@@ -104,20 +133,21 @@ func (producer *ConfigRestoreProducer) PrepareCandidate(ctx context.Context,
 		return nil, configSnapshotGuardConflict()
 	}
 	defer etcdstore.ClearValues(read.Values)
-	task, err := etcd.DecodeTaskRecord(read.Values[0].Value)
-	if err != nil || task.ID != owner.Transfer.Binding.TaskID || task.Type != taskjournal.TaskRestore ||
-		task.Status != taskjournal.TaskStatusRunning || task.Target != owner.EnvironmentID || task.CreatedAt.IsZero() {
+	task, err := workqueue.DecodeTask(read.Values[0].Value)
+	if err != nil || task.ID != binding.Attempt.TaskID || task.Action != workexecution.ActionRestore ||
+		task.FinishedAt != nil || (task.Stop != nil && !recovering) || task.TargetID != owner.EnvironmentID || task.CreatedAt.IsZero() {
 		return nil, configSnapshotGuardConflict()
 	}
-	sealed, err := backupruntime.DecodeBackupExecutionPlan(read.Values[1].Value)
-	if err != nil || sealed.PlanId != task.PlanID || hex.EncodeToString(sealed.PlanHash) != task.PlanHash ||
-		len(sealed.Steps) != 1 {
+	sealed, err := executionplan.DecodeBackupWorkInput(read.Values[1].Value)
+	if err != nil || len(sealed.Steps) != 1 || binding.SourceOrdinal != 0 {
 		return nil, configSnapshotGuardConflict()
 	}
-	step := sealed.Steps[0].GetBackupStep()
+	if _, err := executionplan.OpenBackupWorkInput(binding.Attempt, sealed); err != nil {
+		return nil, err
+	}
+	step := sealed.Steps[0]
 	config := step.GetRestore().GetConfig()
-	if config == nil || step.StepId != owner.Transfer.Binding.StepID ||
-		step.ExecutionId != owner.Transfer.Binding.ExecutionID ||
+	if config == nil || step.ExecutionId != binding.TransferID || !bytes.Equal(step.StepDigest, binding.AuthorityDigest[:]) ||
 		config.DestinationEnvironmentId != owner.EnvironmentID ||
 		config.RestoreGenerationId != owner.GenerationID ||
 		config.RenderGeneration != owner.RenderGeneration ||
@@ -175,7 +205,7 @@ func (producer *ConfigRestoreProducer) PrepareCandidate(ctx context.Context,
 		projection.Record,
 		identities.Record,
 		pointID,
-		task.PlanID,
+		ids.DeriveAt(ids.KindPlan, task.CreatedAt, binding.Attempt.WorkItemID, "config-restore-projection"),
 	)
 	if err != nil {
 		return nil, err

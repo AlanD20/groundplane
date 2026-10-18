@@ -9,76 +9,59 @@ import (
 	"time"
 
 	contract "github.com/AlanD20/groundplane/internal/common/edgeconnectioncheck"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/edgeconnectioncheck"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	checkrecord "github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-type assignments interface {
-	GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
-}
 type exchange interface {
 	CheckEdgeConnections(context.Context, string, *agentpb.CheckEdgeConnections) (*agentpb.EdgeConnectionResult, error)
 }
 
 type Executor struct {
-	repository  *checkrecord.Repository
-	assignments assignments
-	exchange    exchange
+	repository *checkrecord.Repository
+	exchange   exchange
 }
 
-func NewExecutor(repository *checkrecord.Repository, tasks assignments, channel exchange) (*Executor, error) {
-	if repository == nil || tasks == nil || channel == nil {
-		return nil, errs.New(errs.KindInternal, "Tunnel check repository, Tasks and Agent channel are required")
+func NewExecutor(repository *checkrecord.Repository, channel exchange) (*Executor, error) {
+	if repository == nil || channel == nil {
+		return nil, errs.New(errs.KindInternal, "Tunnel check repository and Agent channel are required")
 	}
-	return &Executor{repository: repository, assignments: tasks, exchange: channel}, nil
+	return &Executor{repository: repository, exchange: channel}, nil
 }
 
-func (executor *Executor) Execute(ctx context.Context, task etcd.TaskRecord) error {
-	if ctx == nil || task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskCheck ||
-		task.Status != taskjournal.TaskStatusRunning ||
-		(task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceRoute && task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent) ||
-		len(
-			task.Params,
-		) != 2 || len(task.Steps) != 0 || len(task.Materializations) != 0 || task.Configuration != nil || task.EntryRuntime != nil || task.RenderGeneration != 1 {
-		return errs.New(errs.KindValidationFailed, "Tunnel check Task is invalid")
+func (executor *Executor) execute(ctx context.Context, delivery workqueue.Delivery) error {
+	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
+	if ctx == nil || item.Validate() != nil || attempt.Validate() != nil ||
+		item.Operation != workexecution.EdgeCheck || item.Phase != workexecution.Running ||
+		attempt.Executor.Executor != workexecution.Controller || attempt.Direction != workexecution.Forward ||
+		attempt.StartedAt == nil || attempt.FinishedAt != nil || item.ActiveAttemptID != attempt.ID ||
+		attempt.TaskID != item.TaskID || attempt.WorkItemID != item.ID ||
+		item.Input == nil || *item.Input != attempt.Input {
+		return errs.New(errs.KindValidationFailed, "Tunnel check execution is invalid")
 	}
-	loaded, err := executor.repository.Load(ctx, task.ID)
+	loaded, err := executor.repository.Load(ctx, item.TaskID)
 	if err != nil {
 		return err
 	}
 	record := loaded.Record
 	planHash, err := checkrecord.PlanHash(record)
-	if err != nil || record.Owner.TaskID != task.ID || record.Owner.PlanID != task.PlanID ||
-		record.Owner.OperationID != task.OperationID ||
-		record.Owner.EnvironmentID != task.Owner.EnvironmentID ||
-		record.Source.Request.TargetID() != task.Target ||
-		(record.Source.Request.RouteID != "") != (task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceRoute) ||
-		record.RetryOf != task.RetryOf ||
-		planHash != task.PlanHash ||
-		record.ConfigurationSHA256 != task.Params[taskjournal.TaskEdgeCheckInputParam] {
-		return errs.New(errs.KindStateConflict, "Tunnel check differs from its sealed Task input")
+	if err != nil || record.Owner.TaskID != item.TaskID || record.Owner.WorkItemID != item.ID ||
+		record.Owner.PlanID != attempt.Input.ID || planHash != attempt.Input.SHA256 ||
+		record.Source.Request.TargetID() != item.TargetID {
+		return errs.New(errs.KindStateConflict, "Tunnel check differs from its captured execution input")
 	}
 	if record.Phase == checkrecord.Finished {
 		return outcomeError(record)
 	}
-	claim, err := executor.assignments.GetTaskAssignment(ctx, task.ID)
+	journal, err := checkrecord.NewJournal(executor.repository, record.Owner, attempt.ID, attempt.Executor)
 	if err != nil {
 		return err
 	}
-	claimed := claim.Task.Record
-	if claimed.PlanID != task.PlanID || claimed.PlanHash != task.PlanHash || claimed.OperationID != task.OperationID ||
-		claimed.Target != task.Target {
-		return errs.New(errs.KindStateConflict, "Tunnel check Task claim changed")
-	}
-	journal, err := checkrecord.NewJournal(executor.repository, record.Owner, claim.Assignment.Record.AssignmentID)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithDeadline(ctx, claim.Assignment.Record.Deadline)
+	ctx, cancel := context.WithDeadline(ctx, attempt.Deadline)
 	defer cancel()
 	switch record.Phase {
 	case checkrecord.PrivateChecking, checkrecord.Cleaning:
@@ -122,7 +105,7 @@ func (executor *Executor) Execute(ctx context.Context, task etcd.TaskRecord) err
 	if err := journal.ObservePrivate(settlement, observed, result.CleanupRequired, result.Failure); err != nil {
 		return err
 	}
-	latest, err := executor.repository.Load(settlement, task.ID)
+	latest, err := executor.repository.Load(settlement, item.TaskID)
 	if err != nil {
 		return err
 	}
@@ -241,8 +224,7 @@ func settlementContext(ctx context.Context) (context.Context, context.CancelFunc
 }
 
 func outcomeError(record checkrecord.Record) error {
-	if record.Outcome == "passed" || record.Outcome == "protected" ||
-		record.Outcome == "interrupted" && record.RetryOf != "" {
+	if record.Outcome == "passed" || record.Outcome == "protected" {
 		return nil
 	}
 	switch record.Failure {

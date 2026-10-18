@@ -43,7 +43,6 @@ func (runtime *Runtime) ExecuteStep(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	checkpoint volumeRemovalCheckpoint,
 ) (StepResult, error) {
 	if runtime == nil || runtime.helper == nil {
 		return StepResult{}, errs.New(
@@ -54,11 +53,8 @@ func (runtime *Runtime) ExecuteStep(
 	if err := ctx.Err(); err != nil {
 		return StepResult{}, err
 	}
-	if step.GetManagedVolumeDirectoryRemove() != nil {
-		return runtime.executeVolumeRemoval(ctx, assignment, step, checkpoint)
-	}
 	if step.GetEnvironmentDirectoryCreate() == nil && step.GetEnvironmentDirectoryRemove() == nil &&
-		step.GetManagedVolumeDirectoriesEnsure() == nil && step.GetManagedVolumeDirectoryRemove() == nil {
+		step.GetManagedVolumeDirectoriesEnsure() == nil {
 		return StepResult{}, errs.New(
 			errs.KindInternal,
 			"agent: Environment directory runtime received an unsupported step",

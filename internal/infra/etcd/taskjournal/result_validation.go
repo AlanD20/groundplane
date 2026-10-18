@@ -98,8 +98,7 @@ func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 			result.ReleaseRecoveryRecordSHA256 != "" || result.Diagnostic != TaskResultDiagnosticNone ||
 			len(result.Projects) != 0 || len(result.ProxyEvidence) != 0 || len(result.RecreateEvidence) != 0 ||
 			result.CandidateAbsenceEvidence != nil || result.DNSResolverCandidateObservation != nil ||
-			result.DNSResolverRollbackObservation != nil || result.ComponentRestorationEvidence != nil ||
-			result.ServiceAbsenceEvidence != nil {
+			result.DNSResolverRollbackObservation != nil || result.ServiceAbsenceEvidence != nil {
 			return errs.New(
 				errs.KindValidationFailed,
 				"backup task result carries invalid or unrelated execution evidence",
@@ -170,16 +169,6 @@ func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 			previous = identity
 		}
 	}
-	if evidence := result.ComponentRestorationEvidence; evidence != nil {
-		if result.Kind != TaskResultCompose || ids.Validate(ids.KindComponent, evidence.ComponentID) != nil ||
-			ids.Validate(
-				ids.KindConfig,
-				evidence.ArtifactID,
-			) != nil || ids.Validate(ids.KindService, evidence.ServiceID) != nil ||
-			evidence.ComposeProjectName == "" || (evidence.Target != "predecessor" && evidence.Target != "candidate_absence") {
-			return errs.New(errs.KindValidationFailed, "task Component restoration evidence is invalid")
-		}
-	}
 	if evidence := result.ServiceAbsenceEvidence; evidence != nil {
 		if result.Kind != TaskResultCompose || ids.Validate(ids.KindService, evidence.ServiceID) != nil ||
 			ids.Validate(ids.KindConfig, evidence.ArtifactID) != nil || evidence.ComposeProjectName == "" ||
@@ -238,7 +227,6 @@ func CloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 	cloned.RecreateEvidence = append([]TaskRecreateEvidence(nil), result.RecreateEvidence...)
 	cloned.RollingEvidence = append([]rollingrelease.Completion(nil), result.RollingEvidence...)
 	cloned.CandidateAbsenceEvidence = CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence)
-	cloned.ComponentRestorationEvidence = CloneTaskComponentRestorationEvidence(result.ComponentRestorationEvidence)
 	cloned.ServiceAbsenceEvidence = CloneTaskServiceAbsenceEvidence(result.ServiceAbsenceEvidence)
 	cloned.DNSResolverCandidateObservation = CloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverCandidateObservation,

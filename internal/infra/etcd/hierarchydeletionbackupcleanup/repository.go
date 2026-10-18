@@ -20,8 +20,9 @@ type cleanupStore interface {
 // hierarchy-deletion action. Point.Object is populated whenever an immutable
 // provider identity was already retained or was durably selected.
 type RemoteAuthority struct {
-	Point  backupruntime.BackupRecoveryPointSnapshot
-	Orphan *backupruntime.BackupOrphanRecord
+	Point           backupruntime.BackupRecoveryPointSnapshot
+	Orphan          *backupruntime.BackupOrphanRecord
+	ConfirmedAbsent bool
 }
 
 type Repository struct{ store cleanupStore }
@@ -39,6 +40,7 @@ type cleanupIntent struct {
 	FixedInputDigest  string                                        `json:"fixed_input_digest"`
 	Selected          backupruntime.BackupObjectIdentity            `json:"selected,omitempty"`
 	ConfirmedAbsent   backupruntime.BackupObjectIdentity            `json:"confirmed_absent,omitempty"`
+	DeleteAttempt     string                                        `json:"delete_attempt,omitempty"`
 }
 
 type localAuthority struct {
@@ -50,23 +52,21 @@ type localAuthority struct {
 }
 
 func cleanupIntentKey(operationID string, ordinal int64) (string, error) {
-	prefix, err := hierarchydeletion.HierarchyDeletionProgressPrefix(operationID)
-	if err != nil {
-		return "", err
+	if !hierarchydeletion.ValidHierarchyDeletionPrivateID(operationID, "del") || ordinal < 0 {
+		return "", errs.New(errs.KindValidationFailed, "backup cleanup identity is invalid")
 	}
-	return prefix + fmt.Sprintf("backup-cleanup-%020d", ordinal), nil
+	return fmt.Sprintf("/v1/runtime/removal-backup-objects/%s/%020d", operationID, ordinal), nil
 }
 
 func validateActive(operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) error {
 	if action.ParentOperationID != operation.Tombstone.OperationID ||
-		action.Ordinal != operation.Tombstone.Checkpoint.NextOrdinal ||
 		action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureController ||
 		action.ControllerProcedure == nil || action.ControllerProcedure.FixedInputRevision != action.TargetRevision ||
 		operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionExecuting ||
 		operation.Fence.Phase != hierarchydeletion.HierarchyDeletionExecuting ||
-		operation.Fence.ActiveActionOrdinal == nil || *operation.Fence.ActiveActionOrdinal != action.Ordinal ||
+		operation.Fence.Dispatch != hierarchydeletion.HierarchyDeletionDispatchOpen ||
 		operation.Fence.ParentOperationID != action.ParentOperationID ||
 		operation.Fence.DeletionEpoch != operation.Tombstone.DeletionEpoch ||
 		operation.TombstoneRevision <= 0 || operation.FenceRevision <= 0 {

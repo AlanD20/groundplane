@@ -22,7 +22,6 @@ import { MetaPill } from "@/components/common/meta-pill";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { useStore } from "@/lib/store";
-import type { TaskStep } from "@/lib/types";
 
 export default function TenantSettingsPage() {
   const editorSession = useEditorSession();
@@ -55,21 +54,6 @@ export default function TenantSettingsPage() {
   const projects = store.tenantProjects.filter((p) => p.tenantId === tenant.id);
   const runners = store.runners.filter((r) => r.tenantId === tenant.id);
   const environments = projects.flatMap((p) => p.environments ?? []);
-  const destroySteps: TaskStep[] = [
-    {
-      label: `Detach all ${projects.flatMap((p) => (p.environments ?? []).flatMap((e) => e.attaches)).length} backing attaches`,
-      state: "pending",
-    },
-    {
-      label: `Destroy ${environments.length} environments (volumes + data)`,
-      state: "pending",
-    },
-    {
-      label: `Delete ${projects.length} projects (secrets, connectors, runners)`,
-      state: "pending",
-    },
-    { label: `Remove tenant ${tenant.name} from etcd`, state: "pending" },
-  ];
 
   return (
     <div

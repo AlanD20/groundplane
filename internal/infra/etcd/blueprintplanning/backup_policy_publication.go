@@ -22,7 +22,6 @@ type BackupPolicyPublication struct {
 func PrepareBlueprintBackupPolicyPublication(
 	task TaskIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
-	attaches BlueprintAttachTaskPreparation,
 	prepared BlueprintBackupPolicyPreparation,
 ) (BackupPolicyPublication, error) {
 	if prepared.state == nil {
@@ -147,20 +146,9 @@ func PrepareBlueprintBackupPolicyPublication(
 			)
 		}
 		if !state.retain && source.record.Kind == core.BackupSourceAttach {
-			if source.candidateAttach {
-				candidate := blueprintBackupAttachCandidate(attaches, source.record.TargetID)
-				if candidate == nil || !candidate.Record.OwnsCredential() {
-					ClearPreparedBlueprintBackupPolicyPublication(publication)
-					return BackupPolicyPublication{}, errs.New(
-						errs.KindValidationFailed,
-						"Blueprint Backup candidate Attach changed",
-					)
-				}
-			} else {
-				compare(backuppolicymutations.BackupPolicyCompareAttach, source.record.TargetID, attachrecord.AttachKey(source.record.TargetID), source.attach.Revision)
-				compare(backuppolicymutations.BackupPolicyCompareTargetOwnerIndex, source.record.TargetID, attachrecord.AttachOwnerKey(state.environmentID, source.record.TargetID), source.attachOwner.ModRevision)
-				compare(backuppolicymutations.BackupPolicyCompareTargetTombstone, source.record.TargetID, deletionrecord.TombstoneKey("attach", source.record.TargetID), 0)
-			}
+			compare(backuppolicymutations.BackupPolicyCompareAttach, source.record.TargetID, attachrecord.AttachKey(source.record.TargetID), source.attach.Revision)
+			compare(backuppolicymutations.BackupPolicyCompareTargetOwnerIndex, source.record.TargetID, attachrecord.AttachOwnerKey(state.environmentID, source.record.TargetID), source.attachOwner.ModRevision)
+			compare(backuppolicymutations.BackupPolicyCompareTargetTombstone, source.record.TargetID, deletionrecord.TombstoneKey("attach", source.record.TargetID), 0)
 		}
 	}
 	if state.retain && state.retainedConnectorID != "" {

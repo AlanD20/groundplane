@@ -14,7 +14,7 @@ func validateBlueprintAttachPlan(plan *agentpb.ExecutionPlan) error {
 		len(plan.ScriptBodyArtifacts) != 0 ||
 		plan.ComponentLifecycleMode != agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_UNSPECIFIED ||
 		plan.GetCandidateReleaseProcedure() != nil || plan.GetManagedComponentProcedure() != nil ||
-		plan.GetComponentRecoveryProcedure() != nil || plan.GetServiceAbsenceRecoveryProcedure() != nil {
+		plan.GetServiceAbsenceRecoveryProcedure() != nil {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Attach provisioning plan shape is invalid",

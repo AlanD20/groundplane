@@ -5,21 +5,25 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type ServicePlanner struct{ hosts hostbindings.Reader }
+type ServicePlanner struct {
+	hosts    hostbindings.Reader
+	removals ServiceRemovalReader
+}
 type NetworkPlanner struct{ hosts hostbindings.Reader }
 type AttachPlanner struct{ hosts hostbindings.Reader }
 type ComponentPlanner struct{ hosts hostbindings.Reader }
 
-func NewServicePlanner(hosts hostbindings.Reader) (*ServicePlanner, error) {
-	if hosts == nil {
+func NewServicePlanner(hosts hostbindings.Reader, removals ServiceRemovalReader) (*ServicePlanner, error) {
+	if hosts == nil || removals == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Service planner requires host ownership storage")
 	}
-	return &ServicePlanner{hosts: hosts}, nil
+	return &ServicePlanner{hosts: hosts, removals: removals}, nil
 }
 
 func NewNetworkPlanner(hosts hostbindings.Reader) (*NetworkPlanner, error) {
@@ -46,23 +50,22 @@ func NewComponentPlanner(hosts hostbindings.Reader) (*ComponentPlanner, error) {
 // A Service's deployment strategy belongs to its captured Release input, not
 // admission. Removal instead selects the typed resource-removal operation.
 func (planner *ServicePlanner) PrepareBlueprintWork(ctx context.Context, task workexecution.Task,
-	unit blueprintunits.Unit, baseline blueprintunits.Snapshot,
+	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
 ) (PreparedUnit, error) {
-	operation := workexecution.Release
 	if unit.Removal {
-		operation = workexecution.Hierarchy
+		return planner.prepareRemoval(ctx, task, unit, baseline)
 	}
-	return prepareHostResource(ctx, planner.hosts, task, unit, baseline, ids.KindService, operation)
+	return prepareHostResource(ctx, planner.hosts, task, unit, baseline, ids.KindService, workexecution.Release)
 }
 
 func (planner *NetworkPlanner) PrepareBlueprintWork(ctx context.Context, task workexecution.Task,
-	unit blueprintunits.Unit, baseline blueprintunits.Snapshot,
+	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
 ) (PreparedUnit, error) {
 	return prepareHostResource(ctx, planner.hosts, task, unit, baseline, ids.KindNetwork, workexecution.Network)
 }
 
 func (planner *AttachPlanner) PrepareBlueprintWork(ctx context.Context, task workexecution.Task,
-	unit blueprintunits.Unit, baseline blueprintunits.Snapshot,
+	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
 ) (PreparedUnit, error) {
 	operation := workexecution.Attach
 	if unit.Removal {
@@ -72,9 +75,25 @@ func (planner *AttachPlanner) PrepareBlueprintWork(ctx context.Context, task wor
 }
 
 func (planner *ComponentPlanner) PrepareBlueprintWork(ctx context.Context, task workexecution.Task,
-	unit blueprintunits.Unit, baseline blueprintunits.Snapshot,
+	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
 ) (PreparedUnit, error) {
-	return prepareHostResource(ctx, planner.hosts, task, unit, baseline, ids.KindComponent, workexecution.Component)
+	selected, err := prepareHostResource(ctx, planner.hosts, task, unit, baseline, ids.KindComponent, workexecution.Component)
+	if err != nil {
+		return PreparedUnit{}, err
+	}
+	metadata, err := planner.metadataOnly(ctx, task, unit, baseline, components)
+	if err != nil {
+		return PreparedUnit{}, err
+	}
+	if metadata {
+		input, err := blueprintunits.ComponentDefinitionInput(task, unit)
+		if err != nil {
+			return PreparedUnit{}, err
+		}
+		selected.Placement = workexecution.Placement{Executor: workexecution.Controller}
+		selected.Input = &input
+	}
+	return selected, nil
 }
 
 func prepareHostResource(ctx context.Context, hosts hostbindings.Reader, task workexecution.Task,

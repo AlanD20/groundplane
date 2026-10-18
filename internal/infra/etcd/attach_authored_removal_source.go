@@ -2,82 +2,13 @@ package etcd
 
 import (
 	"context"
-	"encoding/hex"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// PrepareAuthoredAttachRuntime binds the removal plan to the exact
-// acknowledged runtimes captured with its applied projection. It performs no
-// latest-state read.
-func PrepareAuthoredAttachRuntime(
-	plan *agentpb.ExecutionPlan,
-	sources []etcdstore.Versioned[serviceruntimerecord.Record],
-) (serviceruntimerecord.AttachPreparation, error) {
-	sealed, err := executionplan.Validate(plan)
-	if err != nil {
-		return serviceruntimerecord.AttachPreparation{}, err
-	}
-	if sealed.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_DETACH || len(sealed.GetArtifacts()) != 1 {
-		return serviceruntimerecord.AttachPreparation{}, errs.New(
-			errs.KindValidationFailed, "authored Attach runtime requires one Detach artifact",
-		)
-	}
-	prepared := serviceruntimerecord.AttachPreparation{
-		EnvironmentID: sealed.GetArtifacts()[0].GetOwnerId(), PlanID: sealed.GetPlanId(),
-		PlanHash: hex.EncodeToString(sealed.GetPlanHash()), RenderGeneration: sealed.GetRenderGeneration(),
-	}
-	var selected []string
-	for _, step := range sealed.GetSteps() {
-		if step.GetComposeApply() == nil {
-			continue
-		}
-		if prepared.StepID != "" {
-			return serviceruntimerecord.AttachPreparation{}, errs.New(
-				errs.KindValidationFailed, "authored Attach runtime has multiple Compose steps",
-			)
-		}
-		prepared.StepID = step.GetStepId()
-		if _, _, err := executionplan.AttachMutationServices(sealed, prepared.StepID); err != nil {
-			return serviceruntimerecord.AttachPreparation{}, err
-		}
-		selected = step.GetComposeApply().GetServiceIds()
-	}
-	if len(selected) > 1 || len(selected) != len(sources) {
-		return serviceruntimerecord.AttachPreparation{}, errs.New(
-			errs.KindStateConflict, "authored Attach captured runtime selection changed",
-		)
-	}
-	previous := make([]executionplan.CandidateRuntime, len(sources))
-	for index, source := range sources {
-		if source.Revision <= 0 || source.Record.EnvironmentID != prepared.EnvironmentID ||
-			source.Record.Runtime.ServiceID != selected[index] || serviceruntimerecord.Validate(source.Record) != nil {
-			return serviceruntimerecord.AttachPreparation{}, errs.New(
-				errs.KindStateConflict, "authored Attach captured runtime changed",
-			)
-		}
-		previous[index] = source.Record.Runtime
-	}
-	runtimes, err := executionplan.PrepareAttachRuntimes(sealed, previous)
-	if err != nil {
-		return serviceruntimerecord.AttachPreparation{}, err
-	}
-	for index, runtime := range runtimes {
-		prepared.Updates = append(prepared.Updates, serviceruntimerecord.AttachUpdate{
-			PreviousRevision: sources[index].Revision, Runtime: runtime,
-		})
-	}
-	return prepared, serviceruntimerecord.ValidateAttachPreparation(prepared)
-}
-
-// GetAttachFactsVersioned reads the exact encrypted fact envelope selected by
-// a fixed-revision Attach source. Absence is represented by revision zero.
 func (repository *AttachRepository) GetAttachFactsVersioned(
 	ctx context.Context,
 	current etcdstore.Versioned[attachrecord.Record],

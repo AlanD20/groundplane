@@ -7,7 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 )
 
-func (repository *EnvironmentBlueprintRepository) ResolveResourceHost(ctx context.Context) (workexecution.Placement, error) {
+func (repository *HierarchyRepository) ResolveResourceHost(ctx context.Context) (workexecution.Placement, error) {
 	host, err := hostbindings.ReadLocal(ctx, repository.store, 0)
 	if err != nil {
 		return workexecution.Placement{}, err

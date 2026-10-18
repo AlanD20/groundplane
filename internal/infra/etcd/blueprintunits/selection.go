@@ -61,7 +61,7 @@ func Select(snapshot Snapshot) (blueprintreconcile.Selection, error) {
 			return blueprintreconcile.Selection{}, err
 		}
 		input.Executions = append(input.Executions, blueprintreconcile.Execution{
-			PlanID: record.PlanID, TaskID: record.TaskID, Epoch: record.Epoch,
+			WorkItemID: record.WorkItemID, AttemptID: record.AttemptID, TaskID: record.TaskID, AttemptNumber: record.AttemptNumber,
 			Unit: unit, State: blueprintreconcile.ExecutionState(record.State),
 		})
 	}

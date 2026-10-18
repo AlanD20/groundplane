@@ -93,7 +93,7 @@ export function createEnvironmentActions({
         networkPool,
       };
       persistEnvironmentMutationIntent(intent);
-      let observedTaskStatus: TaskResponse["status"] | undefined;
+      let observedTaskStatus: TaskResponse["task"]["status"] | undefined;
       try {
         const accepted = intent.taskId
           ? { task_id: intent.taskId }
@@ -125,33 +125,33 @@ export function createEnvironmentActions({
         } finally {
           environmentTaskControllers.current.delete(observationController);
         }
-        observedTaskStatus = task.status;
+        observedTaskStatus = task.task.status;
         if (
-          task.id !== accepted.task_id ||
-          task.type !== "create" ||
-          !task.target
+          task.task.id !== accepted.task_id ||
+          task.task.action !== "create" ||
+          !task.task.target_id
         ) {
           clearEnvironmentMutationIntent(key);
           throw new Error(
             `Controller create Task ${accepted.task_id} did not identify an Environment target`,
           );
         }
-        if (task.project_id !== projectId) {
+        if (task.task.scope.project_id !== projectId) {
           clearEnvironmentMutationIntent(key);
           throw new Error(
             `Controller create Task ${accepted.task_id} belongs to a different Project`,
           );
         }
-        if (task.status !== "completed") {
+        if (task.task.status !== "succeeded") {
           clearEnvironmentMutationIntent(key);
           throw new Error(
-            `Controller create Task ${accepted.task_id} ${task.status}`,
+            `Controller create Task ${accepted.task_id} ${task.task.status}`,
           );
         }
         const environments = await listAllEnvironments(projectId);
         const created = environments.find(
           (environment) =>
-            environment.id === task.target &&
+            environment.id === task.task.target_id &&
             environment.projectId === projectId,
         );
         if (!created) {
@@ -188,7 +188,7 @@ export function createEnvironmentActions({
         clearEnvironmentMutationIntent(key);
         return accepted;
       } catch (error) {
-        if (observedTaskStatus && observedTaskStatus !== "completed")
+        if (observedTaskStatus && observedTaskStatus !== "succeeded")
           clearEnvironmentMutationIntent(key);
         const message =
           error instanceof Error
@@ -331,8 +331,10 @@ export function createEnvironmentActions({
         generation,
       });
       const task = await waitForResourceRemoval(taskId);
-      if (task.status !== "completed") {
-        throw new Error(`Environment deletion Task ${taskId} ${task.status}`);
+      if (task.task.status !== "succeeded") {
+        throw new Error(
+          `Environment deletion Task ${taskId} ${task.task.status}`,
+        );
       }
       return taskId;
     },

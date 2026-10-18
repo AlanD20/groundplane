@@ -50,8 +50,7 @@ func OpenConfigRestoreGeneration(
 		return nil, configSnapshotGuardConflict()
 	}
 	binding := owner.Transfer.Binding
-	cursor, found, err := store.ReadConfigTransferCursor(ctx, binding.TaskID, binding.AssignmentID,
-		binding.StepID, binding.ExecutionID, 0)
+	cursor, found, err := store.ReadConfigTransferCursor(ctx, binding, 0)
 	if err != nil {
 		return nil, err
 	}

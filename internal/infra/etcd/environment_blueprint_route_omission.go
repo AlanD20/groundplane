@@ -2,8 +2,12 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
@@ -12,41 +16,41 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/routepersistence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// SettleBlueprintRouteOmission releases Route metadata only after the exact
+// PrepareBlueprintRouteOmission releases Route metadata only after the exact
 // router unit has acknowledged withdrawal. Desired absence is not host proof.
-func (repository *EnvironmentBlueprintRepository) SettleBlueprintRouteOmission(
-	ctx context.Context, parent TaskRecord, unit blueprintunits.Unit,
-) error {
+func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteOmission(
+	ctx context.Context, work workqueue.View, unit blueprintunits.Unit, at time.Time,
+) (workqueue.Change, error) {
+	parent := work.Task.Task
 	if err := keyvalue.ValidateContext(ctx); err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	if repository == nil || repository.HierarchyRepository == nil ||
-		validateBlueprintParentClaimTask(parent) != nil || parent.Status != taskjournal.TaskStatusRunning ||
-		parent.Params[blueprints.EnvironmentDesiredRevisionParam] != parent.ID ||
+		parent.Validate() != nil || parent.Action != workexecution.ActionApply || work.ReadRevision <= 0 ||
 		unit.Target.Kind != ids.KindRoute || !unit.Removal {
-		return errs.New(errs.KindValidationFailed, "Blueprint Route omission identity is invalid")
+		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Blueprint Route omission identity is invalid")
 	}
 	ledger, err := blueprintunits.NewRepository(repository.store)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
-	snapshot, err := ledger.Load(ctx, parent.Owner.EnvironmentID)
+	snapshot, err := ledger.LoadAtRevision(ctx, parent.Scope.EnvironmentID, work.ReadRevision)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	if snapshot.HeadTaskID != parent.ID {
-		return errs.New(errs.KindStateConflict, "Blueprint Route omission has been superseded")
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route omission has been superseded")
 	}
-	environmentID := parent.Owner.EnvironmentID
+	environmentID := parent.Scope.EnvironmentID
 	keys := []string{
-		taskjournal.TaskStorageKey(parent.ID), taskjournal.BlueprintParentClaimKey(parent.ID),
+		workqueue.TaskKey(parent.ID), workqueue.ItemKey(work.Item.Item.ID),
 		blueprints.EnvironmentBlueprintRootKey(environmentID, parent.ID),
 		blueprints.EnvironmentBlueprintOwnedIdentitiesKey(environmentID, parent.ID),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
@@ -54,24 +58,22 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintRouteOmission(
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: snapshot.ReadRevision})
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	if read == nil || read.ReadRevision != snapshot.ReadRevision || len(read.Values) != len(keys) {
-		return errs.New(errs.KindInternal, "Blueprint Route omission snapshot is incomplete")
+		return workqueue.Change{}, errs.New(errs.KindInternal, "Blueprint Route omission snapshot is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	conditions := make([]keyvalue.Condition, 0, len(keys)+2)
 	for index, value := range read.Values {
 		if index < 4 && value == nil || value != nil && value.Key != keys[index] {
-			return errs.New(errs.KindStateConflict, "Blueprint Route omission authority is unavailable")
+			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route omission authority is unavailable")
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: keys[index], ModRevision: keyvalue.RevisionOf(value)})
 	}
 	if read.Values[4] != nil || read.Values[5] != nil {
-		return errs.New(errs.KindResourceInUse, "Blueprint Route withdrawal overlaps an active configuration writer")
+		return workqueue.Change{}, errs.New(errs.KindResourceInUse, "Blueprint Route withdrawal overlaps an active configuration writer")
 	}
-	storedParent, parentErr := DecodeTaskRecord(read.Values[0].Value)
-	claimID, claimErr := idempotency.DecodeTaskReference(read.Values[1].Value)
 	desired, found, desiredErr := blueprints.ReadDesiredInputRevision(
 		ctx,
 		repository.store,
@@ -80,24 +82,31 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintRouteOmission(
 		snapshot.ReadRevision,
 	)
 	owned, ownedErr := environmentprojection.DecodeEnvironmentOwnedIdentities(read.Values[3].Value)
-	if parentErr != nil || claimErr != nil || desiredErr != nil || !found || ownedErr != nil ||
-		claimID != parent.ID || storedParent.ID != parent.ID || storedParent.Owner != parent.Owner ||
-		storedParent.PlanID != parent.PlanID || storedParent.PlanHash != parent.PlanHash ||
-		storedParent.RenderGeneration != parent.RenderGeneration || storedParent.Status != taskjournal.TaskStatusRunning ||
-		validateBlueprintParentClaimTask(storedParent) != nil || desired.Revision != read.Values[2].ModRevision ||
+	if desiredErr != nil || !found || ownedErr != nil ||
+		read.Values[0].ModRevision != work.Task.Revision || read.Values[1].ModRevision != work.Item.Revision ||
+		desired.Revision != read.Values[2].ModRevision ||
 		desired.Record.EnvironmentID != environmentID || desired.Record.RevisionID != parent.ID ||
-		desired.Record.RenderGeneration != uint64(parent.RenderGeneration) || owned.EnvironmentID != environmentID ||
-		owned.RevisionID != parent.ID || owned.RenderGeneration != desired.Record.RenderGeneration {
-		return errs.New(errs.KindStateConflict, "Blueprint Route omission revision changed")
+		owned.EnvironmentID != environmentID || owned.RevisionID != parent.ID ||
+		owned.RenderGeneration != desired.Record.RenderGeneration {
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route omission revision changed")
+	}
+	encoded, err := environmentprojection.EncodeEnvironmentDesiredInputStorage(desired.Record)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	digest := sha256.Sum256(encoded)
+	clear(encoded)
+	if hex.EncodeToString(digest[:]) != parent.Intent.SHA256 {
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route omission input differs from captured intent")
 	}
 	for _, identity := range owned.Routes {
 		if identity.ID == unit.Target.ID {
-			return errs.New(errs.KindStateConflict, "Blueprint Route is still declared")
+			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route is still declared")
 		}
 	}
 	authorities, err := repository.ReadEnvironmentBlueprintRuntimeComponents(ctx, environmentID, snapshot.ReadRevision)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	var router *BlueprintRuntimeComponent
 	for index := range authorities {
@@ -106,7 +115,7 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintRouteOmission(
 		}
 	}
 	if router == nil || !blueprintRouteWithdrawalAcknowledged(snapshot, owned, *router) {
-		return errs.New(errs.KindStateConflict, "router has not acknowledged the Blueprint without this Route")
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "router has not acknowledged the Blueprint without this Route")
 	}
 	conditions = append(
 		conditions,
@@ -127,42 +136,27 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintRouteOmission(
 		snapshot.ReadRevision,
 	)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
-	receipt, err := blueprintunits.PrepareControllerRouteSettlement(
-		snapshot,
-		unit,
-		ids.New(ids.KindOperation),
-		read.Values[2].ModRevision,
-	)
-	if err != nil {
-		return err
-	}
-	defer receipt.Clear()
 	fence, err := environmentfence.LoadOrdinary(ctx, repository.store, environmentID, snapshot.ReadRevision)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
-	defer clear(epoch.Value)
-	conditions = append(conditions, retirementConditions...)
-	conditions = append(conditions, receipt.Conditions()...)
-	conditions = append(conditions, fence.TransactionConditions()...)
-	conditions = append(conditions, keyvalue.Condition{Key: taskjournal.BlueprintParentAbortKey(parent.ID)})
-	mutations = append(mutations, receipt.Mutations()...)
-	mutations = append(mutations, epoch)
-	result, err := repository.store.Transact(ctx, conditions, mutations)
-	keyvalue.ClearValues(result.FailureReads)
+	change, err := blueprintunits.PrepareDefinitionWorkSettlement(snapshot, work, unit, read.Values[2].ModRevision, at)
 	if err != nil {
-		return err
+		clear(epoch.Value)
+		return workqueue.Change{}, err
 	}
-	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Blueprint Route withdrawal raced")
-	}
-	return nil
+	change.Conditions = append(change.Conditions, conditions...)
+	change.Conditions = append(change.Conditions, retirementConditions...)
+	change.Conditions = append(change.Conditions, fence.TransactionConditions()...)
+	change.Mutations = append(change.Mutations, mutations...)
+	change.Mutations = append(change.Mutations, epoch)
+	return change, nil
 }
 
 func blueprintRouteWithdrawalAcknowledged(
@@ -226,7 +220,7 @@ func blueprintRouteWithdrawalAcknowledged(
 				router.Runtime.Revision,
 			)
 	}
-	return router.RuntimePresent && receipt.SourceTaskID == router.Runtime.Record.TaskID &&
-		receipt.SourcePlanID == router.Runtime.Record.PlanID && receipt.ParentTaskID == router.Runtime.Record.RevisionID &&
+	return router.RuntimePresent && receipt.Execution != nil &&
+		*receipt.Execution == router.Runtime.Record.Execution && receipt.ParentTaskID == router.Runtime.Record.RevisionID &&
 		router.Runtime.Record.RevisionID == snapshot.HeadTaskID
 }

@@ -160,8 +160,8 @@ func (resolver *TaskPlanResolver) appendBackingServiceCreationAfterStart(
 	if !declared || serviceID == "" || len(steps) == 0 || len(task.Steps) != len(steps)+1 {
 		return nil, errs.New(errs.KindInternal, "Backing-service after-start Task is incomplete")
 	}
-	inputResolver, ok := resolver.attachIdentities.(serviceLifecycleHookInputResolver)
-	if !ok || inputResolver == nil {
+	inputResolver := resolver.backingCreationHooks
+	if inputResolver == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service hook input resolver is not configured")
 	}
 	consume := func(input backinghook.Input) error {

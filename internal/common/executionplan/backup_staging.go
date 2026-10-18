@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/backupvolume"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/oklog/ulid/v2"
@@ -83,9 +84,22 @@ func validBackupRecoveredFiles(files []*agentpb.BackupRecoveredFile) bool {
 
 func validBackupRecoveredVolumeRestore(value *agentpb.BackupRecoveredVolumeRestore) bool {
 	if value == nil || RejectUnknown(value) != nil || len(value.RecoveryKeySha256) != sha256.Size ||
-		ids.Validate(ids.KindAssignment, value.AssignmentId) != nil ||
-		len(value.RestoreGenerationId) != 26 || len(value.StepSha256) != sha256.Size ||
+		value.Attempt == nil ||
+		len(value.RestoreGenerationId) != 26 || len(value.AuthoritySha256) != sha256.Size ||
 		!value.JournalPresent && !value.ReceiverPresent {
+		return false
+	}
+	// This validates reported identity, not authentication or a recovery grant.
+	// The Controller separately matches the connection and durable work record.
+	attempt, err := workexecution.DecodeAgentAttempt(value.Attempt, workexecution.Identity{
+		Executor: workexecution.Agent, HostID: value.Attempt.HostId,
+		AgentID: value.Attempt.AgentId, Generation: value.Attempt.ExecutorGeneration,
+	})
+	if err != nil {
+		return false
+	}
+	key, err := BackupVolumeRecoveryKey(attempt, value.SourceOrdinal, value.PointId, value.RestoreGenerationId)
+	if err != nil || !bytes.Equal(key, value.RecoveryKeySha256) {
 		return false
 	}
 	if _, err := ulid.ParseStrict(value.RestoreGenerationId); err != nil {

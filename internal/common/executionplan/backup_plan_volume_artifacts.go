@@ -12,12 +12,17 @@ import (
 
 // Backup carries exact sealed Compose artifacts, never mutable lookups by ID.
 // Volume projection authority and PostgreSQL Service facts select their uses.
-func validateBackupPlanArtifacts(plan *agentpb.ExecutionPlan) error {
-	if len(plan.Artifacts) > MaximumArtifacts {
+func ValidateBackupArtifacts(environmentID string, scope *agentpb.BackupPlanScope,
+	steps []*agentpb.BackupStepAuthority, captured []*agentpb.ComposeArtifact,
+) error {
+	if err := validateBackupResourceScope(scope, environmentID); err != nil {
+		return err
+	}
+	if len(captured) > MaximumArtifacts {
 		return invalidBackupVolumeArtifact()
 	}
-	artifacts := make(map[string]*agentpb.ComposeArtifact, len(plan.Artifacts))
-	for _, artifact := range plan.Artifacts {
+	artifacts := make(map[string]*agentpb.ComposeArtifact, len(captured))
+	for _, artifact := range captured {
 		if artifact == nil || ids.Validate(ids.KindConfig, artifact.ArtifactId) != nil ||
 			artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 			ids.Validate(ids.KindEnvironment, artifact.OwnerId) != nil || len(artifact.CanonicalYaml) == 0 ||
@@ -32,12 +37,14 @@ func validateBackupPlanArtifacts(plan *agentpb.ExecutionPlan) error {
 		artifacts[artifact.ArtifactId] = artifact
 	}
 	used := make(map[string]bool, len(artifacts))
-	for _, execution := range plan.Steps {
-		step := execution.GetBackupStep()
-		if err := markBackupPostgresArtifacts(plan, step, artifacts, used); err != nil {
+	for _, step := range steps {
+		if _, err := ValidateBackupStepAuthority(step); err != nil {
 			return err
 		}
-		if err := markBackupMySQLArtifacts(plan, step, artifacts, used); err != nil {
+		if err := markBackupPostgresArtifacts(environmentID, scope, step, artifacts, used); err != nil {
+			return err
+		}
+		if err := markBackupMySQLArtifacts(environmentID, scope, step, artifacts, used); err != nil {
 			return err
 		}
 		var volume *agentpb.BackupVolumeProjectionAuthority
@@ -52,7 +59,7 @@ func validateBackupPlanArtifacts(plan *agentpb.ExecutionPlan) error {
 			continue
 		}
 		artifact := artifacts[volume.ArtifactId]
-		if artifact == nil || artifact.OwnerId != plan.TargetId ||
+		if artifact == nil || artifact.OwnerId != environmentID ||
 			artifact.AuthorizedVolumeDir != volume.AuthorizedVolumeDir ||
 			!backupVolumeArtifactDigestMatches(artifact, volume.ArtifactSha256) {
 			return invalidBackupVolumeArtifact()
@@ -70,7 +77,7 @@ func validateBackupPlanArtifacts(plan *agentpb.ExecutionPlan) error {
 			return invalidBackupVolumeArtifact()
 		}
 		for _, serviceID := range step.ConsumerServiceIds {
-			consumer, _, err := BackupVolumeConsumer(plan, step, serviceID)
+			consumer, _, err := BackupConsumer(environmentID, scope.GetServices(), captured, step, serviceID)
 			if err != nil {
 				return err
 			}

@@ -113,9 +113,9 @@ func validateBlueprintServiceRemovalLifecyclePlan(plan *agentpb.ExecutionPlan) e
 	candidate := plan.GetCandidateReleaseProcedure()
 	if ids.Validate(ids.KindService, plan.GetTargetId()) != nil || procedure == nil || candidate == nil ||
 		candidate.GetConfigurationRestoration() != nil || len(candidate.GetMembers()) != 1 ||
-		plan.GetManagedComponentProcedure() != nil || plan.GetComponentRecoveryProcedure() != nil ||
+		plan.GetManagedComponentProcedure() != nil ||
 		plan.GetServiceAbsenceRecoveryProcedure() != nil ||
-		plan.GetEntryMutationProcedure() != nil || plan.GetComponentRollbackObservation() != nil ||
+		plan.GetComponentRollbackObservation() != nil ||
 		len(procedure.GetSources()) == 0 || len(procedure.GetSources()) > MaximumServiceRuntimeMembers ||
 		len(plan.GetSteps()) != len(procedure.GetSources())+2 {
 		return invalid()

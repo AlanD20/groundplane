@@ -60,7 +60,6 @@ func validateAndCopyAssignment(
 	switch assignment.ExecutionMode {
 	case agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD:
 		if assignment.ReleaseRecoveryDirective != nil || len(assignment.ReleaseRecoveryRecordSHA256) != 0 ||
-			assignment.ComponentRecoveryDirective != nil || len(assignment.ComponentRecoveryRecordSHA256) != 0 ||
 			assignment.RecoveryProofRequired {
 			return taskassignment.Assignment{}, errs.New(
 				errs.KindInternal,
@@ -78,13 +77,7 @@ func validateAndCopyAssignment(
 				assignment.ReleaseRecoveryDirective.GetReleaseRecoveryRecordSha256(),
 				assignment.ReleaseRecoveryRecordSHA256,
 			)
-		componentRecovery := assignment.ComponentRecoveryDirective != nil &&
-			len(assignment.ComponentRecoveryRecordSHA256) == 32 &&
-			bytes.Equal(
-				assignment.ComponentRecoveryDirective.GetComponentRecoveryRecordSha256(),
-				assignment.ComponentRecoveryRecordSHA256,
-			)
-		if releaseRecovery == componentRecovery ||
+		if !releaseRecovery ||
 			assignment.RecoveryProofRequired && !assignment.Deadline.After(assignment.RecoveryDeadline) {
 			return taskassignment.Assignment{}, errs.New(
 				errs.KindInternal,
@@ -151,9 +144,6 @@ func validateAndCopyAssignment(
 	if err := taskassignment.ValidateCandidateReleaseAuthority(assignment, plan); err != nil {
 		return taskassignment.Assignment{}, err
 	}
-	if err := taskassignment.ValidateComponentRecoveryAuthority(assignment, plan); err != nil {
-		return taskassignment.Assignment{}, err
-	}
 	if assignment.AutomaticReconcile && plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 		return taskassignment.Assignment{}, errs.New(
 			errs.KindInternal,
@@ -211,10 +201,6 @@ func validateAndCopyAssignment(
 	if assignment.ReleaseRecoveryDirective != nil {
 		recoveryDirective = proto.Clone(assignment.ReleaseRecoveryDirective).(*agentpb.ReleaseRecoveryDirective)
 	}
-	var componentRecoveryDirective *agentpb.ComponentRecoveryDirective
-	if assignment.ComponentRecoveryDirective != nil {
-		componentRecoveryDirective = proto.Clone(assignment.ComponentRecoveryDirective).(*agentpb.ComponentRecoveryDirective)
-	}
 	return taskassignment.Assignment{
 		BackupAuthority: backupAuthority, BackupResume: backupResume, BackupAuthoritySHA256: append([]byte(nil), assignment.BackupAuthoritySHA256...), AssignmentGeneration: assignment.AssignmentGeneration,
 		AssignmentID: assignment.AssignmentID,
@@ -225,10 +211,8 @@ func validateAndCopyAssignment(
 		RecoveryProofRequired: assignment.RecoveryProofRequired,
 		ExecutionMode:         assignment.ExecutionMode, ExecutionEpoch: assignment.ExecutionEpoch,
 		RestorationAuthority: restorationAuthority, ReleaseRecoveryDirective: recoveryDirective,
-		ReleaseRecoveryRecordSHA256:   append([]byte(nil), assignment.ReleaseRecoveryRecordSHA256...),
-		ComponentRecoveryDirective:    componentRecoveryDirective,
-		ComponentRecoveryRecordSHA256: append([]byte(nil), assignment.ComponentRecoveryRecordSHA256...),
-		AutomaticReconcile:            assignment.AutomaticReconcile,
+		ReleaseRecoveryRecordSHA256: append([]byte(nil), assignment.ReleaseRecoveryRecordSHA256...),
+		AutomaticReconcile:          assignment.AutomaticReconcile,
 	}, nil
 }
 

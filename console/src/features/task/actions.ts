@@ -1,4 +1,4 @@
-import type { TaskResponse } from "./api";
+import type { TaskResponse, TaskRetryRequest } from "./api";
 import {
   abortTask as requestTaskAbort,
   requestTask,
@@ -8,7 +8,7 @@ import { waitForRequest } from "@/lib/controller-json-request";
 
 export type TaskActions = {
   getTask: (taskId: string, signal?: AbortSignal) => Promise<TaskResponse>;
-  retryTask: (taskId: string) => Promise<string>;
+  retryTask: (taskId: string, input: TaskRetryRequest) => Promise<string>;
   abortTask: (taskId: string) => Promise<void>;
 };
 
@@ -20,7 +20,10 @@ type TaskActionOptions = {
     taskId: string,
     task: TaskResponse,
   ) => Promise<void>;
-  retryResourceRemoval: (taskId: string) => Promise<string> | undefined;
+  retryResourceRemoval: (
+    taskId: string,
+    input: TaskRetryRequest,
+  ) => Promise<string> | undefined;
   reconcileZoneRemoval: (taskId: string, task: TaskResponse) => void;
   reconcileConnectorRemoval: (
     taskId: string,
@@ -50,8 +53,8 @@ export function createTaskActions({
       await reconcileConnectorRemoval(taskId, task);
       return task;
     },
-    retryTask: (taskId) =>
-      retryResourceRemoval(taskId) ?? requestTaskRetry(taskId),
+    retryTask: (taskId, input) =>
+      retryResourceRemoval(taskId, input) ?? requestTaskRetry(taskId, input),
     abortTask: requestTaskAbort,
   };
 }

@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -122,6 +123,7 @@ func (repository *InputRepository) prepareDirectRemovalFinalization(ctx context.
 		{Type: keyvalue.MutationPut, Key: receiptKey, Value: receipt},
 		{Type: keyvalue.MutationDelete, Key: tombstoneKey},
 		{Type: keyvalue.MutationDelete, Key: addressesKey},
+		{Type: keyvalue.MutationDelete, Key: attachments.BackingZoneCreationKey(input.NetworkId)},
 	}}
 	change.Conditions = append(change.Conditions, removal...)
 	if len(pool.Reservations) == 0 {

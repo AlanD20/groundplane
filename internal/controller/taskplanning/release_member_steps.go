@@ -246,7 +246,7 @@ func buildSingleTargetReleaseSteps(
 			)
 			continue
 		}
-		priorConfig, err := releasePriorProxyConfig(member, priorArtifacts[member.Render.ServiceID])
+		priorConfig, err := releaserender.PriorProxyConfiguration(member, priorArtifacts[member.Render.ServiceID])
 		if err != nil {
 			return nil, err
 		}

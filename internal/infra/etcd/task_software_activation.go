@@ -20,7 +20,7 @@ func validateSoftwareActivationTask(record TaskRecord) error {
 		record.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceSoftware ||
 		record.TimeoutSeconds != activationrecord.TaskTimeoutSeconds || record.RenderGeneration != 1 ||
 		record.RetryOf != "" || len(record.Steps) != 0 || len(record.Materializations) != 0 ||
-		record.Configuration != nil || record.EntryRuntime != nil || record.Result != nil ||
+		record.Configuration != nil || record.Result != nil ||
 		len(record.ComponentActionStepIDs) != 0 || len(record.ManagedComponentTeardownSources) != 0 {
 		return errs.New(errs.KindValidationFailed, "software activation Task authority is invalid")
 	}

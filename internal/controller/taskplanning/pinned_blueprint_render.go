@@ -181,7 +181,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 			return nil, err
 		}
 	} else {
-		externalNetworks, err = managedAttachExternalNetworks(project)
+		externalNetworks, err = composerender.ManagedAttachExternalNetworks(project)
 		if err != nil {
 			return nil, err
 		}

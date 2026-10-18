@@ -39,7 +39,7 @@ func requireSettledConfiguration(
 		DecodeTaskRecord, func(task TaskRecord) string { return task.ID },
 		func(task TaskRecord) bool { return task.Owner.EnvironmentID == environmentID },
 		func(task TaskRecord) bool {
-			return task.ID != taskID && task.Configuration != nil && !connectorCheckTask(task) &&
+			return task.ID != taskID && task.Configuration != nil &&
 				!taskjournal.IsTerminalTaskStatus(task.Status)
 		},
 	)
@@ -205,8 +205,7 @@ func taskRuntimeConfiguration(task TaskRecord) (*runtimeconfiguration.Reference,
 	reference := task.Configuration.Current
 	if reference == (runtimeconfiguration.Reference{}) {
 		if task.Configuration.Prior != nil || task.Configuration.PriorRevision != 0 ||
-			task.Configuration.BackingHookInputs == nil && !(connectorCheckTask(task) &&
-				task.Configuration.SecretPins != nil && len(task.Materializations) == 0) {
+			task.Configuration.BackingHookInputs == nil {
 			return nil, errs.New(errs.KindStateConflict, "Task configuration authority is inconsistent")
 		}
 		return nil, nil

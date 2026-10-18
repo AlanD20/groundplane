@@ -2,7 +2,6 @@ package blueprintunits
 
 import (
 	"context"
-	"math"
 	"slices"
 	"strings"
 
@@ -132,7 +131,7 @@ func (repository *Repository) LoadAtRevision(
 				} else {
 					record, err := DecodeExecution(value.Value)
 					if err != nil || record.EnvironmentID != environmentID ||
-						value.Key != ExecutionKey(environmentID, record.PlanID) {
+						value.Key != ExecutionKey(environmentID, record.WorkItemID) {
 						return Snapshot{}, corruptRecord()
 					}
 					snapshot.Executions = append(snapshot.Executions, etcdstore.Versioned[ExecutionRecord]{
@@ -158,8 +157,8 @@ type AppliedChange struct {
 }
 
 type ExecutionChange struct {
-	PlanID string
-	Next   *ExecutionRecord
+	WorkItemID string
+	Next       *ExecutionRecord
 }
 
 // MutationPlan is appended to the same transaction that publishes or retires
@@ -202,7 +201,7 @@ func prepareMutation(
 		if versioned.Record.EnvironmentID != snapshot.EnvironmentID ||
 			validateApplied(versioned.Record) != nil || versioned.Revision < 0 ||
 			(versioned.Revision == 0 && (!seeded[versioned.Record.Target] ||
-				versioned.Record.State != Absent || versioned.Record.SourceTaskID != "")) ||
+				versioned.Record.State != Absent || hasAppliedEffectSource(versioned.Record))) ||
 			(versioned.Revision > 0 && !hasAppliedEffectSource(versioned.Record)) {
 			return MutationPlan{}, invalidRecord()
 		}
@@ -217,7 +216,7 @@ func prepareMutation(
 			validateExecution(versioned.Record) != nil || versioned.Revision <= 0 {
 			return MutationPlan{}, invalidRecord()
 		}
-		knownExecutions[versioned.Record.PlanID] = versioned
+		knownExecutions[versioned.Record.WorkItemID] = versioned
 	}
 	epoch := EpochRecord{EnvironmentID: snapshot.EnvironmentID, Sequence: snapshot.Epoch.Sequence + 1}
 	epochValue, err := EncodeEpoch(epoch)
@@ -265,13 +264,13 @@ func prepareMutation(
 	}
 	seenExecutions := make(map[string]bool, len(executions))
 	for _, change := range executions {
-		if ids.Validate(ids.KindPlan, change.PlanID) != nil || seenExecutions[change.PlanID] {
+		if ids.Validate(ids.KindWorkItem, change.WorkItemID) != nil || seenExecutions[change.WorkItemID] {
 			plan.Clear()
 			return MutationPlan{}, invalidRecord()
 		}
-		seenExecutions[change.PlanID] = true
-		key := ExecutionKey(snapshot.EnvironmentID, change.PlanID)
-		current, exists := knownExecutions[change.PlanID]
+		seenExecutions[change.WorkItemID] = true
+		key := ExecutionKey(snapshot.EnvironmentID, change.WorkItemID)
+		current, exists := knownExecutions[change.WorkItemID]
 		plan.conditions = append(plan.conditions, etcdstore.Condition{Key: key, ModRevision: current.Revision})
 		if change.Next == nil {
 			if !exists {
@@ -281,7 +280,7 @@ func prepareMutation(
 			plan.mutations = append(plan.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 			continue
 		}
-		if change.Next.EnvironmentID != snapshot.EnvironmentID || change.Next.PlanID != change.PlanID ||
+		if change.Next.EnvironmentID != snapshot.EnvironmentID || change.Next.WorkItemID != change.WorkItemID ||
 			!validExecutionAdvance(snapshot.HeadTaskID, current.Record, exists, *change.Next) {
 			plan.Clear()
 			return MutationPlan{}, invalidRecord()
@@ -327,13 +326,14 @@ func validAppliedAdvance(
 		}
 		return false
 	}
-	if next.SourceTaskID == "" {
+	if next.Execution == nil || next.Execution.Validate() != nil {
 		return false
 	}
-	execution, found := executions[next.SourcePlanID]
-	if !found || execution.Record.ParentTaskID != next.ParentTaskID ||
-		execution.Record.TaskID != next.SourceTaskID || execution.Record.Epoch <= 0 ||
-		execution.Record.Epoch > math.MaxUint32 || uint32(execution.Record.Epoch) != next.ExecutionEpoch ||
+	execution, found := executions[next.Execution.WorkItemID]
+	if !found || execution.Record.TaskID != next.ParentTaskID ||
+		execution.Record.TaskID != next.Execution.TaskID || execution.Record.AttemptID != next.Execution.AttemptID ||
+		execution.Record.Executor == nil || *execution.Record.Executor != next.Execution.Executor ||
+		execution.Record.Input == nil || *execution.Record.Input != next.Execution.Input ||
 		!slices.Contains(execution.Record.Unit.Writes, next.Target) {
 		return false
 	}
@@ -356,29 +356,34 @@ func validAppliedAdvance(
 }
 
 func validExecutionAdvance(headTaskID string, current ExecutionRecord, exists bool, next ExecutionRecord) bool {
-	if !exists {
-		return next.ParentTaskID == headTaskID && next.State == Pending
+	if validateExecution(next) != nil {
+		return false
 	}
-	if current.EnvironmentID != next.EnvironmentID || current.ParentTaskID != next.ParentTaskID ||
-		current.TaskID != next.TaskID || current.PlanID != next.PlanID ||
+	if !exists {
+		return next.TaskID == headTaskID && next.State == Pending
+	}
+	if current.EnvironmentID != next.EnvironmentID || current.TaskID != next.TaskID ||
+		current.WorkItemID != next.WorkItemID ||
 		current.Unit.Target != next.Unit.Target || current.Unit.Removal != next.Unit.Removal ||
 		current.Unit.Fingerprint != next.Unit.Fingerprint ||
 		!slices.Equal(current.Unit.Reads, next.Unit.Reads) ||
 		!slices.Equal(current.Unit.Writes, next.Unit.Writes) ||
-		!slices.Equal(current.Unit.After, next.Unit.After) {
+		!slices.Equal(current.Unit.After, next.Unit.After) ||
+		current.Input != nil && (next.Input == nil || *current.Input != *next.Input) {
 		return false
 	}
 	switch current.State {
 	case Pending:
-		return next.ParentTaskID == headTaskID && next.State == Running && next.Epoch > 0
-	case Running:
-		if next.State == Draining && next.Epoch == current.Epoch {
-			return true
+		return next.TaskID == headTaskID && (next.State == Pending ||
+			next.State == Running && next.AttemptNumber == 1)
+	case Running, Draining:
+		if next.AttemptNumber == current.AttemptNumber {
+			return next.State == Draining && next.AttemptID == current.AttemptID &&
+				next.Executor != nil && current.Executor != nil && *next.Executor == *current.Executor
 		}
-		return current.Epoch < math.MaxUint32 && next.Epoch == current.Epoch+1 &&
-			(next.State == Draining || next.State == Running && next.ParentTaskID == headTaskID)
-	case Draining:
-		return current.Epoch < math.MaxUint32 && next.Epoch == current.Epoch+1 && next.State == Draining
+		return current.AttemptNumber < ^uint64(0) && next.AttemptNumber == current.AttemptNumber+1 &&
+			next.AttemptID != current.AttemptID &&
+			(next.State == Draining || current.State == Running && next.State == Running && next.TaskID == headTaskID)
 	default:
 		return false
 	}

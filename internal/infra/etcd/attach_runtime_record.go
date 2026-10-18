@@ -1,94 +1,14 @@
 package etcd
 
 import (
-	"context"
-	"encoding/hex"
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"slices"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
-
-// PrepareAttachRuntime reads acknowledged sources in one snapshot. Publication
-// compares these exact revisions together with the captured Environment epoch.
-func (repository *AttachRepository) PrepareAttachRuntime(
-	ctx context.Context, plan *agentpb.ExecutionPlan,
-) (serviceruntimerecord.AttachPreparation, error) {
-	var empty serviceruntimerecord.AttachPreparation
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return empty, err
-	}
-	sealed, err := executionplan.Validate(plan)
-	if err != nil {
-		return empty, err
-	}
-	if (sealed.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_ATTACH &&
-		sealed.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_DETACH) || len(sealed.GetArtifacts()) != 1 {
-		return empty, errs.New(errs.KindValidationFailed, "Attach runtime preparation requires a standalone plan")
-	}
-	prepared := serviceruntimerecord.AttachPreparation{
-		EnvironmentID: sealed.GetArtifacts()[0].GetOwnerId(), PlanID: sealed.GetPlanId(),
-		PlanHash: hex.EncodeToString(sealed.GetPlanHash()), RenderGeneration: sealed.GetRenderGeneration(),
-	}
-	var selected []string
-	for _, step := range sealed.GetSteps() {
-		if step.GetComposeApply() == nil {
-			continue
-		}
-		if prepared.StepID != "" {
-			return empty, errs.New(errs.KindValidationFailed, "Attach runtime has multiple Compose steps")
-		}
-		prepared.StepID = step.GetStepId()
-		if _, _, err := executionplan.AttachMutationServices(sealed, prepared.StepID); err != nil {
-			return empty, err
-		}
-		selected = step.GetComposeApply().GetServiceIds()
-	}
-	if len(selected) > 1 {
-		return empty, errs.New(errs.KindValidationFailed, "Attach runtime has multiple consumers")
-	}
-	var previous []executionplan.CandidateRuntime
-	var sourceRevision int64
-	if len(selected) == 1 {
-		result, readErr := repository.store.GetMany(
-			ctx,
-			etcdstore.GetManyRequest{Keys: []string{serviceruntimerecord.Key(selected[0])}},
-		)
-		if readErr != nil {
-			return empty, readErr
-		}
-		if result == nil || result.ReadRevision <= 0 || len(result.Values) != 1 || result.Values[0] == nil {
-			return empty, errs.New(errs.KindStateConflict, "running Attach consumer has no acknowledged runtime")
-		}
-		defer etcdstore.ClearValues(result.Values)
-		record, decodeErr := decodeAcknowledgedServiceRuntime(
-			result.Values[0].Value,
-			prepared.EnvironmentID,
-			selected[0],
-		)
-		if decodeErr != nil {
-			return empty, decodeErr
-		}
-		previous = []executionplan.CandidateRuntime{record.Runtime}
-		sourceRevision = result.Values[0].ModRevision
-	}
-	runtimes, err := executionplan.PrepareAttachRuntimes(sealed, previous)
-	if err != nil {
-		return empty, err
-	}
-	for _, runtime := range runtimes {
-		prepared.Updates = append(
-			prepared.Updates,
-			serviceruntimerecord.AttachUpdate{PreviousRevision: sourceRevision, Runtime: runtime},
-		)
-	}
-	return prepared, serviceruntimerecord.ValidateAttachPreparation(prepared)
-}
 
 func decodeAcknowledgedServiceRuntime(
 	value []byte,

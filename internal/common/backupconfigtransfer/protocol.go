@@ -10,7 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/backupconfig"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/oklog/ulid/v2"
@@ -30,12 +30,11 @@ const (
 
 // Binding is the complete immutable identity of one directional transfer.
 type Binding struct {
-	TaskID       string                        `json:"task_id"`
-	AssignmentID string                        `json:"assignment_id"`
-	StepID       string                        `json:"step_id"`
-	ExecutionID  string                        `json:"execution_id"`
-	TransferID   string                        `json:"transfer_id"`
-	Direction    agentpb.BackupConfigDirection `json:"direction"`
+	Attempt         workexecution.Attempt         `json:"attempt"`
+	SourceOrdinal   uint32                        `json:"source_ordinal"`
+	AuthorityDigest [sha256.Size]byte             `json:"authority_digest"`
+	TransferID      string                        `json:"transfer_id"`
+	Direction       agentpb.BackupConfigDirection `json:"direction"`
 }
 
 // ContentSHA256 binds staging to the complete sealed Config content authority.
@@ -47,10 +46,9 @@ func ContentSHA256(content *agentpb.BackupConfigContentAuthority) ([]byte, error
 }
 
 func (binding Binding) Validate() error {
-	if ids.Validate(ids.KindTask, binding.TaskID) != nil ||
-		ids.Validate(ids.KindAssignment, binding.AssignmentID) != nil ||
-		ids.Validate(ids.KindStep, binding.StepID) != nil ||
-		!validRawULID(binding.ExecutionID) || !validRawULID(binding.TransferID) ||
+	if binding.Attempt.Validate() != nil || binding.Attempt.Executor.Executor != workexecution.Agent ||
+		binding.Attempt.StartedAt != nil || binding.Attempt.FinishedAt != nil || binding.Attempt.Result != nil ||
+		binding.AuthorityDigest == ([sha256.Size]byte{}) || !validRawULID(binding.TransferID) ||
 		!validDirection(binding.Direction) {
 		return invalid("transfer binding is invalid")
 	}
@@ -64,9 +62,9 @@ func InitialChainSHA256(binding Binding) ([]byte, error) {
 		return nil, err
 	}
 	seed := &agentpb.BackupConfigCredit{
-		TaskId: binding.TaskID, AssignmentId: binding.AssignmentID,
-		StepId: binding.StepID, ExecutionId: binding.ExecutionID,
-		TransferId: binding.TransferID, Direction: binding.Direction,
+		Attempt: binding.wireAttempt(), SourceOrdinal: binding.SourceOrdinal,
+		AuthorityDigest: append([]byte(nil), binding.AuthorityDigest[:]...),
+		TransferId:      binding.TransferID, Direction: binding.Direction,
 	}
 	return deterministicDigest(chainSeedDomain, seed)
 }
@@ -275,13 +273,13 @@ func validContent(value *agentpb.BackupConfigContentAuthority) bool {
 }
 
 func frameMatches(binding Binding, frame *agentpb.BackupConfigTransfer) bool {
-	return frame.TaskId == binding.TaskID && frame.AssignmentId == binding.AssignmentID &&
-		frame.StepId == binding.StepID && frame.ExecutionId == binding.ExecutionID && frame.TransferId == binding.TransferID
+	return binding.matchesAttempt(frame.Attempt) && frame.SourceOrdinal == binding.SourceOrdinal &&
+		bytes.Equal(frame.AuthorityDigest, binding.AuthorityDigest[:]) && frame.TransferId == binding.TransferID
 }
 
 func creditMatches(binding Binding, credit *agentpb.BackupConfigCredit) bool {
-	return credit.TaskId == binding.TaskID && credit.AssignmentId == binding.AssignmentID &&
-		credit.StepId == binding.StepID && credit.ExecutionId == binding.ExecutionID &&
+	return binding.matchesAttempt(credit.Attempt) && credit.SourceOrdinal == binding.SourceOrdinal &&
+		bytes.Equal(credit.AuthorityDigest, binding.AuthorityDigest[:]) &&
 		credit.TransferId == binding.TransferID && credit.Direction == binding.Direction
 }
 

@@ -5,10 +5,17 @@ import (
 	"sync"
 
 	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
+
+type transferSlotKey struct {
+	attemptID string
+	ordinal   uint32
+}
 
 type captureSlot struct {
 	binding       backupconfigtransfer.Binding
@@ -23,45 +30,55 @@ type captureSlot struct {
 // assignment. The receive/control loop never waits for disk or worker progress.
 type Inbox struct {
 	mu       sync.Mutex
-	slots    map[string]*captureSlot
-	restores map[string]*restoreSlot
+	slots    map[transferSlotKey]*captureSlot
+	restores map[transferSlotKey]*restoreSlot
 }
 
 func NewInbox() *Inbox {
-	return &Inbox{slots: make(map[string]*captureSlot), restores: make(map[string]*restoreSlot)}
+	return &Inbox{slots: make(map[transferSlotKey]*captureSlot), restores: make(map[transferSlotKey]*restoreSlot)}
 }
 
-func (inbox *Inbox) Register(authority *agentpb.BackupTaskAuthority) error {
-	if authority == nil {
-		return nil
+func (inbox *Inbox) Register(assignment *agentpb.BackupWorkAssignment, identity workexecution.Identity) error {
+	owned, _, err := executionplan.OpenBackupWorkAssignment(assignment, identity)
+	if err != nil {
+		return err
+	}
+	bindings := make([]backupconfigtransfer.Binding, 0, len(owned.Input.Steps))
+	for ordinal, step := range owned.Input.Steps {
+		direction := agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_CAPTURE
+		if step.GetRestore().GetConfig() != nil {
+			direction = agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_RESTORE
+		} else if step.GetCapture().GetConfig() == nil {
+			continue
+		}
+		binding, err := backupconfigtransfer.Bind(owned, identity, uint32(ordinal), direction)
+		if err != nil {
+			return err
+		}
+		bindings = append(bindings, binding)
 	}
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
-	for _, step := range authority.Steps {
-		if step.GetRestore().GetConfig() != nil {
-			if err := inbox.registerRestore(authority, step); err != nil {
-				return err
+	// Validate the entire registration before publishing any slots.
+	for _, binding := range bindings {
+		key := transferSlotKey{binding.Attempt.ID, binding.SourceOrdinal}
+		if current := inbox.slots[key]; current != nil && current.binding != binding {
+			return invalidCapture()
+		}
+		if current := inbox.restores[key]; current != nil && current.binding != binding {
+			return invalidCapture()
+		}
+	}
+	for _, binding := range bindings {
+		key := transferSlotKey{binding.Attempt.ID, binding.SourceOrdinal}
+		if binding.Direction == agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_RESTORE {
+			if inbox.restores[key] == nil {
+				inbox.restores[key] = &restoreSlot{binding: binding, credits: make(chan *agentpb.BackupConfigCredit, 1), done: make(chan struct{})}
 			}
-			continue
+		} else if inbox.slots[key] == nil {
+			inbox.slots[key] = &captureSlot{binding: binding, frames: make(chan *agentpb.BackupConfigTransfer, backupconfigtransfer.MetadataCreditRecords),
+				confirmations: make(chan *agentpb.BackupConfigCredit, 1), done: make(chan struct{})}
 		}
-		if step.GetCapture().GetConfig() == nil {
-			continue
-		}
-		binding := backupconfigtransfer.Binding{TaskID: authority.TaskId, AssignmentID: authority.AssignmentId,
-			StepID: step.StepId, ExecutionID: step.ExecutionId, TransferID: step.ExecutionId,
-			Direction: agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_CAPTURE}
-		if err := binding.Validate(); err != nil {
-			return err
-		}
-		if current := inbox.slots[step.StepId]; current != nil {
-			if current.binding != binding {
-				return invalidCapture()
-			}
-			continue
-		}
-		inbox.slots[step.StepId] = &captureSlot{binding: binding,
-			frames:        make(chan *agentpb.BackupConfigTransfer, backupconfigtransfer.MetadataCreditRecords),
-			confirmations: make(chan *agentpb.BackupConfigCredit, 1), done: make(chan struct{})}
 	}
 	return nil
 }
@@ -75,7 +92,7 @@ func (inbox *Inbox) AcceptFrame(ctx context.Context, frame *agentpb.BackupConfig
 	}
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
-	slot := inbox.slots[frame.StepId]
+	slot := inbox.slots[transferSlotKey{frame.GetAttempt().GetAttemptId(), frame.SourceOrdinal}]
 	if slot == nil {
 		return invalidCapture()
 	}
@@ -104,7 +121,7 @@ func (inbox *Inbox) AcceptCredit(ctx context.Context, credit *agentpb.BackupConf
 	if credit.Direction == agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_RESTORE {
 		return inbox.acceptRestoreCredit(credit)
 	}
-	slot := inbox.slots[credit.StepId]
+	slot := inbox.slots[transferSlotKey{credit.GetAttempt().GetAttemptId(), credit.SourceOrdinal}]
 	if slot == nil {
 		return invalidCapture()
 	}
@@ -127,13 +144,13 @@ func (inbox *Inbox) AcceptCredit(ctx context.Context, credit *agentpb.BackupConf
 
 // Stream binds a worker's credit publication port to its already reserved slot.
 func (inbox *Inbox) Stream(
-	taskID, assignmentID, stepID string,
+	binding backupconfigtransfer.Binding,
 	publish func(context.Context, *agentpb.BackupConfigCredit) error,
 ) (*CaptureStream, error) {
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
-	slot := inbox.slots[stepID]
-	if slot == nil || slot.binding.TaskID != taskID || slot.binding.AssignmentID != assignmentID || publish == nil {
+	slot := inbox.slots[transferSlotKey{binding.Attempt.ID, binding.SourceOrdinal}]
+	if slot == nil || slot.binding != binding || publish == nil {
 		return nil, invalidCapture()
 	}
 	return &CaptureStream{slot: slot, publish: publish}, nil
@@ -186,11 +203,11 @@ func (stream *CaptureStream) CommitCredit(ctx context.Context, credit *agentpb.B
 	}
 }
 
-func (inbox *Inbox) Release(taskID string) {
+func (inbox *Inbox) Release(attemptID string) {
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
 	for stepID, slot := range inbox.slots {
-		if taskID != "" && slot.binding.TaskID != taskID {
+		if attemptID != "" && slot.binding.Attempt.ID != attemptID {
 			continue
 		}
 		delete(inbox.slots, stepID)
@@ -198,7 +215,7 @@ func (inbox *Inbox) Release(taskID string) {
 		drainCaptureFrames(slot.frames)
 	}
 	for stepID, slot := range inbox.restores {
-		if taskID != "" && slot.binding.TaskID != taskID {
+		if attemptID != "" && slot.binding.Attempt.ID != attemptID {
 			continue
 		}
 		delete(inbox.restores, stepID)

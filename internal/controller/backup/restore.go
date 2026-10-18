@@ -2,7 +2,6 @@ package backup
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,7 +13,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -83,20 +81,10 @@ func (service *RestoreService) Restore(ctx context.Context, environmentID, idemp
 		return idempotency.IdempotencyResponse{}, err
 	}
 	defer prepared.Publication.Clear()
-	task := etcd.TaskRecord{ID: taskID, OperationID: prepared.Restore.OperationID, Owner: prepared.Owner,
-		Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
-		PlanID: ids.New(ids.KindPlan), Type: taskjournal.TaskRestore, Target: environmentID,
-		Steps: []taskjournal.TaskStepRecord{
-			{ID: prepared.Authority.StepId, Kind: taskjournal.TaskStepOperation},
-		},
-		TimeoutSeconds: backupRunTaskTimeoutSeconds, Status: taskjournal.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt}
-	sealed, err := prepared.buildPlan(task)
+	task, item, captured, err := buildRestoreWork(prepared, ids.New(ids.KindPlan))
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
-	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed)
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -127,7 +115,7 @@ func (service *RestoreService) Restore(ctx context.Context, environmentID, idemp
 			}
 		}()
 	}
-	result, publishErr := prepared.Publication.Publish(ctx, task, sealed, marker)
+	result, publishErr := prepared.Publication.PublishWork(ctx, task, item, captured, marker)
 	if publishErr != nil {
 		clear(body)
 		if !restorePublicationUnknown(publishErr) {

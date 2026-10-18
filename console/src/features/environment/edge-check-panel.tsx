@@ -296,11 +296,6 @@ export function EdgeCheckPanel({
               </Button>
             </div>
           )}
-          {result.cleanup_task_id && (
-            <TaskLink taskId={result.cleanup_task_id}>
-              Inspect cleanup Task
-            </TaskLink>
-          )}
           <Disclosure summary="Captured configuration">
             <div className="space-y-2 pt-3 text-xs">
               <CompactReference

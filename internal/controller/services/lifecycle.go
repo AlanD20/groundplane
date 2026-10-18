@@ -5,17 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/servicelifecyclework"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -31,26 +28,8 @@ const (
 	maximumServiceLifecycleAttempts       = 3
 )
 
-type serviceLifecyclePlanResolver interface {
-	PrepareServiceLifecycleHookTask(
-		context.Context,
-		etcd.TaskRecord,
-		releaserender.ServiceLifecycleRenderInput,
-		*taskconfiguration.BackingHookEncryptedInputs,
-		[]string,
-	) (etcd.TaskRecord, error)
-	PrepareServiceRemovalTask(
-		context.Context,
-		etcd.TaskRecord,
-		environmentchanges.ServiceRemovalIntent,
-		string,
-		string,
-	) (etcd.TaskRecord, error)
-}
-
 type serviceLifecycleService struct {
 	repository  serviceLifecycleRepository
-	plans       serviceLifecyclePlanResolver
 	idempotency serviceLifecycleIdempotency
 	hookInputs  serviceLifecycleHookInputs
 	now         func() time.Time
@@ -58,15 +37,14 @@ type serviceLifecycleService struct {
 
 func NewLifecycleService(
 	repository serviceLifecycleRepository,
-	plans serviceLifecyclePlanResolver,
 	idempotency serviceLifecycleIdempotency,
 	hookInputs serviceLifecycleHookInputs,
 ) (*serviceLifecycleService, error) {
-	if repository == nil || plans == nil || idempotency == nil || hookInputs == nil {
+	if repository == nil || idempotency == nil || hookInputs == nil {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle service is not configured")
 	}
 	return &serviceLifecycleService{
-		repository: repository, plans: plans, idempotency: idempotency, hookInputs: hookInputs, now: time.Now,
+		repository: repository, idempotency: idempotency, hookInputs: hookInputs, now: time.Now,
 	}, nil
 }
 
@@ -75,7 +53,7 @@ func (service *serviceMutationService) StartService(
 	serviceID string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, taskjournal.TaskStart)
+	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, workexecution.ActionStart)
 }
 
 func (service *serviceMutationService) StopService(
@@ -83,7 +61,7 @@ func (service *serviceMutationService) StopService(
 	serviceID string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, taskjournal.TaskStop)
+	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, workexecution.ActionStop)
 }
 
 func (service *serviceMutationService) DestroyService(
@@ -91,14 +69,14 @@ func (service *serviceMutationService) DestroyService(
 	serviceID string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, taskjournal.TaskDestroy)
+	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, workexecution.ActionDestroy)
 }
 
 func (service *serviceMutationService) runServiceLifecycle(
 	ctx context.Context,
 	serviceID string,
 	idempotencyKey string,
-	taskType taskjournal.TaskType,
+	taskType workexecution.Action,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.lifecycle == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
@@ -113,7 +91,7 @@ func (service *serviceLifecycleService) Run(
 	ctx context.Context,
 	serviceID string,
 	idempotencyKey string,
-	taskType taskjournal.TaskType,
+	taskType workexecution.Action,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
@@ -147,9 +125,9 @@ func (service *serviceLifecycleService) runOnce(
 	ctx context.Context,
 	serviceID string,
 	idempotencyKey string,
-	taskType taskjournal.TaskType,
+	taskType workexecution.Action,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	route, intent, err := serviceLifecycleContract(taskType)
+	route, _, err := serviceLifecycleContract(taskType)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -241,10 +219,6 @@ func (service *serviceLifecycleService) runOnce(
 			"Service Project kind is invalid",
 		)
 	}
-	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
 	projection, hasProjection, err := service.repository.GetEnvironmentAppliedComposeProjection(
 		ctx,
 		environment.Record.ID,
@@ -273,20 +247,14 @@ func (service *serviceLifecycleService) runOnce(
 			errs.KindStateConflict, "Service lifecycle applied authority is incomplete",
 		)
 	}
-	var projectionInput *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
-	replacement, err := servicerecord.SetServiceRuntimeIntent(current.Record, intent)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-
 	now := service.now().UTC()
-	task := etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
-		PlanID: ids.New(ids.KindPlan), Type: taskType, Target: serviceID,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+	capture := servicelifecyclework.Input{
+		TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
+		Action: taskType, ServiceID: serviceID, ServiceRevision: current.Revision,
+		Scope:     workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID},
+		CreatedAt: now,
 	}
-	var renderInput *releaserender.ServiceLifecycleRenderInput
+	timeout := serviceLifecycleControlTimeoutSeconds
 	var sealedHookInputs *taskconfiguration.BackingHookEncryptedInputs
 	defer func() {
 		if sealedHookInputs != nil {
@@ -294,23 +262,29 @@ func (service *serviceLifecycleService) runOnce(
 		}
 	}()
 	if applied {
-		projectionInput = &projection
-		var input releaserender.ServiceLifecycleRenderInput
-		task, input, sealedHookInputs, err = service.prepareAppliedServiceLifecycle(
-			ctx, taskType, current, tenant, project, environment, projection, nativeBacking, task,
+		input, sealed, captureErr := service.prepareAppliedServiceLifecycle(
+			ctx, capture.Action, current, tenant, project, environment, projection, nativeBacking, capture.PlanID, ids.New(ids.KindOperation),
 		)
+		if captureErr != nil {
+			return idempotencyrecord.IdempotencyResponse{}, captureErr
+		}
+		sealedHookInputs, capture.Runtime = sealed, &input
+		placement, err := service.repository.ResolveLifecycleHost(ctx)
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
-		renderInput = &input
-	} else {
-		task, err = prepareControllerServiceLifecycleTask(task, environment.Record.ID, current.Revision)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
+		capture.HostID = placement.HostID
+		timeout = serviceLifecycleAgentTimeoutSeconds
+		if definition := serviceLifecycleHookDefinition(capture.Action, input.HookConfiguration); definition != nil {
+			timeout = max(timeout, int64(definition.TimeoutSeconds)+serviceLifecycleControlTimeoutSeconds)
+		}
+		if sealed != nil {
+			capture.HookInputs = &servicelifecyclework.HookInputs{OperationID: sealed.OperationID,
+				CiphertextSHA256: sealed.CiphertextSHA256, SecretSources: sealed.SecretSources}
 		}
 	}
 
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: capture.TaskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -321,11 +295,11 @@ func (service *serviceLifecycleService) runOnce(
 	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
-		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+		TaskID: capture.TaskID, CreatedAt: now, UpdatedAt: now,
 	}
-	result, mutationErr := service.repository.BeginServiceLifecycleWithTaskHookInputs(
-		ctx, tenant, project, environment, current, replacement, projectionInput, renderInput,
-		sealedHookInputs, task, marker,
+	result, mutationErr := service.repository.PublishServiceLifecycle(
+		ctx, tenant, project, environment, current, capture,
+		sealedHookInputs, now.Add(time.Duration(timeout)*time.Second), marker,
 	)
 	if mutationErr != nil {
 		if !isUnknownServiceLifecycleMutationOutcome(mutationErr) {

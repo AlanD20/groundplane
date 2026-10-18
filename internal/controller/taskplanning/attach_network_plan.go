@@ -224,7 +224,7 @@ func projectAttachRuntimeNetworks(
 func removeManagedAttachNetworks(project *composetypes.Project) {
 	managed := make(map[string]struct{})
 	for name := range project.Networks {
-		if _, ok := managedAttachNetworkID(name); ok {
+		if _, ok := composerender.ManagedAttachNetworkID(name); ok {
 			managed[name] = struct{}{}
 			delete(project.Networks, name)
 		}
@@ -246,29 +246,4 @@ func removeManagedAttachNetworks(project *composetypes.Project) {
 	}
 	removeMemberships(project.Services)
 	removeMemberships(project.DisabledServices)
-}
-
-func managedAttachExternalNetworks(project *composetypes.Project) ([]composeidentity.Resource, error) {
-	external := make([]composeidentity.Resource, 0)
-	for name, network := range project.Networks {
-		networkID, managed := managedAttachNetworkID(name)
-		if !managed {
-			continue
-		}
-		if !network.External {
-			return nil, errs.New(errs.KindInternal, "managed Attach network is not external")
-		}
-		external = append(external, composeidentity.Resource{ID: networkID, Name: name})
-	}
-	sort.Slice(external, func(left int, right int) bool { return external[left].Name < external[right].Name })
-	return external, nil
-}
-
-func managedAttachNetworkID(composeName string) (string, bool) {
-	const prefix = "gp_attach_net_"
-	if !strings.HasPrefix(composeName, prefix) {
-		return "", false
-	}
-	networkID := "net_" + strings.ToUpper(strings.TrimPrefix(composeName, prefix))
-	return networkID, ids.Validate(ids.KindNetwork, networkID) == nil
 }

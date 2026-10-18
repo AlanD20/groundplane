@@ -6,14 +6,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
-	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -41,7 +39,7 @@ type attachMutationRepository interface {
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
-	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[attachrender.AttachTaskRenderInput], error)
+	GetAttachFactsVersioned(context.Context, etcdstore.Versioned[attachrecord.Record]) (etcdstore.Versioned[attachrecord.EncryptedFacts], bool, error)
 	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
 	RenameAttachIdempotent(
 		context.Context,
@@ -51,16 +49,7 @@ type attachMutationRepository interface {
 		string,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	CreateAttachWithTaskHookInputs(
-		context.Context,
-		etcd.AttachCreateScope,
-		attachrecord.Record,
-		*attachrecord.EncryptedFacts,
-		*taskconfiguration.BackingHookEncryptedInputs,
-		attachrender.AttachTaskRenderInput,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	PublishAttachWork(context.Context, etcd.AttachWorkPublication) (etcd.IdempotencyTransactionResult, error)
 	CaptureDetachSnapshot(context.Context, etcdstore.Versioned[attachrecord.Record]) (attachremoval.DetachSnapshot, error)
 	ResolveDetachHost(context.Context) (workexecution.Placement, error)
 	PublishDetachWork(context.Context, etcd.DetachWorkPublication) (etcd.IdempotencyTransactionResult, error)
@@ -148,11 +137,10 @@ func (repository *durableAttachMutationRepository) GetAttach(
 	return repository.attaches.GetAttach(ctx, id)
 }
 
-func (repository *durableAttachMutationRepository) GetAttachTaskRenderInput(
-	ctx context.Context,
-	planID string,
-) (etcdstore.Versioned[attachrender.AttachTaskRenderInput], error) {
-	return repository.attaches.GetAttachTaskRenderInput(ctx, planID)
+func (repository *durableAttachMutationRepository) GetAttachFactsVersioned(ctx context.Context,
+	current etcdstore.Versioned[attachrecord.Record],
+) (etcdstore.Versioned[attachrecord.EncryptedFacts], bool, error) {
+	return repository.attaches.GetAttachFactsVersioned(ctx, current)
 }
 
 func (repository *durableAttachMutationRepository) ListAttaches(
@@ -174,19 +162,8 @@ func (repository *durableAttachMutationRepository) RenameAttachIdempotent(
 	return repository.attaches.RenameAttachIdempotent(ctx, environment, project, current, name, marker)
 }
 
-func (repository *durableAttachMutationRepository) CreateAttachWithTaskHookInputs(
-	ctx context.Context,
-	scope etcd.AttachCreateScope,
-	record attachrecord.Record,
-	facts *attachrecord.EncryptedFacts,
-	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
-	renderInput attachrender.AttachTaskRenderInput,
-	task etcd.TaskRecord,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.attaches.CreateAttachWithTaskHookInputs(
-		ctx, scope, record, facts, hookInputs, renderInput, task, marker,
-	)
+func (repository *durableAttachMutationRepository) PublishAttachWork(ctx context.Context, request etcd.AttachWorkPublication) (etcd.IdempotencyTransactionResult, error) {
+	return repository.attaches.PublishAttachWork(ctx, request)
 }
 
 func (repository *durableAttachMutationRepository) CaptureDetachSnapshot(ctx context.Context,

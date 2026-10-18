@@ -5,8 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -21,6 +24,7 @@ type configRestorePublicationAuthority struct {
 	head                   string
 	conditions             []etcdstore.Condition
 	fence                  environmentfence.Evidence
+	recovering             bool
 }
 
 // Every publication batch closes the same immutable source, native assignment,
@@ -28,6 +32,7 @@ type configRestorePublicationAuthority struct {
 // may replace the predecessor fence; an unrelated later head is never accepted.
 func (repository *BackupRuntimeRepository) loadConfigRestorePublication(ctx context.Context,
 	generation etcdstore.Versioned[backupconfiguration.ConfigRestoreGenerationRecord],
+	recovery *workexecution.Attempt,
 ) (configRestorePublicationAuthority, error) {
 	var zero configRestorePublicationAuthority
 	owner := generation.Record.Owner
@@ -35,12 +40,12 @@ func (repository *BackupRuntimeRepository) loadConfigRestorePublication(ctx cont
 		backupconfiguration.ValidateConfigRestoreTransferOwner(owner) != nil {
 		return zero, configTransferAuthorityConflict()
 	}
-	taskID := owner.Transfer.Binding.TaskID
+	taskID := owner.Transfer.Binding.Attempt.TaskID
 	memberKey, err := backupruntime.BackupRestoreEnvironmentIndexKey(owner.EnvironmentID, taskID)
 	if err != nil {
 		return zero, err
 	}
-	keys := []string{backupruntime.BackupRestoreKey(taskID), memberKey, backupruntime.BackupExecutionPlanKey(taskID),
+	keys := []string{backupruntime.BackupRestoreKey(taskID), memberKey, backupwork.InputKey(owner.Transfer.Binding.Attempt.WorkItemID),
 		backupconfiguration.ConfigRestoreGenerationKey(
 			owner,
 		), blueprints.EnvironmentBlueprintRootKey(owner.EnvironmentID, taskID),
@@ -72,6 +77,26 @@ func (repository *BackupRuntimeRepository) loadConfigRestorePublication(ctx cont
 		read.Values[1].Version != 1 || string(read.Values[1].Value) != taskID || read.Values[1].ModRevision > read.Values[0].ModRevision {
 		return zero, configTransferAuthorityConflict()
 	}
+	if recovery != nil {
+		if current.State != backupruntime.BackupRestoreRecoveryRequired || !current.MutationStarted {
+			return zero, configTransferAuthorityConflict()
+		}
+		progress := current.ConfigProgress
+		current.Verification = backupruntime.BackupVerificationPending
+		switch {
+		case progress.MaterializationSHA256 != "":
+			current.State, current.Verification = backupruntime.BackupRestoreVerified, backupruntime.BackupVerificationPassed
+		case progress.PublishedHeadRevision > 0:
+			current.State = backupruntime.BackupRestoreCanonicalComplete
+		case progress.DeleteEntryOrdinal == progress.DeleteEntryCount:
+			current.State = backupruntime.BackupRestoreApplyingUpserts
+		default:
+			current.State = backupruntime.BackupRestoreApplyingDeletes
+		}
+		if backupruntime.ValidateBackupRestoreRecord(current) != nil {
+			return zero, configTransferAuthorityConflict()
+		}
+	}
 	switch current.State {
 	case backupruntime.BackupRestoreStaged, backupruntime.BackupRestoreApplyingDeletes,
 		backupruntime.BackupRestoreApplyingUpserts, backupruntime.BackupRestoreCanonicalComplete,
@@ -79,9 +104,9 @@ func (repository *BackupRuntimeRepository) loadConfigRestorePublication(ctx cont
 	default:
 		return zero, configTransferAuthorityConflict()
 	}
-	sealed, err := backupruntime.DecodeBackupExecutionPlan(read.Values[2].Value)
+	sealed, err := executionplan.DecodeBackupWorkInput(read.Values[2].Value)
 	if err != nil || read.Values[2].Version != 1 ||
-		backupruntime.ValidateConfigRestoreExecutionPlan(current, sealed) != nil {
+		backupruntime.ValidateRestoreWorkInput(current, sealed) != nil {
 		return zero, configTransferAuthorityConflict()
 	}
 	source, err := backupconfiguration.DecodeConfigRestoreGeneration(read.Values[3].Value)
@@ -129,15 +154,10 @@ func (repository *BackupRuntimeRepository) loadConfigRestorePublication(ctx cont
 			return zero, configTransferAuthorityConflict()
 		}
 	}
-	conditions, err := repository.configTransferGuard(ctx, owner.Transfer, read.ReadRevision)
+	conditions, err := repository.configRestoreExecutionGuard(ctx, owner, read.ReadRevision, recovery)
 	if err != nil {
 		return zero, err
 	}
-	more, err := repository.configRestoreTransferGuard(ctx, owner, read.ReadRevision)
-	if err != nil {
-		return zero, err
-	}
-	conditions = append(conditions, more...)
 	fence, err := environmentfence.LoadOwned(
 		ctx,
 		repository.store,
@@ -182,5 +202,6 @@ func (repository *BackupRuntimeRepository) loadConfigRestorePublication(ctx cont
 		headRevision: read.Values[5].ModRevision,
 		conditions:   conditions,
 		fence:        fence,
+		recovering:   recovery != nil,
 	}, nil
 }

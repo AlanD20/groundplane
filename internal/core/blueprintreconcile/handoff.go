@@ -26,18 +26,19 @@ type WriteEffect struct {
 	Outcome  WriteOutcome
 }
 
-// HandoffReport contains Controller-verified evidence for one execution epoch.
+// HandoffReport contains Controller-verified evidence for one execution attempt.
 // Stopped excludes delayed executor/daemon mutations, not only a cancelled context.
 // Untouched requires proof of no effect; Changed requires accounted actual effects,
 // not successful application. Missing runtime proof is represented as Unknown.
 // Transport authentication and verification of the physical evidence belong to
 // the caller; these flags cannot themselves prove a host process stopped.
 type HandoffReport struct {
-	PlanID   string
-	TaskID   string
-	Epoch    int64
-	Executor ExecutorStopState
-	Writes   []WriteEffect
+	WorkItemID    string
+	AttemptID     string
+	TaskID        string
+	AttemptNumber uint64
+	Executor      ExecutorStopState
+	Writes        []WriteEffect
 }
 
 type HandoffDecision struct {
@@ -51,7 +52,7 @@ type HandoffDecision struct {
 // handoff; this function grants no exception to other recovery procedures.
 // The persistence owner must atomically record the receipt, mark ChangedWrites
 // diverged without discarding last-success fingerprints, and release this exact
-// epoch's claims. It must fence the latest snapshot again before admitting work.
+// attempt's claims. It must fence the latest snapshot again before admitting work.
 // Until Settled, all claims stay held. Duplicate terminal delivery belongs to the
 // durable receipt path, not reactivation of an already released execution.
 func ResolveHandoff(execution Execution, report HandoffReport) (HandoffDecision, error) {
@@ -59,8 +60,8 @@ func ResolveHandoff(execution Execution, report HandoffReport) (HandoffDecision,
 	if err != nil {
 		return HandoffDecision{}, err
 	}
-	if execution.State != Draining || report.PlanID != execution.PlanID ||
-		report.TaskID != execution.TaskID || report.Epoch != execution.Epoch {
+	if execution.State != Draining || report.WorkItemID != execution.WorkItemID ||
+		report.TaskID != execution.TaskID || report.AttemptID != execution.AttemptID || report.AttemptNumber != execution.AttemptNumber {
 		return HandoffDecision{}, errs.New(errs.KindStateConflict, "superseded execution authority changed")
 	}
 	if report.Executor != ExecutorUnconfirmed && report.Executor != ExecutorStopped ||

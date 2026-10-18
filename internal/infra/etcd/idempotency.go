@@ -98,19 +98,6 @@ func newTaskIdempotencyMutationPlan(
 	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
 ) (*idempotencyMutationPlan, error) {
-	return newTaskIdempotencyMutationPlanAllowingPrivateMarker(
-		record, initiation, conditions, mutations, classify, "",
-	)
-}
-
-func newTaskIdempotencyMutationPlanAllowingPrivateMarker(
-	record TaskRecord,
-	initiation TaskInitiation,
-	conditions []etcdstore.Condition,
-	mutations []etcdstore.Mutation,
-	classify idempotencyPlanClassifier,
-	privateMarkerKey string,
-) (*idempotencyMutationPlan, error) {
 	if err := validateTaskInitiation(record, initiation, true); err != nil {
 		return nil, err
 	}
@@ -122,12 +109,11 @@ func newTaskIdempotencyMutationPlanAllowingPrivateMarker(
 	if err != nil {
 		return nil, err
 	}
-	return newIdempotencyMutationPlanForMarkerAllowingPrivateMarker(
+	return newIdempotencyMutationPlanForMarker(
 		idempotencyrecord.IdempotencyMarkerTask,
 		conditions,
 		mutations,
 		classify,
-		privateMarkerKey,
 	)
 }
 
@@ -137,18 +123,6 @@ func newIdempotencyMutationPlanForMarker(
 	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
 ) (*idempotencyMutationPlan, error) {
-	return newIdempotencyMutationPlanForMarkerAllowingPrivateMarker(
-		markerKind, conditions, mutations, classify, "",
-	)
-}
-
-func newIdempotencyMutationPlanForMarkerAllowingPrivateMarker(
-	markerKind idempotencyrecord.IdempotencyMarkerKind,
-	conditions []etcdstore.Condition,
-	mutations []etcdstore.Mutation,
-	classify idempotencyPlanClassifier,
-	privateMarkerKey string,
-) (*idempotencyMutationPlan, error) {
 	if markerKind != idempotencyrecord.IdempotencyMarkerDirect &&
 		markerKind != idempotencyrecord.IdempotencyMarkerTask {
 		return nil, errs.New(errs.KindInternal, "idempotency mutation plan marker kind is invalid")
@@ -156,7 +130,7 @@ func newIdempotencyMutationPlanForMarkerAllowingPrivateMarker(
 	if classify == nil || markerKind == idempotencyrecord.IdempotencyMarkerTask && len(mutations) == 0 {
 		return nil, errs.New(errs.KindInternal, "idempotency mutation plan is incomplete")
 	}
-	if err := validateIdempotencyPlanKeysAllowingPrivateMarker(conditions, mutations, privateMarkerKey); err != nil {
+	if err := validateIdempotencyPlanKeys(conditions, mutations); err != nil {
 		return nil, err
 	}
 	return &idempotencyMutationPlan{
@@ -168,25 +142,9 @@ func newIdempotencyMutationPlanForMarkerAllowingPrivateMarker(
 }
 
 func validateIdempotencyPlanKeys(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
-	return validateIdempotencyPlanKeysAllowingPrivateMarker(conditions, mutations, "")
-}
-
-func validateIdempotencyPlanKeysAllowingPrivateMarker(
-	conditions []etcdstore.Condition, mutations []etcdstore.Mutation, privateMarkerKey string,
-) error {
-	if privateMarkerKey != "" && !strings.HasPrefix(privateMarkerKey, idempotencyrecord.IdempotencyMarkerPrefix) {
-		return errs.New(errs.KindInternal, "private Task marker key is invalid")
-	}
 	compareKeys := make(map[string]struct{}, len(conditions))
-	privateCompare := 0
 	for _, condition := range conditions {
-		if condition.Key == privateMarkerKey && privateMarkerKey != "" {
-			privateCompare++
-			if condition.ModRevision != 0 || condition.Prefix {
-				return errs.New(errs.KindInternal, "private Task marker compare is invalid")
-			}
-		}
-		if condition.Key != privateMarkerKey && invalidIdempotencyPlanKey(condition.Key) {
+		if invalidIdempotencyPlanKey(condition.Key) {
 			return errs.New(errs.KindInternal, "idempotency plan compare key is invalid")
 		}
 		if _, duplicate := compareKeys[condition.Key]; duplicate {
@@ -195,24 +153,14 @@ func validateIdempotencyPlanKeysAllowingPrivateMarker(
 		compareKeys[condition.Key] = struct{}{}
 	}
 	mutationKeys := make(map[string]struct{}, len(mutations))
-	privateMutation := 0
 	for _, mutation := range mutations {
-		if mutation.Key == privateMarkerKey && privateMarkerKey != "" {
-			privateMutation++
-			if mutation.Type != etcdstore.MutationPut || mutation.Prefix || len(mutation.Value) == 0 {
-				return errs.New(errs.KindInternal, "private Task marker mutation is invalid")
-			}
-		}
-		if mutation.Key != privateMarkerKey && invalidIdempotencyPlanKey(mutation.Key) {
+		if invalidIdempotencyPlanKey(mutation.Key) {
 			return errs.New(errs.KindInternal, "idempotency plan mutation key is invalid")
 		}
 		if _, duplicate := mutationKeys[mutation.Key]; duplicate {
 			return errs.New(errs.KindInternal, "idempotency plan contains a duplicate mutation key")
 		}
 		mutationKeys[mutation.Key] = struct{}{}
-	}
-	if privateMarkerKey != "" && (privateCompare != 1 || privateMutation != 1) {
-		return errs.New(errs.KindInternal, "private Task marker publication is incomplete")
 	}
 	return nil
 }

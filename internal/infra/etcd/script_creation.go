@@ -34,7 +34,7 @@ func (repository *ScriptRepository) CreateScriptIdempotent(
 		etcdstore.ClearMutationValues(mutations)
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearRouteHeadPublication(publication)
+	defer clearDesiredMutationFragment(publication)
 	conditions, mutations, classify, err = publication.bindDirectDesired(conditions, mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

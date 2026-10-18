@@ -8,8 +8,9 @@ import (
 )
 
 type Repository struct {
-	store  Store
-	script ScriptPrimaryCodec
+	store             Store
+	script            ScriptPrimaryCodec
+	preparationGuards []Condition
 }
 
 func NewRepository(store Store, script ScriptPrimaryCodec) (*Repository, error) {
@@ -57,7 +58,7 @@ func (repository *Repository) Prepare(
 			return Prepared{}, encodeErr
 		}
 		result, transactErr := repository.store.Transact(ctx,
-			[]Condition{{Key: PreparationKey(operationID), ModRevision: revision}},
+			repository.guardPreparation([]Condition{{Key: PreparationKey(operationID), ModRevision: revision}}),
 			[]Mutation{{Type: MutationPut, Key: PreparationKey(operationID), Value: value}},
 		)
 		clear(value)
@@ -106,7 +107,7 @@ func (repository *Repository) ensurePreparation(
 		return Preparation{}, 0, err
 	}
 	result, err := repository.store.Transact(ctx,
-		[]Condition{{Key: PreparationKey(expected.OperationID)}, {Key: RootKey(expected.OperationID)}},
+		repository.guardPreparation([]Condition{{Key: PreparationKey(expected.OperationID)}, {Key: RootKey(expected.OperationID)}}),
 		[]Mutation{{Type: MutationPut, Key: PreparationKey(expected.OperationID), Value: value}},
 	)
 	clear(value)
@@ -169,7 +170,7 @@ func (repository *Repository) prepareBatch(
 	if lookups == nil || len(lookups.Values) != len(lookupKeys) {
 		return Preparation{}, 0, corruption("source count evidence is incomplete")
 	}
-	conditions := []Condition{{Key: PreparationKey(descriptor.OperationID), ModRevision: descriptorRevision}}
+	conditions := repository.guardPreparation([]Condition{{Key: PreparationKey(descriptor.OperationID), ModRevision: descriptorRevision}})
 	mutations := make([]Mutation, 0, len(members)*2+len(uniqueSources)+len(bodySources)+1)
 	defer clearMutations(mutations)
 	sourceConditions := make(map[string]int64)

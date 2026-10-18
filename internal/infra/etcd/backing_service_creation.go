@@ -88,12 +88,18 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		found {
 		return existing, err
 	}
+	publicationEnvironment, materializes, err := desiredRevisionTaskEnvironment(creation.Task)
+	if err != nil || !materializes {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Backing publication has no owning Environment")
+	}
 	publication, err := repository.prepareEnvironmentBlueprintPublication(
 		ctx,
 		creation.Claim,
 		creation.Revision,
 		creation.Projection,
-		creation.Task,
+		desiredPublicationOwner{TaskID: creation.Task.ID, EnvironmentID: publicationEnvironment,
+			RevisionID:       creation.Task.Params[blueprints.EnvironmentDesiredRevisionParam],
+			RenderGeneration: uint64(creation.Task.RenderGeneration)},
 		creation.Marker,
 		0,
 	)

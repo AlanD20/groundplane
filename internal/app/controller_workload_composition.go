@@ -30,7 +30,6 @@ func newControllerServiceMutations(
 	}
 	serviceLifecycle, err := serviceoperations.NewLifecycleService(
 		serviceMutationRepository,
-		planResolver,
 		serviceLifecycleIdempotency,
 		attachFactValues,
 	)

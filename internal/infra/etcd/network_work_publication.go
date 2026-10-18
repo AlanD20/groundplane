@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
@@ -20,6 +21,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -36,18 +38,29 @@ type NetworkWorkPublication struct {
 	Item        workexecution.Item
 	Input       *agentpb.NetworkWorkInput
 	Marker      idempotency.IdempotencyMarker
+	Cascade     *NetworkCascadePublication
 }
 
-// PublishNetworkWork publishes direct removal of an Environment-owned Zone.
-// Backing Zone cascades must first capture their cross-Environment dependencies
-// and impact approval; they cannot use this narrower publication boundary.
+type NetworkCascadePublication struct {
+	SnapshotRevision int64
+	Items            []workexecution.Item
+	Inputs           []attachremoval.DetachInput
+	Captures         []attachremoval.WorkCapture
+}
+
+// PublishNetworkWork joins Zone removal to its authored state and request replay.
+// A Backing Zone additionally supplies its complete captured consumer graph.
 func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context.Context, request NetworkWorkPublication) (IdempotencyTransactionResult, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	task, item := request.Task, request.Item
+	ordinary := request.Cascade == nil && request.Project.Record.Kind == hierarchyrecord.ProjectKindTenant &&
+		request.Zone.Record.Desired.OwnerKind == core.ZoneOwnerEnvironment && request.Zone.Record.Desired.OwnerID == request.Environment.Record.ID
+	backing := request.Cascade != nil && request.Project.Record.Kind == hierarchyrecord.ProjectKindBacking &&
+		request.Zone.Record.Desired.OwnerKind == core.ZoneOwnerBackingProject && request.Zone.Record.Desired.OwnerID == request.Project.Record.ID
 	if repository == nil || repository.HierarchyRepository == nil || repository.transactions == nil ||
-		request.Project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+		(!ordinary && !backing) ||
 		request.Environment.Record.ProjectID != request.Project.Record.ID ||
 		request.Environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		task.Scope != (workexecution.Scope{TenantID: request.Project.Record.TenantID,
@@ -55,9 +68,7 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 		task.Actor != workexecution.OperatorActor || task.Action != workexecution.ActionRemove ||
 		item.ID != ids.DeriveAt(ids.KindWorkItem, request.Claim.CreatedAt, request.Claim.TaskID, "network") ||
 		request.Input == nil || request.Input.NetworkId != request.Zone.Record.Desired.ID ||
-		request.Input.RemovalSubnet != request.Zone.Record.Desired.Subnet ||
-		request.Zone.Record.Desired.OwnerKind != core.ZoneOwnerEnvironment ||
-		request.Zone.Record.Desired.OwnerID != request.Environment.Record.ID {
+		request.Input.RemovalSubnet != request.Zone.Record.Desired.Subnet {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Zone removal requires its ready owning Environment")
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil || found {
@@ -155,7 +166,12 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	work, err := inputs.PreparePublication(ctx, task, item, request.Input, request.Marker, admission, request.Claim.RevisionID)
+	var work workqueue.Change
+	if request.Cascade == nil {
+		work, err = inputs.PreparePublication(ctx, task, item, request.Input, request.Marker, admission, request.Claim.RevisionID)
+	} else {
+		work, err = repository.prepareNetworkCascadePublication(ctx, inputs, request, admission)
+	}
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

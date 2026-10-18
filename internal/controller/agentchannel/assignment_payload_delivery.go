@@ -23,33 +23,33 @@ type assignmentPayloadFrame struct {
 // FIFO delivery bounds memory and rotates among concurrent bulk transfers.
 // Only Connect touches the underlying stream; producers cannot write to it.
 type assignmentPayloadDelivery struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	frames   chan *assignmentPayloadFrame
-	failures chan error
-	limit    int
-	mu       sync.Mutex
-	active   map[string]*assignmentPayloadProducer
-	workers  sync.WaitGroup
+	ctx            context.Context
+	cancel         context.CancelFunc
+	frames         chan *assignmentPayloadFrame
+	failures       chan error
+	limit          int
+	mu             sync.Mutex
+	active         map[string]*assignmentPayloadProducer
+	backupPayloads map[string]*backupPayloadProducer
+	workers        sync.WaitGroup
 }
 
 func newAssignmentPayloadDelivery(ctx context.Context, limit int32) *assignmentPayloadDelivery {
 	owned, cancel := context.WithCancel(ctx)
 	return &assignmentPayloadDelivery{ctx: owned, cancel: cancel,
 		frames: make(chan *assignmentPayloadFrame, int(limit)), failures: make(chan error, 1),
-		limit: int(limit), active: make(map[string]*assignmentPayloadProducer)}
+		limit: int(limit), active: make(map[string]*assignmentPayloadProducer), backupPayloads: make(map[string]*backupPayloadProducer)}
 }
 
 type assignmentPayloadProducer struct {
-	cancel  context.CancelFunc
-	credits *configTransferExchange
+	cancel context.CancelFunc
 }
 
 func (delivery *assignmentPayloadDelivery) start(
 	stream agentpb.AgentChannel_ConnectServer,
 	assignment *agentpb.TaskAssignment,
 	release func(),
-	send func(agentpb.AgentChannel_ConnectServer, *agentpb.TaskAssignment, *configTransferExchange) error,
+	send func(agentpb.AgentChannel_ConnectServer, *agentpb.TaskAssignment) error,
 ) error {
 	delivery.mu.Lock()
 	if delivery.ctx.Err() != nil {
@@ -58,15 +58,14 @@ func (delivery *assignmentPayloadDelivery) start(
 		return nil // The stream is closing; its durable claim remains for reconnect.
 	}
 	_, exists := delivery.active[assignment.AssignmentId]
-	if exists || len(delivery.active) >= delivery.limit {
+	if exists || len(delivery.active)+len(delivery.backupPayloads) >= delivery.limit {
 		delivery.mu.Unlock()
 		release()
 		return errs.New(errs.KindStateConflict, "assignment payload delivery is not available")
 	}
 	owned := proto.CloneOf(assignment)
 	ctx, cancel := context.WithDeadline(delivery.ctx, owned.ExecutionDeadline.AsTime())
-	credits := newConfigTransferExchange(ctx, owned)
-	delivery.active[owned.AssignmentId] = &assignmentPayloadProducer{cancel: cancel, credits: credits}
+	delivery.active[owned.AssignmentId] = &assignmentPayloadProducer{cancel: cancel}
 	delivery.workers.Add(1)
 	delivery.mu.Unlock()
 	go func() {
@@ -80,9 +79,8 @@ func (delivery *assignmentPayloadDelivery) start(
 			delivery.mu.Unlock()
 		}()
 		defer cancel()
-		defer credits.close()
 		queued := &assignmentPayloadStream{AgentChannel_ConnectServer: stream, delivery: delivery, ctx: ctx}
-		if err := send(queued, owned, credits); err != nil && ctx.Err() == nil {
+		if err := send(queued, owned); err != nil && ctx.Err() == nil {
 			select {
 			case delivery.failures <- err:
 			default:
@@ -108,11 +106,11 @@ func (delivery *assignmentPayloadDelivery) acceptConfigCredit(credit *agentpb.Ba
 	}
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
-	producer := delivery.active[credit.AssignmentId]
+	producer := delivery.backupPayloads[credit.GetAttempt().GetAttemptId()]
 	if producer == nil {
 		return errs.New(errs.KindStateConflict, "Config capture assignment is not active")
 	}
-	return producer.credits.accept(credit)
+	return producer.configs.accept(credit)
 }
 
 func (delivery *assignmentPayloadDelivery) acceptConfigRestoreFrame(frame *agentpb.BackupConfigTransfer) error {
@@ -121,11 +119,11 @@ func (delivery *assignmentPayloadDelivery) acceptConfigRestoreFrame(frame *agent
 	}
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
-	producer := delivery.active[frame.AssignmentId]
+	producer := delivery.backupPayloads[frame.GetAttempt().GetAttemptId()]
 	if producer == nil {
 		return errs.New(errs.KindStateConflict, "Config restore assignment is not active")
 	}
-	return producer.credits.acceptRestoreFrame(frame)
+	return producer.configs.acceptRestoreFrame(frame)
 }
 
 func (delivery *assignmentPayloadDelivery) acceptVolumeManifestFrame(
@@ -135,12 +133,12 @@ func (delivery *assignmentPayloadDelivery) acceptVolumeManifestFrame(
 		return errs.New(errs.KindValidationFailed, "Volume manifest frame is missing")
 	}
 	delivery.mu.Lock()
-	producer := delivery.active[frame.AssignmentId]
+	producer := delivery.backupPayloads[frame.GetAttempt().GetAttemptId()]
 	delivery.mu.Unlock()
-	if producer == nil || producer.credits.volumes == nil {
+	if producer == nil {
 		return errs.New(errs.KindStateConflict, "Volume manifest assignment is not active")
 	}
-	return producer.credits.volumes.acceptFrame(frame)
+	return producer.exchange.acceptFrame(frame)
 }
 
 func (delivery *assignmentPayloadDelivery) acceptVolumeManifestCredit(
@@ -150,18 +148,18 @@ func (delivery *assignmentPayloadDelivery) acceptVolumeManifestCredit(
 		return errs.New(errs.KindValidationFailed, "Volume manifest credit is missing")
 	}
 	delivery.mu.Lock()
-	producer := delivery.active[credit.AssignmentId]
+	producer := delivery.backupPayloads[credit.GetAttempt().GetAttemptId()]
 	delivery.mu.Unlock()
-	if producer == nil || producer.credits.volumes == nil {
+	if producer == nil {
 		return errs.New(errs.KindStateConflict, "Volume manifest assignment is not active")
 	}
-	return producer.credits.volumes.acceptCredit(credit)
+	return producer.exchange.acceptCredit(credit)
 }
 
 func (delivery *assignmentPayloadDelivery) resize(limit int32) bool {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
-	if len(delivery.active) != 0 {
+	if len(delivery.active)+len(delivery.backupPayloads) != 0 {
 		return false
 	}
 	delivery.limit = int(limit)
@@ -230,10 +228,6 @@ func (stream *assignmentPayloadStream) Send(message *agentpb.ControllerMessage) 
 }
 
 func clearAssignmentPayloadFrame(message *agentpb.ControllerMessage) {
-	if chunk := message.GetBackupSecretSlotTransfer().GetChunk(); chunk != nil {
-		clear(chunk.Content)
-		chunk.Content = nil
-	}
 	if chunk := message.GetMaterializationTransfer().GetChunk(); chunk != nil {
 		clear(chunk.Content)
 		chunk.Content = nil

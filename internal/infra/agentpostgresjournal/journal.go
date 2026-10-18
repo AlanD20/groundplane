@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/oklog/ulid/v2"
 )
 
 const (
@@ -16,22 +17,25 @@ const (
 )
 
 type IDs struct {
-	Task  string
-	Step  string
-	Point string
+	Task        string
+	ExecutionID string
+	Point       string
 }
 
 func (value IDs) validate() error {
 	if ids.Validate(ids.KindTask, value.Task) != nil ||
-		ids.Validate(ids.KindStep, value.Step) != nil ||
 		ids.Validate(ids.KindRecoveryPoint, value.Point) != nil {
 		return invalid("database execution journal IDs are invalid")
+	}
+	execution, err := ulid.ParseStrict(value.ExecutionID)
+	if err != nil || execution.String() != value.ExecutionID {
+		return invalid("database execution journal source identity is invalid")
 	}
 	return nil
 }
 
 func (value IDs) name() string {
-	return value.Task + "." + value.Step + "." + value.Point
+	return value.Task + "." + value.ExecutionID + "." + value.Point
 }
 
 func parseName(name string) (IDs, error) {
@@ -39,7 +43,7 @@ func parseName(name string) (IDs, error) {
 	if len(parts) != 3 {
 		return IDs{}, invalid("database execution journal marker name is invalid")
 	}
-	value := IDs{Task: parts[0], Step: parts[1], Point: parts[2]}
+	value := IDs{Task: parts[0], ExecutionID: parts[1], Point: parts[2]}
 	if value.validate() != nil || value.name() != name {
 		return IDs{}, invalid("database execution journal marker name is invalid")
 	}

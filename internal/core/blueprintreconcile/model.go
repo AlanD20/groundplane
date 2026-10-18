@@ -69,15 +69,16 @@ const (
 	Draining ExecutionState = "draining"
 )
 
-// Execution is one private unit's sealed plan inside its public Apply Task.
-// Epoch is zero while Pending and positive after assignment; it fences redispatch.
+// Execution is the resource-selection view of one work item in its Apply Task.
+// AttemptNumber is zero while Pending and positive after assignment; it fences redispatch.
 // Draining retains claims until cancellation and effect accounting are proven.
 type Execution struct {
-	PlanID string
-	TaskID string
-	Epoch  int64
-	Unit   Unit
-	State  ExecutionState
+	WorkItemID    string
+	AttemptID     string
+	TaskID        string
+	AttemptNumber uint64
+	Unit          Unit
+	State         ExecutionState
 }
 
 // Snapshot contains one validated latest desired set, including generated

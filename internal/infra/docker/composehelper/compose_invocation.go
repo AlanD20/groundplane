@@ -100,25 +100,6 @@ func commandsFor(
 		mutation.Args = append(mutation.Args, serviceNames(artifact, []string{compensate.ServiceId})...)
 		return []runner.RunCmdOpts{validation, mutation}, nil
 	}
-	if step.GetComponentRestorationCompensate() != nil {
-		procedure := request.Plan.GetComponentRecoveryProcedure()
-		serviceID := procedure.GetCandidateAbsence().GetServiceId()
-		if prior := procedure.GetPredecessor(); prior != nil {
-			serviceID = prior.GetServiceId()
-			validation := base
-			validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")
-			mutation := base
-			mutation.Args = append(append([]string(nil), prefix...),
-				"up", "--detach", "--force-recreate", "--no-deps", "--wait", "--wait-timeout",
-				strconv.FormatUint(uint64(request.GetTimeoutSeconds()), 10))
-			mutation.Args = append(mutation.Args, serviceNames(artifact, []string{serviceID})...)
-			return []runner.RunCmdOpts{validation, mutation}, nil
-		}
-		mutation := base
-		mutation.Args = append(append([]string(nil), prefix...), "rm", "--stop", "--force")
-		mutation.Args = append(mutation.Args, serviceNames(artifact, []string{serviceID})...)
-		return []runner.RunCmdOpts{mutation}, nil
-	}
 	if apply := step.GetComposeWorkloadApply(); apply != nil {
 		workload, err := executionplan.ReleaseWorkloadService(
 			artifact,
@@ -193,9 +174,6 @@ func commandsFor(
 func applyServiceNames(
 	plan *agentpb.ExecutionPlan, step *agentpb.ExecutionStep, artifact *agentpb.ComposeArtifact,
 ) ([]string, error) {
-	if plan.GetEntryMutationProcedure() != nil {
-		return executionplan.EntryMutationServices(plan, step.StepId)
-	}
 	names, selected, err := executionplan.VolumeRemovalServices(plan, step.StepId)
 	if selected || err != nil {
 		return names, err

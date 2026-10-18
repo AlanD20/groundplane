@@ -100,7 +100,7 @@ func (repository *Repository) abandonPreparation(ctx context.Context, expected P
 			}
 			continue
 		}
-		if err := repository.releaseAbandonedPage(ctx, descriptor, read.Values[0].ModRevision, page.Values); err != nil {
+		if err := repository.releaseAbandonedPage(ctx, descriptor, read.Values[0].ModRevision, page.Values, nil); err != nil {
 			return err
 		}
 	}
@@ -111,6 +111,7 @@ func (repository *Repository) releaseAbandonedPage(
 	descriptor Preparation,
 	descriptorRevision int64,
 	page []KeyValue,
+	guards []Condition,
 ) error {
 	references := make([]Reference, len(page))
 	uniqueSources := make([]sourceBatch, 0, len(page))
@@ -158,6 +159,7 @@ func (repository *Repository) releaseAbandonedPage(
 		return corruption("source abandonment membership evidence is incomplete")
 	}
 	conditions := []Condition{{Key: PreparationKey(descriptor.OperationID), ModRevision: descriptorRevision}}
+	conditions = append(conditions, guards...)
 	mutations := make([]Mutation, 0, len(page)*2+len(uniqueSources)+len(bodySources)+1)
 	defer clearMutations(mutations)
 	for index, reverse := range page {

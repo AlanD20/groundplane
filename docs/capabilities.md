@@ -11,6 +11,11 @@ it does not redefine the [product contract](mvp.md) or authorize implementation.
 
 ## Available implementation and remaining proof
 
+The [Task execution redesign](decisions/task-execution-redesign.md) is accepted
+contract only: no replacement engine, new Task protocol or migration is implemented.
+Its remote-host assignment boundary does not establish multi-host runtime support.
+The table below describes the existing implementation and its evidence.
+
 | Area | Implementation position | Remaining qualification or limitation |
 | --- | --- | --- |
 | Host, Controller and Agent | Native Controller, owned Agent and independent etcd lifecycle; staged updates and recovery paths exist. Software preparation supports Controller, Agent or Both from source refs or component releases, with registry-pinned outputs and a separate Apply. [H97](acceptance.md#source-software-preparation-and-activation) qualifies selected source builds and normal activation on Ubuntu amd64. | Published artifact QA is deferred. Partial Both activation, broader interruption/replay, held connections, other operating systems and arm64 remain unqualified; historical passes are bounded. |

@@ -15,8 +15,7 @@ type Server struct {
 	plans                  PlanResolver
 	materials              MaterializationResolver
 	managed                ManagedConfigResolver
-	secrets                BackupSecretSlotResolver
-	checkpoints            BackupCheckpointer
+	secrets                RestoreIdentityReleaser
 	scriptCheckpoints      ScriptCheckpointer
 	workIdentities         WorkIdentityResolver
 	workStarts             WorkStarter
@@ -24,8 +23,15 @@ type Server struct {
 	releaseCheckpoints     ReleaseWorkCheckpointer
 	hierarchyReports       HierarchyReporter
 	attachReports          AttachReporter
+	attachProvisionReports AttachProvisionReporter
 	networkReports         NetworkReporter
+	componentReports       ComponentReporter
+	entryReports           EntryReporter
 	volumeReports          VolumeReporter
+	lifecycleReports       LifecycleReporter
+	backupWorkReports      BackupWorkReporter
+	backupWorkSecrets      BackupWorkSecretResolver
+	removalRecoveryReports RemovalRecoveryReporter
 	scriptCompletion       ScriptWorkCompleter
 	backingHookCheckpoints BackingHookCheckpointer
 	scriptArtifacts        ScriptArtifactResolver
@@ -82,9 +88,9 @@ func NewWithPrivateTransfers(
 	tasks TaskStore,
 	plans PlanResolver,
 	materials MaterializationResolver,
-	secrets BackupSecretSlotResolver,
+	secrets RestoreIdentityReleaser,
 ) *Server {
-	return NewWithRuntimeServices(auth, sessions, tasks, plans, materials, secrets, nil)
+	return NewWithRuntimeServices(auth, sessions, tasks, plans, materials, secrets)
 }
 
 // NewWithRuntimeServices returns a server with all private transfer and
@@ -95,21 +101,19 @@ func NewWithRuntimeServices(
 	tasks TaskStore,
 	plans PlanResolver,
 	materials MaterializationResolver,
-	secrets BackupSecretSlotResolver,
-	checkpoints BackupCheckpointer,
+	secrets RestoreIdentityReleaser,
 ) *Server {
 	if sessions == nil {
 		sessions = NewRegistry()
 	}
 	return &Server{
-		auth:        auth,
-		sessions:    sessions,
-		tasks:       tasks,
-		plans:       plans,
-		materials:   materials,
-		secrets:     secrets,
-		checkpoints: checkpoints,
-		now:         time.Now,
+		auth:      auth,
+		sessions:  sessions,
+		tasks:     tasks,
+		plans:     plans,
+		materials: materials,
+		secrets:   secrets,
+		now:       time.Now,
 	}
 }
 
@@ -121,11 +125,10 @@ func NewWithManagedRuntimeServices(
 	tasks TaskStore,
 	plans PlanResolver,
 	materials MaterializationResolver,
-	secrets BackupSecretSlotResolver,
-	checkpoints BackupCheckpointer,
+	secrets RestoreIdentityReleaser,
 	managed ManagedConfigResolver,
 ) *Server {
-	server := NewWithRuntimeServices(auth, sessions, tasks, plans, materials, secrets, checkpoints)
+	server := NewWithRuntimeServices(auth, sessions, tasks, plans, materials, secrets)
 	server.managed = managed
 	return server
 }
@@ -136,14 +139,13 @@ func NewWithScriptRuntimeServices(
 	tasks TaskStore,
 	plans PlanResolver,
 	materials MaterializationResolver,
-	secrets BackupSecretSlotResolver,
-	checkpoints BackupCheckpointer,
+	secrets RestoreIdentityReleaser,
 	managed ManagedConfigResolver,
 	scripts ScriptArtifactResolver,
 	scriptCheckpoints ScriptCheckpointer,
 ) *Server {
 	server := NewWithManagedRuntimeServices(
-		auth, sessions, tasks, plans, materials, secrets, checkpoints, managed,
+		auth, sessions, tasks, plans, materials, secrets, managed,
 	)
 	server.scriptArtifacts = scripts
 	server.scriptCheckpoints = scriptCheckpoints

@@ -3,19 +3,15 @@ package operations
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -150,7 +146,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 			"Entry mutation requires initialized Environment desired state",
 		)
 	}
-	runtime, err := service.desired.plans.CaptureEntryMutationRuntime(ctx, current)
+	runtime, err := service.desired.runtime.CaptureEntryMutationRuntime(ctx, current)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -241,34 +237,6 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	planID := entryStableIDFromRevision(ids.KindPlan, claim.RevisionID)
-	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task := etcd.TaskRecord{
-		ID:                claim.TaskID,
-		OperationID:       allocator.Named(ids.KindOperation, "entry-bulk-operation"),
-		IdempotencyKey:    idempotencyKey,
-		Owner:             owner,
-		Actor:             taskjournal.TaskActorOperator,
-		Executor:          taskjournal.TaskExecutorAgent,
-		PlanID:            planID,
-		RenderGeneration:  int32(generation),
-		Type:              taskjournal.TaskUpdate,
-		Target:            input.environmentID,
-		Materializations:  materializationRecords,
-		TimeoutSeconds:    controllerrevision.TaskTimeoutSeconds,
-		Status:            taskjournal.TaskStatusPending,
-		NextEventSequence: 1,
-		CreatedAt:         claim.CreatedAt,
-		UpdatedAt:         claim.CreatedAt,
-	}
-	task, err = runtime.PrepareTask(service.desired.volumeRoot, task, candidate,
-		allocator.Named(ids.KindStep, "entry-compose-apply"))
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
 	response, err := entryBulkUpsertResponse(candidateRecords.changes, claim.TaskID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -280,7 +248,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		Locator:   locator,
 		Intent:    claim.Intent,
 		Response:  response,
-		TaskID:    task.ID,
+		TaskID:    claim.TaskID,
 		CreatedAt: claim.CreatedAt,
 		UpdatedAt: claim.CreatedAt,
 	}
@@ -328,12 +296,12 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	result, publicationErr := service.desired.repository.PublishEnvironmentDesiredRevisionWithTask(
-		ctx, project, environment, headRevision, claim,
-		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.environmentID, RevisionID: claim.RevisionID},
-		candidate, nil, nil, nil, groupstore.ReleaseGroupBlueprintPreparedMutation{},
-		componentplanning.ComponentTaskPreparation{}, blueprintplanning.BlueprintAttachTaskPreparation{}, task, marker,
-	)
+	result, publicationErr := service.desired.publishConfiguration(ctx, entryConfigurationPublication{
+		Project: project, Environment: environment, Claim: claim, Runtime: runtime,
+		Candidate: candidate, ReadRevision: current.ReadRevision, Files: materializationRecords,
+		Marker: marker, Action: workexecution.ActionUpdate, TargetID: input.environmentID,
+		TargetName: "Entries",
+	})
 	if publicationErr != nil {
 		if !isUnknownEntryCreationOutcome(publicationErr) {
 			return idempotencyrecord.IdempotencyResponse{}, publicationErr

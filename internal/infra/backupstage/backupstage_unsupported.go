@@ -78,6 +78,11 @@ type Stager struct{}
 type RecoverySession struct{}
 type Stage struct{}
 type Artifact struct{}
+
+func (*Stage) PublishedArtifact(context.Context, string) (*Artifact, ArtifactEvidence, error) {
+	return nil, ArtifactEvidence{}, unsupported()
+}
+
 type ArtifactReader struct{}
 type ValidationSpool struct{}
 

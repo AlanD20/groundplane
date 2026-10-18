@@ -24,7 +24,9 @@ func NewRepository(backend store) (*Repository, error) {
 	return &Repository{store: backend}, nil
 }
 
-func Key(taskID string) string { return "/v1/private/edge-connection-checks/" + taskID }
+const RecordPrefix = "/v1/private/edge-connection-checks/"
+
+func Key(taskID string) string { return RecordPrefix + taskID }
 func OperationKey(operationID string) string {
 	return "/v1/indexes/edge-connection-checks/by-operation/" + operationID
 }

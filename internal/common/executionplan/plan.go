@@ -22,13 +22,10 @@ const (
 	MaximumArtifacts                     = 16
 	MaximumArtifactYAMLBytes             = 1024 * 1024
 	MaximumPlanBytes                     = 4 * 1024 * 1024
-	MaximumAdapterKeyBytes               = 64
-	MaximumAdapterSecretBytes            = 256
 	MaximumBackupSources                 = 12
 	MaximumBackupPrunePoints             = 11
 	MaximumBackupPruneStepTimeoutSeconds = 30 * 60
 	maximumComposeNameBytes              = 255
-	maximumAdapterIdentityBytes          = 63
 	maximumBackupObjectKeyBytes          = 1024
 )
 
@@ -140,7 +137,7 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	} else if plan.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "execution plan render generation must be positive")
 	}
-	if err := validateRuntimeMutationProcedures(plan); err != nil {
+	if err := validateServiceLifecyclePlan(plan); err != nil {
 		return err
 	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_SCRIPT {
@@ -226,9 +223,6 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 		return err
 	}
 	if err := validateCandidateReleasePlan(plan, artifacts); err != nil {
-		return err
-	}
-	if err := validateComponentRecoveryPlan(plan, artifacts); err != nil {
 		return err
 	}
 	if err := validateServiceAbsenceRecoveryPlan(plan, artifacts); err != nil {

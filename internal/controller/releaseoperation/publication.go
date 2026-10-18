@@ -23,6 +23,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/distribution/reference"
@@ -263,8 +264,26 @@ func (service *Service) publish(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if err := service.ledger.ValidatePostgresPatchPlan(ctx, plan, scope.ReadRevision); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	var storageConditions []keyvalue.Condition
+	for _, member := range renderMembers {
+		found := false
+		for _, artifact := range plan.GetArtifacts() {
+			if artifact.GetArtifactId() != member.Render.ArtifactID {
+				continue
+			}
+			if found {
+				return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Release candidate artifact is ambiguous")
+			}
+			found = true
+			conditions, err := service.ledger.PostgresPatchConditions(ctx, artifact, member.Render.ServiceID, scope.ReadRevision)
+			if err != nil {
+				return idempotencyrecord.IdempotencyResponse{}, err
+			}
+			storageConditions = append(storageConditions, conditions...)
+		}
+		if !found {
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Release candidate artifact is missing")
+		}
 	}
 	task, err = service.ledger.PrepareTaskConfigurationAtRevision(ctx, preparedTask, scope.ReadRevision)
 	if err != nil {
@@ -315,8 +334,9 @@ func (service *Service) publish(
 		CreatedAt: now, UpdatedAt: now,
 	}
 	result, err := service.ledger.Publish(ctx, etcd.ReleasePublicationEvidence{
-		ProxyAddresses: addresses,
-		Manifest:       manifest, EnvironmentID: scope.Environment.Record.ID,
+		StorageConditions: storageConditions,
+		ProxyAddresses:    addresses,
+		Manifest:          manifest, EnvironmentID: scope.Environment.Record.ID,
 		ProjectID: scope.Project.Record.ID, TenantID: scope.Tenant.Record.ID,
 		DesiredKind: desiredKind, DesiredID: desiredID, DesiredRevision: desiredRevision,
 		EnvironmentEpochRevision: scope.EnvironmentEpochRevision,

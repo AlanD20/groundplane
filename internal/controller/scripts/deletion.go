@@ -2,17 +2,15 @@ package scripts
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptremoval"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -34,30 +32,30 @@ type scriptDeletionRepository interface {
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 	GetScript(context.Context, string) (etcdstore.Versioned[scriptrecord.Record], error)
-	BeginScriptDeletionWithTask(
+	PublishScriptRemoval(
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[servicerecord.ServiceRecord],
 		etcdstore.Versioned[scriptrecord.Record],
-		deletionrecord.DeletionTombstoneRecord,
-		etcd.TaskRecord,
+		scriptremoval.Input,
+		workexecution.Task,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-func (repository *MutationRepository) BeginScriptDeletionWithTask(
+func (repository *MutationRepository) PublishScriptRemoval(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current etcdstore.Versioned[scriptrecord.Record],
-	tombstone deletionrecord.DeletionTombstoneRecord,
-	task etcd.TaskRecord,
+	input scriptremoval.Input,
+	task workexecution.Task,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.scripts.BeginScriptDeletionWithTask(
-		ctx, environment, project, target, current, tombstone, task, marker,
+	return repository.scripts.PublishScriptRemoval(
+		ctx, environment, project, target, current, input, task, marker,
 	)
 }
 
@@ -265,10 +263,6 @@ func (service *scriptDeletionService) deleteScriptOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
 	targetService, err := service.repository.GetService(ctx, current.Record.ServiceID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -297,20 +291,18 @@ func (service *scriptDeletionService) deleteScriptOnce(
 	}
 
 	now := service.now().UTC()
-	task := etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
-		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
-		Type: taskjournal.TaskRemove, Target: scriptID,
-		Params:         map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceScript},
-		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
-		TimeoutSeconds: scriptDeletionTimeoutSeconds,
-		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	task.PlanHash, err = scriptDeletionPlanHash(scriptID)
+	input := scriptremoval.Input{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
+		TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID,
+		ServiceID: current.Record.ServiceID, ScriptID: scriptID, ScriptRevision: current.Revision,
+		ScriptSetGeneration: current.Record.ScriptSetGeneration, CreatedAt: now}
+	ref, err := input.Reference()
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	task := workexecution.Task{ID: input.TaskID, Action: workexecution.ActionRemove, Actor: workexecution.OperatorActor,
+		Scope:    workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID},
+		TargetID: scriptID, TargetName: current.Record.Desired.Slug, Intent: ref, ExpectedItems: 1,
+		CreatedAt: now, Deadline: now.Add(time.Duration(scriptDeletionTimeoutSeconds) * time.Second)}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -325,13 +317,8 @@ func (service *scriptDeletionService) deleteScriptOnce(
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	tombstone := deletionrecord.DeletionTombstoneRecord{
-		TargetKind: deletionrecord.DeletionTargetScript, TargetID: scriptID,
-		TargetRevision: current.Revision, TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing,
-		CreatedAt: now, UpdatedAt: now,
-	}
-	result, deleteErr := service.repository.BeginScriptDeletionWithTask(
-		ctx, environment, project, targetService, current, tombstone, task, marker,
+	result, deleteErr := service.repository.PublishScriptRemoval(
+		ctx, environment, project, targetService, current, input, task, marker,
 	)
 	if deleteErr != nil {
 		if !isUnknownScriptDeletionOutcome(deleteErr) {
@@ -355,20 +342,6 @@ func (service *scriptDeletionService) deleteScriptOnce(
 			"Script deletion resolution is invalid",
 		)
 	}
-}
-
-func scriptDeletionPlanHash(scriptID string) (string, error) {
-	value, err := json.Marshal(struct {
-		Version  int    `json:"version"`
-		Type     string `json:"type"`
-		ScriptID string `json:"script_id"`
-	}{Version: 1, Type: string(taskjournal.TaskRemove), ScriptID: scriptID})
-	if err != nil {
-		return "", errs.Wrap(errs.KindInternal, err)
-	}
-	digest := sha256.Sum256(value)
-	clear(value)
-	return hex.EncodeToString(digest[:]), nil
 }
 
 func isUnknownScriptDeletionOutcome(err error) bool {

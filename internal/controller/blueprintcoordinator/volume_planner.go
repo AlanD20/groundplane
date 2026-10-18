@@ -5,6 +5,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -25,7 +26,7 @@ func NewVolumePlanner(hosts hostbindings.Reader) (*VolumePlanner, error) {
 }
 
 func (planner *VolumePlanner) PrepareBlueprintWork(ctx context.Context, task workexecution.Task,
-	unit blueprintunits.Unit, baseline blueprintunits.Snapshot,
+	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
 ) (PreparedUnit, error) {
 	if task.Validate() != nil || task.Action != workexecution.ActionApply || task.PublicationComplete ||
 		task.Scope.EnvironmentID != baseline.EnvironmentID || baseline.ReadRevision <= 0 ||

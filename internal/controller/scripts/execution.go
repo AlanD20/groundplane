@@ -2,19 +2,17 @@ package scripts
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
+	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -62,43 +60,46 @@ func (service *scriptMutationService) RunScript(
 	}
 
 	now := service.now().UTC()
-	owner, err := taskjournal.EnvironmentTaskOwner(sources.Project.Record, sources.Environment.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task := etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
-		PlanID: ids.New(ids.KindPlan), Type: taskjournal.TaskScript, Target: scriptID,
-		Params: map[string]string{
-			scriptexecutions.ScriptExecutionIDParam: ids.NewULID(),
-			scriptexecutions.ScriptGenerationParam:  jsonNumber(sources.BodyGeneration.Record.Generation),
-		},
-		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
-		TimeoutSeconds: executionplan.ScriptExecutionTimeoutSeconds,
-		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}
+	taskID, workID := ids.New(ids.KindTask), ids.New(ids.KindWorkItem)
+	operationID, planID := ids.New(ids.KindOperation), ids.New(ids.KindPlan)
 	prepared, err := service.preparation.Prepare(ctx, sources)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	plan, err := taskplanning.BuildManualScriptPlan(ctx, taskplanning.ManualScriptPlanInput{
-		TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID, StepID: task.Steps[0].ID,
-		ExecutionID: task.Params[scriptexecutions.ScriptExecutionIDParam], SnapshotID: ids.NewULID(), Sources: sources,
+	runner, err := taskplanning.PrepareManualScriptRunner(ctx, taskplanning.ScriptRunnerInput{
+		TaskID: taskID, WorkItemID: workID, OperationID: operationID, PlanID: planID,
+		ExecutionID: ids.NewULID(), SnapshotID: ids.NewULID(), Sources: sources,
 		Preparation: prepared,
 	})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	task.RenderGeneration = int32(plan.RenderGeneration)
-	task.PlanHash = hex.EncodeToString(plan.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan)
-	execution, err := etcd.NewScriptExecutionRecord(task, plan, now)
+	execution, err := scriptexecutions.NewExecution(scriptexecutions.ExecutionInput{
+		TaskID: taskID, WorkItemID: workID, OperationID: operationID, PlanID: planID,
+		ScriptSetGeneration: sources.Script.Record.ScriptSetGeneration,
+		Snapshot:            runner.Snapshot, Projection: runner.Projection, Run: runner.Run, Body: runner.Body,
+	}, now)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	defer clear(execution.Plan)
-	defer clear(execution.Snapshot)
+	defer execution.Clear()
+	task := workexecution.Task{
+		ID: taskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionScript,
+		Scope: workexecution.Scope{TenantID: sources.Project.Record.TenantID,
+			ProjectID: sources.Project.Record.ID, EnvironmentID: sources.Environment.Record.ID},
+		TargetID: scriptID, TargetName: sources.Script.Record.Desired.Slug, Intent: execution.Input,
+		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(15 * time.Minute), ExpectedItems: 1,
+	}
+	item := workexecution.Item{
+		ID: workID, TaskID: taskID, Operation: workexecution.Script, TargetID: scriptID,
+		Placement: service.placement, Input: &execution.Input,
+		Claims: []workexecution.Claim{
+			{ScopeID: sources.Service.Record.Desired.ID},
+			{HostID: service.placement.HostID, ScopeID: sources.Service.Record.Desired.ID},
+		},
+		Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
+		CreatedAt: now, UpdatedAt: now, Deadline: task.Deadline,
+	}
 
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
@@ -121,11 +122,6 @@ func (service *scriptMutationService) RunScript(
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
 	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.PublishExecutionWithTask(ctx, sources, execution, task, marker)
+	result, mutationErr := service.repository.PublishScriptWork(ctx, sources, execution, task, item, marker)
 	return service.resolveScriptMutation(ctx, locator, evidence, result, mutationErr, response)
-}
-
-func jsonNumber(value uint64) string {
-	encoded, _ := json.Marshal(value)
-	return string(encoded)
 }

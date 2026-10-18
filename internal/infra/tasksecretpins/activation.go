@@ -7,14 +7,14 @@ import (
 )
 
 // Activation returns the constant-size root transition that the caller must
-// commit atomically with the owning Task publication and its operation CAS.
+// commit atomically with the owning work input publication and its operation CAS.
+// Retry keeps the same work identity and root; no ownership transfer is needed.
 func Activation(prepared Prepared) (Fragment, error) {
 	if err := validatePrepared(prepared); err != nil {
 		return Fragment{}, err
 	}
 	root := prepared.record
 	root.Phase = phaseActive
-	root.AttemptID = root.TaskID
 	value, err := encodeSet(root)
 	if err != nil {
 		return Fragment{}, err
@@ -31,36 +31,17 @@ func Activation(prepared Prepared) (Fragment, error) {
 	}, nil
 }
 
-// RetainForRetry transfers live attempt authority in the same transaction as
-// Retry publication. This changes the root revision even if an attempt starts
-// and finishes between an expiry reader's checks and its final compare.
-func RetainForRetry(active ActiveRoot, taskID string) (Fragment, error) {
-	if validateActive(active) != nil || active.record.Phase != phaseActive ||
-		ids.Validate(ids.KindTask, taskID) != nil || taskID == active.record.AttemptID {
-		return Fragment{}, validation("Secret pin Retry authority is invalid")
-	}
-	next := active.record
-	next.AttemptID = taskID
-	value, err := encodeSet(next)
-	if err != nil {
-		return Fragment{}, err
-	}
-	return Fragment{
-		Conditions: []Condition{{Key: RootKey(next.OperationID), ModRevision: active.revision}},
-		Mutations:  []Mutation{{Type: MutationPut, Key: RootKey(next.OperationID), Value: value}},
-	}, nil
-}
-
 // LoadActive reconstructs restart-safe operation ownership from the current
 // validated root. A missing root is distinct from corrupt or conflicting state.
 func (repository *Repository) LoadActive(
 	ctx context.Context,
 	operationID string,
+	revision int64,
 ) (ActiveRoot, bool, error) {
-	if ctx == nil || ids.Validate(ids.KindOperation, operationID) != nil {
+	if ctx == nil || revision < 0 || ids.Validate(ids.KindOperation, operationID) != nil {
 		return ActiveRoot{}, false, validation("active Secret pin root lookup is invalid")
 	}
-	read, err := repository.read(ctx, []string{RootKey(operationID), PreparationKey(operationID)}, 0)
+	read, err := repository.read(ctx, []string{RootKey(operationID), PreparationKey(operationID)}, revision)
 	if err != nil {
 		return ActiveRoot{}, false, err
 	}

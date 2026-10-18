@@ -81,7 +81,7 @@ func (resolver *TaskPlanResolver) buildReleaseNetworkPlan(child, parent etcd.Tas
 		child.Owner != parent.Owner || child.Target != parent.Owner.EnvironmentID ||
 		child.RenderGeneration != parent.RenderGeneration || child.RenderGeneration <= 0 ||
 		child.TimeoutSeconds <= 0 || child.TimeoutSeconds > math.MaxUint32 ||
-		len(child.Materializations) != 0 || child.Configuration != nil || child.EntryRuntime != nil {
+		len(child.Materializations) != 0 || child.Configuration != nil {
 		return nil, nil, errs.New(errs.KindValidationFailed, "release network Task ownership is invalid")
 	}
 	planTime, err := ids.Timestamp(ids.KindPlan, child.PlanID)

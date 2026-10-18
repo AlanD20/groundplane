@@ -21,7 +21,7 @@ func (c *Client) sendReady(stream agentStream) error {
 		return err
 	}
 	clean = clean && c.staging != nil && c.staging.ready && !c.staging.reinspect.Load()
-	capacity := c.pool.Capacity()
+	capacity := c.availableWorkCapacity()
 	if !clean {
 		capacity = 0
 	}
@@ -38,4 +38,12 @@ func (c *Client) sendReady(stream agentStream) error {
 			ArchitectureVariant: variant,
 		},
 	}})
+}
+
+func (c *Client) availableWorkCapacity() int {
+	capacity := c.pool.Capacity()
+	if c.executionWorkers != nil {
+		capacity -= c.executionWorkers.limit - c.executionWorkers.capacity()
+	}
+	return max(0, capacity)
 }

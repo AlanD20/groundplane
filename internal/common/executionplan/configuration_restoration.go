@@ -134,9 +134,7 @@ func ConfigurationFilePair(plan *agentpb.ExecutionPlan, stepID string) *agentpb.
 	return nil
 }
 
-// ConfigurationRestorationForPlan returns the one closed file-restoration
-// procedure. Candidate Release and authored Component procedures are mutually
-// exclusive under complete plan validation.
+// ConfigurationRestorationForPlan returns the captured Release file-restoration procedure.
 func ConfigurationRestorationForPlan(plan *agentpb.ExecutionPlan) *agentpb.ConfigurationRestoration {
 	if plan == nil {
 		return nil
@@ -144,7 +142,7 @@ func ConfigurationRestorationForPlan(plan *agentpb.ExecutionPlan) *agentpb.Confi
 	if procedure := plan.GetCandidateReleaseProcedure(); procedure != nil {
 		return procedure.GetConfigurationRestoration()
 	}
-	return plan.GetComponentRecoveryProcedure().GetConfigurationRestoration()
+	return nil
 }
 
 // ConfigurationSnapshotMatches binds the retained source identity without

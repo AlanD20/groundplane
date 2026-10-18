@@ -1,26 +1,19 @@
 package executionplan
 
 import (
-	"slices"
-	"sort"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/volumeexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
-	"gopkg.in/yaml.v3"
 )
 
 func dependencyFreeServiceSelection(
 	plan *agentpb.ExecutionPlan, step *agentpb.ExecutionStep, artifacts map[string]*agentpb.ComposeArtifact,
 ) bool {
-	if blueprintManagedServiceSelection(plan.Operation, step.GetComposeApply(), artifacts) ||
-		routeManagedServiceSelection(plan, step, artifacts) {
+	if blueprintManagedServiceSelection(plan.Operation, step.GetComposeApply(), artifacts) {
 		return true
-	}
-	if plan.GetEntryMutationProcedure() != nil {
-		return validateEntryMutationPlan(plan) == nil
 	}
 	if _, selected, err := AttachMutationServices(plan, step.GetStepId()); selected {
 		return err == nil
@@ -59,91 +52,12 @@ func VolumeRemovalServices(plan *agentpb.ExecutionPlan, stepID string) ([]string
 			candidate = artifact
 		}
 	}
-	if baseline == nil || candidate == nil || baseline == candidate ||
-		baseline.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-		candidate.OwnerKind != baseline.OwnerKind || candidate.OwnerId != baseline.OwnerId ||
-		candidate.ProjectName != baseline.ProjectName || candidate.AuthorizedVolumeDir != baseline.AuthorizedVolumeDir ||
-		len(candidate.Services) != len(baseline.Services) {
+	if remove.DockerName != "gp_vol_"+strings.ToLower(plan.TargetId) {
 		return invalid()
 	}
-	found := false
-	for _, volume := range baseline.Volumes {
-		if volume.GetVolumeId() == plan.TargetId && volume.GetComposeName() == directory.ComposeKey &&
-			volume.GetDockerName() == remove.DockerName {
-			found = true
-		}
-	}
-	for _, volume := range candidate.Volumes {
-		if volume.GetVolumeId() == plan.TargetId || volume.GetComposeName() == directory.ComposeKey {
-			return invalid()
-		}
-	}
-	if !found {
-		return invalid()
-	}
-	priorMounts, err := volumeRemovalMounts(baseline, directory.ComposeKey)
-	if err != nil {
-		return nil, true, err
-	}
-	nextMounts, err := volumeRemovalMounts(candidate, directory.ComposeKey)
-	if err != nil {
-		return nil, true, err
-	}
-	var names []string
-	for index, service := range baseline.Services {
-		if service == nil || !proto.Equal(service, candidate.Services[index]) || nextMounts[service.ComposeName] {
-			return invalid()
-		}
-		if priorMounts[service.ComposeName] {
-			if !slices.Contains(apply.ServiceIds, service.ServiceId) {
-				return invalid()
-			}
-			names = append(names, service.ComposeName)
-		}
-	}
-	sort.Strings(names)
-	return names, true, nil
-}
-
-func volumeRemovalMounts(artifact *agentpb.ComposeArtifact, key string) (map[string]bool, error) {
-	var document struct {
-		Services map[string]struct {
-			Volumes []yaml.Node `yaml:"volumes"`
-		} `yaml:"services"`
-	}
-	if err := yaml.Unmarshal(artifact.CanonicalYaml, &document); err != nil {
-		return nil, errs.Wrap(errs.KindValidationFailed, err)
-	}
-	if len(document.Services) != len(artifact.Services) {
-		return nil, errs.New(errs.KindValidationFailed, "Volume removal runtime mapping is incomplete")
-	}
-	result := make(map[string]bool, len(document.Services))
-	for _, service := range artifact.Services {
-		entry, ok := document.Services[service.GetComposeName()]
-		if !ok {
-			return nil, errs.New(errs.KindValidationFailed, "Volume removal runtime Service is absent")
-		}
-		for _, mount := range entry.Volumes {
-			var source, kind string
-			switch mount.Kind {
-			case yaml.ScalarNode:
-				source, _, _ = strings.Cut(mount.Value, ":")
-			case yaml.MappingNode:
-				var value struct {
-					Source string `yaml:"source"`
-					Type   string `yaml:"type"`
-				}
-				if err := mount.Decode(&value); err != nil {
-					return nil, errs.Wrap(errs.KindValidationFailed, err)
-				}
-				source, kind = value.Source, value.Type
-			default:
-				return nil, errs.New(errs.KindValidationFailed, "Volume removal mount is invalid")
-			}
-			if source == key && (kind == "" || kind == "volume") {
-				result[service.ComposeName] = true
-			}
-		}
-	}
-	return result, nil
+	names, err := (volumeexecution.Removal{
+		VolumeID: plan.TargetId, Key: directory.ComposeKey,
+		Baseline: baseline, Candidate: candidate, ConsumerIDs: apply.ServiceIds,
+	}).Consumers()
+	return names, true, err
 }

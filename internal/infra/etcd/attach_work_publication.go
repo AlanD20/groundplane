@@ -94,7 +94,7 @@ func (repository *AttachRepository) PublishDetachWork(ctx context.Context, reque
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearRouteHeadPublication(desired)
+	defer clearDesiredMutationFragment(desired)
 	ancestry, err := hierarchydeletion.BindMutationEpochs(ctx, repository.store, source.SnapshotRevision,
 		hierarchydeletion.MutationScope{TenantID: source.TenantID, ProjectID: source.ProjectID}, nil, nil)
 	if err != nil {
@@ -114,7 +114,7 @@ func (repository *AttachRepository) PublishDetachWork(ctx context.Context, reque
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	captured, err := inputs.PrepareDetachPublicationCapture(ctx, task, item, request.Input, request.Capture, admission)
+	captured, err := inputs.PrepareDetachPublicationCapture(ctx, workqueue.TaskSnapshot{Task: task}, item, request.Input, request.Capture, admission)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -163,16 +163,16 @@ func (journal *Journal) Close() error {
 	return storage(errors.Join(journal.log.Close(), unix.Close(journal.directoryFD), unix.Close(journal.rootFD)))
 }
 
-func (journal *Journal) CurrentCredit(ctx context.Context) (*agentpb.BackupVolumeManifestAckCredit, error) {
+func (journal *Journal) Position(ctx context.Context) (*agentpb.BackupVolumeManifestAckCredit, bool, error) {
 	if journal == nil {
-		return nil, invalid("Volume manifest receiver is unavailable")
+		return nil, false, invalid("Volume manifest receiver is unavailable")
 	}
 	journal.mu.Lock()
 	defer journal.mu.Unlock()
 	if err := journal.available(ctx); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return proto.CloneOf(journal.state.credits[len(journal.state.credits)-1]), nil
+	return proto.CloneOf(journal.state.credits[len(journal.state.credits)-1]), journal.state.complete && !journal.state.partial, nil
 }
 
 // AcceptFrame persists exact frame bytes and the resulting cumulative credit

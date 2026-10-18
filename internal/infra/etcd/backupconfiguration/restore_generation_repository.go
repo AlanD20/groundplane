@@ -23,10 +23,7 @@ func (repository *ConfigTransferRepository) SealConfigRestoreGeneration(
 	binding := record.Owner.Transfer.Binding
 	cursor, found, err := repository.ReadConfigTransferCursor(
 		ctx,
-		binding.TaskID,
-		binding.AssignmentID,
-		binding.StepID,
-		binding.ExecutionID,
+		binding,
 		0,
 	)
 	if err != nil {
@@ -35,15 +32,11 @@ func (repository *ConfigTransferRepository) SealConfigRestoreGeneration(
 	if !found || cursor.Record.Owner != record.Owner.Transfer || cursor.Record.MetadataAcceptedCreditSequence == 0 {
 		return 0, captureSnapshotConflict()
 	}
-	conditions, err := repository.guard(ctx, record.Owner.Transfer, cursor.ReadRevision)
+	conditions, err := repository.restoreGuard(ctx, record.Owner, cursor.ReadRevision)
 	if err != nil {
 		return 0, err
 	}
-	more, err := repository.restoreGuard(ctx, record.Owner, cursor.ReadRevision)
-	if err != nil {
-		return 0, err
-	}
-	conditions = append(conditions, more...)
+
 	keys := []string{
 		ConfigRestoreGenerationKey(record.Owner),
 		ConfigTransferCreditKey(binding, cursor.Record.LastCreditSequence),

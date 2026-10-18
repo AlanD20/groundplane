@@ -50,7 +50,6 @@ func (repository *RunnerRepository) LoadRunnerCheckSource(
 			string(deletions.DeletionTargetRunner),
 			runnerID,
 		),
-		runners.RunnerRemovalIntentKey(runnerID),
 		runnerchecks.ActiveKey(runnerID),
 		runnerchecks.LatestKey(runnerID),
 	}
@@ -74,7 +73,7 @@ func (repository *RunnerRepository) LoadRunnerCheckSource(
 			"Runner changed; refresh before checking connections",
 		)
 	}
-	if read.Values[2] == nil || read.Values[3] != nil || read.Values[4] != nil || read.Values[5] != nil {
+	if read.Values[2] == nil || read.Values[3] != nil || read.Values[4] != nil {
 		return RunnerCheckSource{}, errs.New(
 			errs.KindResourceInUse,
 			"Runner runtime is unavailable, being removed or already has an active connection check",
@@ -142,7 +141,6 @@ func (repository *RunnerRepository) RunnerCheckSourcesChanged(
 			string(deletions.DeletionTargetRunner),
 			source.RunnerID,
 		),
-		runners.RunnerRemovalIntentKey(source.RunnerID),
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
@@ -155,8 +153,7 @@ func (repository *RunnerRepository) RunnerCheckSourcesChanged(
 		return false, errs.New(errs.KindInternal, "Runner diagnostic freshness read is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil || read.Values[3] != nil ||
-		read.Values[4] != nil {
+	if read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil || read.Values[3] != nil {
 		return true, nil
 	}
 	current, err := runners.DecodeRunnerAggregate(read.Values[0], read.Values[1])

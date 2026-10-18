@@ -1,40 +1,21 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Inspector } from "@/components/common/inspector";
 import { CompactReference } from "@/components/common/compact-reference";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { ImageFetchTaskDetails } from "@/features/image-delivery/image-fetch-task-details";
-import { ConnectorCheckPanel } from "@/features/connectors/connector-check-panel";
-import { BackingCheckPanel } from "@/features/attach/backing-check-panel";
-import { EdgeCheckPanel } from "@/features/environment/edge-check-panel";
-import { DNSCheckPanel } from "@/features/platform-component/dns-check-panel";
-import { RunnerCheckPanel } from "@/features/runners/runner-check-panel";
-import { requestTask } from "@/features/task/api";
-import { taskFromAPI } from "@/features/task/journal-model";
-import {
-  TaskIdentity,
-  TaskOverview,
-  taskPresentation,
-} from "@/features/task/task-overview";
-import { TaskExecutionTerminal } from "@/features/task/task-execution-terminal";
-import { BlueprintExecutions } from "@/features/task/blueprint-executions";
-import { useStore } from "@/lib/store";
-import { taskDetailActions } from "@/lib/task-detail-actions";
+import { requestTask, abortTask, type TaskResponse } from "@/features/task/api";
+import { TaskExecution } from "@/features/task/task-execution";
 import type {
   ActivityEntry,
   TaskJournalScope,
   TaskJournalSurface,
 } from "@/lib/types";
-import { RefreshCw, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 
 export function TaskDetailDrawer({
   entry,
   taskId,
-  scope,
-  surface,
   onOpenChange,
 }: {
   scope: TaskJournalScope;
@@ -43,161 +24,103 @@ export function TaskDetailDrawer({
 } & (
   { entry: ActivityEntry; taskId?: never } | { taskId: string; entry?: never }
 )) {
-  const store = useStore();
-  const [detail, setDetail] = useState<ActivityEntry | null>(null);
-  const [detailLoading, setDetailLoading] = useState(true);
-  const [detailError, setDetailError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionPending, setActionPending] = useState(false);
-  const [retryReview, setRetryReview] = useState(false);
+  const id = taskId ?? entry!.id;
+  const [detail, setDetail] = useState<TaskResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState(false);
   const [reload, setReload] = useState(0);
-  const [executionLimit, setExecutionLimit] = useState(5);
-  const [executionCursors, setExecutionCursors] = useState<string[]>([""]);
-  const suppliedId = taskId ?? entry!.id;
-  const [id, setId] = useState(suppliedId);
-  const [, setSearch] = useSearchParams();
+  const [page, setPage] = useState<{ after?: string; revision?: number }>({});
   useEffect(() => {
-    setId(suppliedId);
-    setExecutionCursors([""]);
-  }, [suppliedId]);
-  const task = detail ?? (id === suppliedId ? entry : undefined);
-
+    setPage({});
+    setDetail(null);
+  }, [id]);
   useEffect(() => {
     const controller = new AbortController();
-    setActionError(null);
-    setActionPending(false);
-    setDetailLoading(true);
-    setDetailError(null);
-    setDetail(null);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
-      let terminal = false;
+      let finished = false;
       try {
-        const loaded = taskFromAPI(
-          await requestTask(
-            id,
-            controller.signal,
-            executionCursors.length > 1 || executionLimit !== 5
-              ? { limit: executionLimit, cursor: executionCursors.at(-1) }
-              : undefined,
-          ),
-        );
+        const response = await requestTask(id, controller.signal, {
+          limit: 25,
+          ...page,
+        });
         if (controller.signal.aborted) return;
-        setDetail(loaded);
-        setDetailError(null);
-        terminal = ["completed", "failed", "timed_out", "aborted"].includes(
-          loaded.status,
-        );
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        setDetailError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load Task details",
-        );
+        setDetail(response);
+        setError(null);
+        finished = !!response.task.finished_at;
+      } catch (cause) {
+        if (!controller.signal.aborted)
+          setError(
+            cause instanceof Error ? cause.message : "Unable to load Task",
+          );
       } finally {
-        if (!controller.signal.aborted) setDetailLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
-      if (!terminal && !controller.signal.aborted)
-        timer = setTimeout(() => void poll(), 1000);
+      if (!controller.signal.aborted && !finished && !page.revision)
+        timer = setTimeout(() => void poll(), 2000);
     };
+    setLoading(true);
     void poll();
     return () => {
       controller.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [id, reload, executionLimit, executionCursors]);
-
-  const actions = taskDetailActions(detail);
-
-  async function runAction(action: "abort" | "retry") {
-    setActionError(null);
-    setActionPending(true);
+  }, [id, page, reload]);
+  const task = detail?.task.id === id ? detail.task : null;
+  async function cancel() {
+    setPending(true);
+    setError(null);
     try {
-      if (action === "abort") {
-        await store.abortTask(id);
-        setReload((value) => value + 1);
-      } else {
-        const nextId = await store.retryTask(id);
-        setReload((value) => value + 1);
-        setId(nextId);
-        setSearch((current) => {
-          const next = new URLSearchParams(current);
-          if (next.get("task") === id) next.set("task", nextId);
-          return next;
-        });
-      }
-      setActionPending(false);
-      setRetryReview(false);
-      void store.loadTaskJournal(surface, scope).catch(() => undefined);
-    } catch (error) {
-      setActionError(
-        error instanceof Error ? error.message : `Unable to ${action} Task`,
+      await abortTask(id);
+      setPage({});
+      setReload((value) => value + 1);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to request cancellation",
       );
-      setActionPending(false);
+    } finally {
+      setPending(false);
     }
   }
-
   return (
     <Inspector
       open
       onOpenChange={onOpenChange}
-      context={task ? `Task / ${taskPresentation(task, store).scope}` : "Task"}
+      context="Task"
       title={
         task
-          ? task.imageFetch
-            ? task.title
-            : taskPresentation(task, store).title
+          ? `${task.action.replaceAll("_", " ")} · ${task.target_name}`
           : "Task details"
       }
       status={task && <StatusBadge status={task.status} />}
-      actions={
-        task && <TaskIdentity task={task} onClose={() => onOpenChange(false)} />
-      }
       footer={
         <>
-          {actions.abort && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setPage({});
+              setReload((value) => value + 1);
+            }}
+          >
+            Refresh
+          </Button>
+          {task?.cancel.allowed && (
             <Button
               variant="destructive"
               size="sm"
-              disabled={actionPending}
-              onClick={() => void runAction("abort")}
+              disabled={pending}
+              onClick={() => void cancel()}
             >
-              <X className="size-4" /> Abort
-            </Button>
-          )}
-          {actions.cancel && (
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={actionPending}
-              onClick={() => void runAction("abort")}
-            >
-              <X className="size-4" /> Cancel
-            </Button>
-          )}
-          {actions.retry && task?.type !== "check" && (
-            <Button
-              size="sm"
-              disabled={actionPending}
-              onClick={() =>
-                detail?.interruptedDetachRetry
-                  ? setRetryReview(true)
-                  : void runAction("retry")
-              }
-            >
-              <RefreshCw className="size-4" />{" "}
-              {detail?.interruptedDetachRetry
-                ? "Retry captured Detach hook"
-                : detail?.recoveryRetryAvailable
-                  ? "Retry recovery"
-                  : "Retry"}
+              Request cancellation
             </Button>
           )}
           <Button
             variant="outline"
             size="sm"
-            disabled={actionPending}
             onClick={() => onOpenChange(false)}
           >
             Close
@@ -205,162 +128,105 @@ export function TaskDetailDrawer({
         </>
       }
     >
-      <div className="flex flex-col gap-4">
-        {retryReview && detail?.interruptedDetachRetry && (
-          <section
-            className="space-y-3 rounded-lg border border-border bg-muted/30 p-4"
-            aria-label="Confirm captured Detach hook retry"
+      {loading && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading Task…
+        </p>
+      )}
+      {error && (
+        <div role="alert" className="space-y-2 text-sm text-destructive">
+          <p>{error}</p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setPage({});
+              setReload((value) => value + 1);
+            }}
           >
-            <h3 className="text-sm font-medium">
-              Run the captured Detach hook again?
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              The hook started, but no result was saved. It may already have
-              changed the backing service. Retry runs the original command and
-              inputs once in the same Task. Only continue if repeating it is
-              safe.
+            Retry loading
+          </Button>
+        </div>
+      )}
+      {task && detail && (
+        <div className="min-w-0 space-y-4">
+          <section className="space-y-2 rounded-lg border border-border p-4">
+            <p className="text-sm">
+              Created {new Date(task.created_at).toLocaleString()}
+              {task.finished_at
+                ? ` · Finished ${new Date(task.finished_at).toLocaleString()}`
+                : ` · Deadline ${new Date(task.deadline).toLocaleString()}`}
             </p>
-            <CompactReference
-              value={detail.interruptedDetachRetry.attach_id}
-              label="Attach"
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                disabled={actionPending}
-                onClick={() => void runAction("retry")}
-              >
-                Authorize one retry
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={actionPending}
-                onClick={() => setRetryReview(false)}
-              >
-                Cancel
-              </Button>
-            </div>
-          </section>
-        )}
-        {detailLoading && (
-          <p
-            role="status"
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground"
-          >
-            Loading Task details…
-          </p>
-        )}
-        {detailError && (
-          <div
-            role="alert"
-            className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-          >
-            <span>{detailError}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setExecutionCursors([""]);
-                setReload((value) => value + 1);
-              }}
-            >
-              Retry
-            </Button>
-          </div>
-        )}
-        {detail && task && (
-          <>
-            {task.imageFetch ? (
-              <>
-                <TaskExecutionTerminal task={task} />
-                <ImageFetchTaskDetails task={task} />
-              </>
-            ) : (
-              <>
-                <TaskOverview task={task}>
-                  {task.executor === "blueprint" ? (
-                    <BlueprintExecutions
-                      task={task}
-                      limit={executionLimit}
-                      loading={detailLoading}
-                      previous={executionCursors.length > 1}
-                      onLimit={(value) => {
-                        setExecutionLimit(value);
-                        setExecutionCursors([""]);
-                      }}
-                      onPrevious={() =>
-                        setExecutionCursors((current) => current.slice(0, -1))
-                      }
-                      onNext={(cursor) =>
-                        setExecutionCursors((current) => [...current, cursor])
-                      }
-                    />
-                  ) : undefined}
-                </TaskOverview>
-                {task.type === "check" &&
-                  task.resourceKind === "connector" &&
-                  task.environmentId && (
-                    <ConnectorCheckPanel
-                      environmentId={task.environmentId}
-                      identity={task.id}
-                      taskId={task.id}
-                      open
-                    />
-                  )}
-                {task.type === "check" &&
-                  task.resourceKind === "attach" &&
-                  task.environmentId && (
-                    <BackingCheckPanel
-                      environmentId={task.environmentId}
-                      taskId={task.id}
-                      open
-                    />
-                  )}
-                {task.type === "check" &&
-                  (task.resourceKind === "route" ||
-                    task.resourceKind === "component") &&
-                  task.environmentId && (
-                    <EdgeCheckPanel
-                      environmentId={task.environmentId}
-                      taskId={task.id}
-                      open
-                    />
-                  )}
-                {task.type === "check" &&
-                  task.resourceKind === "component" &&
-                  !task.environmentId && (
-                    <DNSCheckPanel
-                      componentId={task.target}
-                      taskId={task.id}
-                      open
-                    />
-                  )}
-                {task.type === "check" && task.resourceKind === "runner" && (
-                  <RunnerCheckPanel
-                    runnerId={task.target}
-                    taskId={task.id}
-                    open
-                  />
-                )}
-              </>
+            <p className="text-sm text-muted-foreground">
+              {task.counts.succeeded} succeeded · {task.counts.failed} failed ·{" "}
+              {task.counts.running} running · {task.counts.waiting} waiting
+            </p>
+            {task.stop_requested && (
+              <p className="text-sm">
+                Stop requested. Running effects must be accounted for before
+                resource protection is released.
+              </p>
             )}
-          </>
-        )}
-        {actionError && (
-          <p
-            role="alert"
-            className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-          >
-            {actionError}
-          </p>
-        )}
-        {actionPending && (
-          <p role="status" className="text-xs text-muted-foreground">
-            Submitting Task action…
-          </p>
-        )}
-      </div>
+            {task.status === "attention_required" && (
+              <p role="status" className="text-sm text-warning">
+                Work needs attention. Inspect its outcome and cleanup state
+                below.
+              </p>
+            )}
+            {!task.cancel.allowed && task.cancel.reason && (
+              <p className="text-xs text-muted-foreground">
+                {task.cancel.reason}
+              </p>
+            )}
+            <CompactReference value={task.id} label="Task" />
+          </section>
+          {task.history_expired ? (
+            <p className="text-sm text-muted-foreground">
+              Execution details are no longer retained.
+            </p>
+          ) : (
+            <>
+              <TaskExecution
+                detail={detail}
+                onChanged={() => {
+                  setPage({});
+                  setReload((value) => value + 1);
+                }}
+              />
+              <div className="flex gap-2">
+                {page.after && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPage({})}
+                  >
+                    First work items
+                  </Button>
+                )}
+                {detail.work.more && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setPage({
+                        after: detail.work.after,
+                        revision: detail.work.revision,
+                      })
+                    }
+                  >
+                    Next work items
+                  </Button>
+                )}
+              </div>
+              {page.revision && (
+                <p className="text-xs text-muted-foreground">
+                  Browsing a fixed snapshot. Refresh to see current execution.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </Inspector>
   );
 }

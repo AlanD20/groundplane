@@ -2,10 +2,7 @@ package agentchannel
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
-	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backupvolumemanifest"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -113,74 +110,9 @@ type ManagedConfigResolver interface {
 	) (ManagedConfigSource, error)
 }
 
-// BackupSecretSlotResolver returns task-owned transient plaintext slots. The
-// channel takes ownership of every returned buffer and clears it on every path.
-type BackupSecretSlotResolver interface {
-	ResolveBackupSecretSlots(
-		context.Context,
-		backupsecret.Request,
-	) (map[agentpb.BackupSecretSlotPurpose][]byte, error)
+// RestoreIdentityReleaser clears Task-owned transient restore identities.
+type RestoreIdentityReleaser interface {
 	ReleaseRestoreIdentity(context.Context, string) error
-}
-
-// BackupCheckpointer durably accepts one Agent operation boundary before the
-// stream acknowledges that the next side effect is authorized.
-type BackupCheckpointer interface {
-	ReadRestoreNewVolumeManifest(
-		context.Context,
-		string,
-		uint64,
-		string,
-		string,
-		string,
-	) (backupvolumemanifest.Complete, error)
-	BeginVolumeManifest(context.Context, string, uint64, string, string, string,
-		agentpb.BackupVolumeManifestDirection) (*agentpb.BackupVolumeManifestAckCredit, bool, error)
-	AcceptVolumeManifestFrame(context.Context, string, uint64,
-		*agentpb.BackupVolumeManifestTransfer) (*agentpb.BackupVolumeManifestAckCredit, error)
-	StreamBackupConfigRestore(
-		context.Context,
-		string,
-		uint64,
-		*agentpb.BackupTaskAuthority,
-		string,
-		backupconfigtransfer.ReceiverTransport,
-	) error
-	StreamBackupConfigCapture(
-		context.Context, string, uint64, *agentpb.BackupTaskAuthority, string,
-		*agentpb.BackupConfigCredit, backupconfigtransfer.StreamTransport,
-	) error
-	CommitBackupConfigCredit(
-		context.Context, string, uint64, *agentpb.BackupTaskAuthority,
-		backupconfigtransfer.Binding, *agentpb.BackupConfigCredit,
-	) error
-	ResolveBackupConfigStagingPrefix(
-		context.Context,
-		string,
-		uint64,
-		*agentpb.BackupTaskAuthority,
-		string,
-		uint64,
-	) (*agentpb.BackupRecoveredFile, error)
-	ResolveBackupStagingPrepared(
-		context.Context,
-		string,
-		uint64,
-		*agentpb.BackupTaskAuthority,
-		string,
-	) (*agentpb.BackupArtifactPrepared, error)
-	ResolveBackupTaskResume(
-		context.Context,
-		string,
-		uint64,
-		*agentpb.BackupTaskAuthority,
-	) (*agentpb.BackupTaskResume, error)
-	CheckpointBackup(
-		context.Context,
-		string,
-		uint64,
-		*agentpb.BackupCheckpointRequest,
-	) (*agentpb.BackupCheckpointAck, error)
 }
 
 type BackingHookCheckpointer interface {

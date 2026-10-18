@@ -3,15 +3,14 @@ package blueprintrelease
 import (
 	"context"
 	"errors"
+	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -23,96 +22,106 @@ func (service *Service) finishSelectedRuntime(
 	input prepareInput,
 	captured preparedSelectedRuntime,
 	addresses networkreservations.ProxyAddresses,
-) (Prepared, error) {
-	var err error
-	task := captured.task
-	runtime := captured.runtime
+) (_ Prepared, resultErr error) {
 	hooks, manifest := captured.hooks, captured.manifest
-	task, err = service.prepareTaskConfiguration(ctx, task, input.Environment.ReadRevision)
+	rollout, err := service.ledger.StageBlueprintServiceRollout(ctx, captured.capture)
 	if err != nil {
 		return Prepared{}, err
 	}
-	task, plan, err := service.plans.SealBlueprintReleaseRuntime(ctx, task, runtime)
+	defer clear(rollout.Record.CandidateArtifact)
+	configuration, err := service.prepareWorkConfiguration(ctx, input, rollout.Record, input.Files)
 	if err != nil {
 		return Prepared{}, err
 	}
-	var rollout *keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]
-	if taskjournal.IsBlueprintChild(task.Params) {
-		capture, err := runtime.Capture()
-		if err != nil {
-			return Prepared{}, err
+	defer clear(configuration.Value)
+	defer func() {
+		if resultErr != nil && !blueprintPublicationOutcomeUnknown(resultErr) {
+			resultErr = errors.Join(resultErr,
+				service.ledger.AbandonReleaseWorkSecretPins(ctx, input.Work, configuration.Secrets))
 		}
-		stored, err := service.ledger.StageBlueprintServiceRollout(ctx, capture)
-		clear(capture.NativePlan)
-		if err != nil {
-			return Prepared{}, err
-		}
-		defer clear(stored.Record.NativePlan)
-		rollout = &stored
-	}
-	if err := service.ledger.ValidatePostgresPatchPlan(ctx, plan, input.Environment.ReadRevision); err != nil {
+	}()
+	publishedAt := time.Now().UTC()
+	preparedInput, err := service.ledger.PrepareBlueprintWorkInput(ctx, input.Work,
+		rollout, configuration.Input, configuration.Secrets, publishedAt)
+	if err != nil {
 		return Prepared{}, err
 	}
-	candidateDescriptor, err := executionplan.DescribeCandidateRelease(plan)
-	if err != nil {
-		return Prepared{}, errs.Wrap(errs.KindInternal, err)
+	defer keyvalue.ZeroMutationBytes(preparedInput.Change.Mutations)
+	hookWork := etcd.ReleaseHookWorkPublication{
+		Task: input.Work.Task.Task, Item: preparedInput.Item, OperationID: input.OperationID,
+		ReadRevision: manifest.ReadRevision,
 	}
-	var executions []scriptexecutions.ScriptExecutionRecord
-	if len(plan.GetScriptRunnerSnapshots()) != 0 {
-		executions, err = etcd.NewScriptExecutionRecords(task, plan, input.CreatedAt)
-		if err != nil {
-			return Prepared{}, err
+	defer func() {
+		for index := range hookWork.Hooks {
+			hookWork.Hooks[index].Execution.Clear()
+		}
+	}()
+	phases, err := releaserender.OrderedReleaseHooks(domain.OperationBlueprintApply,
+		captured.capture.Render.ServiceID, captured.capture.Render.Hooks)
+	if err != nil {
+		return Prepared{}, err
+	}
+	defer phases.Clear()
+	for _, group := range [][]releaserender.ReleaseHookRenderInput{phases.Before, phases.After, phases.Failure} {
+		for _, hook := range group {
+			execution, err := releaserender.CaptureHookExecution(hookWork.Task, hookWork.Item,
+				input.OperationID, hook, input.CreatedAt)
+			if err != nil {
+				return Prepared{}, err
+			}
+			sources, exists := hooks.sources[execution.ID]
+			if !exists {
+				execution.Clear()
+				return Prepared{}, errs.New(errs.KindInternal, "Blueprint post-deploy execution source is missing")
+			}
+			hookWork.Hooks = append(hookWork.Hooks, etcd.ReleaseHookExecutionPublication{Sources: sources, Execution: execution})
 		}
 	}
-	if len(executions) != hooks.executions {
+	if len(hookWork.Hooks) != hooks.executions {
 		return Prepared{}, errs.New(errs.KindInternal, "Blueprint post-deploy execution authority is incomplete")
 	}
-	hookPublications := make([]etcd.ReleaseHookExecutionPublication, len(executions))
-	for index, execution := range executions {
-		sources, exists := hooks.sources[execution.ID]
-		if !exists {
-			return Prepared{}, errs.New(errs.KindInternal, "Blueprint post-deploy execution source is missing")
-		}
-		hookPublications[index] = etcd.ReleaseHookExecutionPublication{Sources: sources, Execution: execution}
-	}
-	hookPrepared, err := service.ledger.PrepareBlueprintReleaseHooks(ctx, task, hookPublications)
+	hookPrepared, err := service.ledger.PrepareBlueprintReleaseHooks(ctx, input.Work, hookWork)
 	if err != nil {
 		return Prepared{}, err
 	}
-	for index := range hookPublications {
-		hookPublications[index].SnapshotRevision = hookPrepared.SnapshotRevision(
-			hookPublications[index].Execution.SnapshotID,
+	for index := range hookWork.Hooks {
+		hookWork.Hooks[index].SnapshotRevision = hookPrepared.SnapshotRevision(
+			hookWork.Hooks[index].Execution.SnapshotID,
 		)
 	}
-	sourceMembers, err := service.ledger.BlueprintReleaseSourceMembers(ctx, manifest, hookPublications)
+	sourceMembers, err := service.ledger.BlueprintReleaseSourceMembers(ctx, manifest, hookWork.Hooks)
 	if err != nil {
 		return Prepared{}, err
 	}
 	var sourcePrepared scriptsourcepublication.PreparedSourceSet
 	if len(sourceMembers) != 0 {
-		sourcePrepared, err = service.sources.Prepare(ctx, task.OperationID, sourceMembers)
+		sourcePrepared, err = service.sources.Prepare(ctx, input.OperationID, sourceMembers)
 		if err != nil {
 			if blueprintPublicationOutcomeUnknown(err) {
 				return Prepared{}, err
 			}
-			if cleanupErr := service.sources.Abandon(ctx, task.OperationID, sourceMembers); cleanupErr != nil {
+			if cleanupErr := service.sources.Abandon(ctx, input.OperationID, sourceMembers); cleanupErr != nil {
 				return Prepared{}, errors.Join(err, cleanupErr)
 			}
 			return Prepared{}, err
 		}
+	}
+	for index := range hookWork.Hooks {
+		hookWork.Hooks[index].Execution.SourceMembershipCount = sourcePrepared.MembershipCount()
+		hookWork.Hooks[index].Execution.SourceMembershipSHA256 = sourcePrepared.MembershipSHA256()
 	}
 	publication, err := service.ledger.PrepareBlueprintReleasePublication(
 		ctx,
 		service.sources,
 		etcd.BlueprintReleasePublicationEvidence{
 			RenderingInput:     input.Projection,
-			ServiceRollout:     rollout,
+			ServiceRollout:     &rollout,
 			ProxyAddresses:     addresses,
 			NativePredecessors: captured.predecessors,
-			Manifest:           manifest, EnvironmentID: input.Environment.Record.ID, Task: task, PublishedAt: input.CreatedAt,
-			CandidateReleaseDescriptor: candidateDescriptor,
-			Plan:                       plan,
-			Hooks:                      hookPublications, HookPrepared: hookPrepared, SourcePrepared: sourcePrepared, SourceMembers: sourceMembers,
+			StorageConditions:  captured.storageConditions,
+			Manifest:           manifest, EnvironmentID: input.Environment.Record.ID, PublishedAt: publishedAt,
+			Work: input.Work, PreparedInput: preparedInput,
+			HookWork: hookWork, HookPrepared: hookPrepared, SourcePrepared: sourcePrepared, SourceMembers: sourceMembers,
 		},
 	)
 	if err != nil {
@@ -120,13 +129,14 @@ func (service *Service) finishSelectedRuntime(
 			return Prepared{}, err
 		}
 		if len(sourceMembers) != 0 {
-			if cleanupErr := service.sources.Abandon(ctx, task.OperationID, sourceMembers); cleanupErr != nil {
+			if cleanupErr := service.sources.Abandon(ctx, input.OperationID, sourceMembers); cleanupErr != nil {
 				return Prepared{}, errors.Join(err, cleanupErr)
 			}
 		}
 		return Prepared{}, err
 	}
-	return Prepared{Task: task, Plan: plan, Publication: publication}, nil
+	return Prepared{Item: preparedInput.Item, Input: preparedInput.Input, Publication: publication,
+		ledger: service.ledger, work: input.Work, secrets: configuration.Secrets}, nil
 }
 
 func blueprintPublicationOutcomeUnknown(err error) bool {

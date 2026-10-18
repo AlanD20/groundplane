@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/app/hostplatform"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"log/slog"
@@ -42,7 +43,7 @@ type Controller struct {
 	agent                 controllerAgentChannel
 	scheduler             controllerScheduler
 	controllerTasks       controllerScheduler
-	blueprints            controllerScheduler
+	workExecution         *hostplatform.WorkExecution
 	software              controllerScheduler
 	runners               controllerScheduler
 	resolverConfiguration controllerScheduler

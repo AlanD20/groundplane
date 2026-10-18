@@ -18,8 +18,6 @@ const (
 	preparationPrefix = "/v1/staging/task-secret-pin-sets/"
 	rootPrefix        = "/v1/records/task-secret-pin-sets/"
 	releasingPrefix   = "/v1/indexes/task-secret-pin-sets/releasing/"
-	taskPrefix        = "/v1/tasks/"
-	activeTaskPrefix  = "/v1/indexes/tasks/active-operation/"
 	releaseBatchSize  = 16
 )
 
@@ -44,7 +42,7 @@ type setRecord struct {
 	Schema            uint32   `json:"schema"`
 	OperationID       string   `json:"operation_id"`
 	TaskID            string   `json:"task_id"`
-	AttemptID         string   `json:"attempt_id,omitempty"`
+	WorkItemID        string   `json:"work_item_id"`
 	MembershipCount   uint64   `json:"membership_count"`
 	MembershipSHA256  string   `json:"membership_sha256"`
 	Phase             setPhase `json:"phase"`
@@ -60,6 +58,7 @@ type Prepared struct {
 func (prepared Prepared) IsZero() bool              { return prepared.record.OperationID == "" }
 func (prepared Prepared) OperationID() string       { return prepared.record.OperationID }
 func (prepared Prepared) TaskID() string            { return prepared.record.TaskID }
+func (prepared Prepared) WorkItemID() string        { return prepared.record.WorkItemID }
 func (prepared Prepared) MembershipCount() uint64   { return prepared.record.MembershipCount }
 func (prepared Prepared) MembershipSHA256() string  { return prepared.record.MembershipSHA256 }
 func (prepared Prepared) DescriptorRevision() int64 { return prepared.revision }
@@ -71,7 +70,7 @@ type ActiveRoot struct {
 
 func (root ActiveRoot) OperationID() string      { return root.record.OperationID }
 func (root ActiveRoot) TaskID() string           { return root.record.TaskID }
-func (root ActiveRoot) AttemptID() string        { return root.record.AttemptID }
+func (root ActiveRoot) WorkItemID() string       { return root.record.WorkItemID }
 func (root ActiveRoot) MembershipCount() uint64  { return root.record.MembershipCount }
 func (root ActiveRoot) MembershipSHA256() string { return root.record.MembershipSHA256 }
 func (root ActiveRoot) Revision() int64          { return root.revision }
@@ -83,7 +82,6 @@ func (prepared Prepared) ActiveRoot(revision int64) (ActiveRoot, error) {
 	}
 	record := prepared.record
 	record.Phase = phaseActive
-	record.AttemptID = record.TaskID
 	return ActiveRoot{record: record, revision: revision}, nil
 }
 
@@ -109,8 +107,6 @@ func ReverseKey(operationID string, ordinal uint64) string {
 	return ReversePrefix(operationID) + ordinalKey(ordinal)
 }
 
-func taskKey(taskID string) string                { return taskPrefix + taskID }
-func activeTaskKey(operationID string) string     { return activeTaskPrefix + operationID }
 func secretMetadataKey(secretID string) string    { return "/v1/records/secrets/" + secretID }
 func secretValueKey(secretID string) string       { return "/v1/secret-values/secrets/" + secretID }
 func secretTombstoneKey(secretID string) string   { return tombstoneKey("secret", secretID) }
@@ -122,9 +118,11 @@ func tombstoneKey(kind, id string) string { return "/v1/runtime/deletions/" + ki
 func canonicalPins(
 	operationID string,
 	taskID string,
+	workItemID string,
 	pins []tasksecretpinrecord.Record,
 ) ([]tasksecretpinrecord.Record, string, error) {
 	if ids.Validate(ids.KindOperation, operationID) != nil || ids.Validate(ids.KindTask, taskID) != nil ||
+		ids.Validate(ids.KindWorkItem, workItemID) != nil ||
 		len(pins) == 0 || len(pins) > MaximumPins {
 		return nil, "", validation("secret pin preparation identity is invalid")
 	}

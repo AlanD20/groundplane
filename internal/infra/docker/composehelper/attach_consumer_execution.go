@@ -37,7 +37,7 @@ func ExecuteAttachConsumer(ctx context.Context, taskRunner runner.Runner, reques
 	}
 	response := &agentpb.AttachConsumerHelperResponse{ServiceId: observation.ServiceID, NetworkId: observation.NetworkID,
 		Input:    &agentpb.WorkInputReference{InputId: input.Attempt.Input.ID, Sha256: digest},
-		Detached: observation.Detached, ObservedAt: timestamppb.New(observation.At), Inspection: input.InspectOnly}
+		Detached: observation.Detached, Connected: observation.Connected, ObservedAt: timestamppb.New(observation.At), Inspection: input.InspectOnly}
 	if err := attachexecution.ValidateConsumerHelperResponse(input, response); err != nil {
 		return nil, err
 	}

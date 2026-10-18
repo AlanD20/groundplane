@@ -16,7 +16,6 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -86,9 +85,6 @@ func (repository *TaskRepository) beginTaskPrune(
 		taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
 		taskjournal.TaskPruneIntentKey(task.ID),
 		environmentchanges.ComponentTaskIntentKey(task.ID),
-		environmentchanges.RouteRemovalIntentKey(task.ID),
-		environmentchanges.RouteMutationIntentKey(task.ID),
-		environmentchanges.EntryRemovalIntentKey(task.ID),
 		attachments.BlueprintAttachTaskIntentKey(task.ID),
 		environmentchanges.ServiceRemovalIntentKey(task.ID),
 		environmentchanges.AttachRemovalIntentKey(task.ID),
@@ -193,31 +189,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		}
 	}
 	if companions.Values[5] != nil {
-		routeIntent, decodeErr := environmentchanges.DecodeRouteRemovalIntent(companions.Values[5].Value)
-		if decodeErr != nil || validateRouteRemovalTaskOwner(task, routeIntent) != nil ||
-			routeIntent.Status != task.Status || routeIntent.TerminalAt == nil || task.FinishedAt == nil ||
-			!routeIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
-		}
-	}
-	if companions.Values[6] != nil {
-		mutationIntent, decodeErr := environmentchanges.DecodeRouteMutationIntent(companions.Values[6].Value)
-		if decodeErr != nil || validateRouteMutationTaskOwner(task, mutationIntent) != nil ||
-			mutationIntent.Status != task.Status || mutationIntent.TerminalAt == nil || task.FinishedAt == nil ||
-			!mutationIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
-		}
-	}
-	if companions.Values[7] != nil {
-		entryIntent, decodeErr := environmentchanges.DecodeEntryRemovalIntent(companions.Values[7].Value)
-		if decodeErr != nil || validateEntryRemovalTaskOwner(task, entryIntent) != nil ||
-			entryIntent.Status != task.Status || entryIntent.TerminalAt == nil || task.FinishedAt == nil ||
-			!entryIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
-		}
-	}
-	if companions.Values[8] != nil {
-		attachIntent, decodeErr := attachments.DecodeBlueprintAttachTaskIntent(companions.Values[8].Value)
+		attachIntent, decodeErr := attachments.DecodeBlueprintAttachTaskIntent(companions.Values[5].Value)
 		if decodeErr != nil ||
 			blueprintplanning.ValidateBlueprintAttachTaskOwner(
 				blueprintplanning.TaskIdentity{ID: task.ID, Target: task.Target},
@@ -230,16 +202,16 @@ func (repository *TaskRepository) beginTaskPrune(
 			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 	}
-	if companions.Values[9] != nil {
-		serviceIntent, decodeErr := environmentchanges.DecodeServiceRemovalIntent(companions.Values[9].Value)
+	if companions.Values[6] != nil {
+		serviceIntent, decodeErr := environmentchanges.DecodeServiceRemovalIntent(companions.Values[6].Value)
 		if decodeErr != nil || validateServiceRemovalTaskOwner(task, serviceIntent) != nil ||
 			serviceIntent.Status != task.Status || serviceIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!serviceIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 	}
-	if companions.Values[10] != nil {
-		attachIntent, decodeErr := environmentchanges.DecodeAttachRemovalIntent(companions.Values[10].Value)
+	if companions.Values[7] != nil {
+		attachIntent, decodeErr := environmentchanges.DecodeAttachRemovalIntent(companions.Values[7].Value)
 		if decodeErr != nil || !authoredBlueprintAttachRemovalTask(task) ||
 			validateAuthoredAttachRemovalTaskOwner(task, attachIntent) != nil ||
 			attachIntent.Status != task.Status || attachIntent.TerminalAt == nil || task.FinishedAt == nil ||
@@ -351,7 +323,6 @@ func (repository *TaskRepository) beginTaskPrune(
 	conditions = backupReceiptCompanion.appendStartCondition(conditions)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskPruneIntentKey(task.ID), Value: intentValue},
-		{Type: etcdstore.MutationDelete, Key: releaserender.ServiceLifecycleRenderInputKey(task.ID)},
 		{Type: etcdstore.MutationDelete, Key: backinghooks.CheckpointTaskPrefix(task.ID), Prefix: true},
 		{Type: etcdstore.MutationDelete, Key: retentionEntry.Key},
 		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
@@ -369,52 +340,25 @@ func (repository *TaskRepository) beginTaskPrune(
 		)
 	}
 	conditions = append(conditions, componentCondition)
-	routeCondition := etcdstore.Condition{Key: environmentchanges.RouteRemovalIntentKey(task.ID)}
 	if companions.Values[5] != nil {
-		routeCondition.ModRevision = companions.Values[5].ModRevision
-		mutations = append(
-			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.RouteRemovalIntentKey(task.ID)},
-		)
-	}
-	conditions = append(conditions, routeCondition)
-	mutationCondition := etcdstore.Condition{Key: environmentchanges.RouteMutationIntentKey(task.ID)}
-	if companions.Values[6] != nil {
-		mutationCondition.ModRevision = companions.Values[6].ModRevision
-		mutations = append(
-			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.RouteMutationIntentKey(task.ID)},
-		)
-	}
-	conditions = append(conditions, mutationCondition)
-	entryCondition := etcdstore.Condition{Key: environmentchanges.EntryRemovalIntentKey(task.ID)}
-	if companions.Values[7] != nil {
-		entryCondition.ModRevision = companions.Values[7].ModRevision
-		mutations = append(
-			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.EntryRemovalIntentKey(task.ID)},
-		)
-	}
-	conditions = append(conditions, entryCondition)
-	if companions.Values[8] != nil {
 		conditions = append(conditions, etcdstore.Condition{
-			Key: attachments.BlueprintAttachTaskIntentKey(task.ID), ModRevision: companions.Values[8].ModRevision,
+			Key: attachments.BlueprintAttachTaskIntentKey(task.ID), ModRevision: companions.Values[5].ModRevision,
 		})
 		mutations = append(mutations, etcdstore.Mutation{
 			Type: etcdstore.MutationDelete, Key: attachments.BlueprintAttachTaskIntentKey(task.ID),
 		})
 	}
 	serviceCondition := etcdstore.Condition{Key: environmentchanges.ServiceRemovalIntentKey(task.ID)}
-	if companions.Values[9] != nil {
-		serviceCondition.ModRevision = companions.Values[9].ModRevision
+	if companions.Values[6] != nil {
+		serviceCondition.ModRevision = companions.Values[6].ModRevision
 		mutations = append(mutations, etcdstore.Mutation{
 			Type: etcdstore.MutationDelete, Key: environmentchanges.ServiceRemovalIntentKey(task.ID),
 		})
 	}
 	conditions = append(conditions, serviceCondition)
 	attachCondition := etcdstore.Condition{Key: environmentchanges.AttachRemovalIntentKey(task.ID)}
-	if companions.Values[10] != nil {
-		attachCondition.ModRevision = companions.Values[10].ModRevision
+	if companions.Values[7] != nil {
+		attachCondition.ModRevision = companions.Values[7].ModRevision
 		mutations = append(mutations, etcdstore.Mutation{
 			Type: etcdstore.MutationDelete, Key: environmentchanges.AttachRemovalIntentKey(task.ID),
 		})

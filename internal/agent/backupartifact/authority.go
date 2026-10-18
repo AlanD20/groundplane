@@ -7,90 +7,58 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/backupobject"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
-// Authority owns the exact task, step, capture, and Environment identity used
-// to derive the provider-neutral object expectation. It is constructed only
-// from sealed schema-one authority.
+// Authority owns the captured resource and Environment used to derive the exact
+// provider-neutral object expectation. Execution authentication belongs to its caller.
 type Authority struct {
-	task    *agentpb.BackupTaskAuthority
-	step    *agentpb.BackupStepAuthority
-	capture *agentpb.BackupCaptureAuthority
+	environment string
+	capture     *agentpb.BackupCaptureAuthority
 }
 
-// NewAuthority binds a capture to its sealed task and step. The returned value
+// NewAuthority binds a capture to its Environment. The returned value
 // owns copies, so callers cannot change upload authority after validation.
 func NewAuthority(
-	task *agentpb.BackupTaskAuthority,
-	step *agentpb.BackupStepAuthority,
+	environment string,
 	capture *agentpb.BackupCaptureAuthority,
 ) (*Authority, error) {
-	if task == nil || step == nil || capture == nil {
+	if ids.Validate(ids.KindEnvironment, environment) != nil {
 		return nil, invalidAuthority()
 	}
-	sealedTask, sealedStep, err := bindStep(task, step)
+	owned, err := executionplan.CaptureBackupArtifactAuthority(capture)
 	if err != nil {
 		return nil, err
 	}
-	if !proto.Equal(sealedStep.GetCapture(), capture) {
-		return nil, invalidAuthority()
-	}
 	return &Authority{
-		task:    sealedTask,
-		step:    sealedStep,
-		capture: proto.Clone(capture).(*agentpb.BackupCaptureAuthority),
+		environment: environment,
+		capture:     owned,
 	}, nil
 }
 
-func bindStep(task *agentpb.BackupTaskAuthority, step *agentpb.BackupStepAuthority) (
-	*agentpb.BackupTaskAuthority, *agentpb.BackupStepAuthority, error,
-) {
-	if task == nil || step == nil {
-		return nil, nil, invalidAuthority()
-	}
-	if _, err := executionplan.BackupTaskAuthorityDigest(task); err != nil {
-		return nil, nil, err
-	}
-	sealedStep, err := executionplan.ValidateBackupStepAuthority(step)
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, candidate := range task.Steps {
-		if proto.Equal(candidate, sealedStep) {
-			return proto.Clone(task).(*agentpb.BackupTaskAuthority), sealedStep, nil
-		}
-	}
-	return nil, nil, invalidAuthority()
-}
-
 func (authority *Authority) artifact(prepared *agentpb.BackupArtifactPrepared) (backupobject.Artifact, error) {
-	if authority == nil || authority.task == nil || authority.step == nil || authority.capture == nil ||
+	if authority == nil || authority.environment == "" || authority.capture == nil ||
 		prepared == nil {
 		return backupobject.Artifact{}, invalidAuthority()
 	}
-	validated, err := authority.validateCheckpoint(&agentpb.BackupCheckpointRequest{
-		Checkpoint: &agentpb.BackupCheckpointRequest_ArtifactPrepared{ArtifactPrepared: prepared},
-	})
-	if err != nil {
+	if err := executionplan.ValidateBackupPreparedArtifact(prepared); err != nil {
 		return backupobject.Artifact{}, err
 	}
-	prepared = validated.GetArtifactPrepared()
 	if prepared.PointId != authority.capture.PointId || !preparedSourceMatches(prepared, authority.capture) {
 		return backupobject.Artifact{}, invalidAuthority()
 	}
 	target := authority.capture.Target
 	connector := target.Connector
 	parts := strings.Split(strings.TrimPrefix(target.ObjectKey, connector.Prefix), "/")
-	if len(parts) != 4 || parts[0] != authority.task.EnvironmentId {
+	if len(parts) != 4 || parts[0] != authority.environment {
 		return backupobject.Artifact{}, invalidAuthority()
 	}
 
 	artifact := backupobject.Artifact{
 		Key:             target.ObjectKey,
-		EnvironmentID:   authority.task.EnvironmentId,
+		EnvironmentID:   authority.environment,
 		SourceID:        parts[1],
 		RecoveryPointID: authority.capture.PointId,
 		Evidence: backupobject.Evidence{
@@ -146,20 +114,6 @@ func (authority *Authority) artifact(prepared *agentpb.BackupArtifactPrepared) (
 		return backupobject.Artifact{}, err
 	}
 	return artifact, nil
-}
-
-func (authority *Authority) validateCheckpoint(
-	request *agentpb.BackupCheckpointRequest,
-) (*agentpb.BackupCheckpointRequest, error) {
-	if request == nil {
-		return nil, invalidAuthority()
-	}
-	request = proto.Clone(request).(*agentpb.BackupCheckpointRequest)
-	request.TaskId, request.AssignmentId = authority.task.TaskId, authority.task.AssignmentId
-	request.StepId, request.ExecutionId = authority.step.StepId, authority.step.ExecutionId
-	request.CheckpointSequence = 1
-	request.AuthorityDigest = append([]byte(nil), authority.step.StepDigest...)
-	return executionplan.ValidateBackupCheckpointRequest(request, 1)
 }
 
 func preparedSourceMatches(prepared *agentpb.BackupArtifactPrepared, capture *agentpb.BackupCaptureAuthority) bool {

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -9,12 +10,15 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/servicelifecyclework"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
+	"time"
 )
 
 type serviceLifecycleRepository interface {
+	ResolveLifecycleHost(context.Context) (workexecution.Placement, error)
 	GetServiceRemovalRuntime(
 		context.Context,
 		string,
@@ -35,17 +39,15 @@ type serviceLifecycleRepository interface {
 		string,
 		int64,
 	) (etcdstore.Versioned[releaserender.ReleaseRenderInput], error)
-	BeginServiceLifecycleWithTaskHookInputs(
+	PublishServiceLifecycle(
 		context.Context,
 		*etcdstore.Versioned[hierarchyrecord.TenantRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcdstore.Versioned[servicerecord.ServiceRecord],
-		servicerecord.ServiceRecord,
-		*etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-		*releaserender.ServiceLifecycleRenderInput,
+		servicelifecyclework.Input,
 		*taskconfiguration.BackingHookEncryptedInputs,
-		etcd.TaskRecord,
+		time.Time,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -88,20 +90,22 @@ func (repository *MutationRepository) GetReleaseRenderInputAt(
 	return repository.releases.GetReleaseRenderInputAt(ctx, releaseID, revision)
 }
 
-func (repository *MutationRepository) BeginServiceLifecycleWithTaskHookInputs(
+func (repository *MutationRepository) ResolveLifecycleHost(ctx context.Context) (workexecution.Placement, error) {
+	return repository.hierarchy.ResolveResourceHost(ctx)
+}
+
+func (repository *MutationRepository) PublishServiceLifecycle(
 	ctx context.Context,
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
-	replacement servicerecord.ServiceRecord,
-	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	renderInput *releaserender.ServiceLifecycleRenderInput,
+	input servicelifecyclework.Input,
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
-	task etcd.TaskRecord,
+	deadline time.Time,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.services.BeginServiceLifecycleWithTaskHookInputs(
-		ctx, tenant, project, environment, current, replacement, projection, renderInput, hookInputs, task, marker,
+	return repository.services.PublishServiceLifecycle(
+		ctx, tenant, project, environment, current, input, hookInputs, deadline, marker,
 	)
 }

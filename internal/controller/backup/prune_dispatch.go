@@ -2,13 +2,11 @@ package backup
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -141,29 +139,13 @@ func (service *BackupPruneService) publishPrepared(ctx context.Context,
 	zero := idempotencyrecord.IdempotencyResponse{}
 	dispatch := prepared.Dispatch
 	taskID, createdAt := dispatch.TaskID, dispatch.CreatedAt
-	steps := make([]taskjournal.TaskStepRecord, len(dispatch.RecoveryPointIDs))
-	executionIDs := make([]string, len(steps))
-	for index := range steps {
-		steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
-		executionIDs[index] = ids.NewULID()
+	if actor != taskjournal.TaskActorSystem {
+		return zero, errs.New(errs.KindValidationFailed, "Prune requires its system execution actor")
 	}
-	task := etcd.TaskRecord{
-		ID: taskID, OperationID: dispatch.OperationID, Owner: prepared.Owner,
-		Actor: actor, Executor: taskjournal.TaskExecutorAgent,
-		PlanID: ids.New(ids.KindPlan), Type: taskjournal.TaskBackupPrune, Target: dispatch.EnvironmentID,
-		Steps: steps, TimeoutSeconds: int64(executionplan.MaximumBackupPruneStepTimeoutSeconds),
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1,
-		CreatedAt: createdAt, UpdatedAt: createdAt,
-	}
-	sealed, err := BuildBackupPrunePlan(BackupPrunePlanInput{
-		Task: task, Scope: prepared.Scope, Dispatch: prepared.Dispatch,
-		Evidence: prepared.Evidence, ExecutionIDs: executionIDs,
-	})
+	task, item, captured, err := buildPruneWork(prepared)
 	if err != nil {
 		return zero, err
 	}
-	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed)
 	body, err := json.Marshal(struct {
 		TaskID string `json:"task_id"`
 	}{TaskID: taskID})
@@ -180,7 +162,7 @@ func (service *BackupPruneService) publishPrepared(ctx context.Context,
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, publishErr := prepared.Publication.Publish(ctx, task, sealed, marker)
+	result, publishErr := prepared.Publication.PublishWork(ctx, task, item, captured, marker)
 	if publishErr != nil {
 		if !errors.Is(publishErr, errs.New(errs.KindStorageUnavailable, "")) &&
 			!errors.Is(publishErr, context.DeadlineExceeded) {

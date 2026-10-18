@@ -32,7 +32,7 @@ func validateControllerResult(result TaskResultRecord, status TaskStatus) error 
 		result.DNSWithdrawalTaskID != "" || result.ReconciliationRequired || len(result.Projects) != 0 ||
 		len(result.BackingObservations) != 0 || len(result.ProxyEvidence) != 0 || len(result.RecreateEvidence) != 0 ||
 		len(result.RollingEvidence) != 0 || result.CandidateAbsenceEvidence != nil ||
-		result.ComponentRestorationEvidence != nil || result.ServiceAbsenceEvidence != nil ||
+		result.ServiceAbsenceEvidence != nil ||
 		result.DNSResolverCandidateObservation != nil || result.DNSResolverRollbackObservation != nil ||
 		result.ExecutionEpoch != 0 || result.ReleaseRecoveryRecordSHA256 != "" || result.AssignmentGeneration != 0 {
 		return errs.New(errs.KindValidationFailed, "Controller result carries unrelated execution evidence")

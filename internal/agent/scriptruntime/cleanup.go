@@ -25,7 +25,15 @@ func (runtime *Runtime) cleanupAndReturn(
 			value := containerEvidenceFromCheckpoint(durable.ContainerCreated)
 			container = &value
 		}
-		proof, err := runtime.engine.Cleanup(request, body, container)
+		cleanup := scriptexecution.CleanupRequest{
+			QuiescenceRequest: scriptexecution.QuiescenceRequest{
+				TaskID: request.TaskID, WorkItemID: request.WorkItemID,
+				OperationID: request.OperationID, ExecutionID: request.ExecutionID,
+				Projection: request.Projection,
+			},
+			BodyMetadata: request.BodyMetadata,
+		}
+		proof, err := runtime.engine.Cleanup(cleanup, body, container)
 		if err != nil {
 			return 0, err
 		}

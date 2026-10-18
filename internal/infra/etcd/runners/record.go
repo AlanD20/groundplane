@@ -161,27 +161,6 @@ func BindRunnerContainerID(record RunnerRecord, taskID string, containerID strin
 	return CloneRunnerRecord(record), nil
 }
 
-func RetryRunnerProvisioning(record RunnerRecord, sourceTaskID string, retryTaskID string) (RunnerRecord, error) {
-	if err := ValidateRunnerRecord(record); err != nil {
-		return RunnerRecord{}, err
-	}
-	if record.ProvisioningState != RunnerProvisioningFailed || record.CreateTaskID != sourceTaskID {
-		return RunnerRecord{}, errs.New(errs.KindStateConflict, "runner is not available for provisioning retry")
-	}
-	if ids.Validate(ids.KindTask, retryTaskID) != nil {
-		return RunnerRecord{}, errs.New(errs.KindValidationFailed, "retry task id is invalid")
-	}
-	record.ProvisioningState = RunnerProvisioningProvisioning
-	record.CreateTaskID = retryTaskID
-	record.ContainerID = ""
-	record.Software = buildversion.ContainerIdentity{}
-	if record.RuntimeEpoch == ^uint64(0) {
-		return RunnerRecord{}, errs.New(errs.KindResourceInUse, "runner runtime epoch is exhausted")
-	}
-	record.RuntimeEpoch++
-	return CloneRunnerRecord(record), nil
-}
-
 func TakeRunnerRuntimeCleanupOwnership(record RunnerRecord) (RunnerRecord, error) {
 	if err := ValidateRunnerRecord(record); err != nil {
 		return RunnerRecord{}, err

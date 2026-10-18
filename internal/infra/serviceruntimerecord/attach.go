@@ -5,6 +5,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -12,12 +13,12 @@ import (
 // mutation. Source revisions are compared at publication and acknowledgement.
 // An empty Updates list explicitly means validation-only execution.
 type AttachPreparation struct {
-	EnvironmentID    string         `json:"environment_id"`
-	PlanID           string         `json:"plan_id"`
-	PlanHash         string         `json:"plan_hash"`
-	StepID           string         `json:"step_id"`
-	RenderGeneration uint64         `json:"render_generation"`
-	Updates          []AttachUpdate `json:"updates"`
+	EnvironmentID    string              `json:"environment_id"`
+	WorkItemID       string              `json:"work_item_id"`
+	Input            workexecution.Input `json:"input"`
+	StageID          string              `json:"stage_id"`
+	RenderGeneration uint64              `json:"render_generation"`
+	Updates          []AttachUpdate      `json:"updates"`
 }
 
 type AttachUpdate struct {
@@ -27,9 +28,9 @@ type AttachUpdate struct {
 
 func ValidateAttachPreparation(prepared AttachPreparation) error {
 	if ids.Validate(ids.KindEnvironment, prepared.EnvironmentID) != nil ||
-		ids.Validate(ids.KindPlan, prepared.PlanID) != nil ||
-		ids.Validate(ids.KindStep, prepared.StepID) != nil ||
-		!validDigest(prepared.PlanHash) || prepared.RenderGeneration == 0 || len(prepared.Updates) > 1 {
+		ids.Validate(ids.KindWorkItem, prepared.WorkItemID) != nil ||
+		ids.Validate(ids.KindStep, prepared.StageID) != nil ||
+		prepared.Input.Validate() != nil || prepared.RenderGeneration == 0 || len(prepared.Updates) > 1 {
 		return errs.New(errs.KindValidationFailed, "Attach runtime preparation identity is invalid")
 	}
 	for _, update := range prepared.Updates {
@@ -59,8 +60,9 @@ func AcknowledgeAttach(previous Record, prepared AttachPreparation, source Ackno
 		return Record{}, err
 	}
 	if len(prepared.Updates) != 1 || previous.EnvironmentID != prepared.EnvironmentID ||
-		source.PlanID != prepared.PlanID || source.PlanHash != prepared.PlanHash ||
-		source.StepID != prepared.StepID || source.RenderGeneration != prepared.RenderGeneration {
+		source.WorkItemID != prepared.WorkItemID || source.Input != prepared.Input ||
+		source.Checkpoint.StageID != prepared.StageID || source.RenderGeneration != prepared.RenderGeneration ||
+		source.Executor.HostID != previous.Source.Executor.HostID {
 		return Record{}, errs.New(errs.KindStateConflict, "Attach runtime acknowledgement differs from preparation")
 	}
 	next := prepared.Updates[0].Runtime

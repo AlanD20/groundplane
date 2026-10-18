@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -17,7 +18,7 @@ import (
 // omission in the same acceptance transaction as this change.
 func (repository *InputRepository) PrepareCascadePublication(ctx context.Context, task workexecution.Task,
 	graph []workexecution.Item, input *agentpb.NetworkWorkInput, marker idempotency.IdempotencyMarker,
-	admission []keyvalue.Condition, desiredRevision string,
+	admission []keyvalue.Condition, desiredRevision string, snapshotRevision int64,
 ) (_ workqueue.Change, resultErr error) {
 	if task.Scope.TenantID != "" || len(graph) == 0 || task.ExpectedItems != uint32(len(graph)) {
 		return workqueue.Change{}, conflict("Backing Zone publication requires its complete captured work graph")
@@ -25,6 +26,11 @@ func (repository *InputRepository) PrepareCascadePublication(ctx context.Context
 	if err := workexecution.ValidateGraph(task, graph); err != nil {
 		return workqueue.Change{}, err
 	}
+	creation, err := attachments.BackingZoneCreationCondition(ctx, repository.store, task.TargetID, snapshotRevision)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	admission = append(append([]keyvalue.Condition(nil), admission...), creation)
 	bridge := graph[len(graph)-1]
 	change, err := workqueue.PrepareTask(task, marker)
 	if err != nil {

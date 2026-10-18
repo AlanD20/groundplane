@@ -13,6 +13,7 @@ import {
   emptyTaskJournal,
   taskJournalKey,
   taskJournalQuery,
+  taskJournalCursor,
   taskFromAPI,
   type TaskPageResponse,
 } from "./journal-model";
@@ -88,7 +89,8 @@ export function useTaskJournal(
             ...journal.pageCursors.slice(0, pageIndex),
             cursor,
           ];
-          journal.nextCursor = page.next_cursor ?? null;
+          journal.nextCursor = taskJournalCursor(page);
+          journal.scanLimited = page.scan_limited;
           journal.loaded = true;
           journal.loading = false;
           journal.loadingMore = false;
@@ -124,6 +126,6 @@ export function useTaskJournal(
       emptyTaskJournal(defaultPageSize),
     loadTaskJournal,
     getTaskJournalDetail: async (taskId, signal) =>
-      taskFromAPI(await requestTask(taskId, signal)),
+      taskFromAPI((await requestTask(taskId, signal)).task),
   };
 }

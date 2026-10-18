@@ -6,11 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -18,32 +20,43 @@ import (
 // Component's atomic publication must subsequently compare the returned root;
 // neither these writes nor the root grant an execution or applied-state receipt.
 func (repository *EnvironmentBlueprintRepository) StageBlueprintProxyCandidateInput(ctx context.Context,
-	execution componentplanning.ChildExecution, projection projectionrecord.EnvironmentComposeProjection,
+	work workqueue.View, projection projectionrecord.EnvironmentComposeProjection,
 	desiredRootRevision int64,
 ) (keyvalue.Versioned[componentplanning.ProxyCandidateInputReference], error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return keyvalue.Versioned[componentplanning.ProxyCandidateInputReference]{}, err
 	}
-	if repository == nil || desiredRootRevision <= 0 || !execution.Component.Desired.Kind.IsEnvironmentProxy() ||
-		execution.EnvironmentID != projection.EnvironmentID || execution.ParentTaskID != projection.RevisionID {
+	task, item := work.Task.Task, work.Item.Item
+	if repository == nil || desiredRootRevision <= 0 || work.ReadRevision < desiredRootRevision ||
+		work.Task.Revision <= 0 || work.Item.Revision <= 0 || task.Validate() != nil || item.Validate() != nil ||
+		task.Action != workexecution.ActionApply || item.TaskID != task.ID ||
+		item.Operation != workexecution.Component || item.Placement.Executor != workexecution.Agent ||
+		(item.Phase != workexecution.Waiting && item.Phase != workexecution.Ready) ||
+		item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.ForwardRevoked ||
+		task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
+		task.Scope.EnvironmentID != projection.EnvironmentID || task.ID != projection.RevisionID {
 		return keyvalue.Versioned[componentplanning.ProxyCandidateInputReference]{}, errs.New(
 			errs.KindValidationFailed,
 			"prepared router input staging is invalid",
 		)
 	}
-	plan, err := execution.ExecutionPlan()
-	if err != nil {
+	if err := repository.validateProxyCandidateDesired(ctx, task, projection, desiredRootRevision, work.ReadRevision); err != nil {
 		return keyvalue.Versioned[componentplanning.ProxyCandidateInputReference]{}, err
 	}
-	if plan.GetRenderGeneration() != projection.RenderGeneration {
+	matched := 0
+	for _, component := range projection.Components {
+		if component.Desired.ID == item.TargetID && component.Desired.Kind.IsEnvironmentProxy() &&
+			component.Desired.OwnerID == projection.EnvironmentID {
+			matched++
+		}
+	}
+	if matched != 1 {
 		return keyvalue.Versioned[componentplanning.ProxyCandidateInputReference]{}, errs.New(
-			errs.KindValidationFailed,
-			"prepared router input generation differs from its recipe",
-		)
+			errs.KindStateConflict, "prepared router input has no unique target Component")
 	}
 	return repository.stageBlueprintProxyCandidateInput(ctx, componentplanning.ProxyCandidateInputReference{
-		EnvironmentID: execution.EnvironmentID, ParentTaskID: execution.ParentTaskID,
-		SourceID: execution.TaskID, SourceOwner: componentplanning.ProxyInputAgentTask, ComponentID: execution.Component.Desired.ID,
+		EnvironmentID: projection.EnvironmentID, ParentTaskID: task.ID,
+		SourceID: item.ID, SourceOwner: componentplanning.ProxyInputAgentWork, ComponentID: item.TargetID,
 	}, projection, desiredRootRevision)
 }
 
@@ -114,4 +127,35 @@ func (repository *EnvironmentBlueprintRepository) stageBlueprintProxyInputValue(
 		return 0, 0, errs.New(errs.KindStateConflict, "prepared router input was already staged with different content")
 	}
 	return stored.ModRevision, result.Revision, nil
+}
+
+func (repository *EnvironmentBlueprintRepository) validateProxyCandidateDesired(ctx context.Context,
+	task workexecution.Task, projection projectionrecord.EnvironmentComposeProjection,
+	desiredRootRevision, readRevision int64,
+) error {
+	desired, found, err := blueprints.ReadDesiredInputRevision(ctx, repository.store,
+		projection.EnvironmentID, task.ID, readRevision)
+	if err != nil {
+		return err
+	}
+	if !found || desired.Revision != desiredRootRevision ||
+		desired.Record.EnvironmentID != projection.EnvironmentID || desired.Record.RevisionID != task.ID ||
+		desired.Record.RenderGeneration != projection.RenderGeneration {
+		return errs.New(
+			errs.KindValidationFailed,
+			"prepared router input generation differs from its recipe",
+		)
+	}
+	encoded, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(desired.Record)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(encoded)
+	clear(encoded)
+	if hex.EncodeToString(digest[:]) != task.Intent.SHA256 {
+		return errs.New(
+			errs.KindStateConflict, "prepared router input does not match the accepted Blueprint")
+	}
+
+	return nil
 }

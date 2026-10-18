@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -17,6 +15,7 @@ import (
 	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -64,15 +63,19 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 			start = page.Values[len(page.Values)-1].Key
 		}
 	}
+	if err := retainCheckImages(&result, read); err != nil {
+		return imageRetention{}, err
+	}
+	if err := retainImageOperations(&result, operationID, read); err != nil {
+		return imageRetention{}, err
+	}
+	if err := retainRunnerRuntimeImages(&result, read); err != nil {
+		return imageRetention{}, err
+	}
 	if err := read(taskjournal.TaskPrefix, func(value keyvalue.KeyValue) error {
 		task, err := etcd.DecodeTaskRecord(value.Value)
 		if err != nil {
 			return err
-		}
-		if task.Executor == taskjournal.TaskExecutorBlueprint && !taskjournal.IsTerminalTaskStatus(task.Status) {
-			if err := service.retainControllerProxyReplacementImages(ctx, &result, task, revision); err != nil {
-				return err
-			}
 		}
 		if task.OperationID != operationID && task.Status != taskjournal.TaskStatusCompleted && task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceImage {
 			covered, err := service.retainTaskImages(ctx, &result, task, revision)
@@ -82,14 +85,6 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 			if !covered {
 				result.busy = fmt.Sprintf("Task %s may still execute or recover; finish it or let its retention expire", task.ID)
 			}
-		}
-		if task.Type == taskjournal.TaskFetch &&
-			task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceImage {
-			plan, err := imagefetch.Decode(task.Params[taskjournal.TaskImageFetchInputParam], task.PlanHash)
-			if err != nil {
-				return err
-			}
-			result.fetches = append(result.fetches, retainedFetch{plan: plan, taskID: task.ID, requestedAt: task.CreatedAt, status: task.Status})
 		}
 		return nil
 	}); err != nil {
@@ -105,8 +100,14 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 	}); err != nil {
 		return result, err
 	}
-	if err := read(componentplanning.ChildExecutionPrefix, func(value keyvalue.KeyValue) error {
-		return service.retainProxyReplacementImages(ctx, &result, value, revision)
+	if err := read(workqueue.ItemKey(""), func(value keyvalue.KeyValue) error {
+		if err := service.retainRunnerWorkImages(ctx, &result, value, revision); err != nil {
+			return err
+		}
+		if err := service.retainComponentWorkImages(ctx, &result, value, revision); err != nil {
+			return err
+		}
+		return service.retainEntryWorkImages(ctx, &result, value, revision)
 	}); err != nil {
 		return result, err
 	}

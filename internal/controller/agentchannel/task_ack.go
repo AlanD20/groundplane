@@ -46,20 +46,7 @@ func (s *Server) acknowledge(
 	if err != nil {
 		return taskReportRejected, err
 	}
-	componentRecovery := plan.GetComponentRecoveryProcedure() != nil
 	recoveryDigest := acknowledgement.GetReleaseRecoveryRecordSha256()
-	if componentRecovery {
-		recoveryDigest = acknowledgement.GetComponentRecoveryRecordSha256()
-	}
-	if len(acknowledgement.GetReleaseRecoveryRecordSha256()) != 0 &&
-		len(acknowledgement.GetComponentRecoveryRecordSha256()) != 0 ||
-		componentRecovery && len(acknowledgement.GetReleaseRecoveryRecordSha256()) != 0 ||
-		!componentRecovery && len(acknowledgement.GetComponentRecoveryRecordSha256()) != 0 {
-		return taskReportRejected, errs.New(
-			errs.KindValidationFailed,
-			"Agent Task acknowledgement carries two recovery families",
-		)
-	}
 	backupTask := task.Record.Type == taskjournal.TaskBackup || task.Record.Type == taskjournal.TaskBackupPrune ||
 		task.Record.Type == taskjournal.TaskRestore
 	if backupTask != (acknowledgement.GetBackupResult() != nil) ||

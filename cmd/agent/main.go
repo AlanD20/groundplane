@@ -15,9 +15,30 @@ import (
 func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
+	if len(os.Args) == 2 && os.Args[1] == app.EntryWorkHelperArgument {
+		if err := app.RunEntryWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Entry helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.ComponentWorkHelperArgument {
+		if err := app.RunComponentWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Component helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == app.AttachConsumerHelperArgument {
 		if err := app.RunAttachConsumerHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Detach consumer helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.BackupConsumerHelperArgument {
+		if err := app.RunBackupConsumerHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Backup Volume consumer helper:", err)
 			os.Exit(1)
 		}
 		return
@@ -32,6 +53,20 @@ func main() {
 	if len(os.Args) == 2 && os.Args[1] == app.VolumeWorkHelperArgument {
 		if err := app.RunVolumeWorkHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Volume helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.LifecycleWorkHelperArgument {
+		if err := app.RunLifecycleWorkHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Service lifecycle helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.RemovalRecoveryHelperArgument {
+		if err := app.RunRemovalRecoveryHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Service removal recovery helper:", err)
 			os.Exit(1)
 		}
 		return

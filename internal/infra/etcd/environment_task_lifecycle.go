@@ -24,66 +24,6 @@ type taskEnvironmentMutationState struct {
 	EpochValue    []byte
 }
 
-func (repository *TaskRepository) prepareEnvironmentTaskRetry(
-	ctx context.Context,
-	source TaskRecord,
-	retry TaskRecord,
-	revision int64,
-) (environmentTaskChange, error) {
-	if source.Executor == taskjournal.TaskExecutorAgent && source.Type == taskjournal.TaskRemove &&
-		ids.Validate(ids.KindEnvironment, source.Target) == nil {
-		return repository.prepareEnvironmentRemovalTaskRetry(ctx, source, retry, revision)
-	}
-	if source.Executor != taskjournal.TaskExecutorAgent || source.Type != taskjournal.TaskCreate ||
-		ids.Validate(ids.KindEnvironment, source.Target) != nil {
-		return environmentTaskChange{}, nil
-	}
-	if retry.Type != source.Type || retry.Target != source.Target {
-		return environmentTaskChange{}, errs.New(
-			errs.KindInternal,
-			"environment retry changed its durable target",
-		)
-	}
-	state, err := repository.readTaskEnvironmentMutationState(ctx, source.Target, revision, true)
-	if err != nil {
-		return environmentTaskChange{}, err
-	}
-	current := state.Environment
-	if current.Record.CreateTaskID != source.ID {
-		return environmentTaskChange{}, errs.New(
-			errs.KindStateConflict,
-			"source Task no longer owns Environment provisioning",
-		)
-	}
-	retrying, err := hierarchyrecord.RetryEnvironmentProvisioning(current.Record, retry.ID)
-	if err != nil {
-		return environmentTaskChange{}, err
-	}
-	value, err := hierarchyrecord.EncodeEnvironment(retrying)
-	if err != nil {
-		return environmentTaskChange{}, err
-	}
-	return environmentTaskChange{
-		applies: true,
-		conditions: []etcdstore.Condition{
-			{Key: hierarchyrecord.EnvironmentKey(source.Target), ModRevision: current.Revision},
-			{Key: hierarchyrecord.EnvironmentMutationEpochKey(source.Target), ModRevision: state.EpochRevision},
-			{Key: hierarchyrecord.EnvironmentOperationLockKey(source.Target)},
-		},
-		mutations: []etcdstore.Mutation{
-			{
-				Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(source.Target), Value: value,
-			},
-			{
-				Type:  etcdstore.MutationPut,
-				Key:   hierarchyrecord.EnvironmentMutationEpochKey(source.Target),
-				Value: state.EpochValue,
-			},
-		},
-		values: [][]byte{value, state.EpochValue},
-	}, nil
-}
-
 func (repository *TaskRepository) readTaskEnvironmentMutationState(
 	ctx context.Context,
 	environmentID string,

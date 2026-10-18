@@ -53,13 +53,6 @@ func (s *Server) sendTaskTerminalReceipt(
 	if err != nil {
 		return err
 	}
-	// The immutable receipt proves settlement; an unaccepted worker report does
-	// not authorize destruction of a request-only identity.
-	if s.secrets != nil {
-		if err := s.secrets.ReleaseRestoreIdentity(stream.Context(), ack.TaskId); err != nil {
-			return err
-		}
-	}
 	receiptSHA, err := taskjournal.TaskTerminalReceiptSHA256(stored.Record)
 	if err != nil {
 		return err

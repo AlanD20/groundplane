@@ -44,7 +44,7 @@ func BindHierarchyDeletionAction(
 	}
 	switch planned.ProcedureInput.Kind {
 	case hierarchydeletion.HierarchyDeletionProcedureAgent:
-		input := planned.ProcedureInput.AgentChild
+		input := planned.ProcedureInput.AgentWork
 		if input == nil || planned.ProcedureInput.ControllerFinalizer != nil {
 			return hierarchydeletion.HierarchyDeletionAction{}, errs.New(
 				errs.KindValidationFailed,
@@ -52,16 +52,12 @@ func BindHierarchyDeletionAction(
 			)
 		}
 		action.AgentProcedure = &hierarchydeletion.HierarchyDeletionAgentProcedure{
-			ChildOperationID: hierarchydeletion.HierarchyDeletionStableOperationID(
-				planned.ParentOperationID,
-				planned.NodeID,
-			),
-			TaskType: input.TaskType, TypedProcedure: input.TypedProcedure,
-			InputDigest: input.InputDigest, TimeoutSeconds: input.TimeoutSeconds,
+			TypedProcedure: input.TypedProcedure,
+			InputDigest:    input.InputDigest, TimeoutSeconds: input.TimeoutSeconds,
 		}
 	case hierarchydeletion.HierarchyDeletionProcedureController:
 		input := planned.ProcedureInput.ControllerFinalizer
-		if input == nil || planned.ProcedureInput.AgentChild != nil || input.TargetKind != planned.TargetKind ||
+		if input == nil || planned.ProcedureInput.AgentWork != nil || input.TargetKind != planned.TargetKind ||
 			input.TargetID != planned.TargetID || input.FixedInputRevision != planned.TargetRevision ||
 			!hierarchydeletion.ValidHierarchyDeletionDigest(input.FixedInputDigest) || input.BatchOrdinal < 0 ||
 			input.BatchCount <= 0 || input.BatchOrdinal >= input.BatchCount {

@@ -20,6 +20,9 @@ func (server *Server) ConfigureAttachWork(reports AttachReporter) { server.attac
 // attachReport keeps typed Attach reporting on the authenticated session. The
 // stream loop owns transport; operation owners own evidence and settlement.
 func (server *Server) attachReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
+	if handled, reply, err := server.attachProvisionReport(session, generation, message); handled {
+		return handled, reply, err
+	}
 	if message.GetAttachRemovalFailureRequest() == nil && message.GetAttachRemovalCompletionRequest() == nil &&
 		message.GetAttachRemovalCheckpointRequest() == nil && message.GetAttachRecoveryCompletionRequest() == nil {
 		return false, nil, nil

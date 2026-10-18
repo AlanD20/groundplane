@@ -175,7 +175,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearRouteHeadPublication(desired)
+	defer clearDesiredMutationFragment(desired)
 	conditions, mutations, classify, err = desired.bindDirectDesired(
 		binding.Conditions(),
 		binding.Mutations(),

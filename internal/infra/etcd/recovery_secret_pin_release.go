@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionretention"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
@@ -45,11 +44,6 @@ func (repository *TaskRepository) ResumeTaskSourceReleases(ctx context.Context) 
 func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
 	ctx context.Context, task TaskRecord, revision int64,
 ) (taskMaterializationProjectionChange, error) {
-	// Check settlement releases pins for every fully cleaned outcome. Its domain
-	// finalizer owns this once, including failed and canceled probes.
-	if connectorCheckTask(task) {
-		return taskMaterializationProjectionChange{}, nil
-	}
 	if task.Configuration == nil || task.Status != taskjournal.TaskStatusCompleted {
 		return taskMaterializationProjectionChange{}, nil
 	}
@@ -110,7 +104,7 @@ func (repository *TaskRepository) beginRecoverySecretPinRelease(
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
-	root, found, err := pins.LoadActive(ctx, task.OperationID)
+	root, found, err := pins.LoadActive(ctx, task.OperationID, 0)
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
@@ -154,7 +148,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	if err != nil {
 		return true, err
 	}
-	root, found, err := pins.LoadActive(ctx, task.OperationID)
+	root, found, err := pins.LoadActive(ctx, task.OperationID, 0)
 	if err != nil || !found {
 		return false, err
 	}
@@ -242,9 +236,6 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
 		etcdstore.Condition{Key: retention.Key, ModRevision: retention.ModRevision},
 	)
-	change.conditions = append(change.conditions, hierarchydeletionretention.ChildRetiredConditions(
-		task.Params[taskjournal.TaskHierarchyDeletionParentParam],
-	)...)
 	for index, key := range keys {
 		change.conditions = append(
 			change.conditions,
@@ -314,9 +305,6 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 		{Key: keys[0]}, {Key: keys[1]},
 		{Key: keys[2], ModRevision: read.Values[2].ModRevision},
 	}
-	conditions = append(conditions, hierarchydeletionretention.ChildRetiredConditions(
-		task.Params[taskjournal.TaskHierarchyDeletionParentParam],
-	)...)
 	commit, err := repository.store.Transact(
 		ctx,
 		conditions,

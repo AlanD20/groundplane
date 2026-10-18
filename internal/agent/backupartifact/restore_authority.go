@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/backupobject"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -12,26 +14,26 @@ import (
 // RestoreAuthority owns the selected object and evidence from the sealed
 // Restore step. Neither download nor reconnect may select a newer object.
 type RestoreAuthority struct {
-	task    *agentpb.BackupTaskAuthority
-	step    *agentpb.BackupStepAuthority
 	restore *agentpb.BackupRestoreAuthority
 	object  backupobject.Object
 }
 
-func NewRestoreAuthority(task *agentpb.BackupTaskAuthority, step *agentpb.BackupStepAuthority) (
+func NewRestoreAuthority(environment string, selectedRestore *agentpb.BackupRestoreAuthority) (
 	*RestoreAuthority, error,
 ) {
-	sealedTask, sealedStep, err := bindStep(task, step)
+	if ids.Validate(ids.KindEnvironment, environment) != nil {
+		return nil, invalidRestore()
+	}
+	restore, err := executionplan.CaptureRestoreArtifactAuthority(selectedRestore)
 	if err != nil {
 		return nil, err
 	}
-	restore := sealedStep.GetRestore()
 	if restore == nil || restore.Destination == nil || restore.Destination.GetResourceId() == "" {
 		return nil, invalidRestore()
 	}
 	selected := restore.SourceObject
 	parts := strings.Split(strings.TrimPrefix(selected.ObjectKey, selected.Connector.Prefix), "/")
-	if len(parts) != 4 || parts[0] != sealedTask.EnvironmentId {
+	if len(parts) != 4 || parts[0] != environment {
 		return nil, invalidRestore()
 	}
 	artifact := backupobject.Artifact{
@@ -87,8 +89,8 @@ func NewRestoreAuthority(task *agentpb.BackupTaskAuthority, step *agentpb.Backup
 		return nil, err
 	}
 	return &RestoreAuthority{
-		task: sealedTask, step: sealedStep, restore: restore,
-		object: backupobject.Object{Artifact: artifact, Discriminator: discriminator},
+		restore: restore,
+		object:  backupobject.Object{Artifact: artifact, Discriminator: discriminator},
 	}, nil
 }
 

@@ -47,6 +47,6 @@ func routeProviderCompose(provider environmentchanges.RouteProviderPin) environm
 		project.Services = composetypes.Services{name: selected}
 		project.DisabledServices = nil
 		project.Volumes = nil
-		return managedAttachExternalNetworks(project)
+		return composerender.ManagedAttachExternalNetworks(project)
 	}
 }

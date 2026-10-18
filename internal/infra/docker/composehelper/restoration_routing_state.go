@@ -90,7 +90,7 @@ func readRestorationRouting(ctx context.Context, taskRunner runner.Runner, conta
 // reload. Repair only a recognized captured snapshot, then prove both views;
 // arbitrary observed bytes never become execution authority.
 func repairRestorationPosition(ctx context.Context, taskRunner runner.Runner,
-	containerID string, proxy *agentpb.ComposeService, member *agentpb.CandidateReleaseMember,
+	containerID string, proxy *agentpb.ComposeService, traffic [][]byte,
 ) (int, error) {
 	implementation, err := executionplan.OpenProxyImplementation(proxy.GetProxyImplementation())
 	if err != nil {
@@ -100,12 +100,13 @@ func repairRestorationPosition(ctx context.Context, taskRunner runner.Runner,
 	if err != nil {
 		return -1, err
 	}
-	for position := len(member.GetRolling().GetChanges()); position >= 0; position-- {
+	for position := len(traffic); position >= 0; position-- {
 		manifest := proxy.GetProxyConfigJson()
 		digest := proxy.GetProxyConfigSha256()
 		if position > 0 {
-			change := member.GetRolling().GetChanges()[position-1]
-			manifest, digest = change.GetProxyConfigJson(), change.GetProxyConfigSha256()
+			manifest = traffic[position-1]
+			hash := sha256.Sum256(manifest)
+			digest = hash[:]
 		}
 		if !proxyBytesMatch(observed, digest) {
 			continue

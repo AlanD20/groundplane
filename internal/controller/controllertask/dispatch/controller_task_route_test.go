@@ -14,7 +14,6 @@ func TestControllerTaskHandlerAcceptsExactRouteMutation(t *testing.T) {
 	t.Parallel()
 	handler, err := newTestResourceHandler(
 		&fakeControllerTaskLocalAgents{},
-		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{})
 
 	if err != nil {

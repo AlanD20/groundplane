@@ -2,115 +2,105 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// SettleBlueprintRoute acknowledges the Route in the immutable authored input
+// PrepareBlueprintRouteSettlement acknowledges the Route in the immutable authored input
 // before the router needs it. It does not claim that the host is serving it.
-func (repository *EnvironmentBlueprintRepository) SettleBlueprintRoute(
-	ctx context.Context, parent TaskRecord, unit blueprintunits.Unit,
-	route projectionrecord.EnvironmentRouteProjection,
-) error {
+func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteSettlement(
+	ctx context.Context, work workqueue.View, unit blueprintunits.Unit,
+	route projectionrecord.EnvironmentRouteProjection, at time.Time,
+) (workqueue.Change, error) {
+	parent := work.Task.Task
 	if err := keyvalue.ValidateContext(ctx); err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	if repository == nil || repository.HierarchyRepository == nil ||
-		validateBlueprintParentClaimTask(parent) != nil || parent.Status != taskjournal.TaskStatusRunning ||
-		parent.Params[blueprints.EnvironmentDesiredRevisionParam] != parent.ID ||
+		parent.Validate() != nil || parent.Action != workexecution.ActionApply || work.ReadRevision <= 0 ||
 		unit.Target.Kind != ids.KindRoute || unit.Removal {
-		return errs.New(errs.KindValidationFailed, "Blueprint Route settlement identity is invalid")
+		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Blueprint Route settlement identity is invalid")
 	}
 	ledger, err := blueprintunits.NewRepository(repository.store)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
-	snapshot, err := ledger.Load(ctx, parent.Owner.EnvironmentID)
+	snapshot, err := ledger.LoadAtRevision(ctx, parent.Scope.EnvironmentID, work.ReadRevision)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	if snapshot.HeadTaskID != parent.ID {
-		return errs.New(errs.KindStateConflict, "Blueprint Route parent is no longer current")
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route parent is no longer current")
 	}
-	parentKey := taskjournal.TaskStorageKey(parent.ID)
-	claimKey := taskjournal.BlueprintParentClaimKey(parent.ID)
-	rootKey := blueprints.EnvironmentBlueprintRootKey(parent.Owner.EnvironmentID, parent.ID)
-	identitiesKey := blueprints.EnvironmentBlueprintOwnedIdentitiesKey(parent.Owner.EnvironmentID, parent.ID)
-	keys := []string{parentKey, claimKey, rootKey, identitiesKey}
+	parentKey := workqueue.TaskKey(parent.ID)
+	workKey := workqueue.ItemKey(work.Item.Item.ID)
+	rootKey := blueprints.EnvironmentBlueprintRootKey(parent.Scope.EnvironmentID, parent.ID)
+	identitiesKey := blueprints.EnvironmentBlueprintOwnedIdentitiesKey(parent.Scope.EnvironmentID, parent.ID)
+	keys := []string{parentKey, workKey, rootKey, identitiesKey}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: snapshot.ReadRevision})
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	if read == nil || read.ReadRevision != snapshot.ReadRevision || len(read.Values) != len(keys) {
-		return errs.New(errs.KindInternal, "Blueprint Route settlement evidence is incomplete")
+		return workqueue.Change{}, errs.New(errs.KindInternal, "Blueprint Route settlement evidence is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] {
-			return errs.New(errs.KindStateConflict, "Blueprint Route settlement authority is unavailable")
+			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route settlement authority is unavailable")
 		}
 	}
-	storedParent, parentErr := DecodeTaskRecord(read.Values[0].Value)
-	claimID, claimErr := idempotency.DecodeTaskReference(read.Values[1].Value)
-	if parentErr != nil || claimErr != nil || claimID != parent.ID ||
-		validateBlueprintParentClaimTask(storedParent) != nil ||
-		storedParent.Status != taskjournal.TaskStatusRunning ||
-		storedParent.ID != parent.ID || storedParent.Owner != parent.Owner ||
-		storedParent.PlanID != parent.PlanID || storedParent.PlanHash != parent.PlanHash {
-		return errs.New(errs.KindStateConflict, "Blueprint Route parent claim changed")
+	if read.Values[0].ModRevision != work.Task.Revision || read.Values[1].ModRevision != work.Item.Revision {
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route work changed")
 	}
 	desired, found, err := blueprints.ReadDesiredInputRevision(
 		ctx,
 		repository.store,
-		parent.Owner.EnvironmentID,
+		parent.Scope.EnvironmentID,
 		parent.ID,
 		snapshot.ReadRevision,
 	)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	owned, err := projectionrecord.DecodeEnvironmentOwnedIdentities(read.Values[3].Value)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	if !found || desired.Revision != read.Values[2].ModRevision ||
-		desired.Record.EnvironmentID != parent.Owner.EnvironmentID || desired.Record.RevisionID != parent.ID ||
-		desired.Record.RenderGeneration != uint64(parent.RenderGeneration) ||
-		owned.EnvironmentID != parent.Owner.EnvironmentID || owned.RevisionID != parent.ID ||
+		desired.Record.EnvironmentID != parent.Scope.EnvironmentID || desired.Record.RevisionID != parent.ID ||
+		owned.EnvironmentID != parent.Scope.EnvironmentID || owned.RevisionID != parent.ID ||
 		owned.RenderGeneration != desired.Record.RenderGeneration ||
 		!authoredRouteSelectionMatches(desired.Record, owned, unit, route) {
-		return errs.New(errs.KindStateConflict, "Blueprint Route authored selection changed")
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route authored selection changed")
 	}
-	receipt, err := blueprintunits.PrepareControllerRouteSettlement(
-		snapshot, unit, ids.New(ids.KindOperation), read.Values[2].ModRevision,
-	)
+	encoded, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(desired.Record)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
-	defer receipt.Clear()
-	conditions := append(receipt.Conditions(),
-		keyvalue.Condition{Key: parentKey, ModRevision: read.Values[0].ModRevision},
-		keyvalue.Condition{Key: claimKey, ModRevision: read.Values[1].ModRevision},
-		keyvalue.Condition{Key: taskjournal.BlueprintParentAbortKey(parent.ID)},
-		keyvalue.Condition{Key: rootKey, ModRevision: read.Values[2].ModRevision},
-		keyvalue.Condition{Key: identitiesKey, ModRevision: read.Values[3].ModRevision},
-	)
-	result, err := repository.store.Transact(ctx, conditions, receipt.Mutations())
-	keyvalue.ClearValues(result.FailureReads)
+	digest := sha256.Sum256(encoded)
+	clear(encoded)
+	if hex.EncodeToString(digest[:]) != parent.Intent.SHA256 {
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route desired input differs from captured intent")
+	}
+	change, err := blueprintunits.PrepareDefinitionWorkSettlement(snapshot, work, unit, read.Values[2].ModRevision, at)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
-	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Blueprint Route settlement raced")
+	for index, key := range keys {
+		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision})
 	}
-	return nil
+	return change, nil
 }
 
 func authoredRouteSelectionMatches(desired projectionrecord.EnvironmentDesiredInput,

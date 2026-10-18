@@ -2,37 +2,30 @@ package etcd
 
 import (
 	"context"
-	"slices"
-
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/postgresbackingguard"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
+	"slices"
 )
 
-type postgresBackingGuardCleanupTask struct {
-	task                    etcdstore.Versioned[TaskRecord]
-	plan                    *agentpb.ExecutionPlan
-	nativeKey               string
-	owner                   environmentfence.Owner
-	consumerEnvironmentID   string
-	expectedStepEnvironment map[string]string
-	coveredSteps            map[string]struct{}
+type postgresBackingGuardCleanupWork struct {
+	source     backupwork.StagingSource
+	owner      environmentfence.Owner
+	expected   map[uint32]string
+	covered    map[uint32]bool
+	conditions []etcdstore.Condition
 }
 
-// preparePostgresBackingGuardStagingCleanup accepts only the first durable ACK
-// for exact DiscardRecovered dispositions whose PostgreSQL helper inventory was
-// already proved clean by the Agent. It independently binds every guard to the
-// sealed Task plan and terminal native record before releasing any backing
-// Environment lock in the same transaction as that ACK. Terminal Tasks cannot
-// be pruned while their exact guard remains, so the delivery and guard CASes
-// are the compact commit fence after those immutable records are validated.
-func (repository *TaskRepository) preparePostgresBackingGuardStagingCleanup(
-	ctx context.Context,
+// The first staging ACK can release database locks only after every started
+// source has an exact discard acknowledgement. Captured work and resource state,
+// not the retired Task plan, authorize this transaction.
+func (repository *TaskRepository) preparePostgresBackingGuardStagingCleanup(ctx context.Context,
 	delivery etcdstore.Versioned[backupruntime.BackupStagingDeliveryRecord],
 ) (postgresbackingguard.Plan, error) {
 	result := postgresbackingguard.Plan{}
@@ -40,227 +33,168 @@ func (repository *TaskRepository) preparePostgresBackingGuardStagingCleanup(
 		len(delivery.Record.Plan.Dispositions) != len(delivery.Record.Inventory.Entries) {
 		return result, backupStagingConflict()
 	}
-	tasks := make(map[string]*postgresBackingGuardCleanupTask)
+	inputs, err := backupwork.NewInputRepository(repository.store)
+	if err != nil {
+		return result, err
+	}
+	queue, err := workqueue.NewRepository(repository.store)
+	if err != nil {
+		return result, err
+	}
+	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: delivery.Record.HostID,
+		AgentID: delivery.Record.AgentID, Generation: delivery.Record.AgentGeneration}
+	works := make(map[string]*postgresBackingGuardCleanupWork)
 	for index, disposition := range delivery.Record.Plan.Dispositions {
 		guard := disposition.GetDatabaseGuard()
 		if guard == nil || disposition.GetDiscardRecovered() == nil {
 			continue
 		}
 		if guard.GetPostgresRecoveryApply() != nil || guard.GetMysqlRecoveryApply() != nil {
-			return postgresbackingguard.Plan{}, backupStagingConflict()
+			return result, backupStagingConflict()
 		}
-		source, err := repository.ReadBackupStagingSource(
-			ctx,
-			delivery.Record.AgentID,
-			delivery.Record.AgentGeneration,
-			delivery.Record.Inventory.Entries[index].RecoveryKeySha256,
-		)
-		if err != nil || source.Plan == nil || source.Step == nil ||
-			guard.GetTaskId() != source.Task.Record.ID ||
-			guard.TerminalCleanup != taskjournal.IsTerminalTaskStatus(source.Task.Record.Status) ||
-			guard.CompletedTask != (source.Task.Record.Status == taskjournal.TaskStatusCompleted) ||
-			!proto.Equal(guard.GetStep(), source.Step) ||
+		source, err := inputs.ReadStagingSource(ctx, queue, identity, delivery.Record.Inventory.Entries[index].RecoveryKeySha256)
+		if err != nil {
+			return result, err
+		}
+		item := source.View.Item.Item
+		terminal := item.Phase == workexecution.Settled &&
+			(item.Cleanup == workexecution.CleanupNone || item.Cleanup == workexecution.CleanupComplete)
+		if guard.TaskId != source.View.Task.Task.ID || guard.TerminalCleanup != terminal ||
+			guard.CompletedTask != (terminal && item.Outcome == workexecution.Succeeded) ||
 			!postgresBackingGuardPlanSelectionMatches(source, guard) {
-			return postgresbackingguard.Plan{}, backupStagingConflict()
+			return result, backupStagingConflict()
 		}
-		if !taskjournal.IsTerminalTaskStatus(source.Task.Record.Status) ||
-			source.Task.Record.Status == taskjournal.TaskStatusCompleted {
+		result.Conditions = append(result.Conditions, source.Conditions...)
+		if !terminal || item.Outcome == workexecution.Succeeded {
 			continue
 		}
-		cleanup, found := tasks[source.Task.Record.ID]
-		if !found {
-			cleanup, err = repository.loadPostgresBackingGuardCleanupTask(
-				ctx,
-				source,
-				delivery.ReadRevision,
-			)
+		cleanup := works[item.ID]
+		if cleanup == nil {
+			cleanup, err = loadPostgresBackingGuardCleanupWork(ctx, inputs, source)
 			if err != nil {
-				return postgresbackingguard.Plan{}, err
+				return result, err
 			}
-			tasks[source.Task.Record.ID] = cleanup
-		} else if cleanup.task.Revision != source.Task.Revision ||
-			!proto.Equal(cleanup.plan, source.Plan) {
-			return postgresbackingguard.Plan{}, backupStagingConflict()
+			works[item.ID] = cleanup
+		} else if cleanup.source.View.Item.Revision != source.View.Item.Revision ||
+			!proto.Equal(cleanup.source.Input, source.Input) {
+			return result, backupStagingConflict()
 		}
-		stepID := guard.GetStep().GetStepId()
-		if cleanup.expectedStepEnvironment[stepID] == "" {
-			return postgresbackingguard.Plan{}, backupStagingConflict()
+		if cleanup.expected[source.Ordinal] == "" || cleanup.covered[source.Ordinal] {
+			return result, backupStagingConflict()
 		}
-		if _, duplicate := cleanup.coveredSteps[stepID]; duplicate {
-			return postgresbackingguard.Plan{}, backupStagingConflict()
-		}
-		cleanup.coveredSteps[stepID] = struct{}{}
+		cleanup.covered[source.Ordinal] = true
 	}
-
-	taskIDs := make([]string, 0, len(tasks))
-	for taskID := range tasks {
-		taskIDs = append(taskIDs, taskID)
+	workIDs := make([]string, 0, len(works))
+	for id := range works {
+		workIDs = append(workIDs, id)
 	}
-	slices.Sort(taskIDs)
-	for _, taskID := range taskIDs {
-		cleanup := tasks[taskID]
-		if len(cleanup.coveredSteps) != len(cleanup.expectedStepEnvironment) {
+	slices.Sort(workIDs)
+	for _, id := range workIDs {
+		cleanup := works[id]
+		if len(cleanup.expected) != len(cleanup.covered) {
 			result.Clear()
 			return postgresbackingguard.Plan{}, backupStagingConflict()
 		}
-		environmentSet := make(map[string]struct{})
-		for stepID, environmentID := range cleanup.expectedStepEnvironment {
-			if _, found := cleanup.coveredSteps[stepID]; !found {
-				result.Clear()
-				return postgresbackingguard.Plan{}, backupStagingConflict()
-			}
-			environmentSet[environmentID] = struct{}{}
+		environments := make([]string, 0, len(cleanup.expected))
+		for _, environment := range cleanup.expected {
+			environments = append(environments, environment)
 		}
-		environmentIDs := make([]string, 0, len(environmentSet))
-		for environmentID := range environmentSet {
-			environmentIDs = append(environmentIDs, environmentID)
-		}
-		slices.Sort(environmentIDs)
-		guardPlan, err := postgresbackingguard.PrepareOwnership(
-			ctx,
-			repository.store,
-			environmentIDs,
-			cleanup.consumerEnvironmentID,
-			cleanup.owner,
-			delivery.ReadRevision,
-			true,
-		)
+		slices.Sort(environments)
+		environments = slices.Compact(environments)
+		plan, err := postgresbackingguard.PrepareOwnership(ctx, repository.store, environments,
+			cleanup.source.Input.EnvironmentId, cleanup.owner, cleanup.source.View.ReadRevision, true)
 		if err != nil {
 			result.Clear()
 			return postgresbackingguard.Plan{}, err
 		}
-		result.Conditions = append(result.Conditions, guardPlan.Conditions...)
-		result.Mutations = append(result.Mutations, guardPlan.Mutations...)
-		guardPlan.Conditions = nil
-		guardPlan.Mutations = nil
+		result.Conditions = append(result.Conditions, cleanup.conditions...)
+		result.Conditions = append(result.Conditions, plan.Conditions...)
+		result.Mutations = append(result.Mutations, plan.Mutations...)
 	}
 	return result, nil
 }
 
-func (repository *TaskRepository) loadPostgresBackingGuardCleanupTask(
-	ctx context.Context,
-	source BackupStagingSource,
-	readRevision int64,
-) (*postgresBackingGuardCleanupTask, error) {
-	if source.Task.Revision <= 0 || source.Task.Record.TerminalAssignment == nil ||
-		!taskjournal.IsTerminalTaskStatus(source.Task.Record.Status) ||
-		source.Task.Record.Status == taskjournal.TaskStatusCompleted {
-		return nil, backupStagingConflict()
-	}
-	cleanup := &postgresBackingGuardCleanupTask{
-		task:                    source.Task,
-		plan:                    source.Plan,
-		expectedStepEnvironment: make(map[string]string),
-		coveredSteps:            make(map[string]struct{}),
-	}
-	switch source.Task.Record.Type {
-	case taskjournal.TaskBackup:
-		cleanup.nativeKey = backupruntime.BackupRunKey(source.Task.Record.ID)
-		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{cleanup.nativeKey}, Revision: readRevision,
-		})
+func loadPostgresBackingGuardCleanupWork(ctx context.Context, inputs *backupwork.InputRepository,
+	source backupwork.StagingSource,
+) (*postgresBackingGuardCleanupWork, error) {
+	cleanup := &postgresBackingGuardCleanupWork{source: source, expected: make(map[uint32]string), covered: make(map[uint32]bool)}
+	switch source.Input.Operation {
+	case agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_CAPTURE:
+		run, guard, err := inputs.LoadStagingCapture(ctx, source)
 		if err != nil {
 			return nil, err
 		}
-		if read == nil || read.ReadRevision != readRevision || len(read.Values) != 1 ||
-			read.Values[0] == nil || read.Values[0].ModRevision != source.Task.Revision {
+		if !backupruntime.TerminalBackupRunState(run.State) || run.State == backupruntime.BackupRunCompleted {
 			return nil, backupStagingConflict()
 		}
-		defer etcdstore.ClearValues(read.Values)
-		run, err := backupruntime.DecodeBackupRunRecord(read.Values[0].Value)
-		wantState, stateErr := backupRunStateForTaskStatus(source.Task.Record.Status)
-		if err != nil || ValidateBackupRunTaskBinding(source.Task.Record, run) != nil ||
-			backupplanning.ValidateBackupRunExecutionPlan(run, source.Plan) != nil ||
-			stateErr != nil || run.State != wantState ||
-			!backupruntime.TerminalBackupRunState(run.State) || run.State == backupruntime.BackupRunCompleted {
-			return nil, backupStagingConflict()
-		}
-		cleanup.owner = postgresbackingguard.Owner(
-			backupruntime.BackupOperationBackup,
-			run.OperationID,
-			run.TaskID,
-		)
-		cleanup.consumerEnvironmentID = run.EnvironmentID
+		cleanup.conditions = append(cleanup.conditions, guard)
+		cleanup.owner = postgresbackingguard.Owner(backupruntime.BackupOperationBackup, run.OperationID, run.TaskID)
 		for index, attempt := range run.Sources {
-			if attempt.Kind != backupruntime.BackupRuntimeSourceAttach ||
-				attempt.State == backupruntime.BackupSourceAttemptUnstarted {
+			if attempt.Kind != backupruntime.BackupRuntimeSourceAttach || attempt.State == backupruntime.BackupSourceAttemptUnstarted {
 				continue
 			}
-			step := source.Plan.Steps[index].GetBackupStep()
-			if step == nil || (step.GetCapture().GetPostgres() == nil && step.GetCapture().GetMysql() == nil) ||
-				cleanup.expectedStepEnvironment[step.GetStepId()] != "" {
+			step := source.Input.Steps[index]
+			environment := ""
+			if step.GetCapture().GetPostgres() != nil && attempt.Snapshot.Postgres != nil && attempt.Snapshot.MySQL == nil {
+				environment = attempt.Snapshot.Postgres.BackingEnvironmentID
+			} else if step.GetCapture().GetMysql() != nil && attempt.Snapshot.MySQL != nil && attempt.Snapshot.Postgres == nil {
+				environment = attempt.Snapshot.MySQL.BackingEnvironmentID
+			}
+			if environment == "" {
 				return nil, backupStagingConflict()
 			}
-			environmentID, ok := backupAttemptBackingEnvironmentID(attempt)
-			if !ok {
-				return nil, backupStagingConflict()
-			}
-			cleanup.expectedStepEnvironment[step.GetStepId()] = environmentID
+			cleanup.expected[uint32(index)] = environment
 		}
-	case taskjournal.TaskRestore:
-		cleanup.nativeKey = backupruntime.BackupRestoreKey(source.Task.Record.ID)
-		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{cleanup.nativeKey}, Revision: readRevision,
-		})
+	case agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_RESTORE:
+		restored, guard, err := inputs.LoadStagingRestore(ctx, source)
 		if err != nil {
 			return nil, err
 		}
-		if read == nil || read.ReadRevision != readRevision || len(read.Values) != 1 ||
-			read.Values[0] == nil || read.Values[0].ModRevision != source.Task.Revision {
+		if restored.State != backupruntime.BackupRestoreFailedSafe || len(source.Input.Steps) != 1 {
 			return nil, backupStagingConflict()
 		}
-		defer etcdstore.ClearValues(read.Values)
-		restored, err := backupruntime.DecodeBackupRestoreRecord(read.Values[0].Value)
-		if err != nil || restored.TaskID != source.Task.Record.ID ||
-			restored.OperationID != source.Task.Record.OperationID ||
-			restored.EnvironmentID != source.Task.Record.Owner.EnvironmentID ||
-			restored.State != backupruntime.BackupRestoreFailedSafe ||
-			backupruntime.ValidateDatabaseRestoreExecutionPlan(restored, source.Plan) != nil {
+		environment, found, err := backupruntime.DatabaseRestoreBackingEnvironmentID(restored)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
 			return nil, backupStagingConflict()
 		}
-		backingEnvironmentID, found, err := backupruntime.DatabaseRestoreBackingEnvironmentID(restored)
-		if err != nil || !found || len(source.Plan.Steps) != 1 {
-			return nil, backupStagingConflict()
-		}
-		step := source.Plan.Steps[0].GetBackupStep()
-		if step == nil || (step.GetRestore().GetPostgres() == nil && step.GetRestore().GetMysql() == nil) {
-			return nil, backupStagingConflict()
-		}
-		cleanup.owner = postgresbackingguard.Owner(
-			backupruntime.BackupOperationRestore,
-			restored.OperationID,
-			restored.TaskID,
-		)
-		cleanup.consumerEnvironmentID = restored.EnvironmentID
-		cleanup.expectedStepEnvironment[step.GetStepId()] = backingEnvironmentID
+		cleanup.conditions = append(cleanup.conditions, guard)
+		cleanup.owner = postgresbackingguard.Owner(backupruntime.BackupOperationRestore, restored.OperationID, restored.TaskID)
+		cleanup.expected[0] = environment
 	default:
 		return nil, backupStagingConflict()
 	}
-	if len(cleanup.expectedStepEnvironment) == 0 {
+	if len(cleanup.expected) == 0 {
 		return nil, backupStagingConflict()
 	}
 	return cleanup, nil
 }
 
 func postgresBackingGuardPlanSelectionMatches(
-	source BackupStagingSource,
+	source backupwork.StagingSource,
 	guard *agentpb.BackupDatabaseStagingGuard,
 ) bool {
-	serviceID := source.Step.GetCapture().GetPostgres().GetDatabaseServiceId()
-	if mysql := source.Step.GetCapture().GetMysql(); mysql != nil {
+	step := source.Input.Steps[source.Ordinal]
+	if !proto.Equal(step, guard.Step) {
+		return false
+	}
+	serviceID := step.GetCapture().GetPostgres().GetDatabaseServiceId()
+	if mysql := step.GetCapture().GetMysql(); mysql != nil {
 		serviceID = mysql.DatabaseServiceId
 	}
-	if restore := source.Step.GetRestore().GetPostgres(); restore != nil {
+	if restore := step.GetRestore().GetPostgres(); restore != nil {
 		serviceID = restore.GetDatabaseServiceId()
 	}
-	if mysql := source.Step.GetRestore().GetMysql(); mysql != nil {
+	if mysql := step.GetRestore().GetMysql(); mysql != nil {
 		serviceID = mysql.GetDatabaseServiceId()
 	}
-	if serviceID == "" || source.Plan.GetBackupScope() == nil {
+	if serviceID == "" {
 		return false
 	}
 	factMatches := 0
-	for _, fact := range source.Plan.GetBackupScope().GetServices() {
+	for _, fact := range source.Input.Services {
 		if fact.GetServiceId() == serviceID {
 			factMatches++
 			if !proto.Equal(fact, guard.GetDatabaseService()) {
@@ -269,7 +203,7 @@ func postgresBackingGuardPlanSelectionMatches(
 		}
 	}
 	artifactMatches := 0
-	for _, artifact := range source.Plan.GetArtifacts() {
+	for _, artifact := range source.Input.Artifacts {
 		for _, service := range artifact.GetServices() {
 			if service.GetServiceId() == serviceID &&
 				service.GetComposeName() == guard.GetDatabaseService().GetCurrentName() {
@@ -281,14 +215,4 @@ func postgresBackingGuardPlanSelectionMatches(
 		}
 	}
 	return factMatches == 1 && artifactMatches == 1
-}
-
-func backupAttemptBackingEnvironmentID(attempt backupruntime.BackupRunSourceAttemptRecord) (string, bool) {
-	if attempt.Snapshot.Postgres != nil && attempt.Snapshot.MySQL == nil {
-		return attempt.Snapshot.Postgres.BackingEnvironmentID, true
-	}
-	if attempt.Snapshot.MySQL != nil && attempt.Snapshot.Postgres == nil {
-		return attempt.Snapshot.MySQL.BackingEnvironmentID, true
-	}
-	return "", false
 }

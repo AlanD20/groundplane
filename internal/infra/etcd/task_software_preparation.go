@@ -20,7 +20,7 @@ func validateSoftwarePreparationTask(record TaskRecord) error {
 		record.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceSoftwarePreparation ||
 		record.TimeoutSeconds != preparation.TaskTimeoutSeconds || record.RenderGeneration != 1 ||
 		record.RetryOf != "" || len(record.Steps) != 0 || len(record.Materializations) != 0 ||
-		record.Configuration != nil || record.EntryRuntime != nil ||
+		record.Configuration != nil ||
 		len(record.ComponentActionStepIDs) != 0 || len(record.ManagedComponentTeardownSources) != 0 {
 		return errs.New(errs.KindValidationFailed, "software preparation Task authority is invalid")
 	}

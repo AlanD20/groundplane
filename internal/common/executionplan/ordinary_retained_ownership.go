@@ -12,9 +12,6 @@ import (
 func validRetainedOwnership(
 	plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact, serviceID string, labels map[string]string,
 ) (bool, retainedOwnershipReason) {
-	if validRouteRecoveryRetainedOwnership(plan, artifact, labels) {
-		return true, ""
-	}
 	if validEnvironmentComponentOwnership(plan, artifact, serviceID, labels) {
 		return true, ""
 	}
@@ -26,7 +23,7 @@ func validRetainedOwnership(
 	}
 	if validAttachMutationOwnership(plan, artifact, labels) ||
 		validOrdinaryRetainedOwnership(plan, artifact, serviceID, labels) ||
-		validVolumeResourceOnlyOwnership(plan, artifact, labels) || validEntryMutationOwnership(plan, labels) {
+		validVolumeResourceOnlyOwnership(plan, artifact, labels) {
 		return true, ""
 	}
 	return retainedOwnershipReject(retainedOwnershipInvalidInput)

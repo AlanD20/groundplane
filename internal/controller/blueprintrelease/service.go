@@ -2,9 +2,11 @@ package blueprintrelease
 
 import (
 	"context"
+	"errors"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/rollingpredecessor"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -17,7 +19,8 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"time"
@@ -31,6 +34,7 @@ type Service struct {
 	scripts     *etcd.ScriptRepository
 	plans       *taskplanning.TaskPlanResolver
 	preparation *taskplanning.ScriptRunnerPreparationService
+	artifacts   *taskplanning.ScriptArtifactService
 	sources     *scriptsourcepublication.Authority
 }
 
@@ -57,6 +61,7 @@ func NewService(
 		scripts:     scripts,
 		plans:       plans,
 		preparation: preparation,
+		artifacts:   artifacts,
 		sources:     sources,
 		agents:      agents,
 		images:      images,
@@ -74,27 +79,63 @@ type prepareInput struct {
 	Projection        projectionrecord.EnvironmentComposeProjection
 	ServiceChanges    []blueprints.EnvironmentBlueprintServiceChange
 	Scripts           []scriptrecord.Record
-	Task              etcd.TaskRecord
-	PrefixSteps       []*agentpb.ExecutionStep
+	Files             []taskmaterialization.Record
+	Work              workqueue.View
+	OperationID       string
+	PlanID            string
 	Artifact          *agentpb.ComposeArtifact
 	AllocateNamed     func(ids.Kind, string) string
 	CreatedAt         time.Time
 }
 
 type Prepared struct {
-	Task        etcd.TaskRecord
-	Plan        *agentpb.ExecutionPlan
-	Publication etcd.BlueprintReleasePublication
+	Item             workexecution.Item
+	Input            workexecution.Input
+	Publication      etcd.BlueprintReleasePublication
+	ledger           *etcd.ReleaseLedger
+	work             workqueue.View
+	secrets          tasksecretpins.Prepared
+	sourceConditions []etcdstore.Condition
 }
 
-func (prepared Prepared) Abandon(ctx context.Context) error { return prepared.Publication.Abandon(ctx) }
+func (prepared Prepared) Abandon(ctx context.Context) error {
+	sourceErr := prepared.Publication.Abandon(ctx)
+	if prepared.secrets.IsZero() {
+		return sourceErr
+	}
+	return errors.Join(sourceErr, prepared.ledger.AbandonReleaseWorkSecretPins(ctx, prepared.work, prepared.secrets))
+}
+
+// Change binds the prerequisite snapshots used by the coordinator to the one
+// publication. No hidden Task or generic plan is returned to the caller.
+func (prepared Prepared) Change(dependencies []workqueue.ItemSnapshot) (workqueue.Change, error) {
+	change, err := prepared.Publication.Change(prepared.work, dependencies)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, prepared.sourceConditions...)
+	return change, nil
+}
+
+func (prepared *Prepared) Clear() {
+	if prepared == nil {
+		return
+	}
+	prepared.Publication.Clear()
+	*prepared = Prepared{}
+}
 
 func (service *Service) validatePrepareInput(ctx context.Context, input prepareInput) error {
 	if ctx == nil || service == nil || service.ledger == nil || service.plans == nil || input.AllocateNamed == nil ||
-		input.Task.ID == "" || input.Task.OperationID == "" ||
+		input.Work.Task.Task.Validate() != nil || input.Work.Item.Item.Validate() != nil ||
+		input.Work.Task.Task.Action != workexecution.ActionApply ||
+		input.Work.Item.Item.TaskID != input.Work.Task.Task.ID ||
+		input.Work.Item.Item.Operation != workexecution.Release ||
+		input.Work.Item.Item.Placement.Executor != workexecution.Agent ||
+		ids.Validate(ids.KindOperation, input.OperationID) != nil || ids.Validate(ids.KindPlan, input.PlanID) != nil ||
 		ids.Validate(ids.KindTask, input.DesiredRevisionID) != nil ||
 		input.Projection.RevisionID != input.DesiredRevisionID ||
-		input.Task.Params[blueprints.EnvironmentDesiredRevisionParam] != input.DesiredRevisionID ||
+		input.Work.Task.Task.ID != input.DesiredRevisionID ||
 		!input.CreatedAt.Equal(input.CreatedAt.UTC()) {
 		return errs.New(errs.KindValidationFailed, "Blueprint Release preparation is invalid")
 	}
@@ -106,7 +147,7 @@ func (service *Service) prepareSelected(
 	input prepareInput,
 	candidates []blueprints.EnvironmentBlueprintServiceChange,
 ) (Prepared, error) {
-	if len(candidates) != 1 || !taskjournal.IsBlueprintChild(input.Task.Params) {
+	if len(candidates) != 1 || candidates[0].Record.Desired.ID != input.Work.Item.Item.TargetID {
 		return Prepared{}, errs.New(errs.KindInternal, "Blueprint Release requires one owned Service unit")
 	}
 	proxyServices := make([]core.Service, len(candidates))
@@ -124,17 +165,7 @@ func (service *Service) prepareSelected(
 		return Prepared{}, err
 	}
 	defer addresses.Clear()
-	task := input.Task
-	if task.Params == nil {
-		task.Params = make(map[string]string)
-	}
-	procedure, validProcedure := taskcontract.ParseBlueprintComposeProcedure(
-		task.Params[taskcontract.EnvironmentBlueprintProcedureParam],
-	)
-	if !validProcedure || procedure != taskcontract.BlueprintComposeProcedureNone {
-		return Prepared{}, errs.New(errs.KindValidationFailed, "Blueprint Release Task procedure is invalid")
-	}
-	captured, err := service.stageSelectedRuntime(ctx, input, candidates, task, addresses)
+	captured, err := service.stageSelectedRuntime(ctx, input, candidates, addresses)
 	if err != nil {
 		return Prepared{}, err
 	}

@@ -14,7 +14,7 @@ func databaseExecutionIDs(taskID string, step *agentpb.BackupStepAuthority) agen
 	if pointID == "" {
 		pointID = step.GetRestore().GetPointId()
 	}
-	return agentpostgresjournal.IDs{Task: taskID, Step: step.GetStepId(), Point: pointID}
+	return agentpostgresjournal.IDs{Task: taskID, ExecutionID: step.GetExecutionId(), Point: pointID}
 }
 
 func inventoryDatabaseExecutions(ctx context.Context, inventory *agentpb.BackupStagingInventory) error {
@@ -27,7 +27,7 @@ func inventoryDatabaseExecutions(ctx context.Context, inventory *agentpb.BackupS
 		entries[hex.EncodeToString(entry.RecoveryKeySha256)] = entry
 	}
 	for _, marker := range markers {
-		key, err := executionplan.BackupStagingRecoveryKey(marker.Task, marker.Step, marker.Point)
+		key, err := executionplan.BackupSourceStagingKey(marker.Task, marker.ExecutionID, marker.Point)
 		if err != nil {
 			return err
 		}

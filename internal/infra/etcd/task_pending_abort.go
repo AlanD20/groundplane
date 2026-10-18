@@ -37,7 +37,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		}
 		if current.Record.Type == taskjournal.TaskBackup || current.Record.Type == taskjournal.TaskBackupPrune ||
 			current.Record.Type == taskjournal.TaskRestore {
-			return repository.terminalizePendingBackupTask(ctx, taskID, taskjournal.TaskStatusAborted, terminalAt)
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Backup and Restore require native work-item cancellation")
 		}
 		environmentCreation := current.Record.Executor == taskjournal.TaskExecutorAgent &&
 			current.Record.Type == taskjournal.TaskCreate &&
@@ -259,33 +259,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			conditions = append(conditions, blueprintAttachChange.conditions...)
 			mutations = append(mutations, blueprintAttachChange.mutations...)
 		}
-		secretChange, err := repository.prepareSecretTaskAcknowledgement(
-			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			clear(taskRetentionValue)
-			clear(environmentValue)
-			etcdstore.ClearMutationValues(zoneMutations)
-			clearAttachTaskChange(attachChange)
-			return etcdstore.Versioned[TaskRecord]{}, err
-		}
-		scriptChange, err := repository.prepareScriptTaskAcknowledgement(
-			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			clear(taskRetentionValue)
-			clear(environmentValue)
-			etcdstore.ClearMutationValues(zoneMutations)
-			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			return etcdstore.Versioned[TaskRecord]{}, err
-		}
 		releaseGroupChange, err := repository.prepareReleaseGroupTaskAcknowledgement(
 			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 		)
@@ -297,8 +270,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearScriptTaskChange(scriptChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer clearReleaseGroupTaskChange(releaseGroupChange)
@@ -317,22 +288,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			return etcdstore.Versioned[TaskRecord]{}, err
-		}
-		serviceChange, err := repository.prepareServiceTaskAcknowledgement(
-			ctx, current.Record, current.ReadRevision,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			clear(taskRetentionValue)
-			clear(environmentValue)
-			etcdstore.ClearMutationValues(zoneMutations)
-			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		backingZoneChange, err := repository.prepareBackingZoneTaskAcknowledgement(
@@ -346,9 +301,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			clearServiceTaskChange(serviceChange)
+			clearRemovalTaskChange(routeChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		componentChange, err := repository.prepareComponentTaskAcknowledgement(
@@ -362,27 +315,13 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			clearServiceTaskChange(serviceChange)
+			clearRemovalTaskChange(routeChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
-		}
-		if secretChange.applies {
-			conditions = append(conditions, secretChange.conditions...)
-			mutations = append(mutations, secretChange.mutations...)
-		}
-		if scriptChange.applies {
-			conditions = append(conditions, scriptChange.conditions...)
-			mutations = append(mutations, scriptChange.mutations...)
 		}
 		if routeChange.applies {
 			conditions = append(conditions, routeChange.conditions...)
 			mutations = append(mutations, routeChange.mutations...)
-		}
-		if serviceChange.applies {
-			conditions = append(conditions, serviceChange.conditions...)
-			mutations = append(mutations, serviceChange.mutations...)
 		}
 		if backingZoneChange.applies {
 			conditions = append(conditions, backingZoneChange.conditions...)
@@ -403,9 +342,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			clearServiceTaskChange(serviceChange)
+			clearRemovalTaskChange(routeChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -427,9 +364,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			clearServiceTaskChange(serviceChange)
+			clearRemovalTaskChange(routeChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
@@ -439,53 +374,6 @@ func (repository *TaskRepository) AbortPendingTask(
 		if hostResolutionChange.applies {
 			conditions = append(conditions, hostResolutionChange.conditions[hostResolutionBaseConditionCount:]...)
 			mutations = append(mutations, hostResolutionChange.mutations...)
-		}
-		connectorChange, err := repository.prepareResourceTaskAcknowledgement(
-			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision, terminal.UpdatedAt,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			clear(taskRetentionValue)
-			clear(environmentValue)
-			etcdstore.ClearMutationValues(zoneMutations)
-			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			clearServiceTaskChange(serviceChange)
-			clearBackingZoneTaskChange(backingZoneChange)
-			clearComponentTaskChange(componentChange)
-			clearPlatformComponentTaskChange(platformComponentChange)
-			return etcdstore.Versioned[TaskRecord]{}, err
-		}
-		if connectorChange.applies {
-			conditions = append(conditions, connectorChange.conditions...)
-			mutations = append(mutations, connectorChange.mutations...)
-		}
-		runnerChange, err := repository.prepareRunnerTaskAcknowledgement(
-			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			clear(taskRetentionValue)
-			clear(environmentValue)
-			etcdstore.ClearMutationValues(zoneMutations)
-			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			clearServiceTaskChange(serviceChange)
-			clearBackingZoneTaskChange(backingZoneChange)
-			clearComponentTaskChange(componentChange)
-			clearResourceTaskChange(connectorChange)
-			clearPlatformComponentTaskChange(platformComponentChange)
-			return etcdstore.Versioned[TaskRecord]{}, err
-		}
-		if runnerChange.applies {
-			conditions = append(conditions, runnerChange.conditions...)
-			mutations = append(mutations, runnerChange.mutations...)
 		}
 		rotationChange, err := repository.prepareBackupKeyRotationTaskAcknowledgement(
 			ctx, current.Record, taskjournal.TaskStatusAborted, terminalAt, current.ReadRevision,
@@ -509,9 +397,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations,
 			false,
 			attachChange.applies,
-			routeChange.applies && current.Record.Params[taskjournal.TaskEntryEnvironmentParam] != "",
-			serviceChange.applies,
-			connectorChange.applies,
+			false,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -521,13 +407,9 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			clearServiceTaskChange(serviceChange)
+			clearRemovalTaskChange(routeChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
-			clearResourceTaskChange(connectorChange)
-			clearRunnerTaskChange(runnerChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
@@ -546,14 +428,10 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			clearServiceTaskChange(serviceChange)
+			clearRemovalTaskChange(routeChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
-			clearResourceTaskChange(connectorChange)
-			clearRunnerTaskChange(runnerChange)
 			clear(environmentEpochValue)
 			environmentBinding.Clear()
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -570,14 +448,10 @@ func (repository *TaskRepository) AbortPendingTask(
 		clear(environmentValue)
 		etcdstore.ClearMutationValues(zoneMutations)
 		clearAttachTaskChange(attachChange)
-		clearSecretTaskChange(secretChange)
-		clearRouteTaskChange(routeChange)
-		clearServiceTaskChange(serviceChange)
+		clearRemovalTaskChange(routeChange)
 		clearBackingZoneTaskChange(backingZoneChange)
 		clearComponentTaskChange(componentChange)
 		clearPlatformComponentTaskChange(platformComponentChange)
-		clearResourceTaskChange(connectorChange)
-		clearRunnerTaskChange(runnerChange)
 		blueprintAbortChange.clear()
 		clear(environmentEpochValue)
 		environmentBinding.Clear()

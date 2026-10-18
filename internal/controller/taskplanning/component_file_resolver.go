@@ -7,7 +7,6 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 
@@ -24,45 +23,11 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 	if ctx == nil || resolver == nil || resolver.blueprints == nil ||
 		ids.Validate(ids.KindEnvironment, environmentID) != nil ||
 		ids.Validate(ids.KindTask, reference.RevisionID) != nil ||
-		ids.Validate(ids.KindComponent, reference.ComponentID) != nil ||
-		(reference.RouteTaskID != "" && ids.Validate(ids.KindTask, reference.RouteTaskID) != nil) {
+		ids.Validate(ids.KindComponent, reference.ComponentID) != nil {
 		return nil, errs.New(errs.KindInternal, "Component file resolver input is invalid")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-	if reference.RouteTaskID != "" {
-		reader, ok := resolver.blueprints.(routeRemovalPlanStateReader)
-		if ok {
-			stored, found, err := reader.GetRouteRemovalIntent(ctx, reference.RouteTaskID)
-			if err != nil {
-				return nil, err
-			}
-			intent := stored.Record
-			if found {
-				if intent.TaskID != reference.RouteTaskID || intent.EnvironmentID != environmentID ||
-					intent.Status != taskjournal.TaskStatusPending || intent.CandidateProjection == nil ||
-					intent.CandidateProjection.RevisionID != reference.RevisionID || intent.Provider == nil {
-					return nil, taskmaterialization.CorruptSource()
-				}
-				return resolver.routeProviderFile(*intent.Provider, *intent.CandidateProjection)
-			}
-		}
-		mutationReader, ok := resolver.blueprints.(routeMutationPlanStateReader)
-		if !ok {
-			return nil, errs.New(errs.KindInternal, "Route plan state reader is unavailable")
-		}
-		stored, found, err := mutationReader.GetRouteMutationIntent(ctx, reference.RouteTaskID)
-		if err != nil {
-			return nil, err
-		}
-		intent := stored.Record
-		if !found || intent.TaskID != reference.RouteTaskID || intent.EnvironmentID != environmentID ||
-			intent.Status != taskjournal.TaskStatusPending || intent.CandidateProjection == nil ||
-			intent.CandidateProjection.RevisionID != reference.RevisionID || intent.Provider == nil {
-			return nil, taskmaterialization.CorruptSource()
-		}
-		return resolver.routeProviderFile(*intent.Provider, *intent.CandidateProjection)
 	}
 	projection, found, err := resolver.blueprints.GetEnvironmentComposeProjection(ctx, environmentID)
 	if err != nil {

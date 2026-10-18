@@ -2,24 +2,23 @@ package runner
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -32,23 +31,21 @@ const (
 
 type provisioningRepository interface {
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
-	CreateRunnerWithTask(
+	PrepareRunnerCreation(
 		context.Context,
 		runnerallocation.RunnerAllocationConfig,
 		runnerrecord.RunnerDesiredRecord,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-	RetryRunnerCreationWithTask(
-		context.Context,
 		string,
-		etcd.TaskRecord,
+		time.Time,
+	) (etcd.RunnerCreationSource, error)
+	PublishRunnerCreation(
+		context.Context,
+		etcd.RunnerCreationSource,
+		runnerwork.Input,
+		workexecution.Task,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-}
-
-type runnerTaskReader interface {
-	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
+	PrepareRunnerRetry(context.Context, etcdstore.Versioned[runnerrecord.RunnerRecord], runnerwork.Input) (workqueue.Change, error)
 }
 
 type runnerProjectReader interface {
@@ -61,7 +58,8 @@ type runnerProjectReader interface {
 // by its in-process broker and never crosses the persistence seam.
 type ProvisioningService struct {
 	runners     provisioningRepository
-	tasks       runnerTaskReader
+	queue       *workqueue.Repository
+	inputs      *runnerwork.Repository
 	projects    runnerProjectReader
 	idempotency *etcd.IdempotencyRepository
 	coordinator *requestidempotency.Coordinator
@@ -74,7 +72,8 @@ type ProvisioningService struct {
 
 func NewProvisioningService(
 	runners provisioningRepository,
-	tasks runnerTaskReader,
+	queue *workqueue.Repository,
+	inputs *runnerwork.Repository,
 	projects runnerProjectReader,
 	idempotency *etcd.IdempotencyRepository,
 	coordinator *requestidempotency.Coordinator,
@@ -83,7 +82,7 @@ func NewProvisioningService(
 	imageRef string,
 	policy corerunner.IsolationPolicy,
 ) (*ProvisioningService, error) {
-	if runners == nil || tasks == nil || projects == nil || idempotency == nil || coordinator == nil ||
+	if runners == nil || queue == nil || inputs == nil || projects == nil || idempotency == nil || coordinator == nil ||
 		broker == nil || imageRef == "" {
 		return nil, errs.New(errs.KindInternal, "Runner provisioning service is not configured")
 	}
@@ -91,7 +90,7 @@ func NewProvisioningService(
 		return nil, err
 	}
 	return &ProvisioningService{
-		runners: runners, tasks: tasks, projects: projects,
+		runners: runners, queue: queue, inputs: inputs, projects: projects,
 		idempotency: idempotency, coordinator: coordinator, broker: broker,
 		allocation: allocation, imageRef: imageRef, policy: policy, now: time.Now,
 	}, nil
@@ -144,22 +143,46 @@ func (service *ProvisioningService) CreateRunner(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	now := service.now().UTC()
-	task, err := newRunnerCreateTask(desired, idempotencyKey, now)
+	taskID := ids.New(ids.KindTask)
+	source, err := service.runners.PrepareRunnerCreation(ctx, service.allocation, desired, taskID, now)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	response, marker, err := service.newTaskMarker(locator, evidence, task, now)
+	defer source.Clear()
+	record := source.Runner()
+	plan, err := corerunner.NewPlan(corerunner.Target{
+		RunnerID: desired.ID, TenantID: desired.TenantID,
+		OwnerKind: corerunner.OwnerKind(desired.OwnerKind), OwnerID: desired.OwnerID,
+		GitHubURL: desired.GitHubURL, Labels: desired.Labels, ImageRef: desired.ImageRef,
+		RuntimeEpoch: record.RuntimeEpoch + 1, AllocationConfig: service.allocation, Allocation: record.Allocation,
+	}, service.policy)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	input := runnerwork.Input{TaskID: taskID, WorkItemID: ids.New(ids.KindWorkItem),
+		PlanID: ids.New(ids.KindPlan), Operation: runnerallocation.RuntimeOperationCreate,
+		Desired: desired, Plan: plan, CreatedAt: now}
+	ref, err := input.Reference()
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	task := workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor,
+		Scope:  workexecution.Scope{TenantID: desired.TenantID, ProjectID: desired.ProjectID(), EnvironmentID: desired.EnvironmentID()},
+		Action: workexecution.ActionCreate, TargetID: desired.ID, TargetName: desired.Slug,
+		Intent: ref, ExpectedItems: 1, CreatedAt: now, UpdatedAt: now,
+		Deadline: now.Add(time.Duration(runnerCreateTimeoutSeconds) * time.Second)}
+	response, marker, err := service.newTaskMarker(locator, evidence, task.ID, now)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	key := TokenKey{TaskID: task.ID, Attempt: 1}
-	if err := service.broker.Stage(key, token); err != nil {
+	key := TokenKey{TaskID: task.ID, WorkItemID: input.WorkItemID, Attempt: 1}
+	if err := service.broker.Stage(key, token, task.Deadline); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	result, mutationErr := service.runners.CreateRunnerWithTask(
-		ctx, service.allocation, desired, task, marker,
+	result, mutationErr := service.runners.PublishRunnerCreation(
+		ctx, source, input, task, marker,
 	)
 	return service.resolvePublication(ctx, locator, evidence, response, result, mutationErr, key)
 }
@@ -210,25 +233,49 @@ func (service *ProvisioningService) RetryRunner(
 	if err := service.policy.RequireControllerEndpoint(); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	source, err := service.tasks.GetTask(ctx, current.Record.CreateTaskID)
+	source, err := service.inputs.LoadTask(ctx, current.Record.CreateTaskID, current.ReadRevision)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	view, err := service.queue.ReadWork(ctx, source.Record.TaskID, source.Record.WorkItemID, current.ReadRevision)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	var previous workqueue.AttemptSnapshot
+	if view.Item.Item.AttemptNumber != 0 {
+		_, previous, err = service.queue.ReadAttempt(ctx, source.Record.TaskID, source.Record.WorkItemID,
+			view.Item.Item.AttemptNumber, current.ReadRevision)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+	}
 	now := service.now().UTC()
-	retry := newRunnerRetryTask(source.Record, now)
-	response, marker, err := service.newTaskMarker(locator, evidence, retry, now)
+	change, err := runnerwork.PrepareRetry(source, view.Task, view.Item, previous, now)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	defer etcdstore.ClearMutationValues(change.Mutations)
+	resource, err := service.runners.PrepareRunnerRetry(ctx, current, source.Record)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	defer etcdstore.ClearMutationValues(resource.Mutations)
+	change.Conditions = append(change.Conditions, resource.Conditions...)
+	change.Mutations = append(change.Mutations, resource.Mutations...)
+	response, marker, err := service.newTaskMarker(locator, evidence, source.Record.TaskID, now)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	key := TokenKey{TaskID: retry.ID, Attempt: 1}
-	if err := service.broker.Stage(key, token); err != nil {
+	// Retry is a completed admission receipt, not a second pending Task.
+	marker.Kind, marker.State, marker.TaskID = idempotencyrecord.IdempotencyMarkerDirect, idempotencyrecord.IdempotencyMarkerCompleted, ""
+	marker.TerminalAt, marker.RetainUntil = now, now.Add(idempotencyrecord.MarkerRetention)
+	key := TokenKey{TaskID: source.Record.TaskID, WorkItemID: source.Record.WorkItemID, Attempt: view.Item.Item.AttemptNumber + 1}
+	if err := service.broker.Stage(key, token, now.Add(time.Duration(runnerCreateTimeoutSeconds)*time.Second)); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	result, mutationErr := service.runners.RetryRunnerCreationWithTask(
-		ctx, source.Record.ID, retry, marker,
-	)
+	result, mutationErr := service.idempotency.ApplyExecutionRetry(ctx, change, marker)
 	return service.resolvePublication(ctx, locator, evidence, response, result, mutationErr, key)
 }
 
@@ -362,10 +409,10 @@ func runnerIntentScope(locator idempotencyrecord.IdempotencyLocator) requestidem
 func (service *ProvisioningService) newTaskMarker(
 	locator idempotencyrecord.IdempotencyLocator,
 	evidence requestidempotency.ProtectedEvidence,
-	task etcd.TaskRecord,
+	taskID string,
 	now time.Time,
 ) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
-	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(
 			errs.KindInternal,
@@ -384,7 +431,7 @@ func (service *ProvisioningService) newTaskMarker(
 	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: durable, Response: response,
-		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+		TaskID: taskID, CreatedAt: now, UpdatedAt: now,
 	}
 	return response, marker, nil
 }
@@ -438,61 +485,4 @@ func taskResponseOwnsToken(response idempotencyrecord.IdempotencyResponse, taskI
 	}
 	var accepted apiTypes.TaskAccepted
 	return json.Unmarshal(response.Body, &accepted) == nil && accepted.TaskID == taskID
-}
-
-func newRunnerCreateTask(
-	desired runnerrecord.RunnerDesiredRecord,
-	idempotencyKey string,
-	now time.Time,
-) (etcd.TaskRecord, error) {
-	owner, err := runnerrecord.TaskOwner(desired)
-	if err != nil {
-		return etcd.TaskRecord{}, err
-	}
-	planInput := strings.Join([]string{
-		"groundplane.runner-create.v1", desired.ID, desired.TenantID, string(desired.OwnerKind),
-		desired.OwnerID, desired.ParentProjectID, desired.Slug, desired.GitHubURL, strings.Join(desired.Labels, "\x1f"), desired.ImageRef,
-	}, "\x00")
-	planDigest := sha256.Sum256([]byte(planInput))
-	return etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
-		PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
-		Type: taskjournal.TaskCreate, Target: desired.ID,
-		Params: map[string]string{
-			taskjournal.TaskResourceKindParam:                runnerrecord.TaskResourceRunner,
-			runnerrecord.RunnerRegistrationTokenPresentParam: "true",
-		},
-		Steps: []taskjournal.TaskStepRecord{
-			{
-				Kind:           taskjournal.TaskStepOperation,
-				ID:             ids.New(ids.KindStep),
-				Action:         "Register and start GitHub Runner",
-				Description:    "Prepare the Runner's isolated runtime and register it with GitHub.",
-				Target:         desired.ID,
-				TimeoutSeconds: uint32(runnerCreateTimeoutSeconds),
-			},
-		}, TimeoutSeconds: runnerCreateTimeoutSeconds,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}, nil
-}
-
-func newRunnerRetryTask(source etcd.TaskRecord, now time.Time) etcd.TaskRecord {
-	return etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: source.OperationID, RetryOf: source.ID,
-		IdempotencyKey: source.IdempotencyKey, Owner: source.Owner, Actor: taskjournal.TaskActorOperator,
-		Executor: source.Executor, PlanID: source.PlanID, PlanHash: source.PlanHash,
-		RenderGeneration: source.RenderGeneration, Type: source.Type, Target: source.Target,
-		Params: cloneRunnerTaskParams(source.Params), Steps: slices.Clone(source.Steps),
-		Materializations: slices.Clone(source.Materializations), TimeoutSeconds: source.TimeoutSeconds,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}
-}
-
-func cloneRunnerTaskParams(source map[string]string) map[string]string {
-	result := make(map[string]string, len(source))
-	for key, value := range source {
-		result[key] = value
-	}
-	return result
 }

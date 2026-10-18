@@ -31,7 +31,7 @@ func (p *WorkerPool) executeReleaseSetup(
 		result, err := p.adapter.ExecuteStep(ctx, step)
 		return composeruntime.StepResult{ExitCode: result.ExitCode}, err
 	case *agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure, *agentpb.ExecutionStep_EnvironmentDirectoryCreate:
-		result, err := p.environmentDirectories.ExecuteStep(ctx, assignment, step, p.CheckpointVolumeRemoval)
+		result, err := p.environmentDirectories.ExecuteStep(ctx, assignment, step)
 		return composeruntime.StepResult{ExitCode: result.ExitCode}, err
 	default:
 		return composeruntime.StepResult{}, errs.New(errs.KindInternal, "agent: unsupported Release setup step")

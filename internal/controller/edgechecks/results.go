@@ -75,10 +75,9 @@ func connectionCheckResult(record checkrecord.Record, stale bool) apiTypes.EdgeC
 		Stages:          []apiTypes.EdgeCheckStage{},
 		Addresses:       []string{},
 		CleanupRequired: record.Phase == checkrecord.CleanupRequired,
-		CleanupTaskID:   record.TransferredTo,
 		CreatedAt:       record.CreatedAt.Format(time.RFC3339),
 	}
-	if record.CleanupPending && record.Phase != checkrecord.Transferred {
+	if record.CleanupPending {
 		result.HelperName = contract.HelperName(record.HelperTaskID)
 	}
 	if record.Private != nil {

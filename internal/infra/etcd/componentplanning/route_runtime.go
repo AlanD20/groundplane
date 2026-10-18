@@ -2,9 +2,9 @@ package componentplanning
 
 import (
 	"cmp"
-	"encoding/hex"
 	"slices"
 
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -18,12 +18,11 @@ import (
 // Component's desired settings are unchanged. Retain that exact applied plan,
 // rather than leaving the earlier Component Task as runtime authority.
 func EncodeRouteAcknowledgedRuntime(
-	taskID string, plan *agentpb.ExecutionPlan, provider *environmentchanges.RouteProviderPin,
+	execution blueprintunits.AppliedExecution, capturedArtifact *agentpb.ComposeArtifact, provider *environmentchanges.RouteProviderPin,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) ([]byte, error) {
-	if plan == nil || provider == nil || len(plan.GetArtifacts()) < 1 ||
-		plan.GetRenderGeneration() != projection.RenderGeneration {
-		return nil, errs.New(errs.KindStateConflict, "Route acknowledged runtime has no captured plan")
+	if execution.Validate() != nil || capturedArtifact == nil || provider == nil || projection.RenderGeneration == 0 {
+		return nil, errs.New(errs.KindStateConflict, "Route acknowledged runtime has no captured execution or artifact")
 	}
 	var selected *componentrecord.Record
 	for index := range projection.Components {
@@ -47,7 +46,7 @@ func EncodeRouteAcknowledgedRuntime(
 	if err != nil {
 		return nil, err
 	}
-	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(plan.GetArtifacts()[0])
+	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(capturedArtifact)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
@@ -61,7 +60,7 @@ func EncodeRouteAcknowledgedRuntime(
 	)
 	return EncodeRuntime(Runtime{
 		EnvironmentID: projection.EnvironmentID, Component: component, RevisionID: projection.RevisionID,
-		RenderGeneration: plan.GetRenderGeneration(), Artifact: artifact, Zones: zones,
-		TaskID: taskID, PlanID: plan.GetPlanId(), PlanHash: hex.EncodeToString(plan.GetPlanHash()),
+		RenderGeneration: projection.RenderGeneration, Artifact: artifact, Zones: zones,
+		Execution: execution,
 	})
 }

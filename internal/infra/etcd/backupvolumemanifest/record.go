@@ -1,4 +1,4 @@
-// Package backupvolumemanifest owns the native, assignment-fenced Volume
+// Package backupvolumemanifest owns the native, attempt-fenced Volume
 // manifest ledger. Frames and their credits are immutable and contiguous.
 package backupvolumemanifest
 
@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/AlanD20/groundplane/internal/common/backupvolumetransfer"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -16,15 +15,11 @@ import (
 )
 
 type Owner struct {
-	Binding              backupvolumetransfer.Binding `json:"binding"`
-	AgentID              string                       `json:"agent_id"`
-	AgentGeneration      uint64                       `json:"agent_generation"`
-	AssignmentGeneration uint64                       `json:"assignment_generation"`
+	Binding backupvolumetransfer.Binding `json:"binding"`
 }
 
 func (owner Owner) Validate() error {
-	if owner.Binding.Validate() != nil || ids.Validate(ids.KindAgent, owner.AgentID) != nil ||
-		owner.AgentGeneration == 0 || owner.AssignmentGeneration == 0 {
+	if owner.Binding.Validate() != nil {
 		return invalidLedger()
 	}
 	return nil
@@ -33,7 +28,8 @@ func (owner Owner) Validate() error {
 func TaskPrefix(taskID string) string { return "/v1/runtime/backup-volume-manifest/" + taskID + "/" }
 
 func prefix(binding backupvolumetransfer.Binding) string {
-	return TaskPrefix(binding.TaskID) + binding.AssignmentID + "/" + binding.StepID + "/" + binding.TransferID + "/"
+	return TaskPrefix(binding.Attempt.TaskID) + binding.Attempt.WorkItemID + "/" + binding.Attempt.ID + "/" +
+		fmt.Sprintf("%04d", binding.SourceOrdinal) + "/" + binding.TransferID + "/"
 }
 
 func Prefix(binding backupvolumetransfer.Binding) string { return prefix(binding) }

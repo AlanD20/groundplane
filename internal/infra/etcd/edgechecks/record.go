@@ -17,13 +17,14 @@ const MaximumRecordBytes = 768 << 10
 
 type Owner struct {
 	TaskID        string `json:"task_id"`
+	WorkItemID    string `json:"work_item_id"`
 	PlanID        string `json:"plan_id"`
 	OperationID   string `json:"operation_id"`
 	EnvironmentID string `json:"environment_id"`
 }
 
 func (owner Owner) Validate() error {
-	if ids.Validate(ids.KindTask, owner.TaskID) != nil || ids.Validate(ids.KindPlan, owner.PlanID) != nil ||
+	if ids.Validate(ids.KindTask, owner.TaskID) != nil || ids.Validate(ids.KindWorkItem, owner.WorkItemID) != nil || ids.Validate(ids.KindPlan, owner.PlanID) != nil ||
 		ids.Validate(
 			ids.KindOperation,
 			owner.OperationID,
@@ -42,7 +43,6 @@ const (
 	Cleaning        Phase = "cleaning"
 	CleanupRequired Phase = "cleanup_required"
 	Finished        Phase = "finished"
-	Transferred     Phase = "transferred"
 )
 
 type Record struct {
@@ -62,8 +62,6 @@ type Record struct {
 	StartedAt           *time.Time              `json:"started_at,omitempty"`
 	PublicStartedAt     *time.Time              `json:"public_started_at,omitempty"`
 	FinishedAt          *time.Time              `json:"finished_at,omitempty"`
-	RetryOf             string                  `json:"retry_of,omitempty"`
-	TransferredTo       string                  `json:"transferred_to,omitempty"`
 }
 
 func NewRecord(owner Owner, source Source, now time.Time) (Record, error) {
@@ -98,8 +96,7 @@ func (record Record) Validate() error {
 	if err != nil || digest != record.ConfigurationSHA256 {
 		return invalidRecord()
 	}
-	if record.RetryOf == "" && record.HelperTaskID != record.Owner.TaskID || record.RetryOf != "" &&
-		(ids.Validate(ids.KindTask, record.RetryOf) != nil || record.RetryOf == record.Owner.TaskID || record.HelperTaskID == record.Owner.TaskID) {
+	if record.HelperTaskID != record.Owner.TaskID {
 		return invalidRecord()
 	}
 	for _, instant := range []*time.Time{record.StartedAt, record.PublicStartedAt, record.FinishedAt} {
@@ -126,7 +123,6 @@ func (record Record) Validate() error {
 			record.CleanupPending ||
 			record.PrivateFailure != "" ||
 			record.PublicFailure != "" ||
-			record.RetryOf != "" ||
 			record.Outcome != "" ||
 			record.Failure != "" {
 			return invalidRecord()
@@ -139,8 +135,7 @@ func (record Record) Validate() error {
 			record.PrivateFailure != "" ||
 			record.PublicFailure != "" ||
 			record.Outcome != "" ||
-			record.Failure != "" ||
-			record.RetryOf != "" {
+			record.Failure != "" {
 			return invalidRecord()
 		}
 	case PublicChecking:
@@ -148,8 +143,7 @@ func (record Record) Validate() error {
 			record.Private == nil && record.PrivateFailure == "" ||
 			record.CleanupPending ||
 			record.Outcome != "" ||
-			record.Failure != "" ||
-			record.RetryOf != "" {
+			record.Failure != "" {
 			return invalidRecord()
 		}
 		if record.PublicStartedAt == nil && (record.Public != nil || record.PublicFailure != "") {
@@ -160,7 +154,7 @@ func (record Record) Validate() error {
 			record.Failure != "" {
 			return invalidRecord()
 		}
-	case CleanupRequired, Finished, Transferred:
+	case CleanupRequired, Finished:
 		if record.FinishedAt == nil || record.Phase == Finished && record.CleanupPending ||
 			record.Phase != Finished && !record.CleanupPending {
 			return invalidRecord()
@@ -174,13 +168,6 @@ func (record Record) Validate() error {
 			return invalidRecord()
 		}
 	default:
-		return invalidRecord()
-	}
-	if record.Phase == Transferred {
-		if ids.Validate(ids.KindTask, record.TransferredTo) != nil || record.TransferredTo == record.Owner.TaskID {
-			return invalidRecord()
-		}
-	} else if record.TransferredTo != "" {
 		return invalidRecord()
 	}
 	return nil
@@ -289,11 +276,12 @@ func PlanHash(record Record) (string, error) {
 	value, err := json.Marshal(struct {
 		Procedure           string `json:"procedure"`
 		PlanID              string `json:"plan_id"`
+		WorkItemID          string `json:"work_item_id"`
 		OperationID         string `json:"operation_id"`
 		EnvironmentID       string `json:"environment_id"`
 		ConfigurationSHA256 string `json:"configuration_sha256"`
 		HelperTaskID        string `json:"helper_task_id"`
-	}{"edge-connections-v1", record.Owner.PlanID, record.Owner.OperationID, record.Owner.EnvironmentID, record.ConfigurationSHA256, record.HelperTaskID})
+	}{"edge-connections-v1", record.Owner.PlanID, record.Owner.WorkItemID, record.Owner.OperationID, record.Owner.EnvironmentID, record.ConfigurationSHA256, record.HelperTaskID})
 	if err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}

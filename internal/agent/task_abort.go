@@ -51,6 +51,5 @@ func (p *WorkerPool) AbortMessage(ctx context.Context, abort *agentpb.TaskAbort)
 	p.mu.Unlock()
 	p.materializations.Retire(abort.TaskId)
 	p.managedConfigs.Release(abort.TaskId)
-	p.backupSecrets.Release(abort.TaskId)
 	return nil
 }

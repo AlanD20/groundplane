@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/backupartifact"
 	"github.com/AlanD20/groundplane/internal/common/backupconfig"
 	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
+	"github.com/AlanD20/groundplane/internal/infra/backupstage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -35,6 +36,12 @@ func PrepareRestore(ctx context.Context, input backupartifact.DownloadInput) (
 	if err != nil {
 		return nil, err
 	}
+	return validateRestoreSource(ctx, sealed, input.Stage, download)
+}
+
+func validateRestoreSource(ctx context.Context, sealed *agentpb.BackupRestoreAuthority,
+	stage *backupstage.Stage, download backupartifact.DownloadResult,
+) (_ *RestoreArtifact, resultErr error) {
 	reader, err := download.Source.OpenPrefix(ctx)
 	if err != nil {
 		return nil, err
@@ -49,7 +56,7 @@ func PrepareRestore(ctx context.Context, input backupartifact.DownloadInput) (
 		}
 	}()
 	createSpool := func(ctx context.Context) (backupconfig.ValidationSpool, error) {
-		return input.Stage.CreateValidationSpool(ctx, download.SourceEvidence.Size)
+		return stage.CreateValidationSpool(ctx, download.SourceEvidence.Size)
 	}
 	validated, err := backupconfig.ValidateArtifact(ctx, reader, backupconfig.SourceEvidence{
 		SizeBytes: download.SourceEvidence.Size, SHA256: download.SourceEvidence.SHA256,

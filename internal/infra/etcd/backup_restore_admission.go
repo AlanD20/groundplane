@@ -8,7 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,6 +17,7 @@ import (
 )
 
 type PreparedConfigRestore struct {
+	HostID      string
 	Restore     backupruntime.BackupRestoreRecord
 	Scope       *agentpb.BackupPlanScope
 	Authority   *agentpb.BackupStepAuthority
@@ -25,6 +26,7 @@ type PreparedConfigRestore struct {
 }
 
 type configRestoreAdmissionState struct {
+	hostID     string
 	mu         sync.Mutex
 	repository *BackupRuntimeRepository
 	restore    backupruntime.BackupRestoreRecord
@@ -33,7 +35,6 @@ type configRestoreAdmissionState struct {
 	authority  *agentpb.BackupStepAuthority
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
-	retryOf    string
 }
 
 // PreparedConfigRestorePublication owns a single atomic publication attempt.
@@ -69,6 +70,11 @@ func (repository *BackupRuntimeRepository) PrepareConfigRestore(ctx context.Cont
 		return zero, err
 	}
 	restore := selected.Restore
+	host, err := hostbindings.ReadLocal(ctx, repository.store, selected.ReadRevision)
+	if err != nil {
+		return zero, err
+	}
+	conditions = append(conditions, host.Conditions...)
 	membership, err := backupruntime.BackupRestoreEnvironmentIndexKey(restore.EnvironmentID, restore.TaskID)
 	if err != nil {
 		return zero, err
@@ -106,66 +112,15 @@ func (repository *BackupRuntimeRepository) PrepareConfigRestore(ctx context.Cont
 		return zero, err
 	}
 	publication := &PreparedConfigRestorePublication{state: &configRestoreAdmissionState{
+		hostID:     host.Binding.HostID,
 		repository: repository, restore: backupruntime.CloneBackupRestoreRecord(restore), owner: selected.Owner,
 		scope: proto.CloneOf(selected.Scope), authority: proto.CloneOf(authority),
 		conditions: conditions, mutations: mutations}}
 	return PreparedConfigRestore{Restore: backupruntime.CloneBackupRestoreRecord(restore),
+		HostID: host.Binding.HostID,
 		Scope: proto.CloneOf(
 			selected.Scope,
 		), Authority: proto.CloneOf(authority), Owner: selected.Owner, Publication: publication}, nil
-}
-
-func (publication *PreparedConfigRestorePublication) Publish(ctx context.Context, task TaskRecord,
-	sealed *agentpb.ExecutionPlan, marker idempotency.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	if publication == nil || publication.state == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "config restore publication is not prepared")
-	}
-	state := publication.state
-	state.mu.Lock()
-	if state.repository == nil {
-		state.mu.Unlock()
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindStateConflict,
-			"config restore publication was already consumed",
-		)
-	}
-	repository, restore, scope, authority := state.repository, state.restore, state.scope, state.authority
-	conditions, mutations := state.conditions, state.mutations
-	state.repository, state.scope, state.authority = nil, nil, nil
-	state.conditions, state.mutations = nil, nil
-	state.mu.Unlock()
-	defer etcdstore.ClearMutationValues(mutations)
-	if task.Owner != state.owner || task.Actor != taskjournal.TaskActorOperator || sealed == nil ||
-		!proto.Equal(sealed.BackupScope, scope) ||
-		len(sealed.Steps) != 1 ||
-		!proto.Equal(sealed.Steps[0].GetBackupStep(), authority) {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"config restore publication authority changed",
-		)
-	}
-	initiation, err := newTaskInitiation(task.Owner, task.Actor)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	plan, err := prepareBackupTaskIdempotencyPlan(backupTaskPublicationAuthority{
-		taskID: restore.TaskID, operationID: restore.OperationID, environmentID: restore.EnvironmentID,
-		taskType: taskjournal.TaskRestore, retryOf: state.retryOf, createdAt: restore.CreatedAt,
-		validatePlan: func(value *agentpb.ExecutionPlan) error {
-			return backupruntime.ValidateConfigRestoreExecutionPlan(restore, value)
-		}}, conditions, mutations, task, sealed, marker, initiation)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := plan.enforceExistingReplay(repository.validateExistingRestorePublication); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotencyRepository, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotencyRepository.Apply(ctx, marker, plan)
 }
 
 func (publication *PreparedConfigRestorePublication) Clear() {

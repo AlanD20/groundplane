@@ -12,7 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func markBackupPostgresArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.BackupStepAuthority,
+func markBackupPostgresArtifacts(environmentID string, scope *agentpb.BackupPlanScope, step *agentpb.BackupStepAuthority,
 	artifacts map[string]*agentpb.ComposeArtifact, used map[string]bool,
 ) error {
 	databaseID := step.GetCapture().GetPostgres().GetDatabaseServiceId()
@@ -28,13 +28,13 @@ func markBackupPostgresArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.Back
 	if err != nil {
 		return err
 	}
-	return markBackupDatabaseArtifacts(plan, step, artifacts, used, databaseID,
+	return markBackupDatabaseArtifacts(environmentID, scope, step, artifacts, used, databaseID,
 		func(service *agentpb.ComposeService, fact *agentpb.BackupServiceFact) bool {
 			return backupPostgresArtifactImage(service, fact, release, true)
 		})
 }
 
-func markBackupMySQLArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.BackupStepAuthority,
+func markBackupMySQLArtifacts(environmentID string, scope *agentpb.BackupPlanScope, step *agentpb.BackupStepAuthority,
 	artifacts map[string]*agentpb.ComposeArtifact, used map[string]bool,
 ) error {
 	mysql := step.GetCapture().GetMysql()
@@ -45,26 +45,26 @@ func markBackupMySQLArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.BackupS
 	if mysql == nil {
 		return nil
 	}
-	return markBackupDatabaseArtifacts(plan, step, artifacts, used, mysql.DatabaseServiceId,
+	return markBackupDatabaseArtifacts(environmentID, scope, step, artifacts, used, mysql.DatabaseServiceId,
 		func(service *agentpb.ComposeService, fact *agentpb.BackupServiceFact) bool {
 			digest := sha256.Sum256([]byte(service.ImageReference))
 			return service.PostgresToolsImage == "" && bytes.Equal(digest[:], mysql.DatabaseImageReferenceSha256)
 		})
 }
 
-func markBackupDatabaseArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.BackupStepAuthority,
+func markBackupDatabaseArtifacts(environmentID string, scope *agentpb.BackupPlanScope, step *agentpb.BackupStepAuthority,
 	artifacts map[string]*agentpb.ComposeArtifact, used map[string]bool, databaseID string,
 	databaseImage func(*agentpb.ComposeService, *agentpb.BackupServiceFact) bool,
 ) error {
 	serviceIDs := append([]string{databaseID}, step.ConsumerServiceIds...)
 	for _, serviceID := range serviceIDs {
-		fact := backupScopeServiceFact(plan.BackupScope, serviceID)
+		fact := backupScopeServiceFact(scope, serviceID)
 		if fact == nil || len(fact.LocalImageIdSha256) != sha256.Size {
 			return invalidBackupDatabaseArtifact()
 		}
 		selected := ""
 		for id, artifact := range artifacts {
-			if serviceID != databaseID && artifact.OwnerId != plan.TargetId {
+			if serviceID != databaseID && artifact.OwnerId != environmentID {
 				continue
 			}
 			matches := 0

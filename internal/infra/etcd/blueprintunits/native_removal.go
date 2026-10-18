@@ -8,21 +8,18 @@ import (
 )
 
 // NativeRemoval identifies an independently verified direct removal.
-// The caller must join its receipt to the exact Task ACK and protected metadata
+// The caller must join its receipt to the exact work settlement and protected metadata
 // retirement; it is not a fabricated hidden child or a Blueprint parent.
 type NativeRemoval struct {
-	Target         ResourceKey
-	OperationID    string
-	TaskID         string
-	PlanID         string
-	AssignmentID   string
-	ExecutionEpoch uint32
-	DNS            *DNSReceipt
+	Target      ResourceKey
+	OperationID string
+	Execution   AppliedExecution
+	DNS         *DNSReceipt
 }
 
 func PrepareNativeRemovalReceipt(snapshot Snapshot, source NativeRemoval) (MutationPlan, error) {
 	target := source.Target
-	if !nativeRemovalTarget(target) {
+	if !nativeRemovalTarget(target) || source.Execution.Validate() != nil {
 		return MutationPlan{}, invalidRecord()
 	}
 	for _, execution := range snapshot.Executions {
@@ -33,8 +30,7 @@ func PrepareNativeRemovalReceipt(snapshot Snapshot, source NativeRemoval) (Mutat
 	}
 	absent := AppliedRecord{
 		EnvironmentID: snapshot.EnvironmentID, Target: target, State: Absent,
-		NativeOperationID: source.OperationID, SourceTaskID: source.TaskID,
-		SourcePlanID: source.PlanID, SourceAssignment: source.AssignmentID, ExecutionEpoch: source.ExecutionEpoch,
+		NativeOperationID: source.OperationID, Execution: &source.Execution,
 		ControllerDNS: source.DNS,
 	}
 	if err := validateApplied(absent); err != nil {

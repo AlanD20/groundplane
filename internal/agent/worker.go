@@ -9,7 +9,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	"github.com/AlanD20/groundplane/internal/agent/backupconfiguration"
-	backupsecrettransfer "github.com/AlanD20/groundplane/internal/agent/backupsecrettransfer"
 	checkpointmailbox "github.com/AlanD20/groundplane/internal/agent/checkpointmailbox"
 	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
@@ -67,14 +66,10 @@ type WorkerPool struct {
 	scriptRuntime          ScriptRuntime
 	materializations       *filematerialization.Inbox
 	managedConfigs         *componentaction.Inbox
-	backupSecrets          *backupsecrettransfer.Inbox
 	backupConfigs          *backupconfiguration.Inbox
-	backupVolumes          *backupVolumeExchange
 	backupStaging          *backupStagingState
-	backupCheckpoints      *checkpointmailbox.BackupInbox
 	scriptCheckpoints      *checkpointmailbox.ScriptInbox
 	backingHookCheckpoints *checkpointmailbox.BackingHookInbox
-	volumeCheckpoints      *checkpointmailbox.VolumeInbox
 	taskEventAcks          *taskEventAckInbox
 	persistBackupTerminal  func(context.Context, TaskResult) error
 
@@ -98,13 +93,9 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		reservations:           make(map[string]*taskReservation, size),
 		materializations:       filematerialization.NewInbox(),
 		managedConfigs:         componentaction.NewInbox(),
-		backupSecrets:          backupsecrettransfer.New(),
 		backupConfigs:          backupconfiguration.NewInbox(),
-		backupVolumes:          newBackupVolumeExchange(),
-		backupCheckpoints:      checkpointmailbox.NewBackupInbox(),
 		scriptCheckpoints:      checkpointmailbox.NewScriptInbox(),
 		backingHookCheckpoints: checkpointmailbox.NewBackingHookInbox(),
-		volumeCheckpoints:      checkpointmailbox.NewVolumeInbox(),
 		taskEventAcks:          &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
 		adapter:                backingadapter.New(taskRunner, nil),
 	}
@@ -218,7 +209,7 @@ func composeTaskResult(
 }
 
 func isReleaseExecution(plan *agentpb.ExecutionPlan) bool {
-	if plan == nil || plan.GetCandidateReleaseProcedure() == nil && plan.GetComponentRecoveryProcedure() == nil &&
+	if plan == nil || plan.GetCandidateReleaseProcedure() == nil &&
 		plan.GetServiceAbsenceRecoveryProcedure() == nil {
 		return false
 	}
@@ -263,9 +254,7 @@ func progressStateFor(taskCtx context.Context, err error) TaskProgressState {
 }
 
 func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservation, result TaskResult) {
-	p.backupSecrets.Release(result.TaskID)
 	p.backupConfigs.Release(result.TaskID)
-	p.backupVolumes.release(reservation.assignment.BackupAuthority)
 	p.materializations.Retire(result.TaskID)
 
 	// Session teardown quiesces Backup workers for the next staging inventory;
@@ -330,7 +319,6 @@ func (p *WorkerPool) stop() {
 		reservation.cancel()
 	}
 	p.mu.Unlock()
-	p.backupSecrets.ReleaseAll()
 	p.backupConfigs.Release("")
 }
 
@@ -345,9 +333,6 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 				ReleaseRecoveryRecordSHA256: append(
 					[]byte(nil),
 					reservation.assignment.ReleaseRecoveryRecordSHA256...),
-				ComponentRecoveryRecordSHA256: append(
-					[]byte(nil),
-					reservation.assignment.ComponentRecoveryRecordSHA256...),
 			}
 			if reservation.assignment.BackupAuthority != nil {
 				result.Backup = &agentpb.BackupTaskResult{RecoveryRequired: proto.Bool(false)}
@@ -397,26 +382,6 @@ func (p *WorkerPool) AcceptManagedConfigTransfer(
 	return p.managedConfigs.Accept(ctx, transfer)
 }
 
-func (p *WorkerPool) AcceptBackupSecretSlotTransfer(
-	ctx context.Context,
-	transfer *agentpb.BackupSecretSlotTransfer,
-) error {
-	return p.backupSecrets.Accept(ctx, transfer)
-}
-
-// ConsumeBackupSecretSlot gives one owned transient slot to a callback exactly
-// once and clears it immediately when the callback returns.
-func (p *WorkerPool) ConsumeBackupSecretSlot(
-	ctx context.Context,
-	taskID string,
-	assignmentID string,
-	stepID string,
-	purpose agentpb.BackupSecretSlotPurpose,
-	consume func([]byte) error,
-) error {
-	return p.backupSecrets.Consume(ctx, taskID, assignmentID, stepID, purpose, consume)
-}
-
 // Submit reserves capacity without blocking the sole receive/control loop.
 func (p *WorkerPool) Submit(ctx context.Context, assignment taskassignment.Assignment) error {
 	if ctx == nil {
@@ -460,25 +425,6 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment taskassignment.Assig
 		p.materializations.Release(owned.TaskID)
 		return err
 	}
-	if err := p.backupSecrets.Register(owned); err != nil {
-		p.materializations.Release(owned.TaskID)
-		p.managedConfigs.Release(owned.TaskID)
-		return err
-	}
-	if err := p.backupConfigs.Register(owned.BackupAuthority); err != nil {
-		p.materializations.Release(owned.TaskID)
-		p.managedConfigs.Release(owned.TaskID)
-		p.backupSecrets.Release(owned.TaskID)
-		p.backupConfigs.Release(owned.TaskID)
-		return err
-	}
-	if err := p.backupVolumes.register(owned.BackupAuthority); err != nil {
-		p.materializations.Release(owned.TaskID)
-		p.managedConfigs.Release(owned.TaskID)
-		p.backupSecrets.Release(owned.TaskID)
-		p.backupConfigs.Release(owned.TaskID)
-		return err
-	}
 	taskCtx, cancel := context.WithDeadline(ctx, owned.Deadline)
 	reservation := &taskReservation{assignment: owned, ctx: taskCtx, cancel: cancel, eventsDurable: true}
 	p.reservations[owned.TaskID] = reservation
@@ -491,9 +437,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment taskassignment.Assig
 		cancel()
 		p.materializations.Release(owned.TaskID)
 		p.managedConfigs.Release(owned.TaskID)
-		p.backupSecrets.Release(owned.TaskID)
 		p.backupConfigs.Release(owned.TaskID)
-		p.backupVolumes.release(owned.BackupAuthority)
 		return errs.New(errs.KindInternal, "agent: worker queue reservation is inconsistent")
 	}
 }

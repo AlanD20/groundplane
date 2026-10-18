@@ -108,7 +108,6 @@ type BackupRunSourceAttemptRecord struct {
 type BackupRunRecord struct {
 	TaskID                        string                         `json:"task_id"`
 	OperationID                   string                         `json:"operation_id"`
-	RetryOfTaskID                 string                         `json:"retry_of_task_id,omitempty"`
 	EnvironmentID                 string                         `json:"environment_id"`
 	PolicyRevision                int64                          `json:"policy_revision"`
 	PolicySHA256                  string                         `json:"policy_sha256"`
@@ -156,12 +155,6 @@ func ValidateBackupRunRecord(record BackupRunRecord) error {
 	if hasUploadEndpoint && (record.ConnectorEndpoint == "" || strings.HasSuffix(record.ConnectorEndpoint, "/") ||
 		record.ConnectorBucket == "" || record.ConnectorRegion == "") {
 		return invalidBackupRuntimeRecord("backup run Connector upload authority is incomplete")
-	}
-	if record.RetryOfTaskID != "" {
-		if recordcodec.ValidateID(ids.KindTask, record.RetryOfTaskID) != nil ||
-			record.RetryOfTaskID == record.TaskID {
-			return invalidBackupRuntimeRecord("backup run retry task is invalid")
-		}
 	}
 	if err := validateBackupRunInitiator(record); err != nil {
 		return err

@@ -1,6 +1,7 @@
 package taskplanning
 
 import (
+	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 	"slices"
 	"strconv"
 
@@ -26,7 +27,7 @@ func buildAuthoredServiceAbsencePlan(
 	if len(selected) == 0 {
 		return nil, errs.New(errs.KindStateConflict, "authored Service absence artifact has no physical identity")
 	}
-	artifact, err := pruneServiceLifecycleArtifact(artifact, selected)
+	artifact, err := servicelifecycle.SelectRuntimeMembers(artifact, selected)
 	if err != nil {
 		return nil, err
 	}

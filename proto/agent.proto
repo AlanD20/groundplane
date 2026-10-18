@@ -111,6 +111,113 @@ message AttachRecoveryCompletionAck {
   google.protobuf.Timestamp started_at = 5;
 }
 
+// Transient provisioning input. The captured source owns credentials and hook
+// values; Agents retain only non-secret command authority and checkpoints.
+message AttachProvisionFactsRequest {
+  WorkAttemptIdentity attempt = 1;
+  repeated BackingHookValue facts = 2;
+}
+
+message AttachProvisionFactsAck {
+  WorkAttemptIdentity attempt = 1;
+  bytes result_sha256 = 2;
+}
+
+message AttachProvisionAssignment {
+  WorkAttemptIdentity attempt = 1;
+  AttachProvisionInput provision = 2;
+}
+
+message AttachProvisionRecoveryAssignment {
+  WorkAttemptIdentity attempt = 1;
+  bytes recovery = 2;
+  AttachConsumerTransition consumer = 3;
+}
+
+message AttachProvisionRecoveryReportRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+  WorkInputReference evidence = 3;
+}
+
+message AttachProvisionRecoveryReportAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  string outcome = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  google.protobuf.Timestamp started_at = 5;
+}
+
+message AttachProvisionCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message AttachProvisionCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message AttachProvisionCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  uint64 checkpoint_sequence = 2;
+  WorkInputReference checkpoint_evidence = 3;
+}
+
+// Sent only after the Controller atomically retains the binding outcome and
+// any encrypted hook facts with the terminal work result.
+message AttachProvisionCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 checkpoint_sequence = 2;
+  WorkInputReference checkpoint_evidence = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  string outcome = 5;
+  WorkInputReference binding_result = 6;
+}
+
+message AttachProvisionFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message AttachProvisionFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+message AttachProvisionInput {
+  WorkInputReference captured_source = 1;
+  string attach_id = 2;
+  string backing_service_id = 3;
+  string tenant_id = 4;
+  string project_id = 5;
+  string environment_id = 6;
+  string service_id = 7;
+  AttachConsumerTransition consumer = 8;
+  oneof provision {
+    AttachCredentialProvision credential = 10;
+    BackingHookProcedure custom_attach = 11;
+  }
+}
+
+message AttachCredentialProvision {
+  string adapter_key = 1;
+  BackingAuthentication authentication = 2;
+  string role = 3;
+  bytes password = 4;
+  string database = 5;
+  repeated AttachGrantProvision grants = 6;
+}
+
+message AttachGrantProvision {
+  string attach_id = 1;
+  string database = 2;
+}
+
 message AttachRemovalInput {
   WorkInputReference captured_source = 1;
   string attach_id = 2;
@@ -126,7 +233,13 @@ message AttachRemovalInput {
   }
 }
 
-// Captured direct Detach consumer update. Both artifacts describe the same
+enum AttachNetworkAction {
+  ATTACH_NETWORK_ACTION_UNSPECIFIED = 0;
+  ATTACH_NETWORK_ACTION_CONNECT = 1;
+  ATTACH_NETWORK_ACTION_DISCONNECT = 2;
+}
+
+// Captured direct Attach/Detach consumer update. Both artifacts describe the same
 // native runtime; only this logical Service's backing-network membership changes.
 message AttachConsumerTransition {
   string environment_id = 1;
@@ -135,6 +248,7 @@ message AttachConsumerTransition {
   string network_id = 4;
   ComposeArtifact baseline = 5;
   ComposeArtifact candidate = 6;
+  AttachNetworkAction action = 7;
 }
 
 message AttachConsumerHelperRequest {
@@ -146,6 +260,8 @@ message AttachConsumerHelperRequest {
   AttachRemovalCheckpointAck acknowledgement = 6;
   bool inspect_only = 7;
   bytes recovery = 8; // captured forward failure; inspection-only recovery variant
+  AttachProvisionCheckpointAck provision_acknowledgement = 9;
+  bytes provision_recovery = 10;
 }
 
 message AttachConsumerHelperResponse {
@@ -155,6 +271,7 @@ message AttachConsumerHelperResponse {
   bool detached = 4;
   google.protobuf.Timestamp observed_at = 5;
   bool inspection = 6;
+  bool connected = 7;
 }
 
 message AttachCredentialRemoval {
@@ -423,6 +540,44 @@ message ReleaseConfigurationRequest {
   string stage_id = 2;
 }
 
+message ComponentConfigurationRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+}
+
+message ComponentConfigurationFile {
+  string destination = 1;
+  string service_id = 2;
+  string service_name = 3;
+  string output_kind = 4;
+  uint32 uid = 5;
+  uint32 gid = 6;
+  uint32 mode = 7;
+  uint64 length = 8;
+  bytes sha256 = 9;
+}
+
+message ComponentConfigurationManifest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  WorkConfigurationReference configuration = 3;
+  repeated ComponentConfigurationFile files = 4;
+}
+
+message ComponentConfigurationFileRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  string destination = 3;
+}
+
+message ComponentConfigurationFileDelivery {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  WorkConfigurationReference configuration = 3;
+  ComponentConfigurationFile file = 4;
+  bytes content = 5;
+}
+
 message ReleaseConfigurationFile {
   string destination = 1;
   string service_id = 2;
@@ -596,14 +751,13 @@ message AgentLabel {
 // ---- Agent -> Controller ----
 
 message AgentMessage {
-  reserved 12;
+  reserved 6, 12;
   oneof payload {
     Authenticate authenticate = 1; // mandatory first message; no config or work is served before it succeeds
     Ready ready = 2;               // idle Ready IS the heartbeat; authoritative for dead-agent detection
     TaskEvent task_event = 3;      // step progress + streamed output
     ObservedState observed_state = 4; // drift-detection feed for reconciliation
     TaskAck task_ack = 5;          // completed / failed
-    BackupCheckpointRequest backup_checkpoint_request = 6;
     LogEvent log_event = 7;
     LogEnd log_end = 8;
     LogReady log_ready = 9;
@@ -650,6 +804,39 @@ message AgentMessage {
     NetworkWorkCompletionRequest network_work_completion_request = 65;
     NetworkWorkFailureRequest network_work_failure_request = 66;
     NetworkWorkRecoveryReportRequest network_work_recovery_report_request = 67;
+    ComponentWorkCheckpointRequest component_work_checkpoint_request = 68;
+    ComponentWorkCompletionRequest component_work_completion_request = 69;
+    ComponentWorkFailureRequest component_work_failure_request = 70;
+    ComponentWorkRecoveryReportRequest component_work_recovery_report_request = 71;
+    ComponentConfigurationRequest component_configuration_request = 72;
+    ComponentConfigurationFileRequest component_configuration_file_request = 73;
+    EntryConfigurationWorkCheckpointRequest entry_configuration_work_checkpoint_request = 74;
+    EntryConfigurationWorkCompletionRequest entry_configuration_work_completion_request = 75;
+    EntryConfigurationWorkFailureRequest entry_configuration_work_failure_request = 76;
+    EntryConfigurationRequest entry_configuration_request = 77;
+    EntryConfigurationFileRequest entry_configuration_file_request = 78;
+    EntryConfigurationWorkRecoveryReportRequest entry_configuration_work_recovery_report_request = 79;
+    AttachProvisionCheckpointRequest attach_provision_checkpoint_request = 80;
+    AttachProvisionCompletionRequest attach_provision_completion_request = 81;
+    AttachProvisionFailureRequest attach_provision_failure_request = 82;
+    AttachProvisionFactsRequest attach_provision_facts_request = 83;
+    AttachProvisionRecoveryReportRequest attach_provision_recovery_report_request = 84;
+    ServiceLifecycleCheckpointRequest service_lifecycle_checkpoint_request = 85;
+    ServiceLifecycleCompletionRequest service_lifecycle_completion_request = 86;
+    ServiceLifecycleFailureRequest service_lifecycle_failure_request = 87;
+    ServiceLifecycleHookRequest service_lifecycle_hook_request = 88;
+    ServiceLifecycleRecoveryReportRequest service_lifecycle_recovery_report_request = 89;
+    ServiceRemovalRecoveryCheckpointRequest service_removal_recovery_checkpoint_request = 90;
+    ServiceRemovalRecoveryCompletionRequest service_removal_recovery_completion_request = 91;
+    ServiceRemovalRecoveryFailureRequest service_removal_recovery_failure_request = 92;
+    ServiceRemovalConfigurationRequest service_removal_configuration_request = 93;
+    ServiceRemovalConfigurationFileRequest service_removal_configuration_file_request = 94;
+    BackupWorkCheckpointRequest backup_work_checkpoint_request = 95;
+    BackupWorkCompletionRequest backup_work_completion_request = 96;
+    BackupWorkSecretRequest backup_work_secret_request = 97;
+    BackupWorkFailureRequest backup_work_failure_request = 98;
+    BackupRecoveryRequest backup_recovery_request = 99;
+    BackupConfigRecoveryPrepareRequest backup_config_recovery_prepare_request = 100;
   }
 }
 
@@ -959,7 +1146,7 @@ message TaskAck {
   uint32 execution_epoch = 8;
   bytes release_recovery_record_sha256 = 9;
   uint64 assignment_generation = 11;
-  bytes component_recovery_record_sha256 = 12;
+  reserved 12;
 }
 
 message BackupTaskResult {
@@ -978,7 +1165,7 @@ message ComposeTaskResult {
   DNSResolverObservationEvidence dns_resolver_candidate_observation = 7;
   DNSResolverObservationEvidence dns_resolver_rollback_observation = 8;
   CandidateAbsenceEvidence candidate_absence_evidence = 9;
-  ComponentRestorationEvidence component_restoration_evidence = 10;
+  reserved 10;
   ServiceAbsenceEvidence service_absence_evidence = 11;
   StepFailure failure = 12;
   repeated RollingReleaseEvidence rolling_evidence = 13;
@@ -1004,21 +1191,6 @@ message ServiceAbsenceEvidence {
   string compose_project_name = 3;
   repeated string compose_names = 4;
   bool absence_proven = 5;
-}
-
-message ComponentRestorationEvidence {
-  string component_id = 1;
-  string artifact_id = 2;
-  string service_id = 3;
-  string compose_project_name = 4;
-  ComponentRestorationTarget target = 5;
-  bool restored = 6;
-}
-
-enum ComponentRestorationTarget {
-  COMPONENT_RESTORATION_TARGET_UNSPECIFIED = 0;
-  COMPONENT_RESTORATION_TARGET_PREDECESSOR = 1;
-  COMPONENT_RESTORATION_TARGET_CANDIDATE_ABSENCE = 2;
 }
 
 message CandidateAbsenceEvidence {
@@ -1111,15 +1283,13 @@ enum TaskTerminal {
 // ---- Controller -> Agent ----
 
 message ControllerMessage {
-  reserved 13;
+  reserved 6, 7, 13;
   oneof payload {
     TaskAssignment task_assignment = 1; // the full procedure: steps, params, timeout
     TaskAbort task_abort = 2;           // cancel in-flight work NOW
     ConfigUpdate config_update = 3;     // delivered at the first fully idle Ready; applied without process restart
     Shutdown shutdown = 4;
     MaterializationTransfer materialization_transfer = 5; // transient bytes; never durable Task or plan state
-    BackupCheckpointAck backup_checkpoint_ack = 6;
-    BackupSecretSlotTransfer backup_secret_slot_transfer = 7;
     LogSubscribe log_subscribe = 8;
     LogCancel log_cancel = 9;
     ManagedConfigTransfer managed_config_transfer = 10;
@@ -1183,6 +1353,47 @@ message ControllerMessage {
     NetworkWorkCompletionAck network_work_completion_ack = 76;
     NetworkWorkFailureAck network_work_failure_ack = 77;
     NetworkWorkRecoveryReportAck network_work_recovery_report_ack = 78;
+    ComponentWorkAssignment component_work_assignment = 79;
+    ComponentWorkCheckpointAck component_work_checkpoint_ack = 80;
+    ComponentWorkCompletionAck component_work_completion_ack = 81;
+    ComponentWorkFailureAck component_work_failure_ack = 82;
+    ComponentWorkRecoveryReportAck component_work_recovery_report_ack = 83;
+    ComponentConfigurationManifest component_configuration_manifest = 84;
+    ComponentConfigurationFileDelivery component_configuration_file_delivery = 85;
+    EntryConfigurationWorkAssignment entry_configuration_work_assignment = 86;
+    EntryConfigurationWorkCheckpointAck entry_configuration_work_checkpoint_ack = 87;
+    EntryConfigurationWorkCompletionAck entry_configuration_work_completion_ack = 88;
+    EntryConfigurationWorkFailureAck entry_configuration_work_failure_ack = 89;
+    EntryConfigurationManifest entry_configuration_manifest = 90;
+    EntryConfigurationFileDelivery entry_configuration_file_delivery = 91;
+    EntryConfigurationWorkRecoveryReportAck entry_configuration_work_recovery_report_ack = 92;
+    AttachProvisionAssignment attach_provision_assignment = 93;
+    AttachProvisionCheckpointAck attach_provision_checkpoint_ack = 94;
+    AttachProvisionCompletionAck attach_provision_completion_ack = 95;
+    AttachProvisionFailureAck attach_provision_failure_ack = 96;
+    AttachProvisionFactsAck attach_provision_facts_ack = 97;
+    AttachProvisionRecoveryAssignment attach_provision_recovery_assignment = 98;
+    AttachProvisionRecoveryReportAck attach_provision_recovery_report_ack = 99;
+    ServiceLifecycleAssignment service_lifecycle_assignment = 100;
+    ServiceLifecycleCheckpointAck service_lifecycle_checkpoint_ack = 101;
+    ServiceLifecycleCompletionAck service_lifecycle_completion_ack = 102;
+    ServiceLifecycleFailureAck service_lifecycle_failure_ack = 103;
+    ServiceLifecycleHookDelivery service_lifecycle_hook_delivery = 104;
+    ServiceLifecycleRecoveryReportAck service_lifecycle_recovery_report_ack = 105;
+    ServiceRemovalRecoveryAssignment service_removal_recovery_assignment = 106;
+    ServiceRemovalRecoveryCheckpointAck service_removal_recovery_checkpoint_ack = 107;
+    ServiceRemovalRecoveryCompletionAck service_removal_recovery_completion_ack = 108;
+    ServiceRemovalRecoveryFailureAck service_removal_recovery_failure_ack = 109;
+    ServiceRemovalConfigurationManifest service_removal_configuration_manifest = 110;
+    ServiceRemovalConfigurationFileDelivery service_removal_configuration_file_delivery = 111;
+    BackupWorkAssignment backup_work_assignment = 112;
+    BackupWorkCheckpointAck backup_work_checkpoint_ack = 113;
+    BackupWorkSecretTransfer backup_work_secret_transfer = 114;
+    BackupWorkCompletionAck backup_work_completion_ack = 115;
+    BackupWorkFailureAck backup_work_failure_ack = 116;
+    BackupRecoveryAssignment backup_recovery_assignment = 117;
+    BackupRecoveryAck backup_recovery_ack = 118;
+    BackupConfigRecoveryPrepareAck backup_config_recovery_prepare_ack = 119;
   }
 }
 
@@ -1348,23 +1559,7 @@ message TaskAssignment {
   bytes release_recovery_record_sha256 = 20; // required only in recovery_only mode
   ReleaseRecoveryDirective release_recovery_directive = 21; // required only in recovery_only mode
   google.protobuf.Timestamp execution_deadline = 22; // current bounded attempt deadline; proof-required recovery uses a distinct non-renewable budget
-  ComponentRecoveryDirective component_recovery_directive = 23; // required only for authored Component recovery
-  bytes component_recovery_record_sha256 = 24; // exact durable authored Component recovery authority
-}
-
-message ComponentRecoveryDirective {
-  repeated string step_ids = 1;
-  uint32 cursor = 2;
-  bytes component_recovery_record_sha256 = 3;
-  ComponentRecoveryPhase phase = 4;
-  repeated string applicable_compensation_step_ids = 5;
-}
-
-enum ComponentRecoveryPhase {
-  COMPONENT_RECOVERY_PHASE_UNSPECIFIED = 0;
-  COMPONENT_RECOVERY_PHASE_PROBE = 1;
-  COMPONENT_RECOVERY_PHASE_COMPENSATE = 2;
-  COMPONENT_RECOVERY_PHASE_PROVEN = 3;
+  reserved 23, 24;
 }
 
 message ReleaseRecoveryDirective {
@@ -1619,9 +1814,9 @@ message ExecutionPlan {
   CandidateReleaseProcedure candidate_release_procedure = 14;
   ManagedComponentProcedure managed_component_procedure = 15;
   ServiceLifecycleProcedure service_lifecycle_procedure = 16;
-  EntryMutationProcedure entry_mutation_procedure = 17;
+  reserved 17;
   BackupPlanScope backup_scope = 18;
-  ComponentRecoveryProcedure component_recovery_procedure = 19;
+  reserved 19;
   ServiceAbsenceRecoveryProcedure service_absence_recovery_procedure = 20;
   ManagedNetworkRecoveryProcedure managed_network_recovery_procedure = 21;
 }
@@ -1663,73 +1858,6 @@ message ServiceAbsenceRecoveryProcedure {
   repeated string forward_step_ids = 3;
   string probe_step_id = 4;
   string compensate_step_id = 5;
-}
-
-// ComponentRecoveryProcedure is the immutable recovery-only authority for one
-// authored Environment Component child. It never names or fabricates a Service
-// Release and cannot select another Component or a newer desired projection.
-message ComponentRecoveryProcedure {
-  string component_id = 1;
-  string candidate_artifact_id = 2;
-  repeated string forward_step_ids = 3;
-  ConfigurationRestoration configuration_restoration = 4;
-  oneof runtime_target {
-    ComponentPredecessorRestoration predecessor = 5;
-    ComponentCandidateAbsenceRestoration candidate_absence = 6;
-  }
-  oneof configuration_source {
-    // Update recovery reuses the forward action's captured source pair.
-    string configuration_action_step_id = 7;
-    // Disable/omission or an engine change has no predecessor activation action.
-    // The closed retained source owns read-only active/restart confirmation.
-    ComponentRetainedConfiguration retained_configuration = 8;
-  }
-}
-
-message ComponentRetainedConfiguration {
-  oneof file_source {
-    string materialize_step_id = 1;
-    // A predecessor file not written by this Task. This is observation evidence,
-    // never permission to materialize a file or execute a Component action.
-    ComponentUnchangedConfigurationFile unchanged_file = 7;
-  }
-  bytes definition_digest = 2;
-  bytes catalog_digest = 3;
-  string action_id = 4;
-  bytes source = 5;
-  uint64 generation = 6;
-}
-
-message ComponentUnchangedConfigurationFile {
-  string materialization_id = 1;
-  string environment_id = 2;
-  string destination = 3;
-  bytes sha256 = 4;
-  string prior_snapshot_id = 5;
-  bytes prior_snapshot_sha256 = 6;
-  uint64 prior_snapshot_generation = 7;
-}
-
-message ComponentPredecessorRestoration {
-  string prior_artifact_id = 1;
-  string service_id = 2;
-  string probe_step_id = 3;
-  string compensate_step_id = 4;
-}
-
-message ComponentCandidateAbsenceRestoration {
-  string compose_project_name = 1;
-  string service_id = 2;
-  string probe_step_id = 3;
-  string compensate_step_id = 4;
-}
-
-// EntryMutationProcedure confines configuration reconciliation to retained
-// workloads. The baseline proves runtime identity; the candidate supplies only
-// Entry decorations and pinned materializations. Stable proxies are untouched.
-message EntryMutationProcedure {
-  string baseline_artifact_id = 1;
-  string candidate_artifact_id = 2;
 }
 
 // ServiceLifecycleProcedure narrowly authorizes lifecycle steps to act on
@@ -1860,16 +1988,6 @@ message CandidateRestorationCompensate {
   string candidate_release_id = 3;
 }
 
-message ComponentRestorationProbe {
-  string component_id = 1;
-  string candidate_artifact_id = 2;
-}
-
-message ComponentRestorationCompensate {
-  string component_id = 1;
-  string candidate_artifact_id = 2;
-}
-
 enum ComponentLifecycleMode {
   COMPONENT_LIFECYCLE_MODE_UNSPECIFIED = 0;
   COMPONENT_LIFECYCLE_MODE_UPDATE = 1;
@@ -1895,6 +2013,214 @@ enum PlanOperation {
   PLAN_OPERATION_SCRIPT = 14;
   PLAN_OPERATION_BLUEPRINT_APPLY = 15;
   PLAN_OPERATION_RESTORE = 16;
+}
+
+// Entry changes have a closed files-first procedure. Removal never reconciles
+// workloads; create/edit/bulk select captured running consumers only. Metadata
+// contains no secret bytes and does not grant arbitrary Compose execution.
+message EntryConfigurationWorkInput {
+  string operation_id = 1;
+  string environment_id = 2;
+  uint64 render_generation = 3;
+  bool removal = 4;
+  ComposeArtifact baseline = 5;
+  ComposeArtifact candidate = 6;
+  WorkConfigurationReference configuration = 7;
+  WorkConfigurationReference prior_configuration = 8;
+  repeated MaterializeFile files = 9;
+  repeated string running_consumer_ids = 10;
+}
+
+// One Environment Component operation. The compiled handler owns sequencing;
+// neither a hidden Task nor a generic step program is part of this input.
+// Removal retains its exact predecessor for teardown and absence verification.
+message ComponentWorkInput {
+  string operation_id = 1;
+  string environment_id = 2;
+  string component_id = 3;
+  uint64 render_generation = 4;
+  bool remove = 5;
+  ComposeArtifact candidate = 6; // absent for removal
+  ComponentWorkPredecessor predecessor = 7; // explicit absence on first activation
+  ComponentApply configuration_action = 8;
+  WorkConfigurationReference configuration = 9;
+  WorkConfigurationReference prior_configuration = 10;
+  repeated MaterializeFile files = 11; // metadata only; plaintext uses authenticated delivery
+}
+
+message ComponentWorkPredecessor {
+  bool absent = 1;
+  ComposeArtifact runtime = 2;
+  // Captured provider configuration needed to restore the predecessor. This
+  // contains no step identities or permission to execute unrelated actions.
+  ComponentWorkRetainedConfiguration configuration = 3;
+}
+
+message ComponentWorkRetainedConfiguration {
+  MaterializeFile file = 1;
+  bytes definition_digest = 2;
+  bytes catalog_digest = 3;
+  string action_id = 4;
+  bytes source = 5;
+  uint64 generation = 6;
+}
+
+message EntryConfigurationRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+}
+
+message EntryConfigurationFile {
+  string destination = 1;
+  string service_id = 2;
+  string service_name = 3;
+  string output_kind = 4;
+  uint32 uid = 5;
+  uint32 gid = 6;
+  uint32 mode = 7;
+  uint64 length = 8;
+  bytes sha256 = 9;
+}
+
+message EntryConfigurationManifest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  WorkConfigurationReference configuration = 3;
+  repeated EntryConfigurationFile files = 4;
+}
+
+message EntryConfigurationFileRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  string destination = 3;
+}
+
+message EntryConfigurationFileDelivery {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  WorkConfigurationReference configuration = 3;
+  EntryConfigurationFile file = 4;
+  bytes content = 5;
+}
+
+message EntryConfigurationWorkCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes progress = 2;
+}
+
+message EntryConfigurationWorkCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 sequence = 2;
+  string stage_id = 3;
+  WorkInputReference evidence = 4;
+  google.protobuf.Timestamp recorded_at = 5;
+}
+
+message EntryConfigurationWorkCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+}
+
+message EntryConfigurationWorkCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  string outcome = 5;
+}
+
+message EntryConfigurationWorkFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message EntryConfigurationWorkFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+message EntryConfigurationWorkAssignment {
+  WorkAttemptIdentity attempt = 1;
+  EntryConfigurationWorkInput input = 2;
+  bytes recovery_source = 3;
+  bytes recovery_boundary = 4;
+}
+
+message EntryConfigurationWorkRecoveryReportRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message EntryConfigurationWorkRecoveryReportAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bool predecessor_restored = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp finished_at = 6;
+}
+
+message ComponentWorkAssignment {
+  WorkAttemptIdentity attempt = 1;
+  ComponentWorkInput input = 2;
+  bytes recovery_source = 3;
+  bytes recovery_boundary = 4;
+}
+
+message ComponentWorkCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes progress = 2;
+}
+
+message ComponentWorkCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 sequence = 2;
+  string stage_id = 3;
+  WorkInputReference evidence = 4;
+  google.protobuf.Timestamp recorded_at = 5;
+}
+
+message ComponentWorkCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+}
+
+message ComponentWorkCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  string outcome = 5;
+}
+
+message ComponentWorkFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message ComponentWorkFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+message ComponentWorkRecoveryReportRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message ComponentWorkRecoveryReportAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bool predecessor_restored = 3;
+  google.protobuf.Timestamp finished_at = 4;
 }
 
 // A Network item owns one managed bridge. Ensure captures only that bridge's
@@ -1977,6 +2303,31 @@ message NetworkWorkRecoveryReportAck {
   google.protobuf.Timestamp finished_at = 4;
 }
 
+message ComponentWorkHelperRequest {
+  ComponentWorkAssignment assignment = 1;
+  WorkStartAck start = 2;
+  ComponentWorkCheckpointRequest report = 3;
+  ComponentWorkCheckpointAck acknowledgement = 4;
+  bool inspect_only = 5;
+}
+
+message EntryConfigurationWorkHelperRequest {
+  EntryConfigurationWorkAssignment assignment = 1;
+  WorkStartAck start = 2;
+  EntryConfigurationWorkCheckpointRequest report = 3;
+  EntryConfigurationWorkCheckpointAck acknowledgement = 4;
+  bool inspect_only = 5;
+}
+
+message EntryConfigurationWorkHelperResponse {
+  bytes observation = 1;
+}
+
+message ComponentWorkHelperResponse {
+  bytes observation = 1;
+  bytes recovery_report = 2;
+}
+
 message NetworkWorkHelperRequest {
   NetworkWorkAssignment assignment = 1;
   WorkStartAck start = 2;
@@ -1997,6 +2348,234 @@ message NetworkWorkHelperResponse {
 
 // Captured Volume work has a closed procedure, not a list of generic steps.
 // Removal retains both runtime configurations and the approved impact digest.
+// Removal restoration has its own effect-grant protocol. Lifecycle recovery
+// only inspects a prior stage and must never authorize these restorative writes.
+message ServiceRemovalRecoveryAssignment {
+  WorkAttemptIdentity attempt = 1;
+  ServiceLifecycleWorkInput removal = 2;
+  bytes captured_failure = 3;
+  WorkConfigurationReference configuration = 4;
+}
+
+message ServiceRemovalConfigurationRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+}
+
+message ServiceRemovalConfigurationFile {
+  string destination = 1;
+  string service_id = 2;
+  string service_name = 3;
+  string output_kind = 4;
+  uint32 uid = 5;
+  uint32 gid = 6;
+  uint32 mode = 7;
+  uint64 length = 8;
+  bytes sha256 = 9;
+}
+
+message ServiceRemovalConfigurationManifest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  WorkConfigurationReference configuration = 3;
+  repeated ServiceRemovalConfigurationFile files = 4;
+}
+
+message ServiceRemovalConfigurationFileRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  string destination = 3;
+}
+
+message ServiceRemovalConfigurationFileDelivery {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  WorkConfigurationReference configuration = 3;
+  ServiceRemovalConfigurationFile file = 4;
+  bytes content = 5;
+}
+
+message ServiceRemovalRecoveryCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes progress = 2;
+}
+
+message ServiceRemovalRecoveryCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 sequence = 2;
+  string stage_id = 3;
+  WorkInputReference evidence = 4;
+  google.protobuf.Timestamp recorded_at = 5;
+}
+
+message ServiceRemovalRecoveryCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+}
+
+message ServiceRemovalRecoveryCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp finished_at = 4;
+}
+
+message ServiceRemovalRecoveryFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message ServiceRemovalRecoveryFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  google.protobuf.Timestamp finished_at = 4;
+}
+
+message ServiceRemovalRecoveryHelperRequest {
+  ServiceRemovalRecoveryAssignment assignment = 1;
+  WorkStartAck start = 2;
+  ServiceRemovalRecoveryCheckpointRequest report = 3;
+  ServiceRemovalRecoveryCheckpointAck acknowledgement = 4;
+  bool inspect_only = 5;
+}
+
+message ServiceRemovalRecoveryHelperResponse {
+  string stage_id = 1;
+  WorkInputReference evidence = 2;
+  google.protobuf.Timestamp observed_at = 3;
+  bool satisfied = 4;
+  bool inspection = 5;
+}
+
+message ServiceLifecycleAssignment {
+  WorkAttemptIdentity attempt = 1;
+  ServiceLifecycleWorkInput input = 2;
+  // Recovery inspects previously granted effects; it does not replay a hook.
+  bytes recovery_source = 3;
+  // Forward Retry retains proof of completed stages from previous attempts.
+  bytes continuation = 4;
+}
+
+message ServiceLifecycleWorkInput {
+  WorkInputReference captured_source = 1;
+  string environment_id = 2;
+  string service_id = 3;
+  ServiceLifecycleAction action = 4;
+  repeated ServiceLifecycleMember members = 5;
+  ServiceLifecycleHook hook = 6;
+  uint32 stop_grace_seconds = 7;
+}
+
+enum ServiceLifecycleAction {
+  SERVICE_LIFECYCLE_ACTION_UNSPECIFIED = 0;
+  SERVICE_LIFECYCLE_ACTION_START = 1;
+  SERVICE_LIFECYCLE_ACTION_STOP = 2;
+  SERVICE_LIFECYCLE_ACTION_DESTROY = 3;
+}
+
+message ServiceLifecycleMember {
+  ComposeArtifact artifact = 1;
+  ServiceLifecycleSource ownership = 2;
+}
+
+// Non-secret hook authority. Values are delivered only to the exact active
+// attempt after its checkpoint grant; neither assignment nor recovery has them.
+message ServiceLifecycleHook {
+  string stage_id = 1;
+  BackingHookEvent event = 2;
+  repeated string command = 3;
+  uint32 timeout_seconds = 4;
+}
+
+message ServiceLifecycleHookRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+}
+
+message ServiceLifecycleHookDelivery {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  BackingHookProcedure hook = 3;
+}
+
+// Recovery reports account for the captured interrupted effect; they do not
+// replace the failed forward action or authorize replay of its hook.
+message ServiceLifecycleRecoveryReportRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message ServiceLifecycleRecoveryReportAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bool boundary_completed = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}
+
+message ServiceLifecycleCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes progress = 2;
+}
+
+message ServiceLifecycleCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 sequence = 2;
+  string stage_id = 3;
+  WorkInputReference evidence = 4;
+  google.protobuf.Timestamp recorded_at = 5;
+}
+
+message ServiceLifecycleCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+}
+
+message ServiceLifecycleCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  string outcome = 5;
+  // A completed host removal may lose publication authority to Abort or newer
+  // intent. This receipt preserves the stopped result and required restoration.
+  ServiceLifecycleFailureAck stopped = 6;
+}
+
+message ServiceLifecycleFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message ServiceLifecycleFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}
+
+// Local helper envelope: the checkpoint acknowledgement precedes any effect.
+// Custom hooks use their recorded Docker exec instead of this member helper.
+message ServiceLifecycleHelperRequest {
+  ServiceLifecycleAssignment assignment = 1;
+  WorkStartAck start = 2;
+  ServiceLifecycleCheckpointRequest report = 3;
+  ServiceLifecycleCheckpointAck acknowledgement = 4;
+  bool inspect_only = 5;
+}
+
+message ServiceLifecycleHelperResponse {
+  string stage_id = 1;
+  string member = 2;
+  string state = 3;
+  WorkInputReference evidence = 4;
+  google.protobuf.Timestamp observed_at = 5;
+  bool inspection = 6;
+  bool satisfied = 7;
+}
+
 message VolumeWorkInput {
   VolumeWorkAction action = 1;
   string environment_id = 2;
@@ -2174,6 +2753,7 @@ message LabelPair {
 }
 
 message ExecutionStep {
+  reserved 38, 39;
   reserved 13, 14, 15;
   reserved "backup_source_capture", "backup_artifact_prune";
   string step_id = 1;
@@ -2211,8 +2791,6 @@ message ExecutionStep {
     // Immutable typed Backup step input. Dispatch wraps these exact steps in
     // the assignment-specific BackupTaskAuthority; no source reconstruction.
     BackupStepAuthority backup_step = 37;
-    ComponentRestorationProbe component_restoration_probe = 38;
-    ComponentRestorationCompensate component_restoration_compensate = 39;
     ServiceAbsenceProbe service_absence_probe = 40;
     ComposeWorkloadRemove compose_workload_remove = 41;
     RollingTrafficSwitch rolling_traffic_switch = 42;
@@ -2671,6 +3249,166 @@ message BackupTaskAuthority {
 
 // Sealed once during publication. Assignment adds only its exact delivery
 // identity and absolute claim deadline; reconnect never rereads live resources.
+// Captured Backup work has no attempt, assignment or generic plan identity.
+// Delivery binds this payload through WorkAttemptIdentity.input; retries retain
+// the payload and add a new attempt rather than rewriting source authority.
+message BackupWorkInput {
+  uint32 schema = 1;
+  BackupWorkOperation operation = 2;
+  string project_id = 3;
+  RevisionDigest project = 4;
+  string environment_id = 5;
+  RevisionDigest environment = 6;
+  repeated BackupServiceFact services = 7;
+  repeated BackupStepAuthority steps = 8;
+  repeated ComposeArtifact artifacts = 9;
+}
+
+enum BackupWorkOperation {
+  BACKUP_WORK_OPERATION_UNSPECIFIED = 0;
+  BACKUP_WORK_OPERATION_CAPTURE = 1;
+  BACKUP_WORK_OPERATION_RESTORE = 2;
+  BACKUP_WORK_OPERATION_PRUNE = 3;
+}
+
+// Reconnect repeats the same attempt and the Controller's durable source
+// cursors. An Agent may not substitute locally remembered progress.
+message BackupWorkAssignment {
+  WorkAttemptIdentity attempt = 1;
+  BackupWorkInput input = 2;
+  repeated BackupStepResume sources = 3;
+}
+
+// Native Volume consumer command. Inspection uses the same captured workload;
+// mutation additionally requires the exact acknowledged source intent.
+message BackupConsumerHelperRequest {
+  BackupWorkAssignment assignment = 1;
+  uint32 source_ordinal = 2;
+  string service_id = 3;
+  WorkStartAck start = 4;
+  bool inspect_only = 5;
+  BackupConsumerOperation operation = 6;
+  BackupWorkCheckpointRequest checkpoint = 7;
+  BackupWorkCheckpointAck acknowledgement = 8;
+  BackupRecoveryAssignment recovery = 9;
+}
+
+message BackupConsumerHelperResponse {
+  WorkAttemptIdentity attempt = 1;
+  uint32 source_ordinal = 2;
+  string service_id = 3;
+  bool inspection = 4;
+  ObservedProject observed = 5;
+  bytes observation_sha256 = 6;
+  google.protobuf.Timestamp observed_at = 7;
+}
+
+// Recovery uses captured progress; it never grants forward execution again.
+enum BackupRestoreRecoveryMode {
+  BACKUP_RESTORE_RECOVERY_MODE_UNSPECIFIED = 0;
+  BACKUP_RESTORE_RECOVERY_MODE_NO_LIVE_MUTATION = 1;
+  BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION = 2;
+}
+
+message BackupRecoveryAssignment {
+  WorkAttemptIdentity attempt = 1;
+  BackupWorkInput input = 2;
+  bytes recovery_source = 3;
+  repeated BackupStepResume sources = 4;
+  BackupRestoreRecoveryMode restore_mode = 5;
+}
+
+message BackupRecoveryRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+// The Agent must obtain this publication acknowledgement before materializing
+// the captured Config generation during recovery.
+message BackupConfigRecoveryPrepareRequest {
+  WorkAttemptIdentity attempt = 1;
+  uint32 source_ordinal = 2;
+}
+
+message BackupConfigRecoveryPrepareAck {
+  BackupRecoveryAssignment assignment = 1;
+  uint32 source_ordinal = 2;
+  BackupConfigTransferCompleted completed = 3;
+}
+
+message BackupRecoveryAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp finished_at = 4;
+}
+
+message BackupWorkCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  uint32 source_ordinal = 2;
+  uint64 checkpoint_sequence = 3;
+  CheckpointFence preceding_checkpoint = 4;
+  oneof checkpoint {
+    BackupArtifactPrepared artifact_prepared = 20;
+    BackupUploadVerified upload_verified = 21;
+    BackupSourceCleanupCompleted source_cleanup_completed = 22;
+    BackupPostgresContainerObserved postgres_container_observed = 23;
+    BackupPostgresDumpStart postgres_dump_start = 24;
+    BackupPostgresRestoreApplyStartCheckpoint postgres_restore_apply_start = 25;
+    BackupRestoreArtifactValidated restore_artifact_validated = 26;
+    BackupConfigCheckpoint config = 27;
+    BackupVolumeCheckpoint volume = 28;
+    BackupPruneObjectDeleted prune_object_deleted = 29;
+    BackupPostgresRestoreVerified postgres_restore_verified = 30;
+    BackupPostgresServiceProgress postgres_service_progress = 31;
+    BackupUploadCompleted upload_completed = 32;
+    BackupMySQLContainerObserved mysql_container_observed = 33;
+    BackupMySQLDumpStart mysql_dump_start = 34;
+    BackupMySQLRestoreApplyStartCheckpoint mysql_restore_apply_start = 35;
+    BackupMySQLRestoreVerified mysql_restore_verified = 36;
+    BackupMySQLServiceProgress mysql_service_progress = 37;
+    BackupDatabaseConsumerRecovery database_consumer_recovery = 38;
+  }
+}
+
+message BackupWorkCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+}
+
+// Sent only after the source executor has stopped and cannot start another
+// operation. An unacknowledged result must be replayed before this request.
+message BackupWorkFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message BackupWorkFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp finished_at = 6;
+}
+
+message BackupWorkCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  string outcome = 5;
+}
+
+message BackupWorkCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  uint32 source_ordinal = 2;
+  uint64 checkpoint_sequence = 3;
+  CheckpointFence committed = 4;
+  bytes request_sha256 = 5;
+  BackupStepResume source = 6;
+}
+
 message BackupPlanScope {
   string project_id = 1;
   RevisionDigest project = 2;
@@ -2772,6 +3510,7 @@ message BackupRestoreResume {
   BackupRestoreCursor cursor = 4;
   BackupPostgresRestoreApplyStartCheckpoint apply_start = 5;
   BackupMySQLRestoreApplyStartCheckpoint mysql_apply_start = 6;
+  BackupDatabaseRestoreProgress database_progress = 7;
   oneof checkpoint {
     BackupRestoreArtifactValidated artifact_validated = 10;
     BackupPostgresContainerObserved postgres_container_observed = 11;
@@ -2786,6 +3525,23 @@ message BackupRestoreResume {
     BackupMySQLRestoreVerified mysql_restore_verified = 20;
     BackupMySQLServiceProgress mysql_service_progress = 21;
   }
+}
+
+// Constant-size cumulative database restore state; reassignment does not replay
+// diagnostic history to recover container identity or consumer stop/restart order.
+message BackupDatabaseRestoreProgress {
+  uint32 stopped_consumers = 1;
+  uint32 recovered_consumers = 2;
+  BackupServicePhase consumer_phase = 3;
+  BackupPostgresContainerObserved postgres_observed = 4;
+  BackupMySQLContainerObserved mysql_observed = 5;
+  BackupPostgresRestoreVerified postgres_verified = 6;
+  BackupMySQLRestoreVerified mysql_verified = 7;
+  bool consumers_only = 8; // recovery before any database apply was authorized
+}
+
+message BackupDatabaseConsumerRecovery {
+  string point_id = 1;
 }
 
 message BackupCaptureCursor {
@@ -2805,46 +3561,6 @@ message BackupRestoreCursor {
   bytes cumulative_chain_sha256 = 6;
 }
 
-message BackupCheckpointRequest {
-  reserved "sequence", "kind", "control_payload_sha256";
-  string task_id = 1;
-  string step_id = 2;
-  string execution_id = 3;
-  uint64 checkpoint_sequence = 4;
-  CheckpointFence preceding_checkpoint = 5;
-  bytes authority_digest = 6;
-  string assignment_id = 7;
-  oneof checkpoint {
-    BackupArtifactPrepared artifact_prepared = 20;
-    BackupUploadVerified upload_verified = 21;
-    BackupSourceCleanupCompleted source_cleanup_completed = 22;
-    BackupPostgresContainerObserved postgres_container_observed = 23;
-    BackupPostgresDumpStart postgres_dump_start = 24;
-    BackupPostgresRestoreApplyStartCheckpoint postgres_restore_apply_start = 25;
-    BackupRestoreArtifactValidated restore_artifact_validated = 26;
-    BackupConfigCheckpoint config = 27;
-    BackupVolumeCheckpoint volume = 28;
-    BackupPruneObjectDeleted prune_object_deleted = 29;
-    BackupPostgresRestoreVerified postgres_restore_verified = 30;
-    BackupPostgresServiceProgress postgres_service_progress = 31;
-    BackupUploadCompleted upload_completed = 32;
-    BackupMySQLContainerObserved mysql_container_observed = 33;
-    BackupMySQLDumpStart mysql_dump_start = 34;
-    BackupMySQLRestoreApplyStartCheckpoint mysql_restore_apply_start = 35;
-    BackupMySQLRestoreVerified mysql_restore_verified = 36;
-    BackupMySQLServiceProgress mysql_service_progress = 37;
-  }
-}
-
-message BackupCheckpointAck {
-  reserved "sequence";
-  string task_id = 1;
-  string step_id = 2;
-  string execution_id = 3;
-  uint64 checkpoint_sequence = 4;
-  CheckpointFence committed = 5;
-  string assignment_id = 6;
-}
 
 message BackupCaptureAuthority {
   reserved 5;
@@ -2930,9 +3646,9 @@ message BackupStagingInventory {
 // Restore generation. Neither a path nor an unbounded manifest is sent.
 message BackupRecoveredVolumeRestore {
   bytes recovery_key_sha256 = 1;
-  string assignment_id = 2;
+  WorkAttemptIdentity attempt = 2;
   string restore_generation_id = 3;
-  bytes step_sha256 = 4;
+  bytes authority_sha256 = 4;
   bool journal_present = 5;
   bytes old_manifest_sha256 = 6;
   bytes old_full_tree_sha256 = 7;
@@ -2957,6 +3673,8 @@ message BackupRecoveredVolumeRestore {
   uint64 receiver_entry_count = 26;
   bool journal_discarding = 27;
   bool receiver_discarding = 28;
+  uint32 source_ordinal = 29;
+  string point_id = 30;
 }
 
 message BackupRecoveredStage {
@@ -3089,12 +3807,11 @@ enum BackupConfigDirection {
 }
 
 message BackupConfigTransfer {
-  string task_id = 1;
-  string step_id = 2;
-  string execution_id = 3;
+  WorkAttemptIdentity attempt = 1;
+  uint32 source_ordinal = 2;
+  bytes authority_digest = 3;
   string transfer_id = 4;
   uint64 record_sequence = 5;
-  string assignment_id = 6;
   oneof record {
     BackupConfigTransferStart start = 10;
     BackupConfigEntryHeader entry_header = 11;
@@ -3146,13 +3863,12 @@ message BackupConfigTransferResume {
 }
 
 message BackupConfigCredit {
-  string task_id = 1;
-  string step_id = 2;
-  string execution_id = 3;
+  WorkAttemptIdentity attempt = 1;
+  uint32 source_ordinal = 2;
+  bytes authority_digest = 3;
   string transfer_id = 4;
   BackupConfigDirection direction = 5;
   uint64 credit_sequence = 6;
-  string assignment_id = 7;
   oneof credit {
     BackupConfigMetadataAccepted metadata_accepted = 10;
     BackupConfigValueCredit value_credit = 11;
@@ -3179,9 +3895,9 @@ enum BackupVolumeManifestRole {
 }
 
 message BackupVolumeManifestTransfer {
-  string task_id = 1;
-  string assignment_id = 2;
-  string step_id = 3;
+  WorkAttemptIdentity attempt = 1;
+  uint32 source_ordinal = 2;
+  reserved 3;
   bytes authority_digest = 4;
   string transfer_id = 5;
   BackupVolumeManifestDirection direction = 6;
@@ -3230,9 +3946,9 @@ message BackupVolumeManifestResume {
 }
 
 message BackupVolumeManifestAckCredit {
-  string task_id = 1;
-  string assignment_id = 2;
-  string step_id = 3;
+  WorkAttemptIdentity attempt = 1;
+  uint32 source_ordinal = 2;
+  reserved 3;
   bytes authority_digest = 4;
   string transfer_id = 5;
   uint64 ack_sequence = 6;
@@ -3337,7 +4053,7 @@ message BackupConfigMaterializationVerified {
 
 message BackupVolumeCheckpoint {
   oneof checkpoint {
-    BackupVolumeConsumersStopped consumers_stopped = 1;
+    BackupConsumersStopped consumers_stopped = 1;
     BackupVolumeConstructionIntent construction_intent = 2;
     BackupVolumeConstructionCompleted construction_completed = 3;
     BackupVolumeFinalizationIntent finalization_intent = 4;
@@ -3798,7 +4514,7 @@ message BackupVolumeSourceArchiveEvidence {
 
 message BackupVolumeNoSourceArchiveEvidence {}
 
-message BackupVolumeConsumersStopped {
+message BackupConsumersStopped {
   uint32 stopped_count = 1;
   bytes service_progress_sha256 = 2;
 }
@@ -3887,15 +4603,19 @@ message BackupVolumeServiceProgress {
 
 // Secret material remains transient assignment/step-fenced header/chunk/end
 // traffic. Config selected values use BackupConfigTransfer instead.
-message BackupSecretSlotTransfer {
-  string task_id = 1;
-  string assignment_id = 2;
-  string step_id = 3;
-  BackupSecretSlotPurpose purpose = 4;
+message BackupWorkSecretRequest {
+  WorkAttemptIdentity attempt = 1;
+  uint32 source_ordinal = 2;
+}
+
+message BackupWorkSecretTransfer {
+  WorkAttemptIdentity attempt = 1;
+  uint32 source_ordinal = 2;
+  BackupSecretSlotPurpose purpose = 3;
   oneof record {
-    BackupSecretSlotHeader header = 5;
-    BackupSecretSlotChunk chunk = 6;
-    BackupSecretSlotEnd end = 7;
+    BackupSecretSlotHeader header = 4;
+    BackupSecretSlotChunk chunk = 5;
+    BackupSecretSlotEnd end = 6;
   }
 }
 
@@ -4423,43 +5143,17 @@ message ComposeHelperRequest {
   uint32 timeout_seconds = 6; // remaining bounded execution time
   string assignment_id = 7;
   ReleaseRestorationAuthority restoration_authority = 9;
-  BackupVolumeConsumerAction backup_volume_consumer = 10;
-  BackupPostgresConsumerAction backup_postgres_consumer = 11;
-  BackupMySQLConsumerAction backup_mysql_consumer = 12;
+  reserved 10;
+  reserved 11, 12;
 }
 
-enum BackupVolumeConsumerOperation {
-  BACKUP_VOLUME_CONSUMER_OPERATION_UNSPECIFIED = 0;
-  BACKUP_VOLUME_CONSUMER_OPERATION_STOP = 1;
-  BACKUP_VOLUME_CONSUMER_OPERATION_RECOVER = 2;
+enum BackupConsumerOperation {
+  BACKUP_CONSUMER_OPERATION_UNSPECIFIED = 0;
+  BACKUP_CONSUMER_OPERATION_STOP = 1;
+  BACKUP_CONSUMER_OPERATION_RECOVER = 2;
 }
 
-message BackupVolumeConsumerAction {
-  string service_id = 1;
-  BackupVolumeConsumerOperation operation = 2;
-}
 
-enum BackupPostgresConsumerOperation {
-  BACKUP_POSTGRES_CONSUMER_OPERATION_UNSPECIFIED = 0;
-  BACKUP_POSTGRES_CONSUMER_OPERATION_STOP = 1;
-  BACKUP_POSTGRES_CONSUMER_OPERATION_RECOVER = 2;
-}
-
-message BackupPostgresConsumerAction {
-  string service_id = 1;
-  BackupPostgresConsumerOperation operation = 2;
-}
-
-enum BackupMySQLConsumerOperation {
-  BACKUP_MYSQL_CONSUMER_OPERATION_UNSPECIFIED = 0;
-  BACKUP_MYSQL_CONSUMER_OPERATION_STOP = 1;
-  BACKUP_MYSQL_CONSUMER_OPERATION_RECOVER = 2;
-}
-
-message BackupMySQLConsumerAction {
-  string service_id = 1;
-  BackupMySQLConsumerOperation operation = 2;
-}
 
 message ComposeHelperResponse {
   uint32 schema = 1; // exactly 1
@@ -4471,7 +5165,7 @@ message ComposeHelperResponse {
   CandidateAbsenceEvidence candidate_absence_evidence = 7;
   RollingProxyEvidence rolling_proxy_evidence = 8;
   RollingReleaseEvidence rolling_evidence = 9;
-  ComponentRestorationEvidence component_restoration_evidence = 10;
+  reserved 10;
 }
 
 message RollingProxyEvidence {

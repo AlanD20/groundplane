@@ -4,6 +4,7 @@ import (
 	"context"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // preparedTaskTimeoutResult classifies only Tasks with durable effect authority.
@@ -14,9 +15,8 @@ func (repository *TaskRepository) preparedTaskTimeoutResult(
 	ctx context.Context,
 	assignment TaskAssignment,
 ) (taskjournal.TaskResultRecord, bool, error) {
-	if assignment.Task.Record.Type == taskjournal.TaskRestore {
-		result, err := repository.configRestoreTimeoutResult(ctx, assignment)
-		return result, true, err
+	if assignment.Task.Record.Type == taskjournal.TaskRestore || assignment.Task.Record.Type == taskjournal.TaskBackup || assignment.Task.Record.Type == taskjournal.TaskBackupPrune {
+		return taskjournal.TaskResultRecord{}, true, errs.New(errs.KindStateConflict, "Backup and Restore require native work-item timeout handling")
 	}
 	if assignment.Task.Record.Type == taskjournal.TaskRemove &&
 		assignment.Task.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {

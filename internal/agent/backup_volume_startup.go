@@ -7,9 +7,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/backupvolumetransfer"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/agentvolumejournal"
 	"github.com/AlanD20/groundplane/internal/infra/agentvolumemanifest"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type recoveredVolumeRestore struct {
@@ -45,7 +47,18 @@ func inventoryBackupVolumeRestores(ctx context.Context) ([]*agentpb.BackupRecove
 			row.Config.RestoreGenerationID == "" {
 			return nil, nil, invalidAgentStaging()
 		}
-		key, err := executionplan.BackupStagingRecoveryKey(row.Config.TaskID, row.Config.StepID, row.Config.PointID)
+		binding := row.Config.Binding
+		transferID, err := backupvolumetransfer.TransferID(row.Config.RestoreGenerationID,
+			agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW)
+		if err != nil || binding.Validate() != nil || binding.TransferID != transferID ||
+			binding.Direction != agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW {
+			return nil, nil, invalidAgentStaging()
+		}
+		key, err := executionplan.BackupVolumeRecoveryKey(binding.Attempt, binding.SourceOrdinal, row.Config.PointID, row.Config.RestoreGenerationID)
+		if err != nil {
+			return nil, nil, err
+		}
+		attempt, err := workexecution.EncodeAgentAttempt(binding.Attempt)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -54,8 +67,9 @@ func inventoryBackupVolumeRestores(ctx context.Context) ([]*agentpb.BackupRecove
 			return nil, nil, invalidAgentStaging()
 		}
 		wire := &agentpb.BackupRecoveredVolumeRestore{RecoveryKeySha256: key,
-			AssignmentId: row.Config.AssignmentID, RestoreGenerationId: row.Config.RestoreGenerationID,
-			StepSha256: append([]byte(nil), row.Config.StepSHA256[:]...), JournalPresent: true,
+			Attempt: attempt, SourceOrdinal: binding.SourceOrdinal, PointId: row.Config.PointID,
+			RestoreGenerationId: row.Config.RestoreGenerationID,
+			AuthoritySha256:     append([]byte(nil), binding.AuthorityDigest[:]...), JournalPresent: true,
 			OldManifestSha256: append([]byte(nil), row.Config.OldManifestSHA256[:]...),
 			OldFullTreeSha256: append([]byte(nil), row.Config.OldFullTreeSHA256[:]...),
 			NewManifestSha256: append([]byte(nil), row.Config.NewManifestSHA256[:]...),
@@ -77,19 +91,25 @@ func inventoryBackupVolumeRestores(ctx context.Context) ([]*agentpb.BackupRecove
 		binding := row.Config.Binding
 		transferID, err := backupvolumetransfer.TransferID(row.Config.RestoreGenerationID,
 			agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW)
-		if err != nil || binding.TransferID != transferID {
+		if err != nil || binding.Validate() != nil || binding.TransferID != transferID ||
+			binding.Direction != agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW {
 			return nil, nil, invalidAgentStaging()
 		}
-		key, err := executionplan.BackupStagingRecoveryKey(binding.TaskID, binding.StepID, row.Config.PointID)
+		key, err := executionplan.BackupVolumeRecoveryKey(binding.Attempt, binding.SourceOrdinal, row.Config.PointID, row.Config.RestoreGenerationID)
 		if err != nil {
 			return nil, nil, err
 		}
 		name := string(key)
+		attempt, err := workexecution.EncodeAgentAttempt(binding.Attempt)
+		if err != nil {
+			return nil, nil, err
+		}
 		entry := local[name]
 		if entry.receiver != nil || entry.wire != nil &&
-			(entry.wire.AssignmentId != binding.AssignmentID ||
+			(!proto.Equal(entry.wire.Attempt, attempt) || entry.wire.SourceOrdinal != binding.SourceOrdinal ||
+				entry.wire.PointId != row.Config.PointID ||
 				entry.wire.RestoreGenerationId != row.Config.RestoreGenerationID ||
-				!bytes.Equal(entry.wire.StepSha256, binding.AuthorityDigest[:]) ||
+				!bytes.Equal(entry.wire.AuthoritySha256, binding.AuthorityDigest[:]) ||
 				!bytes.Equal(entry.wire.NewManifestSha256, row.Config.ExpectedArchive.ContentManifestSHA256[:]) ||
 				!bytes.Equal(entry.wire.NewFullTreeSha256, row.Config.ExpectedArchive.FullTreeSHA256[:]) ||
 				entry.wire.NewEntryCount != row.Config.ExpectedArchive.EntryCount) {
@@ -97,8 +117,9 @@ func inventoryBackupVolumeRestores(ctx context.Context) ([]*agentpb.BackupRecove
 		}
 		if entry.wire == nil {
 			entry.wire = &agentpb.BackupRecoveredVolumeRestore{RecoveryKeySha256: key,
-				AssignmentId: binding.AssignmentID, RestoreGenerationId: row.Config.RestoreGenerationID,
-				StepSha256: append([]byte(nil), binding.AuthorityDigest[:]...)}
+				Attempt: attempt, SourceOrdinal: binding.SourceOrdinal, PointId: row.Config.PointID,
+				RestoreGenerationId: row.Config.RestoreGenerationID,
+				AuthoritySha256:     append([]byte(nil), binding.AuthorityDigest[:]...)}
 		}
 		entry.wire.ReceiverPresent = true
 		if row.CurrentCredit != nil {

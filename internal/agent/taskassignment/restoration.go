@@ -22,8 +22,7 @@ func ValidateCandidateReleaseAuthority(assignment Assignment, plan *agentpb.Exec
 	if procedure == nil {
 		if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_DETACH &&
 			assignment.ExecutionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
-			if assignment.RestorationAuthority != nil || assignment.ComponentRecoveryDirective != nil ||
-				len(assignment.ComponentRecoveryRecordSHA256) != 0 {
+			if assignment.RestorationAuthority != nil {
 				return errs.New(errs.KindInternal, "agent: Detach assignment carries foreign recovery authority")
 			}
 			return executionplan.ValidateAttachRemovalRecoveryDirective(
@@ -86,8 +85,7 @@ func ValidateCandidateReleaseAuthority(assignment Assignment, plan *agentpb.Exec
 }
 
 func ValidateServiceAbsenceRecoveryAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {
-	if assignment.RestorationAuthority != nil || assignment.ComponentRecoveryDirective != nil ||
-		len(assignment.ComponentRecoveryRecordSHA256) != 0 {
+	if assignment.RestorationAuthority != nil {
 		return errs.New(errs.KindInternal, "agent: Service absence assignment carries foreign restoration authority")
 	}
 	if assignment.ExecutionMode != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
@@ -127,62 +125,6 @@ func ValidateServiceAbsenceRecoveryAuthority(assignment Assignment, plan *agentp
 		}
 	default:
 		return errs.New(errs.KindInternal, "agent: Service absence recovery phase is invalid")
-	}
-	return nil
-}
-
-func ValidateComponentRecoveryAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {
-	procedure := plan.GetComponentRecoveryProcedure()
-	if procedure == nil {
-		if assignment.ComponentRecoveryDirective != nil || len(assignment.ComponentRecoveryRecordSHA256) != 0 {
-			return errs.New(errs.KindInternal, "agent: non-Component assignment carries Component recovery authority")
-		}
-		return nil
-	}
-	if assignment.RestorationAuthority != nil || assignment.ReleaseRecoveryDirective != nil ||
-		len(assignment.ReleaseRecoveryRecordSHA256) != 0 {
-		return errs.New(errs.KindInternal, "agent: Component assignment carries Release restoration authority")
-	}
-	if assignment.ExecutionMode != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
-		return nil
-	}
-	directive := assignment.ComponentRecoveryDirective
-	selectedStepIDs := executionplan.ComponentRecoveryStepIDs(procedure)
-	probeCount := len(selectedStepIDs) / 2
-	if directive == nil || directive.GetCursor() > uint32(len(directive.GetStepIds())) ||
-		len(directive.GetStepIds()) != len(selectedStepIDs) {
-		return errs.New(errs.KindInternal, "agent: Component recovery cursor is invalid")
-	}
-	for index := range selectedStepIDs {
-		if directive.GetStepIds()[index] != selectedStepIDs[index] {
-			return errs.New(errs.KindInternal, "agent: Component recovery procedure diverges")
-		}
-	}
-	applicableIndex := 0
-	for _, compensationStepID := range selectedStepIDs[probeCount:] {
-		if applicableIndex < len(directive.GetApplicableCompensationStepIds()) &&
-			directive.GetApplicableCompensationStepIds()[applicableIndex] == compensationStepID {
-			applicableIndex++
-		}
-	}
-	if applicableIndex != len(directive.GetApplicableCompensationStepIds()) {
-		return errs.New(errs.KindInternal, "agent: Component recovery obligation is not canonical")
-	}
-	switch directive.GetPhase() {
-	case agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_PROBE:
-		if int(directive.GetCursor()) >= probeCount {
-			return errs.New(errs.KindInternal, "agent: Component recovery probe cursor is invalid")
-		}
-	case agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_COMPENSATE:
-		if int(directive.GetCursor()) < probeCount || int(directive.GetCursor()) >= len(selectedStepIDs) {
-			return errs.New(errs.KindInternal, "agent: Component recovery compensation cursor is invalid")
-		}
-	case agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_PROVEN:
-		if int(directive.GetCursor()) != len(selectedStepIDs) {
-			return errs.New(errs.KindInternal, "agent: Component recovery proven cursor is invalid")
-		}
-	default:
-		return errs.New(errs.KindInternal, "agent: Component recovery phase is invalid")
 	}
 	return nil
 }

@@ -67,7 +67,6 @@ func (repository *TaskRepository) claimNextTask(
 	}
 
 	conflicts := 0
-	expiredBackups := 0
 	settledDNSRemovals := 0
 	for {
 		candidate, found, err := repository.nextTaskClaimCandidate(ctx, executor, assignedAt)
@@ -94,16 +93,7 @@ func (repository *TaskRepository) claimNextTask(
 		deadline := TaskForwardDeadline(task, claimAt)
 		if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune ||
 			task.Type == taskjournal.TaskRestore {
-			if !deadline.After(claimAt) {
-				if _, err := repository.terminalizePendingBackupTask(ctx, task.ID, taskjournal.TaskStatusTimedOut, claimAt); err != nil {
-					return TaskAssignment{}, false, err
-				}
-				expiredBackups++
-				if expiredBackups == 24 {
-					return TaskAssignment{}, false, nil
-				}
-				continue
-			}
+			return TaskAssignment{}, false, errs.New(errs.KindStateConflict, "Backup and Restore require native work-item assignment")
 		}
 		recoveryDeadline := deadline.Add(time.Duration(task.TimeoutSeconds) * time.Second)
 		timeoutIndexKey := taskjournal.TaskTimeoutIndexKey(task.ID, deadline)
@@ -160,42 +150,13 @@ func (repository *TaskRepository) claimNextTask(
 			ClaimedTaskRevision: taskValue.ModRevision, AssignedAt: claimAt, Deadline: deadline,
 			RecoveryDeadline: recoveryDeadline, ExecutionMode: taskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
 		}
-		backupClaim, err := repository.prepareBackupAssignmentFence(
-			ctx,
-			task,
-			assignment,
-			candidate.readRevision,
-		)
-		if err != nil {
-			return TaskAssignment{}, false, err
-		}
-		assignment.BackupAuthorityFence = backupClaim.fence
-		if backupClaim.assignmentID != "" {
-			assignment.AssignmentID = backupClaim.assignmentID
-		}
-		var componentRecoveryCondition etcdstore.Condition
-		if componentRecoveryTask(task) {
-			_, procedure, condition, procedureErr := repository.componentRecoveryProcedureAtRevision(
-				ctx, task, candidate.readRevision,
-			)
-			if procedureErr != nil {
-				return TaskAssignment{}, false, procedureErr
-			}
-			assignment.ComponentRecoveryProcedureSHA256, err = componentRecoveryAuthorityDigest(procedure)
-			if err != nil {
-				return TaskAssignment{}, false, err
-			}
-			componentRecoveryCondition = condition
-		}
 		runningValue, err := EncodeTaskRecord(running)
 		if err != nil {
-			etcdstore.ClearMutationValues(backupClaim.mutations)
 			return TaskAssignment{}, false, err
 		}
 		assignmentValue, err := taskassignments.EncodeTaskAssignment(assignment)
 		if err != nil {
 			clear(runningValue)
-			etcdstore.ClearMutationValues(backupClaim.mutations)
 			return TaskAssignment{}, false, err
 		}
 		conditions := []etcdstore.Condition{
@@ -207,10 +168,6 @@ func (repository *TaskRepository) claimNextTask(
 			{Key: timeoutIndexKey},
 		}
 		conditions = append(conditions, candidate.dnsConditions...)
-		if componentRecoveryCondition.Key != "" {
-			conditions = append(conditions, componentRecoveryCondition,
-				etcdstore.Condition{Key: taskassignments.ComponentRecoveryKey(task.ID)})
-		}
 		mutations := []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: runningValue},
 			{Type: etcdstore.MutationDelete, Key: queued.Key},
@@ -219,8 +176,6 @@ func (repository *TaskRepository) claimNextTask(
 			{Type: etcdstore.MutationPut, Key: timeoutIndexKey, Value: assignmentValue},
 		}
 		conditions = append(conditions, childConditions...)
-		conditions = append(conditions, backupClaim.conditions...)
-		mutations = append(mutations, backupClaim.mutations...)
 		mutations = append(mutations, childMutations...)
 		hookInputConditions, err := repository.backingHookInputClaimConditions(ctx, task, candidate.readRevision)
 		if err != nil {
@@ -306,25 +261,6 @@ func (repository *TaskRepository) claimNextTask(
 				}
 				conditions = append(conditions, epochCondition)
 				mutations = append(mutations, epochMutation)
-			}
-			if authoredBlueprintEntryRemovalTask(task) {
-				authority, authorityDigest, authorityConditions, authorityErr :=
-					repository.prepareAuthoredEntryRestorationAuthority(ctx, task, candidate.readRevision)
-				if authorityErr != nil {
-					etcdstore.ClearMutationValues(mutations)
-					return TaskAssignment{}, false, authorityErr
-				}
-				assignment.RestorationAuthority, assignment.RestorationAuthoritySHA256 = &authority, authorityDigest
-				updatedAssignmentValue, encodeErr := taskassignments.EncodeTaskAssignment(assignment)
-				if encodeErr != nil {
-					etcdstore.ClearMutationValues(mutations)
-					return TaskAssignment{}, false, encodeErr
-				}
-				clear(assignmentValue)
-				assignmentValue = updatedAssignmentValue
-				mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
-				conditions = append(conditions, authorityConditions...)
-				conditions = append(conditions, etcdstore.Condition{Key: taskassignments.ReleaseRecoveryKey(task.ID)})
 			}
 		}
 		if authoredBlueprintServiceRemovalTask(task) {

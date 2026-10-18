@@ -9,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
 const blueprintHistorySourcePrefix = "/v1/records/environment-blueprint-revisions/"
@@ -18,15 +18,6 @@ const blueprintHistorySourcePrefix = "/v1/records/environment-blueprint-revision
 // published. Those children still compare the original acknowledged runtime at
 // the captured view; a recent-history window alone cannot protect a long Apply.
 func blueprintHistoricalReference(key string, value []byte) (*storagemaintenance.Pin, error) {
-	if strings.HasPrefix(key, componentplanning.ChildExecutionPrefix) {
-		record, err := componentplanning.DecodeChildExecution(value)
-		if err != nil {
-			return nil, err
-		}
-		if record.ProxyPreflight != nil {
-			return blueprintPreparationPin(record.ParentTaskID, record.ProxyPreflight.ReadRevision)
-		}
-	}
 	if !strings.HasPrefix(key, blueprintHistorySourcePrefix) {
 		return nil, nil
 	}
@@ -78,7 +69,7 @@ func (s *store) historicalReferenceHeld(
 	}
 	read, err := s.GetMany(
 		ctx,
-		keyvalue.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(pin.OwnerID)}, Revision: revision},
+		keyvalue.GetManyRequest{Keys: []string{workqueue.TaskKey(pin.OwnerID)}, Revision: revision},
 	)
 	if err != nil {
 		return false, err
@@ -90,10 +81,9 @@ func (s *store) historicalReferenceHeld(
 	if read.Values[0] == nil {
 		return false, nil
 	}
-	task, err := DecodeTaskRecord(read.Values[0].Value)
+	task, err := workqueue.DecodeTask(read.Values[0].Value)
 	if err != nil || task.ID != pin.OwnerID {
 		return false, recordcodec.CorruptRecord()
 	}
-	return !taskjournal.IsTerminalTaskStatus(task.Status) ||
-		task.Result != nil && task.Result.ReconciliationRequired, nil
+	return task.FinishedAt == nil, nil
 }

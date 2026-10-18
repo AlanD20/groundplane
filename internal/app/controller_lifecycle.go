@@ -14,6 +14,9 @@ func (c *Controller) Run(ctx context.Context) error {
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "controller run context is required")
 	}
+	if c.workExecution == nil {
+		return errs.New(errs.KindInternal, "controller execution runtime is not configured")
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	schedulerDone := make(chan struct{})
@@ -27,13 +30,6 @@ func (c *Controller) Run(ctx context.Context) error {
 		c.controllerTasks.Run(runCtx)
 	}()
 	localAgentDone := make(chan struct{})
-	blueprintsDone := make(chan struct{})
-	go func() {
-		defer close(blueprintsDone)
-		if c.blueprints != nil {
-			c.blueprints.Run(runCtx)
-		}
-	}()
 	softwareDone := make(chan struct{})
 	go func() {
 		defer close(softwareDone)
@@ -64,7 +60,14 @@ func (c *Controller) Run(ctx context.Context) error {
 		name string
 		err  error
 	}
-	runtimeDone := make(chan runtimeResult, 3)
+	runtimeDone := make(chan runtimeResult, 4)
+	go func() {
+		err := c.workExecution.Run(runCtx)
+		if err == nil && runCtx.Err() == nil {
+			err = errors.New("execution runtime stopped unexpectedly")
+		}
+		runtimeDone <- runtimeResult{name: "run execution runtime", err: err}
+	}()
 	go func() {
 		err := c.server.Serve(runCtx, c.Config.Listen.HTTP)
 		if err == nil && runCtx.Err() == nil {
@@ -87,8 +90,8 @@ func (c *Controller) Run(ctx context.Context) error {
 		runtimeDone <- runtimeResult{name: "reconcile etcd container", err: err}
 	}()
 
-	runtimeErrors := make(map[string]error, 3)
-	for index := 0; index < 3; index++ {
+	runtimeErrors := make(map[string]error, 4)
+	for index := 0; index < 4; index++ {
 		result := <-runtimeDone
 		runtimeErrors[result.name] = result.err
 		if index == 0 {
@@ -97,7 +100,6 @@ func (c *Controller) Run(ctx context.Context) error {
 	}
 	<-schedulerDone
 	<-controllerTasksDone
-	<-blueprintsDone
 	<-softwareDone
 	<-localAgentDone
 	<-runnersDone
@@ -107,6 +109,7 @@ func (c *Controller) Run(ctx context.Context) error {
 	closeErr := c.store.Close()
 	etcdContainerCloseErr := c.etcdContainer.Close()
 	joined := errors.Join(
+		wrapControllerRunError("run execution runtime", runtimeErrors["run execution runtime"]),
 		wrapControllerRunError("serve HTTP", runtimeErrors["serve HTTP"]),
 		wrapControllerRunError("serve Agent channel", runtimeErrors["serve Agent channel"]),
 		wrapControllerRunError("reconcile etcd container", runtimeErrors["reconcile etcd container"]),

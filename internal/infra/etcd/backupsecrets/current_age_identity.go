@@ -22,10 +22,10 @@ type CurrentAgeIdentityEvidence struct {
 
 func planCurrentAgeIdentityKeys(
 	dynamic *backupSecretDynamicRead,
-	step *agentpb.ExecutionStep,
+	step *agentpb.BackupStepAuthority,
 	environmentID string,
 ) error {
-	purposes, err := backupsecret.Purposes(step)
+	purposes, err := backupsecret.SourcePurposes(step)
 	if err != nil {
 		return err
 	}
@@ -43,9 +43,9 @@ func decodeCurrentAgeIdentityEvidence(
 	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
 	evidence *Evidence,
-	step *agentpb.ExecutionStep,
+	step *agentpb.BackupStepAuthority,
 ) error {
-	purposes, err := backupsecret.Purposes(step)
+	purposes, err := backupsecret.SourcePurposes(step)
 	if err != nil {
 		return err
 	}
@@ -60,14 +60,14 @@ func decodeCurrentAgeIdentityEvidence(
 	}
 	environmentID, recipient, era := "", "", 0
 	recordRevision, valueRevision := int64(0), int64(0)
-	encryption := step.GetBackupStep().GetCapture().GetEncryption()
+	encryption := step.GetCapture().GetEncryption()
 	if run := evidence.Run; run != nil {
 		environmentID, recipient, era = run.EnvironmentID, run.Recipient, run.KeyEra
 		recordRevision, valueRevision = run.BackupKeyRecordRevision, run.BackupKeyValueRevision
 	} else if restored := evidence.Restore; restored != nil && !restored.UsesOldIdentity {
 		environmentID, recipient, era = restored.EnvironmentID, restored.Point.Recipient, restored.Point.KeyEra
 		recordRevision, valueRevision = restored.ExpectedKeyRecordRevision, restored.ExpectedKeyValueRevision
-		encryption = step.GetBackupStep().GetRestore().GetEncryption()
+		encryption = step.GetRestore().GetEncryption()
 	}
 	if environmentID == "" || encryption == nil || recordRevision <= 0 || valueRevision <= 0 {
 		return errs.New(errs.KindStateConflict, "current age identity lacks sealed operation evidence")

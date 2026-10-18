@@ -41,6 +41,28 @@ func ReadDeclaredResources(
 	if err != nil {
 		return keyvalue.Versioned[DeclaredResources]{}, false, err
 	}
+	return readDeclaredSources(ctx, store, input, owned, found)
+}
+
+// ReadDeclaredResourcesRevision reads the selected immutable declaration. It
+// does not substitute the current head when a retained omission needs its source.
+func ReadDeclaredResourcesRevision(ctx context.Context, store snapshotReader, environmentID, revisionID string, revision int64) (keyvalue.Versioned[DeclaredResources], bool, error) {
+	input, found, err := blueprints.ReadDesiredInputRevision(ctx, store, environmentID, revisionID, revision)
+	if err != nil || !found {
+		return keyvalue.Versioned[DeclaredResources]{ReadRevision: input.ReadRevision}, found, err
+	}
+	owned, found, err := blueprints.ReadOwnedIdentitiesRevision(ctx, store, environmentID, revisionID, input.ReadRevision)
+	if err != nil {
+		return keyvalue.Versioned[DeclaredResources]{}, false, err
+	}
+	return readDeclaredSources(ctx, store, input, owned, found)
+}
+
+func readDeclaredSources(ctx context.Context, store snapshotReader,
+	input keyvalue.Versioned[environmentprojection.EnvironmentDesiredInput],
+	owned keyvalue.Versioned[environmentprojection.EnvironmentOwnedIdentities], found bool,
+) (keyvalue.Versioned[DeclaredResources], bool, error) {
+	environmentID := input.Record.EnvironmentID
 	if !found || owned.Revision != input.Revision || owned.Record.RevisionID != input.Record.RevisionID ||
 		owned.Record.RenderGeneration != input.Record.RenderGeneration ||
 		owned.Record.EnvironmentID != input.Record.EnvironmentID {

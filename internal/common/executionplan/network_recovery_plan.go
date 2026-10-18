@@ -15,9 +15,9 @@ func validateNetworkRecoveryPlan(plan *agentpb.ExecutionPlan) error {
 		return errs.New(errs.KindValidationFailed, "network recovery exceeds its captured bridge operation")
 	}
 	if ids.Validate(ids.KindEnvironment, procedure.GetEnvironmentId()) != nil ||
-		plan.GetCandidateReleaseProcedure() != nil || plan.GetComponentRecoveryProcedure() != nil ||
+		plan.GetCandidateReleaseProcedure() != nil ||
 		plan.GetServiceAbsenceRecoveryProcedure() != nil || plan.GetManagedComponentProcedure() != nil ||
-		plan.GetServiceLifecycleProcedure() != nil || plan.GetEntryMutationProcedure() != nil ||
+		plan.GetServiceLifecycleProcedure() != nil ||
 		len(
 			plan.GetScriptRunnerSnapshots(),
 		) != 0 || len(plan.GetScriptRunnerProjections()) != 0 || len(plan.GetScriptBodyArtifacts()) != 0 {

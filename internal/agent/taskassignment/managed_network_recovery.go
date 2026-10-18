@@ -15,8 +15,7 @@ func ValidateManagedNetworkRecoveryAuthority(assignment Assignment, plan *agentp
 		len(executionplan.NetworkRecoverySettlementSteps(procedure)) == 0 {
 		return errs.New(errs.KindInternal, "agent: managed network recovery procedure is invalid")
 	}
-	if assignment.RestorationAuthority != nil || assignment.ComponentRecoveryDirective != nil ||
-		len(assignment.ComponentRecoveryRecordSHA256) != 0 {
+	if assignment.RestorationAuthority != nil {
 		return errs.New(errs.KindInternal, "agent: managed network assignment carries foreign recovery authority")
 	}
 	if assignment.ExecutionMode != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {

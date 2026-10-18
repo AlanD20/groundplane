@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
@@ -15,13 +16,18 @@ import (
 func (repository *InputRepository) PrepareCascadeFinish(ctx context.Context, finished workqueue.FinishedWork) (workqueue.Change, error) {
 	task := finished.Task.Task
 	if task.Action != workexecution.ActionRemove || task.Scope.TenantID != "" || !task.PublicationComplete ||
-		task.ExpectedItems <= 1 || len(finished.Items) != int(task.ExpectedItems) {
+		task.ExpectedItems == 0 || len(finished.Items) != int(task.ExpectedItems) {
 		return workqueue.Change{}, conflict("Backing Zone completion requires its complete settled graph")
 	}
 	graph, change, err := repository.LoadCascadeGraph(ctx, finished.Task, finished.ReadRevision)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
+	rejection, evidence, proof, rejected, err := repository.LoadCascadeRejection(ctx, finished.Task, finished.ReadRevision)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, proof.Conditions...)
 	expected := make(map[string]workexecution.Item, len(graph))
 	for _, item := range graph {
 		expected[item.ID] = item
@@ -39,6 +45,10 @@ func (repository *InputRepository) PrepareCascadeFinish(ctx context.Context, fin
 			return workqueue.Change{}, conflict("Backing Zone completion has changed or unresolved work")
 		}
 		delete(expected, item.ID)
+		if rejected && (item.AttemptNumber != 0 || *item.Result != evidence || item.Outcome != rejection.Outcome ||
+			item.Cleanup != workexecution.CleanupNone || item.CleanupResult != nil) {
+			return workqueue.Change{}, conflict("rejected Backing Zone publication differs from its saved no-execution result")
+		}
 		if item.Operation == workexecution.Network {
 			bridge = snapshot
 		}
@@ -54,6 +64,13 @@ func (repository *InputRepository) PrepareCascadeFinish(ctx context.Context, fin
 		return workqueue.Change{}, conflict("Backing Zone bridge result differs from its captured resource")
 	}
 	change.Conditions = append(change.Conditions, conditions...)
+	if rejected {
+		// The rejected-publication barrier already settled every consumer and
+		// released this exact fence. Completion must not recreate or release it.
+		change.Conditions = append(change.Conditions, keyvalue.Condition{
+			Key: deletions.TombstoneKey(string(deletions.DeletionTargetZone), task.TargetID),
+		})
+	}
 	// Every item transition updates its Task counters under this revision.
 	// One Task CAS protects aggregate membership without a transaction whose
 	// comparison count grows with the number of consumer removals.

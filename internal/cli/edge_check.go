@@ -68,7 +68,7 @@ func renderEdgeCheckResult(cmd *cobra.Command, result apiTypes.EdgeCheckResult) 
 			"stale": result.Stale, "configuration": result.Configuration, "stages": result.Stages, "failure": result.Failure,
 			"private_failure": result.PrivateFailure, "public_failure": result.PublicFailure, "addresses": result.Addresses,
 			"selected_address": result.SelectedAddress, "tls_version": result.TLSVersion, "certificate_expires_at": result.CertificateExpiresAt,
-			"cleanup_required": result.CleanupRequired, "helper_name": result.HelperName, "cleanup_task_id": result.CleanupTaskID,
+			"cleanup_required": result.CleanupRequired, "helper_name": result.HelperName,
 			"created_at": result.CreatedAt, "started_at": result.StartedAt, "finished_at": result.FinishedAt},
 	)
 	return fromContext(cmd).Out.RenderOne(fields, values, result)

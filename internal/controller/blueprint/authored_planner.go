@@ -5,87 +5,32 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Plan derives only effective inputs that can be reproduced from the parent's
-// immutable desired revision. A plan stays open when an Attach resolution or
-// hook output has not been pinned into that revision; desired text alone is not
-// evidence that those runtime inputs exist.
-func (service *Service) Plan(
+// planAuthoredUnits captures resource membership and ordering without publishing
+// runtime files or running hooks. Deferred outputs affect executable input
+// readiness, never which resources belong to this accepted Apply.
+func (service *Service) planAuthoredUnits(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	input authoredParentInput,
+	attachGenerations map[string]authoredAttachPlanInput,
 	snapshot blueprintunits.Snapshot,
 ) (blueprintunits.DesiredPlan, error) {
 	if service == nil || service.repository == nil || ctx == nil ||
-		snapshot.EnvironmentID != parent.Owner.EnvironmentID ||
-		snapshot.HeadTaskID != parent.ID || snapshot.ReadRevision <= 0 {
-		return blueprintunits.DesiredPlan{}, errs.New(
-			errs.KindStateConflict,
-			"Blueprint parent unit snapshot changed",
-		)
-	}
-	input, err := service.loadAuthoredParentInput(ctx, parent)
-	if err != nil {
-		return blueprintunits.DesiredPlan{}, err
-	}
-	runtime, runtimeReady, err := service.repository.GetEnvironmentComposeProjectionRevision(
-		ctx, parent.Owner.EnvironmentID, parent.ID,
-	)
-	if err != nil {
-		kind, known := errs.KindOf(err)
-		if !known || kind != errs.KindStateConflict {
-			return blueprintunits.DesiredPlan{}, err
-		}
-		runtimeReady = false
-	}
-	attachGenerations, err := service.loadAuthoredAttachGenerationAuthority(ctx, input, snapshot)
-	if err != nil {
-		return blueprintunits.DesiredPlan{}, err
-	}
-	defer clearAuthoredAttachGenerationAuthority(attachGenerations)
-	if !runtimeReady && requireAuthoredRuntimeProjectionInputs(input.desired, input.identities, snapshot) == nil {
-		if err := service.sealAuthoredRuntimeProjection(ctx, parent, snapshot); err != nil {
-			return blueprintunits.DesiredPlan{}, err
-		}
-		runtime, runtimeReady, err = service.repository.GetEnvironmentComposeProjectionRevision(
-			ctx, parent.Owner.EnvironmentID, parent.ID,
-		)
-		if err != nil || !runtimeReady {
-			if err != nil {
-				return blueprintunits.DesiredPlan{}, err
-			}
-			return blueprintunits.DesiredPlan{}, errs.New(
-				errs.KindStateConflict, "Blueprint runtime projection seal is not readable",
-			)
-		}
-	}
-	if runtimeReady && (runtime.Record.EnvironmentID != parent.Owner.EnvironmentID ||
-		runtime.Record.RevisionID != parent.ID ||
-		runtime.Record.RenderGeneration != input.desired.RenderGeneration) {
-		return blueprintunits.DesiredPlan{}, errs.New(
-			errs.KindStateConflict, "Blueprint runtime projection changed",
-		)
-	}
-	// Completion seals unit membership and inputs. Retiring an omission or
-	// acknowledging DNS must not derive a different plan for the same Apply.
-	// Runtime sealing above still proceeds when its prerequisites settle.
-	if snapshot.Desired != nil && snapshot.Desired.Record.ParentTaskID == parent.ID &&
-		snapshot.Desired.Record.Complete {
-		return snapshot.Desired.Record, nil
+		input.desired.EnvironmentID != snapshot.EnvironmentID || snapshot.ReadRevision <= 0 ||
+		input.owner.EnvironmentID != input.desired.EnvironmentID ||
+		input.identities.EnvironmentID != input.desired.EnvironmentID ||
+		input.identities.RevisionID != input.desired.RevisionID ||
+		input.identities.RenderGeneration != input.desired.RenderGeneration {
+		return blueprintunits.DesiredPlan{}, errs.New(errs.KindStateConflict, "Blueprint planning sources do not describe one captured revision")
 	}
 	targets, err := selectAuthoredOwnedUnitTargets(input.identities)
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
-	var sealedRuntime *projectionrecord.EnvironmentComposeProjection
-	if runtimeReady {
-		sealedRuntime = &runtime.Record
-	}
-	planner, err := newAuthoredUnitPlanner(ctx, input, targets, sealedRuntime, attachGenerations, snapshot)
+	planner, err := newAuthoredUnitPlanner(ctx, input, targets, attachGenerations, snapshot)
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
@@ -100,7 +45,7 @@ func (service *Service) Plan(
 	omissions := orderAuthoredRemovalUnits(planner.omissions)
 	omissions, err = service.orderAuthoredAttachRemovals(
 		ctx,
-		parent.Owner.EnvironmentID,
+		input.desired.EnvironmentID,
 		omissions,
 		snapshot.ReadRevision,
 	)
@@ -166,8 +111,8 @@ func (service *Service) Plan(
 		)
 	}
 	return blueprintunits.DesiredPlan{
-		EnvironmentID: parent.Owner.EnvironmentID,
-		ParentTaskID:  parent.ID,
+		EnvironmentID: input.desired.EnvironmentID,
+		ParentTaskID:  input.desired.RevisionID,
 		Complete:      complete,
 		Units:         units,
 	}, nil

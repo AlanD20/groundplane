@@ -57,10 +57,9 @@ func newControllerExecutionComposition(
 		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Attach fact reads: %w", err)
 	}
-	planResolver, err := taskplanning.NewTaskPlanResolverWithAttachments(
+	planResolver, err := taskplanning.NewTaskPlanResolverWithServiceSources(
 		cfg.Storage.VolumeRoot,
 		authority.hierarchyRecords,
-		attachRecords,
 		dataServices.serviceRecords,
 		attachFactValues,
 		componentCatalog,

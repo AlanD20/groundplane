@@ -2,22 +2,19 @@ package connectors
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorremoval"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -33,16 +30,8 @@ type connectorDeletionRepository interface {
 	GetConnector(context.Context, string) (etcdstore.Versioned[connectorrecord.Record], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	BeginConnectorDeletionWithTask(
-		context.Context,
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[connectorrecord.Record],
-		deletionrecord.DeletionTombstoneRecord,
-		connectorrecord.RemovalIntent,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	CaptureConnectorRemoval(context.Context, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], etcdstore.Versioned[hierarchyrecord.ProjectRecord], etcdstore.Versioned[connectorrecord.Record], string, string, string, time.Time) (connectorremoval.Input, error)
+	PublishConnectorRemoval(context.Context, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], etcdstore.Versioned[hierarchyrecord.ProjectRecord], etcdstore.Versioned[connectorrecord.Record], connectorremoval.Input, workexecution.Task, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 }
 
 type connectorDeletionEvidence struct {
@@ -233,10 +222,6 @@ func (service *connectorDeletionService) deleteConnectorOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
 	locator = idempotencyrecord.IdempotencyLocator{
 		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
 		Method: http.MethodDelete, Route: connectorDeletionRoute, Key: idempotencyKey,
@@ -262,10 +247,20 @@ func (service *connectorDeletionService) deleteConnectorOnce(
 
 	now := service.now().UTC()
 	connector := current.Record.Connector
-	task, err := newConnectorDeletionTask(taskOwner, connector, idempotencyKey, now)
+	input, err := service.repository.CaptureConnectorRemoval(ctx, environment, project, current,
+		ids.New(ids.KindTask), ids.New(ids.KindWorkItem), ids.New(ids.KindPlan), now)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	ref, err := input.Reference()
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	task := workexecution.Task{ID: input.TaskID, Actor: workexecution.OperatorActor,
+		Scope:  workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID},
+		Action: workexecution.ActionRemove, TargetID: input.ConnectorID, TargetName: connector.Name,
+		Intent: ref, ExpectedItems: 1, CreatedAt: now, UpdatedAt: now,
+		Deadline: now.Add(time.Duration(connectorDeletionTimeoutSeconds) * time.Second)}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -280,20 +275,7 @@ func (service *connectorDeletionService) deleteConnectorOnce(
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	tombstone := deletionrecord.DeletionTombstoneRecord{
-		TargetKind: deletionrecord.DeletionTargetConnector, TargetID: connectorID,
-		TargetRevision: current.Revision, TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing,
-		CreatedAt: now, UpdatedAt: now,
-	}
-	intent, err := connectorrecord.NewRemovalIntent(
-		task.ID, environment.Record.ID, connectorID, current.Revision, now,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	result, deleteErr := service.repository.BeginConnectorDeletionWithTask(
-		ctx, environment, project, current, tombstone, intent, task, marker,
-	)
+	result, deleteErr := service.repository.PublishConnectorRemoval(ctx, environment, project, current, input, task, marker)
 	if deleteErr != nil {
 		if !isUnknownConnectorDeletionOutcome(deleteErr) {
 			return idempotencyrecord.IdempotencyResponse{}, deleteErr
@@ -341,60 +323,6 @@ func (service *connectorDeletionService) replayConnectorDeletion(
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }
 
-func newConnectorDeletionTask(
-	owner taskjournal.TaskOwner,
-	connector core.Connector,
-	idempotencyKey string,
-	createdAt time.Time,
-) (etcd.TaskRecord, error) {
-	planHash, err := connectorDeletionPlanHash(connector.ID, connector.EnvironmentID, connector.Name)
-	if err != nil {
-		return etcd.TaskRecord{}, err
-	}
-	return etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: taskjournal.TaskActorOperator,
-		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
-		Type: taskjournal.TaskRemove, Target: connector.ID,
-		Params: map[string]string{
-			taskjournal.TaskResourceKindParam:  taskjournal.TaskResourceConnector,
-			etcd.TaskConnectorEnvironmentParam: connector.EnvironmentID,
-			etcd.TaskConnectorNameParam:        connector.Name,
-		},
-		Steps: []taskjournal.TaskStepRecord{
-			{
-				Kind:           taskjournal.TaskStepOperation,
-				ID:             ids.New(ids.KindStep),
-				Action:         "Remove Connector",
-				Description:    "Delete the unreferenced Connector and its owned credentials; stored backup objects remain untouched.",
-				Target:         connector.ID,
-				TimeoutSeconds: uint32(connectorDeletionTimeoutSeconds),
-			},
-		},
-		TimeoutSeconds: connectorDeletionTimeoutSeconds, PlanHash: planHash,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
-	}, nil
-}
-
-func connectorDeletionPlanHash(connectorID string, environmentID string, name string) (string, error) {
-	value, err := json.Marshal(struct {
-		Version       int    `json:"version"`
-		Type          string `json:"type"`
-		ConnectorID   string `json:"connector_id"`
-		EnvironmentID string `json:"environment_id"`
-		Name          string `json:"name"`
-	}{
-		Version: 1, Type: string(taskjournal.TaskRemove), ConnectorID: connectorID,
-		EnvironmentID: environmentID, Name: name,
-	})
-	if err != nil {
-		return "", errs.Wrap(errs.KindInternal, err)
-	}
-	digest := sha256.Sum256(value)
-	clear(value)
-	return hex.EncodeToString(digest[:]), nil
-}
-
 func isUnknownConnectorDeletionOutcome(err error) bool {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
@@ -439,17 +367,17 @@ func (repository *durableConnectorDeletionRepository) GetProject(
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
-func (repository *durableConnectorDeletionRepository) BeginConnectorDeletionWithTask(
-	ctx context.Context,
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	current etcdstore.Versioned[connectorrecord.Record],
-	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent connectorrecord.RemovalIntent,
-	task etcd.TaskRecord,
-	marker idempotencyrecord.IdempotencyMarker,
+func (repository *durableConnectorDeletionRepository) CaptureConnectorRemoval(ctx context.Context,
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[connectorrecord.Record], taskID, workID, planID string, at time.Time,
+) (connectorremoval.Input, error) {
+	return repository.connectors.CaptureConnectorRemoval(ctx, environment, project, current, taskID, workID, planID, at)
+}
+
+func (repository *durableConnectorDeletionRepository) PublishConnectorRemoval(ctx context.Context,
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[connectorrecord.Record], input connectorremoval.Input,
+	task workexecution.Task, marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.connectors.BeginConnectorDeletionWithTask(
-		ctx, environment, project, current, tombstone, intent, task, marker,
-	)
+	return repository.connectors.PublishConnectorRemoval(ctx, environment, project, current, input, task, marker)
 }

@@ -3,8 +3,10 @@ package runner
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -76,15 +78,22 @@ type Runtime interface {
 }
 
 type Lifecycle struct {
-	journal Journal
-	runtime Runtime
+	diagnostics *executiondiagnostics.Repository
+	journal     Journal
+	runtime     Runtime
 }
 
-func NewLifecycle(journal Journal, runtime Runtime) (*Lifecycle, error) {
-	if journal == nil || runtime == nil {
+// EffectAuthority is bound to one native attempt. A local journal entry alone
+// cannot authorize an effect after Abort or replacement of the Controller.
+type EffectAuthority interface {
+	Grant(context.Context, runnerallocation.RunnerRuntimeStep, time.Time) error
+}
+
+func NewLifecycle(journal Journal, runtime Runtime, diagnostics *executiondiagnostics.Repository) (*Lifecycle, error) {
+	if journal == nil || runtime == nil || diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "runner lifecycle dependencies are required")
 	}
-	return &Lifecycle{journal: journal, runtime: runtime}, nil
+	return &Lifecycle{journal: journal, runtime: runtime, diagnostics: diagnostics}, nil
 }
 
 type RegistrationToken struct{ value []byte }
@@ -126,26 +135,22 @@ func (token *RegistrationToken) clear() {
 	}
 }
 
-func (lifecycle *Lifecycle) Create(ctx context.Context, attempt Attempt, token *RegistrationToken) error {
-	_, err := lifecycle.CreateWithEvidence(ctx, attempt, token)
-	return err
-}
-
 func (lifecycle *Lifecycle) CreateWithEvidence(
 	ctx context.Context,
 	attempt Attempt,
 	token *RegistrationToken,
+	authority EffectAuthority,
 ) (RuntimeEvidence, error) {
 	defer token.clear()
 	var evidence RuntimeEvidence
 	err := lifecycle.execute(
-		ctx, attempt, OperationCreate, runnerallocation.CreationRuntimeSteps(), token, &evidence,
+		ctx, attempt, OperationCreate, runnerallocation.CreationRuntimeSteps(), token, &evidence, authority,
 	)
 	return evidence, err
 }
 
-func (lifecycle *Lifecycle) Remove(ctx context.Context, attempt Attempt) error {
-	return lifecycle.execute(ctx, attempt, OperationRemove, runnerallocation.RemovalRuntimeSteps(), nil, nil)
+func (lifecycle *Lifecycle) Remove(ctx context.Context, attempt Attempt, authority EffectAuthority) error {
+	return lifecycle.execute(ctx, attempt, OperationRemove, runnerallocation.RemovalRuntimeSteps(), nil, nil, authority)
 }
 
 func (lifecycle *Lifecycle) execute(
@@ -155,8 +160,9 @@ func (lifecycle *Lifecycle) execute(
 	steps []runnerallocation.RunnerRuntimeStep,
 	token *RegistrationToken,
 	result *RuntimeEvidence,
+	authority EffectAuthority,
 ) error {
-	if ctx == nil || ctx.Err() != nil || attempt.TaskID == "" || attempt.Plan.Digest() == "" {
+	if ctx == nil || ctx.Err() != nil || attempt.TaskID == "" || attempt.Plan.Digest() == "" || authority == nil {
 		return errs.New(errs.KindValidationFailed, "runner lifecycle attempt is invalid")
 	}
 	progress, err := lifecycle.journal.Begin(ctx, attempt, operation)
@@ -196,9 +202,11 @@ func (lifecycle *Lifecycle) execute(
 			}
 		}
 		var stepEvidence runnerallocation.RunnerRuntimeStepEvidence
+		report := lifecycle.beginStage(ctx, attempt, step)
 		if progress.ActiveStep != nil {
 			if *progress.ActiveStep != step {
 				clear(transient)
+				report.finish(ctx, false)
 				return lifecycle.fail(
 					ctx,
 					progress,
@@ -208,6 +216,9 @@ func (lifecycle *Lifecycle) execute(
 			stepEvidence, err = lifecycle.observe(ctx, progress.Plan, step)
 		} else {
 			progress, err = lifecycle.journal.Issue(ctx, progress, step)
+			if err == nil {
+				err = authority.Grant(ctx, step, time.Now().UTC())
+			}
 			if err == nil {
 				stepEvidence, err = lifecycle.apply(ctx, progress.Plan, step, transient)
 				if err != nil {
@@ -222,15 +233,19 @@ func (lifecycle *Lifecycle) execute(
 		}
 		clear(transient)
 		if err != nil {
+			report.finish(ctx, false)
 			return lifecycle.fail(ctx, progress, err)
 		}
 		if !stepEvidence.Valid(operation, step) {
+			report.finish(ctx, false)
 			return lifecycle.fail(ctx, progress, errs.New(errs.KindInternal, "runner runtime evidence is invalid"))
 		}
 		progress, err = lifecycle.journal.Checkpoint(ctx, progress, stepEvidence)
 		if err != nil {
+			report.finish(ctx, false)
 			return err
 		}
+		report.finish(ctx, true)
 	}
 	if operation == OperationRemove {
 		return lifecycle.journal.Removed(ctx, progress)

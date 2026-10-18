@@ -5,7 +5,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -42,47 +41,28 @@ func (repository *EnvironmentBlueprintRepository) blueprintRuntimeAttachConditio
 	}
 	conditions := []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}
 	if receipt.ControllerAttachInputRevision == 0 {
-		if receipt.SourceTaskID != attach.Record.TaskID {
+		if receipt.Execution == nil || receipt.Execution.Validate() != nil ||
+			receipt.Execution.TaskID != attach.Record.TaskID || receipt.ParentTaskID != attach.Record.TaskID {
 			return nil, errs.New(errs.KindStateConflict, "Blueprint runtime Attach execution changed")
 		}
 		return conditions, nil
 	}
-	inputKey := attachinputs.Key(receipt.ParentTaskID, attach.Record.ID)
-	input, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{inputKey}, Revision: revision})
-	if err != nil {
-		return nil, err
+	digest, err := attachrecord.BindingDigest(attach.Record)
+	if err != nil || digest != receipt.ControllerAttachBindingSHA256 {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint runtime Attach differs from its acknowledged binding")
 	}
-	if input == nil || input.ReadRevision != revision || len(input.Values) != 1 || input.Values[0] == nil ||
-		input.Values[0].ModRevision != receipt.ControllerAttachInputRevision {
-		if input != nil {
-			etcdstore.ClearValues(input.Values)
+	if len(receipt.ControllerAttachReferences) == 0 || receipt.ControllerAttachReferences[0].AttachID != attach.Record.CredentialAttachID {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint runtime Attach has no captured credential reference")
+	}
+	for _, expected := range receipt.ControllerAttachReferences {
+		current, guards, err := attachrecord.ReadBindingReference(ctx, repository.store, expected.AttachID, revision)
+		if err != nil {
+			return nil, err
 		}
-		return nil, errs.New(errs.KindStateConflict, "Blueprint runtime Attach binding is unavailable")
+		if current != expected {
+			return nil, errs.New(errs.KindStateConflict, "Blueprint runtime Attach credential or grant changed")
+		}
+		conditions = append(conditions, guards...)
 	}
-	defer etcdstore.ClearValues(input.Values)
-	generation, err := attachinputs.Decode(input.Values[0].Value)
-	if err != nil {
-		return nil, err
-	}
-	defer attachinputs.Clear(&generation)
-	if generation.ParentTaskID != receipt.ParentTaskID || generation.EnvironmentID != environmentID ||
-		generation.AttachID != attach.Record.ID || !generation.MatchesControllerBinding(attach.Record, attach.Revision) {
-		return nil, errs.New(errs.KindStateConflict, "Blueprint runtime Attach binding changed")
-	}
-	conditions = append(
-		conditions,
-		etcdstore.Condition{Key: inputKey, ModRevision: receipt.ControllerAttachInputRevision},
-	)
-	if generation.Binding != nil {
-		return append(conditions, generation.Binding.Conditions()...), nil
-	}
-	if generation.Provision == nil {
-		return conditions, nil
-	}
-	credentialConditions, err := repository.blueprintAttachCredentialConditions(ctx, generation, revision)
-	if err != nil {
-		return nil, err
-	}
-	conditions = append(conditions, credentialConditions...)
-	return append(conditions, generation.Provision.Conditions()...), nil
+	return conditions, nil
 }

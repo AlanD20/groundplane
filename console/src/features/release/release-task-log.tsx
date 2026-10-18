@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { requestTask } from "@/features/task/api";
-import { taskFromAPI } from "@/features/task/journal-model";
-import { TaskExecutionTerminal } from "@/features/task/task-execution-terminal";
-import type { ActivityEntry } from "@/lib/types";
+import { requestTask, type TaskResponse } from "@/features/task/api";
+import { TaskExecution } from "@/features/task/task-execution";
+import { TaskLink } from "@/components/common/task-link";
 
 export function ReleaseTaskLog({ taskId }: { taskId: string }) {
-  const [task, setTask] = useState<ActivityEntry | null>(null);
+  const [task, setTask] = useState<TaskResponse | null>(null);
   const [error, setError] = useState<string>();
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -15,13 +15,11 @@ export function ReleaseTaskLog({ taskId }: { taskId: string }) {
     const refresh = async () => {
       let terminal = false;
       try {
-        const next = taskFromAPI(await requestTask(taskId, controller.signal));
+        const next = await requestTask(taskId, controller.signal);
         if (controller.signal.aborted) return;
         setTask(next);
         setError(undefined);
-        terminal = ["completed", "failed", "timed_out", "aborted"].includes(
-          next.status,
-        );
+        terminal = !!next.task.finished_at;
       } catch (cause) {
         if (controller.signal.aborted) return;
         setError(
@@ -38,7 +36,7 @@ export function ReleaseTaskLog({ taskId }: { taskId: string }) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [taskId]);
+  }, [taskId, reload]);
   return (
     <div className="min-w-0 space-y-3">
       {error && (
@@ -47,7 +45,15 @@ export function ReleaseTaskLog({ taskId }: { taskId: string }) {
         </p>
       )}
       {task ? (
-        <TaskExecutionTerminal task={task} />
+        <>
+          <TaskExecution
+            detail={task}
+            onChanged={() => setReload((value) => value + 1)}
+          />
+          {task.work.more && (
+            <TaskLink taskId={taskId}>Inspect all work</TaskLink>
+          )}
+        </>
       ) : (
         !error && (
           <p role="status" className="text-sm text-muted-foreground">

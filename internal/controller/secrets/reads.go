@@ -2,11 +2,13 @@ package secrets
 
 import (
 	"context"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/secretremoval"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	"time"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -193,13 +195,17 @@ func (repository *Repository) CreateSecretIdempotent(
 	return repository.secrets.CreateSecretIdempotent(ctx, owner, record, value, marker)
 }
 
-func (repository *Repository) BeginSecretDeletionWithTask(
+func (repository *Repository) PublishSecretRemoval(
 	ctx context.Context,
 	owner secretrecord.Owner,
 	current etcdstore.Versioned[secretrecord.Record],
-	tombstone deletionrecord.DeletionTombstoneRecord,
-	task etcd.TaskRecord,
+	input secretremoval.Input,
+	task workexecution.Task,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.secrets.BeginSecretDeletionWithTask(ctx, owner, current, tombstone, task, marker)
+	return repository.secrets.PublishSecretRemoval(ctx, owner, current, input, task, marker)
+}
+
+func (repository *Repository) CaptureSecretRemoval(ctx context.Context, owner secretrecord.Owner, current etcdstore.Versioned[secretrecord.Record], taskID, workID, planID string, at time.Time) (secretremoval.Input, error) {
+	return repository.secrets.CaptureSecretRemoval(ctx, owner, current, taskID, workID, planID, at)
 }

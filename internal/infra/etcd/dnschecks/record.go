@@ -17,6 +17,7 @@ import (
 
 type Owner struct {
 	TaskID      string `json:"task_id"`
+	WorkItemID  string `json:"work_item_id"`
 	PlanID      string `json:"plan_id"`
 	OperationID string `json:"operation_id"`
 }
@@ -103,7 +104,7 @@ func (record Record) Observation() (*agentpb.DNSConnectionResult, error) {
 }
 
 func (record Record) Validate() error {
-	if ids.Validate(ids.KindTask, record.Owner.TaskID) != nil ||
+	if ids.Validate(ids.KindTask, record.Owner.TaskID) != nil || ids.Validate(ids.KindWorkItem, record.Owner.WorkItemID) != nil ||
 		ids.Validate(ids.KindPlan, record.Owner.PlanID) != nil ||
 		ids.Validate(ids.KindOperation, record.Owner.OperationID) != nil ||
 		record.Source.Validate() != nil ||

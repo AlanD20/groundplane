@@ -438,24 +438,18 @@ export type TaskType =
   | "apply"
   | "check";
 
-export type TaskStepState = "pending" | "running" | "done" | "failed";
-
-export type TaskStep = {
-  label: string;
-  action?: string;
-  description?: string;
-  target?: string;
-  timeoutSeconds?: number;
-  state: TaskStepState;
-  detail?: string;
-  healthWait?: import("@/lib/api.generated").components["schemas"]["Readiness"];
-  healthWaitReceivedAt?: string;
-  failure?: import("@/lib/api.generated").components["schemas"]["TaskFailure"];
-  healthchecks?: import("@/lib/api.generated").components["schemas"]["ConfiguredHealthcheck"][];
-};
-
 export type TaskStatus =
-  "pending" | "running" | "completed" | "failed" | "timed_out" | "aborted";
+  | "queued"
+  | "preparing"
+  | "waiting"
+  | "running"
+  | "attention_required"
+  | "stopping"
+  | "finishing"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "superseded";
 
 export type TaskWorkspaceType = "platform" | "tenant";
 
@@ -476,6 +470,7 @@ export type TaskJournalSurface = "tasks" | "activity";
 export type TaskPageSize = 5 | 10 | 25 | 50;
 
 export type TaskJournalState = {
+  scanLimited?: boolean;
   entries: ActivityEntry[];
   pageSize: TaskPageSize;
   pageIndex: number;
@@ -489,31 +484,14 @@ export type TaskJournalState = {
 };
 
 export type ActivityEntry = {
-  reconciliationRequired?: boolean;
-  imageFetch?: TaskResponse["image_fetch"];
-  interruptedDetachRetry?: TaskResponse["interrupted_detach_retry"];
-  recoveryRetryAvailable?: boolean;
-  diagnosticsExpiredAt?: string;
+  counts: TaskResponse["task"]["counts"];
+  cancel: TaskResponse["task"]["cancel"];
   id: string;
-  operationId?: string;
-  retryOf?: string;
-  idempotencyKey?: string;
-  planHash?: string;
-  params?: Record<string, string>;
-  timeout?: string;
   type: TaskType;
   title: string;
   target: string;
   targetName?: string;
   resourceKind?: string;
-  executor?: TaskResponse["executor"];
-  timeoutSeconds?: number;
-  resultSummary?: string;
-  failure?: TaskResponse["failure"];
-  recovery?: TaskResponse["recovery"];
-  preparation?: TaskResponse["preparation"];
-  attemptHistory?: TaskResponse["attempt_history"];
-  executions?: TaskResponse["executions"];
   workspace: string; // "platform" or tenant slug
   status: TaskStatus;
   actor: string;
@@ -524,11 +502,8 @@ export type ActivityEntry = {
   environmentId?: string;
   createdAt?: string;
   updatedAt?: string;
-  startedAt?: string | null;
   finishedAt?: string | null;
   note?: string;
-  taskState?: "queued" | "pulled" | "running" | "acked";
-  steps?: TaskStep[];
 };
 
 // Platform runtime state rendered by the Controller. The Controller owns the

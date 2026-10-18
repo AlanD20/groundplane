@@ -13,7 +13,7 @@ import {
   type EnvironmentRemovalDraft,
   type PendingResourceRemoval,
 } from "@/features/environment/environment-removal-model";
-import type { TaskResponse } from "@/features/task/api";
+import type { TaskResponse, TaskRetryRequest } from "@/features/task/api";
 
 export type EnvironmentLifecycleDraft = EnvironmentRemovalDraft & {
   projectError: string | null;
@@ -58,7 +58,10 @@ export type EnvironmentLifecycle<State extends EnvironmentLifecycleDraft> = {
     task: TaskResponse,
   ) => Promise<void>;
   dispatchResourceRemoval: (removal: PendingResourceRemoval) => Promise<string>;
-  retryResourceRemoval: (taskId: string) => Promise<string> | undefined;
+  retryResourceRemoval: (
+    taskId: string,
+    input: TaskRetryRequest,
+  ) => Promise<string> | undefined;
   waitForResourceRemoval: (taskId: string) => Promise<TaskResponse>;
   nextEnvironmentGeneration: (
     environmentId: string,

@@ -3,17 +3,15 @@ package attachments
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
+	"time"
 )
 
 func (service *MutationService) CreateAttach(
@@ -86,10 +84,6 @@ func (service *MutationService) createAttachOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	runtime, err := service.runtime.CaptureEntryMutationRuntime(ctx, scope.ComposeProjection)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
 	name := request.Name
 	if name == "" {
 		existingNames := make(map[string]struct{}, len(currentAttaches))
@@ -108,97 +102,25 @@ func (service *MutationService) createAttachOnce(
 	now := service.now().UTC()
 	attachID := ids.New(ids.KindAttach)
 	taskID := ids.New(ids.KindTask)
-	credentialAttachID := attachID
-	grantIDs := attachGrantIDs(scope.Grants)
-	ownsCredential := request.Credential.Mode == apiTypes.AttachCredentialNew
-	hooked := false
-	attachHook := false
-	if ownsCredential && adapter.Custom() && scope.BackingService.Record.Desired.Hooks != nil {
-		hooks := scope.BackingService.Record.Desired.Hooks
-		hooked = hooks.Attach != nil || hooks.Detach != nil
-		attachHook = hooks.Attach != nil
-	}
-	task, artifactID, err := newAttachMutationTask(
-		scope.Project.Record, scope.Environment.Record,
-		taskID, attachID, environmentID, taskjournal.TaskAttach,
-		scope.ComposeProjection.Record.RenderGeneration,
-		attachTaskStepCount(
-			adapter, scope.BackingService.Record.Desired.Authentication,
-			len(grantIDs), ownsCredential, attachHook,
-		),
-		idempotencyKey, now,
-	)
+	draft, err := service.captureCreateInput(ctx, scope, adapter, attachID, name, taskID, ids.New(ids.KindOperation), now)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	var identity *taskplanning.AttachPlanIdentity
-	var metadata []attachrecord.FactSetMetadata
-	var encryptedFacts *attachrecord.EncryptedFacts
-	var hookInputs *taskconfiguration.BackingHookEncryptedInputs
-	if ownsCredential {
-		identity, metadata, encryptedFacts, hookInputs, err = service.prepareAttachFacts(
-			ctx, attachID, task.OperationID, consumer, scope, adapter,
-		)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-		if hookInputs != nil {
-			task, err = etcd.BindBackingHookTaskInputs(task, scope.BackingProject.Record.ID, *hookInputs)
-			if err != nil {
-				return idempotencyrecord.IdempotencyResponse{}, err
-			}
-		}
-	} else {
-		credentialAttachID = request.Credential.AttachID
-		metadata = cloneAttachFactMetadata(scope.CredentialOwner.Record.FactSets)
+	defer blueprintattachinputs.Clear(&draft)
+	timeout := attachMutationTimeout
+	if draft.Hook.Attach != nil {
+		timeout = max(timeout, int64(draft.Hook.Attach.TimeoutSeconds)+15)
 	}
-	if identity != nil {
-		defer identity.Clear()
-	}
-	if encryptedFacts != nil {
-		defer clear(encryptedFacts.Ciphertext)
-	}
-	if hookInputs != nil {
-		defer clear(hookInputs.Ciphertext)
-	}
-	record, err := attachrecord.NewPendingAttachRecord(
-		attachID, environmentID, name, scope.BackingProject.Record.ID, scope.BackingEnvironment.Record.ID,
-		scope.BackingService.Record.Desired.ID, scope.BackingService.Record.BackingNetworkID,
-		consumer.Record.Desired.ID, credentialAttachID, grantIDs, metadata, taskID, now,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	record.HookBundle = hooked
-	if attachHook {
-		task.TimeoutSeconds = max(
-			task.TimeoutSeconds,
-			int64(scope.BackingService.Record.Desired.Hooks.Attach.TimeoutSeconds)+15,
-		)
-	}
-	renderInput, err := buildAttachTaskRenderInput(scope, runtime, record, currentAttaches, task, artifactID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task, prepared, err := service.plans.SealDraft(
-		ctx,
-		etcdstore.Versioned[attachrecord.Record]{Record: record},
-		renderInput,
-		task,
-		identity,
-		encryptedFacts,
-		hookInputs,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task.PlanHash, renderInput.RuntimePreparation = prepared.PlanHash, &prepared
+	task := workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor,
+		Scope:  workexecution.Scope{TenantID: scope.Tenant.Record.ID, ProjectID: scope.Project.Record.ID, EnvironmentID: environmentID},
+		Action: workexecution.ActionAttach, TargetID: attachID, TargetName: name,
+		Intent:        workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, now, taskID, "request-intent"), SHA256: evidence.durable.CiphertextDigest},
+		ExpectedItems: 1, CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(timeout) * time.Second)}
 	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task.ID, task.CreatedAt, nil)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	result, createErr := service.repository.CreateAttachWithTaskHookInputs(
-		ctx, scope, record, encryptedFacts, hookInputs, renderInput, task, marker,
-	)
+	result, createErr := service.repository.PublishAttachWork(ctx, etcd.AttachWorkPublication{
+		Task: task, WorkID: ids.DeriveAt(ids.KindWorkItem, now, taskID, "attach"), Scope: scope, Generation: draft, Marker: marker})
 	return service.resolveMutationResult(ctx, locator, evidence, result, createErr, response)
 }

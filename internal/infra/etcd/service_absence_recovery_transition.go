@@ -32,7 +32,7 @@ func (repository *TaskRepository) transitionServiceAbsenceAcknowledgementToRecov
 	if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward ||
 		!taskassignments.ValidTerminalTaskStatus(status) || result.ExecutionEpoch != assignment.ExecutionEpoch ||
 		result.ReleaseRecoveryRecordSHA256 != "" || assignment.ExecutionEpoch == math.MaxUint32 ||
-		assignment.RestorationAuthority != nil || assignment.ComponentRecoveryProcedureSHA256 != "" {
+		assignment.RestorationAuthority != nil {
 		return keyvalue.Versioned[TaskRecord]{}, true, errs.New(
 			errs.KindStateConflict,
 			"Service absence recovery authority changed",
@@ -280,10 +280,9 @@ func validateServiceAbsenceRecoveryProof(
 	evidence := result.ServiceAbsenceEvidence
 	if evidence == nil || !evidence.AbsenceProven || evidence.ServiceID != procedure.GetServiceId() ||
 		evidence.ArtifactID != procedure.GetArtifactId() || evidence.ComposeProjectName == "" ||
-		result.CandidateAbsenceEvidence != nil || result.ComponentRestorationEvidence != nil ||
-		len(
-			result.ProxyEvidence,
-		) != 0 || len(result.RecreateEvidence) != 0 || len(result.RollingEvidence) != 0 || len(result.BackingObservations) != 0 ||
+		result.CandidateAbsenceEvidence != nil || len(
+		result.ProxyEvidence,
+	) != 0 || len(result.RecreateEvidence) != 0 || len(result.RollingEvidence) != 0 || len(result.BackingObservations) != 0 ||
 		result.DNSResolverCandidateObservation != nil || result.DNSResolverRollbackObservation != nil ||
 		len(result.Projects) != 1 || result.Projects[0].ProjectName != evidence.ComposeProjectName ||
 		result.Projects[0].CollisionCount != 0 {

@@ -251,7 +251,7 @@ func (repository *TaskRepository) taskDiagnosticAuthorityHeld(
 		taskjournal.TaskAssignmentIndexKey(task.ID), taskjournal.TaskActiveOperationKey(task.OperationID),
 		taskClosingReportKey(
 			task,
-		), taskassignments.ReleaseRecoveryKey(task.ID), taskassignments.ComponentRecoveryKey(task.ID),
+		), taskassignments.ReleaseRecoveryKey(task.ID),
 		taskassignments.ServiceAbsenceRecoveryKey(
 			task.ID,
 		), taskassignments.ManagedNetworkRecoveryKey(task.ID), taskassignments.AttachRemovalRecoveryKey(task.ID),
@@ -259,7 +259,7 @@ func (repository *TaskRepository) taskDiagnosticAuthorityHeld(
 	if err != nil {
 		return false, err
 	}
-	if read == nil || len(read.Values) != 8 {
+	if read == nil || len(read.Values) != 7 {
 		return false, recordcodec.CorruptRecord()
 	}
 	defer keyvalue.ClearValues(read.Values)

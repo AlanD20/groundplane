@@ -14,6 +14,7 @@ import (
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	"github.com/AlanD20/groundplane/internal/controller/hostterminal"
 	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
+	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -107,11 +108,11 @@ type Server struct {
 	environmentDNS          EnvironmentDNSService
 	taskMutations           TaskRetrier
 	taskAborts              TaskAborter
+	taskInspection          *taskinspection.Service
 	controllerTaskWake      func()
 	agentTaskWake           func()
 	console                 fs.FS
 	tasks                   taskQueries
-	taskEventStreams        taskEventStreamOpener
 	logs                    *servicelogs.Service
 	routePolicies           map[string]routePolicy
 }
@@ -192,6 +193,7 @@ type Options struct {
 	EnvironmentDNS          EnvironmentDNSService
 	TaskMutations           TaskRetrier
 	TaskAborts              TaskAborter
+	TaskInspection          *taskinspection.Service
 	ControllerTaskWake      func()
 	AgentTaskWake           func()
 	Console                 fs.FS
@@ -304,15 +306,13 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		environmentDNS:          options.EnvironmentDNS,
 		taskMutations:           options.TaskMutations,
 		taskAborts:              options.TaskAborts,
+		taskInspection:          options.TaskInspection,
 		controllerTaskWake:      options.ControllerTaskWake,
 		agentTaskWake:           options.AgentTaskWake,
 		console:                 options.Console,
 		tasks:                   options.Tasks,
 		logs:                    options.Logs,
 		routePolicies:           make(map[string]routePolicy),
-	}
-	if options.Tasks != nil {
-		s.taskEventStreams = repositoryTaskEventStreamOpener{repository: options.Tasks}
 	}
 	s.routes()
 	s.registerLogOpenAPI()
@@ -406,45 +406,6 @@ func (s *Server) routes() {
 	s.registerAgents()
 }
 
-func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiTypes.Task, error) {
-	response, err := taskListResponse(record)
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	stepStatus, err := taskProgressStatuses(record, snapshot, response.Status)
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	response.Steps = make([]apiTypes.TaskStep, len(record.Steps))
-	healthWait, err := taskHealthWaitObservations(record, snapshot)
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	failures, err := taskStepFailures(record, snapshot)
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	for index, step := range record.Steps {
-		kind, err := taskStepKindResponse(step)
-		if err != nil {
-			return apiTypes.Task{}, err
-		}
-		response.Steps[index] = apiTypes.TaskStep{
-			Failure: failures[step.ID],
-			Name:    step.ID, Status: stepStatus[step.ID], Kind: kind,
-			ScriptID: step.ScriptID, ScriptSlug: step.ScriptSlug,
-			Action: step.Action, Description: step.Description, Target: step.Target,
-			TimeoutSeconds: step.TimeoutSeconds, HealthWait: healthWait[step.ID].value,
-			HealthWaitReceivedAt: healthWait[step.ID].receivedAt,
-			Healthchecks:         step.Healthchecks,
-		}
-		if response.Steps[index].Action == "" {
-			response.Steps[index].Action = "Descriptions were not recorded"
-		}
-	}
-	return response, nil
-}
-
 func taskAPIStatus(status taskjournal.TaskStatus) (apiTypes.TaskStatus, error) {
 	switch status {
 	case taskjournal.TaskStatusPending:
@@ -461,25 +422,6 @@ func taskAPIStatus(status taskjournal.TaskStatus) (apiTypes.TaskStatus, error) {
 		return apiTypes.TaskTimedOut, nil
 	default:
 		return "", errs.New(errs.KindInternal, "Task has an invalid durable status")
-	}
-}
-
-func taskEventAPIStatus(status taskjournal.TaskEventState) (apiTypes.TaskStatus, error) {
-	switch status {
-	case taskjournal.TaskEventStatePending:
-		return apiTypes.TaskPending, nil
-	case taskjournal.TaskEventStateRunning:
-		return apiTypes.TaskRunning, nil
-	case taskjournal.TaskEventStateCompleted:
-		return apiTypes.TaskCompleted, nil
-	case taskjournal.TaskEventStateFailed:
-		return apiTypes.TaskFailed, nil
-	case taskjournal.TaskEventStateAborted:
-		return apiTypes.TaskAborted, nil
-	case taskjournal.TaskEventStateTimedOut:
-		return apiTypes.TaskTimedOut, nil
-	default:
-		return "", errs.New(errs.KindInternal, "Task event has an invalid durable status")
 	}
 }
 

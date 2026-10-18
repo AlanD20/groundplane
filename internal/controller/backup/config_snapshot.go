@@ -13,7 +13,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -40,7 +39,7 @@ func NewConfigSnapshotProducer(
 	if store == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "Config snapshot producer dependencies are required")
 	}
-	guard, err := NewConfigSnapshotWriteGuard(backupruntime.NewReader(store))
+	guard, err := NewConfigSnapshotWriteGuard(store)
 	if err != nil {
 		return nil, err
 	}

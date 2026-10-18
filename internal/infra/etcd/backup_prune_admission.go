@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"sync"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppruneevidence"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -18,6 +18,7 @@ import (
 )
 
 type PreparedBackupPrune struct {
+	HostID      string
 	Dispatch    backupruntime.BackupRecoveryPointPruneDispatchRecord
 	Scope       *agentpb.BackupPlanScope
 	Evidence    []backupplanning.PruneExecutionEvidence
@@ -26,6 +27,8 @@ type PreparedBackupPrune struct {
 }
 
 type preparedBackupPruneState struct {
+	hostID     string
+	dispatch   backupruntime.BackupRecoveryPointPruneDispatchRecord
 	mu         sync.Mutex
 	repository *BackupRuntimeRepository
 	plan       backupPruneTransactionPlan
@@ -140,50 +143,21 @@ func (repository *BackupRuntimeRepository) PrepareBackupPrune(
 		EnvironmentId: environment.ID, Environment: backuppruneevidence.RevisionDigest(read.Values[0]),
 		TaskAttempt: 1,
 	}
+	host, err := hostbindings.ReadLocal(ctx, repository.store, plan.readRevision)
+	if err != nil {
+		return zero, err
+	}
+	plan.conditions = append(plan.conditions, host.Conditions...)
 	prepared := PreparedBackupPrune{
+		HostID:   host.Binding.HostID,
 		Dispatch: dispatch, Scope: proto.CloneOf(scope), Evidence: cloneBackupPruneExecutionEvidence(plan.evidence),
 		Owner: owner, Publication: &PreparedBackupPrunePublication{state: &preparedBackupPruneState{
+			hostID: host.Binding.HostID, dispatch: dispatch,
 			repository: repository, plan: plan, scope: scope, owner: owner,
 		}},
 	}
 	release = false
 	return prepared, nil
-}
-
-func (publication *PreparedBackupPrunePublication) Publish(
-	ctx context.Context, task TaskRecord, sealed *agentpb.ExecutionPlan,
-	marker idempotencyrecord.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	if publication == nil || publication.state == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "backup prune publication is not prepared")
-	}
-	state := publication.state
-	state.mu.Lock()
-	if state.repository == nil {
-		state.mu.Unlock()
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backup prune publication was consumed")
-	}
-	repository, plan, scope, owner := state.repository, state.plan, state.scope, state.owner
-	state.repository, state.plan, state.scope, state.owner = nil, backupPruneTransactionPlan{}, nil, taskjournal.TaskOwner{}
-	state.mu.Unlock()
-	defer plan.clear()
-	if task.Actor != taskjournal.TaskActorSystem || task.Owner != owner ||
-		sealed == nil || !proto.Equal(sealed.BackupScope, scope) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "backup prune scope changed")
-	}
-	initiation, err := newTaskInitiation(task.Owner, task.Actor)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	mutationPlan, err := plan.taskIdempotencyPlan(task, sealed, marker, initiation)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, mutationPlan)
 }
 
 func (publication *PreparedBackupPrunePublication) Clear() {

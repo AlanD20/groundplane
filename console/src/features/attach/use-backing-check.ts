@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { newULID } from "@/lib/utils";
-import { retryTask } from "@/features/task/api";
+import { retryTask, type TaskRetryRequest } from "@/features/task/api";
+import { captureCleanupRetry } from "@/features/task/cleanup-retry";
 import {
   backingCheckRequest,
   getBackingCheck,
@@ -29,7 +30,11 @@ export function useBackingCheck(
   const intent = useRef<{ key: string; body?: BackingCheckRequest } | null>(
     null,
   );
-  const cleanupIntent = useRef<{ taskId: string; key: string } | null>(null);
+  const cleanupIntent = useRef<{
+    taskId: string;
+    key: string;
+    input?: TaskRetryRequest;
+  } | null>(null);
   const selectionIdentity = `${environmentId}/${attachId ?? ""}/${grantId}/${initialTaskId ?? ""}`;
   const selected = useRef(selectionIdentity);
   useEffect(() => {
@@ -185,7 +190,10 @@ export function useBackingCheck(
     if (cleanupIntent.current?.taskId !== taskId)
       cleanupIntent.current = { taskId, key: newULID() };
     try {
-      const next = await retryTask(taskId, cleanupIntent.current.key);
+      const captured = cleanupIntent.current;
+      captured.input ??= await captureCleanupRetry(taskId, "backing_check");
+      if (generation.current !== current) return;
+      const next = await retryTask(taskId, captured.input, captured.key);
       if (generation.current === current) {
         cleanupIntent.current = null;
         setResult(null);

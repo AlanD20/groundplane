@@ -10,26 +10,27 @@ import (
 	commonrunner "github.com/AlanD20/groundplane/internal/common/runner"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
-	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
+	"github.com/AlanD20/groundplane/internal/controller/blueprint"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/environmentdns"
 	"github.com/AlanD20/groundplane/internal/controller/handlers"
+	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/controller/hostterminal"
 	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
+	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
 )
 
 type controllerStaleTaskMaintenance interface {
 	ExpireStaleAgentTasks(context.Context, time.Time) (int, error)
-}
-
-type controllerBlueprintService interface {
-	handlers.EnvironmentBlueprintService
-	blueprintcoordinator.Planner
-	blueprintcoordinator.ChildPreparer
 }
 
 type controllerHTTPDependencies struct {
@@ -42,6 +43,7 @@ type controllerHTTPDependencies struct {
 	software                *softwareplatform.Composition
 	images                  *imagedelivery.Service
 	agentRuntime            *channeltransport.Runtime
+	blueprintReleases       *blueprintrelease.Service
 	runner                  *controllerRunnerComposition
 	backup                  *controllerBackupComposition
 	hierarchy               *controllerHierarchyMutations
@@ -58,10 +60,9 @@ type controllerHTTPDependencies struct {
 	secretMutations         handlers.SecretMutator
 	secretDeletions         handlers.SecretDeleter
 	volumeMutations         handlers.VolumeMutator
-	environmentBlueprints   controllerBlueprintService
-	hierarchyDeletions      handlers.HierarchyDeletionService
+	environmentBlueprints   *blueprint.Service
+	hierarchyDeletions      *hierarchydeletion.Service
 	attachMutations         *attachments.MutationService
-	taskMutations           handlers.TaskRetrier
 	controllerTasks         *controllertask.Runner
 	staleTasks              controllerStaleTaskMaintenance
 }
@@ -92,16 +93,6 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Backing access checks: %w", err)
 	}
-	blueprintCoordinator, err := newBlueprintCoordinatorRuntime(
-		dependencies.store, dependencies.authority.tasks,
-		dependencies.environmentBlueprints, dependencies.environmentBlueprints,
-		dependencies.agentRuntime.Registry, dependencies.bootstrap.tick, dependencies.bootstrap.logger,
-	)
-	if err != nil {
-		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
-		return nil, fmt.Errorf("controller: initialize Blueprint coordinator: %w", err)
-	}
 	terminalInactivity, err := dependencies.bootstrap.config.ParsedHostTerminalInputInactivity()
 	if err != nil {
 		_ = dependencies.platform.Close()
@@ -114,15 +105,83 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize host terminal service: %w", err)
 	}
-	taskAborts, err := taskoperations.NewAbortService(
-		dependencies.authority.tasks, dependencies.agentRuntime.Registry, dependencies.controllerTasks,
-		blueprintCoordinator,
-	)
+	workRuntime, err := dependencies.platform.NewWorkExecution(hostplatform.ExecutionDependencies{
+		BackupSecrets:   dependencies.execution.backupSecrets,
+		Hierarchy:       dependencies.hierarchyDeletions,
+		AttachFacts:     dependencies.execution.attachFactValues,
+		BackupRemoval:   dependencies.backup.cleanup,
+		ScriptArtifacts: dependencies.execution.scriptArtifacts,
+		Releases:        dependencies.blueprintReleases,
+		CapturedFiles:   dependencies.execution.materializationResolver,
+		Blueprints:      dependencies.environmentBlueprints,
+		Entries:         dependencies.environmentBlueprints,
+		Definitions:     dependencies.environmentBlueprints,
+		Images:          dependencies.images, RunnerChecks: dependencies.runner.checkExecutor,
+		RunnerLifecycle: dependencies.runner.lifecycle,
+	})
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize execution storage: %w", err)
+	}
+	executionQueue := workRuntime.Queue
+	taskMutations, err := taskoperations.NewRetryService(executionQueue, workRuntime.Retries,
+		dependencies.authority.idempotency, dependencies.authority.intentCoordinator)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize execution Retry: %w", err)
+	}
+	taskAborts, err := taskoperations.NewAbortService(executionQueue)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Task abort service: %w", err)
+	}
+	imageRecords, err := imageoperations.NewRepository(dependencies.store)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize image execution inspection: %w", err)
+	}
+	executionDiagnostics, err := executiondiagnostics.New(dependencies.store, executionQueue)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize execution diagnostics: %w", err)
+	}
+	hierarchyInspection, err := etcd.NewHierarchyDeletionRepository(dependencies.store)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize removal inspection: %w", err)
+	}
+	componentInspection, err := componentwork.NewInputRepository(dependencies.store)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Component inspection: %w", err)
+	}
+	runnerInspection, err := runnerwork.NewRepository(dependencies.store)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Runner inspection: %w", err)
+	}
+	taskInspection, err := taskinspection.New(executionQueue, imageRecords, executionDiagnostics, workRuntime.Retries, hierarchyInspection, componentInspection, runnerInspection)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Task inspection: %w", err)
 	}
 	serviceReads, err := newServiceReadResources(
 		dependencies.authority.hierarchyRecords,
@@ -205,8 +264,9 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		EdgeChecks:              edgeChecks,
 		DNSChecks:               dnsChecks,
 		EnvironmentDNS:          environmentDNS,
-		TaskMutations:           dependencies.taskMutations,
+		TaskMutations:           taskMutations,
 		TaskAborts:              taskAborts,
+		TaskInspection:          taskInspection,
 		ControllerTaskWake:      dependencies.controllerTasks.Wake,
 		AgentTaskWake:           dependencies.agentRuntime.Registry.WakeTaskDispatch,
 		TenantMutations:         dependencies.hierarchy.tenantMutations,
@@ -229,7 +289,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		agent:           dependencies.agentRuntime,
 		scheduler:       maintenanceScheduler,
 		controllerTasks: dependencies.controllerTasks,
-		blueprints:      blueprintCoordinator,
+		workExecution:   workRuntime,
 		software:        dependencies.software,
 		localAgent:      dependencies.platform,
 		attachMutations: dependencies.attachMutations,

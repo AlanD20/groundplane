@@ -1,11 +1,4 @@
-type TaskLike = { status: string };
-
-const terminalTaskStatuses = new Set([
-  "completed",
-  "failed",
-  "timed_out",
-  "aborted",
-]);
+import type { TaskResponse } from "@/features/task/api";
 
 function waitForDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
   if (!signal) return new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -27,8 +20,8 @@ function waitForDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export async function observeEnvironmentTask<Task extends TaskLike>(
-  requestTask: (taskId: string, signal?: AbortSignal) => Promise<Task>,
+export async function observeEnvironmentTask(
+  requestTask: (taskId: string, signal?: AbortSignal) => Promise<TaskResponse>,
   taskId: string,
   active: { current: boolean },
   signal?: AbortSignal,
@@ -36,7 +29,7 @@ export async function observeEnvironmentTask<Task extends TaskLike>(
   let delayMs = 250;
   while (active.current && !signal?.aborted) {
     const task = await requestTask(taskId, signal);
-    if (terminalTaskStatuses.has(task.status)) return task;
+    if (task.task.finished_at) return task;
     await waitForDelay(delayMs, signal);
     delayMs = Math.min(delayMs * 2, 2_000);
   }

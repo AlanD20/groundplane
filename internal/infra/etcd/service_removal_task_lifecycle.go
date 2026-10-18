@@ -21,29 +21,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *TaskRepository) prepareServiceRemovalTaskRetry(
-	ctx context.Context,
-	source TaskRecord,
-	revision int64,
-) (routeTaskChange, error) {
-	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{environmentchanges.ServiceRemovalIntentKey(source.ID)}, Revision: revision,
-	})
-	if err != nil {
-		return routeTaskChange{}, err
-	}
-	if result == nil || len(result.Values) != 1 {
-		return routeTaskChange{}, errs.New(errs.KindInternal, "Service removal retry read is incomplete")
-	}
-	if result.Values[0] == nil {
-		return routeTaskChange{}, nil
-	}
-	return routeTaskChange{}, errs.New(
-		errs.KindStateConflict,
-		"failed Service removal must be reissued with DELETE so a fresh desired candidate is sealed",
-	)
-}
-
 func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
@@ -51,29 +28,29 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	terminalAt time.Time,
 	revision int64,
 	assignment taskassignments.TaskAssignmentRecord,
-) (routeTaskChange, error) {
+) (removalTaskChange, error) {
 	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentchanges.ServiceRemovalIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
-		return routeTaskChange{}, err
+		return removalTaskChange{}, err
 	}
 	if intentRead == nil || len(intentRead.Values) != 1 {
-		return routeTaskChange{}, errs.New(errs.KindInternal, "Service removal intent read is incomplete")
+		return removalTaskChange{}, errs.New(errs.KindInternal, "Service removal intent read is incomplete")
 	}
 	intentValue := intentRead.Values[0]
 	if intentValue == nil {
-		return routeTaskChange{}, nil
+		return removalTaskChange{}, nil
 	}
 	intent, err := environmentchanges.DecodeServiceRemovalIntent(intentValue.Value)
 	if err != nil {
-		return routeTaskChange{}, err
+		return removalTaskChange{}, err
 	}
 	if err := validateServiceRemovalTaskOwner(task, intent); err != nil {
-		return routeTaskChange{}, err
+		return removalTaskChange{}, err
 	}
 	if intent.Status != taskjournal.TaskStatusPending {
-		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal intent is not pending")
+		return removalTaskChange{}, errs.New(errs.KindStateConflict, "Service removal intent is not pending")
 	}
 	if intent.Authored != nil {
 		return repository.prepareAuthoredServiceRemovalAcknowledgement(
@@ -92,7 +69,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
-		return routeTaskChange{}, err
+		return removalTaskChange{}, err
 	}
 	if state == nil || len(state.Values) != len(keys) || state.Values[1] == nil ||
 		state.Values[2] == nil || state.Values[3] == nil || state.Values[4] == nil ||
@@ -102,7 +79,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		) ||
 		state.Values[2].ModRevision != intent.ExpectedHeadRevision ||
 		string(state.Values[4].Value) != task.ID {
-		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal terminal state changed")
+		return removalTaskChange{}, errs.New(errs.KindStateConflict, "Service removal terminal state changed")
 	}
 	foundDesired := false
 	for _, desired := range intent.CurrentProjection.DesiredServices {
@@ -113,7 +90,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		}
 	}
 	if !foundDesired {
-		return routeTaskChange{}, environmentchanges.CorruptServiceRemovalIntent()
+		return removalTaskChange{}, environmentchanges.CorruptServiceRemovalIntent()
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[1].Value)
 	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetService ||
@@ -121,21 +98,21 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		tombstone.TargetRevision != intent.ServiceRevision ||
 		tombstone.TaskID != task.ID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects {
-		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal tombstone changed")
+		return removalTaskChange{}, errs.New(errs.KindStateConflict, "Service removal tombstone changed")
 	}
 	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[3].Value)
-	if err != nil || !environmentchanges.SameRouteRemovalProjection(projection, intent.CurrentProjection) {
-		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal projection changed")
+	if err != nil || !environmentchanges.SameServiceRemovalProjection(projection, intent.CurrentProjection) {
+		return removalTaskChange{}, errs.New(errs.KindStateConflict, "Service removal projection changed")
 	}
 	terminalIntent, err := environmentchanges.TerminalServiceRemovalIntent(intent, terminalStatus, terminalAt)
 	if err != nil {
-		return routeTaskChange{}, err
+		return removalTaskChange{}, err
 	}
 	terminalValue, err := environmentchanges.EncodeServiceRemovalIntent(terminalIntent)
 	if err != nil {
-		return routeTaskChange{}, err
+		return removalTaskChange{}, err
 	}
-	change := routeTaskChange{
+	change := removalTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{Key: environmentchanges.ServiceRemovalIntentKey(task.ID), ModRevision: intentValue.ModRevision},
@@ -166,21 +143,21 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		revision,
 	)
 	if err != nil {
-		clearRouteTaskChange(change)
-		return routeTaskChange{}, err
+		clearRemovalTaskChange(change)
+		return removalTaskChange{}, err
 	}
 	change.conditions = append(change.conditions, scriptConditions...)
 	dnsConditions, err := dnsrecords.NewReader(repository.store).
 		RequireDNSUnreferenced(ctx, intent.ServiceID, "", revision)
 	if err != nil {
-		clearRouteTaskChange(change)
-		return routeTaskChange{}, err
+		clearRemovalTaskChange(change)
+		return removalTaskChange{}, err
 	}
 	change.conditions = append(change.conditions, dnsConditions...)
 	addresses, err := networkreservations.PrepareProxyAddressRelease(ctx, repository.store, intent.ServiceID, revision)
 	if err != nil {
-		clearRouteTaskChange(change)
-		return routeTaskChange{}, err
+		clearRemovalTaskChange(change)
+		return removalTaskChange{}, err
 	}
 	change.conditions = append(change.conditions, addresses.Conditions()...)
 	change.mutations = append(change.mutations, addresses.Mutations()...)
@@ -200,8 +177,8 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		intent.ExpectedHeadRevision,
 	)
 	if err != nil {
-		clearRouteTaskChange(change)
-		return routeTaskChange{}, err
+		clearRemovalTaskChange(change)
+		return removalTaskChange{}, err
 	}
 	identityPublication, err := prepareEnvironmentDesiredIdentityPublication(
 		ctx,
@@ -213,15 +190,15 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	)
 	if err != nil {
 		clear(publication.publishedDescriptor)
-		clearRouteTaskChange(change)
-		return routeTaskChange{}, err
+		clearRemovalTaskChange(change)
+		return removalTaskChange{}, err
 	}
 	headReference, err := idempotencyrecord.EncodeTaskReference(intent.Claim.RevisionID)
 	if err != nil {
 		clear(publication.publishedDescriptor)
 		identityPublication.clear()
-		clearRouteTaskChange(change)
-		return routeTaskChange{}, err
+		clearRemovalTaskChange(change)
+		return removalTaskChange{}, err
 	}
 	change.values = append(change.values, publication.publishedDescriptor, headReference)
 	for _, mutation := range identityPublication.mutations {
@@ -255,14 +232,14 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	)
 	receipt, err := repository.prepareDirectServiceRemovalReceipt(ctx, task, assignment, intent, revision)
 	if err != nil {
-		clearRouteTaskChange(change)
-		return routeTaskChange{}, err
+		clearRemovalTaskChange(change)
+		return removalTaskChange{}, err
 	}
 	change.conditions, err = appendRemovalComparisons(change.conditions, receipt.Conditions())
 	if err != nil {
 		receipt.Clear()
-		clearRouteTaskChange(change)
-		return routeTaskChange{}, err
+		clearRemovalTaskChange(change)
+		return removalTaskChange{}, err
 	}
 	change.mutations = append(change.mutations, receipt.Mutations()...)
 	for _, mutation := range receipt.Mutations() {
@@ -336,7 +313,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 	}
 	projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[3].Value)
 	if state.Values[2].ModRevision != wantRevision || decodeErr != nil ||
-		!environmentchanges.SameRouteRemovalProjection(projection, wantProjection) {
+		!environmentchanges.SameServiceRemovalProjection(projection, wantProjection) {
 		return errs.New(errs.KindStateConflict, "Service removal terminal desired state is inconsistent")
 	}
 	return nil

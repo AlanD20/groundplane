@@ -53,7 +53,6 @@ type controllerDataComposition struct {
 	backupPolicyRecords           *etcd.BackupPolicyRepository
 	backupKeyRecords              *backuppolicy.KeyRepository
 	backupRuntimeRecords          *etcd.BackupRuntimeRepository
-	backupCheckpoints             *backup.BackupCheckpointService
 	scriptCheckpoints             *taskcheckpoint.ScriptCheckpointService
 	backupPolicyRepository        *backup.PolicyRepository
 }
@@ -236,11 +235,6 @@ func newControllerDataComposition(
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize backup runtime repository: %w", err)
 	}
-	backupCheckpoints, err := backup.NewBackupCheckpointService(backupRuntime, store, authority.intentProtector)
-	if err != nil {
-		_ = store.Close()
-		return controllerDataComposition{}, fmt.Errorf("controller: initialize Backup checkpoint service: %w", err)
-	}
 	scriptCheckpoints, err := taskcheckpoint.NewScriptCheckpointService(scriptRecords)
 	if err != nil {
 		_ = store.Close()
@@ -279,7 +273,6 @@ func newControllerDataComposition(
 		backupPolicyRecords:           backupPolicyRecords,
 		backupKeyRecords:              backupKeyRecords,
 		backupRuntimeRecords:          backupRuntime,
-		backupCheckpoints:             backupCheckpoints,
 		scriptCheckpoints:             scriptCheckpoints,
 		backupPolicyRepository:        backupPolicyRepository,
 	}, nil

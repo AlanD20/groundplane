@@ -3,37 +3,34 @@ package handlers
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type taskListInput struct {
-	Limit        int    `query:"limit" required:"false" minimum:"1" maximum:"200"`
-	Cursor       string `query:"cursor" required:"false"`
-	Environment  string `query:"environment" required:"false" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Project      string `query:"project" required:"false" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Workspace    string `query:"workspace" required:"false" pattern:"^(platform|tnt_[0-9A-HJKMNP-TV-Z]{26})$"`
-	Status       string `query:"status" required:"false" enum:"pending,running,completed,failed,timed_out,aborted"`
-	Type         string `query:"type" required:"false"`
-	ResourceKind string `query:"resource_kind" required:"false"`
+	ResourceKind string `query:"resource_kind"`
+	Scope        string `query:"scope" default:"all"`
+	Limit        int64  `query:"limit" default:"25" minimum:"1" maximum:"100"`
+	After        string `query:"after"`
+	Revision     int64  `query:"revision" minimum:"0"`
+	Action       string `query:"action"`
+	Status       string `query:"status"`
 }
-
 type taskShowInput struct {
-	ID              string `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
-	ExecutionLimit  int    `query:"execution_limit" minimum:"1" maximum:"50"`
-	ExecutionCursor string `query:"execution_cursor"`
+	ID       string `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Limit    int64  `query:"limit" default:"25" minimum:"1" maximum:"100"`
+	After    string `query:"after"`
+	Revision int64  `query:"revision" minimum:"0"`
 }
 
 type taskMutationInput struct {
@@ -42,11 +39,11 @@ type taskMutationInput struct {
 }
 
 type taskPageOutput struct {
-	Body apiTypes.Page[apiTypes.Task]
+	Body apiTypes.ExecutionPage[apiTypes.TaskSummary]
 }
 
 type taskOutput struct {
-	Body apiTypes.Task
+	Body apiTypes.TaskDetails
 }
 
 type taskMutationOutput struct {
@@ -56,6 +53,7 @@ type taskMutationOutput struct {
 }
 
 func (s *Server) registerTasks() {
+	s.registerTaskWork()
 	taskStepOpenAPISchema(s.API.OpenAPI().Components.Schemas)
 	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
 		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
@@ -76,8 +74,8 @@ func (s *Server) registerTasks() {
 	}, s.showTask)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "task.retry", Method: http.MethodPost, Path: "/tasks/{id}/retry",
-		Summary: "Retry a failed Task or authorize a captured Blueprint Detach hook", Tags: []string{"Task"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectTaskMutationBody, s.rejectTaskMutationQuery},
+		Summary: "Retry the selected captured work attempt within the same Task", Tags: []string{"Task"}, DefaultStatus: http.StatusAccepted,
+		Middlewares: huma.Middlewares{s.rejectTaskMutationQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.retryTask)
 	huma.Register(s.API, huma.Operation{
@@ -91,12 +89,12 @@ func (s *Server) registerTasks() {
 
 func (s *Server) retryTask(
 	ctx context.Context,
-	request *taskMutationInput,
+	request *taskRetryInput,
 ) (*taskMutationOutput, error) {
 	if s.taskMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Task retrier is not configured")
 	}
-	response, err := s.taskMutations.RetryTask(ctx, request.ID, request.IdempotencyKey)
+	response, err := s.taskMutations.RetryTask(ctx, request.ID, request.IdempotencyKey, request.Body)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
@@ -164,102 +162,38 @@ func (s *Server) writeTaskProblem(w http.ResponseWriter, err error) {
 }
 
 func (s *Server) listTasks(ctx context.Context, request *taskListInput) (*taskPageOutput, error) {
-	if s.tasks == nil {
-		return nil, errs.New(errs.KindInternal, "Task repository is not configured")
+	if s.taskInspection == nil {
+		return nil, errs.New(errs.KindInternal, "task inspection is not configured")
 	}
-	if request.Limit < 0 {
-		return nil, errs.New(errs.KindValidationFailed, "Task list limit must be a positive integer")
-	}
-	scope, err := taskListScope(request)
-	if err != nil {
-		return nil, err
-	}
-	scope.Status = taskjournal.TaskStatus(request.Status)
-	scope.Type = taskjournal.TaskType(request.Type)
-	scope.ResourceKind = request.ResourceKind
-	page, err := s.tasks.ListTasksByScope(
-		ctx,
-		scope,
-		etcdstore.PageRequest{Limit: request.Limit, Cursor: request.Cursor},
-	)
+	page, err := s.taskInspection.List(ctx, request.Scope, request.After, request.Limit, request.Revision,
+		taskinspection.Filter{Action: workexecution.Action(request.Action), Status: request.Status, ResourceKind: request.ResourceKind})
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
-	response := apiTypes.Page[apiTypes.Task]{
-		Items: make([]apiTypes.Task, len(page.Items)), NextCursor: page.NextCursor,
-	}
-	for index, versioned := range page.Items {
-		response.Items[index], err = taskListResponse(versioned.Record)
-		if err != nil {
-			return nil, normalizeTaskRouteError(err)
-		}
+	response := apiTypes.ExecutionPage[apiTypes.TaskSummary]{Items: []apiTypes.TaskSummary{}, More: page.More, After: page.After, Revision: page.Revision, ScanLimited: page.ScanLimited}
+	for _, task := range page.Tasks {
+		response.Items = append(response.Items, executionSummary(task))
 	}
 	return &taskPageOutput{Body: response}, nil
 }
-
 func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOutput, error) {
-	if s.tasks == nil {
-		return nil, errs.New(errs.KindInternal, "Task repository is not configured")
+	if s.taskInspection == nil {
+		return nil, errs.New(errs.KindInternal, "task inspection is not configured")
 	}
-	task, err := s.tasks.GetTask(ctx, request.ID)
+	page, err := s.taskInspection.WorkPage(ctx, request.ID, request.After, request.Limit, request.Revision)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
-	if taskjournal.IsInternalChild(task.Record.Params) {
-		return nil, errs.Newf(errs.KindTaskNotFound, "task not found: %s", request.ID)
+	work := apiTypes.ExecutionPage[apiTypes.TaskWork]{Items: []apiTypes.TaskWork{}, More: page.More, After: page.After, Revision: page.Revision}
+	for _, item := range page.Work {
+		work.Items = append(work.Items, executionWork(item))
 	}
-	events, err := s.tasks.ListTaskEvents(ctx, task.Record.ID, task.ReadRevision)
-	if err != nil {
-		return nil, normalizeTaskRouteError(err)
+	detail := apiTypes.TaskDetails{Task: executionSummary(page.Task), Work: work}
+	if value := page.Preparation; value != nil {
+		detail.Preparation = &apiTypes.TaskPreparation{Reason: value.Reason, Outcome: value.Outcome,
+			Summary: value.Summary, NextAction: value.NextAction, FinishedAt: value.FinishedAt}
 	}
-	response, err := taskResponse(task.Record, events)
-	if err != nil {
-		return nil, normalizeTaskRouteError(err)
-	}
-	recovery, err := s.tasks.GetTaskRecovery(ctx, task.Record, task.ReadRevision)
-	if err != nil {
-		return nil, normalizeTaskRouteError(err)
-	}
-	if err := applyTaskRecovery(&response, task.Record, events, recovery); err != nil {
-		return nil, normalizeTaskRouteError(err)
-	}
-	response.DiagnosticsExpiredAt = events.DiagnosticsExpiredAt
-	preparation, err := s.tasks.GetReleasePreparation(ctx, task.Record, task.ReadRevision)
-	if err != nil {
-		return nil, normalizeTaskRouteError(err)
-	}
-	response.Preparation = taskPreparationResponse(preparation)
-	history, err := s.tasks.GetTaskAttemptHistory(ctx, task.Record, events)
-	if err != nil {
-		return nil, normalizeTaskRouteError(err)
-	}
-	response.AttemptHistory, err = taskAttemptHistoryResponse(task.Record, history)
-	if err != nil {
-		return nil, normalizeTaskRouteError(err)
-	}
-	if task.Record.Executor == taskjournal.TaskExecutorBlueprint &&
-		task.Record.Status == taskjournal.TaskStatusRunning {
-		retry, err := s.tasks.GetInterruptedDetachRetry(ctx, task.Record.ID)
-		if err != nil {
-			return nil, normalizeTaskRouteError(err)
-		}
-		if retry != nil {
-			response.InterruptedDetachRetry = &apiTypes.TaskDetachRetry{AttachID: retry.AttachID, StepID: retry.StepID}
-		}
-	}
-	if err := s.applyBlueprintFailureDetails(ctx, task.Record, &response); err != nil {
-		return nil, normalizeTaskRouteError(err)
-	}
-	if task.Record.Status == taskjournal.TaskStatusRunning {
-		response.RecoveryRetryAvailable, err = s.tasks.GetStoppedRecoveryRetry(ctx, task.Record.ID)
-		if err != nil {
-			return nil, normalizeTaskRouteError(err)
-		}
-	}
-	if err := s.applyBlueprintExecutionDetails(ctx, task, request, &response); err != nil {
-		return nil, normalizeTaskRouteError(err)
-	}
-	return &taskOutput{Body: response}, nil
+	return &taskOutput{Body: detail}, nil
 }
 
 func normalizeTaskRouteError(err error) error {
@@ -268,112 +202,6 @@ func normalizeTaskRouteError(err error) error {
 		return domainError
 	}
 	return errs.Wrap(errs.KindInternal, err)
-}
-
-func taskListResponse(record etcd.TaskRecord) (apiTypes.Task, error) {
-	status, err := taskAPIStatus(record.Status)
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	workspace, err := taskAPIWorkspace(record.Owner.WorkspaceType)
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	actor, err := taskAPIActor(record.Actor)
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	taskType, err := taskAPIType(record.Type, record.Actor)
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() {
-		return apiTypes.Task{}, errs.New(errs.KindInternal, "task has an invalid durable timeline")
-	}
-	fetch, err := imageFetchTaskDetails(record)
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	return apiTypes.Task{
-		ReconciliationRequired: record.Result != nil && record.Result.ReconciliationRequired,
-		ImageFetch:             fetch,
-		ID:                     record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
-		PlanHash: record.PlanHash, Type: taskType, Target: record.Target, Status: status,
-		Executor: string(record.Executor), TimeoutSeconds: record.TimeoutSeconds,
-		TargetName:   record.TargetName,
-		ResourceKind: taskResourceKind(record),
-		Failure:      taskFailure(record), ResultSummary: taskResultSummary(record),
-		WorkspaceType: workspace, TenantID: record.Owner.TenantID, ProjectID: record.Owner.ProjectID,
-		EnvironmentID: record.Owner.EnvironmentID, Actor: actor,
-		CreatedAt: record.CreatedAt.UTC(), UpdatedAt: record.UpdatedAt.UTC(),
-		StartedAt: taskAPITime(record.StartedAt), FinishedAt: taskAPITime(record.FinishedAt),
-	}, nil
-}
-
-func taskAPIType(taskType taskjournal.TaskType, actor taskjournal.TaskActor) (string, error) {
-	if !taskjournal.ValidTaskType(taskType) {
-		return "", errs.New(errs.KindInternal, "task has an invalid durable type")
-	}
-	if taskType == taskjournal.TaskBackupPrune && actor != taskjournal.TaskActorSystem {
-		return "", errs.New(errs.KindInternal, "backup_prune task has an invalid durable actor")
-	}
-	return string(taskType), nil
-}
-
-func taskListScope(request *taskListInput) (etcd.TaskListScope, error) {
-	scopeCount := 0
-	for _, value := range []string{request.Environment, request.Project, request.Workspace} {
-		if value != "" {
-			scopeCount++
-		}
-	}
-	if scopeCount > 1 {
-		return etcd.TaskListScope{}, errs.New(errs.KindValidationFailed, "task list scopes are mutually exclusive")
-	}
-	if request.Environment != "" {
-		if ids.Validate(ids.KindEnvironment, request.Environment) != nil {
-			return etcd.TaskListScope{}, errs.New(errs.KindValidationFailed, "task list Environment scope is invalid")
-		}
-		return etcd.TaskListScope{Kind: etcd.TaskListScopeEnvironment, ID: request.Environment}, nil
-	}
-	if request.Project != "" {
-		if ids.Validate(ids.KindProject, request.Project) != nil {
-			return etcd.TaskListScope{}, errs.New(errs.KindValidationFailed, "task list Project scope is invalid")
-		}
-		return etcd.TaskListScope{Kind: etcd.TaskListScopeProject, ID: request.Project}, nil
-	}
-	if request.Workspace == "platform" {
-		return etcd.TaskListScope{Kind: etcd.TaskListScopePlatformWorkspace}, nil
-	}
-	if request.Workspace != "" {
-		if ids.Validate(ids.KindTenant, request.Workspace) != nil {
-			return etcd.TaskListScope{}, errs.New(errs.KindValidationFailed, "task list Tenant workspace is invalid")
-		}
-		return etcd.TaskListScope{Kind: etcd.TaskListScopeTenantWorkspace, ID: request.Workspace}, nil
-	}
-	return etcd.TaskListScope{Kind: etcd.TaskListScopeGlobal}, nil
-}
-
-func taskAPIWorkspace(workspace taskjournal.TaskWorkspaceType) (apiTypes.TaskWorkspaceType, error) {
-	switch workspace {
-	case taskjournal.TaskWorkspacePlatform:
-		return apiTypes.TaskWorkspacePlatform, nil
-	case taskjournal.TaskWorkspaceTenant:
-		return apiTypes.TaskWorkspaceTenant, nil
-	default:
-		return "", errs.New(errs.KindInternal, "task has an invalid durable workspace")
-	}
-}
-
-func taskAPIActor(actor taskjournal.TaskActor) (apiTypes.TaskActor, error) {
-	switch actor {
-	case taskjournal.TaskActorOperator:
-		return apiTypes.TaskActorOperator, nil
-	case taskjournal.TaskActorSystem:
-		return apiTypes.TaskActorSystem, nil
-	default:
-		return "", errs.New(errs.KindInternal, "task has an invalid durable actor")
-	}
 }
 
 func taskAPITime(value *time.Time) *time.Time {
@@ -389,7 +217,7 @@ func (s *Server) validateTaskListQuery(ctx huma.Context, next func(huma.Context)
 	query := requestURL.Query()
 	for key, values := range query {
 		switch key {
-		case "environment", "project", "workspace", "limit", "cursor", "status", "type", "resource_kind":
+		case "scope", "limit", "after", "revision", "action", "status", "resource_kind":
 		default:
 			s.writeTaskListProblem(ctx, http.StatusBadRequest, "Task list query is invalid")
 			return
@@ -398,16 +226,6 @@ func (s *Server) validateTaskListQuery(ctx huma.Context, next func(huma.Context)
 			s.writeTaskListProblem(ctx, http.StatusBadRequest, "Task list query contains duplicate values")
 			return
 		}
-	}
-	scopeCount := 0
-	for _, key := range []string{"environment", "project", "workspace"} {
-		if query.Has(key) {
-			scopeCount++
-		}
-	}
-	if scopeCount > 1 {
-		s.writeTaskListProblem(ctx, http.StatusUnprocessableEntity, "Task list scopes are mutually exclusive")
-		return
 	}
 	next(ctx)
 }

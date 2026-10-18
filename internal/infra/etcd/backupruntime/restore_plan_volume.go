@@ -23,8 +23,11 @@ func ValidateVolumeRestoreExecutionPlan(record BackupRestoreRecord, plan *agentp
 		len(validated.Artifacts) == 0 {
 		return invalidBackupRuntimeRecord("Volume Restore execution plan is invalid")
 	}
-	target, scope := record.CurrentTarget.Volume, validated.BackupScope
-	step := validated.Steps[0].GetBackupStep()
+	return validateVolumeRestoreInput(record, validated.BackupScope, validated.Steps[0].GetBackupStep())
+}
+
+func validateVolumeRestoreInput(record BackupRestoreRecord, scope *agentpb.BackupPlanScope, step *agentpb.BackupStepAuthority) error {
+	target := record.CurrentTarget.Volume
 	restore := step.GetRestore()
 	volume := restore.GetVolume()
 	if target == nil || scope.EnvironmentId != record.EnvironmentID ||

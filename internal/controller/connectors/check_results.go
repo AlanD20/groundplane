@@ -68,7 +68,7 @@ func connectionCheckResult(record connectorchecks.Record, stale bool) apiTypes.C
 		Stages:        make([]apiTypes.ConnectorCheckStage, len(record.Stages)),
 		SecretSources: make([]apiTypes.ConnectorCheckSecretSource, len(record.SecretSources)),
 		UploadIDs:     []string{}, CleanupRequired: record.Phase == connectorchecks.CleanupRequired,
-		CleanupTaskID: record.TransferredTo, CreatedAt: record.CreatedAt.Format(time.RFC3339)}
+		CreatedAt: record.CreatedAt.Format(time.RFC3339)}
 	for index, stage := range record.Stages {
 		result.Stages[index] = apiTypes.ConnectorCheckStage{
 			Name:                stage.Name,
@@ -81,16 +81,14 @@ func connectionCheckResult(record connectorchecks.Record, stale bool) apiTypes.C
 		result.SecretSources[index] = apiTypes.ConnectorCheckSecretSource{Credential: source.Name,
 			SecretID: source.Pin.SecretID, Revision: source.Pin.MetadataRevision}
 	}
-	if record.Phase != connectorchecks.Transferred {
-		if record.Cleanup.ObjectPending {
-			result.ObjectKey = record.Cleanup.ObjectKey
-		}
-		if record.Cleanup.MultipartPending {
-			result.MultipartKey = record.Cleanup.MultipartKey
-		}
-		if len(record.Cleanup.UploadIDs) > 0 {
-			result.UploadIDs = slices.Clone(record.Cleanup.UploadIDs)
-		}
+	if record.Cleanup.ObjectPending {
+		result.ObjectKey = record.Cleanup.ObjectKey
+	}
+	if record.Cleanup.MultipartPending {
+		result.MultipartKey = record.Cleanup.MultipartKey
+	}
+	if len(record.Cleanup.UploadIDs) > 0 {
+		result.UploadIDs = slices.Clone(record.Cleanup.UploadIDs)
 	}
 	if record.StartedAt != nil {
 		result.StartedAt = record.StartedAt.Format(time.RFC3339)

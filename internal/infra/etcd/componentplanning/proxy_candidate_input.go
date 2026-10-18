@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -20,7 +21,7 @@ const ProxyCandidateInputChunkBytes = 256 * 1024
 type ProxyInputOwner string
 
 const (
-	ProxyInputAgentTask            ProxyInputOwner = "agent_task"
+	ProxyInputAgentWork            ProxyInputOwner = "agent_work"
 	ProxyInputControllerSettlement ProxyInputOwner = "controller_settlement"
 )
 
@@ -49,8 +50,8 @@ func ProxyCandidateInputChunkKey(reference ProxyCandidateInputReference, ordinal
 
 func (reference ProxyCandidateInputReference) Validate() error {
 	digest, err := hex.DecodeString(reference.SHA256)
-	ownerValid := reference.SourceOwner == ProxyInputAgentTask &&
-		ids.Validate(ids.KindTask, reference.SourceID) == nil ||
+	ownerValid := reference.SourceOwner == ProxyInputAgentWork &&
+		ids.Validate(ids.KindWorkItem, reference.SourceID) == nil ||
 		reference.SourceOwner == ProxyInputControllerSettlement &&
 			ids.Validate(ids.KindOperation, reference.SourceID) == nil
 	if ids.Validate(ids.KindEnvironment, reference.EnvironmentID) != nil ||
@@ -172,28 +173,33 @@ func ReadProxyCandidateInput(ctx context.Context, store planningStore,
 	}, nil
 }
 
-func (preparation ComponentTaskPreparation) WithProxyCandidateInput(
+func BindWorkProxyCandidateInput(task workexecution.Task, item workexecution.Item,
+	preflight ProxyServicePreflight,
 	reference keyvalue.Versioned[ProxyCandidateInputReference],
-) (ComponentTaskPreparation, error) {
+) (*ProxyServicePreflight, keyvalue.Condition, error) {
 	if reference.Revision <= 0 || reference.ReadRevision < reference.Revision || reference.Record.Validate() != nil ||
-		preparation.proxyServicePreflight == nil || len(preparation.Intent.Candidates) != 1 ||
-		reference.Record.SourceOwner != ProxyInputAgentTask || preparation.Intent.TaskID != reference.Record.SourceID || preparation.Intent.EnvironmentID != reference.Record.EnvironmentID ||
-		preparation.proxyServicePreflight.ParentTaskID != reference.Record.ParentTaskID ||
-		preparation.Intent.Candidates[0].Candidate.Desired.ID != reference.Record.ComponentID {
-		return ComponentTaskPreparation{}, errs.New(
+		task.Validate() != nil || item.Validate() != nil || preflight.validate() != nil ||
+		task.Action != workexecution.ActionApply || item.TaskID != task.ID ||
+		item.Operation != workexecution.Component || item.Placement.Executor != workexecution.Agent ||
+		(item.Phase != workexecution.Waiting && item.Phase != workexecution.Ready) ||
+		item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.ForwardRevoked ||
+		task.Stop != nil || task.FinishedAt != nil ||
+		reference.Record.SourceOwner != ProxyInputAgentWork || item.ID != reference.Record.SourceID ||
+		task.Scope.EnvironmentID != reference.Record.EnvironmentID || task.ID != reference.Record.ParentTaskID ||
+		preflight.ParentTaskID != task.ID || preflight.EnvironmentID != task.Scope.EnvironmentID ||
+		item.TargetID != reference.Record.ComponentID {
+		return nil, keyvalue.Condition{}, errs.New(
 			errs.KindValidationFailed,
-			"prepared router input differs from its Component Task",
+			"prepared router input differs from its Component work",
 		)
 	}
-	result := cloneComponentTaskPreparation(preparation)
+	if preflight.CandidateInput != nil && *preflight.CandidateInput != reference.Record {
+		return nil, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Component work already captured different router input")
+	}
+	result := cloneProxyServicePreflight(&preflight)
 	owned := reference.Record
-	result.proxyServicePreflight.CandidateInput = &owned
-	result.proxyServiceConditions = append(
-		result.proxyServiceConditions,
-		keyvalue.Condition{Key: ProxyCandidateInputKey(owned), ModRevision: reference.Revision},
-	)
-	result.proxyServiceConditionCount++
-	return result, nil
+	result.CandidateInput = &owned
+	return result, keyvalue.Condition{Key: ProxyCandidateInputKey(owned), ModRevision: reference.Revision}, nil
 }
 
 // Runtime publication consumes only the original router's actual receipt. A

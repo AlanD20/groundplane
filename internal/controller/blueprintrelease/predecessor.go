@@ -8,7 +8,6 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"slices"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -66,7 +65,7 @@ func (service *Service) preparePredecessor(
 	if captured.serving == nil {
 		return nil
 	}
-	render.PriorRuntime = &taskassignments.ReleaseNativePredecessorAuthority{
+	render.PriorRuntime = &releaserender.ServingRuntimeCapture{
 		ServiceID: captured.native.ServiceID, CurrentArtifact: slices.Clone(captured.native.CurrentArtifact),
 		RetainedPriorArtifact: slices.Clone(captured.native.RetainedPriorArtifact),
 	}

@@ -5,12 +5,13 @@ import (
 	"math"
 	"slices"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,7 +22,8 @@ type authoredApplyBaseline struct {
 	environment          etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	project              etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	tenant               etcdstore.Versioned[hierarchyrecord.TenantRecord]
-	taskOwner            taskjournal.TaskOwner
+	scope                workexecution.Scope
+	ledger               blueprintunits.Snapshot
 	previousInput        etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput]
 	previousIdentities   etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]
 	hasHead              bool
@@ -45,8 +47,8 @@ func (service *Service) loadAuthoredApplyBaseline(
 	if err != nil {
 		return authoredApplyBaseline{}, err
 	}
-	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
+	scope := workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID}
+	if err := scope.Validate(); err != nil {
 		return authoredApplyBaseline{}, err
 	}
 	if environment.Record.ProjectID != project.Record.ID || project.Record.TenantID != tenant.Record.ID {
@@ -62,8 +64,16 @@ func (service *Service) loadAuthoredApplyBaseline(
 		)
 	}
 	baseline := authoredApplyBaseline{
-		environment: environment, project: project, tenant: tenant, taskOwner: owner,
+		environment: environment, project: project, tenant: tenant, scope: scope,
 		hasHead: hasHead, expectedHeadRevision: head.Revision, generation: 1,
+	}
+	baseline.ledger, err = service.repository.LoadBlueprintAdmissionSnapshot(ctx, environmentID, head.ReadRevision)
+	if err != nil {
+		return authoredApplyBaseline{}, err
+	}
+	if baseline.ledger.HeadRevision != head.Revision ||
+		(hasHead && baseline.ledger.HeadTaskID != head.Record.RevisionID) {
+		return authoredApplyBaseline{}, errs.New(errs.KindStateConflict, "Blueprint resource ledger does not match the authoring head")
 	}
 	if !hasHead {
 		return baseline, nil

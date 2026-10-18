@@ -2,15 +2,12 @@ package etcd
 
 import (
 	"context"
-	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppruneevidence"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // prepareBackupPrunePublication composes retained prune authority and the
@@ -172,17 +169,9 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		return backupPruneTransactionPlan{}, err
 	}
 	return backupPruneTransactionPlan{
-		conditions: conditions,
-		mutations:  mutations,
-		evidence:   planEvidence,
-		authority: &backupTaskPublicationAuthority{
-			taskID: dispatch.TaskID, operationID: dispatch.OperationID,
-			environmentID: dispatch.EnvironmentID, taskType: taskjournal.TaskBackupPrune,
-			createdAt: dispatch.CreatedAt,
-			validatePlan: func(value *agentpb.ExecutionPlan) error {
-				return backupplanning.ValidateBackupPruneExecutionPlan(dispatch, planEvidence, value)
-			},
-		},
+		conditions:   conditions,
+		mutations:    mutations,
+		evidence:     planEvidence,
 		readRevision: anchor.ReadRevision,
 	}, nil
 }

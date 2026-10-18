@@ -17,10 +17,11 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { TaskResponse } from "@/features/task/api";
+import { TaskExecution } from "@/features/task/task-execution";
 import { useStore } from "@/lib/store";
 import type { TaskType } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 type Phase = "review" | "running" | "done" | "dispatched" | "failed";
@@ -66,9 +67,7 @@ export function TaskRunnerDialog({
 }) {
   const { abortTask, getTask, watchTaskEvents } = useStore();
   const [phase, setPhase] = useState<Phase>("review");
-  const [reportedSteps, setReportedSteps] = useState<
-    NonNullable<TaskResponse["steps"]>
-  >([]);
+  const [detail, setDetail] = useState<TaskResponse | null>(null);
   const [typed, setTyped] = useState("");
   const [taskId, setTaskId] = useState("");
   const [taskStatus, setTaskStatus] = useState("");
@@ -103,7 +102,7 @@ export function TaskRunnerDialog({
   useEffect(() => {
     if (open) {
       setPhase("review");
-      setReportedSteps([]);
+      setDetail(null);
       setTyped("");
       setTaskId("");
       setTaskStatus("");
@@ -127,22 +126,22 @@ export function TaskRunnerDialog({
       if (polling || controller.signal.aborted) return;
       polling = true;
       try {
-        const task = await getTask(taskId, controller.signal);
+        const response = await getTask(taskId, controller.signal);
         if (controller.signal.aborted) return;
+        const task = response.task;
+        setDetail(response);
         setTaskStatus(task.status);
         setStatusFailure("");
-        setReportedSteps(task.steps ?? []);
         if (
-          task.status === "completed" &&
+          task.finished_at &&
+          task.status === "succeeded" &&
           committedTaskId.current !== task.id
         ) {
           committedTaskId.current = task.id;
           setPhase("done");
           onCommitRef.current?.();
         }
-        if (
-          ["completed", "failed", "timed_out", "aborted"].includes(task.status)
-        ) {
+        if (task.finished_at) {
           stopEvents();
           if (settledTaskId.current !== task.id) {
             settledTaskId.current = task.id;
@@ -211,7 +210,8 @@ export function TaskRunnerDialog({
   }
 
   function abort() {
-    if (!taskId || aborting || abortRequested) return;
+    if (!taskId || aborting || abortRequested || !detail?.task.cancel.allowed)
+      return;
     const generation = session.current.generation;
     setAborting(true);
     setStatusFailure("");
@@ -236,10 +236,9 @@ export function TaskRunnerDialog({
   }
 
   const canStart = confirmText ? typed === confirmText : true;
-  const taskTerminalFailure = ["failed", "timed_out", "aborted"].includes(
-    taskStatus,
-  );
-  const taskInFlight = ["pending", "running"].includes(taskStatus);
+  const taskTerminalFailure =
+    !!detail?.task.finished_at && detail.task.status !== "succeeded";
+  const taskInFlight = !!taskId && !detail?.task.finished_at;
   const taskStatusLabel =
     taskStatus === "not_required"
       ? "No task required"
@@ -347,48 +346,7 @@ export function TaskRunnerDialog({
         </div>
       )}
 
-      {phase !== "review" && taskId && reportedSteps.length > 0 && (
-        <div className="flex flex-col gap-1 rounded-lg border border-border bg-[oklch(0.14_0.01_260)] p-3 font-mono text-xs">
-          {reportedSteps.map((step) => {
-            const state = step.status;
-            const failed = ["failed", "timed_out", "aborted"].includes(state);
-            return (
-              <div key={step.name} className="flex items-center gap-2 py-0.5">
-                {state === "completed" ? (
-                  <CheckCircle2 className="size-3.5 text-success" />
-                ) : state === "running" ? (
-                  <Loader2 className="size-3.5 animate-spin text-info" />
-                ) : failed ? (
-                  <XCircle className="size-3.5 text-destructive" />
-                ) : (
-                  <Circle className="size-3.5 text-muted-foreground/50" />
-                )}
-                <span
-                  className={cn(
-                    state === "completed" && "text-foreground",
-                    state === "running" && "text-info",
-                    state === "pending" && "text-muted-foreground/60",
-                  )}
-                >
-                  {step.action ||
-                    step.description ||
-                    step.script_slug ||
-                    "Operation not recorded"}
-                </span>
-                <span
-                  className={cn(
-                    "ml-auto text-xs",
-                    state === "completed" && "text-success",
-                    failed && "text-destructive",
-                  )}
-                >
-                  {state.replaceAll("_", " ")}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {phase !== "review" && detail && <TaskExecution detail={detail} />}
 
       <DialogFooter>
         {phase === "review" && (
@@ -442,7 +400,7 @@ export function TaskRunnerDialog({
               {taskStatusLabel}
             </span>
             <div className="flex gap-2">
-              {taskInFlight && abortable && (
+              {taskInFlight && abortable && detail?.task.cancel.allowed && (
                 <Button
                   variant="destructive"
                   disabled={aborting || abortRequested}
@@ -453,7 +411,7 @@ export function TaskRunnerDialog({
                 </Button>
               )}
               <Button onClick={() => onOpenChange(false)}>
-                {taskStatus === "completed" ? "Done" : "Close"}
+                {detail?.task.finished_at ? "Done" : "Close"}
               </Button>
             </div>
           </div>

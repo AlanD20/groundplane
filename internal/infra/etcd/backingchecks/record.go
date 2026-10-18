@@ -23,6 +23,7 @@ import (
 
 type Owner struct {
 	TaskID        string `json:"task_id"`
+	WorkItemID    string `json:"work_item_id"`
 	PlanID        string `json:"plan_id"`
 	OperationID   string `json:"operation_id"`
 	EnvironmentID string `json:"environment_id"`
@@ -61,7 +62,6 @@ const (
 	Cleaning        Phase = "cleaning"
 	Finished        Phase = "finished"
 	CleanupRequired Phase = "cleanup_required"
-	Transferred     Phase = "transferred"
 )
 
 type Outcome string
@@ -94,8 +94,6 @@ type Record struct {
 	CreatedAt           time.Time             `json:"created_at"`
 	StartedAt           *time.Time            `json:"started_at,omitempty"`
 	FinishedAt          *time.Time            `json:"finished_at,omitempty"`
-	RetryOf             string                `json:"retry_of,omitempty"`
-	TransferredTo       string                `json:"transferred_to,omitempty"`
 }
 
 func (source Source) Target() (*agentpb.ServiceObservationTarget, error) {
@@ -153,7 +151,7 @@ func NewRecord(owner Owner, source Source, ciphertext []byte, createdAt time.Tim
 }
 
 func (record Record) Validate() error {
-	if record.Schema != 1 || ids.Validate(ids.KindTask, record.Owner.TaskID) != nil ||
+	if record.Schema != 1 || ids.Validate(ids.KindTask, record.Owner.TaskID) != nil || ids.Validate(ids.KindWorkItem, record.Owner.WorkItemID) != nil ||
 		ids.Validate(
 			ids.KindPlan,
 			record.Owner.PlanID,
@@ -161,8 +159,7 @@ func (record Record) Validate() error {
 		ids.Validate(ids.KindEnvironment, record.Owner.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, record.HelperTaskID) != nil || record.Source.Validate() != nil ||
 		record.Source.Parameters.EnvironmentID != record.Owner.EnvironmentID || !validTime(record.CreatedAt) ||
-		record.RetryOf == "" && record.HelperTaskID != record.Owner.TaskID || record.RetryOf != "" &&
-		(ids.Validate(ids.KindTask, record.RetryOf) != nil || record.RetryOf == record.Owner.TaskID || record.HelperTaskID == record.Owner.TaskID) {
+		record.HelperTaskID != record.Owner.TaskID {
 		return invalidRecord()
 	}
 	digest, err := sourceDigest(record.Source)
@@ -183,7 +180,7 @@ func (record Record) Validate() error {
 	}
 	if record.Phase == Ready {
 		if record.StartedAt != nil || record.FinishedAt != nil || record.ProbeRecorded || record.CleanupPending ||
-			record.Outcome != "" || record.Failure != "" || record.RetryOf != "" || record.TransferredTo != "" ||
+			record.Outcome != "" || record.Failure != "" ||
 			len(record.EncryptedInput) == 0 || len(record.EncryptedInput) > 256<<10 {
 			return invalidRecord()
 		}
@@ -202,12 +199,12 @@ func (record Record) Validate() error {
 	switch record.Phase {
 	case Checking, Cleaning:
 		if record.StartedAt == nil || record.FinishedAt != nil || record.Outcome != "" || record.Failure != "" ||
-			record.TransferredTo != "" || record.Phase == Cleaning && !record.CleanupPending ||
+			record.Phase == Cleaning && !record.CleanupPending ||
 			record.Phase == Checking && !record.ProbeRecorded && !record.CleanupPending {
 			return invalidRecord()
 		}
 	case Finished:
-		if record.FinishedAt == nil || record.CleanupPending || record.TransferredTo != "" {
+		if record.FinishedAt == nil || record.CleanupPending {
 			return invalidRecord()
 		}
 		if record.Outcome == Passed {
@@ -219,11 +216,9 @@ func (record Record) Validate() error {
 			record.Outcome == Interrupted && (record.StartedAt == nil || record.Failure != InterruptedFailure) {
 			return invalidRecord()
 		}
-	case CleanupRequired, Transferred:
+	case CleanupRequired:
 		if record.StartedAt == nil || record.FinishedAt == nil || !record.CleanupPending || record.Outcome != Failed ||
-			record.Failure == "" || !validFailure(record.Failure) || record.Phase == CleanupRequired && record.TransferredTo != "" ||
-			record.Phase == Transferred &&
-				(ids.Validate(ids.KindTask, record.TransferredTo) != nil || record.TransferredTo == record.Owner.TaskID) {
+			record.Failure == "" || !validFailure(record.Failure) {
 			return invalidRecord()
 		}
 	default:
@@ -270,12 +265,13 @@ func sourceDigest(source Source) (string, error) {
 func PlanHash(record Record) (string, error) {
 	value, err := json.Marshal(struct {
 		Procedure           string `json:"procedure"`
+		WorkItemID          string `json:"work_item_id"`
 		PlanID              string `json:"plan_id"`
 		OperationID         string `json:"operation_id"`
 		EnvironmentID       string `json:"environment_id"`
 		ConfigurationSHA256 string `json:"configuration_sha256"`
 		HelperTaskID        string `json:"helper_task_id"`
-	}{"backing-access-v1", record.Owner.PlanID, record.Owner.OperationID, record.Owner.EnvironmentID,
+	}{"backing-access", record.Owner.WorkItemID, record.Owner.PlanID, record.Owner.OperationID, record.Owner.EnvironmentID,
 		record.ConfigurationSHA256, record.HelperTaskID})
 	if err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)

@@ -33,7 +33,6 @@ type TaskRecord struct {
 	Params             map[string]string                         `json:"params,omitempty"`
 	Steps              []taskjournal.TaskStepRecord              `json:"steps,omitempty"`
 	Materializations   []materializationrecord.Record            `json:"materializations,omitempty"`
-	EntryRuntime       *taskjournal.EntryTaskRuntime             `json:"entry_runtime,omitempty"`
 	Configuration      *taskconfiguration.TaskConfiguration      `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                                     `json:"timeout_seconds"`
 	Status             taskjournal.TaskStatus                    `json:"status"`

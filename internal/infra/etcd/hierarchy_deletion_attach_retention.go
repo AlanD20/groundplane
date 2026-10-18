@@ -94,7 +94,8 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachRetention(c
 		return false, workqueue.Change{}, err
 	}
 	for _, key := range []string{actionKey, completionKey, hierarchydeletion.WorkBindingKey(item.ID), hierarchydeletion.WorkStopKey(item.ID),
-		attachremoval.WorkRecoveryKey(item.ID), attachremoval.WorkCaptureKey(item.ID), attachremoval.FrozenKey(captured.Action.ParentOperationID, item.TargetID)} {
+		attachremoval.WorkRecoveryKey(item.ID), attachremoval.WorkCaptureKey(item.ID), hierarchyAttachPreparedKey(item.ID),
+		attachremoval.FrozenKey(captured.Action.ParentOperationID, item.TargetID)} {
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})
 	}
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Prefix: true, Key: hierarchydeletion.WorkStopEvidencePrefix(item.ID)})

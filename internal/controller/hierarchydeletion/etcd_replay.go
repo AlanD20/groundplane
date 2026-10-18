@@ -6,7 +6,6 @@ import (
 	"errors"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -319,17 +318,14 @@ func replayScopeMatches(
 	locator idempotencyrecord.IdempotencyLocator,
 	operation hierarchydeletion.HierarchyDeletionOperation,
 ) bool {
-	owner := operation.Owner
-	if owner.WorkspaceType == taskjournal.TaskWorkspacePlatform {
+	scope := operation.Scope
+	if scope.TenantID == "" {
 		return locator.ScopeKind == idempotencyrecord.IdempotencyScopePlatform && locator.ScopeID == "-"
 	}
-	if owner.WorkspaceType != taskjournal.TaskWorkspaceTenant || owner.TenantID == "" {
-		return false
+	if scope.EnvironmentID != "" {
+		return locator.ScopeKind == idempotencyrecord.IdempotencyScopeProject && locator.ScopeID == scope.ProjectID
 	}
-	if owner.EnvironmentID != "" {
-		return locator.ScopeKind == idempotencyrecord.IdempotencyScopeProject && locator.ScopeID == owner.ProjectID
-	}
-	return locator.ScopeKind == idempotencyrecord.IdempotencyScopeTenant && locator.ScopeID == owner.TenantID
+	return locator.ScopeKind == idempotencyrecord.IdempotencyScopeTenant && locator.ScopeID == scope.TenantID
 }
 
 func idempotencyScopeKind(target TargetKind) requestidempotency.ScopeKind {

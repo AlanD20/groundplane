@@ -1,7 +1,6 @@
 package hierarchydeletion
 
 import (
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 )
 
@@ -84,7 +83,7 @@ type HierarchyDeletionActionTargetKind string
 type HierarchyDeletionProcedureKind string
 
 const (
-	HierarchyDeletionProcedureAgent      HierarchyDeletionProcedureKind = "agent-child"
+	HierarchyDeletionProcedureAgent      HierarchyDeletionProcedureKind = "agent-work"
 	HierarchyDeletionProcedureController HierarchyDeletionProcedureKind = "controller-finalizer"
 )
 
@@ -104,9 +103,6 @@ type HierarchyDeletionCheckpoint struct {
 	NextOrdinal             int64  `json:"next_ordinal"`
 	CompletedCount          int64  `json:"completed_count"`
 	CompletedPrefixDigest   string `json:"completed_prefix_digest"`
-	ActiveChildOperationID  string `json:"active_child_operation_id,omitempty"`
-	ActiveChildAttemptID    string `json:"active_child_attempt_id,omitempty"`
-	ReceiptSummaryDigest    string `json:"receipt_summary_digest,omitempty"`
 	CompletionSummaryDigest string `json:"completion_summary_digest,omitempty"`
 }
 
@@ -125,7 +121,6 @@ type HierarchyDeletionTombstone struct {
 	TargetRevision   int64                          `json:"target_revision"`
 	OperationKind    HierarchyDeletionOperationKind `json:"operation_kind"`
 	OperationID      string                         `json:"operation_id"`
-	TaskOperationID  string                         `json:"task_operation_id"`
 	DeletionEpoch    int64                          `json:"deletion_epoch"`
 	CurrentTaskID    string                         `json:"current_task_id"`
 	Workspace        HierarchyDeletionWorkspace     `json:"workspace"`
@@ -143,7 +138,6 @@ type HierarchyDeletionIntent struct {
 	Schema           int                            `json:"schema"`
 	OperationKind    HierarchyDeletionOperationKind `json:"operation_kind"`
 	OperationID      string                         `json:"operation_id"`
-	TaskOperationID  string                         `json:"task_operation_id"`
 	DeletionEpoch    int64                          `json:"deletion_epoch"`
 	TargetKind       HierarchyDeletionTargetKind    `json:"target_kind"`
 	TargetID         string                         `json:"target_id"`
@@ -181,28 +175,23 @@ type HierarchyDeletionReplayLocator struct {
 }
 
 type HierarchyDeletionCleanupFence struct {
-	Schema                 int                         `json:"schema"`
-	ParentOperationID      string                      `json:"parent_operation_id"`
-	DeletionEpoch          int64                       `json:"deletion_epoch"`
-	TargetKind             HierarchyDeletionTargetKind `json:"target_kind"`
-	TargetID               string                      `json:"target_id"`
-	PlanDigest             *string                     `json:"plan_digest"`
-	Generation             int64                       `json:"generation"`
-	Phase                  HierarchyDeletionPhase      `json:"phase"`
-	CurrentTaskID          string                      `json:"current_task_id"`
-	ActiveActionOrdinal    *int64                      `json:"active_action_ordinal"`
-	ActiveChildOperationID string                      `json:"active_child_operation_id,omitempty"`
-	ActiveChildAttemptID   string                      `json:"active_child_attempt_id,omitempty"`
-	Dispatch               HierarchyDeletionDispatch   `json:"dispatch"`
-	UpdatedAt              time.Time                   `json:"updated_at"`
+	Schema            int                         `json:"schema"`
+	ParentOperationID string                      `json:"parent_operation_id"`
+	DeletionEpoch     int64                       `json:"deletion_epoch"`
+	TargetKind        HierarchyDeletionTargetKind `json:"target_kind"`
+	TargetID          string                      `json:"target_id"`
+	PlanDigest        *string                     `json:"plan_digest"`
+	Generation        int64                       `json:"generation"`
+	Phase             HierarchyDeletionPhase      `json:"phase"`
+	CurrentTaskID     string                      `json:"current_task_id"`
+	Dispatch          HierarchyDeletionDispatch   `json:"dispatch"`
+	UpdatedAt         time.Time                   `json:"updated_at"`
 }
 
 type HierarchyDeletionAgentProcedure struct {
-	ChildOperationID string               `json:"child_operation_id"`
-	TaskType         taskjournal.TaskType `json:"task_type"`
-	TypedProcedure   string               `json:"typed_procedure"`
-	InputDigest      string               `json:"input_digest"`
-	TimeoutSeconds   int64                `json:"timeout_seconds"`
+	TypedProcedure string `json:"typed_procedure"`
+	InputDigest    string `json:"input_digest"`
+	TimeoutSeconds int64  `json:"timeout_seconds"`
 }
 
 type HierarchyDeletionControllerProcedure struct {
@@ -228,32 +217,6 @@ type HierarchyDeletionAction struct {
 	ControllerProcedure  *HierarchyDeletionControllerProcedure `json:"controller_procedure,omitempty"`
 }
 
-type HierarchyDeletionAgentTerminal string
-
-const (
-	HierarchyDeletionAgentCompleted HierarchyDeletionAgentTerminal = "completed"
-	HierarchyDeletionAgentFailed    HierarchyDeletionAgentTerminal = "failed"
-	HierarchyDeletionAgentAborted   HierarchyDeletionAgentTerminal = "aborted"
-	HierarchyDeletionAgentTimedOut  HierarchyDeletionAgentTerminal = "timed_out"
-)
-
-type HierarchyDeletionAgentCompletionProof struct {
-	ChildOperationID   string                         `json:"child_operation_id"`
-	AttemptID          string                         `json:"attempt_id"`
-	TaskID             string                         `json:"task_id"`
-	AssignmentID       string                         `json:"assignment_id"`
-	AttemptGeneration  int64                          `json:"attempt_generation"`
-	ReceiptRevision    int64                          `json:"receipt_revision"`
-	ReceiptDigest      string                         `json:"receipt_digest"`
-	ProgressKey        string                         `json:"progress_key"`
-	ProgressDigest     string                         `json:"progress_digest"`
-	TerminalTaskDigest string                         `json:"terminal_task_digest"`
-	Terminal           HierarchyDeletionAgentTerminal `json:"terminal"`
-	ResultDigest       string                         `json:"result_digest,omitempty"`
-	ErrorDigest        string                         `json:"error_digest,omitempty"`
-	CheckpointDigest   string                         `json:"checkpoint_digest"`
-}
-
 type HierarchyDeletionControllerCompletionProof struct {
 	Finalizer                   string `json:"finalizer"`
 	FixedInputRevision          int64  `json:"fixed_input_revision"`
@@ -272,30 +235,6 @@ type HierarchyDeletionActionCompletion struct {
 	TargetID          string                                      `json:"target_id"`
 	TargetRevision    int64                                       `json:"target_revision"`
 	Executor          HierarchyDeletionProcedureKind              `json:"executor"`
-	AgentProof        *HierarchyDeletionAgentCompletionProof      `json:"agent_proof,omitempty"`
 	ControllerProof   *HierarchyDeletionControllerCompletionProof `json:"controller_proof,omitempty"`
 	CompletedAt       time.Time                                   `json:"completed_at"`
-}
-
-type HierarchyDeletionReceiptSummary struct {
-	Schema                  int       `json:"schema"`
-	ParentOperationID       string    `json:"parent_operation_id"`
-	DeletionEpoch           int64     `json:"deletion_epoch"`
-	ChildCount              int64     `json:"child_count"`
-	OrderedReceiptSetDigest string    `json:"ordered_receipt_set_digest"`
-	FinalCheckpointDigest   string    `json:"final_checkpoint_digest"`
-	CompletedAt             time.Time `json:"completed_at"`
-}
-
-type HierarchyDeletionCompletionSummary struct {
-	Schema                     int       `json:"schema"`
-	ParentOperationID          string    `json:"parent_operation_id"`
-	DeletionEpoch              int64     `json:"deletion_epoch"`
-	PlanCount                  int64     `json:"plan_count"`
-	PlanDigest                 string    `json:"plan_digest"`
-	OrderedCompletionSetDigest string    `json:"ordered_completion_set_digest"`
-	AgentReceiptSummaryDigest  string    `json:"agent_receipt_summary_digest"`
-	FinalCheckpointDigest      string    `json:"final_checkpoint_digest"`
-	CompletedAt                time.Time `json:"completed_at"`
-	RetainUntil                time.Time `json:"retain_until"`
 }

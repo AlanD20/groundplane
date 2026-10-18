@@ -11,7 +11,6 @@ import (
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	corenetwork "github.com/AlanD20/groundplane/internal/core/network"
 
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
@@ -25,7 +24,6 @@ type Service struct {
 	zoneReads      *zoneReadService
 	zoneMutations  *zoneCreationService
 	zoneImpacts    *zoneRemovalImpactService
-	zoneDeletionID zoneDeletionIdempotency
 	routeReads     *routeReadService
 	routeMutations *routeMutationService
 }
@@ -46,10 +44,10 @@ type idempotencyEvidenceRepository interface {
 // all Zone and Route decisions remain in this package.
 func NewEtcdService(
 	repository *networketcd.Repository,
-	plans *taskplanning.TaskPlanResolver,
 	coordinator *requestidempotency.Coordinator,
+	routePublisher *RouteWorkPublisher,
 ) (*Service, error) {
-	if repository == nil || plans == nil || coordinator == nil {
+	if repository == nil || coordinator == nil || routePublisher == nil {
 		return nil, errs.New(errs.KindInternal, "network capability dependencies are not configured")
 	}
 	zoneReads, err := newZoneReadService(repository)
@@ -88,48 +86,15 @@ func NewEtcdService(
 	if err != nil {
 		return nil, err
 	}
-	if err := plans.EnableRoutePlans(repository); err != nil {
-		return nil, err
-	}
-	routeMutations, err := newRouteMutationService(repository, routeMutationIdempotency, plans)
+	routeMutations, err := newRouteMutationService(repository, routeMutationIdempotency, routePublisher)
 	if err != nil {
 		return nil, err
 	}
-	routeDeletions, err := newRouteRemovalService(
-		repository,
-		plans,
-		&durableRouteRemovalIdempotency{coordinator: coordinator, repository: repository},
-	)
-	if err != nil {
-		return nil, err
-	}
-	routeMutations.deletions = routeDeletions
 	return &Service{
 		repository: repository,
 		zoneReads:  zoneReads, zoneMutations: zoneMutations, zoneImpacts: zoneImpacts,
-		zoneDeletionID: zoneDeletionIdempotency,
-		routeReads:     routeReads, routeMutations: routeMutations,
+		routeReads: routeReads, routeMutations: routeMutations,
 	}, nil
-}
-
-// NewBackingZoneCascadeExecutor constructs the Controller executor for the
-// sole Zone dependency-cascade exception. The executor stays part of the
-// Network capability while app supplies already-constructed collaborators.
-func (service *Service) NewBackingZoneCascadeExecutor(
-	detaches backingZoneCascadeDetaches,
-	retries backingZoneCascadeRetries,
-	plans *taskplanning.TaskPlanResolver,
-) (*backingZoneCascadeService, error) {
-	if service == nil || service.repository == nil || service.zoneDeletionID == nil {
-		return nil, errs.New(errs.KindInternal, "network capability is not configured")
-	}
-	return newBackingZoneCascadeService(
-		service.repository,
-		detaches,
-		retries,
-		plans,
-		service.zoneDeletionID,
-	)
 }
 
 func (service *Service) GetZone(

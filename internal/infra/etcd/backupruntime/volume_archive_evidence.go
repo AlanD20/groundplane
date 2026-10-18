@@ -4,11 +4,9 @@ import (
 	"encoding/hex"
 
 	"github.com/AlanD20/groundplane/internal/common/backupvolumetransfer"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupvolumemanifest"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"github.com/oklog/ulid/v2"
 )
 
 // BackupVolumeArchiveEvidence is selected capture authority retained with a
@@ -22,40 +20,20 @@ type BackupVolumeArchiveEvidence struct {
 }
 
 type BackupVolumeManifestReference struct {
-	TaskID               string `json:"task_id"`
-	AssignmentID         string `json:"assignment_id"`
-	StepID               string `json:"step_id"`
-	TransferID           string `json:"transfer_id"`
-	AuthoritySHA256      string `json:"authority_sha256"`
-	AgentID              string `json:"agent_id"`
-	AgentGeneration      uint64 `json:"agent_generation"`
-	AssignmentGeneration uint64 `json:"assignment_generation"`
-	CursorRevision       int64  `json:"cursor_revision"`
+	Binding        backupvolumetransfer.Binding `json:"binding"`
+	CursorRevision int64                        `json:"cursor_revision"`
 }
 
 func (reference BackupVolumeManifestReference) Valid() bool {
-	_, transferErr := ulid.ParseStrict(reference.TransferID)
-	return ids.Validate(ids.KindTask, reference.TaskID) == nil &&
-		ids.Validate(ids.KindAssignment, reference.AssignmentID) == nil &&
-		ids.Validate(ids.KindStep, reference.StepID) == nil && transferErr == nil &&
-		recordcodec.ValidSHA256(reference.AuthoritySHA256) && ids.Validate(ids.KindAgent, reference.AgentID) == nil &&
-		reference.AgentGeneration > 0 && reference.AssignmentGeneration > 0 && reference.CursorRevision > 0
+	return reference.Binding.Validate() == nil && reference.CursorRevision > 0 &&
+		reference.Binding.Direction == agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_CAPTURE
 }
 
 func (reference BackupVolumeManifestReference) Owner() (backupvolumemanifest.Owner, error) {
 	if !reference.Valid() {
 		return backupvolumemanifest.Owner{}, invalidBackupRuntimeRecord("Volume manifest reference is invalid")
 	}
-	digest, err := hex.DecodeString(reference.AuthoritySHA256)
-	if err != nil {
-		return backupvolumemanifest.Owner{}, err
-	}
-	binding := backupvolumetransfer.Binding{TaskID: reference.TaskID,
-		AssignmentID: reference.AssignmentID, StepID: reference.StepID, TransferID: reference.TransferID,
-		Direction: agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_CAPTURE}
-	copy(binding.AuthorityDigest[:], digest)
-	owner := backupvolumemanifest.Owner{Binding: binding, AgentID: reference.AgentID,
-		AgentGeneration: reference.AgentGeneration, AssignmentGeneration: reference.AssignmentGeneration}
+	owner := backupvolumemanifest.Owner{Binding: reference.Binding}
 	return owner, owner.Validate()
 }
 

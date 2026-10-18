@@ -21,6 +21,11 @@ func unstartedEvidencePrefix(workID string) string {
 
 func (repository *InputRepository) PrepareUnstartedRetry(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
+	if task.Action == workexecution.ActionRemove && task.Scope.TenantID == "" && item.Result != nil &&
+		item.Result.ID == ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "cascade-publication-rejection") {
+		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable,
+			"Zone removal was rejected before execution; submit a new removal to capture current consumers and approval")
+	}
 	if item.Operation != workexecution.Network || task.Stop != nil || task.CollectionStartedAt != nil ||
 		item.AttemptNumber != 0 || item.Input == nil || item.Result == nil || item.Phase != workexecution.Settled ||
 		item.Outcome != workexecution.Failed || item.Cleanup != workexecution.CleanupNone || item.ForwardRevoked {

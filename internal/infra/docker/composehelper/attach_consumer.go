@@ -18,6 +18,7 @@ type AttachConsumerObservation struct {
 	NetworkID string
 	ServiceID string
 	Detached  bool
+	Connected bool
 	At        time.Time
 }
 
@@ -37,16 +38,22 @@ func ApplyAttachConsumerDocker(ctx context.Context, taskRunner runner.Runner, in
 		return AttachConsumerObservation{}, err
 	}
 	for _, containerID := range containers {
-		if _, found := connected[containerID]; !found {
+		_, found := connected[containerID]
+		connect := input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT
+		if found == connect {
 			continue
 		}
-		if _, err := runNetworkWork(ctx, taskRunner, "network", "disconnect", networkID, containerID); err != nil {
+		action := "disconnect"
+		if connect {
+			action = "connect"
+		}
+		if _, err := runNetworkWork(ctx, taskRunner, "network", action, networkID, containerID); err != nil {
 			return AttachConsumerObservation{}, err
 		}
 	}
 	observation, err := ObserveAttachConsumerDocker(ctx, taskRunner, input)
-	if err == nil && !observation.Detached {
-		err = errs.New(errs.KindStateConflict, "Service still has a backing-network connection after Detach")
+	if err == nil && ((input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT && !observation.Connected) || (input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT && !observation.Detached)) {
+		err = errs.New(errs.KindStateConflict, "Service backing-network membership does not match the requested action")
 	}
 	return observation, err
 }
@@ -63,15 +70,16 @@ func ObserveAttachConsumerDocker(ctx context.Context, taskRunner runner.Runner, 
 	if err != nil {
 		return AttachConsumerObservation{}, err
 	}
-	detached := true
+	detached, fullyConnected := true, true
 	for _, containerID := range containers {
 		if _, found := connected[containerID]; found {
 			detached = false
-			break
+		} else {
+			fullyConnected = false
 		}
 	}
 	return AttachConsumerObservation{NetworkID: input.NetworkId, ServiceID: input.ServiceId,
-		Detached: detached, At: time.Now().UTC()}, nil
+		Detached: detached, Connected: fullyConnected, At: time.Now().UTC()}, nil
 }
 
 func validateAttachConsumerExecution(ctx context.Context, taskRunner runner.Runner, input *agentpb.AttachConsumerTransition) error {

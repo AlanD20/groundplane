@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
 
@@ -46,7 +46,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		}
 		root.rootSlug = tenant.Slug
 		root.workspace = hierarchydeletion.HierarchyDeletionWorkspace{Type: "tenant", TenantID: tenant.ID}
-		root.owner, err = taskjournal.TenantTaskOwner(tenant.ID)
+		root.scope = workexecution.Scope{TenantID: tenant.ID}
 		root.coordinationKeys = []string{hierarchydeletion.HierarchyCoordinationKey(string(targetKind), targetID)}
 	case hierarchydeletion.HierarchyDeletionTargetProject:
 		project, decodeErr := hierarchyrecord.DecodeProject(result.Entry.Value)
@@ -54,7 +54,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 			return hierarchyDeletionRoot{}, 0, hierarchyDeletionUnavailable(targetKind)
 		}
 		root.rootSlug = project.Slug
-		root.owner, err = taskjournal.ProjectTaskOwner(project)
+		root.scope = workexecution.Scope{TenantID: project.TenantID, ProjectID: project.ID}
 		if project.Kind == hierarchyrecord.ProjectKindBacking {
 			root.workspace = hierarchydeletion.HierarchyDeletionWorkspace{Type: "platform"}
 		} else {
@@ -72,7 +72,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		}
 		root.rootSlug = project.Slug
 		root.workspace = hierarchydeletion.HierarchyDeletionWorkspace{Type: "platform"}
-		root.owner, err = taskjournal.ProjectTaskOwner(project)
+		root.scope = workexecution.Scope{TenantID: project.TenantID, ProjectID: project.ID}
 		root.coordinationKeys = []string{
 			hierarchydeletion.HierarchyCoordinationKey(
 				string(hierarchydeletion.HierarchyDeletionTargetProject),
@@ -201,10 +201,7 @@ func (repository *HierarchyDeletionRepository) readEnvironmentParentsAtRevision(
 	root.primaryFences = append(root.primaryFences, etcdstore.Condition{
 		Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision,
 	})
-	root.owner, err = taskjournal.EnvironmentTaskOwner(project, environment)
-	if err != nil {
-		return hierarchyDeletionRoot{}, err
-	}
+	root.scope = workexecution.Scope{TenantID: project.TenantID, ProjectID: project.ID, EnvironmentID: environment.ID}
 	root.coordinationKeys = []string{
 		hierarchydeletion.HierarchyCoordinationKey(
 			string(hierarchydeletion.HierarchyDeletionTargetProject),
@@ -231,12 +228,12 @@ func prepareHierarchyDeletionPublication(
 	begin HierarchyDeletionBegin,
 	root hierarchyDeletionRoot,
 	snapshotRevision int64,
-) (hierarchydeletion.HierarchyDeletionOperation, []etcdstore.Condition, []etcdstore.Mutation, TaskInitiation, error) {
+) (hierarchydeletion.HierarchyDeletionOperation, []etcdstore.Condition, []etcdstore.Mutation, error) {
 	if begin.OperationKind == hierarchydeletion.HierarchyDeletionOperationProject &&
 		root.workspace.Type == "platform" ||
 		begin.OperationKind == hierarchydeletion.HierarchyDeletionOperationBacking &&
 			root.workspace.Type != "platform" {
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy deletion Project kind must use its exclusive permanent-delete authority",
 		)
@@ -251,28 +248,28 @@ func prepareHierarchyDeletionPublication(
 		}
 	}
 	if targetCoordinationIndex < 0 {
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	deletionEpoch := root.coordination[targetCoordinationIndex].Record.MutationEpoch + 1
 	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(begin.TargetKind), begin.TargetID)
 	lockKey := hierarchydeletion.HierarchyDeletionLockKey(string(begin.TargetKind), begin.TargetID)
 	replayKey, err := hierarchydeletion.HierarchyDeletionReplayTargetKey(begin.OperationID)
 	if err != nil {
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, err
 	}
 	fenceKey, err := hierarchydeletion.HierarchyDeletionCleanupFenceKey(begin.OperationID)
 	if err != nil {
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, err
 	}
 	intentKey, err := hierarchydeletion.HierarchyDeletionIntentKey(begin.OperationID)
 	if err != nil {
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, err
 	}
 	initialDigest := sha256.Sum256([]byte("gp-deletion-completed-prefix-v1\x00"))
 	tombstone := hierarchydeletion.HierarchyDeletionTombstone{
 		Schema: 1, TargetKind: begin.TargetKind, TargetID: begin.TargetID,
 		TargetRevision: root.targetRevision, OperationKind: begin.OperationKind,
-		OperationID: begin.OperationID, TaskOperationID: begin.TaskOperationID,
+		OperationID:   begin.OperationID,
 		DeletionEpoch: deletionEpoch, CurrentTaskID: begin.TaskID, Workspace: root.workspace,
 		SnapshotRevision: snapshotRevision, Phase: hierarchydeletion.HierarchyDeletionPlanning,
 		Checkpoint: hierarchydeletion.HierarchyDeletionCheckpoint{
@@ -282,8 +279,8 @@ func prepareHierarchyDeletionPublication(
 	}
 	intent := hierarchydeletion.HierarchyDeletionIntent{
 		Schema: 1, OperationKind: begin.OperationKind, OperationID: begin.OperationID,
-		TaskOperationID: begin.TaskOperationID, DeletionEpoch: deletionEpoch,
-		TargetKind: begin.TargetKind, TargetID: begin.TargetID, TargetRevision: root.targetRevision,
+		DeletionEpoch: deletionEpoch,
+		TargetKind:    begin.TargetKind, TargetID: begin.TargetID, TargetRevision: root.targetRevision,
 		Workspace: root.workspace, RootSlug: root.rootSlug, SnapshotRevision: snapshotRevision,
 		TimeoutSeconds: int64(hierarchydeletion.AttemptTimeout / time.Second), CreatedAt: begin.CreatedAt,
 	}
@@ -311,7 +308,7 @@ func prepareHierarchyDeletionPublication(
 		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
 	)
 	if err != nil {
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, err
 	}
 	intentValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
 		intent,
@@ -319,7 +316,7 @@ func prepareHierarchyDeletionPublication(
 	)
 	if err != nil {
 		clear(tombstoneValue)
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, err
 	}
 	lockValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
 		lock,
@@ -328,7 +325,7 @@ func prepareHierarchyDeletionPublication(
 	if err != nil {
 		clear(tombstoneValue)
 		clear(intentValue)
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, err
 	}
 	replayValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
 		replay,
@@ -338,7 +335,7 @@ func prepareHierarchyDeletionPublication(
 		clear(tombstoneValue)
 		clear(intentValue)
 		clear(lockValue)
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, err
 	}
 	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
 		fence,
@@ -349,7 +346,7 @@ func prepareHierarchyDeletionPublication(
 		clear(intentValue)
 		clear(lockValue)
 		clear(replayValue)
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, err
 	}
 	mutatedRootValue, err := hierarchyDeletionRootValue(begin.TargetKind, root.targetValue, begin.TaskID)
 	if err != nil {
@@ -358,7 +355,7 @@ func prepareHierarchyDeletionPublication(
 		clear(lockValue)
 		clear(replayValue)
 		clear(fenceValue)
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, err
 	}
 	conditions := slices.Concat(root.primaryFences, root.referenceFences)
 	conditions = append(conditions,
@@ -379,26 +376,15 @@ func prepareHierarchyDeletionPublication(
 		encoded, encodeErr := hierarchydeletion.EncodeHierarchyCoordination(next)
 		if encodeErr != nil {
 			etcdstore.ClearMutationValues(mutations)
-			return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, encodeErr
+			return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, encodeErr
 		}
 		key := root.coordinationKeys[index]
 		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: current.Revision})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded})
 	}
-	initiationFences := append([]etcdstore.Condition(nil), root.primaryFences...)
-	for index, current := range root.coordination {
-		initiationFences = append(initiationFences, etcdstore.Condition{
-			Key: root.coordinationKeys[index], ModRevision: current.Revision,
-		})
-	}
-	initiation, err := newTaskInitiation(root.owner, taskjournal.TaskActorOperator, initiationFences...)
-	if err != nil {
-		etcdstore.ClearMutationValues(mutations)
-		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
-	}
 	return hierarchydeletion.HierarchyDeletionOperation{
-		Tombstone: tombstone, Fence: fence, Intent: intent, UpdatedAt: begin.CreatedAt,
-	}, conditions, mutations, initiation, nil
+		Tombstone: tombstone, Fence: fence, Intent: intent, Scope: root.scope, UpdatedAt: begin.CreatedAt,
+	}, conditions, mutations, nil
 }
 
 func hierarchyDeletionRootValue(

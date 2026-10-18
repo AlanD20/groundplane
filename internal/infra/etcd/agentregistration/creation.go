@@ -2,6 +2,7 @@ package agentregistration
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -26,6 +27,11 @@ func (repository *Repository) CreateSingleton(
 	if err := localagentrecord.ValidateLocalAgentRecord(record); err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
 	}
+	binding, err := hostbindings.PrepareLocalEnrollment(ctx, repository.store, record.ID)
+	if err != nil {
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
+	}
+	defer etcdstore.ClearMutationValues(binding.Mutations)
 	primaryValue, configValue, tokenValue, reference, err := localagentrecord.EncodeLocalAgentValues(record)
 	if err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
@@ -42,6 +48,8 @@ func (repository *Repository) CreateSingleton(
 		conditions[index] = etcdstore.Condition{Key: key}
 		mutations[index] = etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: values[index]}
 	}
+	conditions = append(conditions, binding.Conditions...)
+	mutations = append(mutations, binding.Mutations...)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err

@@ -101,7 +101,6 @@ func (repository *Planner) freezeEnvironmentAttachMembership(ctx context.Context
 			if err != nil {
 				return nil, err
 			}
-			node.fixedInputDigest = digest
 			node.ProcedureInput.AgentWork.InputDigest = digest
 			nodes = append(nodes, node)
 			required = []string{node.NodeID}

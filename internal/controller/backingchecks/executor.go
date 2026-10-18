@@ -7,87 +7,101 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backingaccess"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	checkrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-type assignments interface {
-	GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
-}
 type exchange interface {
 	CheckBackingAccess(context.Context, string, *agentpb.CheckBackingAccess) (*agentpb.BackingAccessResult, error)
 }
 
 type Executor struct {
-	repository  *checkrecord.Repository
-	assignments assignments
-	exchange    exchange
-	protector   *secretvalue.Protector
+	repository *checkrecord.Repository
+	exchange   exchange
+	protector  *secretvalue.Protector
 }
 
 func NewExecutor(
 	repository *checkrecord.Repository,
-	tasks assignments,
 	channel exchange,
 	protector *secretvalue.Protector,
 ) (*Executor, error) {
-	if repository == nil || tasks == nil || channel == nil || protector == nil {
+	if repository == nil || channel == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "Backing access check executor dependencies are required")
 	}
-	return &Executor{repository: repository, assignments: tasks, exchange: channel, protector: protector}, nil
+	return &Executor{repository: repository, exchange: channel, protector: protector}, nil
 }
 
-func (executor *Executor) Execute(ctx context.Context, task etcd.TaskRecord) error {
-	if ctx == nil || task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskCheck ||
-		task.Status != taskjournal.TaskStatusRunning || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceAttach ||
-		len(
-			task.Params,
-		) != 2 || len(task.Steps) != 0 || len(task.Materializations) != 0 || task.Configuration != nil || task.RenderGeneration != 1 {
+func (executor *Executor) Execute(ctx context.Context, delivery workqueue.Delivery) error {
+	return executor.recordFailure(ctx, delivery, executor.execute(ctx, delivery))
+}
+
+func (executor *Executor) recordFailure(ctx context.Context, delivery workqueue.Delivery, err error) error {
+	if err == nil || ctx == nil {
+		return err
+	}
+	settlement, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+	defer cancel()
+	loaded, loadErr := executor.repository.Load(settlement, delivery.Item.Item.TaskID)
+	if loadErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, loadErr)
+	}
+	defer loaded.Record.Clear()
+	if loaded.Record.Phase == checkrecord.Finished || loaded.Record.Phase == checkrecord.CleanupRequired {
+		return err
+	}
+	attempt := delivery.Attempt.Attempt
+	journal, journalErr := checkrecord.NewJournal(executor.repository, loaded.Record.Owner, attempt.ID, attempt.Executor)
+	if journalErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, journalErr)
+	}
+	if stopErr := journal.Stop(settlement, backingaccess.MachineFailure(err), time.Now().UTC()); stopErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, stopErr)
+	}
+	return err
+}
+
+func (executor *Executor) execute(ctx context.Context, delivery workqueue.Delivery) error {
+	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
+	if ctx == nil || item.Validate() != nil || attempt.Validate() != nil ||
+		item.Operation != workexecution.BackingCheck || item.Phase != workexecution.Running ||
+		attempt.Executor.Executor != workexecution.Controller || item.ActiveAttemptID != attempt.ID ||
+		attempt.TaskID != item.TaskID || attempt.WorkItemID != item.ID || attempt.StartedAt == nil || attempt.FinishedAt != nil ||
+		item.Input == nil || *item.Input != attempt.Input {
 		return errs.New(errs.KindValidationFailed, "Backing access check Task is invalid")
 	}
-	loaded, err := executor.repository.Load(ctx, task.ID)
+	loaded, err := executor.repository.Load(ctx, item.TaskID)
 	if err != nil {
 		return err
 	}
 	record := loaded.Record
 	defer record.Clear()
 	planHash, err := checkrecord.PlanHash(record)
-	if err != nil || record.Owner.TaskID != task.ID || record.Owner.PlanID != task.PlanID ||
-		record.Owner.OperationID != task.OperationID ||
-		record.Owner.EnvironmentID != task.Owner.EnvironmentID ||
-		record.Source.Parameters.AttachID != task.Target ||
-		record.RetryOf != task.RetryOf ||
-		planHash != task.PlanHash ||
-		record.ConfigurationSHA256 != task.Params[taskjournal.TaskBackingCheckInputParam] {
+	if err != nil || record.Owner.TaskID != item.TaskID || record.Owner.WorkItemID != item.ID ||
+		record.Owner.PlanID != attempt.Input.ID || record.Source.Parameters.AttachID != item.TargetID || planHash != attempt.Input.SHA256 {
 		return errs.New(errs.KindStateConflict, "Backing access check differs from its sealed Task input")
 	}
 	if record.Phase == checkrecord.Finished {
-		return outcomeError(record, task.RetryOf != "")
+		return outcomeError(record, attempt.Direction == workexecution.Recovery)
 	}
-	claim, err := executor.assignments.GetTaskAssignment(ctx, task.ID)
-	if err != nil {
-		return err
-	}
-	claimed := claim.Task.Record
-	if claimed.PlanID != task.PlanID || claimed.PlanHash != task.PlanHash || claimed.OperationID != task.OperationID ||
-		claimed.Target != task.Target {
-		return errs.New(errs.KindStateConflict, "Backing access check Task claim changed")
-	}
-	journal, err := checkrecord.NewJournal(executor.repository, record.Owner, claim.Assignment.Record.AssignmentID)
+	journal, err := checkrecord.NewJournal(executor.repository, record.Owner, attempt.ID, attempt.Executor)
 	if err != nil {
 		return err
 	}
 	if record.Phase != checkrecord.Ready {
-		return executor.resume(ctx, record, journal)
+		return executor.resume(ctx, record, journal, attempt.Direction == workexecution.Recovery)
+	}
+	if attempt.Direction != workexecution.Forward {
+		return errs.New(errs.KindStateConflict, "unstarted Backing access probe has no cleanup to execute")
 	}
 	if err := ctx.Err(); err != nil {
 		return finishUnstarted(ctx, journal, err)
 	}
-	if !time.Now().UTC().Before(claim.Assignment.Record.Deadline) {
+	if !time.Now().UTC().Before(attempt.Deadline) {
 		return finishUnstarted(ctx, journal, context.DeadlineExceeded)
 	}
 	started := false
@@ -177,7 +191,7 @@ func (executor *Executor) recordResult(ctx context.Context, record checkrecord.R
 	return failureError(latest.Record.ProbeFailure)
 }
 
-func (executor *Executor) resume(ctx context.Context, record checkrecord.Record, journal *checkrecord.Journal) error {
+func (executor *Executor) resume(ctx context.Context, record checkrecord.Record, journal *checkrecord.Journal, cleanupRetry bool) error {
 	settlement, cancel := context.WithTimeout(context.WithoutCancel(ctx), backingaccess.ExchangeTimeout+15*time.Second)
 	defer cancel()
 	if record.Phase == checkrecord.Checking && record.ProbeRecorded && !record.CleanupPending {
@@ -209,7 +223,7 @@ func (executor *Executor) resume(ctx context.Context, record checkrecord.Record,
 	}
 	return outcomeError(
 		checkrecord.Record{Outcome: checkrecord.Interrupted, Failure: checkrecord.InterruptedFailure},
-		record.RetryOf != "",
+		cleanupRetry,
 	)
 }
 

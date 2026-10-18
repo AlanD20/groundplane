@@ -29,7 +29,43 @@ func WorkCaptureKey(workID string) string {
 	return "/v1/private/attach-removal-work-inputs/" + workID
 }
 
+// EncodePreparedCapture seals encrypted inputs before pins activate. Prepared
+// captures cannot be decoded as active work or authorize Agent execution.
+func EncodePreparedCapture(capture WorkCapture) ([]byte, error) {
+	if capture.Pins != nil || capture.validate(false) != nil {
+		return nil, recordcodec.CorruptRecord()
+	}
+	raw, err := recordcodec.Encode("attach-removal-prepared-input", capture)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > MaximumInputBytes {
+		clear(raw)
+		return nil, recordcodec.CorruptRecord()
+	}
+	return raw, nil
+}
+
+func DecodePreparedCapture(raw []byte) (WorkCapture, error) {
+	if len(raw) > MaximumInputBytes {
+		return WorkCapture{}, recordcodec.CorruptRecord()
+	}
+	capture, err := recordcodec.Decode[WorkCapture](raw, "attach-removal-prepared-input")
+	if err != nil || capture.Pins != nil || capture.validate(false) != nil {
+		capture.Clear()
+		return WorkCapture{}, recordcodec.CorruptRecord()
+	}
+	if capture.Hook != nil {
+		capture.Hook.SecretSources = append([]tasksecretpinrecord.Record(nil), capture.Sources...)
+	}
+	return capture, nil
+}
+
 func (capture WorkCapture) Validate() error {
+	return capture.validate(true)
+}
+
+func (capture WorkCapture) validate(active bool) error {
 	if capture.Schema != 1 || ids.Validate(ids.KindTask, capture.TaskID) != nil ||
 		ids.Validate(ids.KindWorkItem, capture.WorkItemID) != nil || ids.Validate(ids.KindOperation, capture.OperationID) != nil ||
 		ids.Validate(ids.KindPlan, capture.Action.ID) != nil || !recordcodec.ValidSHA256(capture.Action.SHA256) ||
@@ -58,7 +94,16 @@ func (capture WorkCapture) Validate() error {
 		}
 		return nil
 	}
-	if len(capture.Sources) > tasksecretpins.MaximumPins || capture.Pins == nil || capture.Pins.Validate() != nil ||
+	if len(capture.Sources) > tasksecretpins.MaximumPins {
+		return recordcodec.CorruptRecord()
+	}
+	if !active {
+		if capture.Pins != nil {
+			return recordcodec.CorruptRecord()
+		}
+		return nil
+	}
+	if capture.Pins == nil || capture.Pins.Validate() != nil ||
 		capture.Pins.OperationID != capture.OperationID || capture.Pins.TaskID != capture.TaskID ||
 		capture.Pins.WorkItemID != capture.WorkItemID || !capture.Pins.MatchesSources(capture.Sources) {
 		return recordcodec.CorruptRecord()

@@ -256,7 +256,16 @@ func ValidateBackupPruneExecutionStep(
 	if step == nil || step.GetBackupStep().GetStepId() != step.GetStepId() {
 		return errs.New(errs.KindValidationFailed, "backup prune step binding is invalid")
 	}
-	authority, err := executionplan.ValidateBackupStepAuthority(step.GetBackupStep())
+	return ValidateBackupPruneSourceAuthority(dispatch, item, plan.BackupScope, step.GetBackupStep(), index)
+}
+
+func ValidateBackupPruneSourceAuthority(dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
+	item PruneExecutionEvidence, scope *agentpb.BackupPlanScope, step *agentpb.BackupStepAuthority, index int,
+) error {
+	if index < 0 || index >= len(dispatch.RecoveryPointIDs) || scope == nil {
+		return errs.New(errs.KindValidationFailed, "backup prune source ordinal is invalid")
+	}
+	authority, err := executionplan.ValidateBackupStepAuthority(step)
 	if err != nil {
 		return err
 	}
@@ -267,7 +276,7 @@ func ValidateBackupPruneExecutionStep(
 		(item.PruneRevision == 0 && (item.Prune.State != backupruntime.BackupPrunePending ||
 			item.Prune.TaskID != "" || item.Prune.DispatchAttempts != 0)) || item.SourceRevision <= 0 ||
 		point.EnvironmentID != dispatch.EnvironmentID || dispatch.RecoveryPointIDs[index] != point.ID ||
-		plan.GetBackupScope().GetEnvironment().GetModRevision() != item.EnvironmentRevision ||
+		scope.GetEnvironment().GetModRevision() != item.EnvironmentRevision ||
 		authority.StepDeadlineUnixNano != uint64(dispatch.CreatedAt.Add(30*time.Minute).UnixNano()) {
 		return errs.New(errs.KindValidationFailed, "backup prune snapshot authority is invalid")
 	}

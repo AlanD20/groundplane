@@ -183,7 +183,7 @@ func (repository *AttachRepository) LoadBackingCheckSource(ctx context.Context,
 	if err != nil {
 		return BackingCheckSource{}, err
 	}
-	if agentID != runtime.Source.AgentID {
+	if agentID != runtime.Source.Executor.AgentID {
 		return BackingCheckSource{}, errs.New(errs.KindStateConflict, "consumer runtime belongs to another Agent")
 	}
 	agentKey := localagents.LocalAgentPrimaryKey(agentID)

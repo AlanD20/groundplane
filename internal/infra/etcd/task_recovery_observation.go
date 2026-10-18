@@ -57,7 +57,6 @@ func (repository *TaskRepository) GetTaskRecovery(
 	}
 	keys := []string{
 		taskassignments.ReleaseRecoveryKey(task.ID),
-		taskassignments.ComponentRecoveryKey(task.ID),
 		taskassignments.ServiceAbsenceRecoveryKey(task.ID),
 		taskassignments.ManagedNetworkRecoveryKey(task.ID),
 		taskassignments.AttachRemovalRecoveryKey(task.ID),
@@ -74,7 +73,7 @@ func (repository *TaskRepository) GetTaskRecovery(
 	defer keyvalue.ClearValues(read.Values)
 	var observation *TaskRecoverySnapshot
 	var assignmentID, digest string
-	for index, value := range read.Values[:5] {
+	for index, value := range read.Values[:4] {
 		if value == nil {
 			continue
 		}
@@ -92,8 +91,8 @@ func (repository *TaskRepository) GetTaskRecovery(
 	if err := taskjournal.ValidateTaskResult(observation.PrimaryResult, task.Steps, observation.PrimaryStatus); err != nil {
 		return nil, taskassignments.CorruptTaskAssignment()
 	}
-	value := read.Values[5]
-	if value == nil || value.Key != keys[5] {
+	value := read.Values[4]
+	if value == nil || value.Key != keys[4] {
 		return nil, taskassignments.CorruptTaskAssignment()
 	}
 	assignment, err := taskassignments.DecodeTaskAssignment(value.Value)
@@ -103,9 +102,9 @@ func (repository *TaskRepository) GetTaskRecovery(
 		return nil, taskassignments.CorruptTaskAssignment()
 	}
 	observation.State = "pending"
-	if proof := read.Values[6]; proof != nil {
+	if proof := read.Values[5]; proof != nil {
 		proofAssignment, decodeErr := taskassignments.DecodeTaskAssignment(proof.Value)
-		if decodeErr != nil || proof.Key != keys[6] || proofAssignment.TaskID != task.ID ||
+		if decodeErr != nil || proof.Key != keys[5] || proofAssignment.TaskID != task.ID ||
 			proofAssignment.AssignmentID != assignmentID || proofAssignment.ReleaseRecoveryRecordSHA256 != digest ||
 			proofAssignment.ExecutionEpoch != assignment.ExecutionEpoch {
 			return nil, taskassignments.CorruptTaskAssignment()
@@ -143,7 +142,7 @@ func taskRecoveryRecordObservation(
 	var taskID, operationID, planHash, assignmentID, digest string
 	var err error
 	switch kind {
-	case 0, 1, 2:
+	case 0, 1:
 		record, decodeErr := taskassignments.DecodeReleaseRecoveryRecord(value)
 		if decodeErr != nil {
 			return nil, "", "", decodeErr
@@ -153,7 +152,7 @@ func taskRecoveryRecordObservation(
 		observation.PrimaryStatus, observation.PrimaryResult = record.PrimaryStatus, record.PrimaryResult
 		observation.StepIDs, observation.Deadline = slices.Clone(record.RecoveryStepIDs), &record.RecoveryDeadline
 		observation.CompletedSteps = &record.Cursor
-	case 3:
+	case 2:
 		record, decodeErr := taskassignments.DecodeManagedNetworkRecoveryRecord(value)
 		if decodeErr != nil {
 			return nil, "", "", decodeErr
@@ -167,7 +166,7 @@ func taskRecoveryRecordObservation(
 		observation.PrimaryStatus, observation.PrimaryResult = record.PrimaryStatus, *primary
 		observation.StepIDs, observation.Deadline = slices.Clone(record.SettlementStepIDs), &record.RecoveryDeadline
 		observation.OriginalExecutionEpoch = record.OriginalExecutionEpoch
-	case 4:
+	case 3:
 		record, decodeErr := taskassignments.DecodeAttachRemovalRecoveryRecord(value)
 		if decodeErr != nil {
 			return nil, "", "", decodeErr

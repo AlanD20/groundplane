@@ -39,12 +39,6 @@ func validateRequest(
 	if selected == nil || request.TimeoutSeconds > selected.TimeoutSeconds {
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step selection is invalid")
 	}
-	if request.GetBackupVolumeConsumer() != nil {
-		return validateBackupVolumeConsumerRequest(request, plan, selected)
-	}
-	if request.GetBackupPostgresConsumer() != nil || request.GetBackupMysqlConsumer() != nil {
-		return validateBackupDatabaseConsumerRequest(request, plan, selected)
-	}
 	artifactID := ""
 	var artifact *agentpb.ComposeArtifact
 	switch payload := selected.Payload.(type) {
@@ -98,18 +92,6 @@ func validateRequest(
 		artifactID = payload.CandidateRestorationProbe.CandidateArtifactId
 	case *agentpb.ExecutionStep_CandidateRestorationCompensate:
 		artifactID = payload.CandidateRestorationCompensate.CandidateArtifactId
-	case *agentpb.ExecutionStep_ComponentRestorationCompensate:
-		procedure := plan.GetComponentRecoveryProcedure()
-		artifactID = procedure.GetCandidateArtifactId()
-		if procedure.GetPredecessor() != nil {
-			artifactID = procedure.GetPredecessor().GetPriorArtifactId()
-		}
-	case *agentpb.ExecutionStep_ComponentRestorationProbe:
-		procedure := plan.GetComponentRecoveryProcedure()
-		if executionplan.ComponentConfigurationAction(plan) == nil || procedure.GetPredecessor() == nil {
-			return nil, nil, nil, errs.New(errs.KindValidationFailed, "Component configuration probe has no retained predecessor")
-		}
-		artifactID = procedure.GetPredecessor().GetPriorArtifactId()
 	default:
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step payload is unsupported")
 	}
@@ -155,19 +137,6 @@ func componentActionArtifact(
 	componentID string,
 ) (*agentpb.ComposeArtifact, error) {
 	operation, steps, artifacts := plan.GetOperation(), plan.GetSteps(), plan.GetArtifacts()
-	if candidateID, captured := executionplan.ComponentActionCandidateArtifactID(plan, componentID); captured {
-		var candidate *agentpb.ComposeArtifact
-		for _, artifact := range artifacts {
-			if artifact.GetArtifactId() == candidateID {
-				candidate = artifact
-				break
-			}
-		}
-		if candidate == nil {
-			return nil, errs.New(errs.KindValidationFailed, "Compose helper Component recovery candidate is absent")
-		}
-		artifacts = []*agentpb.ComposeArtifact{candidate}
-	}
 	if operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
 		materializations := 0
 		boundArtifactID := ""

@@ -126,7 +126,7 @@ func (repository *RouteRepository) LoadTunnelCheckSource(ctx context.Context, en
 	if err != nil {
 		return EdgeCheckSource{}, err
 	}
-	if runtime.Source.AgentID != agentID {
+	if runtime.Source.Executor.AgentID != agentID {
 		return EdgeCheckSource{}, errs.New(errs.KindStateConflict, "Tunnel origin belongs to another Agent")
 	}
 	connectorZones := source.connector.Record.Component.Desired.Config.CloudflareTunnel.ZoneIDs

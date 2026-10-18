@@ -65,7 +65,7 @@ func (repository *BackupPolicyRepository) ReplaceBackupPolicyProtected(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearRouteHeadPublication(publication)
+	defer clearDesiredMutationFragment(publication)
 	conditions, mutations, classify, err := publication.bindDirectDesired(plan.Conditions(), plan.Mutations(),
 		func(_ int64, values []*etcdstore.KeyValue) error { return plan.ClassifyConflict(values) })
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 
 func prepareAttachDesiredAuthoring(ctx context.Context, store hierarchyStore, record attachrecord.Record,
 	oldName string, remove bool, marker idempotencyrecord.IdempotencyMarker,
-) (routeHeadPublication, error) {
+) (desiredMutationFragment, error) {
 	return prepareDirectDesiredProjectionPublication(
 		ctx,
 		store,

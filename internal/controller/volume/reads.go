@@ -105,8 +105,26 @@ func (service *ReadService) ListVolumeViews(
 		return apiTypes.Page[apiTypes.Volume]{}, err
 	}
 	items := make([]apiTypes.Volume, len(page.Items))
+	if len(page.Items) == 0 {
+		return apiTypes.Page[apiTypes.Volume]{Items: items, NextCursor: page.NextCursor}, nil
+	}
+	volumeIDs := make([]string, len(page.Items))
 	for index, item := range page.Items {
-		items[index] = volumeView(environment.Record, item.Record, "", "active")
+		volumeIDs[index] = item.Record.ID
+	}
+	applied, err := service.repository.ReadAppliedVolumes(ctx, volumeIDs, page.Items[0].ReadRevision)
+	if err != nil {
+		return apiTypes.Page[apiTypes.Volume]{}, err
+	}
+	for index, item := range page.Items {
+		state := "pending"
+		if stored, found := applied[item.Record.ID]; found {
+			if stored.EnvironmentID != environmentID || stored.ComposeKey != item.Record.Key {
+				return apiTypes.Page[apiTypes.Volume]{}, errs.New(errs.KindStateConflict, "applied Volume belongs to different storage")
+			}
+			state = "active"
+		}
+		items[index] = volumeView(environment.Record, item.Record, "", state)
 	}
 	return apiTypes.Page[apiTypes.Volume]{Items: items, NextCursor: page.NextCursor}, nil
 }
@@ -120,9 +138,20 @@ func (service *ReadService) GetVolume(ctx context.Context, volumeID string) (api
 	if err != nil {
 		return apiTypes.Volume{}, err
 	}
+	applied, err := service.repository.ReadAppliedVolumes(ctx, []string{volumeID}, projection.ReadRevision)
+	if err != nil {
+		return apiTypes.Volume{}, err
+	}
+	state := "pending"
+	if stored, found := applied[volumeID]; found {
+		if stored.EnvironmentID != projection.Record.EnvironmentID || stored.ComposeKey != identity.Key {
+			return apiTypes.Volume{}, errs.New(errs.KindStateConflict, "applied Volume belongs to different storage")
+		}
+		state = "active"
+	}
 	return volumeView(environment.Record, etcd.VolumeRecord{
 		ID: identity.ID, EnvironmentID: projection.Record.EnvironmentID, Slug: identity.Slug, Key: identity.Key,
-	}, "", "active"), nil
+	}, "", state), nil
 }
 
 func volumeView(

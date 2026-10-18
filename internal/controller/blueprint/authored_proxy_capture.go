@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -14,7 +15,7 @@ import (
 // Both running-router children and disabled-router Controller settlements pin
 // the same complete membership, predecessor sources and replacement images.
 func (service *Service) prepareAuthoredProxyServiceCapture(ctx context.Context,
-	parent etcd.TaskRecord, kind core.ComponentKind,
+	parent workexecution.Task, kind core.ComponentKind,
 	authority componentplanning.FrozenProjectionAuthority, services []core.Service,
 ) (componentplanning.FrozenProjectionAuthority, error) {
 	authority, err := service.repository.PrepareFrozenProxyServicePreflight(ctx, authority, parent.ID, kind, services)
@@ -34,7 +35,7 @@ func (service *Service) prepareAuthoredProxyServiceCapture(ctx context.Context,
 }
 
 func (service *Service) prepareDisabledProxyServiceCapture(ctx context.Context,
-	parent etcd.TaskRecord, snapshot blueprintunits.Snapshot, source authoredRuntimeProjectionSource,
+	parent workexecution.Task, snapshot blueprintunits.Snapshot, source authoredRuntimeProjectionSource,
 	current etcd.BlueprintRuntimeComponent, kind core.ComponentKind,
 ) (componentplanning.FrozenProjectionAuthority, error) {
 	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
@@ -59,7 +60,7 @@ func (service *Service) prepareDisabledProxyServiceCapture(ctx context.Context,
 	}
 	authority, err := service.repository.PrepareFrozenComponentUnitAuthority(ctx,
 		componentplanning.FrozenProjectionAuthorityInput{
-			EnvironmentID: parent.Owner.EnvironmentID, ReadRevision: snapshot.ReadRevision,
+			EnvironmentID: parent.Scope.EnvironmentID, ReadRevision: snapshot.ReadRevision,
 			DesiredHeadRevision: snapshot.HeadRevision, DesiredRevisionID: parent.ID,
 			RuntimeSourceAuthority: componentplanning.ManagedRuntimeSourceAuthorityApplied,
 		}, current.Component)

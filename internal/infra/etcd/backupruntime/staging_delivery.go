@@ -6,32 +6,28 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
-type BackupStagingTaskReference struct {
-	TaskID                string `json:"task_id"`
-	Revision              int64  `json:"revision"`
-	RequiresTaskAuthority bool   `json:"requires_task_authority"`
-}
-
 type BackupStagingDeliveryRecord struct {
+	HostID            string
 	AgentID           string
 	AgentGeneration   uint64
 	ProcessGeneration [16]byte
 	Inventory         *agentpb.BackupStagingInventory
 	Plan              *agentpb.BackupStagingRecoveryPlan
 	Ack               *agentpb.BackupStagingRecoveryAck
-	Tasks             []BackupStagingTaskReference
+	Guards            []keyvalue.Condition
 }
 
 // AllowsGenerationReplacement replaces a settled handshake or carries the exact
 // unfinished plan forward. Publication independently checks every stage against
 // native Task authority; a later generation may reconcile only terminal Tasks.
 func (record BackupStagingDeliveryRecord) AllowsGenerationReplacement(next BackupStagingDeliveryRecord) bool {
-	if record.AgentID != next.AgentID || next.AgentGeneration <= record.AgentGeneration ||
+	if record.HostID != next.HostID || record.AgentID != next.AgentID || next.AgentGeneration <= record.AgentGeneration ||
 		next.Ack != nil || record.Inventory == nil || next.Inventory == nil {
 		return false
 	}
@@ -40,13 +36,14 @@ func (record BackupStagingDeliveryRecord) AllowsGenerationReplacement(next Backu
 }
 
 type backupStagingDeliveryData struct {
-	AgentID           string                       `json:"agent_id"`
-	AgentGeneration   uint64                       `json:"agent_generation"`
-	ProcessGeneration string                       `json:"process_generation"`
-	Inventory         []byte                       `json:"inventory"`
-	Plan              []byte                       `json:"plan"`
-	Ack               []byte                       `json:"ack,omitempty"`
-	Tasks             []BackupStagingTaskReference `json:"tasks"`
+	HostID            string               `json:"host_id"`
+	AgentID           string               `json:"agent_id"`
+	AgentGeneration   uint64               `json:"agent_generation"`
+	ProcessGeneration string               `json:"process_generation"`
+	Inventory         []byte               `json:"inventory"`
+	Plan              []byte               `json:"plan"`
+	Ack               []byte               `json:"ack,omitempty"`
+	Guards            []keyvalue.Condition `json:"guards"`
 }
 
 func BackupStagingDeliveryKey(agentID string) string {
@@ -54,27 +51,23 @@ func BackupStagingDeliveryKey(agentID string) string {
 }
 
 func EncodeBackupStagingDelivery(record BackupStagingDeliveryRecord) ([]byte, error) {
-	if ids.Validate(ids.KindAgent, record.AgentID) != nil || record.AgentGeneration == 0 ||
+	if ids.Validate(ids.KindHost, record.HostID) != nil || ids.Validate(ids.KindAgent, record.AgentID) != nil || record.AgentGeneration == 0 ||
 		record.ProcessGeneration == ([16]byte{}) ||
-		executionplan.ValidateBackupStagingRecoveryPlan(record.Inventory, record.Plan) != nil ||
-		len(record.Tasks) > executionplan.MaximumBackupRecoveredStages {
+		executionplan.ValidateBackupStagingRecoveryPlan(record.Inventory, record.Plan) != nil {
 		return nil, CorruptBackupRuntimeRecord()
 	}
-	seen := make(map[string]struct{}, len(record.Tasks))
-	for _, reference := range record.Tasks {
-		if ids.Validate(ids.KindTask, reference.TaskID) != nil || reference.Revision <= 0 {
-			return nil, CorruptBackupRuntimeRecord()
-		}
-		if _, duplicate := seen[reference.TaskID]; duplicate {
-			return nil, CorruptBackupRuntimeRecord()
-		}
-		seen[reference.TaskID] = struct{}{}
-	}
-	if (len(record.Tasks) == 0) != (len(record.Inventory.Entries)+len(record.Inventory.VolumeRestores) == 0) {
+	if (len(record.Guards) == 0) != (len(record.Inventory.Entries)+len(record.Inventory.VolumeRestores) == 0) || len(record.Guards) > 256 {
 		return nil, CorruptBackupRuntimeRecord()
 	}
-	data := backupStagingDeliveryData{AgentID: record.AgentID, AgentGeneration: record.AgentGeneration,
-		ProcessGeneration: hex.EncodeToString(record.ProcessGeneration[:]), Tasks: record.Tasks}
+	previous := ""
+	for _, guard := range record.Guards {
+		if guard.Key <= previous || guard.ModRevision < 0 || guard.Prefix {
+			return nil, CorruptBackupRuntimeRecord()
+		}
+		previous = guard.Key
+	}
+	data := backupStagingDeliveryData{HostID: record.HostID, AgentID: record.AgentID, AgentGeneration: record.AgentGeneration,
+		ProcessGeneration: hex.EncodeToString(record.ProcessGeneration[:]), Guards: record.Guards}
 	marshal := proto.MarshalOptions{Deterministic: true}
 	var err error
 	if data.Inventory, err = marshal.Marshal(record.Inventory); err != nil {
@@ -116,9 +109,10 @@ func DecodeBackupStagingDelivery(value []byte) (BackupStagingDeliveryRecord, err
 		return BackupStagingDeliveryRecord{}, CorruptBackupRuntimeRecord()
 	}
 	record := BackupStagingDeliveryRecord{
+		HostID:          data.HostID,
 		AgentID:         data.AgentID,
 		AgentGeneration: data.AgentGeneration,
-		Tasks:           data.Tasks,
+		Guards:          data.Guards,
 		Inventory:       &agentpb.BackupStagingInventory{},
 		Plan:            &agentpb.BackupStagingRecoveryPlan{},
 	}

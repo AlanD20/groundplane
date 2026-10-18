@@ -3,12 +3,10 @@ package blueprintrelease
 import (
 	"context"
 	"crypto/sha256"
-	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -18,28 +16,23 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
-	"strconv"
 	"strings"
 )
 
 type preparedHooks struct {
-	preStepIDs  [][]string
-	task        etcd.TaskRecord
-	members     []releaserender.ReleaseTaskRenderMember
-	postStepIDs [][]string
-	sources     map[string]scriptsourcequeries.ScriptExecutionSources
-	executions  int
+	members    []releaserender.ReleaseTaskRenderMember
+	sources    map[string]scriptsourcequeries.ScriptExecutionSources
+	executions int
 }
 
 func (service *Service) prepareDeployHooks(
 	ctx context.Context,
 	input prepareInput,
 	manifest releases.VersionedReleaseManifest,
-	task etcd.TaskRecord,
 	members []releaserender.ReleaseTaskRenderMember,
 ) (preparedHooks, error) {
 	result := preparedHooks{
-		task: task, members: members, preStepIDs: make([][]string, len(members)), postStepIDs: make([][]string, len(members)),
+		members: members,
 		sources: make(map[string]scriptsourcequeries.ScriptExecutionSources),
 	}
 	candidateByService := make(map[string]blueprints.EnvironmentBlueprintServiceChange, len(input.ServiceChanges))
@@ -90,15 +83,6 @@ func (service *Service) prepareDeployHooks(
 			if err != nil {
 				return preparedHooks{}, err
 			}
-			stepID := input.AllocateNamed(
-				ids.KindStep,
-				fmt.Sprintf(
-					"blueprint-%s/%s/%s",
-					script.Desired.When,
-					member.Render.ServiceID,
-					sources.Script.Record.Desired.Slug,
-				),
-			)
 			executionID, idErr := allocatedRawULID(
 				input.AllocateNamed,
 				"blueprint-script-execution/"+member.Render.ServiceID+"/"+sources.Script.Record.Desired.ID,
@@ -113,9 +97,9 @@ func (service *Service) prepareDeployHooks(
 			if idErr != nil {
 				return preparedHooks{}, idErr
 			}
-			hook, err := taskplanning.BuildReleaseHookRenderInput(ctx, taskplanning.ManualScriptPlanInput{
-				TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID,
-				StepID: stepID, ExecutionID: executionID, SnapshotID: snapshotID,
+			hook, err := taskplanning.BuildReleaseHookRenderInput(ctx, taskplanning.ScriptRunnerInput{
+				TaskID: input.Work.Task.Task.ID, OperationID: input.OperationID, PlanID: input.PlanID,
+				WorkItemID: input.Work.Item.Item.ID, ExecutionID: executionID, SnapshotID: snapshotID,
 				Sources: sources, Preparation: prepared,
 				Candidate: &taskplanning.BlueprintScriptCandidateSources{
 					EnvironmentID:     input.Environment.Record.ID,
@@ -130,14 +114,7 @@ func (service *Service) prepareDeployHooks(
 				return preparedHooks{}, err
 			}
 			member.Render.Hooks = append(member.Render.Hooks, hook)
-			if script.Desired.When == core.ScriptPreDeploy {
-				result.preStepIDs[memberIndex] = append(result.preStepIDs[memberIndex], stepID)
-			} else {
-				result.postStepIDs[memberIndex] = append(result.postStepIDs[memberIndex], stepID)
-			}
 			result.sources[executionID] = sources
-			result.task.Params[releaserender.ReleaseHookStepMemberParam(stepID)] = strconv.Itoa(memberIndex + 1)
-			result.task.Params[releaserender.ReleaseHookStepExecutionParam(stepID)] = executionID
 			result.executions++
 			bodyBytes += uint64(hook.BodySize)
 			if err := validateDeployHookBounds(result.executions, bodyBytes); err != nil {

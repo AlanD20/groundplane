@@ -80,7 +80,7 @@ func openJournal(ctx context.Context, path string, binding backupconfigtransfer.
 	}
 	base := agentprotocol.StatePath + "/config-transfers"
 	if err := binding.Validate(); err != nil ||
-		ownedStep.StepId != binding.StepID || ownedStep.ExecutionId != binding.ExecutionID ||
+		ownedStep.ExecutionId != binding.TransferID || !bytes.Equal(ownedStep.StepDigest, binding.AuthorityDigest[:]) ||
 		!validExpected(expected) ||
 		!filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Dir(path) != base ||
 		filepath.Base(path) != binding.TransferID {

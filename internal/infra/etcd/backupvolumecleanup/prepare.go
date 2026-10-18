@@ -2,14 +2,11 @@ package backupvolumecleanup
 
 import (
 	"context"
-	"encoding/hex"
 
-	"github.com/AlanD20/groundplane/internal/common/backupvolumetransfer"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupvolumemanifest"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const Prefix = "/v1/runtime/backup-volume-manifest-cleanup/"
@@ -36,14 +33,10 @@ func Prepare(ctx context.Context, reader cursorReader,
 	if !ref.Valid() {
 		return nil, nil, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	binding := backupvolumetransfer.Binding{TaskID: ref.TaskID, AssignmentID: ref.AssignmentID,
-		StepID: ref.StepID, TransferID: ref.TransferID,
-		Direction: agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_CAPTURE}
-	if _, err := hex.Decode(binding.AuthorityDigest[:], []byte(ref.AuthoritySHA256)); err != nil {
-		return nil, nil, backupruntime.CorruptBackupRuntimeRecord()
+	owner, err := ref.Owner()
+	if err != nil {
+		return nil, nil, err
 	}
-	owner := backupvolumemanifest.Owner{Binding: binding, AgentID: ref.AgentID,
-		AgentGeneration: ref.AgentGeneration, AssignmentGeneration: ref.AssignmentGeneration}
 	cursor, found, err := backupvolumemanifest.ReadCursor(ctx, reader, owner, revision)
 	if err != nil {
 		return nil, nil, err
@@ -58,6 +51,6 @@ func Prepare(ctx context.Context, reader cursorReader,
 	}
 	key := Prefix + point.ID
 	return []keyvalue.Condition{{Key: key}, {Key: backupruntime.BackupOrphanKey(point.ID)},
-			{Key: backupvolumemanifest.CursorKey(binding), ModRevision: ref.CursorRevision}},
+			{Key: backupvolumemanifest.CursorKey(owner.Binding), ModRevision: ref.CursorRevision}},
 		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: encoded}}, nil
 }

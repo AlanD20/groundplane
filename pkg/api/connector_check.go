@@ -34,7 +34,7 @@ type ConnectorCheckResult struct {
 	ConnectorRevision int64                              `json:"connector_revision"`
 	Draft             bool                               `json:"draft"`
 	Stale             bool                               `json:"stale"`
-	Phase             string                             `json:"phase" enum:"ready,checking,cleaning,finished,cleanup_required,transferred"`
+	Phase             string                             `json:"phase" enum:"ready,checking,cleaning,finished,cleanup_required"`
 	Outcome           string                             `json:"outcome,omitempty" enum:"passed,failed,interrupted"`
 	Failure           s3connector.ConnectionCheckFailure `json:"failure,omitempty"`
 	Stages            []ConnectorCheckStage              `json:"stages"`
@@ -43,7 +43,6 @@ type ConnectorCheckResult struct {
 	ObjectKey         string                             `json:"object_key,omitempty"`
 	MultipartKey      string                             `json:"multipart_key,omitempty"`
 	UploadIDs         []string                           `json:"upload_ids"`
-	CleanupTaskID     string                             `json:"cleanup_task_id,omitempty"`
 	CreatedAt         string                             `json:"created_at"`
 	StartedAt         string                             `json:"started_at,omitempty"`
 	FinishedAt        string                             `json:"finished_at,omitempty"`

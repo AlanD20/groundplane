@@ -13,6 +13,7 @@ the relevant [operator guide](../README.md#operators), not every decision file.
 | [Networks and shared access](network-and-shared-access.md) | How are pools, backing access and authentication separated? |
 | [Release packaging](release-packaging.md) | How are artifacts selected, installed and safely activated? |
 | [Task execution and events](task-execution-and-event-delivery.md) | What can the executor do, and what does a Task result prove? |
+| [Task execution replacement](task-execution-redesign.md) | How will scheduling, operation execution and history be separated without a compatibility path? Accepted, not implemented. |
 | [Desired-state publication](desired-state-publication.md) | How do revisions, publication and accepted latest-wins work differ? |
 | [Service releases and recovery](service-release-and-recovery.md) | Which exact runtime can deploy, rollback and recovery select? |
 | [Configuration and Scripts](configuration-materialization-and-scripts.md) | Why are file sources, Script starts and cleanup pinned separately? |

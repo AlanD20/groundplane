@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -22,33 +20,24 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	authority *scriptsourcepublication.Authority,
 	evidence BlueprintReleasePublicationEvidence,
 ) (BlueprintReleasePublication, error) {
+	work, prepared := evidence.Work, evidence.PreparedInput
 	if ctx == nil || ledger == nil || ledger.store == nil || evidence.Manifest.Revision <= 0 ||
-		evidence.Manifest.Record.OperationID != evidence.Task.OperationID ||
-		evidence.Manifest.Record.PublicationID != evidence.Task.Params[releaserender.TaskReleasePublicationParam] ||
-		evidence.Task.Owner.EnvironmentID != evidence.EnvironmentID || evidence.Task.Type != taskjournal.TaskUpdate ||
+		evidence.ServiceRollout == nil ||
+		evidence.Manifest.Record.PublicationID != evidence.ServiceRollout.Record.PublicationID ||
+		evidence.Manifest.Record.OperationID != evidence.ServiceRollout.Record.OperationID ||
+		work.Task.Task.Scope.EnvironmentID != evidence.EnvironmentID || work.Task.Task.Action != workexecution.ActionApply ||
+		prepared.Item.ID != work.Item.Item.ID || prepared.Item.Input == nil || *prepared.Item.Input != prepared.Input ||
+		prepared.Item.Operation != workexecution.Release || len(prepared.Change.Mutations) == 0 ||
 		evidence.PublishedAt.IsZero() || evidence.PublishedAt.Location() != time.UTC {
 		return BlueprintReleasePublication{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Release publication evidence is invalid",
 		)
 	}
-	if _, err := validateReleaseCandidateDescriptor(evidence.CandidateReleaseDescriptor, evidence.Task, evidence.Manifest.Record); err != nil {
-		return BlueprintReleasePublication{}, err
-	}
-	rolloutCondition, err := blueprintServiceRolloutPublicationCondition(evidence)
-	if err != nil {
-		return BlueprintReleasePublication{}, err
-	}
-	artifact, err := blueprintExecutedArtifact(evidence)
-	if err != nil {
-		return BlueprintReleasePublication{}, err
-	}
-	runtimes, err := executionplan.PrepareBlueprintRuntimeInputs(
-		evidence.Plan,
-		evidence.Task.Params[taskjournal.TaskComposeArtifactParam],
-	)
-	if err != nil {
-		return BlueprintReleasePublication{}, err
+	if len(evidence.Manifest.Record.Members) != 1 ||
+		evidence.Manifest.Record.Members[0].ServiceID != prepared.Item.TargetID ||
+		evidence.Manifest.Record.Members[0].ReleaseID != evidence.ServiceRollout.Record.Render.ReleaseID {
+		return BlueprintReleasePublication{}, errs.New(errs.KindValidationFailed, "Blueprint Release manifest differs from its work item")
 	}
 	conditions := []etcdstore.Condition{
 		{
@@ -57,16 +46,15 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		},
 		{Key: releases.ReleasePublicationKey(evidence.Manifest.Record.PublicationID)},
 	}
-	if rolloutCondition != nil {
-		conditions = append(conditions, *rolloutCondition)
-	}
+	conditions = append(conditions, prepared.Change.Conditions...)
 	conditions = append(conditions, evidence.ProxyAddresses.Conditions()...)
+	conditions = append(conditions, evidence.StorageConditions...)
 	nativeConditions, err := ledger.blueprintNativePredecessorConditions(ctx, evidence)
 	if err != nil {
 		return BlueprintReleasePublication{}, err
 	}
 	conditions = append(conditions, nativeConditions...)
-	primaryConditions, err := ledger.blueprintScriptPrimaryConditions(ctx, evidence.Hooks)
+	primaryConditions, err := ledger.blueprintScriptPrimaryConditions(ctx, evidence.HookWork.Hooks)
 	if err != nil {
 		return BlueprintReleasePublication{}, err
 	}
@@ -75,15 +63,14 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	if err != nil {
 		return BlueprintReleasePublication{}, err
 	}
-	publicationValue, err := releases.EncodeReleaseRecord("release-publication", releases.ReleasePublicationMarker{
-		PublicationID:              evidence.Manifest.Record.PublicationID,
-		OperationID:                evidence.Manifest.Record.OperationID,
-		ManifestDigest:             evidence.Manifest.Record.Digest,
-		CandidateReleaseDescriptor: executionplan.CloneCandidateReleaseDescriptor(evidence.CandidateReleaseDescriptor),
-		ExecutedComposeArtifact:    artifact,
-		BlueprintRuntimes:          runtimes,
-		NativePredecessors:         nativeReferences,
-		PublishedAt:                evidence.PublishedAt,
+	publicationValue, err := releases.EncodeWorkPublication(releases.WorkPublication{
+		PublicationID:  evidence.Manifest.Record.PublicationID,
+		OperationID:    evidence.Manifest.Record.OperationID,
+		ManifestDigest: evidence.Manifest.Record.Digest,
+		TaskID:         work.Task.Task.ID, WorkItemID: prepared.Item.ID,
+		EnvironmentID: evidence.EnvironmentID, ServiceID: prepared.Item.TargetID, Input: prepared.Input,
+		NativePredecessors: nativeReferences,
+		PublishedAt:        evidence.PublishedAt,
 	})
 	if err != nil {
 		return BlueprintReleasePublication{}, err
@@ -95,6 +82,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			Value: publicationValue,
 		},
 	}
+	mutations = append(mutations, cloneBlueprintReleaseMutations(prepared.Change.Mutations)...)
 	mutations = append(mutations, evidence.ProxyAddresses.Mutations()...)
 	for _, member := range evidence.Manifest.Record.Members {
 		environmentValue, encodeErr := json.Marshal(releases.ReleaseEnvironmentIndexValue{
@@ -126,28 +114,33 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			},
 		)
 	}
-	if len(evidence.Hooks) != 0 {
-		if evidence.HookPrepared.key != blueprintReleaseHookStageKey(evidence.Task.OperationID) ||
-			evidence.HookPrepared.revision <= 0 {
+	if len(evidence.HookWork.Hooks) != 0 {
+		if evidence.HookWork.OperationID != evidence.Manifest.Record.OperationID ||
+			evidence.HookWork.Task.Scope.EnvironmentID != evidence.EnvironmentID ||
+			evidence.SourcePrepared.IsZero() {
 			etcdstore.ZeroMutationBytes(mutations)
 			return BlueprintReleasePublication{}, errs.New(
 				errs.KindValidationFailed,
-				"Blueprint hook preparation is incomplete",
+				"Blueprint hook source publication is incomplete",
 			)
 		}
-		conditions = append(
-			conditions,
-			etcdstore.Condition{Key: evidence.HookPrepared.key, ModRevision: evidence.HookPrepared.revision},
-		)
-		for _, hook := range evidence.Hooks {
+		for _, hook := range evidence.HookWork.Hooks {
+			if hook.Execution.SourceMembershipCount != evidence.SourcePrepared.MembershipCount() ||
+				hook.Execution.SourceMembershipSHA256 != evidence.SourcePrepared.MembershipSHA256() {
+				etcdstore.ZeroMutationBytes(mutations)
+				return BlueprintReleasePublication{}, errs.New(errs.KindValidationFailed, "Blueprint hook retained source membership changed")
+			}
 			conditions = append(
 				conditions,
 				scriptsourcequeries.ScriptAttachSourceConditions(hook.Sources.AttachSources)...)
 		}
-		mutations = append(
-			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: evidence.HookPrepared.key},
-		)
+		hookChange, err := evidence.HookPrepared.Publication(evidence.HookWork)
+		if err != nil {
+			etcdstore.ZeroMutationBytes(mutations)
+			return BlueprintReleasePublication{}, err
+		}
+		conditions = append(conditions, hookChange.Conditions...)
+		mutations = append(mutations, hookChange.Mutations...)
 	}
 	var sourceFragment scriptsourcepublication.ScriptSourcePublicationFragment
 	if !evidence.SourcePrepared.IsZero() {
@@ -165,7 +158,8 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		}
 	}
 	publication, err := newBlueprintReleasePublication(blueprintReleasePublicationInput{
-		EnvironmentID: evidence.EnvironmentID, OperationID: evidence.Task.OperationID,
+		Work: work, Input: prepared.Input,
+		EnvironmentID: evidence.EnvironmentID, OperationID: evidence.Manifest.Record.OperationID,
 		Conditions: conditions, Mutations: mutations, SourceFragment: sourceFragment,
 		SourceAuthority: authority, SourceMembers: evidence.SourceMembers,
 	})

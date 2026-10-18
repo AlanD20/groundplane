@@ -3,9 +3,11 @@ package network
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,6 +17,12 @@ func (repository *Repository) ResolveResourceHost(ctx context.Context) (workexec
 
 func (repository *Repository) PublishNetworkWork(ctx context.Context, request etcd.NetworkWorkPublication) (etcd.IdempotencyTransactionResult, error) {
 	return repository.publication.PublishNetworkWork(ctx, request)
+}
+
+func (repository *Repository) SealBackingHookInputsAtRevision(ctx context.Context, operationID, projectID string,
+	configuration backinghook.Configuration, revision int64,
+) (*taskconfiguration.BackingHookEncryptedInputs, error) {
+	return repository.facts.SealBackingHookInputsAtRevision(ctx, operationID, projectID, configuration, revision)
 }
 
 // CaptureBackingZoneDetaches freezes all cleanup inputs at the impact snapshot,

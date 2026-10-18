@@ -8,7 +8,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 func postgresObservationMatches(
@@ -79,31 +78,4 @@ func postgresDumpMatches(value *agentpb.BackupPostgresDumpStart, step *agentpb.B
 	return postgres != nil && validBackupPostgresDump(value) && value.PointId == step.GetCapture().PointId &&
 		value.AdapterContractVersion == postgres.AdapterContractVersion && value.DatabaseName == postgres.DatabaseName &&
 		value.RoleName == postgres.RoleName && value.MaxPlaintextBytes == postgres.MaxPlaintextBytes
-}
-
-func (replay *BackupStepResumeReplay) postgresCaptureCheckpoint(request *agentpb.BackupCheckpointRequest) error {
-	if replay.step.GetCapture().GetPostgres() == nil || replay.prepared != nil || replay.uploaded != nil {
-		return backupResumeHistoryInvalid()
-	}
-	if value := request.GetPostgresContainerObserved(); value != nil {
-		if replay.sequence != 0 || replay.postgresObserved != nil ||
-			!postgresObservationMatchesService(value, replay.step, replay.authority.Services) {
-			return backupResumeHistoryInvalid()
-		}
-		replay.postgresObserved = value
-		replay.capture.Checkpoint = &agentpb.BackupCaptureResume_PostgresContainerObserved{
-			PostgresContainerObserved: value,
-		}
-		return nil
-	}
-	value, observed := request.GetPostgresDumpStart(), replay.postgresObserved
-	if observed == nil || replay.postgresDumpStart != nil || !postgresDumpMatches(value, replay.step) ||
-		value.ContainerId != observed.ContainerId || !bytes.Equal(value.RepositoryDigest, observed.RepositoryDigest) ||
-		!bytes.Equal(value.ExpectedLabelsSha256, observed.ObservedLabelsSha256) {
-		return backupResumeHistoryInvalid()
-	}
-	replay.postgresDumpStart = value
-	replay.capture.DumpStart = proto.CloneOf(value)
-	replay.capture.Checkpoint = &agentpb.BackupCaptureResume_PostgresDumpStart{PostgresDumpStart: value}
-	return nil
 }

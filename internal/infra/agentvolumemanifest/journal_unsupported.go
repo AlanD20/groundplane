@@ -15,8 +15,8 @@ func Open(context.Context, Config) (*Journal, error) {
 	return nil, invalid("Volume manifest receiver requires Linux")
 }
 func (*Journal) Close() error { return nil }
-func (*Journal) CurrentCredit(context.Context) (*agentpb.BackupVolumeManifestAckCredit, error) {
-	return nil, invalid("Volume manifest receiver requires Linux")
+func (*Journal) Position(context.Context) (*agentpb.BackupVolumeManifestAckCredit, bool, error) {
+	return nil, false, invalid("Volume manifest receiver requires Linux")
 }
 func (*Journal) AcceptFrame(context.Context, *agentpb.BackupVolumeManifestTransfer) (
 	*agentpb.BackupVolumeManifestAckCredit, error,

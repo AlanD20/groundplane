@@ -6,7 +6,6 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 
@@ -57,7 +56,7 @@ func bindServingRuntime(
 		captured.Clear()
 		return errs.New(errs.KindStateConflict, "ordinary Release predecessor target changed")
 	}
-	render.PriorRuntime = &taskassignments.ReleaseNativePredecessorAuthority{
+	render.PriorRuntime = &releaserender.ServingRuntimeCapture{
 		ServiceID: render.ServiceID, CurrentArtifact: captured.CurrentArtifact,
 		RetainedPriorArtifact: captured.RetainedPriorArtifact,
 	}

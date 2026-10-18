@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -96,9 +97,10 @@ func (repository *BackupRuntimeRepository) upsertConfigRestoreEntry(ctx context.
 // original Restore fence; a reconnect repeats the bounded list before return.
 func (repository *BackupRuntimeRepository) cleanupConfigRestoreEntries(ctx context.Context,
 	generation etcdstore.Versioned[backupconfiguration.ConfigRestoreGenerationRecord], deleted []entries.Record,
+	recovery *workexecution.Attempt,
 ) error {
 	for _, record := range deleted {
-		authority, err := repository.loadConfigRestorePublication(ctx, generation)
+		authority, err := repository.loadConfigRestorePublication(ctx, generation, recovery)
 		if err != nil {
 			return err
 		}

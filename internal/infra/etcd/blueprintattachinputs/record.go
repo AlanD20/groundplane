@@ -12,27 +12,15 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
+	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const recordPrefix = "/v1/private/blueprint-attach-input-generations/"
 
 const TaskAttachIDParam = "blueprint_attach_input_generation_attach_id"
-
-type OwnerKind string
-
-const (
-	OwnerParent OwnerKind = "parent"
-	OwnerChild  OwnerKind = "child"
-)
-
-// Transfer is immutable evidence that publication moved one generation from
-// its visible Blueprint parent to the exact hidden child which executes it.
-type Transfer struct {
-	ParentTaskID string `json:"parent_task_id"`
-	ChildTaskID  string `json:"child_task_id"`
-}
 
 // HookPlan is the non-secret executable authority needed to run the Attach
 // hook. Resolved values live only in the encrypted envelopes on Generation.
@@ -55,36 +43,37 @@ type HookInput struct {
 	Source HookInputSource `json:"source"`
 }
 
-// Generation is immutable authority first owned by its parent and then by the
-// exact published child. Transfer never resolves mutable backing records.
+// Generation belongs permanently to one visible Apply and one work item.
+// Retries keep this input; no publication transfers it to another Task.
 type Generation struct {
-	ID                   string                                        `json:"id"`
-	EnvironmentID        string                                        `json:"environment_id"`
-	RevisionID           string                                        `json:"revision_id"`
-	ParentTaskID         string                                        `json:"parent_task_id"`
-	OperationID          string                                        `json:"operation_id"`
-	AttachID             string                                        `json:"attach_id"`
-	AttachName           string                                        `json:"attach_name"`
-	AuthoredSpecSHA256   string                                        `json:"authored_spec_sha256"`
-	ConsumerServiceID    string                                        `json:"consumer_service_id"`
-	CredentialOwnerID    string                                        `json:"credential_owner_id"`
-	BackingProjectID     string                                        `json:"backing_project_id"`
-	BackingEnvironmentID string                                        `json:"backing_environment_id"`
-	BackingServiceID     string                                        `json:"backing_service_id"`
-	BackingNetworkID     string                                        `json:"backing_network_id"`
-	AdapterKey           string                                        `json:"adapter_key"`
-	Authentication       core.BackingAuthentication                    `json:"authentication"`
-	Hook                 HookPlan                                      `json:"hook"`
-	Binding              *CapturedBinding                              `json:"binding,omitempty"`
-	Provision            *Provision                                    `json:"provision,omitempty"`
-	FactSets             []attachrecord.FactSetMetadata                `json:"fact_sets,omitempty"`
-	GeneratedInputs      attachrecord.EncryptedFacts                   `json:"generated_inputs"`
-	ResolvedInputs       *taskconfiguration.BackingHookEncryptedInputs `json:"resolved_inputs,omitempty"`
-	SecretSources        []tasksecretpinrecord.Record                  `json:"secret_sources,omitempty"`
-	SecretPins           *taskconfiguration.TaskSecretPinSet           `json:"secret_pins,omitempty"`
-	OwnerKind            OwnerKind                                     `json:"owner_kind"`
-	OwnerTaskID          string                                        `json:"owner_task_id"`
-	Transfer             *Transfer                                     `json:"transfer,omitempty"`
+	ID                      string                                        `json:"id"`
+	EnvironmentID           string                                        `json:"environment_id"`
+	RevisionID              string                                        `json:"revision_id"`
+	ParentTaskID            string                                        `json:"parent_task_id"`
+	OperationID             string                                        `json:"operation_id"`
+	AttachID                string                                        `json:"attach_id"`
+	AttachName              string                                        `json:"attach_name"`
+	AuthoredSpecSHA256      string                                        `json:"authored_spec_sha256"`
+	ConsumerServiceID       string                                        `json:"consumer_service_id"`
+	CredentialOwnerID       string                                        `json:"credential_owner_id"`
+	BackingProjectID        string                                        `json:"backing_project_id"`
+	BackingEnvironmentID    string                                        `json:"backing_environment_id"`
+	BackingServiceID        string                                        `json:"backing_service_id"`
+	BackingNetworkID        string                                        `json:"backing_network_id"`
+	AdapterKey              string                                        `json:"adapter_key"`
+	Authentication          core.BackingAuthentication                    `json:"authentication"`
+	Hook                    HookPlan                                      `json:"hook"`
+	Binding                 *CapturedBinding                              `json:"binding,omitempty"`
+	Provision               *Provision                                    `json:"provision,omitempty"`
+	FactSets                []attachrecord.FactSetMetadata                `json:"fact_sets,omitempty"`
+	GeneratedInputs         attachrecord.EncryptedFacts                   `json:"generated_inputs"`
+	ResolvedInputs          *taskconfiguration.BackingHookEncryptedInputs `json:"resolved_inputs,omitempty"`
+	SecretSources           []tasksecretpinrecord.Record                  `json:"secret_sources,omitempty"`
+	SecretPins              *tasksecretpins.Binding                       `json:"secret_pins,omitempty"`
+	WorkItemID              string                                        `json:"work_item_id"`
+	ConsumerTransition      []byte                                        `json:"consumer_transition,omitempty"`
+	ConsumerRuntime         *serviceruntimerecord.Record                  `json:"consumer_runtime,omitempty"`
+	ConsumerRuntimeRevision int64                                         `json:"consumer_runtime_revision,omitempty"`
 }
 
 func Key(revisionID, attachID string) string {
@@ -124,8 +113,8 @@ func MatchesConfiguration(record Generation, configuration backinghook.Configura
 		slices.Equal(record.Hook.Facts, facts) && slices.Equal(record.Hook.Inputs, inputs)
 }
 
-func BindSecretPins(record Generation, count uint64, digest string) (Generation, error) {
-	if record.OwnerKind != "" || record.OwnerTaskID != "" || record.Transfer != nil {
+func BindSecretPins(record Generation, workID string, count uint64, digest string) (Generation, error) {
+	if record.WorkItemID != "" || ids.Validate(ids.KindWorkItem, workID) != nil {
 		return Generation{}, errs.New(errs.KindValidationFailed, "Blueprint Attach draft ownership is invalid")
 	}
 	if len(record.SecretSources) == 0 {
@@ -134,30 +123,11 @@ func BindSecretPins(record Generation, count uint64, digest string) (Generation,
 		}
 		record.SecretPins = nil
 	} else {
-		record.SecretPins = &taskconfiguration.TaskSecretPinSet{
-			TaskID: record.ParentTaskID, Count: count, SHA256: digest,
+		record.SecretPins = &tasksecretpins.Binding{
+			OperationID: record.OperationID, TaskID: record.ParentTaskID, WorkItemID: workID, Count: count, SHA256: digest,
 		}
 	}
-	record.OwnerKind = OwnerParent
-	record.OwnerTaskID = record.ParentTaskID
-	if err := validate(record, true); err != nil {
-		return Generation{}, err
-	}
-	return record, nil
-}
-
-// TransferToChild changes only lifecycle ownership. The immutable parent,
-// source identities, encrypted values and original Secret-pin TaskID remain
-// unchanged so replay can prove the exact admitted generation.
-func TransferToChild(record Generation, childTaskID string) (Generation, error) {
-	if err := validate(record, true); err != nil || record.OwnerKind != OwnerParent ||
-		record.OwnerTaskID != record.ParentTaskID || record.Transfer != nil ||
-		ids.Validate(ids.KindTask, childTaskID) != nil || childTaskID == record.ParentTaskID {
-		return Generation{}, errs.New(errs.KindStateConflict, "Blueprint Attach input ownership cannot transfer")
-	}
-	record.OwnerKind = OwnerChild
-	record.OwnerTaskID = childTaskID
-	record.Transfer = &Transfer{ParentTaskID: record.ParentTaskID, ChildTaskID: childTaskID}
+	record.WorkItemID = workID
 	if err := validate(record, true); err != nil {
 		return Generation{}, err
 	}
@@ -185,6 +155,11 @@ func Clear(record *Generation) {
 		return
 	}
 	clear(record.GeneratedInputs.Ciphertext)
+	clear(record.ConsumerTransition)
+	if record.ConsumerRuntime != nil {
+		clear(record.ConsumerRuntime.Runtime.CurrentArtifact)
+		clear(record.ConsumerRuntime.Runtime.RetainedPriorArtifact)
+	}
 	if record.ResolvedInputs != nil {
 		clear(record.ResolvedInputs.Ciphertext)
 	}
@@ -192,6 +167,9 @@ func Clear(record *Generation) {
 }
 
 func validate(record Generation, bound bool) error {
+	if _, err := record.Consumer(); err != nil {
+		return err
+	}
 	if ids.Validate(ids.KindOperation, record.ID) != nil || record.ID != record.OperationID ||
 		ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, record.RevisionID) != nil || record.RevisionID != record.ParentTaskID ||
@@ -240,7 +218,6 @@ func validate(record Generation, bound bool) error {
 			probe.Inputs = append(probe.Inputs, definition)
 		}
 		if (record.Hook.Attach == nil && record.Hook.Detach == nil) ||
-			(record.Hook.Attach == nil && record.OwnerKind == OwnerChild) ||
 			!slices.IsSortedFunc(record.Hook.Inputs, func(left, right HookInput) int {
 				if left.Key < right.Key {
 					return -1
@@ -285,26 +262,15 @@ func validate(record Generation, bound bool) error {
 	}
 	if bound {
 		if (len(record.SecretSources) == 0) != (record.SecretPins == nil) ||
-			taskconfiguration.ValidateTaskSecretPinSet(record.SecretPins) != nil ||
 			record.SecretPins != nil && (record.SecretPins.TaskID != record.ParentTaskID ||
-				record.SecretPins.Count != uint64(len(record.SecretSources))) {
+				record.SecretPins.OperationID != record.OperationID || record.SecretPins.WorkItemID != record.WorkItemID ||
+				!record.SecretPins.MatchesSources(record.SecretSources)) {
 			return errs.New(errs.KindValidationFailed, "Blueprint Attach Secret pin ownership is invalid")
 		}
-		switch record.OwnerKind {
-		case OwnerParent:
-			if record.OwnerTaskID != record.ParentTaskID || record.Transfer != nil {
-				return errs.New(errs.KindValidationFailed, "Blueprint Attach parent ownership is invalid")
-			}
-		case OwnerChild:
-			if ids.Validate(ids.KindTask, record.OwnerTaskID) != nil || record.OwnerTaskID == record.ParentTaskID ||
-				record.Transfer == nil || record.Transfer.ParentTaskID != record.ParentTaskID ||
-				record.Transfer.ChildTaskID != record.OwnerTaskID {
-				return errs.New(errs.KindValidationFailed, "Blueprint Attach child ownership is invalid")
-			}
-		default:
-			return errs.New(errs.KindValidationFailed, "Blueprint Attach input owner kind is invalid")
+		if ids.Validate(ids.KindWorkItem, record.WorkItemID) != nil {
+			return errs.New(errs.KindValidationFailed, "Blueprint Attach work ownership is invalid")
 		}
-	} else if record.SecretPins != nil || record.OwnerKind != "" || record.OwnerTaskID != "" || record.Transfer != nil {
+	} else if record.SecretPins != nil || record.WorkItemID != "" {
 		return errs.New(errs.KindValidationFailed, "Blueprint Attach draft already owns retained authority")
 	}
 	return nil

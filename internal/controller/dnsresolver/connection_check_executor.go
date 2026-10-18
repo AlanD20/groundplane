@@ -5,69 +5,80 @@ import (
 	"errors"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnschecks"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-type dnsCheckAssignments interface {
-	GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
-}
 type dnsCheckExchange interface {
 	CheckDNSConnections(context.Context, string, *agentpb.CheckDNSConnections) (*agentpb.DNSConnectionResult, error)
 }
 
 type ConnectionCheckExecutor struct {
 	records *dnschecks.Repository
-	tasks   dnsCheckAssignments
 	channel dnsCheckExchange
 }
 
 func NewConnectionCheckExecutor(
 	records *dnschecks.Repository,
-	tasks dnsCheckAssignments,
 	channel dnsCheckExchange,
 ) (*ConnectionCheckExecutor, error) {
-	if records == nil || tasks == nil || channel == nil {
-		return nil, errs.New(errs.KindInternal, "DNS check records, Task assignments and Agent channel are required")
+	if records == nil || channel == nil {
+		return nil, errs.New(errs.KindInternal, "DNS check records and Agent channel are required")
 	}
-	return &ConnectionCheckExecutor{records: records, tasks: tasks, channel: channel}, nil
+	return &ConnectionCheckExecutor{records: records, channel: channel}, nil
 }
 
-func (executor *ConnectionCheckExecutor) Execute(ctx context.Context, task etcd.TaskRecord) error {
-	if ctx == nil || etcd.ValidateTaskRecord(task) != nil || task.Executor != taskjournal.TaskExecutorController ||
-		task.Type != taskjournal.TaskCheck || task.Status != taskjournal.TaskStatusRunning ||
-		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent {
+func (executor *ConnectionCheckExecutor) Execute(ctx context.Context, delivery workqueue.Delivery) error {
+	err := executor.execute(ctx, delivery)
+	if err == nil || ctx == nil {
+		return err
+	}
+	settlement, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+	defer cancel()
+	loaded, loadErr := executor.loadDelivery(settlement, delivery)
+	if loadErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, loadErr)
+	}
+	if loaded.Record.Phase == dnschecks.Finished {
+		return err
+	}
+	attempt := delivery.Attempt.Attempt
+	journal, journalErr := dnschecks.NewJournal(executor.records, loaded.Record.Owner, attempt.ID, attempt.Executor)
+	if journalErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, journalErr)
+	}
+	if stopErr := journal.Stop(settlement, dnsCheckExchangeFailure(err), time.Now().UTC()); stopErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, stopErr)
+	}
+	return err
+}
+
+func (executor *ConnectionCheckExecutor) execute(ctx context.Context, delivery workqueue.Delivery) error {
+	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
+	if ctx == nil || item.Validate() != nil || attempt.Validate() != nil ||
+		item.Operation != workexecution.DNSCheck || item.Phase != workexecution.Running || item.ActiveAttemptID != attempt.ID ||
+		attempt.Executor.Executor != workexecution.Controller || attempt.Direction != workexecution.Forward ||
+		attempt.TaskID != item.TaskID || attempt.WorkItemID != item.ID || attempt.StartedAt == nil || attempt.FinishedAt != nil ||
+		item.Input == nil || *item.Input != attempt.Input {
 		return errs.New(errs.KindValidationFailed, "DNS check Task is invalid")
 	}
-	loaded, err := executor.records.Load(ctx, task.ID)
+	loaded, err := executor.records.Load(ctx, item.TaskID)
 	if err != nil {
 		return err
 	}
 	record := loaded.Record
 	hash, err := dnschecks.PlanHash(record)
-	if err != nil || record.Owner.TaskID != task.ID || record.Owner.PlanID != task.PlanID ||
-		record.Owner.OperationID != task.OperationID ||
-		record.Source.ComponentID != task.Target ||
-		hash != task.PlanHash ||
-		record.ConfigurationSHA256 != task.Params[taskjournal.TaskDNSCheckInputParam] {
+	if err != nil || record.Owner.TaskID != item.TaskID || record.Owner.WorkItemID != item.ID || record.Owner.PlanID != attempt.Input.ID ||
+		record.Source.ComponentID != item.TargetID || hash != attempt.Input.SHA256 {
 		return errs.New(errs.KindStateConflict, "DNS check differs from its captured Task input")
 	}
 	if record.Phase == dnschecks.Finished {
 		return dnsCheckOutcomeError(record)
 	}
-	claim, err := executor.tasks.GetTaskAssignment(ctx, task.ID)
-	if err != nil {
-		return err
-	}
-	claimed := claim.Task.Record
-	if claimed.PlanID != task.PlanID || claimed.PlanHash != task.PlanHash || claimed.OperationID != task.OperationID ||
-		claimed.Target != task.Target {
-		return errs.New(errs.KindStateConflict, "DNS check Task claim changed")
-	}
-	journal, err := dnschecks.NewJournal(executor.records, record.Owner, claim.Assignment.Record.AssignmentID)
+	journal, err := dnschecks.NewJournal(executor.records, record.Owner, attempt.ID, attempt.Executor)
 	if err != nil {
 		return err
 	}
@@ -85,7 +96,7 @@ func (executor *ConnectionCheckExecutor) Execute(ctx context.Context, task etcd.
 	if err := ctx.Err(); err != nil {
 		return stopDNSCheck(ctx, journal, dnsCheckExchangeFailure(err), err)
 	}
-	if !time.Now().UTC().Before(claim.Assignment.Record.Deadline) {
+	if !time.Now().UTC().Before(attempt.Deadline) {
 		return stopDNSCheck(ctx, journal, "timeout", context.DeadlineExceeded)
 	}
 	request, err := record.Input()
@@ -104,7 +115,7 @@ func (executor *ConnectionCheckExecutor) Execute(ctx context.Context, task etcd.
 	if err := journal.Finish(settlement, result, time.Now().UTC()); err != nil {
 		return err
 	}
-	completed, err := executor.records.Load(settlement, task.ID)
+	completed, err := executor.records.Load(settlement, item.TaskID)
 	if err != nil {
 		return err
 	}

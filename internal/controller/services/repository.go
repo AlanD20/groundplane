@@ -4,9 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
-	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -59,18 +57,7 @@ type serviceMutationRepository interface {
 		etcdstore.Versioned[servicerecord.ServiceRecord],
 		etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	) error
-	BeginServiceRemovalWithTask(
-		context.Context,
-		etcdstore.Versioned[hierarchyrecord.TenantRecord],
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcdstore.Versioned[servicerecord.ServiceRecord],
-		etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-		deletionrecord.DeletionTombstoneRecord,
-		environmentchanges.ServiceRemovalIntent,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	PublishServiceRemoval(context.Context, etcd.ServiceRemovalPublication) (etcd.IdempotencyTransactionResult, error)
 }
 
 type MutationRepository struct {
@@ -185,19 +172,6 @@ func (repository *MutationRepository) ValidateServiceRemovalReferences(
 	return repository.services.ValidateServiceRemovalReferences(ctx, current, projection)
 }
 
-func (repository *MutationRepository) BeginServiceRemovalWithTask(
-	ctx context.Context,
-	tenant etcdstore.Versioned[hierarchyrecord.TenantRecord],
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	current etcdstore.Versioned[servicerecord.ServiceRecord],
-	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent environmentchanges.ServiceRemovalIntent,
-	task etcd.TaskRecord,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.services.BeginServiceRemovalWithTask(
-		ctx, tenant, project, environment, current, projection, tombstone, intent, task, marker,
-	)
+func (repository *MutationRepository) PublishServiceRemoval(ctx context.Context, request etcd.ServiceRemovalPublication) (etcd.IdempotencyTransactionResult, error) {
+	return repository.services.PublishServiceRemoval(ctx, request)
 }

@@ -93,16 +93,14 @@ export default function PlatformEtcdPage() {
       try {
         const task = await requestTask(taskID, controller.signal);
         if (controller.signal.aborted) return;
-        if (
-          ["completed", "failed", "aborted", "timed_out"].includes(task.status)
-        ) {
+        if (task.task.finished_at) {
           await load(controller.signal);
           if (!controller.signal.aborted) {
             setTaskID(undefined);
             setError(
-              task.status === "completed"
+              task.task.status === "succeeded"
                 ? undefined
-                : `Apply ${task.status}. Open the Task for its recorded result.`,
+                : `Apply ${task.task.status}. Open the Task for its recorded result.`,
             );
           }
           return;

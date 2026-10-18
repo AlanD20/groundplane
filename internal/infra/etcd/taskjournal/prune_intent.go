@@ -7,16 +7,14 @@ import (
 )
 
 type PruneIntent struct {
-	TaskID                                 string `json:"task_id"`
-	TaskRevision                           int64  `json:"task_revision"`
-	BackupCheckpointCursorsComplete        bool   `json:"backup_checkpoint_cursors_complete"`
-	BackupCheckpointDeduplicationsComplete bool   `json:"backup_checkpoint_deduplications_complete"`
-	BackupConfigTransfersComplete          bool   `json:"backup_config_transfers_complete"`
-	TaskPrimaryDeleted                     bool   `json:"task_primary_deleted"`
-	BackupTerminalReceiptRevision          int64  `json:"backup_terminal_receipt_revision,omitempty"`
-	AttachPlanID                           string `json:"attach_plan_id,omitempty"`
-	RemainingEvents                        uint32 `json:"remaining_events"`
-	RemainingDeduplications                uint32 `json:"remaining_deduplications"`
+	TaskID                        string `json:"task_id"`
+	TaskRevision                  int64  `json:"task_revision"`
+	BackupConfigTransfersComplete bool   `json:"backup_config_transfers_complete"`
+	TaskPrimaryDeleted            bool   `json:"task_primary_deleted"`
+	BackupTerminalReceiptRevision int64  `json:"backup_terminal_receipt_revision,omitempty"`
+	AttachPlanID                  string `json:"attach_plan_id,omitempty"`
+	RemainingEvents               uint32 `json:"remaining_events"`
+	RemainingDeduplications       uint32 `json:"remaining_deduplications"`
 }
 
 func EncodePruneIntent(intent PruneIntent) ([]byte, error) {
@@ -39,9 +37,6 @@ func DecodePruneIntent(value []byte) (PruneIntent, error) {
 
 func ValidatePruneIntent(intent PruneIntent) error {
 	if ids.Validate(ids.KindTask, intent.TaskID) != nil || intent.TaskRevision <= 0 ||
-		(intent.BackupCheckpointDeduplicationsComplete &&
-			!intent.BackupCheckpointCursorsComplete) ||
-		(intent.BackupConfigTransfersComplete && !intent.BackupCheckpointDeduplicationsComplete) ||
 		(intent.TaskPrimaryDeleted && !intent.BackupConfigTransfersComplete) ||
 		intent.BackupTerminalReceiptRevision < 0 ||
 		intent.RemainingEvents > MaximumTaskEvents ||

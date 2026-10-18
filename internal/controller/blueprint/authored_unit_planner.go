@@ -5,11 +5,9 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/internal/common/zonedns"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
-	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,26 +15,22 @@ import (
 )
 
 type authoredUnitPlanner struct {
-	input          authoredParentInput
-	project        *composetypes.Project
-	identities     map[ids.Kind]map[string]projectionrecord.OwnedIdentity
-	targets        map[blueprintunits.ResourceKey]authoredOwnedUnitTarget
-	omissions      []blueprintunits.Unit
-	units          map[blueprintunits.ResourceKey]blueprintunits.Unit
-	blocked        map[blueprintunits.ResourceKey]bool
-	runtimeReady   bool
-	serviceProxies map[string]serviceproxy.Implementation
-	attachInputs   map[string]attachinputs.Generation
-	appliedAttach  map[string]blueprintunits.AppliedRecord
-	secretIDs      map[string]string
+	input        authoredParentInput
+	project      *composetypes.Project
+	identities   map[ids.Kind]map[string]projectionrecord.OwnedIdentity
+	targets      map[blueprintunits.ResourceKey]authoredOwnedUnitTarget
+	omissions    []blueprintunits.Unit
+	units        map[blueprintunits.ResourceKey]blueprintunits.Unit
+	blocked      map[blueprintunits.ResourceKey]bool
+	attachInputs map[string]authoredAttachPlanInput
+	secretIDs    map[string]string
 }
 
 func newAuthoredUnitPlanner(
 	ctx context.Context,
 	input authoredParentInput,
 	targets []authoredOwnedUnitTarget,
-	runtime *projectionrecord.EnvironmentComposeProjection,
-	attachInputs map[string]attachinputs.Generation,
+	attachInputs map[string]authoredAttachPlanInput,
 	snapshot blueprintunits.Snapshot,
 ) (*authoredUnitPlanner, error) {
 	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
@@ -55,20 +49,12 @@ func newAuthoredUnitPlanner(
 	}
 	planner := &authoredUnitPlanner{
 		input: input, project: project,
-		identities:     make(map[ids.Kind]map[string]projectionrecord.OwnedIdentity),
-		targets:        make(map[blueprintunits.ResourceKey]authoredOwnedUnitTarget, len(targets)),
-		omissions:      omissions,
-		units:          make(map[blueprintunits.ResourceKey]blueprintunits.Unit, len(targets)),
-		blocked:        make(map[blueprintunits.ResourceKey]bool),
-		runtimeReady:   runtime != nil,
-		serviceProxies: make(map[string]serviceproxy.Implementation),
-		attachInputs:   attachInputs,
-		appliedAttach:  make(map[string]blueprintunits.AppliedRecord),
-	}
-	for _, applied := range snapshot.Applied {
-		if applied.Record.Target.Kind == ids.KindAttach {
-			planner.appliedAttach[applied.Record.Target.ID] = applied.Record
-		}
+		identities:   make(map[ids.Kind]map[string]projectionrecord.OwnedIdentity),
+		targets:      make(map[blueprintunits.ResourceKey]authoredOwnedUnitTarget, len(targets)),
+		omissions:    omissions,
+		units:        make(map[blueprintunits.ResourceKey]blueprintunits.Unit, len(targets)),
+		blocked:      make(map[blueprintunits.ResourceKey]bool),
+		attachInputs: attachInputs,
 	}
 	for _, group := range []struct {
 		kind   ids.Kind
@@ -94,11 +80,6 @@ func newAuthoredUnitPlanner(
 	}
 	if err := planner.validateNamedIdentityCoverage(); err != nil {
 		return nil, err
-	}
-	if runtime != nil {
-		if err := planner.bindServiceProxySelections(*runtime); err != nil {
-			return nil, err
-		}
 	}
 	return planner, nil
 }
@@ -174,23 +155,15 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		if !found {
 			return nil, false, planner.missingInput("Entry", name)
 		}
+		var after []blueprintunits.ResourceKey
 		if spec.Source.Fact != nil {
 			attach, found := planner.identities[ids.KindAttach][spec.Source.Fact.Attach]
 			if !found {
 				return nil, false, planner.missingInput("Entry fact Attach", spec.Source.Fact.Attach)
 			}
-			generation, hasInput := planner.attachInputs[attach.ID]
-			applied, hasApplied := planner.appliedAttach[attach.ID]
-			if !hasInput || !hasApplied || applied.State != blueprintunits.Applied ||
-				(generation.Binding == nil && (generation.Provision == nil || generation.Provision.RequiresProvisioning) &&
-					(generation.OwnerKind != attachinputs.OwnerChild ||
-						generation.OwnerTaskID != applied.SourceTaskID)) ||
-				((generation.Binding != nil || (generation.Provision != nil && !generation.Provision.RequiresProvisioning)) &&
-					(applied.ParentTaskID != generation.ParentTaskID || applied.ControllerAttachInputRevision == 0)) {
-				planner.block(identity)
-				complete = false
-				continue
-			}
+			// Membership is authored now; execution waits for the Attach result.
+			// Never omit this Entry merely because the hook has not run yet.
+			after = []blueprintunits.ResourceKey{{Kind: ids.KindAttach, ID: attach.ID}}
 		}
 		reads, err := planner.entryReads(spec)
 		if err != nil {
@@ -204,7 +177,7 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		if err != nil {
 			return nil, false, err
 		}
-		planner.addUnit(identity, fingerprint, reads, nil)
+		planner.addUnit(identity, fingerprint, reads, after)
 	}
 	for name, identity := range planner.identities[ids.KindAttach] {
 		generation, found := planner.attachInputs[identity.ID]
@@ -214,10 +187,10 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 			continue
 		}
 		spec, found := planner.input.desired.Input.Attachments[name]
-		if !found || generation.AttachName != name || generation.ConsumerServiceID == "" {
+		if !found || generation.Name != name || generation.ConsumerServiceID == "" {
 			return nil, false, planner.missingInput("Attach", name)
 		}
-		authoredSpecSHA256, err := authoredUnitFingerprint("attach-spec", spec)
+		authoredSpecSHA256, err := core.AttachmentSpecFingerprint(spec)
 		if err != nil {
 			return nil, false, err
 		}
@@ -228,70 +201,9 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		if !found || consumer.ID != generation.ConsumerServiceID {
 			return nil, false, planner.missingInput("Attach consumer Service", spec.Service)
 		}
-		fingerprintAuthority := generation
-		fingerprintAuthority.OwnerKind = ""
-		fingerprintAuthority.OwnerTaskID = ""
-		fingerprintAuthority.Transfer = nil
-		fingerprint, err := authoredUnitFingerprint("attach", fingerprintAuthority)
-		if err != nil {
-			return nil, false, err
-		}
-		reads := make([]blueprintunits.ResourceKey, 0)
-		if generation.Provision != nil {
-			if generation.CredentialOwnerID != generation.AttachID {
-				reads = append(
-					reads,
-					blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: generation.CredentialOwnerID},
-				)
-			} else {
-				for _, grant := range generation.Provision.Grants {
-					reads = append(reads, blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: grant.Record.ID})
-				}
-			}
-		}
-		planner.addUnit(identity, fingerprint, reads, reads)
-	}
-	serviceBlocked := make(map[string]bool, len(planner.identities[ids.KindService]))
-	// Service children share one complete Environment runtime projection.
-	// Independent Networks and Volumes remain selectable while it is pending.
-	if !planner.runtimeReady {
-		complete = false
-		for name := range planner.identities[ids.KindService] {
-			serviceBlocked[name] = true
-		}
-	}
-	for changed := true; changed; {
-		changed = false
-		for name := range planner.identities[ids.KindService] {
-			if serviceBlocked[name] {
-				continue
-			}
-			service, found := planner.service(name)
-			if !found {
-				return nil, false, planner.missingInput("Service", name)
-			}
-			for dependency := range service.DependsOn {
-				if serviceBlocked[dependency] {
-					serviceBlocked[name], changed = true, true
-					break
-				}
-			}
-			if extension := planner.input.desired.Input.ServiceExtensions[name]; !serviceBlocked[name] {
-				for dependency := range extension.DependsOn {
-					if serviceBlocked[dependency] {
-						serviceBlocked[name], changed = true, true
-						break
-					}
-				}
-			}
-		}
+		planner.addUnit(identity, generation.Fingerprint, generation.Reads, generation.Reads)
 	}
 	for name, identity := range planner.identities[ids.KindService] {
-		if serviceBlocked[name] {
-			planner.block(identity)
-			complete = false
-			continue
-		}
 		service, found := planner.service(name)
 		if !found {
 			return nil, false, planner.missingInput("Service", name)
@@ -305,22 +217,22 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 			return nil, false, err
 		}
 		fingerprint, err := authoredUnitFingerprint("service", struct {
-			Name                string
-			Spec                composetypes.ServiceConfig
-			Extension           core.ServiceExtensionSpec
-			Files               []core.BlueprintFile
-			Entries             []string
-			Attaches            map[string]core.AttachmentSpec
-			ReleaseGroups       map[string]core.ReleaseGroupSpec
-			Scripts             map[string]core.ScriptSpec
-			DNSUpstreams        []string
-			ProxyImplementation serviceproxy.Implementation
+			Name          string
+			Spec          composetypes.ServiceConfig
+			Extension     core.ServiceExtensionSpec
+			Files         []core.BlueprintFile
+			Entries       []string
+			Attaches      map[string]core.AttachmentSpec
+			ReleaseGroups map[string]core.ReleaseGroupSpec
+			Scripts       map[string]core.ScriptSpec
+			DNSUpstreams  []string
+			Router        core.ComponentSpec
 		}{
 			name, service, planner.input.desired.Input.ServiceExtensions[name],
 			planner.serviceRuntimeFiles(service), planner.serviceEntryNames(name),
 			planner.serviceAttachments(name), planner.serviceReleaseGroups(name),
 			planner.serviceScripts(name),
-			dnsUpstreams, planner.serviceProxies[name],
+			dnsUpstreams, planner.input.desired.Input.Components[string(core.ComponentCapabilityHTTPRouter)],
 		})
 		if err != nil {
 			return nil, false, err
@@ -350,7 +262,7 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		// complete projection -> router. The router child owns the host effect.
 		planner.addUnit(identity, fingerprint, nil, nil)
 	}
-	dnsComplete, err := planner.planDNSUnits(serviceBlocked)
+	dnsComplete, err := planner.planDNSUnits()
 	if err != nil {
 		return nil, false, err
 	}

@@ -76,7 +76,7 @@ func validAttachRemovalRecoverySuccess(result taskjournal.TaskResultRecord) bool
 		len(
 			result.RecreateEvidence,
 		) == 0 && len(result.RollingEvidence) == 0 && result.CandidateAbsenceEvidence == nil &&
-		result.ComponentRestorationEvidence == nil && result.ServiceAbsenceEvidence == nil &&
+		result.ServiceAbsenceEvidence == nil &&
 		len(result.BackingObservations) == 0 && result.DNSResolverCandidateObservation == nil &&
 		result.DNSResolverRollbackObservation == nil
 }

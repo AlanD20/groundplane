@@ -137,14 +137,6 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			return nil, err
 		}
 	}
-	var attachCandidates []blueprintAttachPlanCandidate
-	attachStepCount := 0
-	if !serviceOnly {
-		attachCandidates, attachStepCount, err = resolver.blueprintAttachPlanCandidates(ctx, task)
-		if err != nil {
-			return nil, err
-		}
-	}
 	var managedServiceSteps []*agentpb.ExecutionStep
 	managedTeardown := BlueprintManagedComponentTeardown{Artifacts: []*agentpb.ComposeArtifact{pinned.artifact}}
 	if procedure != taskcontract.BlueprintComposeProcedureFullReconcile && !serviceOnly {
@@ -155,7 +147,6 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			pinned.artifact,
 			"",
 			hasBlueprintReleases,
-			nil,
 		)
 		if err != nil {
 			return nil, err
@@ -181,7 +172,6 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if hasManagedConfigApply {
 		expectedSteps++
 	}
-	expectedSteps += attachStepCount
 	if len(task.Steps) != expectedSteps {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task step count is invalid")
 	}
@@ -240,15 +230,6 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if len(managedVolumeIDs) != 0 && !volumePrecedesMaterialization {
 		appendVolumeStep()
 	}
-	attachSteps, nextStepIndex, err := resolver.blueprintAttachProcedureSteps(
-		ctx, task, attachCandidates, stepIndex,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer clearAdapterProcedurePasswords(attachSteps)
-	steps = append(steps, attachSteps...)
-	stepIndex = nextStepIndex
 	if hasBlueprintReleases {
 		releaseInput, releaseEnd, stepErr := blueprintReleaseProcedureStepIDs(
 			task,
@@ -293,7 +274,6 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			pinned.artifact,
 			prerequisite,
 			false,
-			nil,
 		)
 		if err != nil {
 			return nil, err

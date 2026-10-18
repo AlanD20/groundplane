@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
@@ -38,7 +39,7 @@ type authoredComponentCompileInput struct {
 // is accepted only when the ledger does not retain a possible applied effect.
 func (service *Service) loadAuthoredRuntimeComponents(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	parent workexecution.Task,
 	source authoredRuntimeProjectionSource,
 	snapshot blueprintunits.Snapshot,
 ) (authoredRuntimeComponents, error) {
@@ -52,13 +53,13 @@ type authoredPendingProxy struct {
 
 func (service *Service) loadAuthoredComponentSelections(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	parent workexecution.Task,
 	source authoredRuntimeProjectionSource,
 	snapshot blueprintunits.Snapshot,
 	pending *authoredPendingProxy,
 ) (authoredRuntimeComponents, error) {
 	authorities, err := service.repository.ReadEnvironmentBlueprintRuntimeComponents(
-		ctx, parent.Owner.EnvironmentID, snapshot.ReadRevision,
+		ctx, parent.Scope.EnvironmentID, snapshot.ReadRevision,
 	)
 	if err != nil {
 		return authoredRuntimeComponents{}, err
@@ -178,10 +179,9 @@ func authoredRuntimeComponentReceiptMatches(
 	authority etcd.BlueprintRuntimeComponent,
 ) bool {
 	receipt := applied.Record
-	if receipt.SourceTaskID != "" {
+	if receipt.Execution != nil {
 		return authority.RuntimePresent &&
-			receipt.SourceTaskID == authority.Runtime.Record.TaskID &&
-			receipt.SourcePlanID == authority.Runtime.Record.PlanID &&
+			*receipt.Execution == authority.Runtime.Record.Execution &&
 			receipt.ParentTaskID == authority.Runtime.Record.RevisionID
 	}
 	component := authority.Component

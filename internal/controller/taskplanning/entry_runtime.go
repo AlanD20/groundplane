@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
@@ -22,6 +23,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// EntryRuntimeCapture reads acknowledged runtime without the generic Task planner.
+type EntryRuntimeCapture struct{ releases *etcd.ReleaseLedger }
+
+func NewEntryRuntimeCapture(releases *etcd.ReleaseLedger) (*EntryRuntimeCapture, error) {
+	if releases == nil {
+		return nil, errs.New(errs.KindInternal, "Entry runtime capture requires acknowledged runtime storage")
+	}
+	return &EntryRuntimeCapture{releases: releases}, nil
+}
+
 // EntryMutationRuntime captures the runtime onto which Entry decorations are
 // applied. The epoch fences its selection in the desired publication.
 type EntryMutationRuntime struct {
@@ -31,35 +42,20 @@ type EntryMutationRuntime struct {
 	Sources           []etcdstore.Versioned[serviceruntimerecord.Record]
 }
 
-func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
+func (capture *EntryRuntimeCapture) CaptureEntryMutationRuntime(
 	ctx context.Context, current etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) (EntryMutationRuntime, error) {
-	if resolver == nil || resolver.releases == nil {
+	if capture == nil || capture.releases == nil {
 		return EntryMutationRuntime{}, errs.New(errs.KindInternal, "Entry runtime capture is not configured")
 	}
-	scope, err := resolver.releases.LoadPlanningScopeAtRevision(ctx, current.Record.EnvironmentID, current.ReadRevision)
+	scope, err := capture.releases.LoadPlanningScopeAtRevision(ctx, current.Record.EnvironmentID, current.ReadRevision)
 	if err != nil {
 		return EntryMutationRuntime{}, err
 	}
-	return resolver.captureEntryMutationRuntime(ctx, current, scope)
+	return capture.captureEntryMutationRuntime(ctx, current, scope)
 }
 
-// CaptureAppliedEntryMutationRuntime retains acknowledged workloads during
-// authored omission, even while the new desired projection is still pending.
-func (resolver *TaskPlanResolver) CaptureAppliedEntryMutationRuntime(
-	ctx context.Context, current etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-) (EntryMutationRuntime, error) {
-	if resolver == nil || resolver.releases == nil {
-		return EntryMutationRuntime{}, errs.New(errs.KindInternal, "Entry runtime capture is not configured")
-	}
-	scope, err := resolver.releases.LoadPlanningScopeForAppliedProjection(ctx, current)
-	if err != nil {
-		return EntryMutationRuntime{}, err
-	}
-	return resolver.captureEntryMutationRuntime(ctx, current, scope)
-}
-
-func (resolver *TaskPlanResolver) captureEntryMutationRuntime(
+func (capture *EntryRuntimeCapture) captureEntryMutationRuntime(
 	ctx context.Context,
 	current etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	scope releasequeries.ReleasePlanningScope,
@@ -74,7 +70,7 @@ func (resolver *TaskPlanResolver) captureEntryMutationRuntime(
 	if err != nil {
 		return EntryMutationRuntime{}, err
 	}
-	attaches, err := resolver.releases.LoadPlanningAttaches(ctx, scope)
+	attaches, err := capture.releases.LoadPlanningAttaches(ctx, scope)
 	if err != nil {
 		return EntryMutationRuntime{}, err
 	}
@@ -89,7 +85,7 @@ func (resolver *TaskPlanResolver) captureEntryMutationRuntime(
 	var running []string
 	serving := make(map[string]string)
 	for _, desired := range current.Record.DesiredServices {
-		planning, err := resolver.releases.LoadPlanningServices(ctx, scope, []string{desired.Desired.ID})
+		planning, err := capture.releases.LoadPlanningServices(ctx, scope, []string{desired.Desired.ID})
 		if err != nil {
 			return EntryMutationRuntime{}, err
 		}
@@ -102,7 +98,7 @@ func (resolver *TaskPlanResolver) captureEntryMutationRuntime(
 		}
 	}
 	sort.Strings(running)
-	runtimeSources, err := resolver.releases.LoadAcknowledgedServiceRuntimesAtRevision(
+	runtimeSources, err := capture.releases.LoadAcknowledgedServiceRuntimesAtRevision(
 		ctx, current.Record.EnvironmentID, running, scope.ReadRevision,
 	)
 	if err != nil {

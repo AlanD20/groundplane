@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -18,17 +19,12 @@ import (
 )
 
 type restorePublication interface {
-	Publish(
-		context.Context,
-		etcd.TaskRecord,
-		*agentpb.ExecutionPlan,
-		idempotency.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	PublishWork(context.Context, workexecution.Task, workexecution.Item, *agentpb.BackupWorkInput, idempotency.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 	Clear()
-	BindRetry(etcd.PreparedRestoreRetrySource) error
 }
 
 type preparedRestore struct {
+	HostID      string
 	Restore     backupruntime.BackupRestoreRecord
 	Scope       *agentpb.BackupPlanScope
 	Authority   *agentpb.BackupStepAuthority
@@ -72,7 +68,7 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 		if err != nil {
 			return preparedRestore{}, err
 		}
-		return preparedRestore{Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
+		return preparedRestore{HostID: selected.HostID, Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
 			Owner: selected.Owner, Publication: selected.Publication}, nil
 	case backupruntime.BackupRuntimeSourceVolume:
 		selected, err := service.runtime.PrepareVolumeRestore(ctx, backupplanning.VolumeRestoreSelectionInput{
@@ -83,7 +79,7 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 		if err != nil {
 			return preparedRestore{}, err
 		}
-		return preparedRestore{Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
+		return preparedRestore{HostID: selected.HostID, Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
 			Artifacts: selected.Artifacts, Owner: selected.Owner, Publication: selected.Publication}, nil
 	case backupruntime.BackupRuntimeSourceAttach:
 		selected, err := service.runtime.PrepareDatabaseRestore(ctx, backupplanning.DatabaseRestoreSelectionInput{
@@ -97,25 +93,9 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 		if err != nil {
 			return preparedRestore{}, err
 		}
-		return preparedRestore{Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
+		return preparedRestore{HostID: selected.HostID, Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
 			Artifacts: selected.Artifacts, Owner: selected.Owner, Publication: selected.Publication}, nil
 	default:
 		return preparedRestore{}, errs.New(errs.KindStrategyNotImplemented, "Restore source execution is not available")
-	}
-}
-
-func (prepared preparedRestore) buildPlan(task etcd.TaskRecord) (*agentpb.ExecutionPlan, error) {
-	switch prepared.Restore.Point.SourceKind {
-	case backupruntime.BackupRuntimeSourceConfig:
-		return BuildConfigRestorePlan(ConfigRestorePlanInput{Task: task, Restore: prepared.Restore,
-			Scope: prepared.Scope, Authority: prepared.Authority})
-	case backupruntime.BackupRuntimeSourceVolume:
-		return BuildVolumeRestorePlan(VolumeRestorePlanInput{Task: task, Restore: prepared.Restore,
-			Scope: prepared.Scope, Authority: prepared.Authority, Artifacts: prepared.Artifacts})
-	case backupruntime.BackupRuntimeSourceAttach:
-		return BuildDatabaseRestorePlan(DatabaseRestorePlanInput{Task: task, Restore: prepared.Restore,
-			Scope: prepared.Scope, Authority: prepared.Authority, Artifacts: prepared.Artifacts})
-	default:
-		return nil, errs.New(errs.KindStrategyNotImplemented, "Restore source execution is not available")
 	}
 }

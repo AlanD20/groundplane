@@ -6,18 +6,15 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	"github.com/AlanD20/groundplane/internal/controller/attachplan"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 	"slices"
 	"sort"
 	"time"
@@ -34,64 +31,20 @@ type resolvedBlueprintAttach struct {
 	authentication     core.BackingAuthentication
 }
 
-type blueprintAttachProcedure struct {
-	record     attachrecord.Record
-	adapterKey string
-	identity   *taskplanning.AttachPlanIdentity
-}
-
 type preparedBlueprintAttaches struct {
-	publication blueprintplanning.BlueprintAttachTaskPreparation
-	candidates  []blueprintplanning.EnvironmentBlueprintAttachCandidateInput
-	effective   []etcdstore.Versioned[attachrecord.Record]
-	procedures  []blueprintAttachProcedure
-	facts       *blueprintAttachFactOverlay
+	candidates []blueprintplanning.EnvironmentBlueprintAttachCandidateInput
+	effective  []etcdstore.Versioned[attachrecord.Record]
 }
 
 func (prepared *preparedBlueprintAttaches) clear() {
 	if prepared == nil {
 		return
 	}
-	for index := range prepared.procedures {
-		prepared.procedures[index].identity.Clear()
-	}
-	if prepared.facts != nil {
-		prepared.facts.clear()
-	}
-	blueprintplanning.ClearBlueprintAttachTaskPreparation(&prepared.publication)
 	for index := range prepared.candidates {
 		if prepared.candidates[index].Facts != nil {
 			clear(prepared.candidates[index].Facts.Ciphertext)
 		}
 	}
-}
-
-func (service *Service) prepareBlueprintAttaches(
-	ctx context.Context,
-	environmentID string,
-	taskID string,
-	specs map[string]core.AttachmentSpec,
-	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
-	current []etcdstore.Versioned[attachrecord.Record],
-	namedID func(ids.Kind, string) string,
-	ownsEnvironmentFence bool,
-	createdAt time.Time,
-) (preparedBlueprintAttaches, error) {
-	prepared, err := service.prepareBlueprintAttachCandidates(
-		ctx, environmentID, taskID, specs, serviceChanges, current, namedID, createdAt,
-	)
-	if err != nil {
-		return preparedBlueprintAttaches{}, err
-	}
-	publication, err := blueprintplanning.PrepareEnvironmentBlueprintAttachTask(
-		taskID, environmentID, prepared.candidates, ownsEnvironmentFence, createdAt,
-	)
-	if err != nil {
-		prepared.clear()
-		return preparedBlueprintAttaches{}, err
-	}
-	prepared.publication = publication
-	return prepared, nil
 }
 
 // Candidate preparation is shared by whole-Environment planning and resource
@@ -103,7 +56,6 @@ func (service *Service) prepareBlueprintAttachCandidates(
 ) (preparedBlueprintAttaches, error) {
 	prepared := preparedBlueprintAttaches{
 		effective: append([]etcdstore.Versioned[attachrecord.Record](nil), current...),
-		facts:     newBlueprintAttachFactOverlay(service.attachFacts),
 	}
 	if len(specs) == 0 {
 		return prepared, nil
@@ -223,7 +175,7 @@ func (service *Service) prepareBlueprintAttachCandidates(
 			attachIDs[name] = namedID(ids.KindAttach, "attach:"+name)
 		}
 	}
-	identities := make(map[string]*taskplanning.AttachPlanIdentity)
+	identities := make(map[string]*attachplan.Identity)
 	defer func() {
 		for _, identity := range identities {
 			identity.Clear()
@@ -255,7 +207,7 @@ func (service *Service) prepareBlueprintAttachCandidates(
 				return preparedBlueprintAttaches{}, err
 			}
 		}
-		identities[name] = &taskplanning.AttachPlanIdentity{
+		identities[name] = &attachplan.Identity{
 			Authentication: item.authentication,
 			Database:       identityName, Role: role, Password: password,
 		}
@@ -325,7 +277,7 @@ func (service *Service) prepareBlueprintAttachCandidates(
 					Database: database, Role: identity.Role, Password: identity.Password,
 				},
 			})
-			identity.Grants = append(identity.Grants, taskplanning.AttachPlanGrantIdentity{
+			identity.Grants = append(identity.Grants, attachplan.GrantIdentity{
 				AttachID: grantID, Database: database,
 			})
 		}
@@ -358,21 +310,6 @@ func (service *Service) prepareBlueprintAttachCandidates(
 			BackingEnvironment: item.backingEnvironment, BackingService: item.backingService,
 			RetainedGrantTargets: retainedGrants,
 		})
-		if identity != nil {
-			if err := prepared.facts.addOwner(name, own, grantNames, grantFacts, item.adapter); err != nil {
-				return preparedBlueprintAttaches{}, err
-			}
-			if item.authentication != core.BackingAuthenticationNone {
-				prepared.procedures = append(prepared.procedures, blueprintAttachProcedure{
-					record: record, adapterKey: item.adapter.Key(), identity: identity,
-				})
-			} else {
-				identity.Clear()
-				delete(identities, name)
-			}
-			// Later owners may grant this database; keep its identity through preparation.
-			// The returned procedures own cleanup, with the failure defer covering all identities.
-		}
 	}
 	for _, name := range names {
 		item := resolved[name]
@@ -411,7 +348,6 @@ func (service *Service) prepareBlueprintAttachCandidates(
 			BackingEnvironment: item.backingEnvironment, BackingService: item.backingService,
 			RetainedCredentialOwner: retainedOwner,
 		})
-		prepared.facts.addAlias(name, item.spec.Credential.Attach)
 	}
 	prepared.candidates = inputs
 	for _, name := range names {
@@ -419,15 +355,7 @@ func (service *Service) prepareBlueprintAttachCandidates(
 			prepared.effective = append(prepared.effective, etcdstore.Versioned[attachrecord.Record]{Record: record})
 		}
 	}
-	sort.Slice(prepared.procedures, func(left, right int) bool {
-		return prepared.procedures[left].record.ID < prepared.procedures[right].record.ID
-	})
 	failed = false
-	// Procedure identities remain owned by the returned preparation until its
-	// caller has compiled the immutable plan.
-	for _, procedure := range prepared.procedures {
-		delete(identities, procedure.record.Name)
-	}
 	return prepared, nil
 }
 
@@ -474,55 +402,4 @@ func validateExistingBlueprintAttaches(
 		}
 	}
 	return nil
-}
-
-func (prepared preparedBlueprintAttaches) procedureSteps(
-	taskID string,
-	timeout int64,
-	namedID func(ids.Kind, string) string,
-) ([]*agentpb.ExecutionStep, []taskjournal.TaskStepRecord, error) {
-	steps := make([]*agentpb.ExecutionStep, 0)
-	records := make([]taskjournal.TaskStepRecord, 0)
-	for _, procedure := range prepared.procedures {
-		stepRecords := make([]taskjournal.TaskStepRecord, 0, len(procedure.record.GrantAttachIDs)+1)
-		stepRecords = append(
-			stepRecords,
-			taskjournal.TaskStepRecord{
-				Kind: taskjournal.TaskStepOperation,
-				ID:   namedID(ids.KindStep, "attach:"+procedure.record.ID+":provision"),
-			},
-		)
-		for _, grantID := range procedure.record.GrantAttachIDs {
-			stepRecords = append(
-				stepRecords,
-				taskjournal.TaskStepRecord{
-					Kind: taskjournal.TaskStepOperation,
-					ID:   namedID(ids.KindStep, "attach:"+procedure.record.ID+":grant:"+grantID),
-				},
-			)
-		}
-		procedureTask := etcd.TaskRecord{
-			ID: taskID, Type: taskjournal.TaskAttach, Target: procedure.record.ID,
-			Steps: stepRecords, TimeoutSeconds: timeout,
-		}
-		built, err := taskplanning.BuildAttachProvisionSteps(
-			procedureTask, procedure.record, procedure.adapterKey, *procedure.identity,
-		)
-		if err != nil {
-			clearBlueprintAttachProcedureSteps(steps)
-			return nil, nil, err
-		}
-		steps = append(steps, built...)
-		records = append(records, stepRecords...)
-	}
-	return steps, records, nil
-}
-
-func clearBlueprintAttachProcedureSteps(steps []*agentpb.ExecutionStep) {
-	for _, step := range steps {
-		if procedure := step.GetAdapterProcedure(); procedure != nil {
-			clear(procedure.Password)
-			procedure.Password = nil
-		}
-	}
 }

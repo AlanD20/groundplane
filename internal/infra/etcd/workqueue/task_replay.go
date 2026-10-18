@@ -42,6 +42,30 @@ func (repository *Repository) PrepareTaskFinish(ctx context.Context, task TaskSn
 	if err != nil {
 		return Change{}, err
 	}
+	return repository.prepareFinishedReplay(ctx, task, next, at)
+}
+
+// PreparePlanningRejection joins a no-work failure with request replay and Task
+// retention. The operation owner must join its saved failure evidence and
+// release of planning-only resource fences. No execution graph can be discarded.
+func (repository *Repository) PreparePlanningRejection(ctx context.Context, task TaskSnapshot,
+	outcome workexecution.Outcome, evidence workexecution.Input, at, retainUntil time.Time,
+) (Change, error) {
+	next, err := workexecution.RejectPlanning(task.Task, outcome, evidence, at, retainUntil)
+	if err != nil {
+		return Change{}, err
+	}
+	change, err := repository.prepareFinishedReplay(ctx, task, next, at)
+	if err != nil {
+		return Change{}, err
+	}
+	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: TaskItemsPrefix(task.Task.ID), Prefix: true})
+	return change, nil
+}
+
+func (repository *Repository) prepareFinishedReplay(ctx context.Context, task TaskSnapshot,
+	next workexecution.Task, at time.Time,
+) (Change, error) {
 	read, err := repository.read(ctx, []string{replayBindingKey(task.Task.ID)}, 0)
 	if err != nil {
 		return Change{}, err

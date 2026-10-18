@@ -13,6 +13,7 @@ import (
 
 type Helper interface {
 	Run(context.Context, materializerrunner.Request) error
+	StopCaptured(context.Context, materializerrunner.Ownership) error
 }
 
 type Runtime struct {
@@ -108,7 +109,7 @@ func (runtime *Runtime) runFile(ctx context.Context, volumeDir string, payload P
 		encoded <- encodeErr
 	}()
 	helperErr := runtime.helper.Run(ctx, materializerrunner.Request{
-		VolumeDir: volumeDir, Stream: reader, VerifyOnly: verifyOnly,
+		VolumeDir: volumeDir, Stream: reader, VerifyOnly: verifyOnly, Header: payload.Header,
 	})
 	readerCloseErr := reader.Close()
 	encodeErr := <-encoded

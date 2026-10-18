@@ -137,22 +137,18 @@ func encodeAuthority(
 	if err != nil {
 		return nil, fileError(err)
 	}
-	fields := []string{binding.TaskID, binding.AssignmentID, binding.StepID, binding.ExecutionID, binding.TransferID}
-	size := 2 + 4 + len(content)
-	for _, field := range fields {
-		size += 2 + len(field)
+	bindingDigest, err := backupconfigtransfer.InitialChainSHA256(binding)
+	if err != nil {
+		return nil, err
 	}
+	size := 2 + len(bindingDigest) + 4 + len(content)
 	if size > maximumAuthorityLen {
 		return nil, invalidRecord()
 	}
 	raw, offset := make([]byte, size), 2
 	raw[0], raw[1] = authoritySchema, byte(binding.Direction)
-	for _, field := range fields {
-		binary.BigEndian.PutUint16(raw[offset:offset+2], uint16(len(field)))
-		offset += 2
-		copy(raw[offset:], field)
-		offset += len(field)
-	}
+	copy(raw[offset:], bindingDigest)
+	offset += len(bindingDigest)
 	binary.BigEndian.PutUint32(raw[offset:offset+4], uint32(len(content)))
 	copy(raw[offset+4:], content)
 	return raw, nil

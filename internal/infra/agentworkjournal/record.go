@@ -13,27 +13,38 @@ import (
 // attemptRecord owns the single transport sequence shared by an operation and
 // its hooks. Each typed report is retained for replay without retaining history.
 type attemptRecord struct {
-	NetworkRecovery    *NetworkRecoveryRecord              `json:"network_recovery,omitempty"`
-	Network            *NetworkRecord                      `json:"network,omitempty"`
-	VolumeRecovery     *VolumeRecoveryRecord               `json:"volume_recovery,omitempty"`
-	Volume             *VolumeRecord                       `json:"volume,omitempty"`
-	AttachRecovery     *AttachRecoveryRecord               `json:"attach_recovery,omitempty"`
-	AttachFailure      *AttachFailureDelivery              `json:"attach_failure,omitempty"`
-	AttachRemoval      *AttachRemovalRecord                `json:"attach_removal,omitempty"`
-	EnvironmentFailure *EnvironmentFailureDelivery         `json:"environment_failure,omitempty"`
-	EnvironmentRemoval *EnvironmentRemovalRecord           `json:"environment_removal,omitempty"`
-	ScriptFailure      *ScriptFailureDelivery              `json:"script_failure,omitempty"`
-	ScriptRecovery     *ScriptRecoveryRecord               `json:"script_recovery,omitempty"`
-	Attempt            workexecution.Attempt               `json:"attempt"`
-	Sequence           uint64                              `json:"sequence"`
-	UpdatedAt          time.Time                           `json:"updated_at"`
-	Script             json.RawMessage                     `json:"script,omitempty"`
-	Release            *releaseexecution.CheckpointReport  `json:"release,omitempty"`
-	Effect             *EffectRecord                       `json:"effect,omitempty"`
-	Completion         *releaseexecution.CompletionReceipt `json:"completion,omitempty"`
-	Failure            *ReleaseFailureDelivery             `json:"failure,omitempty"`
-	Recovery           *RecoveryRecord                     `json:"recovery,omitempty"`
-	ScriptCompletion   *workexecution.Attempt              `json:"script_completion,omitempty"`
+	Backup                  *BackupRecord                       `json:"backup,omitempty"`
+	RemovalRecovery         *RemovalRecoveryRecord              `json:"removal_recovery,omitempty"`
+	LifecycleRecovery       *LifecycleRecoveryRecord            `json:"lifecycle_recovery,omitempty"`
+	Lifecycle               *LifecycleRecord                    `json:"lifecycle,omitempty"`
+	AttachProvisionRecovery *AttachProvisionRecoveryRecord      `json:"attach_provision_recovery,omitempty"`
+	AttachProvisionFailure  *AttachProvisionFailureDelivery     `json:"attach_provision_failure,omitempty"`
+	AttachProvision         *AttachProvisionRecord              `json:"attach_provision,omitempty"`
+	EntryRecovery           *EntryRecoveryRecord                `json:"entry_recovery,omitempty"`
+	EntryConfiguration      *EntryConfigurationRecord           `json:"entry_configuration,omitempty"`
+	ComponentRecovery       *ComponentRecoveryRecord            `json:"component_recovery,omitempty"`
+	Component               *ComponentRecord                    `json:"component,omitempty"`
+	NetworkRecovery         *NetworkRecoveryRecord              `json:"network_recovery,omitempty"`
+	Network                 *NetworkRecord                      `json:"network,omitempty"`
+	VolumeRecovery          *VolumeRecoveryRecord               `json:"volume_recovery,omitempty"`
+	Volume                  *VolumeRecord                       `json:"volume,omitempty"`
+	AttachRecovery          *AttachRecoveryRecord               `json:"attach_recovery,omitempty"`
+	AttachFailure           *AttachFailureDelivery              `json:"attach_failure,omitempty"`
+	AttachRemoval           *AttachRemovalRecord                `json:"attach_removal,omitempty"`
+	EnvironmentFailure      *EnvironmentFailureDelivery         `json:"environment_failure,omitempty"`
+	EnvironmentRemoval      *EnvironmentRemovalRecord           `json:"environment_removal,omitempty"`
+	ScriptFailure           *ScriptFailureDelivery              `json:"script_failure,omitempty"`
+	ScriptRecovery          *ScriptRecoveryRecord               `json:"script_recovery,omitempty"`
+	Attempt                 workexecution.Attempt               `json:"attempt"`
+	Sequence                uint64                              `json:"sequence"`
+	UpdatedAt               time.Time                           `json:"updated_at"`
+	Script                  json.RawMessage                     `json:"script,omitempty"`
+	Release                 *releaseexecution.CheckpointReport  `json:"release,omitempty"`
+	Effect                  *EffectRecord                       `json:"effect,omitempty"`
+	Completion              *releaseexecution.CompletionReceipt `json:"completion,omitempty"`
+	Failure                 *ReleaseFailureDelivery             `json:"failure,omitempty"`
+	Recovery                *RecoveryRecord                     `json:"recovery,omitempty"`
+	ScriptCompletion        *workexecution.Attempt              `json:"script_completion,omitempty"`
 }
 
 func (record attemptRecord) script() (*ScriptRecord, error) {
@@ -45,6 +56,54 @@ func (record attemptRecord) script() (*ScriptRecord, error) {
 }
 
 func (record attemptRecord) pending() (bool, error) {
+	if record.Backup != nil {
+		return record.Backup.Completion == nil, nil
+	}
+	if record.RemovalRecovery != nil {
+		if record.RemovalRecovery.Failure != nil {
+			return record.RemovalRecovery.Failure.Receipt == nil, nil
+		}
+		return record.RemovalRecovery.Completion == nil, nil
+	}
+	if record.LifecycleRecovery != nil {
+		return record.LifecycleRecovery.Receipt == nil, nil
+	}
+	if record.Lifecycle != nil {
+		if record.Lifecycle.Failure != nil {
+			return record.Lifecycle.Failure.Receipt == nil, nil
+		}
+		return record.Lifecycle.Completion == nil, nil
+	}
+	if record.AttachProvisionRecovery != nil {
+		return record.AttachProvisionRecovery.Receipt == nil, nil
+	}
+	if record.AttachProvisionFailure != nil {
+		return record.AttachProvisionFailure.Receipt == nil, nil
+	}
+	if record.AttachProvision != nil {
+		return record.AttachProvision.Completion == nil, nil
+	}
+	if record.EntryRecovery != nil {
+		return record.EntryRecovery.Receipt == nil, nil
+	}
+	if record.EntryConfiguration != nil {
+		if record.EntryConfiguration.Failure != nil {
+			return record.EntryConfiguration.Failure.Receipt == nil, nil
+		}
+		return !record.EntryConfiguration.Acknowledged, nil
+	}
+	if record.ComponentRecovery != nil {
+		if record.ComponentRecovery.Failure != nil {
+			return record.ComponentRecovery.Failure.Receipt == nil, nil
+		}
+		return record.ComponentRecovery.Receipt == nil, nil
+	}
+	if record.Component != nil {
+		if record.Component.Failure != nil {
+			return record.Component.Failure.Receipt == nil, nil
+		}
+		return !record.Component.Acknowledged, nil
+	}
 	if record.NetworkRecovery != nil {
 		if record.NetworkRecovery.Failure != nil {
 			return record.NetworkRecovery.Failure.Receipt == nil, nil
@@ -98,6 +157,39 @@ func (record attemptRecord) pending() (bool, error) {
 }
 
 func (record attemptRecord) validate() error {
+	if record.Backup != nil {
+		return record.validateBackup()
+	}
+	if record.RemovalRecovery != nil {
+		return record.validateRemovalRecovery()
+	}
+	if record.LifecycleRecovery != nil {
+		return record.validateLifecycleRecovery()
+	}
+	if record.Lifecycle != nil {
+		return record.validateLifecycle()
+	}
+	if record.AttachProvisionRecovery != nil {
+		return record.validateAttachProvisionRecovery()
+	}
+	if record.AttachProvisionFailure != nil {
+		return record.validateAttachProvisionFailure()
+	}
+	if record.AttachProvision != nil {
+		return record.validateAttachProvision()
+	}
+	if record.EntryRecovery != nil {
+		return record.validateEntryRecovery()
+	}
+	if record.EntryConfiguration != nil {
+		return record.validateEntryConfiguration()
+	}
+	if record.ComponentRecovery != nil {
+		return record.validateComponentRecovery()
+	}
+	if record.Component != nil {
+		return record.validateComponent()
+	}
 	if record.ScriptCompletion != nil {
 		if err := record.validateScriptCompletion(); err != nil {
 			return err

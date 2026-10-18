@@ -9,132 +9,13 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
-	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
-	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 
-	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 	"sort"
-	"time"
 )
-
-func componentTaskPreparationIsZeroForBlueprint(preparation componentplanning.ComponentTaskPreparation) bool {
-	return preparation.Intent.TaskID == ""
-}
-
-func (service *Service) prepareBlueprintComponents(
-	ctx context.Context,
-	environmentID string,
-	taskID string,
-	createdAt time.Time,
-	allocate func(ids.Kind) string,
-	specs map[string]core.ComponentSpec,
-	current []etcdstore.Versioned[componentrecord.Record],
-	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
-) (componentplanning.ComponentTaskPreparation, []componentrecord.Record, []core.Component, error) {
-	currentComponents := make([]core.Component, len(current))
-	currentByID := make(map[string]etcdstore.Versioned[componentrecord.Record], len(current))
-	for index, versioned := range current {
-		component, err := componentrecord.ProjectRecord(versioned.Record)
-		if err != nil {
-			return componentplanning.ComponentTaskPreparation{}, nil, nil, err
-		}
-		if _, duplicate := currentByID[component.ID]; duplicate {
-			return componentplanning.ComponentTaskPreparation{}, nil, nil, errs.New(
-				errs.KindInternal,
-				"Environment Component singleton set repeats an id",
-			)
-		}
-		currentComponents[index] = component
-		currentByID[component.ID] = versioned
-	}
-	changes, err := taskplanning.ReconcileBlueprintComponents(specs, currentComponents, allocate)
-	if err != nil {
-		return componentplanning.ComponentTaskPreparation{}, nil, nil, err
-	}
-	inputs := make([]componentplanning.EnvironmentComponentCandidateInput, len(changes.Candidates))
-	for index, candidate := range changes.Candidates {
-		versioned, exists := currentByID[candidate.Current.ID]
-		if !exists {
-			return componentplanning.ComponentTaskPreparation{}, nil, nil, errs.New(
-				errs.KindInternal,
-				"Blueprint Component candidate lost its active record",
-			)
-		}
-		inputs[index] = componentplanning.EnvironmentComponentCandidateInput{
-			Current: versioned, Candidate: candidate.Candidate,
-		}
-	}
-	preparation := componentplanning.ComponentTaskPreparation{}
-	if len(inputs) != 0 {
-		authority, authorityErr := service.repository.ReadCurrentProjectionAuthority(
-			ctx,
-			environmentID,
-			inputs[0].Current.ReadRevision,
-		)
-		if authorityErr != nil {
-			return componentplanning.ComponentTaskPreparation{}, nil, nil, authorityErr
-		}
-		preparation, err = service.repository.PrepareEnvironmentComponentTask(
-			ctx,
-			taskID,
-			environmentID,
-			zoneChanges,
-			inputs,
-			createdAt,
-			authority,
-		)
-		if err != nil {
-			return componentplanning.ComponentTaskPreparation{}, nil, nil, err
-		}
-	}
-	recordsByID := make(map[string]componentrecord.Record, len(changes.Effective))
-	for _, component := range changes.Effective {
-		record, recordErr := componentrecord.NewRecord(component)
-		if recordErr != nil {
-			return componentplanning.ComponentTaskPreparation{}, nil, nil, recordErr
-		}
-		recordsByID[component.ID] = record
-	}
-	if len(preparation.Intent.Candidates) != len(changes.Candidates) {
-		return componentplanning.ComponentTaskPreparation{}, nil, nil, errs.New(
-			errs.KindInternal,
-			"prepared Blueprint Component candidate count changed",
-		)
-	}
-	for _, candidate := range preparation.Intent.Candidates {
-		if _, exists := recordsByID[candidate.Candidate.Desired.ID]; !exists {
-			return componentplanning.ComponentTaskPreparation{}, nil, nil, errs.New(
-				errs.KindInternal,
-				"prepared Blueprint Component candidate is unknown",
-			)
-		}
-		recordsByID[candidate.Candidate.Desired.ID] = candidate.Candidate
-	}
-	records := make([]componentrecord.Record, 0, len(recordsByID))
-	for _, record := range recordsByID {
-		records = append(records, record)
-	}
-	sort.Slice(records, func(left int, right int) bool {
-		return records[left].Desired.Kind < records[right].Desired.Kind
-	})
-	effective := make([]core.Component, len(records))
-	for index, record := range records {
-		effective[index], err = componentrecord.ProjectRecord(record)
-		if err != nil {
-			return componentplanning.ComponentTaskPreparation{}, nil, nil, err
-		}
-	}
-	return preparation, records, effective, nil
-}
 
 func blueprintComponentEnvironment(
 	environment hierarchyrecord.EnvironmentRecord,
@@ -197,21 +78,25 @@ type environmentComponentMaterializationInput struct {
 	resolve     bool
 }
 
-func (service *Service) environmentComponentMaterializations(
+func (service *Service) environmentFileSources(
 	ctx context.Context,
 	environmentID string,
 	projectID string,
 	revisionID string,
-	artifactID string,
 	generation uint64,
 	allocate func(ids.Kind, string) string,
 	runtimeFiles []core.BlueprintFile,
 	projection composerender.EnvironmentComponentComposeProjection,
 	entryMaterializations []composerender.EnvironmentEntryMaterialization,
 	entries []entryrecord.Record,
-) ([]materializationrecord.Record, []*agentpb.ExecutionStep, error) {
+) ([]materializationrecord.Record, error) {
 	inputs := make([]environmentComponentMaterializationInput, 0,
 		len(runtimeFiles)+len(projection.PlainFiles)+len(projection.EnvironmentFiles)+len(entryMaterializations))
+	defer func() {
+		for _, input := range inputs {
+			clear(input.content)
+		}
+	}()
 	for _, materialization := range entryMaterializations {
 		inputs = append(inputs, environmentComponentMaterializationInput{
 			destination: materialization.Destination,
@@ -256,7 +141,7 @@ func (service *Service) environmentComponentMaterializations(
 		for index, binding := range file.Values {
 			secret, err := service.materials.PinSecretValue(ctx, projectID, binding.SecretID)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			values[index] = materializationrecord.GeneratedEnvironmentEntryReference{
 				Name: binding.Name, Secret: &secret,
@@ -277,11 +162,10 @@ func (service *Service) environmentComponentMaterializations(
 	}
 	sort.Slice(inputs, func(left int, right int) bool { return inputs[left].destination < inputs[right].destination })
 	references := make([]materializationrecord.Record, 0, len(inputs))
-	steps := make([]*agentpb.ExecutionStep, 0, len(inputs))
 	previousDestination := ""
 	for _, input := range inputs {
 		if input.destination == previousDestination {
-			return nil, nil, errs.New(errs.KindNameConflict, "Environment materialization destination is duplicated")
+			return nil, errs.New(errs.KindNameConflict, "Environment materialization destination is duplicated")
 		}
 		content := input.content
 		var err error
@@ -289,7 +173,7 @@ func (service *Service) environmentComponentMaterializations(
 			content, err = service.materials.ResolveTaskMaterializationSource(ctx, environmentID, input.source)
 			if err != nil {
 				clear(content)
-				return nil, nil, err
+				return nil, err
 			}
 		}
 		digest := sha256.Sum256(content)
@@ -306,22 +190,16 @@ func (service *Service) environmentComponentMaterializations(
 		}
 		clear(content)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		step, err := taskmaterialization.BuildTaskMaterializationStep(
-			reference,
-			artifactID,
-			uint32(desiredrevision.TaskTimeoutSeconds),
-		)
-		if err != nil {
-			return nil, nil, err
+		if err := materializationrecord.ValidateRecord(reference, generation); err != nil {
+			return nil, err
 		}
 		references = append(references, reference)
-		steps = append(steps, step)
 		previousDestination = input.destination
 	}
 	sort.Slice(references, func(left int, right int) bool {
 		return references[left].StepID < references[right].StepID
 	})
-	return references, steps, nil
+	return references, nil
 }

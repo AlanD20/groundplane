@@ -155,27 +155,20 @@ func readAppliedProxyServicePreflight(ctx context.Context, store planningStore,
 		}
 		return cloneProxyServicePreflight(&selection.Record.Preflight), nil
 	}
-	if receipt.SourceTaskID == "" {
-		return nil, nil // Same-engine Controller metadata has no proxy replacement.
+	if receipt.Execution == nil {
+		return nil, nil // Controller metadata has no proxy replacement.
 	}
-	execution, err := ReadChildExecution(ctx, store, receipt.SourceTaskID, revision)
+	runtime, found, err := ReadRuntime(ctx, store, receipt.Target.ID, revision)
 	if err != nil {
 		return nil, err
 	}
-	if execution.Record.EnvironmentID != receipt.EnvironmentID ||
-		execution.Record.ParentTaskID != receipt.ParentTaskID ||
-		execution.Record.Component.Desired.ID != receipt.Target.ID ||
-		receipt.SourcePlanID == "" {
-		return nil, errs.New(errs.KindStateConflict, "Blueprint router execution differs from its applied receipt")
+	if !found || runtime.Record.EnvironmentID != receipt.EnvironmentID ||
+		runtime.Record.RevisionID != receipt.ParentTaskID ||
+		runtime.Record.Component.Desired.ID != receipt.Target.ID ||
+		runtime.Record.Execution != *receipt.Execution {
+		return nil, errs.New(errs.KindStateConflict, "Applied router dependencies do not match the acknowledged runtime")
 	}
-	plan, err := execution.Record.ExecutionPlan()
-	if err != nil {
-		return nil, err
-	}
-	if plan.GetPlanId() != receipt.SourcePlanID {
-		return nil, errs.New(errs.KindStateConflict, "Blueprint router receipt names another execution plan")
-	}
-	return cloneProxyServicePreflight(execution.Record.ProxyPreflight), nil
+	return cloneProxyServicePreflight(runtime.Record.ProxyPreflight), nil
 }
 
 func compareProxyServiceSource(

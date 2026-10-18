@@ -164,9 +164,7 @@ func validateSource(source Source) error {
 			source.GeneratedEnvironment != nil ||
 			ids.Validate(ids.KindTask, source.ComponentFile.RevisionID) != nil ||
 			ids.Validate(ids.KindComponent, source.ComponentFile.ComponentID) != nil ||
-			validateSourcePath(source.ComponentFile.Path) != nil ||
-			(source.ComponentFile.RouteTaskID != "" &&
-				ids.Validate(ids.KindTask, source.ComponentFile.RouteTaskID) != nil) {
+			validateSourcePath(source.ComponentFile.Path) != nil {
 			return errs.New(errs.KindValidationFailed, "Component file materialization reference is invalid")
 		}
 	case SourceEntryValue:

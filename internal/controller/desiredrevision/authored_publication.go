@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -63,24 +65,32 @@ func (publication StagedPublication) consumeAuthored(
 }
 
 type PublishAuthoredInput struct {
-	Project                keyvalue.Versioned[hierarchy.ProjectRecord]
-	Environment            keyvalue.Versioned[hierarchy.EnvironmentRecord]
-	ExpectedHeadRevision   int64
-	Staged                 StagedPublication
-	OwnedIdentities        projectionrecord.EnvironmentOwnedIdentities
-	ZoneReservations       []zones.Record
-	PrerequisiteAuthority  etcd.BlueprintPrerequisiteAuthority
-	AttachInputGenerations []etcd.BlueprintAttachInputGenerationPublication
-	Evidence               Evidence
-	Locator                idempotency.IdempotencyLocator
-	Parent                 etcd.TaskRecord
-	ScriptPublication      etcd.BlueprintScriptPublication
+	Project                  keyvalue.Versioned[hierarchy.ProjectRecord]
+	Environment              keyvalue.Versioned[hierarchy.EnvironmentRecord]
+	ExpectedHeadRevision     int64
+	Staged                   StagedPublication
+	OwnedIdentities          projectionrecord.EnvironmentOwnedIdentities
+	ZoneReservations         []zones.Record
+	PrerequisiteAuthority    etcd.BlueprintPrerequisiteAuthority
+	AttachInputGenerations   []etcd.BlueprintAttachInputGenerationPublication
+	RetainedAttachConditions []keyvalue.Condition
+	Evidence                 Evidence
+	Locator                  idempotency.IdempotencyLocator
+	Parent                   workexecution.Task
+	Graph                    blueprintunits.CapturedGraph
+	Baseline                 blueprintunits.Snapshot
+	ScriptPublication        etcd.BlueprintScriptPublication
+}
+
+type AuthoredPublicationIdempotency interface {
+	ResolveExisting(context.Context, idempotency.IdempotencyLocator, Evidence) (requestidempotency.Resolution, bool, error)
+	ResolveUnknown(context.Context, idempotency.IdempotencyLocator, Evidence, error) (requestidempotency.Resolution, error)
 }
 
 func PublishAuthored(
 	ctx context.Context,
 	repository PublicationRepository,
-	idempotencyCoordinator PublicationIdempotency,
+	idempotencyCoordinator AuthoredPublicationIdempotency,
 	input PublishAuthoredInput,
 ) (idempotency.IdempotencyResponse, error) {
 	if ctx == nil || repository == nil || idempotencyCoordinator == nil {
@@ -119,21 +129,33 @@ func PublishAuthored(
 			Project: input.Project, Environment: input.Environment,
 			ExpectedHeadRevision: input.ExpectedHeadRevision,
 			Claim:                claim, DesiredInput: desired, OwnedIdentities: input.OwnedIdentities,
-			ZoneReservations:       input.ZoneReservations,
-			PrerequisiteAuthority:  input.PrerequisiteAuthority,
-			AttachInputGenerations: input.AttachInputGenerations,
-			Parent:                 input.Parent, Marker: marker,
+			ZoneReservations:         input.ZoneReservations,
+			PrerequisiteAuthority:    input.PrerequisiteAuthority,
+			AttachInputGenerations:   input.AttachInputGenerations,
+			RetainedAttachConditions: input.RetainedAttachConditions,
+			Parent:                   input.Parent, Graph: input.Graph, Baseline: input.Baseline, Marker: marker,
 			ScriptPublication: input.ScriptPublication,
 		},
 	)
+	defer keyvalue.ClearValues(result.FailureReads)
 	var resolution requestidempotency.Resolution
 	if publicationErr != nil {
 		if !unknownOutcome(publicationErr) {
 			return idempotency.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, publicationErr)
 		}
 		resolution, err = idempotencyCoordinator.ResolveUnknown(ctx, input.Locator, input.Evidence, publicationErr)
+	} else if result.Succeeded {
+		return cloneResponse(response), nil
 	} else {
-		resolution, err = idempotencyCoordinator.ResolveKnown(ctx, input.Evidence, result)
+		// A failed comparison is known not to have committed. Read the request
+		// marker to distinguish a concurrent replay from changed resource state;
+		// do not misclassify it as an unknown transport outcome.
+		var found bool
+		resolution, found, err = idempotencyCoordinator.ResolveExisting(ctx, input.Locator, input.Evidence)
+		if err == nil && !found {
+			return idempotency.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim,
+				errs.New(errs.KindStateConflict, "Blueprint sources changed before Apply was accepted; submit the updated Blueprint"))
+		}
 	}
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err

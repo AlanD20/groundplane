@@ -1,15 +1,33 @@
 package agent
 
 import (
+	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
+	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
+	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
 	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
+	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
 	"github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
 	"github.com/AlanD20/groundplane/internal/infra/agentownership"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func (c *Client) SetAttachProvisionExecutor(executor *attachruntime.Executor) error {
+	if c == nil || executor == nil {
+		return errs.New(errs.KindValidationFailed, "Agent Attach provisioning executor is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.attachProvisionExecutor != nil {
+		return errs.New(errs.KindStateConflict, "Agent Attach provisioning executor cannot change after configuration")
+	}
+	c.attachProvisionExecutor = executor
+	return nil
+}
 
 // SetProcessOwnership borrows the process-lifetime lease. Application shutdown
 // releases it only after Run has joined every session worker.
@@ -55,6 +73,32 @@ func (c *Client) SetAttachRemovalExecutor(executor *hierarchyruntime.AttachExecu
 	return nil
 }
 
+func (c *Client) SetEntryExecutor(executor *entryruntime.Executor) error {
+	if c == nil || executor == nil {
+		return errs.New(errs.KindValidationFailed, "Agent Entry executor is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.entryExecutor != nil {
+		return errs.New(errs.KindStateConflict, "Agent Entry executor cannot change after configuration")
+	}
+	c.entryExecutor = executor
+	return nil
+}
+
+func (c *Client) SetComponentExecutor(executor *componentruntime.Executor) error {
+	if c == nil || executor == nil {
+		return errs.New(errs.KindValidationFailed, "Agent Component executor is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.componentExecutor != nil {
+		return errs.New(errs.KindStateConflict, "Agent Component executor cannot change after configuration")
+	}
+	c.componentExecutor = executor
+	return nil
+}
+
 func (c *Client) SetNetworkExecutor(executor *networkruntime.Executor) error {
 	if c == nil || executor == nil {
 		return errs.New(errs.KindValidationFailed, "Agent Network executor is required")
@@ -78,6 +122,32 @@ func (c *Client) SetVolumeExecutor(executor *volumeruntime.Executor) error {
 		return errs.New(errs.KindStateConflict, "Agent Volume executor cannot change after configuration")
 	}
 	c.volumeExecutor = executor
+	return nil
+}
+
+func (c *Client) SetLifecycleExecutor(executor *lifecycleruntime.Executor) error {
+	if c == nil || executor == nil {
+		return errs.New(errs.KindValidationFailed, "Agent Service lifecycle executor is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.lifecycleExecutor != nil {
+		return errs.New(errs.KindStateConflict, "Agent Service lifecycle executor cannot change after configuration")
+	}
+	c.lifecycleExecutor = executor
+	return nil
+}
+
+func (c *Client) SetRemovalRecovery(runtime *removalruntime.Runtime) error {
+	if c == nil || runtime == nil {
+		return errs.New(errs.KindValidationFailed, "service removal recovery runtime is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.removalRecovery != nil {
+		return errs.New(errs.KindStateConflict, "service removal recovery runtime cannot change after configuration")
+	}
+	c.removalRecovery = runtime
 	return nil
 }
 

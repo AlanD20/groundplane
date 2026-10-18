@@ -21,7 +21,8 @@ func (reader *Reader) decodePruneDynamicEvidence(
 	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
 	evidence *Evidence,
-	plan *agentpb.ExecutionPlan,
+	scope *agentpb.BackupPlanScope,
+	steps []*agentpb.BackupStepAuthority,
 	stepIndex int,
 ) error {
 	dispatch := evidence.Dispatch
@@ -29,12 +30,12 @@ func (reader *Reader) decodePruneDynamicEvidence(
 		return errs.New(errs.KindInternal, "backup prune dispatch evidence is missing")
 	}
 	if stepIndex < 0 || stepIndex >= len(dispatch.RecoveryPointIDs) ||
-		len(plan.Steps) != len(dispatch.RecoveryPointIDs) {
+		len(steps) != len(dispatch.RecoveryPointIDs) {
 		return errs.New(errs.KindStateConflict, "backup prune selected step is unavailable")
 	}
 	index := stepIndex
 	pointID := dispatch.RecoveryPointIDs[index]
-	planned := plan.Steps[index].GetBackupStep().GetPrune()
+	planned := steps[index].GetPrune()
 	if planned == nil || len(planned.Objects) != 1 || planned.Objects[0].Ordinal != uint32(index+1) ||
 		planned.Objects[0].PointId != pointID {
 		return errs.New(errs.KindStateConflict, "backup prune sealed authority is unavailable")
@@ -106,7 +107,7 @@ func (reader *Reader) decodePruneDynamicEvidence(
 		RetentionPolicy:    policy, PointSHA256: append([]byte(nil), pointDigest[:]...),
 		ConnectorAuthority: dynamic.connectorAuthorities[point.ConnectorID],
 	}
-	if err := backupplanning.ValidateBackupPruneExecutionStep(*dispatch, item, plan, index); err != nil {
+	if err := backupplanning.ValidateBackupPruneSourceAuthority(*dispatch, item, scope, steps[index], index); err != nil {
 		return err
 	}
 	evidence.Point = &point

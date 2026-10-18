@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backingaccess"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -95,25 +94,4 @@ func (record *Record) finish(failure string, now time.Time) error {
 	record.Clear()
 	record.Phase, record.Outcome, record.Failure, record.FinishedAt = Finished, outcome, failure, &now
 	return nil
-}
-
-// Cleanup Retry keeps the original helper identity. It carries no credentials,
-// makes no database connection, and cannot replay the interrupted query.
-func PrepareCleanupRetry(source Record, taskID string) (Record, Record, error) {
-	if source.Validate() != nil || source.Phase != CleanupRequired || ids.Validate(ids.KindTask, taskID) != nil ||
-		taskID == source.Owner.TaskID {
-		return Record{}, Record{}, errs.New(
-			errs.KindTaskNotRetryable,
-			"only pending Backing check cleanup can be retried; run a new access check for a new probe",
-		)
-	}
-	retry := Clone(source)
-	retry.Owner.TaskID, retry.RetryOf = taskID, source.Owner.TaskID
-	retry.Phase, retry.Outcome, retry.Failure, retry.FinishedAt = Cleaning, "", "", nil
-	previous := Clone(source)
-	previous.Phase, previous.TransferredTo = Transferred, taskID
-	if retry.Validate() != nil || previous.Validate() != nil {
-		return Record{}, Record{}, invalidRecord()
-	}
-	return previous, retry, nil
 }

@@ -43,13 +43,12 @@ type BackingCheckResult struct {
 	ExecutionLocation string                    `json:"execution_location"`
 	Configuration     BackingCheckConfiguration `json:"configuration"`
 	Stale             bool                      `json:"stale"`
-	Phase             string                    `json:"phase" enum:"ready,checking,cleaning,finished,cleanup_required,transferred"`
+	Phase             string                    `json:"phase" enum:"ready,checking,cleaning,finished,cleanup_required"`
 	Outcome           string                    `json:"outcome,omitempty" enum:"passed,failed,interrupted"`
 	Failure           string                    `json:"failure,omitempty"`
 	Stages            []BackingCheckStage       `json:"stages"`
 	CleanupRequired   bool                      `json:"cleanup_required"`
 	HelperName        string                    `json:"helper_name,omitempty"`
-	CleanupTaskID     string                    `json:"cleanup_task_id,omitempty"`
 	CreatedAt         string                    `json:"created_at"`
 	StartedAt         string                    `json:"started_at,omitempty"`
 	FinishedAt        string                    `json:"finished_at,omitempty"`

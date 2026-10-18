@@ -87,7 +87,7 @@ func newAttachCheckResultCmd() *cobra.Command {
 				map[string]any{"task_id": result.TaskID, "phase": result.Phase, "outcome": result.Outcome,
 					"failure": result.Failure, "stale": result.Stale, "configuration": result.Configuration, "stages": result.Stages,
 					"execution_location": result.ExecutionLocation, "cleanup_required": result.CleanupRequired,
-					"helper_name": result.HelperName, "cleanup_task_id": result.CleanupTaskID, "created_at": result.CreatedAt,
+					"helper_name": result.HelperName, "created_at": result.CreatedAt,
 					"started_at": result.StartedAt, "finished_at": result.FinishedAt},
 			)
 			return fromContext(cmd).Out.RenderOne(fields, values, result)

@@ -1,10 +1,12 @@
 package attachremoval
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -27,23 +29,53 @@ func NewDetachCapture(task workexecution.Task, item workexecution.Item, input De
 		Action: *item.Input, FrozenSHA256: digest, BackingProjectID: input.Snapshot.Source.Attach.BackingProjectID}, nil
 }
 
-// PrepareDetachPublicationCapture must join Task/input/binding publication. Pin
+// PrepareDetachPublicationCapture must join input/binding publication. Pin
 // preparation verifies exact current Secret metadata and ciphertext under the
 // same source comparisons; stale prepublication input fails rather than silently
-// switching versions. No queued Task is exposed before capture is durable.
-func (repository *InputRepository) PrepareDetachPublicationCapture(ctx context.Context, task workexecution.Task, item workexecution.Item,
+// switching versions. A direct action uses an absent Task; a graph batch uses
+// the exact accepted Task revision while its execution barrier remains closed.
+func (repository *InputRepository) PrepareDetachPublicationCapture(ctx context.Context, snapshot workqueue.TaskSnapshot, item workexecution.Item,
 	input DetachInput, capture WorkCapture, guards []keyvalue.Condition,
 ) (workqueue.Change, error) {
-	view := workqueue.View{Task: workqueue.TaskSnapshot{Task: task}, Item: workqueue.ItemSnapshot{Item: item}}
+	task := snapshot.Task
+	view := workqueue.View{Task: snapshot, Item: workqueue.ItemSnapshot{Item: item}}
 	if ctx == nil || len(guards) == 0 || item.Input == nil || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
+		snapshot.Revision < 0 || task.Validate() != nil || task.PublicationComplete || item.Validate() != nil ||
+		item.TaskID != task.ID || item.Operation != workexecution.Detach ||
 		item.Phase != workexecution.Ready || task.FinishedAt != nil || task.CollectionStartedAt != nil || task.Stop != nil ||
 		capture.Pins != nil || !matchesDetachCaptureSource(view, input, capture) || !matchesDetachHookCapture(input.Snapshot.Source, capture) {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach capture is not eligible for initial publication")
 	}
+	if snapshot.Revision > 0 && (input.Cascade == nil || task.Action != workexecution.ActionRemove ||
+		input.Cascade.Validate(input.Snapshot) != nil || input.Cascade.ZoneID != task.TargetID ||
+		task.ExpectedItems != input.Cascade.Count+1 || task.Scope.TenantID != "" ||
+		task.Scope.ProjectID != input.Snapshot.Source.Attach.BackingProjectID ||
+		task.Scope.EnvironmentID != input.Snapshot.Source.Attach.BackingEnvironmentID) {
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "accepted Detach capture requires its closed Backing Zone graph")
+	}
 	change := workqueue.Change{Conditions: append([]keyvalue.Condition(nil), guards...)}
 	change.Conditions = append(change.Conditions,
-		keyvalue.Condition{Key: workqueue.TaskKey(task.ID)}, keyvalue.Condition{Key: workqueue.ItemKey(item.ID)},
-		keyvalue.Condition{Key: WorkCaptureKey(item.ID)}, keyvalue.Condition{Key: DetachInputKey(item.ID)})
+		keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: snapshot.Revision}, keyvalue.Condition{Key: workqueue.ItemKey(item.ID)},
+		keyvalue.Condition{Key: WorkCaptureKey(item.ID)})
+	if snapshot.Revision == 0 {
+		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: DetachInputKey(item.ID)})
+	} else {
+		view.ReadRevision = snapshot.Revision
+		prepared, err := repository.LoadPreparedCascadeCapture(ctx, view)
+		if err != nil {
+			return workqueue.Change{}, err
+		}
+		defer prepared.Clear()
+		left, leftErr := recordcodec.Encode("prepared-cascade-hook", capture)
+		right, rightErr := recordcodec.Encode("prepared-cascade-hook", prepared.Capture)
+		equal := leftErr == nil && rightErr == nil && bytes.Equal(left, right)
+		clear(left)
+		clear(right)
+		if !equal {
+			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Backing Zone publication changed its presealed hook capture")
+		}
+		change.Conditions = append(change.Conditions, prepared.Conditions...)
+	}
 	if len(capture.Sources) != 0 {
 		pins, err := tasksecretpins.NewEtcdRepository(repository.store, capture.BackingProjectID)
 		if err != nil {
@@ -80,5 +112,8 @@ func (repository *InputRepository) PrepareDetachPublicationCapture(ctx context.C
 		return workqueue.Change{}, err
 	}
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: WorkCaptureKey(item.ID), Value: raw})
+	if snapshot.Revision > 0 {
+		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: preparedCascadeCaptureKey(item.ID)})
+	}
 	return change, nil
 }

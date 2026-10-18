@@ -10,17 +10,15 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *Repository) PrepareRemote(ctx context.Context,
-	operation hierarchydeletion.HierarchyDeletionOperation,
-	action hierarchydeletion.HierarchyDeletionAction,
-) (RemoteAuthority, error) {
+func (repository *Repository) PrepareRemote(ctx context.Context, execution Execution) (RemoteAuthority, error) {
+	operation, action := execution.operation, execution.action
 	if repository == nil || repository.store == nil {
 		return RemoteAuthority{}, errs.New(
 			errs.KindInternal,
 			"hierarchy deletion backup cleanup repository is unavailable",
 		)
 	}
-	if err := validateActive(operation, action); err != nil {
+	if _, err := execution.conditions(false); err != nil {
 		return RemoteAuthority{}, err
 	}
 	local, err := repository.readLocalAuthority(ctx, action)
@@ -52,6 +50,7 @@ func (repository *Repository) PrepareRemote(ctx context.Context,
 				return RemoteAuthority{}, err
 			}
 		}
+		local.remote.ConfirmedAbsent = intent.Selected != (backupruntime.BackupObjectIdentity{}) && intent.ConfirmedAbsent == intent.Selected
 		return local.remote, nil
 	}
 	selected := local.remote.Point.Object
@@ -63,7 +62,7 @@ func (repository *Repository) PrepareRemote(ctx context.Context,
 	if err != nil {
 		return RemoteAuthority{}, err
 	}
-	conditions, err := operationConditions(operation)
+	conditions, err := execution.conditions(false)
 	if err != nil {
 		clear(encoded)
 		return RemoteAuthority{}, err
@@ -106,31 +105,29 @@ func verifyRemoteTemplate(action hierarchydeletion.HierarchyDeletionAction, fixe
 }
 
 func (repository *Repository) SelectObject(ctx context.Context,
-	operation hierarchydeletion.HierarchyDeletionOperation,
-	action hierarchydeletion.HierarchyDeletionAction,
+	execution Execution,
 	identity backupruntime.BackupObjectIdentity,
 ) error {
-	return repository.updateIntent(ctx, operation, action, identity, false)
+	return repository.updateIntent(ctx, execution, identity, false)
 }
 
 func (repository *Repository) ConfirmAbsent(ctx context.Context,
-	operation hierarchydeletion.HierarchyDeletionOperation,
-	action hierarchydeletion.HierarchyDeletionAction,
+	execution Execution,
 	identity backupruntime.BackupObjectIdentity,
 ) error {
-	return repository.updateIntent(ctx, operation, action, identity, true)
+	return repository.updateIntent(ctx, execution, identity, true)
 }
 
 func (repository *Repository) updateIntent(ctx context.Context,
-	operation hierarchydeletion.HierarchyDeletionOperation,
-	action hierarchydeletion.HierarchyDeletionAction,
+	execution Execution,
 	identity backupruntime.BackupObjectIdentity,
 	confirm bool,
 ) error {
+	operation, action := execution.operation, execution.action
 	if repository == nil || repository.store == nil {
 		return errs.New(errs.KindInternal, "hierarchy deletion backup cleanup repository is unavailable")
 	}
-	if err := validateActive(operation, action); err != nil {
+	if _, err := execution.conditions(!confirm); err != nil {
 		return err
 	}
 	local, err := repository.readLocalAuthority(ctx, action)
@@ -173,7 +170,7 @@ func (repository *Repository) updateIntent(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	conditions, err := operationConditions(operation)
+	conditions, err := execution.conditions(!confirm)
 	if err != nil {
 		clear(encoded)
 		return err

@@ -9,7 +9,6 @@ import { useCallback, useEffect } from "react";
 import type { Project } from "@/lib/types";
 import {
   findEnvironment,
-  terminalTaskStatuses,
   type PendingResourceRemoval,
 } from "@/features/environment/environment-removal-model";
 import {
@@ -25,7 +24,7 @@ import {
   requestResourceRemoval,
   type RemovableEnvironmentResource,
 } from "./resource-removal-api";
-import { retryTask } from "@/features/task/api";
+import { retryTask, type TaskRetryRequest } from "@/features/task/api";
 
 const resourceRemovalObservationFreshMs = 1_500;
 const removalResources: Record<
@@ -96,10 +95,7 @@ export function useEnvironmentLifecycle<
         polling = true;
         try {
           const observation = resourceRemovalObservations.current.get(taskId);
-          if (
-            observation &&
-            terminalTaskStatuses.has(observation.task.status)
-          ) {
+          if (observation && observation.task.task.finished_at) {
             await reconcileResourceRemoval(taskId, observation.task);
             return stop();
           }
@@ -110,7 +106,7 @@ export function useEnvironmentLifecycle<
           )
             return schedule();
           const task = await requestResourceRemovalTask(taskId);
-          if (!terminalTaskStatuses.has(task.status)) return schedule();
+          if (!task.task.finished_at) return schedule();
           await reconcileResourceRemoval(taskId, task);
           stop();
         } catch {
@@ -229,7 +225,19 @@ export function useEnvironmentLifecycle<
   );
 
   const retryResourceRemoval = useCallback(
-    (taskId: string) => {
+    (taskId: string, input: TaskRetryRequest) => {
+      const saved = resourceRemovalRetryIntents.current.get(taskId);
+      if (
+        saved &&
+        (saved.input.work_item_id !== input.work_item_id ||
+          saved.input.attempt !== input.attempt)
+      ) {
+        return Promise.reject(
+          new Error(
+            "An earlier Retry is unresolved. Retry its selected work item and attempt before starting another.",
+          ),
+        );
+      }
       let removal = pendingResourceRemovals.current.get(taskId);
       if (!removal) {
         const failure = [...environmentDeletionFailures.current.entries()].find(
@@ -267,10 +275,11 @@ export function useEnvironmentLifecycle<
       const intent = resourceRemovalRetryIntents.current.get(taskId) ?? {
         removal,
         idempotencyKey: `groundplane:${newULID()}`,
+        input: { ...input },
       };
       resourceRemovalRetryIntents.current.set(taskId, intent);
       persistResourceRemovalRetryIntents(resourceRemovalRetryIntents.current);
-      const request = retryTask(taskId, intent.idempotencyKey)
+      const request = retryTask(taskId, intent.input, intent.idempotencyKey)
         .then((acceptedTaskId) => {
           forgetResourceRemoval(taskId, removal);
           const currentGeneration =
@@ -297,10 +306,7 @@ export function useEnvironmentLifecycle<
               outcome: "pending",
             });
           }
-          pendingResourceRemovals.current.set(
-            acceptedTaskId,
-            acceptedRemoval,
-          );
+          pendingResourceRemovals.current.set(acceptedTaskId, acceptedRemoval);
           resourceRemovalTasks.current.set(
             resourceRemovalKey(acceptedRemoval),
             acceptedTaskId,
@@ -323,6 +329,20 @@ export function useEnvironmentLifecycle<
           monitorResourceRemoval(acceptedTaskId);
           return acceptedTaskId;
         })
+        .catch((error: unknown) => {
+          const code =
+            error && typeof error === "object" && "code" in error
+              ? error.code
+              : undefined;
+          // An in-progress or uncertain receipt must keep its original request.
+          if (code === "task.not_retryable" || code === "validation.failed") {
+            resourceRemovalRetryIntents.current.delete(taskId);
+            persistResourceRemovalRetryIntents(
+              resourceRemovalRetryIntents.current,
+            );
+          }
+          throw error;
+        })
         .finally(() => {
           if (resourceRemovalRetries.current.get(taskId) === request)
             resourceRemovalRetries.current.delete(taskId);
@@ -341,17 +361,17 @@ export function useEnvironmentLifecycle<
         const removal = pendingResourceRemovals.current.get(taskId);
         if (
           removal?.kind === "environment" &&
-          task.target !== removal.resourceId
+          task.task.target_id !== removal.resourceId
         ) {
           throw new Error(
             `Controller returned deletion Task ${taskId} for a different Environment`,
           );
         }
-        if (terminalTaskStatuses.has(task.status)) {
+        if (task.task.finished_at) {
           await reconcileResourceRemoval(taskId, task);
-          if (task.status !== "completed")
+          if (task.task.status !== "succeeded")
             throw new Error(
-              `Environment deletion Task ${taskId} ${task.status}`,
+              `Environment deletion Task ${taskId} ${task.task.status}`,
             );
           return task;
         }
@@ -387,8 +407,10 @@ export function useEnvironmentLifecycle<
         );
       const task = await requestResourceRemovalTask(taskId);
       await reconcileResourceRemoval(taskId, task);
-      if (task.status !== "completed")
-        throw new Error(`Environment deletion Task ${taskId} ${task.status}`);
+      if (!task.task.finished_at || task.task.status !== "succeeded")
+        throw new Error(
+          `Environment deletion Task ${taskId} ${task.task.status}`,
+        );
     },
     [reconcileResourceRemoval, requestResourceRemovalTask],
   );

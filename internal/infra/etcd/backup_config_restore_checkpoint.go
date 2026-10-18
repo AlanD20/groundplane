@@ -8,13 +8,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -29,67 +29,72 @@ type ConfigRestoreCheckpointPublication struct {
 	FileProof        *agentpb.BackupConfigMaterializationVerified
 }
 
-// CheckpointConfigRestore commits the native Restore transition and its exact
-// receipt together. A complete transfer cannot stand in for live publication.
-func (repository *BackupRuntimeRepository) CheckpointConfigRestore(ctx context.Context,
-	input backupruntime.BackupCheckpointInput, current etcdstore.Versioned[backupruntime.BackupRestoreRecord],
+// PrepareConfigRestoreProgress joins resource publication to the native work
+// checkpoint. It never commits independently or acknowledges an Agent report.
+func (repository *BackupRuntimeRepository) PrepareConfigRestoreProgress(ctx context.Context,
+	view workqueue.ResumeView, admitted backupwork.CheckpointAdmission,
+	current etcdstore.Versioned[backupruntime.BackupRestoreRecord],
 	publication *ConfigRestoreCheckpointPublication, at time.Time,
-) (int64, error) {
-	if backupruntime.ValidateBackupCheckpointInput(input) != nil || current.Revision <= 0 ||
-		current.Record.TaskID != input.TaskID || current.Record.Point.SourceKind != backupruntime.BackupRuntimeSourceConfig {
-		return 0, configTransferAuthorityConflict()
+) (workqueue.Change, error) {
+	if admitted.Input() == nil || admitted.Request == nil || admitted.Replay != nil ||
+		current.Revision <= 0 || current.ReadRevision != view.Work.ReadRevision ||
+		current.Record.TaskID != view.Work.Task.Task.ID ||
+		current.Record.Point.SourceKind != backupruntime.BackupRuntimeSourceConfig ||
+		backupruntime.ValidateRestoreWorkInput(current.Record, admitted.Input()) != nil {
+		return workqueue.Change{}, configTransferAuthorityConflict()
 	}
-	point := current.Record.Point
-	memberKey, err := backupruntime.BackupRestoreEnvironmentIndexKey(current.Record.EnvironmentID, input.TaskID)
+	request := admitted.Request
+	taskID := view.Work.Task.Task.ID
+	memberKey, err := backupruntime.BackupRestoreEnvironmentIndexKey(current.Record.EnvironmentID, taskID)
 	if err != nil {
-		return 0, err
+		return workqueue.Change{}, err
 	}
-	keys := []string{backupruntime.BackupRestoreKey(input.TaskID), memberKey,
-		backupruntime.BackupExecutionPlanKey(input.TaskID), taskjournal.TaskStorageKey(input.TaskID),
+	keys := []string{backupruntime.BackupRestoreKey(taskID), memberKey,
+		backupwork.InputKey(view.Work.Item.Item.ID), workqueue.TaskKey(taskID),
 		blueprints.EnvironmentBlueprintHeadKey(current.Record.EnvironmentID)}
 	if publication != nil {
 		keys = append(keys, backupconfiguration.ConfigRestoreGenerationKey(publication.Generation.Record.Owner),
-			blueprints.EnvironmentBlueprintRootKey(current.Record.EnvironmentID, input.TaskID))
+			blueprints.EnvironmentBlueprintRootKey(current.Record.EnvironmentID, taskID))
 	}
-	read, err := repository.ReadCurrentKeys(ctx, keys)
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: view.Work.ReadRevision})
 	if err != nil {
-		return 0, err
+		return workqueue.Change{}, err
+	}
+	if read == nil || read.ReadRevision != view.Work.ReadRevision || len(read.Values) != len(keys) {
+		return workqueue.Change{}, configTransferAuthorityConflict()
 	}
 	defer etcdstore.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 {
-			return 0, configTransferAuthorityConflict()
+			return workqueue.Change{}, configTransferAuthorityConflict()
 		}
 	}
 	stored, err := backupruntime.DecodeBackupRestoreRecord(read.Values[0].Value)
 	if err != nil || read.Values[0].ModRevision != current.Revision ||
 		!backupruntime.BackupRestoreRecordsEqual(stored, current.Record) || read.Values[1].Version != 1 ||
-		string(read.Values[1].Value) != input.TaskID || read.Values[1].ModRevision > current.Revision {
-		return 0, configTransferAuthorityConflict()
+		string(read.Values[1].Value) != taskID || read.Values[1].ModRevision > current.Revision {
+		return workqueue.Change{}, configTransferAuthorityConflict()
 	}
-	sealed, err := backupruntime.DecodeBackupExecutionPlan(read.Values[2].Value)
-	if err != nil || read.Values[2].Version != 1 ||
-		backupruntime.ValidateConfigRestoreExecutionPlan(stored, sealed) != nil {
-		return 0, configTransferAuthorityConflict()
+	sealed, err := backupwork.DecodeBackupWorkInput(read.Values[2].Value)
+	if err != nil || read.Values[2].Version != 1 || !proto.Equal(sealed, admitted.Input()) ||
+		read.Values[3].ModRevision != view.Work.Task.Revision ||
+		backupruntime.ValidateRestoreWorkInput(stored, sealed) != nil {
+		return workqueue.Change{}, configTransferAuthorityConflict()
 	}
-	task, err := DecodeTaskRecord(read.Values[3].Value)
-	if err != nil || task.OperationID != stored.OperationID || task.Type != taskjournal.TaskRestore ||
-		task.PlanID != sealed.PlanId || task.PlanHash != hex.EncodeToString(sealed.PlanHash) ||
-		task.Target != stored.EnvironmentID || task.Owner.EnvironmentID != stored.EnvironmentID ||
-		sealed.Steps[0].StepId != input.StepID || sealed.Steps[0].GetBackupStep().ExecutionId != input.ExecutionID ||
-		hex.EncodeToString(sealed.Steps[0].GetBackupStep().StepDigest) != input.AuthoritySHA256 {
-		return 0, configTransferAuthorityConflict()
+	binding, err := admitted.ConfigBinding(view.Attempt.Attempt.Executor)
+	if err != nil {
+		return workqueue.Change{}, err
 	}
 	target := stored.CurrentTarget.Config
 	head, headErr := idempotency.DecodeTaskReference(read.Values[4].Value)
 	expectedHead, expectedHeadRevision := target.BaselineRevisionID, target.BaselineHeadRevision
-	if input.Request.GetConfig().GetMaterializationVerified() != nil ||
-		input.Request.GetSourceCleanupCompleted() != nil {
-		expectedHead, expectedHeadRevision = input.TaskID, stored.ConfigProgress.PublishedHeadRevision
+	if request.GetConfig().GetMaterializationVerified() != nil ||
+		request.GetSourceCleanupCompleted() != nil {
+		expectedHead, expectedHeadRevision = taskID, stored.ConfigProgress.PublishedHeadRevision
 	}
 	if headErr != nil || head != expectedHead || expectedHeadRevision <= 0 ||
 		read.Values[4].ModRevision != expectedHeadRevision {
-		return 0, configTransferAuthorityConflict()
+		return workqueue.Change{}, configTransferAuthorityConflict()
 	}
 	progress := backupruntime.BackupRestoreConfigProgress{}
 	conditions := []etcdstore.Condition{
@@ -107,22 +112,24 @@ func (repository *BackupRuntimeRepository) CheckpointConfigRestore(ctx context.C
 			!proto.Equal(generation.Completed, publication.Generation.Record.Completed) ||
 			read.Values[5].Version != 1 || read.Values[5].ModRevision != publication.Generation.Revision ||
 			read.Values[6].Version != 1 || read.Values[6].ModRevision != publication.RootRevision || root != publication.Root ||
-			root.EnvironmentID != stored.EnvironmentID || root.RevisionID != input.TaskID ||
+			root.EnvironmentID != stored.EnvironmentID || root.RevisionID != taskID ||
 			root.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 			root.RenderGeneration != target.RenderGeneration || root.BaselineHeadRevision != target.BaselineHeadRevision ||
 			owner.EnvironmentID != stored.EnvironmentID || owner.GenerationID != stored.RestoreGenerationID ||
-			owner.Transfer.Binding.TaskID != input.TaskID || owner.Transfer.Binding.AssignmentID != input.AssignmentID ||
-			owner.Transfer.Binding.StepID != input.StepID || owner.Transfer.Binding.ExecutionID != input.ExecutionID ||
-			owner.Transfer.AgentID != input.AgentID || owner.Transfer.AgentGeneration != input.AgentGeneration ||
-			owner.Transfer.AssignmentGeneration != input.AssignmentGeneration || owner.Transfer.AuthoritySHA256 != input.AuthoritySHA256 ||
-			(input.Request.GetConfig().GetTransferCompleted() != nil && !proto.Equal(generation.Completed, input.Request.GetConfig().GetTransferCompleted())) ||
+			owner.Transfer.Binding != binding ||
+			(request.GetConfig().GetTransferCompleted() != nil && !proto.Equal(generation.Completed, request.GetConfig().GetTransferCompleted())) ||
 			publication.FileProof == nil || publication.FileProof.RestoreGenerationId != stored.RestoreGenerationID ||
 			publication.FileProof.MaterializedEntryCount != stored.Point.ConfigArchive.EntryCount || len(publication.FileProof.MaterializationSha256) != 32 {
-			return 0, configTransferAuthorityConflict()
+			return workqueue.Change{}, configTransferAuthorityConflict()
 		}
-		more, err := repository.configRestoreTransferGuard(ctx, owner, read.ReadRevision)
+		var more []etcdstore.Condition
+		if admitted.Recovery != nil {
+			more, err = repository.configRestoreExecutionGuard(ctx, owner, read.ReadRevision, &view.Attempt.Attempt)
+		} else {
+			more, err = repository.configRestoreTransferGuard(ctx, owner, read.ReadRevision)
+		}
 		if err != nil {
-			return 0, err
+			return workqueue.Change{}, err
 		}
 		conditions = append(conditions, more...)
 		digest := sha256.Sum256(read.Values[6].Value)
@@ -131,30 +138,35 @@ func (repository *BackupRuntimeRepository) CheckpointConfigRestore(ctx context.C
 		metadata, err := prepareConfigRestoreMetadata(publication.Generation, publication.Root,
 			publication.Projection, publication.Identities)
 		if err != nil {
-			return 0, err
+			return workqueue.Change{}, err
 		}
 		progress.ProjectionSHA256, progress.IdentitiesSHA256 = metadata.projectionSHA256, metadata.identitiesSHA256
 		progress.ExpectedMaterializationSHA256 = hex.EncodeToString(publication.FileProof.MaterializationSha256)
 		metadata.clear()
-		if materialized := input.Request.GetConfig().GetMaterializationVerified(); materialized != nil {
+		if materialized := request.GetConfig().GetMaterializationVerified(); materialized != nil {
 			if progress.RevisionRootSHA256 != stored.ConfigProgress.RevisionRootSHA256 ||
 				progress.RevisionRootRevision != stored.ConfigProgress.RevisionRootRevision ||
 				progress.ProjectionSHA256 != stored.ConfigProgress.ProjectionSHA256 || progress.IdentitiesSHA256 != stored.ConfigProgress.IdentitiesSHA256 ||
 				progress.ExpectedMaterializationSHA256 != stored.ConfigProgress.ExpectedMaterializationSHA256 ||
 				!proto.Equal(materialized, publication.FileProof) {
-				return 0, configTransferAuthorityConflict()
+				return workqueue.Change{}, configTransferAuthorityConflict()
 			}
 			progress = backupruntime.BackupRestoreConfigProgress{}
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: keys[5], ModRevision: publication.Generation.Revision},
 			etcdstore.Condition{Key: keys[6], ModRevision: publication.RootRevision})
 	}
-	if input.Request.GetConfig().GetMaterializationVerified() != nil && publication == nil {
-		return 0, configTransferAuthorityConflict()
+	if request.GetConfig().GetMaterializationVerified() != nil && publication == nil {
+		return workqueue.Change{}, configTransferAuthorityConflict()
 	}
-	next, err := backupruntime.PrepareConfigRestoreCheckpoint(stored, input.Request, progress, at)
+	var next backupruntime.BackupRestoreRecord
+	if admitted.Recovery != nil {
+		next, err = backupruntime.PrepareConfigRestoreRecoveryCheckpoint(stored, admitted.Input(), request, progress, at)
+	} else {
+		next, err = backupruntime.PrepareConfigRestoreCheckpoint(stored, admitted.Input(), request, progress, at)
+	}
 	if err != nil {
-		return 0, err
+		return workqueue.Change{}, err
 	}
 	fence, err := environmentfence.LoadOwned(
 		ctx,
@@ -164,43 +176,21 @@ func (repository *BackupRuntimeRepository) CheckpointConfigRestore(ctx context.C
 		environmentfence.Owner{
 			Kind:        backupruntime.BackupOperationRestore,
 			OperationID: stored.OperationID,
-			TaskID:      input.TaskID,
+			TaskID:      taskID,
 		},
 	)
 	if err != nil {
-		return 0, err
+		return workqueue.Change{}, err
 	}
 	conditions, err = environmentfence.AppendConditions(conditions, fence)
 	if err != nil {
-		return 0, err
-	}
-	checkpoint, err := repository.loadBackupCheckpointPlan(ctx, input, read.ReadRevision,
-		backupCheckpointBinding{taskType: taskjournal.TaskRestore, pointID: point.ID})
-	if err != nil {
-		return 0, err
-	}
-	defer checkpoint.clear()
-	if checkpoint.duplicate {
-		return checkpoint.commitRevision, nil
+		return workqueue.Change{}, err
 	}
 	value, err := backupruntime.EncodeBackupRestoreRecord(next)
 	if err != nil {
-		return 0, err
+		return workqueue.Change{}, err
 	}
-	defer clear(value)
-	conditions, mutations, err := checkpoint.composeTransaction(conditions,
-		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[0], Value: value}})
-	if err != nil {
-		return 0, err
-	}
-	defer etcdstore.ClearMutationValues(mutations)
-	result, err := repository.TransactRuntime(ctx, conditions, mutations)
-	etcdstore.ClearValues(result.FailureReads)
-	if err != nil {
-		return 0, err
-	}
-	if !result.Succeeded {
-		return 0, errs.New(errs.KindStateConflict, "restore checkpoint authority changed")
-	}
-	return result.Revision, nil
+	return workqueue.Change{Conditions: conditions, Mutations: []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: keys[0], Value: value},
+	}}, nil
 }

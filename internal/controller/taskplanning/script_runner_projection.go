@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	release "github.com/AlanD20/groundplane/internal/core/release"
@@ -20,14 +19,15 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
+	"github.com/oklog/ulid/v2"
 	"google.golang.org/protobuf/proto"
 )
 
-type ManualScriptPlanInput struct {
+type ScriptRunnerInput struct {
 	TaskID      string
+	WorkItemID  string
 	OperationID string
 	PlanID      string
-	StepID      string
 	ExecutionID string
 	SnapshotID  string
 	Sources     scriptsourcequeries.ScriptExecutionSources
@@ -46,33 +46,56 @@ type BlueprintScriptCandidateSources struct {
 	ProjectionSHA256  [sha256.Size]byte
 }
 
-// BuildManualScriptPlan projects one frozen successful Release into a closed
+// PreparedScriptRunner is captured input, not an assignment or execution grant.
+type PreparedScriptRunner struct {
+	Snapshot   *agentpb.ResolvedRunnerSnapshot
+	Projection *agentpb.ScriptRunnerProjection
+	Body       *agentpb.ScriptBodyArtifactMetadata
+	Run        *agentpb.RunScript
+}
+
+// PrepareManualScriptRunner projects one frozen successful Release into a closed
 // one-off runner definition. It does not read current desired state or host
 // runtime state and never places Script body bytes in the plan.
-func BuildManualScriptPlan(
+func PrepareManualScriptRunner(
 	ctx context.Context,
-	input ManualScriptPlanInput,
-) (*agentpb.ExecutionPlan, error) {
+	input ScriptRunnerInput,
+) (*PreparedScriptRunner, error) {
 	if input.Candidate != nil {
 		return nil, errs.New(errs.KindValidationFailed, "manual Script source authority must be existing")
 	}
-	plan, err := buildScriptRunnerPlan(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-	return executionplan.Seal(plan)
+	return prepareScriptRunner(ctx, input)
 }
 
-func buildScriptRunnerPlan(
+func prepareScriptRunner(
 	ctx context.Context,
-	input ManualScriptPlanInput,
-) (*agentpb.ExecutionPlan, error) {
+	input ScriptRunnerInput,
+) (*PreparedScriptRunner, error) {
 	if ctx == nil || ids.Validate(ids.KindTask, input.TaskID) != nil ||
+		ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil ||
 		ids.Validate(ids.KindOperation, input.OperationID) != nil ||
-		ids.Validate(ids.KindPlan, input.PlanID) != nil || ids.Validate(ids.KindStep, input.StepID) != nil {
-		return nil, errs.New(errs.KindValidationFailed, "manual Script plan identity is invalid")
+		ids.Validate(ids.KindPlan, input.PlanID) != nil {
+		return nil, errs.New(errs.KindValidationFailed, "Script work identity is invalid")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if _, err := ulid.ParseStrict(input.ExecutionID); err != nil {
+		return nil, errs.New(errs.KindValidationFailed, "Script execution identity is invalid")
+	}
+	if _, err := ulid.ParseStrict(input.SnapshotID); err != nil {
+		return nil, errs.New(errs.KindValidationFailed, "Script snapshot identity is invalid")
 	}
 	sources := input.Sources
+	if candidate := input.Candidate; candidate != nil {
+		if candidate.EnvironmentID != sources.Environment.Record.ID || candidate.RevisionID != input.TaskID ||
+			candidate.RevisionID != sources.DesiredProjection.Record.RevisionID ||
+			candidate.RenderGeneration != sources.DesiredProjection.Record.RenderGeneration ||
+			candidate.RenderGeneration == 0 || candidate.FixedReadRevision <= 0 ||
+			candidate.ServiceSHA256 == ([sha256.Size]byte{}) || candidate.ProjectionSHA256 == ([sha256.Size]byte{}) {
+			return nil, errs.New(errs.KindValidationFailed, "Script candidate sources differ from captured Blueprint work")
+		}
+	}
 	if err := validateScriptRunnerReleaseSource(sources); err != nil {
 		return nil, err
 	}
@@ -150,32 +173,23 @@ func buildScriptRunnerPlan(
 	if err != nil || len(bodyDigest) != sha256.Size {
 		return nil, errs.New(errs.KindInternal, "Script body generation digest is corrupt")
 	}
-	plan := &agentpb.ExecutionPlan{
-		Schema: executionplan.SchemaVersion, PlanId: input.PlanID,
-		RenderGeneration:        sources.RenderInput.Record.Projection.RenderGeneration,
-		Operation:               agentpb.PlanOperation_PLAN_OPERATION_SCRIPT,
-		TargetId:                sources.Script.Record.Desired.ID,
-		ScriptRunnerSnapshots:   []*agentpb.ResolvedRunnerSnapshot{snapshot},
-		ScriptRunnerProjections: []*agentpb.ScriptRunnerProjection{projection},
-		ScriptBodyArtifacts: []*agentpb.ScriptBodyArtifactMetadata{{
+	return &PreparedScriptRunner{
+		Snapshot: snapshot, Projection: projection,
+		Body: &agentpb.ScriptBodyArtifactMetadata{
 			ScriptExecutionId: input.ExecutionID, ScriptId: sources.Script.Record.Desired.ID,
 			Generation: sources.BodyGeneration.Record.Generation,
 			Size:       sources.BodyGeneration.Record.BodySize, Sha256: bodyDigest, Uid: projection.Uid, Gid: projection.Gid,
-		}},
-		Steps: []*agentpb.ExecutionStep{{
-			StepId: input.StepID, TimeoutSeconds: executionplan.ScriptExecutionTimeoutSeconds,
-			Payload: &agentpb.ExecutionStep_RunScript{RunScript: &agentpb.RunScript{
-				ScriptExecutionId: input.ExecutionID, ScriptId: sources.Script.Record.Desired.ID,
-				ScriptGeneration: sources.BodyGeneration.Record.Generation,
-				EnvironmentId:    sources.Environment.Record.ID, ServiceId: sources.Service.Record.Desired.ID,
-				ReleaseId:               sources.Release.Intent.ID,
-				RenderGeneration:        sources.RenderInput.Record.Projection.RenderGeneration,
-				ServiceDefinitionSha256: serviceDigest[:], BodySha256: bodyDigest,
-				RunnerSnapshotId: input.SnapshotID, RunnerSnapshotSha256: snapshotDigest,
-			}},
-		}},
-	}
-	return plan, nil
+		},
+		Run: &agentpb.RunScript{
+			ScriptExecutionId: input.ExecutionID, ScriptId: sources.Script.Record.Desired.ID,
+			ScriptGeneration: sources.BodyGeneration.Record.Generation,
+			EnvironmentId:    sources.Environment.Record.ID, ServiceId: sources.Service.Record.Desired.ID,
+			ReleaseId:               sources.Release.Intent.ID,
+			RenderGeneration:        sources.RenderInput.Record.Projection.RenderGeneration,
+			ServiceDefinitionSha256: serviceDigest[:], BodySha256: bodyDigest,
+			RunnerSnapshotId: input.SnapshotID, RunnerSnapshotSha256: snapshotDigest,
+		},
+	}, nil
 }
 
 func blueprintScriptStagedSourceAuthority(
@@ -207,7 +221,7 @@ func scriptRunnerReleaseImage(sources scriptsourcequeries.ScriptExecutionSources
 }
 
 func projectScriptRunner(
-	input ManualScriptPlanInput,
+	input ScriptRunnerInput,
 	service composetypes.ServiceConfig,
 	uid uint32,
 	gid uint32,
@@ -236,6 +250,8 @@ func projectScriptRunner(
 		"com.groundplane.kind":           "script-runner",
 		"com.groundplane.managed":        "true",
 		"com.groundplane.operation-id":   input.OperationID,
+		"com.groundplane.task-id":        input.TaskID,
+		"com.groundplane.work-item-id":   input.WorkItemID,
 		"com.groundplane.plan-id":        input.PlanID,
 		"com.groundplane.project-id":     input.Sources.Project.Record.ID,
 		"com.groundplane.release-id":     input.Sources.Release.Intent.ID,

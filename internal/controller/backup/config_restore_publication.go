@@ -92,7 +92,7 @@ func BuildConfigRestorePublication(ctx context.Context, generation *ConfigRestor
 		return nil, err
 	}
 	projection, materializations, err := composerender.ProjectEnvironmentEntryMutation(baselineProjection,
-		composerender.EnvironmentEntryArtifactMutation{RevisionID: owner.Transfer.Binding.TaskID,
+		composerender.EnvironmentEntryArtifactMutation{RevisionID: owner.Transfer.Binding.Attempt.TaskID,
 			ArtifactID: owner.GenerationID, PlanID: planID, RenderGeneration: owner.RenderGeneration, Entries: restored})
 	if err != nil {
 		return nil, err

@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -14,28 +15,39 @@ import (
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PublishExecutionWithTask reserves the complete immutable source set before
+// PublishScriptWork reserves the complete immutable source set before
 // atomically exposing the manual Task and its source root. The source module
 // alone changes membership counts, including the Script-wide body aggregate.
-func (repository *ScriptRepository) PublishExecutionWithTask(
+func (repository *ScriptRepository) PublishScriptWork(
 	ctx context.Context,
 	sources scriptsourcequeries.ScriptExecutionSources,
 	execution scriptexecutions.ScriptExecutionRecord,
-	task TaskRecord,
+	task workexecution.Task,
+	item workexecution.Item,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (result IdempotencyTransactionResult, err error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return result, err
 	}
-	if repository == nil || repository.store == nil || task.Type != taskjournal.TaskScript {
+	if repository == nil || repository.store == nil || task.Validate() != nil || item.Validate() != nil ||
+		task.Action != workexecution.ActionScript || task.ExpectedItems != 1 ||
+		task.Actor != workexecution.OperatorActor || item.TaskID != task.ID ||
+		item.Operation != workexecution.Script || item.Placement.Executor != workexecution.Agent ||
+		item.TargetID != execution.ScriptID || task.TargetID != execution.ScriptID ||
+		task.Scope.EnvironmentID != sources.Environment.Record.ID ||
+		task.Scope.ProjectID != sources.Project.Record.ID || task.Scope.TenantID != sources.Project.Record.TenantID ||
+		item.Input == nil || *item.Input != execution.Input || *item.Input != task.Intent {
 		return result, errs.New(errs.KindValidationFailed, "manual Script publication is invalid")
 	}
-	execution.ScriptSetGeneration = sources.Script.Record.ScriptSetGeneration
+	if execution.ScriptSetGeneration != sources.Script.Record.ScriptSetGeneration {
+		return result, errs.New(errs.KindStateConflict, "Script source generation differs from captured input")
+	}
 	if err := validateScriptExecutionSources(sources, execution); err != nil {
 		return result, err
 	}
@@ -51,9 +63,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
 		task.ID != execution.CurrentTaskID ||
-		task.OperationID != execution.OperationID ||
-		len(task.Steps) != 1 ||
-		task.Steps[0].ID != execution.StepID {
+		item.ID != execution.WorkItemID {
 		return result, errs.New(errs.KindValidationFailed, "Script execution marker does not match its Task")
 	}
 	initiation, err := newEnvironmentTaskInitiation(
@@ -65,17 +75,11 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	if err != nil {
 		return result, err
 	}
-	task = cloneTaskRecord(task)
-	if task.IdempotencyKey == "" {
-		task.IdempotencyKey = marker.Locator.Key
-	}
-	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := validateTaskInitiation(task, initiation, true); err != nil {
+	work, err := workqueue.PrepareSingleTask(task, item, marker)
+	if err != nil {
 		return result, err
 	}
-	if err := ValidateTaskRecord(task); err != nil {
-		return result, err
-	}
+	defer etcdstore.ClearMutationValues(work.Mutations)
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return result, err
 	}
@@ -103,11 +107,11 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		defer cancel()
 		// Abandon fences the descriptor and refuses an active root. This also
 		// protects a publication whose commit succeeded but response was lost.
-		if cleanupErr := authority.Abandon(cleanupCtx, task.OperationID, members); cleanupErr != nil && err == nil {
+		if cleanupErr := authority.Abandon(cleanupCtx, execution.OperationID, members); cleanupErr != nil && err == nil {
 			err = cleanupErr
 		}
 	}()
-	prepared, err := authority.Prepare(ctx, task.OperationID, members)
+	prepared, err := authority.Prepare(ctx, execution.OperationID, members)
 	if err != nil {
 		return result, err
 	}
@@ -116,6 +120,8 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, err
 	}
 	defer fragment.Clear()
+	workInput := *item.Input
+	execution.WorkInput = &workInput
 	execution.SourceMembershipCount, execution.SourceMembershipSHA256 = prepared.MembershipCount(), prepared.MembershipSHA256()
 	primary, err := preparedScriptPrimary(ctx, repository.store, sources)
 	if err != nil {
@@ -123,10 +129,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	}
 	conditions := []etcdstore.Condition{
 		{Key: scriptexecutions.ScriptExecutionKey(execution.ID)},
-		{Key: taskjournal.TaskStorageKey(task.ID)},
-		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
-		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
+		{Key: scriptexecutions.WorkKey(item.ID)},
 		primary,
 		{Key: scriptrecord.ScriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration,
 			execution.ScriptID, execution.ScriptGeneration), ModRevision: sources.BodyGeneration.Revision},
@@ -150,30 +153,27 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, err
 	}
 	defer clear(executionValue)
-	taskValue, err := EncodeTaskRecord(task)
+	bindingValue, err := recordcodec.Encode("script-work", scriptexecutions.WorkBinding{
+		TaskID: task.ID, WorkItemID: item.ID, ExecutionID: execution.ID, Input: execution.Input,
+	})
 	if err != nil {
 		return result, err
 	}
-	defer clear(taskValue)
-	taskReference, err := idempotencyrecord.EncodeTaskReference(task.ID)
-	if err != nil {
-		return result, err
-	}
-	defer clear(taskReference)
+	defer clear(bindingValue)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: scriptexecutions.ScriptExecutionKey(execution.ID), Value: executionValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
-			Value: taskReference,
-		},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: scriptexecutions.WorkKey(item.ID), Value: bindingValue},
 	}
 	mutations = append(mutations, fragment.Mutations()...)
-	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations,
-		classifyScriptExecutionPublication(len(conditions)))
+	conditions = append(conditions, work.Conditions...)
+	mutations = append(mutations, work.Mutations...)
+	conditions, classify, err := prepareTaskInitiationFences(initiation, conditions,
+		classifyScriptExecutionPublication(conditions))
+	if err != nil {
+		return result, err
+	}
+	plan, err := newIdempotencyMutationPlanForMarker(idempotencyrecord.IdempotencyMarkerTask,
+		conditions, mutations, classify)
 	if err != nil {
 		return result, err
 	}
@@ -233,17 +233,14 @@ func manualScriptSourceConditions(sources scriptsourcequeries.ScriptExecutionSou
 	return conditions, nil
 }
 
-func classifyScriptExecutionPublication(expected int) idempotencyPlanClassifier {
+func classifyScriptExecutionPublication(conditions []etcdstore.Condition) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {
-		if len(values) != expected {
+		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "Script execution publication compare evidence is incomplete")
 		}
-		if values[3] != nil {
-			return errs.New(errs.KindStateConflict, "Script operation already has an active Task")
-		}
-		for index, value := range values {
-			if index < 5 && value != nil {
-				return errs.New(errs.KindInternal, "Script execution identity collided with durable state")
+		for index, condition := range conditions {
+			if etcdstore.RevisionOf(values[index]) != condition.ModRevision {
+				return errs.New(errs.KindStateConflict, "Script input or work identity changed before publication")
 			}
 		}
 		return errs.New(errs.KindStateConflict, "Script execution source changed before publication")

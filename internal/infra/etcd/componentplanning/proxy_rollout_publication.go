@@ -8,7 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,10 +15,9 @@ import (
 // router may execute. Publication already carries exact comparisons for these
 // records, complete Service membership and their acknowledged predecessors.
 func validateProxyRolloutPublication(ctx context.Context, store planningStore,
-	preparation ComponentTaskPreparation,
+	preflight *ProxyServicePreflight, sourceMutations []keyvalue.Mutation, readRevision int64,
 ) error {
-	preflight := preparation.proxyServicePreflight
-	if preflight == nil {
+	if preflight == nil || readRevision <= 0 {
 		return errs.New(
 			errs.KindStateConflict,
 			"Environment proxy change requires captured Service membership and runtime sources",
@@ -37,13 +35,13 @@ func validateProxyRolloutPublication(ctx context.Context, store planningStore,
 			)
 		}
 		reference := *source.Rollout
-		keys := []string{ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.TaskID),
-			ProxyServiceNativeRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.TaskID)}
-		read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
+		keys := []string{ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.WorkItemID),
+			ProxyServiceNativeRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.WorkItemID)}
+		read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: readRevision})
 		if err != nil {
 			return err
 		}
-		if read == nil || len(read.Values) != len(keys) {
+		if read == nil || read.ReadRevision != readRevision || len(read.Values) != len(keys) {
 			if read != nil {
 				keyvalue.ClearValues(read.Values)
 			}
@@ -67,9 +65,16 @@ func validateProxyRolloutPublication(ctx context.Context, store planningStore,
 		)
 	}
 	key := scriptsourceevidence.ScriptSourceRootKey(preflight.SourceHold.OperationID)
-	for _, mutation := range preparation.proxySourceMutations {
+	for _, mutation := range sourceMutations {
 		if mutation.Key == key && mutation.Type == keyvalue.MutationPut {
-			return nil // WithProxySourceHold owns and validates this root fragment.
+			root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(mutation.Value)
+			if err != nil || mutation.Prefix || root.OperationID != preflight.SourceHold.OperationID ||
+				root.MembershipCount != preflight.SourceHold.MembershipCount ||
+				root.MembershipSHA256 != preflight.SourceHold.MembershipSHA256 ||
+				root.Phase != scriptsourceevidence.ScriptOperationSourceActive {
+				return errs.New(errs.KindStateConflict, "Proxy hook source publication differs from captured membership")
+			}
+			return nil
 		}
 	}
 	return errs.New(errs.KindStateConflict, "Environment proxy change has no atomic hook-input hold publication")
@@ -81,11 +86,11 @@ func validateProxyRolloutPublicationValues(preflight *ProxyServicePreflight, sou
 	reference := source.Rollout
 	if values[0] == nil || values[1] == nil || values[0].ModRevision != reference.Revision ||
 		values[1].ModRevision != reference.NativeRevision ||
-		values[0].Key != ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.TaskID) ||
+		values[0].Key != ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.WorkItemID) ||
 		values[1].Key != ProxyServiceNativeRolloutKey(
 			preflight.EnvironmentID,
 			preflight.ParentTaskID,
-			reference.TaskID,
+			reference.WorkItemID,
 		) {
 		return 0, errs.New(errs.KindStateConflict, "pending proxy rollout changed before router publication")
 	}
@@ -97,15 +102,13 @@ func validateProxyRolloutPublicationValues(preflight *ProxyServicePreflight, sou
 	if err != nil {
 		return 0, err
 	}
-	defer clear(capture.NativePlan)
-	plan, err := releaserender.OpenBlueprintServiceRolloutCapture(capture)
+	render, err := releaserender.OpenBlueprintServiceRolloutCapture(capture)
 	if err != nil {
 		return 0, err
 	}
-	if capture.TaskID != reference.TaskID || capture.Owner.EnvironmentID != preflight.EnvironmentID ||
-		capture.Params[taskjournal.TaskBlueprintParentParam] != preflight.ParentTaskID ||
-		plan.GetCandidateReleaseProcedure().GetMembers()[0].GetServiceId() != reference.ServiceID {
+	if capture.WorkItemID != reference.WorkItemID || capture.Scope.EnvironmentID != preflight.EnvironmentID ||
+		capture.TaskID != preflight.ParentTaskID || render.ServiceID != reference.ServiceID {
 		return 0, errs.New(errs.KindStateConflict, "pending proxy native rollout belongs to another Service or Apply")
 	}
-	return uint64(len(plan.GetScriptRunnerSnapshots())), nil
+	return uint64(len(render.Hooks)), nil
 }

@@ -47,6 +47,59 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 		}
 		for _, prior := range interrupted {
 			attempt := prior.Attempt.Attempt
+			if prior.Item.Item.Operation == workexecution.BackupPrune || prior.Item.Item.Operation == workexecution.Backup ||
+				prior.Item.Item.Operation == workexecution.Restore {
+				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				if err != nil {
+					return issues, err
+				}
+				if view.Attempt.Attempt.FinishedAt != nil {
+					continue
+				}
+				if err := delivery.backups.ReconcileInterrupted(ctx, view, authorization); err != nil {
+					issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
+				}
+				continue
+			}
+			if prior.Item.Item.Operation == workexecution.Attach {
+				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				if err != nil {
+					return issues, err
+				}
+				if view.Attempt.Attempt.FinishedAt != nil {
+					continue
+				}
+				if err := delivery.attaches.ReconcileInterrupted(ctx, view, authorization); err != nil {
+					issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
+				}
+				continue
+			}
+			if prior.Item.Item.Operation == workexecution.EntryConfiguration {
+				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				if err != nil {
+					return issues, err
+				}
+				if view.Attempt.Attempt.FinishedAt != nil {
+					continue
+				}
+				if err := delivery.entries.ReconcileInterrupted(ctx, view, authorization); err != nil {
+					issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
+				}
+				continue
+			}
+			if prior.Item.Item.Operation == workexecution.Component {
+				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				if err != nil {
+					return issues, err
+				}
+				if view.Attempt.Attempt.FinishedAt != nil {
+					continue
+				}
+				if err := delivery.components.ReconcileInterrupted(ctx, view, authorization); err != nil {
+					issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
+				}
+				continue
+			}
 			if prior.Item.Item.Operation == workexecution.Network {
 				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 				if err != nil {
@@ -56,6 +109,32 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 					continue
 				}
 				if err := delivery.networks.ReconcileInterrupted(ctx, view, authorization); err != nil {
+					issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
+				}
+				continue
+			}
+			if prior.Item.Item.Operation == workexecution.ServiceRemoval {
+				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				if err != nil {
+					return issues, err
+				}
+				if view.Attempt.Attempt.FinishedAt != nil {
+					continue
+				}
+				if err := delivery.removals.ReconcileInterrupted(ctx, view, authorization); err != nil {
+					issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
+				}
+				continue
+			}
+			if prior.Item.Item.Operation == workexecution.ServiceLifecycle {
+				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				if err != nil {
+					return issues, err
+				}
+				if view.Attempt.Attempt.FinishedAt != nil {
+					continue
+				}
+				if err := delivery.lifecycles.ReconcileInterrupted(ctx, view, authorization); err != nil {
 					issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
 				}
 				continue

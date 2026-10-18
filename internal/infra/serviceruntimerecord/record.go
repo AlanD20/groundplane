@@ -5,12 +5,11 @@ package serviceruntimerecord
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -27,83 +26,17 @@ type Record struct {
 }
 
 type Acknowledgement struct {
-	TaskID           string    `json:"task_id"`
-	PlanID           string    `json:"plan_id"`
-	PlanHash         string    `json:"plan_hash"`
-	StepID           string    `json:"step_id"`
-	AgentID          string    `json:"agent_id"`
-	AssignmentID     string    `json:"assignment_id"`
-	ExecutionEpoch   uint32    `json:"execution_epoch"`
-	RenderGeneration uint64    `json:"render_generation"`
-	EffectDigest     string    `json:"effect_digest"`
-	AcknowledgedAt   time.Time `json:"acknowledged_at"`
-}
-
-// Observation contains only the strategy-specific serving proof already
-// validated against the owning Task assignment, never a fresh host discovery.
-type Observation struct {
-	ReleaseID          string
-	Target             string
-	Proxy              *ProxyObservation
-	RecreateArtifactID string
-	Rolling            *rollingrelease.Completion
-}
-
-type ProxyObservation struct {
-	ProxyGeneration uint64
-	ProxyConfigHash string
+	TaskID           string                   `json:"task_id"`
+	WorkItemID       string                   `json:"work_item_id"`
+	AttemptID        string                   `json:"attempt_id"`
+	Executor         workexecution.Identity   `json:"executor"`
+	Input            workexecution.Input      `json:"input"`
+	Checkpoint       workexecution.Checkpoint `json:"checkpoint"`
+	RenderGeneration uint64                   `json:"render_generation"`
+	AcknowledgedAt   time.Time                `json:"acknowledged_at"`
 }
 
 func Key(serviceID string) string { return "/v1/runtime/service-acknowledged-runtimes/" + serviceID }
-
-// AcknowledgeRelease binds prepared post-activation bytes to the successful
-// selected member's exact proof. Calling code publishes this with that member's
-// checkpoint and serving projection in one fenced transaction.
-func AcknowledgeRelease(
-	environmentID string,
-	runtime executionplan.CandidateRuntime,
-	source Acknowledgement,
-	observed Observation,
-) (Record, error) {
-	variants := 0
-	if observed.Proxy != nil {
-		variants++
-	}
-	if observed.RecreateArtifactID != "" {
-		variants++
-	}
-	if observed.Rolling != nil {
-		variants++
-	}
-	if runtime.ReleaseID != observed.ReleaseID || runtime.Target != observed.Target || variants != 1 ||
-		(runtime.Target == "rolling") != (observed.Rolling != nil) {
-		return Record{}, errs.New(
-			errs.KindStateConflict,
-			"release runtime acknowledgement differs from sealed activation",
-		)
-	}
-	if observed.Proxy != nil && (runtime.ProxyGeneration != observed.Proxy.ProxyGeneration ||
-		hex.EncodeToString(runtime.ProxyConfigSHA256) != observed.Proxy.ProxyConfigHash) {
-		return Record{}, errs.New(errs.KindStateConflict, "release runtime proxy proof differs from sealed activation")
-	}
-	if observed.Rolling != nil {
-		if err := executionplan.ValidateRollingCompletion(runtime, *observed.Rolling); err != nil {
-			return Record{}, err
-		}
-	}
-	record := Record{EnvironmentID: environmentID, Runtime: runtime, Source: source}
-	if err := Validate(record); err != nil {
-		return Record{}, err
-	}
-	if observed.RecreateArtifactID != "" {
-		artifact := &agentpb.ComposeArtifact{}
-		if proto.Unmarshal(runtime.CurrentArtifact, artifact) != nil ||
-			artifact.GetArtifactId() != observed.RecreateArtifactID {
-			return Record{}, errs.New(errs.KindStateConflict, "release runtime recreate proof names another artifact")
-		}
-	}
-	return record, nil
-}
 
 func Validate(record Record) error {
 	source := record.Source
@@ -113,13 +46,13 @@ func Validate(record Record) error {
 			record.Configuration.Generation > source.RenderGeneration) {
 		return errs.New(errs.KindValidationFailed, "acknowledged configuration source is invalid")
 	}
-	if ids.Validate(ids.KindTask, source.TaskID) != nil || ids.Validate(ids.KindPlan, source.PlanID) != nil ||
-		ids.Validate(ids.KindStep, source.StepID) != nil || ids.Validate(ids.KindAgent, source.AgentID) != nil ||
-		ids.Validate(
-			ids.KindAssignment,
-			source.AssignmentID,
-		) != nil || source.ExecutionEpoch == 0 || source.RenderGeneration == 0 ||
-		!validDigest(source.PlanHash) || !validDigest(source.EffectDigest) ||
+	if ids.Validate(ids.KindTask, source.TaskID) != nil || ids.Validate(ids.KindWorkItem, source.WorkItemID) != nil ||
+		ids.Validate(ids.KindAttempt, source.AttemptID) != nil || source.Executor.Validate() != nil ||
+		source.Executor.Executor != workexecution.Agent || source.Input.Validate() != nil || source.RenderGeneration == 0 ||
+		source.Checkpoint.AttemptID != source.AttemptID || source.Checkpoint.Sequence == 0 ||
+		ids.Validate(ids.KindStep, source.Checkpoint.StageID) != nil || source.Checkpoint.Evidence.Validate() != nil ||
+		source.Checkpoint.RecordedAt.IsZero() || source.Checkpoint.RecordedAt.Location() != time.UTC ||
+		source.Checkpoint.RecordedAt.After(source.AcknowledgedAt) ||
 		source.AcknowledgedAt.IsZero() || source.AcknowledgedAt.Location() != time.UTC ||
 		ids.Validate(ids.KindDeployment, record.Runtime.ReleaseID) != nil {
 		return errs.New(errs.KindValidationFailed, "acknowledged Service runtime source is invalid")
@@ -183,9 +116,4 @@ func validateRuntimeIdentity(runtime executionplan.CandidateRuntime) error {
 
 func invalidRuntimeIdentity() error {
 	return errs.New(errs.KindValidationFailed, "acknowledged Service runtime artifact identity is invalid")
-}
-
-func validDigest(value string) bool {
-	decoded, err := hex.DecodeString(value)
-	return err == nil && len(decoded) == 32 && hex.EncodeToString(decoded) == value
 }

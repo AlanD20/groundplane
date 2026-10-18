@@ -22,6 +22,10 @@ func (executor *Executor) RecoverExecution(ctx context.Context, expected Contain
 	if err != nil {
 		return postgres16protocol.ExecutionEvidence{}, err
 	}
+	deadline, bounded := ctx.Deadline()
+	if !bounded || deadline.UnixNano() <= 0 {
+		return postgres16protocol.ExecutionEvidence{}, errs.New(errs.KindStateConflict, "PostgreSQL recovery requires a bounded execution window")
+	}
 	_, code, err := executor.inspectExit(ctx, expected, execID)
 	if err != nil || code != postgres16protocol.ExitSuccess {
 		return postgres16protocol.ExecutionEvidence{}, errs.New(
@@ -31,7 +35,7 @@ func (executor *Executor) RecoverExecution(ctx context.Context, expected Contain
 	}
 	result, err := executor.Execute(ctx, expected, postgres16protocol.Request{
 		Operation: postgres16protocol.OperationEvidence, Nonce: original.Nonce,
-		DeadlineUnixNano: original.DeadlineUnixNano, RequestSHA256: digest,
+		DeadlineUnixNano: uint64(deadline.UnixNano()), RequestSHA256: digest,
 	}, nil, nil)
 	if err != nil {
 		return postgres16protocol.ExecutionEvidence{}, err

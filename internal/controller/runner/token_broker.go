@@ -1,7 +1,9 @@
 package runner
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"sync"
+	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -10,12 +12,13 @@ import (
 // scoped to attempts so a retry can never consume material from an earlier
 // failed execution.
 type TokenKey struct {
-	TaskID  string
-	Attempt uint32
+	TaskID     string
+	WorkItemID string
+	Attempt    uint64
 }
 
 func (key TokenKey) valid() bool {
-	return key.TaskID != "" && key.Attempt != 0
+	return ids.Validate(ids.KindTask, key.TaskID) == nil && ids.Validate(ids.KindWorkItem, key.WorkItemID) == nil && key.Attempt != 0
 }
 
 // TokenBroker owns transient Runner registration tokens between intent
@@ -23,17 +26,23 @@ func (key TokenKey) valid() bool {
 // a Controller restart loses the token and requires an operator retry.
 type TokenBroker struct {
 	mu     sync.Mutex
-	tokens map[TokenKey]*RegistrationToken
+	tokens map[TokenKey]*stagedToken
+}
+
+type stagedToken struct {
+	token    *RegistrationToken
+	deadline time.Time
+	timer    *time.Timer
 }
 
 func NewTokenBroker() *TokenBroker {
-	return &TokenBroker{tokens: make(map[TokenKey]*RegistrationToken)}
+	return &TokenBroker{tokens: make(map[TokenKey]*stagedToken)}
 }
 
 // Stage copies token into broker-owned zeroable storage and clears the caller's
 // object. A duplicate key cannot replace another Task attempt's token.
-func (broker *TokenBroker) Stage(key TokenKey, token *RegistrationToken) error {
-	if broker == nil || !key.valid() || token == nil {
+func (broker *TokenBroker) Stage(key TokenKey, token *RegistrationToken, deadline time.Time) error {
+	if broker == nil || !key.valid() || token == nil || !deadline.After(time.Now()) {
 		if token != nil {
 			token.clear()
 		}
@@ -50,7 +59,18 @@ func (broker *TokenBroker) Stage(key TokenKey, token *RegistrationToken) error {
 		owned.clear()
 		return errs.New(errs.KindStateConflict, "runner registration token is already staged")
 	}
-	broker.tokens[key] = owned
+	entry := &stagedToken{token: owned, deadline: deadline}
+	broker.tokens[key] = entry
+	entry.timer = time.AfterFunc(time.Until(deadline), func() {
+		broker.mu.Lock()
+		defer broker.mu.Unlock()
+		// A later publication may reuse a key after a definitive failure.
+		// An older timer must never erase that new token.
+		if broker.tokens[key] == entry {
+			delete(broker.tokens, key)
+			entry.token.clear()
+		}
+	})
 	return nil
 }
 
@@ -65,12 +85,17 @@ func (broker *TokenBroker) Consume(key TokenKey) (*RegistrationToken, bool) {
 	owned, exists := broker.tokens[key]
 	if exists {
 		delete(broker.tokens, key)
+		owned.timer.Stop()
 	}
 	if !exists || owned == nil {
 		return nil, false
 	}
-	token := &RegistrationToken{value: append([]byte(nil), owned.value...)}
-	owned.clear()
+	if !time.Now().Before(owned.deadline) {
+		owned.token.clear()
+		return nil, false
+	}
+	token := &RegistrationToken{value: append([]byte(nil), owned.token.value...)}
+	owned.token.clear()
 	return token, true
 }
 
@@ -85,7 +110,8 @@ func (broker *TokenBroker) Drop(key TokenKey) {
 	delete(broker.tokens, key)
 	broker.mu.Unlock()
 	if token != nil {
-		token.clear()
+		token.timer.Stop()
+		token.token.clear()
 	}
 }
 
@@ -96,9 +122,10 @@ func (broker *TokenBroker) Clear() {
 	}
 	broker.mu.Lock()
 	tokens := broker.tokens
-	broker.tokens = make(map[TokenKey]*RegistrationToken)
+	broker.tokens = make(map[TokenKey]*stagedToken)
 	broker.mu.Unlock()
 	for _, token := range tokens {
-		token.clear()
+		token.timer.Stop()
+		token.token.clear()
 	}
 }

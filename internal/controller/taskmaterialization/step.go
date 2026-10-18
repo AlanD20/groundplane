@@ -16,23 +16,33 @@ func BuildTaskMaterializationStep(
 	artifactID string,
 	timeoutSeconds uint32,
 ) (*agentpb.ExecutionStep, error) {
-	digest, err := hex.DecodeString(reference.SHA256)
+	file, err := BuildFileDescriptor(reference, artifactID)
 	if err != nil {
+		return nil, err
+	}
+	return &agentpb.ExecutionStep{
+		StepId: reference.StepID, TimeoutSeconds: timeoutSeconds,
+		Payload: &agentpb.ExecutionStep_MaterializeFile{MaterializeFile: file},
+	}, nil
+}
+
+// BuildFileDescriptor carries captured file metadata to a typed operation.
+// Content remains in its retained source; no generic execution step is required.
+func BuildFileDescriptor(reference materializationrecord.Record, artifactID string) (*agentpb.MaterializeFile, error) {
+	digest, err := hex.DecodeString(reference.SHA256)
+	if err != nil || len(digest) != 32 {
 		return nil, errs.New(errs.KindInternal, "durable materialization digest is corrupt")
 	}
 	outputKind, err := taskMaterializationOutputKind(reference.OutputKind)
 	if err != nil {
 		return nil, err
 	}
-	return &agentpb.ExecutionStep{
-		StepId: reference.StepID, TimeoutSeconds: timeoutSeconds,
-		Payload: &agentpb.ExecutionStep_MaterializeFile{MaterializeFile: &agentpb.MaterializeFile{
-			ArtifactId: artifactID, MaterializationId: reference.MaterializationID,
-			EnvironmentId: reference.EnvironmentID, Destination: reference.Destination,
-			ServiceId: reference.ServiceID, ServiceName: reference.ServiceName,
-			OutputKind: outputKind, Uid: reference.UID, Gid: reference.GID, Mode: reference.Mode,
-			Length: reference.Length, Sha256: digest,
-		}},
+	return &agentpb.MaterializeFile{
+		ArtifactId: artifactID, MaterializationId: reference.MaterializationID,
+		EnvironmentId: reference.EnvironmentID, Destination: reference.Destination,
+		ServiceId: reference.ServiceID, ServiceName: reference.ServiceName,
+		OutputKind: outputKind, Uid: reference.UID, Gid: reference.GID, Mode: reference.Mode,
+		Length: reference.Length, Sha256: digest,
 	}, nil
 }
 

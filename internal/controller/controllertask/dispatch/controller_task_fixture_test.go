@@ -10,11 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
-func newTestResourceHandler(agents controllerTaskLocalAgents, zones backingZoneCascadeExecutor,
+func newTestResourceHandler(agents controllerTaskLocalAgents,
 	runners controllerTaskRunnerLifecycle, images Executor,
 ) (*ResourceHandler, error) {
 	checks := &recordingControllerTaskExecutor{}
-	return NewResourceHandler(agents, zones, images, checks, checks, checks, checks, checks, runners)
+	return NewResourceHandler(agents, images, checks, checks, checks, checks, checks, runners)
 }
 
 type controllerProgressJournal struct{}

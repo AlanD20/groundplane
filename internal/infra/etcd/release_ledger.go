@@ -51,6 +51,7 @@ const (
 )
 
 type ReleasePublicationEvidence struct {
+	StorageConditions          []etcdstore.Condition
 	ProxyAddresses             networkreservations.ProxyAddresses
 	Manifest                   releases.VersionedReleaseManifest
 	EnvironmentID              string
@@ -189,6 +190,7 @@ func (ledger *ReleaseLedger) Publish(
 	conditions = append(conditions, hookFragment.conditions...)
 	conditions = append(conditions, networkFragment.conditions...)
 	proxyConditions := evidence.ProxyAddresses.Conditions()
+	conditions = append(conditions, evidence.StorageConditions...)
 	conditions = append(conditions, proxyConditions...)
 	configurationCondition, hasConfiguration, err := taskConfigurationCondition(evidence.Task)
 	if err != nil {

@@ -6,6 +6,7 @@ package network
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
@@ -17,6 +18,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"time"
 
@@ -25,12 +27,13 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// RemovalDatabaseResolver resolves the one dynamic fact needed to preview a
-// backing Zone cascade. It is colocated with the adapter because Attach
+// RemovalDatabaseResolver supplies preview facts and encrypted hook captures
+// for a backing Zone cascade. It is colocated with the adapter because Attach
 // persistence records must not cross the Network capability's public service
 // boundary.
 type RemovalDatabaseResolver interface {
 	ResolveRemovalDatabase(context.Context, etcdstore.Versioned[attachrecord.Record], func(string) error) error
+	SealBackingHookInputsAtRevision(context.Context, string, string, backinghook.Configuration, int64) (*taskconfiguration.BackingHookEncryptedInputs, error)
 }
 
 // Repository owns all durable records used by the Network capability.
@@ -194,30 +197,6 @@ func (repository *Repository) ListZones(
 	return repository.zones.ListZones(ctx, environmentID, request)
 }
 
-func (repository *Repository) BeginZoneDeletionWithTask(
-	ctx context.Context,
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	zone etcdstore.Versioned[zonerecord.Record],
-	authorities environmentchanges.EnvironmentZoneRemovalAuthorities,
-	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent environmentchanges.ZoneRemovalIntent,
-	task etcd.TaskRecord,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.zones.BeginZoneDeletionWithTask(
-		ctx,
-		environment,
-		project,
-		zone,
-		authorities,
-		tombstone,
-		intent,
-		task,
-		marker,
-	)
-}
-
 func (repository *Repository) GetRoute(
 	ctx context.Context,
 	id string,
@@ -235,22 +214,6 @@ func (repository *Repository) ListRoutes(
 
 func (repository *Repository) SnapshotRevision(ctx context.Context) (int64, error) {
 	return repository.routes.SnapshotRevision(ctx)
-}
-
-func (repository *Repository) BeginRouteMutationWithTask(
-	ctx context.Context,
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[servicerecord.ServiceRecord],
-	current *etcdstore.Versioned[routerecord.Record],
-	record routerecord.Record,
-	intent environmentchanges.RouteMutationIntent,
-	task etcd.TaskRecord,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.routes.BeginRouteMutationWithTask(
-		ctx, environment, project, target, current, record, intent, task, marker,
-	)
 }
 
 func (repository *Repository) GetEnvironmentComposeProjection(
@@ -272,23 +235,6 @@ func (repository *Repository) GetEnvironmentAppliedComposeProjection(
 	environmentID string,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
-}
-
-func (repository *Repository) BeginRouteDeletionWithTask(
-	ctx context.Context,
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[servicerecord.ServiceRecord],
-	route etcdstore.Versioned[routerecord.Record],
-	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent environmentchanges.RouteRemovalIntent,
-	task etcd.TaskRecord,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.routes.BeginRouteDeletionWithTask(
-		ctx, environment, project, target, route, projection, tombstone, intent, task, marker,
-	)
 }
 
 func (repository *Repository) GetDeletionTombstone(
@@ -335,16 +281,4 @@ func (repository *Repository) GetZoneRemovalIntent(
 	operationID string,
 ) (etcdstore.Versioned[environmentchanges.ZoneRemovalIntent], bool, error) {
 	return repository.hierarchy.GetZoneRemovalIntent(ctx, operationID)
-}
-
-func (repository *Repository) HandoffBackingZoneDeletion(
-	ctx context.Context,
-	zone etcdstore.Versioned[zonerecord.Record],
-	parentTaskID string,
-	tombstone etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord],
-	intent environmentchanges.ZoneRemovalIntent,
-	task etcd.TaskRecord,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.zones.HandoffBackingZoneDeletion(ctx, zone, parentTaskID, tombstone, intent, task, marker)
 }

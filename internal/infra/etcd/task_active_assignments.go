@@ -114,7 +114,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 			!record.Deadline.Equal(TaskForwardDeadline(task, record.AssignedAt)) ||
 			!record.RecoveryDeadline.Equal(record.Deadline.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
 			taskValue.ModRevision < assignmentValue.ModRevision ||
-			task.idempotencyMarker == nil && !isMarkerlessHierarchyDeletionAgentChild(task) {
+			task.idempotencyMarker == nil {
 			return nil, errs.New(errs.KindInternal, "durable Task assignment and Task are inconsistent")
 		}
 		environmentID, materializes, err := taskMaterializationEnvironment(task)
@@ -138,7 +138,6 @@ func (repository *TaskRepository) ListAgentAssignments(
 			}
 		}
 		var recovery *taskassignments.ReleaseRecoveryDirective
-		var componentRecovery *taskassignments.ReleaseRecoveryDirective
 		var serviceAbsenceRecovery *taskassignments.ReleaseRecoveryDirective
 		var managedNetworkRecovery *taskassignments.ReleaseRecoveryDirective
 		var attachRemovalRecovery *taskassignments.ReleaseRecoveryDirective
@@ -216,29 +215,6 @@ func (repository *TaskRepository) ListAgentAssignments(
 				}
 			}
 		}
-		if componentRecoveryTask(task) {
-			_, procedure, _, procedureErr := repository.componentRecoveryProcedureAtRevision(
-				ctx,
-				task,
-				assignments.ReadRevision,
-			)
-			digest, digestErr := componentRecoveryAuthorityDigest(procedure)
-			if procedureErr != nil || digestErr != nil || digest != record.ComponentRecoveryProcedureSHA256 {
-				return nil, taskassignments.CorruptTaskAssignment()
-			}
-			if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
-				componentRecovery, err = repository.componentRecoveryDirectiveAtRevision(
-					ctx,
-					task,
-					record,
-					procedure,
-					assignments.ReadRevision,
-				)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
 		result[index] = TaskAssignment{
 			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
 				Record: record, Revision: assignmentValue.ModRevision,
@@ -249,7 +225,6 @@ func (repository *TaskRepository) ListAgentAssignments(
 				ReadRevision: assignments.ReadRevision,
 			},
 			ReleaseRecovery:        recovery,
-			ComponentRecovery:      componentRecovery,
 			ServiceAbsenceRecovery: serviceAbsenceRecovery,
 			ManagedNetworkRecovery: managedNetworkRecovery,
 			AttachRemovalRecovery:  attachRemovalRecovery,
@@ -257,11 +232,6 @@ func (repository *TaskRepository) ListAgentAssignments(
 		}
 	}
 	return result, nil
-}
-
-func isMarkerlessHierarchyDeletionAgentChild(task TaskRecord) bool {
-	return task.Executor == taskjournal.TaskExecutorAgent && task.Actor == taskjournal.TaskActorSystem &&
-		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion
 }
 
 // ListControllerTaskClaims restores the single native Controller execution

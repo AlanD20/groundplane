@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
@@ -34,37 +35,18 @@ type BackupRunPrepareInput struct {
 // revision evidence has been validated. Publication remains opaque and
 // one-shot.
 type BackupRunPrepared struct {
+	HostID      string
 	Scope       *agentpb.BackupPlanScope
 	Authority   []*agentpb.BackupStepAuthority
 	Artifacts   []*agentpb.ComposeArtifact
-	Run         backupruntime.BackupRunRecord
-	Owner       taskjournal.TaskOwner
-	Publication backupRunPublication
-}
-
-type BackupRunRetryPrepareInput struct {
-	SourceTaskID string
-	TaskID       string
-	CreatedAt    time.Time
-}
-
-type BackupRunRetryPrepared struct {
-	Scope       *agentpb.BackupPlanScope
-	Authority   []*agentpb.BackupStepAuthority
-	Artifacts   []*agentpb.ComposeArtifact
-	SourceTask  etcd.TaskRecord
 	Run         backupruntime.BackupRunRecord
 	Owner       taskjournal.TaskOwner
 	Publication backupRunPublication
 }
 
 type backupRunPublication interface {
-	Publish(
-		context.Context,
-		etcd.TaskRecord,
-		*agentpb.ExecutionPlan,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	PublishWork(context.Context, workexecution.Task, workexecution.Item, *agentpb.BackupWorkInput,
+		idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 	Clear()
 }
 
@@ -73,29 +55,6 @@ type backupRunPublication interface {
 // idempotency coordinator has completed ResolveExisting.
 type BackupRunRepository interface {
 	PrepareBackupRun(context.Context, BackupRunPrepareInput) (BackupRunPrepared, error)
-	PrepareBackupRunRetry(context.Context, BackupRunRetryPrepareInput) (BackupRunRetryPrepared, error)
-}
-
-func (repository *durableBackupRunRepository) PrepareBackupRunRetry(
-	ctx context.Context,
-	input BackupRunRetryPrepareInput,
-) (BackupRunRetryPrepared, error) {
-	prepared, err := repository.runtime.PrepareBackupRunRetry(ctx, etcd.BackupRunRetryInput{
-		SourceTaskID: input.SourceTaskID,
-		TaskID:       input.TaskID,
-		CreatedAt:    input.CreatedAt,
-	})
-	if err != nil {
-		return BackupRunRetryPrepared{}, err
-	}
-	return BackupRunRetryPrepared{
-		Scope: prepared.Scope, Authority: prepared.Authority,
-		Artifacts:   prepared.Artifacts,
-		SourceTask:  prepared.SourceTask,
-		Run:         prepared.Run,
-		Owner:       prepared.Owner,
-		Publication: prepared.Publication,
-	}, nil
 }
 
 type durableBackupRunRepository struct {
@@ -139,7 +98,8 @@ func (repository *durableBackupRunRepository) PrepareBackupRun(
 		return BackupRunPrepared{}, err
 	}
 	return BackupRunPrepared{
-		Scope: prepared.Scope, Authority: prepared.Authority,
+		HostID: prepared.HostID,
+		Scope:  prepared.Scope, Authority: prepared.Authority,
 		Artifacts: prepared.Artifacts,
 		Run:       prepared.Run, Owner: prepared.Owner, Publication: prepared.Publication,
 	}, nil

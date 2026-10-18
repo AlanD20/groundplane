@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
@@ -19,7 +18,6 @@ func IsAuthoredBlueprintPreparationTask(task TaskRecord) bool {
 	}
 	networkID := task.Params[taskjournal.TaskBlueprintNetworkUnitParam]
 	volumeID := task.Params[taskjournal.TaskBlueprintVolumeUnitParam]
-	attachID := task.Params[attachinputs.TaskAttachIDParam]
 	if ids.Validate(ids.KindNetwork, networkID) == nil {
 		return blueprintNetworkChildTaskMatches(task, blueprintunits.Unit{
 			Target: blueprintunits.ResourceKey{Kind: ids.KindNetwork, ID: networkID},
@@ -30,10 +28,5 @@ func IsAuthoredBlueprintPreparationTask(task TaskRecord) bool {
 			Target: blueprintunits.ResourceKey{Kind: ids.KindVolume, ID: volumeID},
 		})
 	}
-	if ids.Validate(ids.KindAttach, attachID) != nil {
-		return false
-	}
-	return blueprintAttachChildTaskMatches(task, blueprintunits.Unit{
-		Target: blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: attachID},
-	})
+	return false
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"net/netip"
 	"slices"
 )
@@ -167,7 +168,10 @@ const (
 
 type RunnerRuntimeAttempt struct {
 	TaskID         string
-	Executor       string
+	WorkItemID     string
+	AttemptID      string
+	AttemptNumber  uint64
+	Executor       workexecution.Identity
 	OwnershipNonce string
 	Plan           RuntimePlan
 }
@@ -177,7 +181,10 @@ type RunnerRuntimeProgress struct {
 	BootID            string                      `json:"boot_id"`
 	RunnerID          string                      `json:"runner_id"`
 	TaskID            string                      `json:"task_id"`
-	Executor          string                      `json:"executor"`
+	WorkItemID        string                      `json:"work_item_id"`
+	AttemptID         string                      `json:"attempt_id"`
+	AttemptNumber     uint64                      `json:"attempt_number"`
+	Executor          workexecution.Identity      `json:"executor"`
 	PlanDigest        string                      `json:"plan_digest"`
 	IdentityDigest    string                      `json:"identity_digest"`
 	RuntimeEpoch      uint64                      `json:"runtime_epoch"`

@@ -2,10 +2,11 @@ package agentchannel
 
 import (
 	"context"
-	"crypto/sha256"
 	"sync"
 
 	"github.com/AlanD20/groundplane/internal/common/backupvolumetransfer"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -23,9 +24,13 @@ type volumeManifestExchange struct {
 	closed bool
 }
 
-func newVolumeManifestExchange(ctx context.Context, assignment *agentpb.TaskAssignment) *volumeManifestExchange {
+func newVolumeManifestExchange(ctx context.Context, assignment *agentpb.BackupWorkAssignment, identity workexecution.Identity) (*volumeManifestExchange, error) {
+	owned, _, err := executionplan.OpenBackupWorkAssignment(assignment, identity)
+	if err != nil {
+		return nil, err
+	}
 	exchange := &volumeManifestExchange{ctx: ctx, slots: make(map[string]*volumeManifestSlot)}
-	for _, step := range assignment.GetBackupAuthority().GetSteps() {
+	for ordinal, step := range owned.Input.Steps {
 		var directions []agentpb.BackupVolumeManifestDirection
 		if step.GetCapture().GetVolume() != nil {
 			directions = append(
@@ -39,19 +44,16 @@ func newVolumeManifestExchange(ctx context.Context, assignment *agentpb.TaskAssi
 				agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_OLD)
 		}
 		for _, direction := range directions {
-			transferID, err := backupvolumetransfer.TransferID(step.ExecutionId, direction)
-			if err != nil || len(step.StepDigest) != sha256.Size {
-				continue
+			binding, err := backupvolumetransfer.Bind(owned, identity, uint32(ordinal), direction)
+			if err != nil {
+				return nil, err
 			}
-			binding := backupvolumetransfer.Binding{TaskID: assignment.TaskId, AssignmentID: assignment.AssignmentId,
-				StepID: step.StepId, TransferID: transferID, Direction: direction}
-			copy(binding.AuthorityDigest[:], step.StepDigest)
-			exchange.slots[transferID] = &volumeManifestSlot{binding: binding,
+			exchange.slots[binding.TransferID] = &volumeManifestSlot{binding: binding,
 				frames:  make(chan *agentpb.BackupVolumeManifestTransfer, 1),
 				credits: make(chan *agentpb.BackupVolumeManifestAckCredit, 1)}
 		}
 	}
-	return exchange
+	return exchange, nil
 }
 
 func (exchange *volumeManifestExchange) acceptFrame(frame *agentpb.BackupVolumeManifestTransfer) error {

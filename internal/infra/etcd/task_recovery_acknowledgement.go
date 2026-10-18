@@ -62,12 +62,6 @@ func (repository *TaskRepository) transitionAcknowledgementToRecovery(
 		)
 		return transitioned, true, processed, err
 	}
-	if componentRecoveryTask(task) {
-		transitioned, processed, err := repository.transitionComponentAcknowledgementToRecovery(
-			ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue, status, *result, revision,
-		)
-		return transitioned, true, processed, err
-	}
 	if assignment.ServiceAbsenceProcedureSHA256 != "" {
 		required, err := repository.serviceAbsenceRecoveryRequiredAtRevision(ctx, task, assignment, revision)
 		if err != nil {

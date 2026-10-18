@@ -145,7 +145,7 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 				)
 			}
 		}
-		if plan.GetComponentRecoveryProcedure() != nil || plan.GetServiceAbsenceRecoveryProcedure() != nil {
+		if plan.GetServiceAbsenceRecoveryProcedure() != nil {
 			return nil
 		}
 		return validateConfigurationRestorationPlan(plan)

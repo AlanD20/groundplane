@@ -8,7 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
 // ProveCandidateFiles uses only the original staged generations/receipts at one
@@ -24,7 +24,7 @@ func (producer *ConfigRestoreProducer) ProveCandidateFiles(
 	owner := candidate.SourceSeal.Record.Owner
 	read, err := producer.sources.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(owner.Transfer.Binding.TaskID)}},
+		etcdstore.GetManyRequest{Keys: []string{workqueue.TaskKey(owner.Transfer.Binding.Attempt.TaskID)}},
 	)
 	if err != nil {
 		return err
@@ -94,7 +94,7 @@ func (producer *ConfigRestoreProducer) ProveCandidateFiles(
 	}
 	headers, err := candidate.filePlan.PrepareHeaders(
 		ctx,
-		owner.Transfer.Binding.TaskID,
+		owner.Transfer.Binding.Attempt.TaskID,
 		candidate.fileStepID,
 		readValue,
 	)

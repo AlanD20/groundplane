@@ -8,6 +8,9 @@ import (
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"log/slog"
 	"net/netip"
 )
@@ -27,7 +30,6 @@ func newControllerRunnerComposition(
 	cfg config.ControllerConfig,
 	store etcd.EnvironmentBlueprintStore,
 	runnerRecords *etcd.RunnerRepository,
-	tasks *etcd.TaskRepository,
 	hierarchyRecords *etcd.HierarchyRepository,
 	idempotency *etcd.IdempotencyRepository,
 	intentCoordinator *requestidempotency.Coordinator,
@@ -44,8 +46,16 @@ func newControllerRunnerComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner network policy: %w", err)
 	}
+	queue, err := workqueue.NewRepository(store)
+	if err != nil {
+		return nil, err
+	}
+	inputs, err := runnerwork.NewRepository(store)
+	if err != nil {
+		return nil, err
+	}
 	runnerProvisioning, err := runnercapability.NewProvisioningService(
-		runnerRecords, tasks, hierarchyRecords, idempotency, intentCoordinator, runnerTokens,
+		runnerRecords, queue, inputs, hierarchyRecords, idempotency, intentCoordinator, runnerTokens,
 		runnerallocation.RunnerAllocationConfigFromPools(runnerPools), cfg.Runner.Image, policy,
 	)
 	if err != nil {
@@ -59,14 +69,17 @@ func newControllerRunnerComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner removal service: %w", err)
 	}
-	lifecycle, maintenance, err := newRunnerLifecycleExecutor(logger, runnerRecords, runnerTokens, policy, runnerPools)
+	diagnostics, err := executiondiagnostics.New(store, queue)
+	if err != nil {
+		return nil, err
+	}
+	lifecycle, maintenance, err := newRunnerLifecycleExecutor(logger, runnerRecords, runnerTokens, inputs, diagnostics)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner lifecycle: %w", err)
 	}
 	checks, checkExecutor, err := newControllerRunnerChecks(
 		store,
 		runnerRecords,
-		tasks,
 		idempotency,
 		intentCoordinator,
 		lifecycle,

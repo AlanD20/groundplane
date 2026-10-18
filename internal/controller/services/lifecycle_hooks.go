@@ -2,18 +2,16 @@ package services
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerlifecycle "github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -28,17 +26,17 @@ type serviceLifecycleHookInputs interface {
 
 func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	ctx context.Context,
-	taskType taskjournal.TaskType,
+	action workexecution.Action,
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	nativeBacking bool,
-	task etcd.TaskRecord,
-) (etcd.TaskRecord, releaserender.ServiceLifecycleRenderInput, *taskconfiguration.BackingHookEncryptedInputs, error) {
+	planID, operationID string,
+) (releaserender.ServiceLifecycleRenderInput, *taskconfiguration.BackingHookEncryptedInputs, error) {
 	input := releaserender.ServiceLifecycleRenderInput{
-		PlanID: task.PlanID, ServiceID: current.Record.Desired.ID,
+		PlanID: planID, ServiceID: current.Record.Desired.ID,
 		ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
 		EnvironmentID: environment.Record.ID, EnvironmentName: environment.Record.Name,
 		AuthorizedVolumeDir:       environment.Record.VolumeDir,
@@ -48,7 +46,7 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	if nativeBacking {
 		artifact, _, err := projectionrecord.SelectBackingRuntime(projection.Record, current.Record.Desired.ID)
 		if err != nil {
-			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
+			return releaserender.ServiceLifecycleRenderInput{}, nil, err
 		}
 		native := projectionrecord.CloneEnvironmentComposeProjection(projection.Record)
 		input.NativeBacking, input.ArtifactID = &native, artifact.ArtifactId
@@ -57,16 +55,16 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 			ctx, service.repository, projection, environment.Record.ID, current.Record.Desired.ID,
 		)
 		if err != nil {
-			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
+			return releaserender.ServiceLifecycleRenderInput{}, nil, err
 		}
 		runtime, err := service.repository.GetServiceRemovalRuntime(
 			ctx, environment.Record.ID, current.Record.Desired.ID, projection.ReadRevision,
 		)
 		if err != nil {
-			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
+			return releaserender.ServiceLifecycleRenderInput{}, nil, err
 		}
 		if runtime.ReadRevision != projection.ReadRevision || runtime.Revision <= 0 || runtime.Revision > projection.ReadRevision {
-			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, errs.New(
+			return releaserender.ServiceLifecycleRenderInput{}, nil, errs.New(
 				errs.KindStateConflict, "Service lifecycle runtime snapshot changed",
 			)
 		}
@@ -78,10 +76,10 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	}
 	var sealed *taskconfiguration.BackingHookEncryptedInputs
 	var err error
-	definition := serviceLifecycleHookDefinition(taskType, current.Record.Desired.Hooks)
+	definition := serviceLifecycleHookDefinition(action, current.Record.Desired.Hooks)
 	if definition != nil {
 		if current.Record.Desired.Adapter != "custom" {
-			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, errs.New(
+			return releaserender.ServiceLifecycleRenderInput{}, nil, errs.New(
 				errs.KindStateConflict,
 				"Service lifecycle hooks require a Custom backing Service",
 			)
@@ -89,60 +87,26 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 		input.AdapterKey = current.Record.Desired.Adapter
 		input.HookConfiguration = backinghook.CloneConfiguration(current.Record.Desired.Hooks)
 		sealed, err = service.hookInputs.SealBackingHookTaskInputs(
-			ctx, task.OperationID, project.Record.ID, *input.HookConfiguration,
+			ctx, operationID, project.Record.ID, *input.HookConfiguration,
 		)
 		if err != nil {
-			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
-		}
-		if sealed != nil {
-			task, err = etcd.BindBackingHookTaskInputs(task, project.Record.ID, *sealed)
-			if err != nil {
-				clear(sealed.Ciphertext)
-				return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
-			}
-		}
-		minimumTimeout := int64(definition.TimeoutSeconds) + serviceLifecycleControlTimeoutSeconds
-		if task.TimeoutSeconds < minimumTimeout {
-			task.TimeoutSeconds = minimumTimeout
+			return releaserender.ServiceLifecycleRenderInput{}, nil, err
 		}
 	}
-	task.Executor = taskjournal.TaskExecutorAgent
-	if task.TimeoutSeconds < serviceLifecycleAgentTimeoutSeconds {
-		task.TimeoutSeconds = serviceLifecycleAgentTimeoutSeconds
-	}
-	stepIDs := make([]string, 0, input.RuntimeMemberCount()+1)
-	for range input.RuntimeMemberCount() {
-		stepIDs = append(stepIDs, ids.New(ids.KindStep))
-	}
-	if input.HookConfiguration != nil {
-		hookStepID := ids.New(ids.KindStep)
-		if taskType == taskjournal.TaskStart {
-			stepIDs = append(stepIDs, hookStepID)
-		} else {
-			stepIDs = append([]string{hookStepID}, stepIDs...)
-		}
-	}
-	prepared, err := service.plans.PrepareServiceLifecycleHookTask(ctx, task, input, sealed, stepIDs)
-	if err != nil {
-		if sealed != nil {
-			clear(sealed.Ciphertext)
-		}
-		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
-	}
-	return prepared, input, sealed, nil
+	return input, sealed, nil
 }
 
 func serviceLifecycleHookDefinition(
-	taskType taskjournal.TaskType,
+	action workexecution.Action,
 	configuration *backinghook.Configuration,
 ) *backinghook.Definition {
 	if configuration == nil {
 		return nil
 	}
-	if taskType == taskjournal.TaskStart {
+	if action == workexecution.ActionStart {
 		return configuration.AfterStart
 	}
-	if taskType == taskjournal.TaskStop || taskType == taskjournal.TaskDestroy {
+	if action == workexecution.ActionStop || action == workexecution.ActionDestroy {
 		return configuration.BeforeStop
 	}
 	return nil

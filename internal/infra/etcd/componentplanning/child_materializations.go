@@ -23,7 +23,7 @@ func (record ChildExecution) validateMaterializations(plan *agentpb.ExecutionPla
 		case taskmaterialization.SourceComponentFile:
 			source := file.Source.ComponentFile
 			if source.ComponentID != record.Component.Desired.ID || source.RevisionID != record.ParentTaskID ||
-				source.Path != file.Destination || source.RouteTaskID != "" {
+				source.Path != file.Destination {
 				return errs.New(errs.KindStateConflict, "Blueprint Component file belongs to another input")
 			}
 		case taskmaterialization.SourceGeneratedEnvironment:

@@ -69,15 +69,11 @@ func (repository *ConfigTransferRepository) StageConfigRestoreEntry(ctx context.
 		return zero, captureSnapshotConflict()
 	}
 	defer etcdstore.ClearValues(read.Values)
-	conditions, err := repository.guard(ctx, owner.Transfer, read.ReadRevision)
+	conditions, err := repository.restoreGuard(ctx, owner, read.ReadRevision)
 	if err != nil {
 		return zero, err
 	}
-	more, err := repository.restoreGuard(ctx, owner, read.ReadRevision)
-	if err != nil {
-		return zero, err
-	}
-	conditions = append(conditions, more...)
+
 	storedSeal, err := DecodeConfigRestoreGeneration(read.Values[0].Value)
 	if err != nil || read.Values[0].Key != keys[0] || read.Values[0].Version != 1 ||
 		read.Values[0].ModRevision != seal.Revision ||

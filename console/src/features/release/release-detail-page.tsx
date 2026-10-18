@@ -89,8 +89,8 @@ export function ReleaseDetails({
         });
     };
     refresh();
-    const unsubscribe = subscribeTerminalTasks((task) => {
-      if (task.environment_id === environment?.id) refresh();
+    const unsubscribe = subscribeTerminalTasks(({ task }) => {
+      if (task.scope.environment_id === environment?.id) refresh();
     });
     return () => {
       controller.abort();

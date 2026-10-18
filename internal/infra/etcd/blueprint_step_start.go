@@ -137,15 +137,6 @@ func (repository *TaskRepository) blueprintSettlementStep(
 		steps, err := releaseRestorationStepIDs(procedure, assignment.RestorationAuthority.Candidates)
 		return slices.Contains(steps, stepID), conditions, err
 	}
-	if assignment.ComponentRecoveryProcedureSHA256 != "" {
-		_, procedure, condition, err := repository.componentRecoveryProcedureAtRevision(ctx, task, revision)
-		return slices.Contains(
-				executionplan.ComponentRecoveryStepIDs(procedure),
-				stepID,
-			), []keyvalue.Condition{
-				condition,
-			}, err
-	}
 	if assignment.ServiceAbsenceProcedureSHA256 != "" {
 		procedure, _, conditions, found, err := repository.serviceAbsenceProcedureAtRevision(ctx, task, revision)
 		if err != nil || !found {

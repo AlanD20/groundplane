@@ -21,15 +21,14 @@ import (
 // its predecessor's readiness, confirmed proxy activation and connection drain.
 func restoreRollingTraffic(ctx context.Context, taskRunner runner.Runner,
 	complete, candidate *agentpb.ComposeArtifact,
-	serving executionplan.NativeServingRuntime, member *agentpb.CandidateReleaseMember,
+	serving executionplan.NativeServingRuntime, plan rollingrelease.Plan, traffic [][]byte,
 ) error {
-	plan, err := executionplan.OpenRollingPlan(member)
-	if err != nil {
-		return err
-	}
 	changes, err := plan.Changes()
 	if err != nil {
 		return err
+	}
+	if len(traffic) != len(changes) {
+		return errs.New(errs.KindStateConflict, "rolling restoration routing does not match the captured changes")
 	}
 	if len(plan.Prior) == 0 {
 		return errs.New(errs.KindStateConflict, "rolling restoration has no captured serving predecessor")
@@ -51,7 +50,8 @@ func restoreRollingTraffic(ctx context.Context, taskRunner runner.Runner,
 	for index := len(changes); index >= 0; index-- {
 		digest := proxy.GetProxyConfigSha256()
 		if index > 0 {
-			digest = member.GetRolling().GetChanges()[index-1].GetProxyConfigSha256()
+			hash := sha256.Sum256(traffic[index-1])
+			digest = hash[:]
 		}
 		matched, err := observeRestorationProxy(
 			ctx,
@@ -69,7 +69,7 @@ func restoreRollingTraffic(ctx context.Context, taskRunner runner.Runner,
 		}
 	}
 	if position < 0 {
-		position, err = repairRestorationPosition(ctx, taskRunner, inventory.proxyID, proxy, member)
+		position, err = repairRestorationPosition(ctx, taskRunner, inventory.proxyID, proxy, traffic)
 		if err != nil {
 			return err
 		}
@@ -111,8 +111,9 @@ func restoreRollingTraffic(ctx context.Context, taskRunner runner.Runner,
 		}
 		beforeConfig, beforeDigest := proxy.GetProxyConfigJson(), proxy.GetProxyConfigSha256()
 		if index > 0 {
-			before := member.GetRolling().GetChanges()[index-1]
-			beforeConfig, beforeDigest = before.GetProxyConfigJson(), before.GetProxyConfigSha256()
+			beforeConfig = traffic[index-1]
+			hash := sha256.Sum256(beforeConfig)
+			beforeDigest = hash[:]
 		}
 		before, err := observeRestorationProxy(ctx, taskRunner, inventory.proxyID,
 			proxy.GetProxyImplementation(), beforeDigest)
@@ -120,9 +121,9 @@ func restoreRollingTraffic(ctx context.Context, taskRunner runner.Runner,
 			return err
 		}
 		if !before {
-			after := member.GetRolling().GetChanges()[index]
+			after := sha256.Sum256(traffic[index])
 			matched, err := observeRestorationProxy(ctx, taskRunner, inventory.proxyID,
-				proxy.GetProxyImplementation(), after.GetProxyConfigSha256())
+				proxy.GetProxyImplementation(), after[:])
 			if err != nil {
 				return err
 			}

@@ -7,40 +7,45 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/rollingpredecessor"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
-	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // preparedSelectedRuntime owns staged native rollout inputs, selected hooks and
 // their sources. It does not publish a Task, hold a Release fence or establish
 // applied runtime. Final file binding and publication remain separate decisions.
 type preparedSelectedRuntime struct {
-	task         etcd.TaskRecord
-	runtime      taskplanning.BlueprintReleaseRuntime
-	members      []releaserender.ReleaseTaskRenderMember
-	hooks        preparedHooks
-	manifest     releases.VersionedReleaseManifest
-	predecessors []etcd.BlueprintNativePredecessorCapture
+	capture           releaserender.BlueprintServiceRolloutCapture
+	artifact          *agentpb.ComposeArtifact
+	storageConditions []keyvalue.Condition
+	members           []releaserender.ReleaseTaskRenderMember
+	hooks             preparedHooks
+	manifest          releases.VersionedReleaseManifest
+	predecessors      []etcd.BlueprintNativePredecessorCapture
 }
 
 func (service *Service) stageSelectedRuntime(
 	ctx context.Context,
 	input prepareInput,
 	candidates []blueprints.EnvironmentBlueprintServiceChange,
-	task etcd.TaskRecord,
 	addresses networkreservations.ProxyAddresses,
 ) (preparedSelectedRuntime, error) {
+	if err := service.validatePrepareInput(ctx, input); err != nil {
+		return preparedSelectedRuntime{}, err
+	}
+	if len(candidates) != 1 || candidates[0].Record.Desired.ID != input.Work.Item.Item.TargetID ||
+		input.Artifact == nil {
+		return preparedSelectedRuntime{}, errs.New(errs.KindValidationFailed, "Service work requires its captured candidate and artifact")
+	}
 	var err error
-	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(
-		taskcontract.BlueprintComposeProcedureCandidateReleases,
-	)
 	publicationID := strings.TrimPrefix(
 		input.AllocateNamed(ids.KindDeployment, "blueprint-release-publication"),
 		string(ids.KindDeployment)+"_",
@@ -51,11 +56,10 @@ func (service *Service) stageSelectedRuntime(
 			"Blueprint Release publication allocator is invalid",
 		)
 	}
-	task.Params[releaserender.TaskReleasePublicationParam] = publicationID
-	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
+	artifactID := input.Artifact.GetArtifactId()
 	stage := releases.ReleaseStage{
 		PublicationID: publicationID,
-		OperationID:   task.OperationID,
+		OperationID:   input.OperationID,
 		CreatedAt:     input.CreatedAt,
 		Members:       make([]releases.ReleaseStageMember, len(candidates)),
 	}
@@ -76,7 +80,7 @@ func (service *Service) stageSelectedRuntime(
 		}
 		render := releaserender.ReleaseRenderInput{
 			ProxyAddresses: addresses.ForService(candidate.Record.Desired.ID),
-			ReleaseID:      releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
+			ReleaseID:      releaseID, PlanID: input.PlanID, ArtifactID: artifactID,
 			ServiceID: candidate.Record.Desired.ID, ServiceName: candidate.Record.Desired.Name,
 			CandidateWorkload: workload, Strategy: strategy,
 			PriorStrategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
@@ -88,7 +92,7 @@ func (service *Service) stageSelectedRuntime(
 		}
 		intent := domain.Intent{
 			ID: releaseID, EnvironmentID: input.Environment.Record.ID, ServiceID: render.ServiceID,
-			OperationID: task.OperationID, OperationKind: domain.OperationBlueprintApply,
+			OperationID: input.OperationID, OperationKind: domain.OperationBlueprintApply,
 			CandidateWorkload: workload, Tag: tag, Strategy: strategy,
 			OnFailure:     domain.OnFailure(candidate.Record.Desired.OnFailure.WithDefault()),
 			RenderInputID: artifactID, CreatedAt: input.CreatedAt,
@@ -146,36 +150,41 @@ func (service *Service) stageSelectedRuntime(
 	if err != nil {
 		return preparedSelectedRuntime{}, err
 	}
-	hooks, err := service.prepareDeployHooks(ctx, input, manifest, task, members)
+	hooks, err := service.prepareDeployHooks(ctx, input, manifest, members)
 	if err != nil {
 		return preparedSelectedRuntime{}, err
 	}
-	task, members = hooks.task, hooks.members
-	memberSteps := make([]taskplanning.ReleaseMemberStepIDs, len(members))
-	for index, member := range members {
-		memberSteps[index], err = taskplanning.AllocateReleaseMemberSteps(member.Render, func(name string) string {
-			return input.AllocateNamed(ids.KindStep, "blueprint-"+name)
-		})
-		if err != nil {
-			return preparedSelectedRuntime{}, err
-		}
+	members = hooks.members
+	if len(members) != 1 {
+		return preparedSelectedRuntime{}, errs.New(errs.KindValidationFailed, "Service work requires exactly one Release")
 	}
-	task, runtime, err := service.plans.PrepareBlueprintReleaseRuntime(
-		ctx,
-		task,
-		taskplanning.BlueprintReleasePlanInput{
-			NativePredecessors: nativePredecessors(input, members),
-			Members:            members, PrefixSteps: input.PrefixSteps,
-			MemberSteps: memberSteps,
-			PreStepIDs:  hooks.preStepIDs, PostStepIDs: hooks.postStepIDs,
-		},
-	)
+	artifact, err := renderSelectedArtifact(ctx, members[0])
 	if err != nil {
+		return preparedSelectedRuntime{}, err
+	}
+	storageConditions, err := service.ledger.PostgresPatchConditions(ctx, artifact, members[0].Render.ServiceID, input.Environment.ReadRevision)
+	if err != nil {
+		return preparedSelectedRuntime{}, err
+	}
+	artifactBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		return preparedSelectedRuntime{}, errs.Wrap(errs.KindInternal, err)
+	}
+	task, item := input.Work.Task.Task, input.Work.Item.Item
+	capture := releaserender.BlueprintServiceRolloutCapture{
+		TaskID: task.ID, WorkItemID: item.ID, OperationID: input.OperationID,
+		PublicationID: manifest.Record.PublicationID,
+		Scope:         task.Scope, Placement: item.Placement, CreatedAt: item.CreatedAt,
+		Deadline: item.Deadline, Render: releaserender.CloneReleaseRenderInput(members[0].Render),
+		CandidateArtifact: artifactBytes,
+	}
+	if _, err := releaserender.OpenBlueprintServiceRolloutCapture(capture); err != nil {
 		return preparedSelectedRuntime{}, err
 	}
 
 	return preparedSelectedRuntime{
-		task: task, runtime: runtime, members: members, hooks: hooks, manifest: manifest,
+		capture: capture, artifact: artifact, storageConditions: storageConditions,
+		members: members, hooks: hooks, manifest: manifest,
 		predecessors: nativePredecessorCaptures(input, members),
 	}, nil
 }

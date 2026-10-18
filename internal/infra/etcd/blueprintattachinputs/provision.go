@@ -44,7 +44,7 @@ func (provision Provision) Conditions() []etcdstore.Condition {
 
 func (generation Generation) PendingRecord(taskID string, createdAt time.Time) (attachrecord.Record, error) {
 	if generation.Provision == nil {
-		if generation.Hook.Attach == nil && generation.Hook.Detach != nil {
+		if generation.Hook.Attach != nil || generation.Hook.Detach != nil {
 			record, err := attachrecord.NewPendingAttachRecord(
 				generation.AttachID,
 				generation.EnvironmentID,
@@ -74,9 +74,29 @@ func (generation Generation) PendingRecord(taskID string, createdAt time.Time) (
 }
 
 func (generation Generation) SettlesInController() bool {
-	return generation.Binding != nil ||
+	return len(generation.ConsumerTransition) == 0 && (generation.Binding != nil ||
 		(generation.Provision != nil && !generation.Provision.RequiresProvisioning) ||
-		(generation.Provision == nil && generation.Hook.Attach == nil && generation.Hook.Detach != nil)
+		(generation.Provision == nil && generation.Hook.Attach == nil && generation.Hook.Detach != nil))
+}
+
+// ControllerBinding is the exact record adopted or published by decision-only
+// settlement. Its digest can live with applied resource state after Task expiry.
+func (generation Generation) ControllerBinding(createdAt time.Time) (attachrecord.Record, error) {
+	if !generation.SettlesInController() {
+		return attachrecord.Record{}, errs.New(errs.KindStateConflict, "Attach requires host provisioning")
+	}
+	if generation.Binding != nil {
+		return attachrecord.CloneAttachRecord(generation.Binding.Consumer.Record), nil
+	}
+	if generation.Provision != nil {
+		createdAt = generation.Provision.Candidate.CreatedAt
+	}
+	record, err := generation.PendingRecord(generation.ParentTaskID, createdAt)
+	if err != nil {
+		return attachrecord.Record{}, err
+	}
+	record.Status = core.AttachReady
+	return record, nil
 }
 
 func (generation Generation) MatchesControllerBinding(record attachrecord.Record, revision int64) bool {

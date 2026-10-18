@@ -1,5 +1,10 @@
 # Platform runtime and observation
 
+The [accepted Task replacement](task-execution-redesign.md#remote-agents-and-host-ownership)
+requires host-specific execution compatible with future remote Agents. It does
+not implement remote enrollment, lifecycle or placement. The single-host topology
+and lifecycle below remain the current runtime boundary.
+
 Status: Accepted architecture. Delivery and qualification status belongs in
 [capabilities](../capabilities.md) and the linked feature documents.
 

@@ -296,30 +296,26 @@ func (repository *BackupPolicyPlanner) loadBlueprintBackupSources(
 			item.environmentIndex = backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(triples.Values[1])
 		}
 		if selection.Kind == core.BackupSourceAttach {
-			candidate := blueprintBackupAttachCandidate(input.AttachPreparation, selection.TargetID)
-			if candidate != nil {
-				item.candidateAttach = true
-			} else {
-				attachRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-					attachrecord.AttachKey(selection.TargetID), attachrecord.AttachOwnerKey(input.EnvironmentID, selection.TargetID),
-					deletionrecord.TombstoneKey("attach", selection.TargetID),
-				}, Revision: revision})
-				if readErr != nil {
-					return nil, readErr
-				}
-				if attachRead == nil || attachRead.ReadRevision != revision || len(attachRead.Values) != 3 ||
-					attachRead.Values[0] == nil || attachRead.Values[1] == nil || attachRead.Values[2] != nil {
-					return nil, errs.New(errs.KindAttachNotFound, "backup Attach source was not found")
-				}
-				attach, decodeErr := attachrecord.DecodeAttachRecord(attachRead.Values[0].Value)
-				if decodeErr != nil || attach.ID != selection.TargetID || attach.EnvironmentID != input.EnvironmentID ||
-					!attach.OwnsCredential() || string(attachRead.Values[1].Value) != selection.TargetID {
-					return nil, errs.New(errs.KindValidationFailed, "backup Attach source must own credentials")
-				}
-				versioned := etcdstore.Versioned[attachrecord.Record]{Record: attach, Revision: attachRead.Values[0].ModRevision, ReadRevision: revision}
-				item.attach = &versioned
-				item.attachOwner = backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(attachRead.Values[1])
+			attachRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
+				attachrecord.AttachKey(selection.TargetID), attachrecord.AttachOwnerKey(input.EnvironmentID, selection.TargetID),
+				deletionrecord.TombstoneKey("attach", selection.TargetID),
+			}, Revision: revision})
+			if readErr != nil {
+				return nil, readErr
 			}
+			if attachRead == nil || attachRead.ReadRevision != revision || len(attachRead.Values) != 3 ||
+				attachRead.Values[0] == nil || attachRead.Values[1] == nil || attachRead.Values[2] != nil {
+				return nil, errs.New(errs.KindAttachNotFound, "backup Attach source was not found")
+			}
+			attach, decodeErr := attachrecord.DecodeAttachRecord(attachRead.Values[0].Value)
+			if decodeErr != nil || attach.ID != selection.TargetID || attach.EnvironmentID != input.EnvironmentID ||
+				!attach.OwnsCredential() || attach.Status != core.AttachReady ||
+				attach.Operation != attachrecord.AttachOperationProvision || string(attachRead.Values[1].Value) != selection.TargetID {
+				return nil, errs.New(errs.KindValidationFailed, "backup Attach source must own credentials")
+			}
+			versioned := etcdstore.Versioned[attachrecord.Record]{Record: attach, Revision: attachRead.Values[0].ModRevision, ReadRevision: revision}
+			item.attach = &versioned
+			item.attachOwner = backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(attachRead.Values[1])
 		}
 		result[index] = item
 	}
@@ -342,23 +338,8 @@ func validateBlueprintBackupTarget(
 			}
 		}
 	case core.BackupSourceAttach:
-		candidate := blueprintBackupAttachCandidate(input.AttachPreparation, selection.TargetID)
-		if candidate == nil ||
-			candidate.Record.EnvironmentID == input.EnvironmentID && candidate.Record.OwnsCredential() {
-			return nil
-		}
+		// Ownership and readiness are checked against the persisted binding.
+		return nil
 	}
 	return errs.New(errs.KindValidationFailed, "Blueprint Backup source target is invalid")
-}
-
-func blueprintBackupAttachCandidate(
-	preparation BlueprintAttachTaskPreparation,
-	attachID string,
-) *EnvironmentBlueprintAttachCandidateInput {
-	for index := range preparation.candidates {
-		if preparation.candidates[index].Record.ID == attachID {
-			return &preparation.candidates[index]
-		}
-	}
-	return nil
 }

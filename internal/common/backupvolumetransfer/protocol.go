@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 
 	"github.com/AlanD20/groundplane/internal/common/backupvolume"
-	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/oklog/ulid/v2"
@@ -22,15 +22,16 @@ const (
 )
 
 type Binding struct {
-	TaskID, AssignmentID, StepID, TransferID string
-	AuthorityDigest                          [sha256.Size]byte
-	Direction                                agentpb.BackupVolumeManifestDirection
+	Attempt         workexecution.Attempt
+	SourceOrdinal   uint32
+	TransferID      string
+	AuthorityDigest [sha256.Size]byte
+	Direction       agentpb.BackupVolumeManifestDirection
 }
 
 func (binding Binding) Validate() error {
-	if ids.Validate(ids.KindTask, binding.TaskID) != nil ||
-		ids.Validate(ids.KindAssignment, binding.AssignmentID) != nil ||
-		ids.Validate(ids.KindStep, binding.StepID) != nil ||
+	if binding.Attempt.Validate() != nil || binding.Attempt.Executor.Executor != workexecution.Agent ||
+		binding.Attempt.StartedAt != nil || binding.Attempt.FinishedAt != nil || binding.Attempt.Result != nil ||
 		!validULID(binding.TransferID) || binding.AuthorityDigest == ([sha256.Size]byte{}) ||
 		(binding.Direction != agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_CAPTURE &&
 			binding.Direction != agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW &&
@@ -62,15 +63,15 @@ func TransferID(executionID string, direction agentpb.BackupVolumeManifestDirect
 }
 
 func (binding Binding) frame(sequence uint64) *agentpb.BackupVolumeManifestTransfer {
-	return &agentpb.BackupVolumeManifestTransfer{TaskId: binding.TaskID, AssignmentId: binding.AssignmentID,
-		StepId: binding.StepID, AuthorityDigest: append([]byte(nil), binding.AuthorityDigest[:]...),
-		TransferId: binding.TransferID, Direction: binding.Direction, RecordSequence: sequence}
+	return &agentpb.BackupVolumeManifestTransfer{Attempt: binding.wireAttempt(), SourceOrdinal: binding.SourceOrdinal,
+		AuthorityDigest: append([]byte(nil), binding.AuthorityDigest[:]...),
+		TransferId:      binding.TransferID, Direction: binding.Direction, RecordSequence: sequence}
 }
 
 func (binding Binding) credit(sequence, committed, next uint64, chain []byte) *agentpb.BackupVolumeManifestAckCredit {
-	return &agentpb.BackupVolumeManifestAckCredit{TaskId: binding.TaskID, AssignmentId: binding.AssignmentID,
-		StepId: binding.StepID, AuthorityDigest: append([]byte(nil), binding.AuthorityDigest[:]...),
-		TransferId: binding.TransferID, AckSequence: sequence, CommittedRecordSequence: committed,
+	return &agentpb.BackupVolumeManifestAckCredit{Attempt: binding.wireAttempt(), SourceOrdinal: binding.SourceOrdinal,
+		AuthorityDigest: append([]byte(nil), binding.AuthorityDigest[:]...),
+		TransferId:      binding.TransferID, AckSequence: sequence, CommittedRecordSequence: committed,
 		NextOrdinal: next, TransferChainSha256: append([]byte(nil), chain...),
 		RecordCredit: GrantRecords, ByteCredit: GrantBytes}
 }
@@ -104,8 +105,8 @@ func ValidateFrame(
 		return nil, err
 	}
 	if frame == nil || frame.RecordSequence == 0 || proto.Size(frame) > MaxFrameBytes ||
-		frame.ProtoReflect().GetUnknown() != nil || frame.TaskId != binding.TaskID ||
-		frame.AssignmentId != binding.AssignmentID || frame.StepId != binding.StepID ||
+		frame.ProtoReflect().GetUnknown() != nil || !binding.matchesAttempt(frame.Attempt) ||
+		frame.SourceOrdinal != binding.SourceOrdinal ||
 		frame.TransferId != binding.TransferID || frame.Direction != binding.Direction ||
 		!bytes.Equal(frame.AuthorityDigest, binding.AuthorityDigest[:]) {
 		return nil, invalidManifest()
@@ -216,8 +217,7 @@ func ValidateCredit(binding Binding, credit *agentpb.BackupVolumeManifestAckCred
 		return err
 	}
 	if credit == nil || credit.ProtoReflect().GetUnknown() != nil ||
-		credit.TaskId != binding.TaskID || credit.AssignmentId != binding.AssignmentID ||
-		credit.StepId != binding.StepID || credit.TransferId != binding.TransferID ||
+		!binding.matchesAttempt(credit.Attempt) || credit.SourceOrdinal != binding.SourceOrdinal || credit.TransferId != binding.TransferID ||
 		!bytes.Equal(credit.AuthorityDigest, binding.AuthorityDigest[:]) ||
 		credit.AckSequence == 0 || credit.NextOrdinal == 0 || credit.NextOrdinal > backupvolume.MaxEntries+1 ||
 		len(credit.TransferChainSha256) != sha256.Size || credit.RecordCredit == 0 ||

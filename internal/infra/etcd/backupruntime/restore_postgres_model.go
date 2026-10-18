@@ -62,6 +62,7 @@ type BackupRestoreDatabaseProgress struct {
 	StopPhase                 agentpb.BackupServicePhase `json:"stop_phase"`
 	StopServiceID             string                     `json:"stop_service_id,omitempty"`
 	ApplyStarted              bool                       `json:"apply_started"`
+	ConsumersOnly             bool                       `json:"consumers_only"`
 	ApplyExecutionNonce       string                     `json:"apply_execution_nonce,omitempty"`
 	ApplyExecID               string                     `json:"apply_exec_id,omitempty"`
 	ApplyRepositoryDigest     string                     `json:"apply_repository_digest,omitempty"`
@@ -200,15 +201,19 @@ func validateBackupRestoreDatabaseProgress(record BackupRestoreRecord, consumerC
 		}
 	} else if progress.ApplyExecutionNonce != "" || progress.ApplyExecID != "" ||
 		progress.ApplyRepositoryDigest != "" || progress.ApplyLabelsSHA256 != "" ||
-		progress.RestoreVerificationSHA256 != "" || progress.RecoveryCursor != 0 ||
+		progress.RestoreVerificationSHA256 != "" || !progress.ConsumersOnly && (progress.RecoveryCursor != 0 ||
 		progress.RecoveryPhase != agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_UNSPECIFIED ||
-		progress.SourceCleanupCompleted {
+		progress.SourceCleanupCompleted) {
 		return invalidBackupRuntimeRecord("database Restore advanced before apply start")
+	}
+	if progress.ConsumersOnly && (progress.ApplyStarted || progress.RestoreVerificationSHA256 != "" ||
+		progress.ContainerID == "" || (record.State != BackupRestoreRecoveryRequired && record.State != BackupRestoreFailedSafe)) {
+		return invalidBackupRuntimeRecord("consumer-only recovery cannot claim database apply or verification")
 	}
 	if progress.RestoreVerificationSHA256 != "" &&
 		!recordcodec.ValidSHA256(progress.RestoreVerificationSHA256) ||
-		progress.RecoveryCursor != 0 && progress.RestoreVerificationSHA256 == "" ||
-		progress.SourceCleanupCompleted && (progress.RestoreVerificationSHA256 == "" ||
+		progress.RecoveryCursor != 0 && progress.RestoreVerificationSHA256 == "" && !progress.ConsumersOnly ||
+		progress.SourceCleanupCompleted && ((!progress.ConsumersOnly && progress.RestoreVerificationSHA256 == "") ||
 			progress.RecoveryCursor != record.ServiceCount) {
 		return invalidBackupRuntimeRecord("database Restore verification or cleanup is out of order")
 	}
@@ -240,7 +245,13 @@ func validateBackupRestoreDatabaseProgress(record BackupRestoreRecord, consumerC
 			return invalidBackupRuntimeRecord("database Restore lacks verification and physical source cleanup")
 		}
 	case BackupRestoreFailedSafe:
-		if record.MutationStarted || progress.ApplyStarted || progress.StopCursor != 0 {
+		if progress.ConsumersOnly {
+			if progress.ApplyStarted || !progress.SourceCleanupCompleted || progress.RecoveryCursor != record.ServiceCount {
+				return invalidBackupRuntimeRecord("failed-safe Restore has unfinished consumer recovery")
+			}
+		} else if record.MutationStarted || progress.ApplyStarted ||
+			(progress.StopPhase != agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_UNSPECIFIED &&
+				progress.StopPhase != agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_NOT_RUNNING) {
 			return invalidBackupRuntimeRecord("failed-safe database Restore has mutation progress")
 		}
 	case BackupRestoreRecoveryRequired:

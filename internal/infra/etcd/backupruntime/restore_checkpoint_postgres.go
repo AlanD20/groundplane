@@ -13,14 +13,14 @@ import (
 // uncertainty may be held for recovery, never treated as authority to apply
 // again. The common resume fold independently checks the complete wire order.
 func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
-	request *agentpb.BackupCheckpointRequest, at time.Time,
+	input *agentpb.BackupWorkInput, request *agentpb.BackupWorkCheckpointRequest, at time.Time,
 ) (BackupRestoreRecord, error) {
 	if ValidateBackupRestoreRecord(current) != nil || current.Point.SourceKind != BackupRuntimeSourceAttach ||
-		request == nil || request.TaskId != current.TaskID ||
+		request == nil || request.GetAttempt().GetTaskId() != current.TaskID || ValidateRestoreWorkInput(current, input) != nil ||
 		!ValidBackupRuntimeInstant(at) || !at.After(current.UpdatedAt) {
 		return BackupRestoreRecord{}, invalidBackupRuntimeRecord("database Restore checkpoint identity is invalid")
 	}
-	if _, err := executionplan.ValidateBackupCheckpointRequest(request, request.CheckpointSequence); err != nil {
+	if err := executionplan.RejectUnknown(request); err != nil {
 		return BackupRestoreRecord{}, err
 	}
 	next := CloneBackupRestoreRecord(current)
@@ -30,7 +30,7 @@ func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
 		return BackupRestoreRecord{}, invalidBackupRuntimeRecord("database Restore progress is missing")
 	}
 	switch event := request.Checkpoint.(type) {
-	case *agentpb.BackupCheckpointRequest_RestoreArtifactValidated:
+	case *agentpb.BackupWorkCheckpointRequest_RestoreArtifactValidated:
 		value := event.RestoreArtifactValidated
 		if value == nil || current.State != BackupRestoreDownloading && current.State != BackupRestoreQueued ||
 			value.PointId != current.Point.ID || !backupObjectMatchesWire(current.Point.Object, value.Object) ||
@@ -40,7 +40,7 @@ func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
 		}
 		artifact := current.Point.Evidence
 		next.Artifact, next.State = &artifact, BackupRestoreArtifactVerified
-	case *agentpb.BackupCheckpointRequest_PostgresContainerObserved:
+	case *agentpb.BackupWorkCheckpointRequest_PostgresContainerObserved:
 		value := event.PostgresContainerObserved
 		if value == nil || current.State != BackupRestoreArtifactVerified || progress.ContainerID != "" ||
 			value.ServiceId != current.CurrentTarget.Postgres.Source.BackingServiceID {
@@ -50,7 +50,7 @@ func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
 		progress.ObservationSHA256 = hex.EncodeToString(value.ObservationSha256)
 		progress.ObservedRepositoryDigest = hex.EncodeToString(value.RepositoryDigest)
 		progress.ObservedLabelsSHA256 = hex.EncodeToString(value.ObservedLabelsSha256)
-	case *agentpb.BackupCheckpointRequest_MysqlContainerObserved:
+	case *agentpb.BackupWorkCheckpointRequest_MysqlContainerObserved:
 		value := event.MysqlContainerObserved
 		if value == nil || current.State != BackupRestoreArtifactVerified || progress.ContainerID != "" ||
 			current.CurrentTarget.MySQL == nil ||
@@ -61,7 +61,7 @@ func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
 		progress.ObservationSHA256 = hex.EncodeToString(value.ObservationSha256)
 		progress.ObservedRepositoryDigest = hex.EncodeToString(value.ImageReferenceSha256)
 		progress.ObservedLabelsSHA256 = hex.EncodeToString(value.ObservedLabelsSha256)
-	case *agentpb.BackupCheckpointRequest_PostgresServiceProgress:
+	case *agentpb.BackupWorkCheckpointRequest_PostgresServiceProgress:
 		value := event.PostgresServiceProgress
 		if value == nil || progress.ContainerID == "" {
 			return BackupRestoreRecord{}, invalidBackupRuntimeRecord("PostgreSQL Restore Service progress lacks observed database")
@@ -79,7 +79,7 @@ func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
 				return BackupRestoreRecord{}, err
 			}
 		}
-	case *agentpb.BackupCheckpointRequest_MysqlServiceProgress:
+	case *agentpb.BackupWorkCheckpointRequest_MysqlServiceProgress:
 		value := event.MysqlServiceProgress
 		if value == nil || progress.ContainerID == "" {
 			return BackupRestoreRecord{}, invalidBackupRuntimeRecord("MySQL Restore Service progress lacks observed database")
@@ -92,7 +92,7 @@ func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
 		} else if err := advanceDatabaseRestoreRecovery(&next, checkpoint); err != nil {
 			return BackupRestoreRecord{}, err
 		}
-	case *agentpb.BackupCheckpointRequest_PostgresRestoreApplyStart:
+	case *agentpb.BackupWorkCheckpointRequest_PostgresRestoreApplyStart:
 		value := event.PostgresRestoreApplyStart
 		if value == nil || current.State != BackupRestoreConsumersStopped || progress.ApplyStarted ||
 			progress.StopCursor != current.ServiceCount || value.PointId != current.Point.ID ||
@@ -109,7 +109,7 @@ func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
 		progress.ApplyRepositoryDigest = hex.EncodeToString(value.RepositoryDigest)
 		progress.ApplyLabelsSHA256 = hex.EncodeToString(value.ExpectedLabelsSha256)
 		next.MutationStarted, next.State = true, BackupRestoreRestoring
-	case *agentpb.BackupCheckpointRequest_MysqlRestoreApplyStart:
+	case *agentpb.BackupWorkCheckpointRequest_MysqlRestoreApplyStart:
 		value := event.MysqlRestoreApplyStart
 		if value == nil || current.State != BackupRestoreConsumersStopped || progress.ApplyStarted ||
 			progress.StopCursor != current.ServiceCount || value.PointId != current.Point.ID ||
@@ -126,7 +126,7 @@ func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
 		progress.ApplyRepositoryDigest = hex.EncodeToString(value.ImageReferenceSha256)
 		progress.ApplyLabelsSHA256 = hex.EncodeToString(value.ExpectedLabelsSha256)
 		next.MutationStarted, next.State = true, BackupRestoreRestoring
-	case *agentpb.BackupCheckpointRequest_PostgresRestoreVerified:
+	case *agentpb.BackupWorkCheckpointRequest_PostgresRestoreVerified:
 		value := event.PostgresRestoreVerified
 		if value == nil || current.State != BackupRestoreRestoring || !progress.ApplyStarted ||
 			progress.RestoreVerificationSHA256 != "" || value.PointId != current.Point.ID ||
@@ -138,7 +138,7 @@ func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
 		if current.ServiceCount == 0 {
 			next.State = BackupRestoreConsumersRestored
 		}
-	case *agentpb.BackupCheckpointRequest_MysqlRestoreVerified:
+	case *agentpb.BackupWorkCheckpointRequest_MysqlRestoreVerified:
 		value := event.MysqlRestoreVerified
 		if value == nil || current.State != BackupRestoreRestoring || !progress.ApplyStarted ||
 			progress.RestoreVerificationSHA256 != "" || value.PointId != current.Point.ID ||
@@ -150,7 +150,7 @@ func PrepareDatabaseRestoreCheckpoint(current BackupRestoreRecord,
 		if current.ServiceCount == 0 {
 			next.State = BackupRestoreConsumersRestored
 		}
-	case *agentpb.BackupCheckpointRequest_SourceCleanupCompleted:
+	case *agentpb.BackupWorkCheckpointRequest_SourceCleanupCompleted:
 		value := event.SourceCleanupCompleted
 		if value == nil || current.State != BackupRestoreConsumersRestored ||
 			progress.SourceCleanupCompleted || value.PointId != current.Point.ID ||
@@ -241,7 +241,8 @@ func advanceDatabaseRestoreStop(next *BackupRestoreRecord, value databaseService
 func advanceDatabaseRestoreRecovery(next *BackupRestoreRecord, value databaseServiceCheckpoint) error {
 	progress := next.DatabaseProgress
 	consumers := databaseRestoreConsumers(next)
-	if next.State != BackupRestoreRestoring || progress.RestoreVerificationSHA256 == "" ||
+	if (next.State != BackupRestoreRestoring && !(next.State == BackupRestoreRecoveryRequired && progress.ConsumersOnly)) ||
+		(progress.RestoreVerificationSHA256 == "" && !progress.ConsumersOnly) ||
 		progress.RecoveryCursor >= next.ServiceCount {
 		return invalidBackupRuntimeRecord("PostgreSQL Restore recovery precedes verification")
 	}
@@ -283,7 +284,7 @@ func advanceDatabaseRestoreRecovery(next *BackupRestoreRecord, value databaseSer
 		return invalidBackupRuntimeRecord("PostgreSQL Restore Service phase is invalid")
 	}
 	progress.RecoveryPhase, progress.RecoveryServiceID = value.phase, value.serviceID
-	if progress.RecoveryCursor == next.ServiceCount {
+	if progress.RecoveryCursor == next.ServiceCount && !progress.ConsumersOnly {
 		next.State = BackupRestoreConsumersRestored
 	}
 	return nil

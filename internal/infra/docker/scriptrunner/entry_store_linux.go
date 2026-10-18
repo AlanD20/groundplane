@@ -18,20 +18,20 @@ import (
 )
 
 func (store *bodyStore) PrepareEntries(
-	assignmentID string,
+	workItemID string,
 	executionID string,
 	entries []*agentpb.ScriptEntryArtifact,
 ) error {
-	if store == nil || store.tasksFD < 0 || ids.Validate(ids.KindAssignment, assignmentID) != nil ||
+	if store == nil || store.workRootFD < 0 || ids.Validate(ids.KindWorkItem, workItemID) != nil ||
 		!validBodyExecutionID(executionID) {
 		return errs.New(errs.KindInternal, "Script Entry store: preparation request is invalid")
 	}
-	assignmentFD, err := openDirectory(store.tasksFD, assignmentID, store.ownerUID, store.ownerGID, store.device)
+	workFD, err := openDirectory(store.workRootFD, workItemID, store.ownerUID, store.ownerGID, store.device)
 	if err != nil {
 		return err
 	}
-	defer unix.Close(assignmentFD)
-	executionFD, err := openDirectory(assignmentFD, executionID, store.ownerUID, store.ownerGID, store.device)
+	defer unix.Close(workFD)
+	executionFD, err := openDirectory(workFD, executionID, store.ownerUID, store.ownerGID, store.device)
 	if err != nil {
 		return err
 	}
@@ -151,23 +151,28 @@ func (store *bodyStore) publishEntry(
 }
 
 func (store *bodyStore) RemoveEntries(
-	assignmentID string,
+	workItemID string,
 	executionID string,
-	entries []*agentpb.ScriptEntryArtifact,
+	bindings []*agentpb.ScriptRunnerEntryBinding,
 ) error {
-	if store == nil || store.tasksFD < 0 || ids.Validate(ids.KindAssignment, assignmentID) != nil ||
+	if store == nil || store.workRootFD < 0 || ids.Validate(ids.KindWorkItem, workItemID) != nil ||
 		!validBodyExecutionID(executionID) {
 		return errs.New(errs.KindInternal, "Script Entry store: cleanup request is invalid")
 	}
-	assignmentFD, err := openDirectory(store.tasksFD, assignmentID, store.ownerUID, store.ownerGID, store.device)
+	for _, binding := range bindings {
+		if binding == nil || len(binding.Sha256) != sha256.Size {
+			return errs.New(errs.KindStateConflict, "Script Entry cleanup binding is missing")
+		}
+	}
+	workFD, err := openDirectory(store.workRootFD, workItemID, store.ownerUID, store.ownerGID, store.device)
 	if errors.Is(err, unix.ENOENT) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	defer unix.Close(assignmentFD)
-	executionFD, err := openDirectory(assignmentFD, executionID, store.ownerUID, store.ownerGID, store.device)
+	defer unix.Close(workFD)
+	executionFD, err := openDirectory(workFD, executionID, store.ownerUID, store.ownerGID, store.device)
 	if errors.Is(err, unix.ENOENT) {
 		return nil
 	}
@@ -175,11 +180,11 @@ func (store *bodyStore) RemoveEntries(
 		return err
 	}
 	defer unix.Close(executionFD)
-	for _, entry := range entries {
-		if entry.Binding.Kind != agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_FILE {
+	for _, binding := range bindings {
+		if binding.Kind != agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_FILE {
 			continue
 		}
-		leaf := entryArtifactLeaf(entry.Binding)
+		leaf := entryArtifactLeaf(binding)
 		fd, err := openBeneath(executionFD, leaf, unix.O_RDONLY|unix.O_CLOEXEC)
 		if errors.Is(err, unix.ENOENT) {
 			continue
@@ -192,17 +197,18 @@ func (store *bodyStore) RemoveEntries(
 			unix.Close(fd)
 			return errs.New(errs.KindInternal, "Script Entry store: own cleanup descriptor")
 		}
-		if _, err := verifiedEntryFile(fd, store.device, entry.Binding); err != nil {
+		if _, err := verifiedEntryFile(fd, store.device, binding); err != nil {
 			_ = file.Close()
 			return err
 		}
-		content, readErr := io.ReadAll(io.LimitReader(file, int64(len(entry.Value))+1))
+		content, readErr := io.ReadAll(io.LimitReader(file, (256<<10)+1))
 		closeErr := file.Close()
 		if readErr != nil || closeErr != nil {
 			clear(content)
 			return bodyStoreError("read Entry during cleanup", errors.Join(readErr, closeErr))
 		}
-		matches := bytes.Equal(content, entry.Value)
+		digest := sha256.Sum256(content)
+		matches := len(content) <= 256<<10 && bytes.Equal(digest[:], binding.Sha256)
 		clear(content)
 		if !matches {
 			return errs.New(errs.KindStateConflict, "Script Entry store: artifact changed before cleanup")
@@ -217,20 +223,20 @@ func (store *bodyStore) RemoveEntries(
 	return nil
 }
 
-func (store *bodyStore) ProveExecutionAbsent(assignmentID, executionID string) error {
-	if store == nil || store.tasksFD < 0 || ids.Validate(ids.KindAssignment, assignmentID) != nil ||
+func (store *bodyStore) ProveExecutionAbsent(workItemID, executionID string) error {
+	if store == nil || store.workRootFD < 0 || ids.Validate(ids.KindWorkItem, workItemID) != nil ||
 		!validBodyExecutionID(executionID) {
 		return errs.New(errs.KindInternal, "Script Entry store: absence proof request is invalid")
 	}
-	assignmentFD, err := openDirectory(store.tasksFD, assignmentID, store.ownerUID, store.ownerGID, store.device)
+	workFD, err := openDirectory(store.workRootFD, workItemID, store.ownerUID, store.ownerGID, store.device)
 	if errors.Is(err, unix.ENOENT) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	defer unix.Close(assignmentFD)
-	executionFD, err := openDirectory(assignmentFD, executionID, store.ownerUID, store.ownerGID, store.device)
+	defer unix.Close(workFD)
+	executionFD, err := openDirectory(workFD, executionID, store.ownerUID, store.ownerGID, store.device)
 	if errors.Is(err, unix.ENOENT) {
 		return nil
 	}

@@ -9,10 +9,12 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/backupvolume"
+	"github.com/AlanD20/groundplane/internal/common/backupvolumetransfer"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/backupvolumefs"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -27,12 +29,9 @@ const (
 // production Agent; it is not selected by a Task payload.
 type Config struct {
 	JournalRoot         string
-	TaskID              string
-	AssignmentID        string
-	StepID              string
+	Binding             backupvolumetransfer.Binding
 	PointID             string
 	RestoreGenerationID string
-	StepSHA256          [sha256.Size]byte
 	OldManifestSHA256   [sha256.Size]byte
 	NewManifestSHA256   [sha256.Size]byte
 	OldFullTreeSHA256   [sha256.Size]byte
@@ -79,9 +78,8 @@ type Recovered struct {
 
 func (config Config) validate() error {
 	if config.JournalRoot != AgentRoot || filepath.Clean(config.JournalRoot) != config.JournalRoot ||
-		ids.Validate(ids.KindTask, config.TaskID) != nil ||
-		ids.Validate(ids.KindAssignment, config.AssignmentID) != nil ||
-		ids.Validate(ids.KindStep, config.StepID) != nil ||
+		config.Binding.Validate() != nil ||
+		config.Binding.Direction != agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW ||
 		ids.Validate(ids.KindRecoveryPoint, config.PointID) != nil ||
 		len(config.RestoreGenerationID) != 26 ||
 		config.RestoreGenerationID != strings.ToUpper(config.RestoreGenerationID) ||
@@ -93,11 +91,14 @@ func (config Config) validate() error {
 	if _, err := ulid.ParseStrict(config.RestoreGenerationID); err != nil {
 		return invalid("Volume journal restore generation is invalid")
 	}
+	transferID, err := backupvolumetransfer.TransferID(config.RestoreGenerationID, config.Binding.Direction)
+	if err != nil || config.Binding.TransferID != transferID {
+		return invalid("Volume journal source differs from its native transfer")
+	}
 	if _, err := environmentpath.Parse(config.VolumeRoot, config.AuthorizedVolumeDir); err != nil {
 		return err
 	}
 	if !validComposeKey(config.ComposeKey) || config.ComposeKey == config.SiblingName ||
-		config.StepSHA256 == ([sha256.Size]byte{}) ||
 		config.OldManifestSHA256 == ([sha256.Size]byte{}) ||
 		config.NewManifestSHA256 == ([sha256.Size]byte{}) ||
 		config.OldFullTreeSHA256 == ([sha256.Size]byte{}) ||

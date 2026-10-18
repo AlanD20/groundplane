@@ -2,20 +2,17 @@ package runner
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,11 +25,11 @@ const (
 
 type removalRepository interface {
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
-	BeginRunnerRemovalWithTask(
+	PrepareRunnerRemoval(context.Context, etcdstore.Versioned[runnerrecord.RunnerRecord], string, string, string, time.Time) (etcd.RunnerRemovalSource, error)
+	PublishRunnerRemoval(
 		context.Context,
-		etcdstore.Versioned[runnerrecord.RunnerRecord],
-		deletionrecord.DeletionTombstoneRecord,
-		etcd.TaskRecord,
+		etcd.RunnerRemovalSource,
+		workexecution.Task,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -119,7 +116,22 @@ func (service *RemovalService) RemoveRunner(
 	}
 
 	now := service.now().UTC()
-	task := newRunnerRemovalTask(current.Record, idempotencyKey, now)
+	source, err := service.repository.PrepareRunnerRemoval(ctx, current, ids.New(ids.KindTask), ids.New(ids.KindWorkItem), ids.New(ids.KindPlan), now)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	input := source.Input()
+	if err := corerunner.ValidatePlan(input.Plan); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	ref, err := input.Reference()
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	task := workexecution.Task{ID: input.TaskID, Actor: workexecution.OperatorActor,
+		Scope:  workexecution.Scope{TenantID: input.Desired.TenantID, ProjectID: input.Desired.ProjectID(), EnvironmentID: input.Desired.EnvironmentID()},
+		Action: workexecution.ActionRemove, TargetID: runnerID, TargetName: input.Desired.Slug, Intent: ref, ExpectedItems: 1,
+		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(runnerRemoveTimeoutSeconds) * time.Second)}
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -140,11 +152,7 @@ func (service *RemovalService) RemoveRunner(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	tombstone := deletionrecord.DeletionTombstoneRecord{
-		TargetKind: deletionrecord.DeletionTargetRunner, TargetID: runnerID, TargetRevision: current.Revision,
-		TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: now, UpdatedAt: now,
-	}
-	result, mutationErr := service.repository.BeginRunnerRemovalWithTask(ctx, current, tombstone, task, marker)
+	result, mutationErr := service.repository.PublishRunnerRemoval(ctx, source, task, marker)
 	if mutationErr != nil {
 		if !unknownMutationOutcome(mutationErr) {
 			return idempotencyrecord.IdempotencyResponse{}, mutationErr
@@ -217,36 +225,5 @@ func runnerRemovalLocator(desired runnerrecord.RunnerDesiredRecord, key string) 
 	return idempotencyrecord.IdempotencyLocator{
 		ScopeKind: desired.IdempotencyScope(), ScopeID: desired.OwnerID,
 		Method: http.MethodDelete, Route: runnerRemoveRoute, Key: key,
-	}
-}
-
-func newRunnerRemovalTask(record runnerrecord.RunnerRecord, key string, now time.Time) etcd.TaskRecord {
-	owner := taskjournal.TaskOwner{
-		WorkspaceType: taskjournal.TaskWorkspaceTenant, TenantID: record.Desired.TenantID,
-		ProjectID: record.Desired.ProjectID(), EnvironmentID: record.Desired.EnvironmentID(),
-	}
-	planInput := strings.Join([]string{
-		"groundplane.runner-remove.v1", record.Desired.ID, record.Desired.TenantID,
-		string(record.Desired.OwnerKind), record.Desired.OwnerID, record.Desired.ParentProjectID,
-		record.Allocation.NetworkCIDR,
-	}, "\x00")
-	planDigest := sha256.Sum256([]byte(planInput))
-	return etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: key,
-		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
-		PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
-		Type: taskjournal.TaskRemove, Target: record.Desired.ID,
-		Params: runnerrecord.RunnerRemovalTaskParams(record),
-		Steps: []taskjournal.TaskStepRecord{
-			{
-				Kind:           taskjournal.TaskStepOperation,
-				ID:             ids.New(ids.KindStep),
-				Action:         "Remove GitHub Runner",
-				Description:    "Unregister the Runner and remove its isolated runtime.",
-				Target:         record.Desired.ID,
-				TimeoutSeconds: uint32(runnerRemoveTimeoutSeconds),
-			},
-		}, TimeoutSeconds: runnerRemoveTimeoutSeconds,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 }

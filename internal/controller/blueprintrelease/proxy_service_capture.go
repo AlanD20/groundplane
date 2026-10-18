@@ -15,7 +15,7 @@ import (
 
 // CaptureProxyServiceRollout freezes native work before the router can execute.
 // It uses the ordinary preparation owner and publishes neither a Task nor a
-// Release. File recovery is deliberately left for the actual child publication.
+// Release. File recovery is deliberately left for native work publication.
 func (service *Service) CaptureProxyServiceRollout(ctx context.Context,
 	input PrepareServiceUnitInput, candidate componentplanning.ProxyCandidateInputReference,
 	preflight componentplanning.ProxyServicePreflight,
@@ -75,15 +75,11 @@ func (service *Service) CaptureProxyServiceRollout(ctx context.Context,
 		return componentplanning.ProxyServiceRolloutReference{}, err
 	}
 	defer addresses.Clear()
-	native, err := service.stageSelectedRuntime(ctx, prepared, prepared.ServiceChanges, prepared.Task, addresses)
+	native, err := service.stageSelectedRuntime(ctx, prepared, prepared.ServiceChanges, addresses)
 	if err != nil {
 		return componentplanning.ProxyServiceRolloutReference{}, err
 	}
-	capture, err := native.runtime.Capture()
-	if err != nil {
-		return componentplanning.ProxyServiceRolloutReference{}, err
-	}
-	defer clear(capture.NativePlan)
+	capture := native.capture
 	members := append([]releaserender.ReleaseTaskRenderMember(nil), native.members...)
 	for index := range members {
 		members[index].Render.Projection = projectionrecord.EnvironmentComposeProjection{}
@@ -95,7 +91,7 @@ func (service *Service) CaptureProxyServiceRollout(ctx context.Context,
 		hooks[executionID] = sources
 	}
 	return service.ledger.StageBlueprintProxyServiceRollout(ctx, etcd.BlueprintProxyServiceRollout{
-		Input: candidate, Task: native.task, Manifest: native.manifest,
+		Input: candidate, WorkItemID: capture.WorkItemID, OperationID: capture.OperationID, Manifest: native.manifest,
 		NativePredecessors: nativePredecessorCaptures(prepared, native.members), Members: members, Hooks: hooks,
 	}, capture)
 }

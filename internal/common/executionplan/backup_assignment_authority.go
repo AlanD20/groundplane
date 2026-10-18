@@ -98,12 +98,18 @@ func backupOperation(operation agentpb.PlanOperation) bool {
 }
 
 func validateBackupPlanScope(scope *agentpb.BackupPlanScope, environmentID string) error {
+	if scope == nil || scope.TaskAttempt == 0 {
+		return errs.New(errs.KindValidationFailed, "backup plan attempt is invalid")
+	}
+	return validateBackupResourceScope(scope, environmentID)
+}
+
+func validateBackupResourceScope(scope *agentpb.BackupPlanScope, environmentID string) error {
 	if scope == nil || ids.Validate(ids.KindProject, scope.ProjectId) != nil ||
 		!backupCheckpointRevision(scope.Project) ||
 		ids.Validate(ids.KindEnvironment, scope.EnvironmentId) != nil ||
 		scope.EnvironmentId != environmentID ||
-		!backupCheckpointRevision(scope.Environment) ||
-		scope.TaskAttempt == 0 {
+		!backupCheckpointRevision(scope.Environment) {
 		return errs.New(errs.KindValidationFailed, "backup plan scope is invalid")
 	}
 	previous := ""

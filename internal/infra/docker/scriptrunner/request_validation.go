@@ -15,14 +15,15 @@ import (
 
 func validateRequest(request scriptexecution.Request) error {
 	if ids.Validate(ids.KindTask, request.TaskID) != nil ||
-		ids.Validate(ids.KindAssignment, request.AssignmentID) != nil ||
+		ids.Validate(ids.KindAttempt, request.AttemptID) != nil ||
 		ids.Validate(ids.KindOperation, request.OperationID) != nil ||
-		ids.Validate(ids.KindStep, request.StepID) != nil ||
-		len(request.PlanHash) != sha256.Size ||
+		ids.Validate(ids.KindWorkItem, request.WorkItemID) != nil ||
+		request.Input.Validate() != nil || request.AssignedAt.IsZero() ||
 		request.Projection == nil ||
 		request.BodyMetadata == nil ||
 		request.ExecutionID == "" ||
 		request.BodyMetadata.ScriptExecutionId != request.ExecutionID ||
+		request.BodyMetadata.Uid != request.Projection.Uid || request.BodyMetadata.Gid != request.Projection.Gid ||
 		len(request.Body) == 0 ||
 		len(request.Body) != int(request.BodyMetadata.Size) ||
 		len(request.Body) > executionplan.MaximumScriptBodyBytes ||
@@ -34,6 +35,23 @@ func validateRequest(request scriptexecution.Request) error {
 		request.Projection.Command[0] != bodyTarget ||
 		request.Projection.StopGraceSeconds != stopSeconds {
 		return errs.New(errs.KindInternal, "Script runner: request is invalid")
+	}
+	labels := make(map[string]string, len(request.Projection.Labels))
+	for _, label := range request.Projection.Labels {
+		if label == nil || label.Key == "" {
+			return errs.New(errs.KindValidationFailed, "Script runner: ownership label is missing")
+		}
+		if _, duplicate := labels[label.Key]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Script runner: ownership label is duplicated")
+		}
+		labels[label.Key] = label.Value
+	}
+	if labels["com.groundplane.task-id"] != request.TaskID ||
+		labels["com.groundplane.work-item-id"] != request.WorkItemID ||
+		labels["com.groundplane.operation-id"] != request.OperationID ||
+		labels["com.groundplane.script-execution-id"] != request.ExecutionID ||
+		labels["com.groundplane.managed"] != "true" || labels["com.groundplane.kind"] != "script-runner" {
+		return errs.New(errs.KindValidationFailed, "Script runner: container ownership does not match captured work")
 	}
 	digest := sha256.Sum256(request.Body)
 	if !bytes.Equal(digest[:], request.BodyMetadata.Sha256) {

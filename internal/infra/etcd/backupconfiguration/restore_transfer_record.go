@@ -97,7 +97,7 @@ func validateConfigRestoreTransferPruneEntry(taskID, key string, raw []byte) err
 	}
 	record, err := DecodeConfigRestoreTransferRecord(raw)
 	defer clear(record.Protected.Ciphertext)
-	if err != nil || record.Owner.Transfer.Binding.TaskID != taskID ||
+	if err != nil || record.Owner.Transfer.Binding.Attempt.TaskID != taskID ||
 		ConfigRestoreTransferRecordKey(record.Owner.Transfer.Binding, record.Sequence) != key {
 		return captureSnapshotConflict()
 	}

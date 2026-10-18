@@ -37,6 +37,7 @@ type Engine interface {
 	ImageInspect(context.Context, string, ...client.ImageInspectOption) (client.ImageInspectResult, error)
 	ImagePull(context.Context, string, client.ImagePullOptions) (client.ImagePullResponse, error)
 	ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error)
+	ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error)
 	ContainerAttach(context.Context, string, client.ContainerAttachOptions) (client.ContainerAttachResult, error)
 	ContainerWait(context.Context, string, client.ContainerWaitOptions) client.ContainerWaitResult
 	ContainerStart(context.Context, string, client.ContainerStartOptions) (client.ContainerStartResult, error)
@@ -131,7 +132,18 @@ func (executor *Executor) Execute(
 			return nil, err
 		}
 	}
-	created, err := executor.engine.ContainerCreate(ctx, createOptions(executor.image, artifact))
+	raw, err := executor.executeFrame(ctx, createOptions(executor.image, artifact), framed)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(raw)
+	return composehelper.ReadResponse(context.Background(), bytes.NewReader(raw))
+}
+
+// executeFrame owns helper-container isolation and cleanup independently of the
+// operation protocol. Native Release input never passes through an old plan.
+func (executor *Executor) executeFrame(ctx context.Context, options client.ContainerCreateOptions, framed []byte) (response []byte, resultErr error) {
+	created, err := executor.engine.ContainerCreate(ctx, options)
 	if err != nil {
 		return nil, operationError(ctx, "create", err)
 	}
@@ -240,7 +252,7 @@ func (executor *Executor) Execute(
 		}
 		return nil, errs.New(errs.KindInternal, message)
 	}
-	return composehelper.ReadResponse(context.Background(), bytes.NewReader(output.stdout))
+	return output.stdout, nil
 }
 
 func createOptions(image string, artifact *agentpb.ComposeArtifact) client.ContainerCreateOptions {

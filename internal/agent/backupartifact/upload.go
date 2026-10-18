@@ -5,16 +5,20 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/backupobject"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/infra/backupstage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
-// PublishCheckpoint must add the task, assignment, step, sequence, predecessor,
-// and authority-digest envelope before publishing. It returns only after the
-// Controller has acknowledged durable acceptance of the exact request.
-type PublishCheckpoint func(context.Context, *agentpb.BackupCheckpointRequest) error
+// Checkpoints persists each exact upload boundary before returning. Execution
+// identity, ordering and acknowledged replay belong to the execution owner.
+type Checkpoints interface {
+	ArtifactPrepared(context.Context, *agentpb.BackupArtifactPrepared) error
+	UploadCompleted(context.Context, *agentpb.BackupUploadCompleted) error
+	UploadVerified(context.Context, *agentpb.BackupUploadVerified) error
+}
 
 // UploadInput is the complete executor-owned upload state. Stored remains
 // owned by the caller and is retained after Upload returns.
@@ -26,7 +30,7 @@ type UploadInput struct {
 	UploadVerified  *agentpb.BackupUploadVerified
 	Stored          *backupstage.Artifact
 	Store           backupobject.Store
-	Publish         PublishCheckpoint
+	Publish         Checkpoints
 }
 
 // Result is the exact provider object selected by verification and the
@@ -58,11 +62,7 @@ func Upload(ctx context.Context, input UploadInput) (Result, error) {
 		if input.UploadCompleted != nil || input.UploadVerified != nil {
 			return Result{}, invalidUpload()
 		}
-		if err := input.Publish(ctx, &agentpb.BackupCheckpointRequest{
-			Checkpoint: &agentpb.BackupCheckpointRequest_ArtifactPrepared{
-				ArtifactPrepared: proto.Clone(input.Prepared).(*agentpb.BackupArtifactPrepared),
-			},
-		}); err != nil {
+		if err := input.Publish.ArtifactPrepared(ctx, proto.CloneOf(input.Prepared)); err != nil {
 			return Result{}, err
 		}
 		return putAndVerify(ctx, input, artifact, metadataCount, metadataSHA)
@@ -141,9 +141,7 @@ func putAndVerify(ctx context.Context, input UploadInput, artifact backupobject.
 }
 
 func publishCompleted(ctx context.Context, input UploadInput, completed *agentpb.BackupUploadCompleted) error {
-	return input.Publish(ctx, &agentpb.BackupCheckpointRequest{
-		Checkpoint: &agentpb.BackupCheckpointRequest_UploadCompleted{UploadCompleted: completed},
-	})
+	return input.Publish.UploadCompleted(ctx, completed)
 }
 
 func headAndVerify(ctx context.Context, input UploadInput, artifact backupobject.Artifact,
@@ -173,9 +171,7 @@ func headAndVerify(ctx context.Context, input UploadInput, artifact backupobject
 		Object: objectToWire(input.Authority, head.Object), MetadataCount: metadataCount,
 		MetadataSha256: append([]byte(nil), metadataSHA[:]...),
 	}
-	if err := input.Publish(ctx, &agentpb.BackupCheckpointRequest{
-		Checkpoint: &agentpb.BackupCheckpointRequest_UploadVerified{UploadVerified: verified},
-	}); err != nil {
+	if err := input.Publish.UploadVerified(ctx, verified); err != nil {
 		return Result{}, err
 	}
 	return Result{Object: head.Object, Verified: proto.Clone(verified).(*agentpb.BackupUploadVerified)}, nil
@@ -184,13 +180,10 @@ func headAndVerify(ctx context.Context, input UploadInput, artifact backupobject
 func verifyPersisted(ctx context.Context, input UploadInput, artifact backupobject.Artifact,
 	metadataCount uint32, metadataSHA [32]byte,
 ) (Result, error) {
-	validated, err := input.Authority.validateCheckpoint(&agentpb.BackupCheckpointRequest{
-		Checkpoint: &agentpb.BackupCheckpointRequest_UploadVerified{UploadVerified: input.UploadVerified},
-	})
-	if err != nil {
+	if err := executionplan.ValidateBackupVerifiedUpload(input.UploadVerified); err != nil {
 		return Result{}, err
 	}
-	verified := validated.GetUploadVerified()
+	verified := proto.CloneOf(input.UploadVerified)
 	if verified.PointId != input.Prepared.PointId || !proto.Equal(verified.Evidence, input.Prepared.Evidence) ||
 		!wireObjectMatchesTarget(verified.Object, input.Authority.capture.Target) ||
 		verified.MetadataCount != metadataCount || !bytes.Equal(verified.MetadataSha256, metadataSHA[:]) {
@@ -215,13 +208,10 @@ func validateCompleted(
 	metadataCount uint32,
 	metadataSHA [32]byte,
 ) (*agentpb.BackupUploadCompleted, error) {
-	validated, err := input.Authority.validateCheckpoint(&agentpb.BackupCheckpointRequest{
-		Checkpoint: &agentpb.BackupCheckpointRequest_UploadCompleted{UploadCompleted: input.UploadCompleted},
-	})
-	if err != nil {
+	if err := executionplan.ValidateBackupCompletedUpload(input.UploadCompleted); err != nil {
 		return nil, err
 	}
-	completed := validated.GetUploadCompleted()
+	completed := proto.CloneOf(input.UploadCompleted)
 	if completed.PointId != input.Prepared.PointId || !proto.Equal(completed.Evidence, input.Prepared.Evidence) ||
 		!proto.Equal(completed.Target, input.Authority.capture.Target) || completed.MetadataCount != metadataCount ||
 		!bytes.Equal(completed.MetadataSha256, metadataSHA[:]) {

@@ -20,19 +20,24 @@ const (
 )
 
 type Runtime struct {
-	Registry         *agentchannel.Registry
-	listen           func(context.Context) (net.Listener, error)
-	newServer        func(*agentchannel.Registry) (agentChannelGRPCServer, error)
-	workIdentities   agentchannel.WorkIdentityResolver
-	workStarts       agentchannel.WorkStarter
-	workCheckpoints  agentchannel.ReleaseWorkCheckpointer
-	scriptCompletion agentchannel.ScriptWorkCompleter
-	hierarchyReports agentchannel.HierarchyReporter
-	attachReports    agentchannel.AttachReporter
-	networkReports   agentchannel.NetworkReporter
-	volumeReports    agentchannel.VolumeReporter
-	workDispatch     agentchannel.WorkDispatcher
-	OnReady          func()
+	Registry               *agentchannel.Registry
+	listen                 func(context.Context) (net.Listener, error)
+	newServer              func(*agentchannel.Registry) (agentChannelGRPCServer, error)
+	workIdentities         agentchannel.WorkIdentityResolver
+	workStarts             agentchannel.WorkStarter
+	workCheckpoints        agentchannel.ReleaseWorkCheckpointer
+	scriptCompletion       agentchannel.ScriptWorkCompleter
+	hierarchyReports       agentchannel.HierarchyReporter
+	attachReports          agentchannel.AttachReporter
+	attachProvisionReports agentchannel.AttachProvisionReporter
+	networkReports         agentchannel.NetworkReporter
+	componentReports       agentchannel.ComponentReporter
+	entryReports           agentchannel.EntryReporter
+	volumeReports          agentchannel.VolumeReporter
+	backupWorkReports      agentchannel.BackupWorkReporter
+	backupWorkSecrets      agentchannel.BackupWorkSecretResolver
+	workDispatch           agentchannel.WorkDispatcher
+	OnReady                func()
 }
 
 type agentChannelGRPCServer interface {
@@ -45,8 +50,7 @@ func New(
 	tasks agentchannel.TaskStore,
 	plans agentchannel.PlanResolver,
 	materials agentchannel.MaterializationResolver,
-	secrets agentchannel.BackupSecretSlotResolver,
-	checkpoints agentchannel.BackupCheckpointer,
+	secrets agentchannel.RestoreIdentityReleaser,
 	managed agentchannel.ManagedConfigResolver,
 	scripts agentchannel.ScriptArtifactResolver,
 	scriptCheckpoints agentchannel.ScriptCheckpointer,
@@ -59,7 +63,7 @@ func New(
 			grpc.MaxSendMsgSize(agentChannelControllerMaximumSendMessageBytes),
 		)
 		channel := agentchannel.NewWithScriptRuntimeServices(
-			authenticator, registry, tasks, plans, materials, secrets, checkpoints, managed,
+			authenticator, registry, tasks, plans, materials, secrets, managed,
 			scripts, scriptCheckpoints,
 		)
 		if backingHookCheckpoints != nil {
@@ -82,15 +86,54 @@ func New(
 			return nil, errs.New(errs.KindInternal, "native Network reporting is not configured")
 		}
 		channel.ConfigureNetworkWork(runtime.networkReports)
+		if runtime.componentReports == nil {
+			server.Stop()
+			return nil, errs.New(errs.KindInternal, "native Component reporting is not configured")
+		}
+		channel.ConfigureComponentWork(runtime.componentReports)
+		if runtime.entryReports == nil {
+			server.Stop()
+			return nil, errs.New(errs.KindInternal, "native Entry reporting is not configured")
+		}
+		channel.ConfigureEntryConfigurationWork(runtime.entryReports)
 		if runtime.attachReports == nil {
 			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Attach reporting is not configured")
 		}
 		channel.ConfigureAttachWork(runtime.attachReports)
+		if runtime.attachProvisionReports == nil {
+			server.Stop()
+			return nil, errs.New(errs.KindInternal, "native Attach provisioning reporting is not configured")
+		}
+		channel.ConfigureAttachProvision(runtime.attachProvisionReports)
+		if err := channel.ConfigureBackupWork(runtime.backupWorkReports); err != nil {
+			server.Stop()
+			return nil, err
+		}
+		if err := channel.ConfigureBackupWorkSecrets(runtime.backupWorkSecrets); err != nil {
+			server.Stop()
+			return nil, err
+		}
 		agentpb.RegisterAgentChannelServer(server, channel)
 		return server, nil
 	}
 	return runtime
+}
+
+func (runtime *Runtime) ConfigureBackupWork(reports agentchannel.BackupWorkReporter) error {
+	if runtime == nil || reports == nil || runtime.backupWorkReports != nil {
+		return errs.New(errs.KindInternal, "native Backup reporting configuration is invalid")
+	}
+	runtime.backupWorkReports = reports
+	return nil
+}
+
+func (runtime *Runtime) ConfigureBackupWorkSecrets(resolver agentchannel.BackupWorkSecretResolver) error {
+	if runtime == nil || resolver == nil || runtime.backupWorkSecrets != nil {
+		return errs.New(errs.KindInternal, "native Backup credential configuration is invalid")
+	}
+	runtime.backupWorkSecrets = resolver
+	return nil
 }
 
 // ConfigureWorkExecution is composition-only and must precede Run. Native work
@@ -124,11 +167,35 @@ func (runtime *Runtime) ConfigureNetworkWork(reports agentchannel.NetworkReporte
 	return nil
 }
 
+func (runtime *Runtime) ConfigureComponentWork(reports agentchannel.ComponentReporter) error {
+	if runtime == nil || reports == nil || runtime.componentReports != nil {
+		return errs.New(errs.KindInternal, "Component reporting dependencies are missing or already configured")
+	}
+	runtime.componentReports = reports
+	return nil
+}
+
+func (runtime *Runtime) ConfigureAttachProvision(reports agentchannel.AttachProvisionReporter) error {
+	if runtime == nil || reports == nil || runtime.attachProvisionReports != nil {
+		return errs.New(errs.KindInternal, "Attach provisioning reporting dependencies are missing or already configured")
+	}
+	runtime.attachProvisionReports = reports
+	return nil
+}
+
 func (runtime *Runtime) ConfigureAttachWork(reports agentchannel.AttachReporter) error {
 	if runtime == nil || reports == nil || runtime.attachReports != nil {
 		return errs.New(errs.KindInternal, "Attach reporting dependencies are missing or already configured")
 	}
 	runtime.attachReports = reports
+	return nil
+}
+
+func (runtime *Runtime) ConfigureEntryConfigurationWork(reports agentchannel.EntryReporter) error {
+	if runtime == nil || reports == nil || runtime.entryReports != nil {
+		return errs.New(errs.KindInternal, "Entry reporting dependencies are missing or already configured")
+	}
+	runtime.entryReports = reports
 	return nil
 }
 

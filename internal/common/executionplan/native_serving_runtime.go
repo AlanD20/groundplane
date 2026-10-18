@@ -14,6 +14,7 @@ import (
 // execution without the owning Task's restoration authority.
 type NativeServingRuntime struct {
 	Artifact  *agentpb.ComposeArtifact
+	Retained  *agentpb.ComposeArtifact
 	Workloads []*agentpb.ComposeService
 	Proxy     *agentpb.ComposeService
 	ReleaseID string
@@ -35,6 +36,12 @@ func OpenNativeServingRuntime(environmentID, serviceID string, current, retained
 	}
 	result := NativeServingRuntime{Artifact: artifact, Workloads: workloads, Proxy: proxy,
 		ReleaseID: nativePredecessorReleaseID(workloads[0]), Target: workloads[0].GetSlot()}
+	if len(retained) != 0 {
+		result.Retained, err = openNativePredecessorArtifact(environmentID, retained)
+		if err != nil {
+			return NativeServingRuntime{}, err
+		}
+	}
 	if workloads[0].GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA {
 		if result.Target == "" {
 			result.Target = "singleton"

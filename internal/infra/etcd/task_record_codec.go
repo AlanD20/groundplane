@@ -31,7 +31,6 @@ type taskRecordData struct {
 	Params             map[string]string                         `json:"params,omitempty"`
 	Steps              []taskjournal.TaskStepRecord              `json:"steps,omitempty"`
 	Materializations   []materializationrecord.Record            `json:"materializations,omitempty"`
-	EntryRuntime       *taskjournal.EntryTaskRuntime             `json:"entry_runtime,omitempty"`
 	Configuration      *taskconfiguration.TaskConfiguration      `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                                     `json:"timeout_seconds"`
 	Status             taskjournal.TaskStatus                    `json:"status"`
@@ -99,7 +98,6 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 			record.ManagedComponentTeardownSources,
 		),
 		Materializations: materializationrecord.Clone(record.Materializations),
-		EntryRuntime:     taskjournal.CloneEntryTaskRuntime(record.EntryRuntime),
 		Configuration:    taskconfiguration.CloneTaskConfiguration(record.Configuration),
 		Status:           record.Status, NextEventSequence: record.NextEventSequence,
 		EventCheckpoints:   taskjournal.CloneEventCheckpoints(record.EventCheckpoints),
@@ -153,7 +151,6 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 			data.ManagedComponentTeardownSources,
 		),
 		Materializations: data.Materializations,
-		EntryRuntime:     data.EntryRuntime,
 		Configuration:    data.Configuration,
 		TimeoutSeconds:   data.TimeoutSeconds, Status: data.Status,
 		Result:             result,
@@ -175,7 +172,6 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned.Params = cloneStringMap(record.Params)
 	cloned.Steps = taskjournal.CloneTaskSteps(record.Steps)
 	cloned.Materializations = materializationrecord.Clone(record.Materializations)
-	cloned.EntryRuntime = taskjournal.CloneEntryTaskRuntime(record.EntryRuntime)
 	cloned.Configuration = taskconfiguration.CloneTaskConfiguration(record.Configuration)
 	cloned.StartedAt = cloneTimePointer(record.StartedAt)
 	cloned.FinishedAt = cloneTimePointer(record.FinishedAt)

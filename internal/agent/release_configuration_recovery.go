@@ -43,9 +43,6 @@ func releaseRecoveryPair(
 		(procedure.GetProbeStepId() == stepID || procedure.GetCompensateStepId() == stepID) {
 		return procedure.GetProbeStepId(), procedure.GetCompensateStepId(), false
 	}
-	if probe, compensate, found := executionplan.ComponentRuntimeRecoveryPair(plan.GetComponentRecoveryProcedure(), stepID); found {
-		return probe, compensate, false
-	}
 	return "", "", false
 }
 
@@ -65,22 +62,7 @@ func selectedRecovery(assignment taskassignment.Assignment) recoverySelection {
 		return recoverySelection{directive.GetPhase(), stepIDs,
 			directive.GetCursor(), directive.GetApplicableCompensationStepIds()}
 	}
-	directive := assignment.ComponentRecoveryDirective
-	phase := agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_UNSPECIFIED
-	switch directive.GetPhase() {
-	case agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_PROBE:
-		phase = agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE
-	case agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_COMPENSATE:
-		phase = agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_COMPENSATE
-	case agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_PROVEN:
-		phase = agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROVEN
-	}
-	return recoverySelection{
-		phase,
-		executionplan.ComponentRecoveryStepIDs(assignment.Plan.GetComponentRecoveryProcedure()),
-		directive.GetCursor(),
-		directive.GetApplicableCompensationStepIds(),
-	}
+	return recoverySelection{}
 }
 
 func (p *WorkerPool) runReleaseRecovery(
@@ -152,10 +134,6 @@ func (p *WorkerPool) runReleaseRecovery(
 					state.err, state.failedStepID, state.reconciliation = err, probeID, true
 					return
 				}
-			}
-			if step.GetComponentRestorationCompensate() != nil && applicable &&
-				hasConfigurationRestoration(reservation.assignment.Plan) {
-				required = true
 			}
 			if required && !applicable {
 				state.err, state.failedStepID = errs.New(
@@ -237,17 +215,11 @@ func (p *WorkerPool) probeReleaseRecoveryWithoutEvent(
 			return false, err
 		}
 	}
-	if result.ComponentRestorationEvidence != nil {
-		state.componentRestoration = proto.CloneOf(result.ComponentRestorationEvidence)
-	}
 	if result.ServiceAbsenceEvidence != nil {
 		state.serviceAbsence = proto.CloneOf(result.ServiceAbsenceEvidence)
 	}
 	if result.ReconciliationRequired {
 		return false, errs.New(errs.KindInternal, "agent: release recovery probe requires reconciliation")
-	}
-	if step.GetComponentRestorationProbe() != nil {
-		return composeruntime.ComponentRestorationProbeStatus(reservation.assignment, result)
 	}
 	if step.GetServiceAbsenceProbe() != nil {
 		return composeruntime.ServiceAbsenceProbeStatus(reservation.assignment, result)

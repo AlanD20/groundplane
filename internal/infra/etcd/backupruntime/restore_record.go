@@ -223,7 +223,10 @@ func validateBackupRestoreStateTable(record BackupRestoreRecord) error {
 	switch record.Point.SourceKind {
 	case BackupRuntimeSourceAttach:
 		switch record.State {
-		case BackupRestoreQueued, BackupRestoreDownloading, BackupRestoreArtifactVerified, BackupRestoreFailedSafe:
+		case BackupRestoreFailedSafe:
+			allowed = true
+			expectedMutation = record.DatabaseProgress != nil && record.DatabaseProgress.ConsumersOnly
+		case BackupRestoreQueued, BackupRestoreDownloading, BackupRestoreArtifactVerified:
 			allowed = true
 		case BackupRestoreConsumersStopped:
 			allowed, expectedMutation = true, record.MutationStarted

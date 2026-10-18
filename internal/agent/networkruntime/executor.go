@@ -12,7 +12,7 @@ import (
 )
 
 type Exchange interface {
-	Start(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
+	StartAttempt(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
 	NetworkCheckpoint(context.Context, *agentpb.NetworkWorkCheckpointRequest) (*agentpb.NetworkWorkCheckpointAck, error)
 	CompleteNetwork(context.Context, *agentpb.NetworkWorkCompletionRequest) (*agentpb.NetworkWorkCompletionAck, error)
 	FailNetwork(context.Context, *agentpb.NetworkWorkFailureRequest) (*agentpb.NetworkWorkFailureAck, error)
@@ -44,7 +44,7 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 	if ctx == nil || input.procedure == nil || exchange == nil {
 		return workexecution.Attempt{}, invalidInput()
 	}
-	ack, err := exchange.Start(ctx, input.attempt)
+	ack, err := exchange.StartAttempt(ctx, input.attempt)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

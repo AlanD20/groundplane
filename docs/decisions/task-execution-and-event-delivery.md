@@ -1,5 +1,12 @@
 # Task execution and event delivery
 
+This document describes the existing mechanism. The
+[accepted replacement](task-execution-redesign.md) governs the next execution
+architecture and breaking cutover; it is not implemented. Existing typed-authority,
+secret-handling and unknown-effect safeguards remain required. Mechanism-specific
+sections here will be replaced during implementation, not retained as a second
+execution path.
+
 - Decision status: Accepted
 - Scope: Controller-authored work executed by the single-host Agent, including
   Compose, built-in adapter procedures, Custom hooks and durable Task-event

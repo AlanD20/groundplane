@@ -90,7 +90,7 @@ func CaptureAttachRemovalRecovery(
 	if assignment.TaskID != authority.TaskID || assignment.Executor != taskjournal.TaskExecutorAgent ||
 		assignment.ExecutionMode != TaskExecutionModeForward || result.ExecutionEpoch != assignment.ExecutionEpoch ||
 		result.ReleaseRecoveryRecordSHA256 != "" || assignment.RestorationAuthority != nil ||
-		assignment.ComponentRecoveryProcedureSHA256 != "" || assignment.ServiceAbsenceProcedureSHA256 != "" ||
+		assignment.ServiceAbsenceProcedureSHA256 != "" ||
 		assignment.ManagedNetworkProcedureSHA256 != "" || assignment.BackupAuthorityFence != nil ||
 		authorityErr != nil || authorityDigest != assignment.AttachRemovalAuthoritySHA256 {
 		return AttachRemovalRecoveryRecord{}, corruptAttachRemovalRecovery()

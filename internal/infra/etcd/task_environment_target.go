@@ -14,9 +14,7 @@ func ordinaryTaskEnvironmentMutationTarget(
 	task TaskRecord,
 	materializationChange bool,
 	attachChange bool,
-	entryChange bool,
 	serviceChange bool,
-	connectorChange bool,
 ) (string, bool, error) {
 	targets := make([]string, 0, 1)
 	if target, declared := task.Params[taskjournal.TaskMaterializationEnvironmentParam]; materializationChange &&
@@ -26,21 +24,11 @@ func ordinaryTaskEnvironmentMutationTarget(
 	if attachChange {
 		targets = append(targets, task.Params[taskjournal.TaskMutationEnvironmentParam])
 	}
-	if entryChange {
-		targets = append(targets, task.Params[taskjournal.TaskEntryEnvironmentParam])
-	}
 	if serviceChange {
 		targets = append(targets, task.Params[taskjournal.TaskServiceEnvironmentParam])
 	}
 	if task.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
 		targets = append(targets, task.Params[taskjournal.TaskZoneEnvironmentParam])
-	}
-	if connectorChange && !dnsCheckTask(task) && !runnerCheckTask(task) {
-		if task.Type == taskjournal.TaskCheck {
-			targets = append(targets, task.Owner.EnvironmentID)
-		} else {
-			targets = append(targets, task.Params[TaskConnectorEnvironmentParam])
-		}
 	}
 	if len(targets) == 0 {
 		return "", false, nil

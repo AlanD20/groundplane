@@ -3,17 +3,23 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/agent/backupruntime"
 	"io"
 	"log/slog"
 	"os"
 
+	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
+	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
 	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
+	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
 	scriptruntime "github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
 	"github.com/AlanD20/groundplane/internal/app/adaptercompiler"
@@ -323,6 +329,20 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	processes := commonrunner.New(logger)
+	entryExecutor, err := entryruntime.NewExecutor(workJournal, materializer, resources.helper, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetEntryExecutor(entryExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	componentExecutor, err := componentruntime.NewExecutor(workJournal, materializer, resources.helper, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetComponentExecutor(componentExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
 	networkHost, err := networkruntime.NewHost(workJournal, resources.helper, ownership)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
@@ -352,7 +372,45 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
-	attachHost, err := hierarchyruntime.NewBackingHost(workJournal, backingadapter.New(processes, adaptercompiler.Compile), ownership, backingCommands)
+	lifecycleHost, err := lifecycleruntime.NewHost(cfg.Storage.VolumeRoot, workJournal, resources.helper, ownership, backingCommands, processes)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	lifecycleExecutor, err := lifecycleruntime.NewExecutor(cfg.Storage.VolumeRoot, workJournal, lifecycleHost)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetLifecycleExecutor(lifecycleExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	backupExecutor, err := backupruntime.NewExecutor(workJournal, cfg.Storage.VolumeRoot, resources.helper, materializer, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetBackupExecutor(backupExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+
+	removalRecovery, err := removalruntime.NewRuntime(cfg.Storage.VolumeRoot, workJournal, resources.helper, materializer, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetRemovalRecovery(removalRecovery); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	backingAdapter := backingadapter.New(processes, adaptercompiler.Compile)
+	provisionHost, err := attachruntime.NewBackingHost(workJournal, backingAdapter, ownership, backingCommands, resources.helper)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	provisionExecutor, err := attachruntime.NewExecutor(workJournal, provisionHost)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetAttachProvisionExecutor(provisionExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	attachHost, err := hierarchyruntime.NewBackingHost(workJournal, backingAdapter, ownership, backingCommands)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}

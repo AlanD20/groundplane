@@ -19,10 +19,28 @@ func ValidateBackupTaskResume(
 		return nil, errs.New(errs.KindValidationFailed, "backup resume assignment binding is invalid")
 	}
 	owned := proto.Clone(resume).(*agentpb.BackupTaskResume)
-	for index, step := range owned.Steps {
-		sealed := authority.Steps[index]
+	if err := ValidateBackupSourceResumes(owned.Steps, authority.Steps); err != nil {
+		return nil, err
+	}
+	return owned, nil
+}
+
+// ValidateBackupSourceResumes checks ordered source progress against captured
+// authority. Delivery identity is checked by the owning assignment protocol.
+func ValidateBackupSourceResumes(sources []*agentpb.BackupStepResume, authorities []*agentpb.BackupStepAuthority) error {
+	if len(sources) == 0 || len(sources) != len(authorities) {
+		return errs.New(errs.KindValidationFailed, "Backup resume source count changed")
+	}
+	for index, step := range sources {
+		sealed := authorities[index]
+		if _, err := ValidateBackupStepAuthority(sealed); err != nil {
+			return err
+		}
+		if step != nil && RejectUnknown(step) != nil {
+			return errs.New(errs.KindValidationFailed, "Backup resume contains unknown fields")
+		}
 		if step == nil || step.StepId != sealed.StepId || step.ExecutionId != sealed.ExecutionId {
-			return nil, errs.New(errs.KindValidationFailed, "backup resume step order or identity is invalid")
+			return errs.New(errs.KindValidationFailed, "backup resume step order or identity is invalid")
 		}
 		valid := false
 		switch state := step.Operation.(type) {
@@ -34,10 +52,10 @@ func ValidateBackupTaskResume(
 			valid = state != nil && validBackupRestoreResume(state.Restore, sealed)
 		}
 		if !valid {
-			return nil, errs.New(errs.KindValidationFailed, "backup resume progress is invalid or unsupported")
+			return errs.New(errs.KindValidationFailed, "backup resume progress is invalid or unsupported")
 		}
 	}
-	return owned, nil
+	return nil
 }
 
 func validBackupPruneResume(state *agentpb.BackupPruneResume, step *agentpb.BackupStepAuthority) bool {

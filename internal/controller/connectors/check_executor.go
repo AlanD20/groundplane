@@ -5,78 +5,94 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/s3connector"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorchecks"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-type checkAssignments interface {
-	GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
-}
 
 // CheckExecutor executes the captured permission check once. A resumed claim
 // performs only cleanup with the original encrypted credentials and object keys.
 type CheckExecutor struct {
-	repository  *connectorchecks.Repository
-	assignments checkAssignments
-	protector   *secretvalue.Protector
+	repository *connectorchecks.Repository
+	protector  *secretvalue.Protector
 }
 
-func NewCheckExecutor(repository *connectorchecks.Repository, assignments checkAssignments,
+func NewCheckExecutor(repository *connectorchecks.Repository,
 	protector *secretvalue.Protector,
 ) (*CheckExecutor, error) {
-	if repository == nil || assignments == nil || protector == nil {
+	if repository == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "connector check executor dependencies are required")
 	}
-	return &CheckExecutor{repository: repository, assignments: assignments, protector: protector}, nil
+	return &CheckExecutor{repository: repository, protector: protector}, nil
 }
 
-func (executor *CheckExecutor) Execute(ctx context.Context, task etcd.TaskRecord) error {
-	if ctx == nil || task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskCheck ||
-		task.Status != taskjournal.TaskStatusRunning || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceConnector ||
-		len(task.Params) != 2 || len(task.Steps) != 0 || task.RenderGeneration != 1 {
-		return errs.New(errs.KindValidationFailed, "connector connection-check Task is invalid")
+func (executor *CheckExecutor) Execute(ctx context.Context, delivery workqueue.Delivery) error {
+	err := executor.execute(ctx, delivery)
+	if err == nil || ctx == nil {
+		return err
 	}
-	loaded, err := executor.repository.Load(ctx, task.ID)
+	settlement, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+	defer cancel()
+	loaded, loadErr := executor.repository.Load(settlement, delivery.Item.Item.TaskID)
+	if loadErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, loadErr)
+	}
+	defer loaded.Record.Clear()
+	if loaded.Record.Phase == connectorchecks.Finished || loaded.Record.Phase == connectorchecks.CleanupRequired {
+		return err
+	}
+	journal, journalErr := connectorchecks.NewJournal(executor.repository, loaded.Record.Owner,
+		delivery.Attempt.Attempt.ID, delivery.Attempt.Attempt.Executor)
+	if journalErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, journalErr)
+	}
+	if stopErr := journal.Stop(settlement, s3connector.CheckFailureForError(err), time.Now().UTC()); stopErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, stopErr)
+	}
+	return err
+}
+
+func (executor *CheckExecutor) execute(ctx context.Context, delivery workqueue.Delivery) error {
+	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
+	if ctx == nil || item.Validate() != nil || attempt.Validate() != nil ||
+		item.Operation != workexecution.ConnectorCheck || item.Phase != workexecution.Running ||
+		attempt.Executor.Executor != workexecution.Controller || item.ActiveAttemptID != attempt.ID ||
+		attempt.TaskID != item.TaskID || attempt.WorkItemID != item.ID || item.Input == nil ||
+		*item.Input != attempt.Input || attempt.StartedAt == nil || attempt.FinishedAt != nil {
+		return errs.New(errs.KindValidationFailed, "connector connection-check execution is invalid")
+	}
+	loaded, err := executor.repository.Load(ctx, item.TaskID)
 	if err != nil {
 		return err
 	}
 	record := loaded.Record
 	defer record.Clear()
 	planHash, err := connectorchecks.PlanHash(record)
-	if err != nil || record.Owner.TaskID != task.ID || record.Owner.PlanID != task.PlanID ||
-		record.Owner.OperationID != task.OperationID || record.Owner.EnvironmentID != task.Owner.EnvironmentID ||
-		record.RetryOf != task.RetryOf ||
-		record.Connector.Connector.ID != task.Target || planHash != task.PlanHash ||
-		record.ConfigurationSHA256 != task.Params[taskjournal.TaskConnectorCheckInputParam] {
+	if err != nil || record.Owner.TaskID != item.TaskID || record.Owner.WorkItemID != item.ID ||
+		record.Owner.PlanID != attempt.Input.ID || record.Connector.Connector.ID != item.TargetID || planHash != attempt.Input.SHA256 {
 		return errs.New(errs.KindStateConflict, "connector check differs from its sealed Task input")
 	}
 	if record.Phase == connectorchecks.Finished {
 		// A cleanup-only attempt may lose its terminal acknowledgement after
 		// cleanup commits. Replaying that result completes cleanup, not the probe.
-		if record.Outcome == connectorchecks.Interrupted && task.RetryOf != "" {
+		if record.Outcome == connectorchecks.Interrupted && attempt.Direction == workexecution.Recovery {
 			return nil
 		}
 		return checkOutcomeError(record)
 	}
-	claim, err := executor.assignments.GetTaskAssignment(ctx, task.ID)
-	if err != nil {
-		return err
-	}
-	if claim.Task.Record.PlanID != task.PlanID || claim.Task.Record.PlanHash != task.PlanHash ||
-		claim.Task.Record.OperationID != task.OperationID || claim.Task.Record.Target != task.Target {
-		return errs.New(errs.KindStateConflict, "connector check Task claim changed")
-	}
-	journal, err := connectorchecks.NewJournal(executor.repository, record.Owner, claim.Assignment.Record.AssignmentID)
+	journal, err := connectorchecks.NewJournal(executor.repository, record.Owner, attempt.ID, attempt.Executor)
 	if err != nil {
 		return err
 	}
 	if record.Phase != connectorchecks.Ready {
-		return executor.resumeCheckCleanup(ctx, record, journal, task.RetryOf != "")
+		return executor.resumeCheckCleanup(ctx, record, journal, attempt.Direction == workexecution.Recovery)
 	}
-	if !time.Now().UTC().Before(claim.Assignment.Record.Deadline) {
+	if attempt.Direction != workexecution.Forward {
+		return errs.New(errs.KindStateConflict, "unstarted connector check has no cleanup to execute")
+	}
+	if !time.Now().UTC().Before(attempt.Deadline) {
 		return finishUnstartedCheck(ctx, journal, context.DeadlineExceeded)
 	}
 	adapter, err := executor.capturedCheckAdapter(ctx, record)
@@ -86,12 +102,12 @@ func (executor *CheckExecutor) Execute(ctx context.Context, task etcd.TaskRecord
 	if err := journal.Start(ctx, time.Now().UTC()); err != nil {
 		return err
 	}
-	_, probeErr := adapter.CheckConnection(ctx, task.OperationID, journal)
+	_, probeErr := adapter.CheckConnection(ctx, record.Owner.OperationID, journal)
 	// A disconnected request cannot erase mutation authority. Reload the durable
 	// journal; the transport's in-memory cleanup result is not settlement proof.
 	settlementCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
-	latest, err := executor.repository.Load(settlementCtx, task.ID)
+	latest, err := executor.repository.Load(settlementCtx, item.TaskID)
 	if err != nil {
 		return err
 	}

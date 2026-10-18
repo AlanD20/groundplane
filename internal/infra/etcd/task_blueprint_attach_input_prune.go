@@ -112,7 +112,7 @@ func (repository *TaskRepository) pruneParentOwnedBlueprintAttachInput(
 				attachinputs.Clear(&generation)
 				return true, err
 			}
-			root, found, err := pins.LoadActive(ctx, generation.OperationID)
+			root, found, err := pins.LoadActive(ctx, generation.OperationID, 0)
 			if err != nil {
 				attachinputs.Clear(&generation)
 				return true, err

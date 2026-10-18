@@ -163,13 +163,6 @@ const (
 func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 	ctx context.Context, task TaskRecord, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) (*agentpb.CandidateReleaseProcedure, []releaseRecoveryProofExpectation, []etcdstore.Condition, error) {
-	if authoredBlueprintEntryRemovalTask(task) {
-		procedure, conditions, err := repository.authoredEntryRecoveryProcedureAtRevision(ctx, task, revision)
-		if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
-			return nil, nil, nil, taskassignments.CorruptTaskAssignment()
-		}
-		return procedure, []releaseRecoveryProofExpectation{}, conditions, nil
-	}
 	if authoredBlueprintServiceRemovalTask(task) {
 		procedure, intent, conditions, err := repository.authoredServiceRecoveryProcedureAtRevision(ctx, task, revision)
 		if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {

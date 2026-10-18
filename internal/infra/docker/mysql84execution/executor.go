@@ -312,7 +312,11 @@ func (executor *Executor) RecoverExecution(ctx context.Context, expected Contain
 	if _, err := executor.waitExit(ctx, expected, execID); err != nil {
 		return Result{}, invalidExecution("MySQL original Exec success is unproven")
 	}
-	recovery := mysql84protocol.Request{Nonce: original.Nonce, DeadlineUnixNano: original.DeadlineUnixNano}
+	deadline, bounded := ctx.Deadline()
+	if !bounded || deadline.UnixNano() <= 0 {
+		return Result{}, invalidExecution("MySQL recovery requires a bounded execution window")
+	}
+	recovery := mysql84protocol.Request{Nonce: original.Nonce, DeadlineUnixNano: uint64(deadline.UnixNano())}
 	var source io.ReadCloser
 	switch original.Operation {
 	case mysql84protocol.OperationDump:

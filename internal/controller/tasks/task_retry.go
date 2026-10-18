@@ -3,347 +3,109 @@ package tasks
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const taskRetryRoute = "/tasks/{id}/retry"
 
-type taskRetryRepository interface {
-	GetStoppedRecoveryRetry(context.Context, string) (bool, error)
-	RetryStoppedRecovery(
-		context.Context,
-		string,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-	RetryInterruptedDetach(
-		context.Context,
-		string,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
-	GetTaskRetryScope(context.Context, string) (etcd.TaskRetryScope, error)
-	RetryTask(
-		context.Context,
-		string,
-		string,
-		taskjournal.TaskActor,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-	RetryTaskWithInitiation(
-		context.Context,
-		string,
-		string,
-		etcd.TaskInitiation,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-}
-
-type backupTaskRetryer interface {
-	RetryBackupTask(
-		context.Context,
-		string,
-		string,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-}
-
-type restoreTaskRetryer interface {
-	RetryRestoreTask(
-		context.Context,
-		string,
-		string,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-}
-
-type taskRetryEvidence struct {
-	candidate requestidempotency.ProtectedEvidence
-	durable   idempotencyrecord.ProtectedIntentRecord
-}
-
-type taskRetryIdempotency interface {
-	Prepare(context.Context, string, requestidempotency.Scope) (taskRetryEvidence, error)
-	ResolveExisting(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		taskRetryEvidence,
-	) (requestidempotency.Resolution, bool, error)
-	ResolveKnown(
-		context.Context,
-		taskRetryEvidence,
-		etcd.IdempotencyTransactionResult,
-	) (requestidempotency.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		taskRetryEvidence,
-		error,
-	) (requestidempotency.Resolution, error)
-}
-
-type durableTaskRetryIdempotency struct {
+type taskRetryService struct {
+	queue       *workqueue.Repository
+	retries     *workdispatch.Retries
+	receipts    *etcd.IdempotencyRepository
 	coordinator *requestidempotency.Coordinator
-	repository  *etcd.IdempotencyRepository
 }
 
-func NewRetryIdempotency(
-	coordinator *requestidempotency.Coordinator,
-	repository *etcd.IdempotencyRepository,
-) (*durableTaskRetryIdempotency, error) {
-	if coordinator == nil || repository == nil {
-		return nil, errs.New(errs.KindInternal, "task retry idempotency is not configured")
+func NewRetryService(queue *workqueue.Repository, retries *workdispatch.Retries,
+	receipts *etcd.IdempotencyRepository, coordinator *requestidempotency.Coordinator,
+) (*taskRetryService, error) {
+	if queue == nil || retries == nil || receipts == nil || coordinator == nil {
+		return nil, errs.New(errs.KindInternal, "execution retry dependencies are required")
 	}
-	return &durableTaskRetryIdempotency{coordinator: coordinator, repository: repository}, nil
+	return &taskRetryService{queue: queue, retries: retries, receipts: receipts, coordinator: coordinator}, nil
 }
 
-func (service *durableTaskRetryIdempotency) Prepare(
-	ctx context.Context,
-	taskID string,
-	scope requestidempotency.Scope,
-) (taskRetryEvidence, error) {
+func (service *taskRetryService) RetryTask(ctx context.Context, taskID, key string, request apiTypes.TaskRetryRequest) (idempotency.IdempotencyResponse, error) {
+	if ids.Validate(ids.KindTask, taskID) != nil || ids.Validate(ids.KindWorkItem, request.WorkItemID) != nil {
+		return idempotency.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Retry requires the exact Task, work item and attempt")
+	}
+	fields := []requestidempotency.Field{
+		{Name: "work_item_id", Value: requestidempotency.String(request.WorkItemID)},
+		{Name: "attempt", Value: requestidempotency.UnsignedInteger(request.Attempt)},
+	}
+	if request.QueuedFailureAt != nil {
+		fields = append(fields, requestidempotency.Field{Name: "queued_failure_at", Value: requestidempotency.String(request.QueuedFailureAt.UTC().Format(time.RFC3339Nano))})
+	}
+	task, _, err := service.queue.ReadTask(ctx, taskID, 0)
+	if err != nil {
+		return idempotency.IdempotencyResponse{}, err
+	}
+	scope, kind, owner := retryScope(task.Task.Scope)
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: taskRetryRoute, Scope: scope,
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: taskID}},
-		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
+		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(fields...)),
 	})
 	if err != nil {
-		return taskRetryEvidence{}, err
+		return idempotency.IdempotencyResponse{}, err
 	}
 	defer digest.Destroy()
-	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)
+	evidence, err := service.coordinator.ProtectIntent(ctx, version, digest)
 	if err != nil {
-		return taskRetryEvidence{}, err
+		return idempotency.IdempotencyResponse{}, err
 	}
-	durable, err := candidate.DurableRecord()
+	durable, err := evidence.DurableRecord()
 	if err != nil {
-		return taskRetryEvidence{}, err
+		return idempotency.IdempotencyResponse{}, err
 	}
-	return taskRetryEvidence{candidate: candidate, durable: durable}, nil
-}
-
-func (service *durableTaskRetryIdempotency) ResolveExisting(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence taskRetryEvidence,
-) (requestidempotency.Resolution, bool, error) {
-	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
-}
-
-func (service *durableTaskRetryIdempotency) ResolveKnown(
-	ctx context.Context,
-	evidence taskRetryEvidence,
-	result etcd.IdempotencyTransactionResult,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
-}
-
-func (service *durableTaskRetryIdempotency) ResolveUnknown(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence taskRetryEvidence,
-	original error,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
-}
-
-type taskRetryService struct {
-	repository  taskRetryRepository
-	idempotency taskRetryIdempotency
-	backups     backupTaskRetryer
-	restores    restoreTaskRetryer
-	now         func() time.Time
-}
-
-func NewRetryService(
-	repository taskRetryRepository,
-	idempotency taskRetryIdempotency,
-	backups backupTaskRetryer,
-	restores restoreTaskRetryer,
-) (*taskRetryService, error) {
-	if repository == nil || idempotency == nil || backups == nil || restores == nil {
-		return nil, errs.New(errs.KindInternal, "task retry service is not configured")
-	}
-	return &taskRetryService{
-		repository:  repository,
-		idempotency: idempotency,
-		backups:     backups,
-		restores:    restores,
-		now:         time.Now,
-	}, nil
-}
-
-func (service *taskRetryService) RetryTask(
-	ctx context.Context,
-	sourceTaskID string,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.retryTask(ctx, sourceTaskID, idempotencyKey, nil)
-}
-
-func (service *taskRetryService) RetryTaskWithInitiation(
-	ctx context.Context,
-	sourceTaskID string,
-	idempotencyKey string,
-	initiation etcd.TaskInitiation,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.retryTask(ctx, sourceTaskID, idempotencyKey, &initiation)
-}
-
-func (service *taskRetryService) retryTask(
-	ctx context.Context,
-	sourceTaskID string,
-	idempotencyKey string,
-	initiation *etcd.TaskInitiation,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "task retry context is required")
-	}
-	if ids.Validate(ids.KindTask, sourceTaskID) != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "task id is invalid")
-	}
-	source, err := service.repository.GetTask(ctx, sourceTaskID)
+	defer clear(durable.Ciphertext)
+	locator := idempotency.IdempotencyLocator{ScopeKind: kind, ScopeID: owner, Method: http.MethodPost, Route: taskRetryRoute, Key: key}
+	resolution, existing, err := service.coordinator.ResolveExisting(ctx, service.receipts, locator, evidence)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if taskjournal.IsInternalChild(source.Record.Params) {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
-			errs.KindTaskNotFound,
-			"task not found: %s",
-			sourceTaskID,
-		)
-	}
-	if source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceController {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindTaskNotRetryable, "Controller update requires a fresh explicit release selection after recovery",
-		)
-	}
-	if source.Record.Executor == taskjournal.TaskExecutorBlueprint && initiation != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindTaskNotRetryable, "Blueprint Apply requires a new Apply after its children have settled",
-		)
-	}
-	if source.Record.Type == taskjournal.TaskBackupPrune {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
-			errs.KindTaskNotRetryable,
-			"internal task %s of type %s is not operator-retryable",
-			sourceTaskID,
-			source.Record.Type,
-		)
-	}
-	durableScope, err := service.repository.GetTaskRetryScope(ctx, sourceTaskID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	intentScope, err := taskRetryIntentScope(durableScope)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	evidence, err := service.idempotency.Prepare(ctx, sourceTaskID, intentScope)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(evidence.durable.Ciphertext)
-	locator := idempotencyrecord.IdempotencyLocator{
-		ScopeKind: durableScope.Kind, ScopeID: durableScope.ID,
-		Method: http.MethodPost, Route: taskRetryRoute, Key: idempotencyKey,
-	}
-	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return idempotency.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"task retry replay resolution is invalid",
-			)
+			return idempotency.IdempotencyResponse{}, errs.New(errs.KindInternal, "Retry receipt is inconsistent")
 		}
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
-	now := service.now().UTC()
-	retryTaskID := ids.New(ids.KindTask)
-	resumeDetach := source.Record.Executor == taskjournal.TaskExecutorBlueprint
-	resumeRecovery, err := service.repository.GetStoppedRecoveryRetry(ctx, sourceTaskID)
+	at := time.Now().UTC()
+	change, err := service.retries.Prepare(ctx, taskID, request.WorkItemID, request.Attempt, request.QueuedFailureAt, at)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return idempotency.IdempotencyResponse{}, err
 	}
-	if resumeRecovery && initiation != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindTaskNotRetryable,
-			"stopped recovery requires an explicit operator Retry",
-		)
-	}
-	if resumeDetach || resumeRecovery {
-		retryTaskID = sourceTaskID
-	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: retryTaskID})
+	defer keyvalue.ClearMutationValues(change.Mutations)
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotency.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
-	}
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, Intent: evidence.durable, Response: response,
-		TaskID: retryTaskID, CreatedAt: now, UpdatedAt: now,
-	}
-	var result etcd.IdempotencyTransactionResult
-	if resumeDetach || resumeRecovery {
-		marker.Kind = idempotencyrecord.IdempotencyMarkerDirect
-		marker.State = idempotencyrecord.IdempotencyMarkerCompleted
-		marker.TaskID = ""
-		marker.TerminalAt = now
-		marker.RetainUntil = now.Add(idempotencyrecord.MarkerRetention)
-	}
-	var retryErr error
-	if resumeRecovery {
-		result, retryErr = service.repository.RetryStoppedRecovery(ctx, sourceTaskID, marker)
-	} else if resumeDetach {
-		result, retryErr = service.repository.RetryInterruptedDetach(ctx, sourceTaskID, marker)
-	} else if source.Record.Type == taskjournal.TaskBackup || source.Record.Type == taskjournal.TaskRestore {
-		if initiation != nil {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindTaskNotRetryable,
-				"backup and Restore Tasks do not accept system retry initiation",
-			)
+	defer clear(body)
+	response := idempotency.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}
+	marker := idempotency.IdempotencyMarker{Kind: idempotency.IdempotencyMarkerDirect, State: idempotency.IdempotencyMarkerCompleted,
+		Locator: locator, Intent: durable, Response: response, CreatedAt: at, UpdatedAt: at, TerminalAt: at, RetainUntil: at.Add(idempotency.MarkerRetention)}
+	result, applyErr := service.receipts.ApplyExecutionRetry(ctx, change, marker)
+	if applyErr != nil {
+		if !errs.IsRetryable(applyErr) && ctx.Err() == nil {
+			return idempotency.IdempotencyResponse{}, applyErr
 		}
-		if source.Record.Type == taskjournal.TaskBackup {
-			result, retryErr = service.backups.RetryBackupTask(ctx, sourceTaskID, retryTaskID, marker)
-		} else {
-			result, retryErr = service.restores.RetryRestoreTask(ctx, sourceTaskID, retryTaskID, marker)
-		}
-	} else if initiation == nil {
-		result, retryErr = service.repository.RetryTask(
-			ctx, sourceTaskID, retryTaskID, taskjournal.TaskActorOperator, marker,
-		)
+		resolution, err = service.coordinator.ResolveUnknown(ctx, service.receipts, locator, evidence, applyErr)
 	} else {
-		result, retryErr = service.repository.RetryTaskWithInitiation(
-			ctx, sourceTaskID, retryTaskID, *initiation, marker,
-		)
-	}
-	if retryErr != nil {
-		if !isUnknownTaskRetryOutcome(retryErr) {
-			return idempotencyrecord.IdempotencyResponse{}, retryErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, retryErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
+		resolution, err = service.coordinator.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return idempotency.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -351,32 +113,19 @@ func (service *taskRetryService) retryTask(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "task retry resolution is invalid")
+		return idempotency.IdempotencyResponse{}, errs.New(errs.KindInternal, "Retry receipt resolution is inconsistent")
 	}
 }
 
-func taskRetryIntentScope(scope etcd.TaskRetryScope) (requestidempotency.Scope, error) {
-	switch scope.Kind {
-	case idempotencyrecord.IdempotencyScopePlatform:
-		if scope.ID != "-" {
-			return requestidempotency.Scope{}, errs.New(errs.KindInternal, "task retry platform scope is invalid")
-		}
-		return requestidempotency.Scope{Kind: requestidempotency.ScopePlatform}, nil
-	case idempotencyrecord.IdempotencyScopeTenant:
-		return requestidempotency.Scope{Kind: requestidempotency.ScopeTenant, ID: scope.ID}, nil
-	case idempotencyrecord.IdempotencyScopeProject:
-		return requestidempotency.Scope{Kind: requestidempotency.ScopeProject, ID: scope.ID}, nil
-	case idempotencyrecord.IdempotencyScopeEnvironment:
-		return requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: scope.ID}, nil
-	default:
-		return requestidempotency.Scope{}, errs.New(errs.KindInternal, "task retry owner scope is invalid")
+func retryScope(scope workexecution.Scope) (requestidempotency.Scope, idempotency.IdempotencyScopeKind, string) {
+	if scope.EnvironmentID != "" {
+		return requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: scope.EnvironmentID}, idempotency.IdempotencyScopeEnvironment, scope.EnvironmentID
 	}
-}
-
-func isUnknownTaskRetryOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
+	if scope.ProjectID != "" {
+		return requestidempotency.Scope{Kind: requestidempotency.ScopeProject, ID: scope.ProjectID}, idempotency.IdempotencyScopeProject, scope.ProjectID
 	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
+	if scope.TenantID != "" {
+		return requestidempotency.Scope{Kind: requestidempotency.ScopeTenant, ID: scope.TenantID}, idempotency.IdempotencyScopeTenant, scope.TenantID
+	}
+	return requestidempotency.Scope{Kind: requestidempotency.ScopePlatform}, idempotency.IdempotencyScopePlatform, "-"
 }

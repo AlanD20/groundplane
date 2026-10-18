@@ -12,7 +12,7 @@ import (
 // projectScriptRunnerContext keeps inherited consumer projection separate from
 // the explicit minimal configuration; ambient fields never enter that branch.
 func projectScriptRunnerContext(
-	input ManualScriptPlanInput, service, desired composetypes.ServiceConfig,
+	input ScriptRunnerInput, service, desired composetypes.ServiceConfig,
 ) (*agentpb.ScriptRunnerProjection, error) {
 	if err := input.Preparation.validateSources(input.Sources); err != nil {
 		return nil, err

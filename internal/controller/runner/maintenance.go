@@ -15,6 +15,7 @@ import (
 const ObservationLifetime = time.Minute
 
 type maintenanceRepository interface {
+	LoadAppliedRunnerPlan(context.Context, string, uint64, string) (runnerallocation.RuntimePlan, error)
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
 	ListRuntimeRunners(
 		context.Context,
@@ -47,10 +48,6 @@ type maintenanceRepository interface {
 	) error
 }
 
-type readyJournal interface {
-	ReadyPlan(context.Context, string, uint64, string) (runnerallocation.RuntimePlan, error)
-}
-
 type readyRuntime interface {
 	Resume(context.Context, runnerallocation.RuntimePlan, string) (runnerallocation.RunnerRuntimeEvidence, error)
 }
@@ -59,7 +56,6 @@ type readyRuntime interface {
 // observations. It shares the executor lock, so it cannot race host cleanup.
 type Maintenance struct {
 	repository maintenanceRepository
-	journal    readyJournal
 	runtime    readyRuntime
 	executor   *Executor
 	logger     *slog.Logger
@@ -67,17 +63,15 @@ type Maintenance struct {
 
 func NewMaintenance(
 	repository maintenanceRepository,
-	journal readyJournal,
 	runtime readyRuntime,
 	executor *Executor,
 	logger *slog.Logger,
 ) (*Maintenance, error) {
-	if repository == nil || journal == nil || runtime == nil || executor == nil || logger == nil {
+	if repository == nil || runtime == nil || executor == nil || logger == nil {
 		return nil, errs.New(errs.KindInternal, "Runner maintenance dependencies are required")
 	}
 	return &Maintenance{
 		repository: repository,
-		journal:    journal,
 		runtime:    runtime,
 		executor:   executor,
 		logger:     logger,
@@ -148,7 +142,7 @@ func (maintenance *Maintenance) refreshOne(ctx context.Context, runnerID string)
 	if !exists || prior.Record.RuntimeEpoch != current.Record.RuntimeEpoch {
 		return errs.New(errs.KindStateConflict, "Runner ready ownership is missing")
 	}
-	plan, err := maintenance.journal.ReadyPlan(ctx, runnerID, prior.Record.RuntimeEpoch, current.Record.CreateTaskID)
+	plan, err := maintenance.repository.LoadAppliedRunnerPlan(ctx, runnerID, prior.Record.RuntimeEpoch, current.Record.ContainerID)
 	if err != nil {
 		return maintenance.offline(ctx, runnerID, err)
 	}

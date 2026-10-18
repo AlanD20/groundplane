@@ -176,15 +176,13 @@ export function BackingCheckPanel({
                 ? "Result stale"
                 : result.cleanup_required
                   ? "Cleanup needed"
-                  : result.phase === "transferred"
-                    ? "Cleanup transferred"
-                    : result.outcome === "passed"
-                      ? "Access verified"
-                      : result.outcome === "interrupted"
-                        ? "Interrupted"
-                        : result.outcome === "failed"
-                          ? "Check failed"
-                          : "In progress"}
+                  : result.outcome === "passed"
+                    ? "Access verified"
+                    : result.outcome === "interrupted"
+                      ? "Interrupted"
+                      : result.outcome === "failed"
+                        ? "Check failed"
+                        : "In progress"}
             </Badge>
             <span className="text-xs text-muted-foreground">
               {new Date(
@@ -261,9 +259,9 @@ export function BackingCheckPanel({
               Temporary helper: {result.helper_name}
             </p>
           )}
-          {result.cleanup_task_id && (
-            <TaskLink taskId={result.cleanup_task_id}>
-              Open cleanup task
+          {result.cleanup_required && (
+            <TaskLink taskId={result.task_id}>
+              Open Task to inspect cleanup
             </TaskLink>
           )}
           {result.cleanup_required && (

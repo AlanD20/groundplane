@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -84,23 +85,7 @@ func (service *routeMutationService) editRouteOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	preparation, err := service.prepareRouteMutationTask(
-		ctx, environment, project, replacement, &current, idempotencyKey,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	replacement = preparation.Intent.Route
-	response, marker, err := service.routeResponseMarker(locator, evidence, replacement, preparation.Task.ID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.BeginRouteMutationWithTask(
-		ctx, environment, project, target, &current, replacement, preparation.Intent, preparation.Task, marker,
-	)
-	return service.resolveRouteMutation(ctx, locator, evidence, result, mutationErr, response)
+	return service.acceptRouteWork(ctx, environment, project, target, &current, replacement, workexecution.ActionUpdate, locator, evidence)
 }
 
 func routeEditMutationIntent(

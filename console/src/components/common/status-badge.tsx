@@ -2,6 +2,34 @@ import { cn } from "@/lib/utils";
 import type { HealthState } from "@/lib/types";
 
 const MAP: Record<string, { label: string; dot: string; text: string }> = {
+  succeeded: { label: "Succeeded", dot: "bg-success", text: "text-success" },
+  queued: { label: "Queued", dot: "bg-warning", text: "text-warning" },
+  preparing: { label: "Preparing", dot: "bg-info", text: "text-info" },
+  waiting: { label: "Waiting", dot: "bg-warning", text: "text-warning" },
+  assigned: { label: "Assigned", dot: "bg-info", text: "text-info" },
+  ready: { label: "Ready", dot: "bg-info", text: "text-info" },
+  attention: {
+    label: "Needs attention",
+    dot: "bg-warning",
+    text: "text-warning",
+  },
+  attention_required: {
+    label: "Needs attention",
+    dot: "bg-warning",
+    text: "text-warning",
+  },
+  stopping: { label: "Stopping", dot: "bg-warning", text: "text-warning" },
+  finishing: { label: "Finishing", dot: "bg-info", text: "text-info" },
+  cancelled: {
+    label: "Cancelled",
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+  },
+  superseded: {
+    label: "Superseded",
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+  },
   healthy: { label: "Healthy", dot: "bg-success", text: "text-success" },
   online: { label: "Online", dot: "bg-success", text: "text-success" },
   completed: { label: "Completed", dot: "bg-success", text: "text-success" },

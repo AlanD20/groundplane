@@ -22,7 +22,6 @@ func (repository *TaskRepository) acknowledgeTerminalTaskReplay(
 	}
 	if executor == taskjournal.TaskExecutorAgent && result != nil &&
 		(releaseRecoveryTask(task) ||
-			componentRecoveryTask(task) ||
 			authoredBlueprintZoneRemovalTask(task)) {
 		normalizedStatus, normalizedResult, handled, normalizeErr := repository.normalizeRecoveryTerminalReplay(
 			ctx,

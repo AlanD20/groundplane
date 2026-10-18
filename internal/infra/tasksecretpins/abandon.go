@@ -9,7 +9,9 @@ import (
 
 // Abandon resumes cleanup after a Controller restart without needing
 // the process-local original input. The durable descriptor is validated, and
-// every cleanup transaction still proves Task and active-operation absence.
+// every cleanup transaction fences the preparation and proves root absence.
+// Activation consumes that descriptor atomically with native work publication,
+// so neither an existing waiting work item nor Task history authorizes cleanup.
 func (repository *Repository) Abandon(ctx context.Context, operationID string) error {
 	if ctx == nil || ids.Validate(ids.KindOperation, operationID) != nil {
 		return validation("unpublished Secret pin cleanup identity is invalid")
@@ -96,7 +98,6 @@ func (repository *Repository) abandonmentState(
 ) (setRecord, int64, bool, error) {
 	keys := []string{
 		PreparationKey(expected.OperationID), RootKey(expected.OperationID),
-		taskKey(expected.TaskID), activeTaskKey(expected.OperationID),
 	}
 	read, err := repository.read(ctx, keys, 0)
 	if err != nil {
@@ -104,9 +105,6 @@ func (repository *Repository) abandonmentState(
 	}
 	if read.Values[1] != nil {
 		return setRecord{}, 0, false, conflict("active Secret pin set cannot be abandoned")
-	}
-	if read.Values[2] != nil || read.Values[3] != nil {
-		return setRecord{}, 0, false, conflict("secret pin preparation belongs to a published Task")
 	}
 	if read.Values[0] == nil {
 		return setRecord{}, 0, false, nil
@@ -126,8 +124,6 @@ func (repository *Repository) abandonmentState(
 func abandonmentGuards(descriptor setRecord) []Condition {
 	return []Condition{
 		{Key: RootKey(descriptor.OperationID)},
-		{Key: taskKey(descriptor.TaskID)},
-		{Key: activeTaskKey(descriptor.OperationID)},
 	}
 }
 

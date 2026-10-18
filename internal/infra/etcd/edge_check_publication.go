@@ -2,14 +2,15 @@ package etcd
 
 import (
 	"context"
-	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,7 +18,7 @@ import (
 // selection and exact helper/resource ownership together. Concurrent image or
 // hierarchy deletion cannot slip between host selection and publication.
 func (repository *RouteRepository) CreateEdgeCheck(ctx context.Context, source EdgeCheckSource,
-	input edgechecks.Record, task TaskRecord, marker idempotency.IdempotencyMarker,
+	input edgechecks.Record, task workexecution.Task, marker idempotency.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateEdgeCheckPublication(ctx, source, input, task, marker); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -40,32 +41,18 @@ func (repository *RouteRepository) CreateEdgeCheck(ctx context.Context, source E
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateTaskInitiation(task, initiation, true); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	taskValue, err := EncodeTaskRecord(task)
+	item := workexecution.Item{ID: input.Owner.WorkItemID, TaskID: task.ID, Operation: workexecution.EdgeCheck,
+		TargetID: task.TargetID, Placement: workexecution.Placement{Executor: workexecution.Controller},
+		Claims: []workexecution.Claim{{ScopeID: task.TargetID}}, Input: &task.Intent,
+		Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
+		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
+	work, err := workqueue.PrepareSingleTask(task, item, marker)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clear(taskValue)
-	reference, err := idempotency.EncodeTaskReference(task.ID)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(reference)
-	keys := []string{taskjournal.TaskStorageKey(task.ID), taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
-		taskjournal.TaskActiveOperationKey(task.OperationID), taskjournal.TaskQueueKey(task.Executor, task.ID)}
-	conditions := slices.Clone(source.conditions)
-	mutations := make([]keyvalue.Mutation, 0, 16)
-	for index, key := range keys {
-		conditions = append(conditions, keyvalue.Condition{Key: key})
-		value := reference
-		if index == 0 {
-			value = taskValue
-		}
-		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
-	}
+	defer keyvalue.ClearMutationValues(work.Mutations)
+	conditions := append(work.Conditions, source.conditions...)
+	mutations := work.Mutations
 	inputConditions, inputMutations, err := edgechecks.PreparePublication(input)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -94,12 +81,13 @@ func (repository *RouteRepository) CreateEdgeCheck(ctx context.Context, source E
 	}
 	defer ancestry.Clear()
 	conditions, mutations = append(conditions, ancestry.Conditions()...), append(mutations, ancestry.Mutations()...)
-	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations,
+	publicationConditions := conditions
+	conditions, classify, err := prepareTaskInitiationFences(initiation, conditions,
 		func(_ int64, values []*keyvalue.KeyValue) error {
-			if len(values) != len(conditions) {
+			if len(values) != len(publicationConditions) {
 				return errs.New(errs.KindInternal, "Tunnel check publication evidence is incomplete")
 			}
-			for index, condition := range conditions {
+			for index, condition := range publicationConditions {
 				if keyvalue.RevisionOf(values[index]) != condition.ModRevision {
 					return errs.New(
 						errs.KindStateConflict,
@@ -109,6 +97,10 @@ func (repository *RouteRepository) CreateEdgeCheck(ctx context.Context, source E
 			}
 			return nil
 		})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -129,29 +121,32 @@ func (repository *RouteRepository) CreateEdgeCheck(ctx context.Context, source E
 }
 
 func validateEdgeCheckPublication(ctx context.Context, source EdgeCheckSource, input edgechecks.Record,
-	task TaskRecord, marker idempotency.IdempotencyMarker,
+	task workexecution.Task, marker idempotency.IdempotencyMarker,
 ) error {
 	_, imageCaptured := imagefence.Revision(ctx)
 	if !imageCaptured || source.fence.ReadRevision() <= 0 ||
 		source.fence.EnvironmentID() != source.environment.Record.ID ||
 		input.Validate() != nil ||
 		input.Phase != edgechecks.Ready ||
-		!edgeCheckMatchesTask(input, task) ||
-		task.Status != taskjournal.TaskStatusPending ||
-		task.RetryOf != "" ||
-		task.Owner.TenantID != source.project.Record.TenantID ||
-		task.Owner.ProjectID != source.project.Record.ID ||
-		task.Owner.EnvironmentID != source.environment.Record.ID ||
+		task.Validate() != nil || task.Actor != workexecution.OperatorActor || task.Action != workexecution.ActionCheck ||
+		task.ExpectedItems != 1 || input.Owner.TaskID != task.ID || input.Owner.PlanID != task.Intent.ID ||
+		input.Source.Request.TargetID() != task.TargetID || input.Owner.EnvironmentID != task.Scope.EnvironmentID ||
+		task.Scope.TenantID != source.project.Record.TenantID ||
+		task.Scope.ProjectID != source.project.Record.ID ||
+		task.Scope.EnvironmentID != source.environment.Record.ID ||
 		marker.Kind != idempotency.IdempotencyMarkerTask ||
 		marker.State != idempotency.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID ||
 		marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != task.Owner.EnvironmentID ||
-		marker.Locator.Key != task.IdempotencyKey ||
+		marker.Locator.ScopeID != task.Scope.EnvironmentID ||
 		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
 		!input.CreatedAt.Equal(task.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Tunnel check publication differs from captured authority")
+	}
+	digest, err := edgechecks.PlanHash(input)
+	if err != nil || digest != task.Intent.SHA256 {
+		return errs.New(errs.KindValidationFailed, "Tunnel check input digest differs from its Task")
 	}
 	configuration, err := source.Configuration()
 	if err != nil {

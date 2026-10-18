@@ -6,10 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"path"
 	"sort"
 	"unicode/utf8"
@@ -24,12 +25,17 @@ import (
 )
 
 type scriptArtifactRepository interface {
-	ResolveScriptAssignmentArtifacts(
-		context.Context,
-		etcd.TaskRecord,
-		*agentpb.ExecutionPlan,
-	) (*agentpb.ScriptAssignmentArtifacts, error)
-	GetScriptExecution(context.Context, string) (etcdstore.Versioned[scriptexecutions.ScriptExecutionRecord], error)
+	ResolveReleaseScriptOwnership(context.Context, workqueue.View, string, workexecution.Input) (*etcd.ScriptWorkOwnership, error)
+	ResolveScriptWorkArtifacts(context.Context, workqueue.View) (*etcd.ScriptWorkArtifacts, error)
+	ResolveReleaseScriptWorkArtifacts(context.Context, workqueue.View, string, workexecution.Input) (*etcd.ScriptWorkArtifacts, error)
+}
+
+// ResolveReleaseScriptOwnership does not resolve or decrypt Script Entry values.
+func (service *ScriptArtifactService) ResolveReleaseScriptOwnership(ctx context.Context, view workqueue.View, executionID string, reference workexecution.Input) (*etcd.ScriptWorkOwnership, error) {
+	if ctx == nil || service == nil || service.repository == nil {
+		return nil, errs.New(errs.KindInternal, "Script ownership delivery is not configured")
+	}
+	return service.repository.ResolveReleaseScriptOwnership(ctx, view, executionID, reference)
 }
 
 type scriptEntryValueResolver interface {
@@ -123,114 +129,100 @@ func scriptEntryBindingMetadata(record entryrecord.Record) (*agentpb.ScriptRunne
 	return binding, nil
 }
 
-func (service *ScriptArtifactService) ResolveScriptAssignmentArtifacts(
-	ctx context.Context,
-	task etcd.TaskRecord,
-	plan *agentpb.ExecutionPlan,
-) (*agentpb.ScriptAssignmentArtifacts, error) {
+// ScriptWorkDelivery owns transient plaintext until the native channel consumes
+// it. Its comparisons must join start authorization before any host effects.
+type ScriptWorkDelivery struct {
+	Captured   *etcd.ScriptWorkArtifacts
+	Entries    []*agentpb.ScriptEntryArtifact
+	Checkpoint *agentpb.ScriptExecutionCheckpoint
+}
+
+func (delivery *ScriptWorkDelivery) Clear() {
+	if delivery == nil {
+		return
+	}
+	delivery.Captured.Clear()
+	for _, entry := range delivery.Entries {
+		if entry != nil {
+			clear(entry.Value)
+			entry.Value = nil
+		}
+	}
+}
+
+func (service *ScriptArtifactService) ResolveScriptWorkArtifacts(ctx context.Context, view workqueue.View) (*ScriptWorkDelivery, error) {
 	if ctx == nil || service == nil || service.repository == nil || service.values == nil {
 		return nil, errs.New(errs.KindInternal, "Script artifact service is not configured")
 	}
-	validated, err := executionplan.Validate(plan)
+	captured, err := service.repository.ResolveScriptWorkArtifacts(ctx, view)
 	if err != nil {
 		return nil, err
 	}
-	if len(validated.ScriptRunnerSnapshots) == 0 ||
-		len(validated.ScriptRunnerSnapshots) != len(validated.ScriptBodyArtifacts) {
-		return nil, errs.New(errs.KindInternal, "Script runner snapshot is missing")
-	}
-	artifacts, err := service.repository.ResolveScriptAssignmentArtifacts(ctx, task, validated)
-	if err != nil {
-		return nil, err
-	}
-	if artifacts == nil || len(artifacts.Entries) != 0 ||
-		len(artifacts.Bodies) != len(validated.ScriptBodyArtifacts) {
-		clearScriptArtifactValues(artifacts)
-		return nil, errs.New(errs.KindInternal, "Script body artifact response is invalid")
-	}
-	seenBindings := make(map[string]*agentpb.ScriptRunnerEntryBinding)
-	for _, snapshot := range validated.ScriptRunnerSnapshots {
-		for _, binding := range snapshot.EntryBindings {
-			identity := binding.EntryId + "\x00" + binding.ValueGenerationId
-			if previous, exists := seenBindings[identity]; exists {
-				if !proto.Equal(previous, binding) {
-					clearScriptArtifactValues(artifacts)
-					return nil, errs.New(errs.KindInternal, "Script Entry artifact bindings disagree")
-				}
-				continue
-			}
-			seenBindings[identity] = binding
-			reference := materializationrecord.EntryValueReference{
-				EntryID: binding.EntryId, ValueGenerationID: binding.ValueGenerationId,
-				Storage: materializationrecord.EntryValueStoragePlain,
-			}
-			if binding.Secret {
-				reference.Storage = materializationrecord.EntryValueStorageSecret
-			}
-			value, resolveErr := service.values.ResolveTaskMaterializationSource(
-				ctx, snapshot.EnvironmentId, materializationrecord.Source{
-					Kind: materializationrecord.SourceEntryValue, EntryValue: &reference,
-				},
-			)
-			if resolveErr != nil {
-				clear(value)
-				clearScriptArtifactValues(artifacts)
-				return nil, resolveErr
-			}
-			digest := sha256.Sum256(value)
-			if !bytes.Equal(digest[:], binding.Sha256) ||
-				(binding.Kind == agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV &&
-					(!utf8.Valid(value) || bytes.IndexByte(value, 0) >= 0)) {
-				clear(value)
-				clearScriptArtifactValues(artifacts)
-				return nil, errs.New(errs.KindInternal, "Script Entry artifact does not match its sealed binding")
-			}
-			artifacts.Entries = append(artifacts.Entries, &agentpb.ScriptEntryArtifact{
-				Binding: proto.Clone(binding).(*agentpb.ScriptRunnerEntryBinding), Value: value,
-			})
-		}
-	}
-	return artifacts, nil
+	return service.resolveCapturedScriptValues(ctx, captured)
 }
 
-func (service *ScriptArtifactService) ResolveScriptExecutionCheckpoints(
-	ctx context.Context,
-	task etcd.TaskRecord,
-	plan *agentpb.ExecutionPlan,
-) ([]*agentpb.ScriptExecutionCheckpoint, error) {
-	if ctx == nil || service == nil || service.repository == nil {
-		return nil, errs.New(errs.KindInternal, "Script checkpoint resolver is not configured")
+func (service *ScriptArtifactService) ResolveReleaseScriptWorkArtifacts(ctx context.Context, view workqueue.View,
+	executionID string, input workexecution.Input,
+) (*ScriptWorkDelivery, error) {
+	if ctx == nil || service == nil || service.repository == nil || service.values == nil {
+		return nil, errs.New(errs.KindInternal, "Script artifact service is not configured")
 	}
-	validated, err := executionplan.Validate(plan)
+	captured, err := service.repository.ResolveReleaseScriptWorkArtifacts(ctx, view, executionID, input)
 	if err != nil {
 		return nil, err
 	}
-	checkpoints := make([]*agentpb.ScriptExecutionCheckpoint, 0, len(validated.ScriptBodyArtifacts))
-	for _, step := range validated.Steps {
-		run := step.GetRunScript()
-		if run == nil {
-			continue
-		}
-		versioned, readErr := service.repository.GetScriptExecution(ctx, run.ScriptExecutionId)
-		if readErr != nil {
-			return nil, readErr
-		}
-		record := versioned.Record
-		if record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
-			record.PlanHash != task.PlanHash || record.StepID != step.StepId {
-			return nil, errs.New(errs.KindInternal, "Script execution checkpoint does not match its Task")
-		}
-		checkpoint, checkpointErr := scriptExecutionCheckpointMessage(record)
-		if checkpointErr != nil {
-			return nil, checkpointErr
-		}
-		validatedCheckpoint, checkpointErr := executionplan.ValidateScriptExecutionCheckpoint(checkpoint)
-		if checkpointErr != nil {
-			return nil, checkpointErr
-		}
-		checkpoints = append(checkpoints, validatedCheckpoint)
+	return service.resolveCapturedScriptValues(ctx, captured)
+}
+
+func (service *ScriptArtifactService) resolveCapturedScriptValues(ctx context.Context, captured *etcd.ScriptWorkArtifacts) (*ScriptWorkDelivery, error) {
+	if captured == nil || captured.Snapshot == nil || captured.Body == nil {
+		captured.Clear()
+		return nil, errs.New(errs.KindInternal, "Script captured artifacts are missing")
 	}
-	return checkpoints, nil
+	delivery := &ScriptWorkDelivery{Captured: captured}
+	fail := func(err error) (*ScriptWorkDelivery, error) { delivery.Clear(); return nil, err }
+	seen := make(map[string]struct{}, len(captured.Snapshot.EntryBindings))
+	for _, binding := range captured.Snapshot.EntryBindings {
+		if binding == nil {
+			return fail(errs.New(errs.KindInternal, "Script captured Entry binding is missing"))
+		}
+		identity := binding.EntryId + "\x00" + binding.ValueGenerationId
+		if _, duplicate := seen[identity]; duplicate {
+			return fail(errs.New(errs.KindInternal, "Script captured Entry binding is duplicated"))
+		}
+		seen[identity] = struct{}{}
+		reference := materializationrecord.EntryValueReference{
+			EntryID: binding.EntryId, ValueGenerationID: binding.ValueGenerationId,
+			Storage: materializationrecord.EntryValueStoragePlain,
+		}
+		if binding.Secret {
+			reference.Storage = materializationrecord.EntryValueStorageSecret
+		}
+		value, err := service.values.ResolveTaskMaterializationSource(ctx, captured.Snapshot.EnvironmentId,
+			materializationrecord.Source{Kind: materializationrecord.SourceEntryValue, EntryValue: &reference})
+		if err != nil {
+			clear(value)
+			return fail(err)
+		}
+		digest := sha256.Sum256(value)
+		if !bytes.Equal(digest[:], binding.Sha256) ||
+			binding.Kind == agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV && (!utf8.Valid(value) || bytes.IndexByte(value, 0) >= 0) {
+			clear(value)
+			return fail(errs.New(errs.KindInternal, "Script Entry value does not match its captured binding"))
+		}
+		delivery.Entries = append(delivery.Entries, &agentpb.ScriptEntryArtifact{
+			Binding: proto.Clone(binding).(*agentpb.ScriptRunnerEntryBinding), Value: value,
+		})
+	}
+	checkpoint, err := scriptExecutionCheckpointMessage(captured.Input.Execution)
+	if err != nil {
+		return fail(err)
+	}
+	delivery.Checkpoint, err = executionplan.ValidateScriptExecutionCheckpoint(checkpoint)
+	if err != nil {
+		return fail(err)
+	}
+	return delivery, nil
 }
 
 func scriptExecutionCheckpointMessage(
@@ -359,22 +351,4 @@ func scriptEntryExposesService(entry core.EnvEntry, serviceName string) bool {
 		}
 	}
 	return false
-}
-
-func clearScriptArtifactValues(artifacts *agentpb.ScriptAssignmentArtifacts) {
-	if artifacts == nil {
-		return
-	}
-	for _, body := range artifacts.Bodies {
-		if body != nil {
-			clear(body.Body)
-			body.Body = nil
-		}
-	}
-	for _, entry := range artifacts.Entries {
-		if entry != nil {
-			clear(entry.Value)
-			entry.Value = nil
-		}
-	}
 }

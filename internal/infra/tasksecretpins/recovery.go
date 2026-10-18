@@ -8,7 +8,7 @@ import (
 )
 
 // RecoverPreparations runs before admitting new requests or dispatching Tasks.
-// Each bounded cleanup still compares the Task and active-operation absences.
+// Each bounded cleanup fences the preparation and compares active-root absence.
 func (repository *Repository) RecoverPreparations(ctx context.Context) error {
 	if ctx == nil {
 		return validation("Secret pin recovery context is missing")

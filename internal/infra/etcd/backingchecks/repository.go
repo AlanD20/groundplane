@@ -24,7 +24,9 @@ func NewRepository(backend store) (*Repository, error) {
 	return &Repository{store: backend}, nil
 }
 
-func Key(taskID string) string { return "/v1/private/backing-access-checks/" + taskID }
+const RecordPrefix = "/v1/private/backing-access-checks/"
+
+func Key(taskID string) string { return RecordPrefix + taskID }
 func OperationKey(operationID string) string {
 	return "/v1/indexes/backing-access-checks/by-operation/" + operationID
 }
@@ -91,17 +93,28 @@ func PreparePublication(record Record) ([]keyvalue.Condition, []keyvalue.Mutatio
 }
 
 func (repository *Repository) Load(ctx context.Context, taskID string) (keyvalue.Versioned[Record], error) {
+	return repository.loadAt(ctx, taskID, 0)
+}
+
+func (repository *Repository) LoadAt(ctx context.Context, taskID string, revision int64) (keyvalue.Versioned[Record], error) {
+	if revision <= 0 {
+		return keyvalue.Versioned[Record]{}, errs.New(errs.KindValidationFailed, "backing check snapshot revision is required")
+	}
+	return repository.loadAt(ctx, taskID, revision)
+}
+
+func (repository *Repository) loadAt(ctx context.Context, taskID string, revision int64) (keyvalue.Versioned[Record], error) {
 	if ids.Validate(ids.KindTask, taskID) != nil {
 		return keyvalue.Versioned[Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Backing access check Task id is invalid",
 		)
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{Key(taskID)}})
+	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{Key(taskID)}, Revision: revision})
 	if err != nil {
 		return keyvalue.Versioned[Record]{}, err
 	}
-	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 1 {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 {
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}

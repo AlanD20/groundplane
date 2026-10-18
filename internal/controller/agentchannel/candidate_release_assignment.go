@@ -15,12 +15,10 @@ import (
 )
 
 type candidateReleaseWireAuthority struct {
-	mode                    agentpb.TaskExecutionMode
-	restoration             *agentpb.ReleaseRestorationAuthority
-	recovery                *agentpb.ReleaseRecoveryDirective
-	recoveryDigest          []byte
-	componentRecovery       *agentpb.ComponentRecoveryDirective
-	componentRecoveryDigest []byte
+	mode           agentpb.TaskExecutionMode
+	restoration    *agentpb.ReleaseRestorationAuthority
+	recovery       *agentpb.ReleaseRecoveryDirective
+	recoveryDigest []byte
 }
 
 type candidateReleaseDescriptorStore interface {
@@ -79,7 +77,7 @@ func candidateReleaseAssignmentAuthority(
 	procedure := plan.GetCandidateReleaseProcedure()
 	if procedure == nil {
 		if record.AttachRemovalAuthoritySHA256 != "" {
-			if record.RestorationAuthority != nil || record.ComponentRecoveryProcedureSHA256 != "" ||
+			if record.RestorationAuthority != nil ||
 				record.ServiceAbsenceProcedureSHA256 != "" || record.ManagedNetworkProcedureSHA256 != "" {
 				return result, errs.New(errs.KindInternal, "Detach assignment carries foreign recovery authority")
 			}
@@ -109,7 +107,7 @@ func candidateReleaseAssignmentAuthority(
 			digest, digestErr := taskassignments.ManagedNetworkRecoveryProcedureSHA256(network)
 			if digestErr != nil || digest != record.ManagedNetworkProcedureSHA256 ||
 				record.RestorationAuthority != nil || record.RestorationAuthoritySHA256 != "" ||
-				record.ComponentRecoveryProcedureSHA256 != "" || record.ServiceAbsenceProcedureSHA256 != "" {
+				record.ServiceAbsenceProcedureSHA256 != "" {
 				return result, errs.New(errs.KindInternal, "managed network recovery assignment authority is invalid")
 			}
 			if result.mode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
@@ -134,8 +132,7 @@ func candidateReleaseAssignmentAuthority(
 			digest, digestErr := taskassignments.ServiceAbsenceProcedureSHA256(absence)
 			if digestErr != nil || digest != record.ServiceAbsenceProcedureSHA256 ||
 				record.RestorationAuthority != nil ||
-				record.RestorationAuthoritySHA256 != "" ||
-				record.ComponentRecoveryProcedureSHA256 != "" {
+				record.RestorationAuthoritySHA256 != "" {
 				return result, errs.New(errs.KindInternal, "Service absence recovery assignment authority is invalid")
 			}
 			if result.mode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
@@ -163,48 +160,15 @@ func candidateReleaseAssignmentAuthority(
 			}
 			return result, nil
 		}
-		if component := plan.GetComponentRecoveryProcedure(); component != nil {
-			digest, digestErr := taskassignments.ComponentRecoveryProcedureSHA256(component)
-			if digestErr != nil || digest != record.ComponentRecoveryProcedureSHA256 ||
-				record.RestorationAuthority != nil ||
-				record.RestorationAuthoritySHA256 != "" {
-				return result, errs.New(errs.KindInternal, "Component recovery assignment authority is invalid")
-			}
-			if result.mode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
-				directive := claim.ComponentRecovery
-				if directive == nil || directive.RecordSHA256 != record.ReleaseRecoveryRecordSHA256 {
-					return result, errs.New(errs.KindInternal, "durable Component recovery directive is missing")
-				}
-				phase := agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_UNSPECIFIED
-				switch directive.Phase {
-				case taskassignments.ReleaseRecoveryPhaseProbe:
-					phase = agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_PROBE
-				case taskassignments.ReleaseRecoveryPhaseCompensate:
-					phase = agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_COMPENSATE
-				case taskassignments.ReleaseRecoveryPhaseProven:
-					phase = agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_PROVEN
-				default:
-					return result, errs.New(errs.KindInternal, "durable Component recovery phase is invalid")
-				}
-				result.componentRecoveryDigest = append([]byte(nil), result.recoveryDigest...)
-				result.recoveryDigest = nil
-				result.componentRecovery = &agentpb.ComponentRecoveryDirective{
-					StepIds: append([]string(nil), directive.StepIDs...), Cursor: directive.Cursor, Phase: phase,
-					ComponentRecoveryRecordSha256: append([]byte(nil), result.componentRecoveryDigest...),
-					ApplicableCompensationStepIds: append([]string(nil), directive.ApplicableCompensationStepIDs...),
-				}
-			}
-			return result, nil
-		}
 		if record.RestorationAuthority != nil || record.RestorationAuthoritySHA256 != "" ||
-			len(result.recoveryDigest) != 0 || record.ComponentRecoveryProcedureSHA256 != "" ||
+			len(result.recoveryDigest) != 0 ||
 			record.ServiceAbsenceProcedureSHA256 != "" || record.ManagedNetworkProcedureSHA256 != "" {
 			return result, errs.New(errs.KindInternal, "non-release assignment carries restoration authority")
 		}
 		return result, nil
 	}
 	authority := record.RestorationAuthority
-	if record.ComponentRecoveryProcedureSHA256 != "" || record.ServiceAbsenceProcedureSHA256 != "" ||
+	if record.ServiceAbsenceProcedureSHA256 != "" ||
 		record.ManagedNetworkProcedureSHA256 != "" || record.AttachRemovalAuthoritySHA256 != "" {
 		return result, errs.New(errs.KindInternal, "candidate Release assignment carries foreign recovery authority")
 	}

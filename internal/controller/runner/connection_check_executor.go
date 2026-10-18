@@ -7,16 +7,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/common/runnerconnectioncheck"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerchecks"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type checkAssignments interface {
-	GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
-}
 type checkRuntime interface {
 	Check(
 		context.Context,
@@ -28,7 +25,6 @@ type checkRuntime interface {
 
 type ConnectionCheckExecutor struct {
 	records   *runnerchecks.Repository
-	tasks     checkAssignments
 	runners   *etcd.RunnerRepository
 	runtime   checkRuntime
 	lifecycle *Executor
@@ -36,60 +32,72 @@ type ConnectionCheckExecutor struct {
 
 func NewConnectionCheckExecutor(
 	records *runnerchecks.Repository,
-	tasks checkAssignments,
 	runnerRecords *etcd.RunnerRepository,
 	runtime checkRuntime,
 	lifecycle *Executor,
 ) (*ConnectionCheckExecutor, error) {
-	if records == nil || tasks == nil || runnerRecords == nil || runtime == nil || lifecycle == nil {
+	if records == nil || runnerRecords == nil || runtime == nil || lifecycle == nil {
 		return nil, errs.New(errs.KindInternal, "Runner diagnostic execution dependencies are required")
 	}
 	return &ConnectionCheckExecutor{
 		records:   records,
-		tasks:     tasks,
 		runners:   runnerRecords,
 		runtime:   runtime,
 		lifecycle: lifecycle,
 	}, nil
 }
 
-func (executor *ConnectionCheckExecutor) Execute(ctx context.Context, task etcd.TaskRecord) error {
-	if ctx == nil || etcd.ValidateTaskRecord(task) != nil || task.Executor != taskjournal.TaskExecutorController ||
-		task.Type != taskjournal.TaskCheck ||
-		task.Status != taskjournal.TaskStatusRunning ||
-		task.Params[taskjournal.TaskResourceKindParam] != runners.TaskResourceRunner {
-		return errs.New(errs.KindValidationFailed, "Runner diagnostic Task is invalid")
+func (executor *ConnectionCheckExecutor) Execute(ctx context.Context, delivery workqueue.Delivery) error {
+	err := executor.execute(ctx, delivery)
+	if err == nil || ctx == nil {
+		return err
 	}
-	loaded, err := executor.records.Load(ctx, task.ID)
+	settlement, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+	defer cancel()
+	loaded, loadErr := executor.loadDelivery(settlement, delivery)
+	if loadErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, loadErr)
+	}
+	if loaded.Record.Phase == runnerchecks.Finished {
+		return err
+	}
+	attempt := delivery.Attempt.Attempt
+	journal, journalErr := runnerchecks.NewJournal(executor.records, loaded.Record.Owner, attempt.ID, attempt.Executor)
+	if journalErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, journalErr)
+	}
+	if stopErr := journal.Stop(settlement, runnerCheckExecutionFailure(err), time.Now().UTC()); stopErr != nil {
+		return errs.WrapJoined(errs.KindStateConflict, err, stopErr)
+	}
+	return err
+}
+
+func (executor *ConnectionCheckExecutor) execute(ctx context.Context, delivery workqueue.Delivery) error {
+	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
+	if ctx == nil || item.Validate() != nil || attempt.Validate() != nil ||
+		item.Operation != workexecution.RunnerCheck || item.Phase != workexecution.Running ||
+		attempt.Executor.Executor != workexecution.Controller || attempt.Direction != workexecution.Forward ||
+		attempt.StartedAt == nil || attempt.FinishedAt != nil || item.ActiveAttemptID != attempt.ID ||
+		attempt.TaskID != item.TaskID || attempt.WorkItemID != item.ID ||
+		item.Input == nil || *item.Input != attempt.Input {
+		return errs.New(errs.KindValidationFailed, "Runner check execution is invalid")
+	}
+	loaded, err := executor.records.Load(ctx, item.TaskID)
 	if err != nil {
 		return err
 	}
 	record := loaded.Record
 	hash, err := runnerchecks.PlanHash(record)
-	owner, ownerErr := runners.TaskOwner(record.Source.Desired)
-	if err != nil || ownerErr != nil || task.Owner != owner || record.Owner.TaskID != task.ID ||
-		record.Owner.PlanID != task.PlanID ||
-		record.Owner.OperationID != task.OperationID ||
-		record.Source.RunnerID != task.Target ||
-		hash != task.PlanHash ||
-		record.InputSHA256 != task.Params[taskjournal.TaskRunnerCheckInputParam] {
-		return errs.New(errs.KindStateConflict, "Runner diagnostic differs from its captured Task input")
+	if err != nil || record.Owner.TaskID != item.TaskID || record.Owner.WorkItemID != item.ID ||
+		record.Owner.PlanID != attempt.Input.ID || hash != attempt.Input.SHA256 || record.Source.RunnerID != item.TargetID {
+		return errs.New(errs.KindStateConflict, "Runner check differs from captured execution input")
 	}
 	if record.Phase == runnerchecks.Finished {
 		return runnerCheckOutcomeError(record)
 	}
-	claim, err := executor.tasks.GetTaskAssignment(ctx, task.ID)
-	if err != nil {
-		return err
-	}
-	claimed := claim.Task.Record
-	if claimed.PlanID != task.PlanID || claimed.PlanHash != task.PlanHash || claimed.OperationID != task.OperationID ||
-		claimed.Target != task.Target {
-		return errs.New(errs.KindStateConflict, "Runner diagnostic Task claim changed")
-	}
-	ctx, cancel := context.WithDeadline(ctx, claim.Assignment.Record.Deadline)
+	ctx, cancel := context.WithDeadline(ctx, attempt.Deadline)
 	defer cancel()
-	journal, err := runnerchecks.NewJournal(executor.records, record.Owner, claim.Assignment.Record.AssignmentID)
+	journal, err := runnerchecks.NewJournal(executor.records, record.Owner, attempt.ID, attempt.Executor)
 	if err != nil {
 		return err
 	}
@@ -107,7 +115,7 @@ func (executor *ConnectionCheckExecutor) Execute(ctx context.Context, task etcd.
 	if err := ctx.Err(); err != nil {
 		return stopRunnerCheck(ctx, journal, runnerCheckExecutionFailure(err), err)
 	}
-	if !time.Now().UTC().Before(claim.Assignment.Record.Deadline) {
+	if !time.Now().UTC().Before(attempt.Deadline) {
 		return stopRunnerCheck(ctx, journal, "timeout", context.DeadlineExceeded)
 	}
 	// Share the existing lifecycle lock with maintenance and removal. Waiting
@@ -163,7 +171,7 @@ func (executor *ConnectionCheckExecutor) Execute(ctx context.Context, task etcd.
 	if err := journal.Finish(settlement, result, time.Now().UTC()); err != nil {
 		return err
 	}
-	completed, err := executor.records.Load(settlement, task.ID)
+	completed, err := executor.records.Load(settlement, item.TaskID)
 	if err != nil {
 		return err
 	}

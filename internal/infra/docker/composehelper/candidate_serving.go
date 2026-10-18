@@ -51,7 +51,15 @@ func executeServingPredecessor(
 	if step.GetCandidateRestorationCompensate() != nil && proxy != nil && inventory.proxyID != "" {
 		for _, member := range request.GetPlan().GetCandidateReleaseProcedure().GetMembers() {
 			if member.GetServiceId() == serviceID && member.GetRolling() != nil {
-				if err := restoreRollingTraffic(executionCtx, taskRunner, complete, candidate, serving, member); err != nil {
+				plan, err := executionplan.OpenRollingPlan(member)
+				if err != nil {
+					return nil, err
+				}
+				traffic := make([][]byte, len(member.Rolling.Changes))
+				for index, change := range member.Rolling.Changes {
+					traffic[index] = change.ProxyConfigJson
+				}
+				if err := restoreRollingTraffic(executionCtx, taskRunner, complete, candidate, serving, plan, traffic); err != nil {
 					return failedProxyResponse(), nil
 				}
 				inventory, err = inspectServingInventory(executionCtx, taskRunner, complete, candidate,

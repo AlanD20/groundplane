@@ -71,14 +71,6 @@ type ManagedVolumeDirectoryRemoveResult struct {
 	MutationCount  uint32
 	Complete       bool
 	ResponseSHA256 []byte
-	Completion     []byte
-}
-
-type ManagedVolumeDirectoryRemover interface {
-	RemoveManagedVolume(
-		context.Context,
-		ManagedVolumeDirectoryRemoveRequest,
-	) (ManagedVolumeDirectoryRemoveResult, error)
 }
 
 func MarshalRequest(request *agentpb.EnvironmentDirectoryHelperRequest) ([]byte, error) {
@@ -173,9 +165,6 @@ func Execute(
 		return nil, err
 	}
 	timeout := time.Duration(owned.TimeoutSeconds) * time.Second
-	if step.GetManagedVolumeDirectoryRemove() != nil && timeout > 30*time.Second {
-		timeout = 30 * time.Second
-	}
 	executionCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	result, err := executeDirectoryMutation(executionCtx, volumeRoot, creator, owned, step)
@@ -189,12 +178,11 @@ func Execute(
 		})
 	}
 	response := &agentpb.EnvironmentDirectoryHelperResponse{
-		Schema:                  SchemaVersion,
-		NextCursor:              result.NextCursor,
-		MutationCount:           result.MutationCount,
-		Complete:                result.Complete,
-		ResponseSha256:          result.ResponseSHA256,
-		VolumeRemovalCompletion: result.Completion,
+		Schema:         SchemaVersion,
+		NextCursor:     result.NextCursor,
+		MutationCount:  result.MutationCount,
+		Complete:       result.Complete,
+		ResponseSha256: result.ResponseSHA256,
 	}
 	return withResponseDigest(response)
 }
@@ -232,25 +220,6 @@ func executeDirectoryMutation(
 	ensure := step.GetManagedVolumeDirectoriesEnsure()
 	managedCreator, ok := creator.(ManagedVolumeDirectoryCreator)
 	if ensure == nil || !ok {
-		if remove := step.GetManagedVolumeDirectoryRemove(); remove != nil {
-			managedRemover, removerOK := creator.(ManagedVolumeDirectoryRemover)
-			if !removerOK {
-				return ManagedVolumeDirectoryRemoveResult{}, errs.New(
-					errs.KindInternal,
-					"Managed volume directory remover is not configured",
-				)
-			}
-			for _, artifact := range request.Plan.Artifacts {
-				if artifact.ArtifactId != remove.ArtifactId {
-					continue
-				}
-				return executeVolumePath(ctx, managedRemover, request, remove, volumeRoot, artifact.AuthorizedVolumeDir)
-			}
-			return ManagedVolumeDirectoryRemoveResult{}, errs.New(
-				errs.KindInternal,
-				"Managed volume directory removal artifact disappeared after validation",
-			)
-		}
 		return ManagedVolumeDirectoryRemoveResult{}, errs.New(
 			errs.KindInternal,
 			"Managed volume directory creator is not configured",
@@ -328,11 +297,8 @@ func validateRequest(
 		if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE {
 			return nil, nil, errs.New(errs.KindValidationFailed, "Environment directory helper plan is unsupported")
 		}
-	} else if step.GetManagedVolumeDirectoriesEnsure() == nil && step.GetManagedVolumeDirectoryRemove() == nil {
+	} else if step.GetManagedVolumeDirectoriesEnsure() == nil {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Environment directory helper step is unsupported")
-	}
-	if err := validateVolumePathRequest(request, step); err != nil {
-		return nil, nil, err
 	}
 	owned := proto.Clone(request).(*agentpb.EnvironmentDirectoryHelperRequest)
 	owned.Plan = plan
@@ -353,9 +319,6 @@ func validateResponse(response *agentpb.EnvironmentDirectoryHelperResponse) erro
 	}
 	if len(response.NextCursor) > 16*1024 || response.MutationCount > 128 {
 		return errs.New(errs.KindValidationFailed, "Environment directory helper progress is outside its bounds")
-	}
-	if err := validateVolumePathResponse(response); err != nil {
-		return err
 	}
 	if len(response.ResponseSha256) != sha256.Size {
 		return errs.New(errs.KindValidationFailed, "Environment directory helper response digest is invalid")

@@ -1,35 +1,55 @@
-import type { ActivityEntry } from '@/lib/types'
-import { formatTimestamp } from '@/lib/format-timestamp'
+import type { ActivityEntry } from "@/lib/types";
+import { formatTimestamp } from "@/lib/format-timestamp";
 
 function owner(entry: ActivityEntry): string {
-  const parts = [entry.workspaceType === 'platform' ? 'platform' : `tenant:${entry.tenantId ?? entry.workspace}`]
-  if (entry.projectId) parts.push(`project:${entry.projectId}`)
-  if (entry.environmentId) parts.push(`environment:${entry.environmentId}`)
-  return parts.join(' / ')
+  const parts = [
+    entry.workspaceType === "platform"
+      ? "platform"
+      : `tenant:${entry.tenantId ?? entry.workspace}`,
+  ];
+  if (entry.projectId) parts.push(`project:${entry.projectId}`);
+  if (entry.environmentId) parts.push(`environment:${entry.environmentId}`);
+  return parts.join(" / ");
 }
 
 export function TaskJournalMetadata({ entry }: { entry: ActivityEntry }) {
   return (
     <div className="flex flex-col gap-2 text-xs text-muted-foreground">
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        <span><span className="font-medium text-foreground/70">Owner</span> <span className="font-mono">{owner(entry)}</span></span>
-        <span><span className="font-medium text-foreground/70">Actor</span> <span className="font-mono">{entry.actor}</span></span>
+        <span>
+          <span className="font-medium text-foreground/70">Owner</span>{" "}
+          <span className="font-mono">{owner(entry)}</span>
+        </span>
+        <span>
+          <span className="font-medium text-foreground/70">Actor</span>{" "}
+          <span className="font-mono">{entry.actor}</span>
+        </span>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
-        <TaskTime label="Created" value={formatTimestamp(entry.createdAt ?? entry.ts, 'unknown')} />
-        <TaskTime label="Updated" value={formatTimestamp(entry.updatedAt ?? entry.ts, 'unknown')} />
-        <TaskTime label="Started" value={formatTimestamp(entry.startedAt, 'not started')} />
-        <TaskTime label="Finished" value={formatTimestamp(entry.finishedAt, 'not finished')} />
+        <TaskTime
+          label="Created"
+          value={formatTimestamp(entry.createdAt ?? entry.ts, "unknown")}
+        />
+        <TaskTime
+          label="Updated"
+          value={formatTimestamp(entry.updatedAt ?? entry.ts, "unknown")}
+        />
+        <TaskTime
+          label="Finished"
+          value={formatTimestamp(entry.finishedAt, "not finished")}
+        />
       </dl>
     </div>
-  )
+  );
 }
 
 function TaskTime({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <dt className="font-medium text-foreground/70">{label}</dt>
-      <dd className="truncate font-mono" title={value}>{value}</dd>
+      <dd className="truncate font-mono" title={value}>
+        {value}
+      </dd>
     </div>
-  )
+  );
 }

@@ -90,7 +90,6 @@ func NewFoundation(
 	}
 	backupRuns := backupcapability.NewBackupRunService(
 		backupRunRepository,
-		backupcapability.BackupRunPlanBuilderFunc(backupcapability.BuildBackupRunPlan),
 		backupRunIdempotency,
 	)
 	backupRetention, err := backupcapability.NewBackupPruneService(backupRuntimeRecords, backupRunIdempotency)

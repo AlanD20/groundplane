@@ -31,20 +31,21 @@ import (
 // files or host effects already exist. Captured work membership is published
 // after this head, Task and immutable graph become atomically visible.
 type BlueprintAuthoredPublication struct {
-	Project                keyvalue.Versioned[hierarchy.ProjectRecord]
-	Environment            keyvalue.Versioned[hierarchy.EnvironmentRecord]
-	ExpectedHeadRevision   int64
-	Claim                  blueprints.EnvironmentBlueprintStageClaim
-	DesiredInput           projectionrecord.EnvironmentDesiredInput
-	OwnedIdentities        projectionrecord.EnvironmentOwnedIdentities
-	ZoneReservations       []zones.Record
-	PrerequisiteAuthority  BlueprintPrerequisiteAuthority
-	AttachInputGenerations []BlueprintAttachInputGenerationPublication
-	Parent                 workexecution.Task
-	Graph                  blueprintunits.CapturedGraph
-	Baseline               blueprintunits.Snapshot
-	Marker                 idempotency.IdempotencyMarker
-	ScriptPublication      BlueprintScriptPublication
+	Project                  keyvalue.Versioned[hierarchy.ProjectRecord]
+	Environment              keyvalue.Versioned[hierarchy.EnvironmentRecord]
+	ExpectedHeadRevision     int64
+	Claim                    blueprints.EnvironmentBlueprintStageClaim
+	DesiredInput             projectionrecord.EnvironmentDesiredInput
+	OwnedIdentities          projectionrecord.EnvironmentOwnedIdentities
+	ZoneReservations         []zones.Record
+	PrerequisiteAuthority    BlueprintPrerequisiteAuthority
+	AttachInputGenerations   []BlueprintAttachInputGenerationPublication
+	RetainedAttachConditions []keyvalue.Condition
+	Parent                   workexecution.Task
+	Graph                    blueprintunits.CapturedGraph
+	Baseline                 blueprintunits.Snapshot
+	Marker                   idempotency.IdempotencyMarker
+	ScriptPublication        BlueprintScriptPublication
 }
 
 func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAuthoredRevision(
@@ -331,6 +332,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	if err != nil {
 		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
 	}
+	conditions = append(conditions, input.RetainedAttachConditions...)
 	result, publicationErr := queue.Commit(ctx, work, graph, workqueue.Change{Conditions: conditions, Mutations: mutations})
 	return attachInputs.finish(ctx, repository.store, parent.ID, result, publicationErr)
 }

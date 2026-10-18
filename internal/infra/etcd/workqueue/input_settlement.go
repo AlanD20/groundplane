@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -22,6 +23,23 @@ type InputSettlement struct {
 	Reason       string                `json:"reason"`
 	At           time.Time             `json:"at"`
 	DependencyID string                `json:"dependency_id,omitempty"`
+}
+
+// PrepareInputRejection records an operation owner's permanent refusal before
+// any executable input exists. The caller must join the exact resource evidence
+// that made preparation impossible; a transient storage error is not rejection.
+func PrepareInputRejection(view View, reason string, at time.Time) (Change, error) {
+	task, item := view.Task.Task, view.Item.Item
+	if !waitingInput(item) || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
+		item.Cleanup != workexecution.CleanupNone || item.Result != nil || item.FirstFailure != nil ||
+		task.Stop != nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
+		at.IsZero() || at.Location() != time.UTC || at.Before(task.UpdatedAt) || at.Before(item.UpdatedAt) ||
+		!at.Before(task.Deadline) || !at.Before(item.Deadline) || reason == "" || len(reason) > 512 || strings.TrimSpace(reason) != reason {
+		return Change{}, invalid("input rejection requires current unstarted work and an operation-owned reason")
+	}
+	return prepareInputSettlement(view, InputSettlement{
+		TaskID: task.ID, WorkID: item.ID, Outcome: workexecution.Failed, Reason: reason, At: at,
+	})
 }
 
 // PrepareInputSettlement closes only work that never became executable. Task

@@ -29,7 +29,7 @@ func (repository *TaskRepository) transitionManagedNetworkAcknowledgementToRecov
 	if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward ||
 		!taskassignments.ValidTerminalTaskStatus(status) || result.ExecutionEpoch != assignment.ExecutionEpoch ||
 		result.ReleaseRecoveryRecordSHA256 != "" || assignment.ExecutionEpoch == math.MaxUint32 ||
-		assignment.RestorationAuthority != nil || assignment.ComponentRecoveryProcedureSHA256 != "" ||
+		assignment.RestorationAuthority != nil ||
 		assignment.ServiceAbsenceProcedureSHA256 != "" {
 		return keyvalue.Versioned[TaskRecord]{}, true, errs.New(
 			errs.KindStateConflict,
@@ -214,8 +214,7 @@ func (repository *TaskRepository) managedNetworkRecoveryAcknowledgementAtRevisio
 		len(
 			result.Projects,
 		) != 0 || len(result.ProxyEvidence) != 0 || len(result.RecreateEvidence) != 0 || len(result.RollingEvidence) != 0 ||
-		result.CandidateAbsenceEvidence != nil || result.ComponentRestorationEvidence != nil ||
-		result.ServiceAbsenceEvidence != nil || len(result.BackingObservations) != 0 ||
+		result.CandidateAbsenceEvidence != nil || result.ServiceAbsenceEvidence != nil || len(result.BackingObservations) != 0 ||
 		result.DNSResolverCandidateObservation != nil || result.DNSResolverRollbackObservation != nil {
 		return releaseRecoveryAcknowledgement{}, errs.New(
 			errs.KindStateConflict,
@@ -265,8 +264,7 @@ func (repository *TaskRepository) normalizeManagedNetworkRecoveryTerminalReplay(
 		task.TerminalAssignment.AgentGeneration != agentGeneration ||
 		result.Kind != taskjournal.TaskResultCompose || len(result.Projects) != 0 ||
 		len(result.ProxyEvidence) != 0 || len(result.RecreateEvidence) != 0 || len(result.RollingEvidence) != 0 ||
-		result.CandidateAbsenceEvidence != nil || result.ComponentRestorationEvidence != nil ||
-		result.ServiceAbsenceEvidence != nil || len(result.BackingObservations) != 0 ||
+		result.CandidateAbsenceEvidence != nil || result.ServiceAbsenceEvidence != nil || len(result.BackingObservations) != 0 ||
 		result.DNSResolverCandidateObservation != nil || result.DNSResolverRollbackObservation != nil {
 		return status, nil, true, errs.New(
 			errs.KindStateConflict,

@@ -10,7 +10,6 @@ type TaskAssignment struct {
 	Assignment             etcdstore.Versioned[taskassignments.TaskAssignmentRecord]
 	Task                   etcdstore.Versioned[TaskRecord]
 	ReleaseRecovery        *taskassignments.ReleaseRecoveryDirective
-	ComponentRecovery      *taskassignments.ReleaseRecoveryDirective
 	ServiceAbsenceRecovery *taskassignments.ReleaseRecoveryDirective
 	ManagedNetworkRecovery *taskassignments.ReleaseRecoveryDirective
 	AttachRemovalRecovery  *taskassignments.ReleaseRecoveryDirective

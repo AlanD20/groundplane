@@ -21,10 +21,10 @@ import (
 )
 
 const (
-	bodyLeaf       = "body"
-	bodyStoreTasks = "tasks"
-	directoryMode  = 0o700
-	bodyMode       = 0o400
+	bodyLeaf      = "body"
+	bodyStoreWork = "work"
+	directoryMode = 0o700
+	bodyMode      = 0o400
 )
 
 type bodyIdentity struct {
@@ -38,18 +38,18 @@ type bodyIdentity struct {
 }
 
 type preparedBody struct {
-	hostPath     string
-	assignmentID string
-	executionID  string
-	identity     bodyIdentity
+	hostPath    string
+	workItemID  string
+	executionID string
+	identity    bodyIdentity
 }
 
 type bodyStore struct {
-	tasksFD  int
-	rootPath string
-	device   uint64
-	ownerUID uint32
-	ownerGID uint32
+	workRootFD int
+	rootPath   string
+	device     uint64
+	ownerUID   uint32
+	ownerGID   uint32
 }
 
 func newBodyStore(stateRoot string, ownerUID uint32, ownerGID uint32) (*bodyStore, error) {
@@ -65,42 +65,42 @@ func newBodyStore(stateRoot string, ownerUID uint32, ownerGID uint32) (*bodyStor
 	if err != nil {
 		return nil, err
 	}
-	tasksFD, err := openOrCreateDirectory(rootFD, bodyStoreTasks, ownerUID, ownerGID, uint64(rootStat.Dev))
+	workRootFD, err := openOrCreateDirectory(rootFD, bodyStoreWork, ownerUID, ownerGID, uint64(rootStat.Dev))
 	if err != nil {
 		return nil, err
 	}
 	return &bodyStore{
-		tasksFD: tasksFD, rootPath: filepath.Join(stateRoot, bodyStoreTasks),
+		workRootFD: workRootFD, rootPath: filepath.Join(stateRoot, bodyStoreWork),
 		device: uint64(rootStat.Dev), ownerUID: ownerUID, ownerGID: ownerGID,
 	}, nil
 }
 
 func (store *bodyStore) Close() error {
-	if store == nil || store.tasksFD < 0 {
+	if store == nil || store.workRootFD < 0 {
 		return nil
 	}
-	err := unix.Close(store.tasksFD)
-	store.tasksFD = -1
+	err := unix.Close(store.workRootFD)
+	store.workRootFD = -1
 	if err != nil {
-		return bodyStoreError("close task root", err)
+		return bodyStoreError("close work root", err)
 	}
 	return nil
 }
 
 func (store *bodyStore) Prepare(
-	assignmentID string,
+	workItemID string,
 	executionID string,
 	body []byte,
 	uid uint32,
 	gid uint32,
 ) (preparedBody, error) {
-	if store == nil || store.tasksFD < 0 || ids.Validate(ids.KindAssignment, assignmentID) != nil ||
+	if store == nil || store.workRootFD < 0 || ids.Validate(ids.KindWorkItem, workItemID) != nil ||
 		!validBodyExecutionID(executionID) || len(body) == 0 {
 		return preparedBody{}, errs.New(errs.KindInternal, "Script body store: preparation request is invalid")
 	}
-	assignmentFD, err := openOrCreateDirectory(
-		store.tasksFD,
-		assignmentID,
+	workFD, err := openOrCreateDirectory(
+		store.workRootFD,
+		workItemID,
 		store.ownerUID,
 		store.ownerGID,
 		store.device,
@@ -108,8 +108,8 @@ func (store *bodyStore) Prepare(
 	if err != nil {
 		return preparedBody{}, err
 	}
-	defer unix.Close(assignmentFD)
-	executionFD, err := openOrCreateDirectory(assignmentFD, executionID, store.ownerUID, store.ownerGID, store.device)
+	defer unix.Close(workFD)
+	executionFD, err := openOrCreateDirectory(workFD, executionID, store.ownerUID, store.ownerGID, store.device)
 	if err != nil {
 		return preparedBody{}, err
 	}
@@ -126,8 +126,8 @@ func (store *bodyStore) Prepare(
 		}
 	}
 	return preparedBody{
-		hostPath:     filepath.Join(store.rootPath, assignmentID, executionID, bodyLeaf),
-		assignmentID: assignmentID, executionID: executionID, identity: identity,
+		hostPath:   filepath.Join(store.rootPath, workItemID, executionID, bodyLeaf),
+		workItemID: workItemID, executionID: executionID, identity: identity,
 	}, nil
 }
 
@@ -242,13 +242,13 @@ func (store *bodyStore) publishBody(
 }
 
 func (store *bodyStore) Remove(prepared preparedBody) error {
-	if store == nil || store.tasksFD < 0 || prepared.assignmentID == "" || prepared.executionID == "" ||
+	if store == nil || store.workRootFD < 0 || prepared.workItemID == "" || prepared.executionID == "" ||
 		prepared.identity.Leaf != bodyLeaf {
 		return errs.New(errs.KindInternal, "Script body store: cleanup evidence is invalid")
 	}
-	assignmentFD, err := openDirectory(
-		store.tasksFD,
-		prepared.assignmentID,
+	workFD, err := openDirectory(
+		store.workRootFD,
+		prepared.workItemID,
 		store.ownerUID,
 		store.ownerGID,
 		store.device,
@@ -259,8 +259,8 @@ func (store *bodyStore) Remove(prepared preparedBody) error {
 	if err != nil {
 		return err
 	}
-	defer unix.Close(assignmentFD)
-	executionFD, err := openDirectory(assignmentFD, prepared.executionID, store.ownerUID, store.ownerGID, store.device)
+	defer unix.Close(workFD)
+	executionFD, err := openDirectory(workFD, prepared.executionID, store.ownerUID, store.ownerGID, store.device)
 	if errors.Is(err, unix.ENOENT) {
 		return nil
 	}
@@ -312,13 +312,13 @@ func (store *bodyStore) Remove(prepared preparedBody) error {
 		}
 		return bodyStoreError("prove body absence", err)
 	}
-	if err := unix.Unlinkat(assignmentFD, prepared.executionID, unix.AT_REMOVEDIR); err != nil {
+	if err := unix.Unlinkat(workFD, prepared.executionID, unix.AT_REMOVEDIR); err != nil {
 		return bodyStoreError("remove execution directory", err)
 	}
-	if err := unix.Fsync(assignmentFD); err != nil {
+	if err := unix.Fsync(workFD); err != nil {
 		return bodyStoreError("sync execution directory removal", err)
 	}
-	if fd, err := openDirectory(assignmentFD, prepared.executionID, store.ownerUID, store.ownerGID, store.device); !errors.Is(
+	if fd, err := openDirectory(workFD, prepared.executionID, store.ownerUID, store.ownerGID, store.device); !errors.Is(
 		err,
 		unix.ENOENT,
 	) {
@@ -328,9 +328,9 @@ func (store *bodyStore) Remove(prepared preparedBody) error {
 		}
 		return err
 	}
-	if err := unix.Unlinkat(store.tasksFD, prepared.assignmentID, unix.AT_REMOVEDIR); err != nil &&
+	if err := unix.Unlinkat(store.workRootFD, prepared.workItemID, unix.AT_REMOVEDIR); err != nil &&
 		!errors.Is(err, unix.ENOTEMPTY) && !errors.Is(err, unix.EEXIST) {
-		return bodyStoreError("remove empty assignment directory", err)
+		return bodyStoreError("remove empty work directory", err)
 	}
 	return nil
 }

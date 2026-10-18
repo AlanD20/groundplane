@@ -2,7 +2,6 @@ package releaserender
 
 import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
-	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
@@ -10,6 +9,16 @@ import (
 	"github.com/AlanD20/groundplane/internal/core/serviceports"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
+
+// ServingRuntimeCapture retains the exact acknowledged per-Service runtime.
+// It belongs to Release input, not a Task assignment or its diagnostic history.
+// Current and retained artifacts are captured before effects and included in
+// the immutable rollout digest; no later desired-state lookup may replace them.
+type ServingRuntimeCapture struct {
+	ServiceID             string `json:"service_id"`
+	CurrentArtifact       []byte `json:"current_artifact"`
+	RetainedPriorArtifact []byte `json:"retained_prior_artifact,omitempty"`
+}
 
 func validateOrdinaryPriorRuntime(render ReleaseRenderInput) error {
 	artifact, err := openOrdinaryPriorArtifact(render)
@@ -49,18 +58,27 @@ func validateOrdinaryPriorRuntime(render ReleaseRenderInput) error {
 // can be sealed. Validate its identity here; the complete render validator
 // checks the actual candidate/prior listener transition after sealing.
 func openOrdinaryPriorArtifact(render ReleaseRenderInput) (*agentpb.ComposeArtifact, error) {
+	runtime, err := openOrdinaryPriorRuntime(render)
+	return runtime.Artifact, err
+}
+
+func openOrdinaryPriorRuntime(render ReleaseRenderInput) (executionplan.NativeServingRuntime, error) {
+	var empty executionplan.NativeServingRuntime
 	witness := render.PriorRuntime
 	if witness == nil {
-		return nil, nil
+		if render.PriorArtifactID != "" || render.PriorWorkload != nil {
+			return empty, releases.CorruptReleaseRecord()
+		}
+		return empty, nil
 	}
-	if witness.ServiceID != render.ServiceID || render.PriorWorkload == nil ||
-		executionplan.ValidateNativePredecessorWitness(render.EnvironmentID, render.ServiceID,
-			witness.CurrentArtifact, witness.RetainedPriorArtifact) != nil {
-		return nil, releases.CorruptReleaseRecord()
+	if witness.ServiceID != render.ServiceID || render.PriorWorkload == nil {
+		return empty, releases.CorruptReleaseRecord()
 	}
-	artifact, err := taskassignments.OpenRestorationWitness(render.EnvironmentID, witness.CurrentArtifact)
-	if err != nil || artifact.ArtifactId != render.PriorArtifactID || artifact.ArtifactId == render.ArtifactID {
-		return nil, releases.CorruptReleaseRecord()
+	runtime, err := executionplan.OpenNativeServingRuntime(render.EnvironmentID, render.ServiceID,
+		witness.CurrentArtifact, witness.RetainedPriorArtifact)
+	if err != nil || runtime.Artifact.GetArtifactId() != render.PriorArtifactID ||
+		runtime.Artifact.GetArtifactId() == render.ArtifactID || runtime.Target != string(render.PriorTarget) {
+		return empty, releases.CorruptReleaseRecord()
 	}
-	return artifact, nil
+	return runtime, nil
 }

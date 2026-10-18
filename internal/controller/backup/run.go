@@ -2,30 +2,27 @@ package backup
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 	"time"
 )
 
 const (
-	backupRunRoute          = "/environments/{id}/backup-run"
-	scheduledBackupRunRoute = "/system/backup-schedules/{id}/backup-run"
+	backupRunTaskTimeoutSeconds int64 = 6 * 60 * 60
+	backupRunRoute                    = "/environments/{id}/backup-run"
+	scheduledBackupRunRoute           = "/system/backup-schedules/{id}/backup-run"
 )
 
 // BackupRunService coordinates the exact bodyless manual backup intent.
 type BackupRunService struct {
 	repository  BackupRunRepository
-	plans       BackupRunPlanBuilder
 	idempotency backupRunIdempotency
 	now         func() time.Time
 }
@@ -35,12 +32,10 @@ type BackupRunService struct {
 // testable without an HTTP server.
 func NewBackupRunService(
 	repository BackupRunRepository,
-	plans BackupRunPlanBuilder,
 	idempotency backupRunIdempotency,
 ) *BackupRunService {
 	return &BackupRunService{
 		repository:  repository,
-		plans:       plans,
 		idempotency: idempotency,
 		now:         time.Now,
 	}
@@ -83,76 +78,13 @@ func (service *BackupRunService) RunScheduledBackup(
 	)
 }
 
-func (service *BackupRunService) RetryBackupTask(
-	ctx context.Context,
-	sourceTaskID string,
-	retryTaskID string,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	if service == nil || service.repository == nil || service.plans == nil {
-		return etcd.IdempotencyTransactionResult{}, errs.New(
-			errs.KindInternal,
-			"backup run service is not configured",
-		)
-	}
-	planID := ids.New(ids.KindPlan)
-	prepared, err := service.repository.PrepareBackupRunRetry(ctx, BackupRunRetryPrepareInput{
-		SourceTaskID: sourceTaskID,
-		TaskID:       retryTaskID,
-		CreatedAt:    marker.CreatedAt,
-	})
-	if err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
-	}
-	defer prepared.Publication.Clear()
-	steps := make([]taskjournal.TaskStepRecord, len(prepared.Run.Sources))
-	if len(prepared.Authority) != len(steps) {
-		return etcd.IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "backup retry authority is incomplete")
-	}
-	for index := range steps {
-		steps[index] = taskjournal.TaskStepRecord{
-			Kind: taskjournal.TaskStepOperation,
-			ID:   prepared.Authority[index].StepId,
-		}
-	}
-	task := etcd.TaskRecord{
-		ID:                retryTaskID,
-		OperationID:       prepared.SourceTask.OperationID,
-		RetryOf:           sourceTaskID,
-		IdempotencyKey:    prepared.SourceTask.IdempotencyKey,
-		Owner:             prepared.Owner,
-		Actor:             taskjournal.TaskActorOperator,
-		Executor:          taskjournal.TaskExecutorAgent,
-		PlanID:            planID,
-		Type:              taskjournal.TaskBackup,
-		Target:            prepared.Run.EnvironmentID,
-		Steps:             steps,
-		TimeoutSeconds:    backupRunTaskTimeoutSeconds,
-		Status:            taskjournal.TaskStatusPending,
-		NextEventSequence: 1,
-		CreatedAt:         marker.CreatedAt,
-		UpdatedAt:         marker.CreatedAt,
-	}
-	sealed, err := service.plans.BuildBackupRunPlan(BackupRunPlanInput{
-		Task:  task,
-		Run:   prepared.Run,
-		Scope: prepared.Scope, Authority: prepared.Authority, Artifacts: prepared.Artifacts,
-	})
-	if err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
-	}
-	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed)
-	return prepared.Publication.Publish(ctx, task, sealed, marker)
-}
-
 func (service *BackupRunService) runBackup(
 	ctx context.Context,
 	environmentID, idempotencyKey, route string,
 	initiator backupruntime.BackupRunInitiator, scheduledAt *time.Time,
 	createdAtOverride time.Time, fixedRevision ...int64,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	if service == nil || service.repository == nil || service.plans == nil ||
+	if service == nil || service.repository == nil ||
 		service.idempotency == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
@@ -214,49 +146,10 @@ func (service *BackupRunService) runBackup(
 	}
 	defer prepared.Publication.Clear()
 
-	steps := make([]taskjournal.TaskStepRecord, len(prepared.Run.Sources))
-	if len(prepared.Authority) != len(steps) {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"backup publication authority is incomplete",
-		)
-	}
-	for index := range steps {
-		steps[index] = taskjournal.TaskStepRecord{
-			Kind: taskjournal.TaskStepOperation,
-			ID:   prepared.Authority[index].StepId,
-		}
-	}
-	task := etcd.TaskRecord{
-		ID:                taskID,
-		OperationID:       operationID,
-		Owner:             prepared.Owner,
-		Actor:             taskjournal.TaskActorOperator,
-		Executor:          taskjournal.TaskExecutorAgent,
-		PlanID:            planID,
-		Type:              taskjournal.TaskBackup,
-		Target:            environmentID,
-		Steps:             steps,
-		TimeoutSeconds:    6 * 60 * 60,
-		Status:            taskjournal.TaskStatusPending,
-		NextEventSequence: 1,
-		CreatedAt:         createdAt,
-		UpdatedAt:         createdAt,
-	}
-	if initiator == backupruntime.BackupRunInitiatorSchedule {
-		task.Actor = taskjournal.TaskActorSystem
-	}
-	sealed, err := service.plans.BuildBackupRunPlan(BackupRunPlanInput{
-		Task: task, Run: prepared.Run, Scope: prepared.Scope, Authority: prepared.Authority,
-		Artifacts: prepared.Artifacts,
-	})
+	task, item, captured, err := buildBackupRunWork(prepared, planID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	// The sealed digest is task metadata, not a parameter or materialization.
-	// The persistence seam validates this exact digest before publication.
-	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed)
 
 	responseBody, err := json.Marshal(struct {
 		TaskID string `json:"task_id"`
@@ -276,7 +169,7 @@ func (service *BackupRunService) runBackup(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, publishErr := prepared.Publication.Publish(ctx, task, sealed, marker)
+	result, publishErr := prepared.Publication.PublishWork(ctx, task, item, captured, marker)
 	if publishErr != nil {
 		if !errors.Is(publishErr, errs.New(errs.KindStorageUnavailable, "")) &&
 			!errors.Is(publishErr, context.DeadlineExceeded) {

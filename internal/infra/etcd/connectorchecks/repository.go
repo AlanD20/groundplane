@@ -38,27 +38,41 @@ func PreparePublication(record Record) ([]keyvalue.Condition, []keyvalue.Mutatio
 	operation := OperationKey(record.Owner.OperationID)
 	environmentReference := EnvironmentReferenceKey(record.Owner.EnvironmentID, record.Owner.TaskID)
 	return []keyvalue.Condition{
-			{Key: key},
-			{Key: reference},
-			{Key: operation},
-			{Key: environmentReference},
-		}, []keyvalue.Mutation{
-			{Type: keyvalue.MutationPut, Key: key, Value: value},
-			{Type: keyvalue.MutationPut, Key: reference, Value: []byte(record.Owner.TaskID)},
-			{Type: keyvalue.MutationPut, Key: operation, Value: []byte(record.Owner.TaskID)},
-			{Type: keyvalue.MutationPut, Key: environmentReference, Value: []byte(record.Owner.TaskID)},
-		}, nil
+		{Key: key},
+		{Key: reference},
+		{Key: operation},
+		{Key: environmentReference},
+	}, []keyvalue.Mutation{
+		{Type: keyvalue.MutationPut, Key: key, Value: value},
+		{Type: keyvalue.MutationPut, Key: reference, Value: []byte(record.Owner.TaskID)},
+		{Type: keyvalue.MutationPut, Key: operation, Value: []byte(record.Owner.TaskID)},
+		{Type: keyvalue.MutationPut, Key: environmentReference, Value: []byte(record.Owner.TaskID)},
+	}, nil
 }
 
 func (repository *Repository) Load(ctx context.Context, taskID string) (keyvalue.Versioned[Record], error) {
+	return repository.loadAt(ctx, taskID, 0)
+}
+
+func (repository *Repository) LoadAt(ctx context.Context, taskID string, revision int64) (keyvalue.Versioned[Record], error) {
+	if revision <= 0 {
+		return keyvalue.Versioned[Record]{}, errs.New(errs.KindValidationFailed, "connector check snapshot revision is required")
+	}
+	return repository.loadAt(ctx, taskID, revision)
+}
+
+func (repository *Repository) loadAt(ctx context.Context, taskID string, revision int64) (keyvalue.Versioned[Record], error) {
 	if ids.Validate(ids.KindTask, taskID) != nil {
 		return keyvalue.Versioned[Record]{}, errs.New(errs.KindValidationFailed, "connector check Task id is invalid")
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{Key(taskID)}})
+	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{Key(taskID)}, Revision: revision})
 	if err != nil {
 		return keyvalue.Versioned[Record]{}, err
 	}
-	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 1 {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 {
+		if read != nil {
+			keyvalue.ClearValues(read.Values)
+		}
 		return keyvalue.Versioned[Record]{}, errs.New(errs.KindInternal, "connector check read is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)

@@ -1,40 +1,41 @@
 package connectorchecks
 
 import (
-	"bytes"
 	"context"
 	"slices"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/s3connector"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Journal fences every write with the actual native Controller claim and its
-// indexed copy. A saved destination or new credential value is never reread.
+// Journal fences every write with the active work item, attempt and executor.
+// A saved destination or new credential value is never reread.
 type Journal struct {
-	repository   *Repository
-	owner        Owner
-	assignmentID string
+	repository *Repository
+	owner      Owner
+	attemptID  string
+	identity   workexecution.Identity
 }
 
-func NewJournal(repository *Repository, owner Owner, assignmentID string) (*Journal, error) {
+func NewJournal(repository *Repository, owner Owner, attemptID string, identity workexecution.Identity) (*Journal, error) {
 	if repository == nil || ids.Validate(ids.KindTask, owner.TaskID) != nil ||
 		ids.Validate(ids.KindPlan, owner.PlanID) != nil || ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
 		ids.Validate(ids.KindEnvironment, owner.EnvironmentID) != nil ||
-		ids.Validate(ids.KindAssignment, assignmentID) != nil {
+		ids.Validate(ids.KindWorkItem, owner.WorkItemID) != nil || ids.Validate(ids.KindAttempt, attemptID) != nil ||
+		identity.Validate() != nil || identity.Executor != workexecution.Controller {
 		return nil, errs.New(errs.KindValidationFailed, "connector check journal ownership is required")
 	}
-	return &Journal{repository: repository, owner: owner, assignmentID: assignmentID}, nil
+	return &Journal{repository: repository, owner: owner, attemptID: attemptID, identity: identity}, nil
 }
 
 func (journal *Journal) Start(ctx context.Context, now time.Time) error {
-	return journal.mutate(ctx, func(record *Record, assignment taskassignments.TaskAssignmentRecord) error {
+	return journal.mutate(ctx, true, func(record *Record, assignment workexecution.Attempt) error {
 		if record.Phase != Ready || !validTime(now) || !now.Before(assignment.Deadline) {
 			return errs.New(errs.KindStateConflict, "connector check cannot start again or beyond its deadline")
 		}
@@ -46,14 +47,23 @@ func (journal *Journal) Start(ctx context.Context, now time.Time) error {
 	})
 }
 
+// Stop records failure and retains exact cleanup authority before the generic
+// work layer releases executor capacity. Unknown remote mutations stay protected.
+func (journal *Journal) Stop(ctx context.Context, failure s3connector.ConnectionCheckFailure, at time.Time) error {
+	return journal.mutate(ctx, false, func(record *Record, _ workexecution.Attempt) error {
+		return record.Stop(failure, at)
+	})
+}
+
 // ResumeCleanup is deliberately not a retry of the permission check. Even if
 // no mutation is pending, an interrupted execution cannot claim a passing result.
 func (journal *Journal) ResumeCleanup(ctx context.Context) error {
-	return journal.mutate(ctx, func(record *Record, _ taskassignments.TaskAssignmentRecord) error {
-		if record.Phase != Checking && record.Phase != Cleaning {
+	return journal.mutate(ctx, false, func(record *Record, _ workexecution.Attempt) error {
+		if record.Phase != Checking && record.Phase != Cleaning && record.Phase != CleanupRequired {
 			return errs.New(errs.KindStateConflict, "connector check has no interrupted execution to clean up")
 		}
 		record.Phase = Cleaning
+		record.Outcome, record.Failure, record.FinishedAt = "", s3connector.CheckFailureNone, nil
 		return nil
 	})
 }
@@ -62,7 +72,7 @@ func (journal *Journal) WriteConnectionCheckCleanup(
 	ctx context.Context,
 	cleanup s3connector.ConnectionCheckCleanup,
 ) error {
-	return journal.mutate(ctx, func(record *Record, _ taskassignments.TaskAssignmentRecord) error {
+	return journal.mutate(ctx, true, func(record *Record, _ workexecution.Attempt) error {
 		if record.Phase != Checking && record.Phase != Cleaning ||
 			cleanup.Validate(record.Connector.Connector.Prefix) != nil ||
 			cleanup.OperationID != record.Cleanup.OperationID || cleanup.ObjectKey != record.Cleanup.ObjectKey ||
@@ -79,7 +89,7 @@ func (journal *Journal) WriteConnectionCheckCleanup(
 }
 
 func (journal *Journal) WriteConnectionCheckStage(ctx context.Context, stage s3connector.ConnectionCheckStage) error {
-	return journal.mutate(ctx, func(record *Record, _ taskassignments.TaskAssignmentRecord) error {
+	return journal.mutate(ctx, false, func(record *Record, _ workexecution.Attempt) error {
 		if !stage.Valid() || record.Phase != Checking && record.Phase != Cleaning ||
 			record.Phase == Cleaning && stage.Name != s3connector.CheckCleanup {
 			return errs.New(errs.KindStateConflict, "connector check stage does not belong to this execution")
@@ -107,6 +117,17 @@ func (journal *Journal) WriteConnectionCheckStage(ctx context.Context, stage s3c
 	})
 }
 
+// RejectAssigned settles only an assignment with no start receipt. Its CAS
+// races the start transaction, so exactly one can retain authority to proceed.
+func (journal *Journal) RejectAssigned(ctx context.Context, failure s3connector.ConnectionCheckFailure, at time.Time) error {
+	return journal.mutateState(ctx, false, true, func(record *Record, attempt workexecution.Attempt) error {
+		if attempt.StartedAt != nil || attempt.Direction != workexecution.Forward || record.Phase != Ready {
+			return errs.New(errs.KindStateConflict, "connector check already started; reconcile its effects")
+		}
+		return record.Stop(failure, at)
+	})
+}
+
 // FinishUnstarted records cancellation or a local setup failure without
 // fabricating a StartedAt or allowing any remote mutation.
 func (journal *Journal) FinishUnstarted(
@@ -114,7 +135,7 @@ func (journal *Journal) FinishUnstarted(
 	failure s3connector.ConnectionCheckFailure,
 	now time.Time,
 ) error {
-	return journal.mutate(ctx, func(record *Record, _ taskassignments.TaskAssignmentRecord) error {
+	return journal.mutate(ctx, false, func(record *Record, _ workexecution.Attempt) error {
 		if record.Phase != Ready || !validTime(now) || failure == s3connector.CheckFailureNone {
 			return errs.New(errs.KindStateConflict, "connector check cannot settle as unstarted")
 		}
@@ -133,7 +154,7 @@ func (journal *Journal) Finish(
 	failure s3connector.ConnectionCheckFailure,
 	now time.Time,
 ) error {
-	return journal.mutate(ctx, func(record *Record, _ taskassignments.TaskAssignmentRecord) error {
+	return journal.mutate(ctx, false, func(record *Record, _ workexecution.Attempt) error {
 		if record.Phase != Checking && record.Phase != Cleaning || !validTime(now) ||
 			cleanupPending(record.Cleanup) || record.Phase == Cleaning && outcome != Interrupted {
 			return errs.New(errs.KindStateConflict, "connector check must finish exact cleanup before settling")
@@ -148,17 +169,24 @@ func (journal *Journal) Finish(
 	})
 }
 
-func (journal *Journal) mutate(ctx context.Context,
-	change func(*Record, taskassignments.TaskAssignmentRecord) error,
+func (journal *Journal) mutate(ctx context.Context, forward bool,
+	change func(*Record, workexecution.Attempt) error,
 ) error {
-	keys := []string{Key(journal.owner.TaskID), taskjournal.ControllerTaskClaimKey(journal.owner.TaskID),
-		taskjournal.TaskAssignmentIndexKey(journal.owner.TaskID), OperationKey(journal.owner.OperationID)}
+	return journal.mutateState(ctx, forward, false, change)
+}
+
+func (journal *Journal) mutateState(ctx context.Context, forward, allowAssigned bool,
+	change func(*Record, workexecution.Attempt) error,
+) error {
+	keys := []string{Key(journal.owner.TaskID), workqueue.ItemKey(journal.owner.WorkItemID),
+		workqueue.AttemptKey(journal.attemptID), OperationKey(journal.owner.OperationID),
+		workqueue.TaskKey(journal.owner.TaskID), workqueue.ExecutorKey(journal.identity)}
 	read, err := journal.repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		return err
 	}
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) ||
-		read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil || read.Values[3] == nil {
+		read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil || read.Values[3] == nil || read.Values[4] == nil || read.Values[5] == nil {
 		return errs.New(errs.KindStateConflict, "connector check no longer has its Controller claim")
 	}
 	defer keyvalue.ClearValues(read.Values)
@@ -167,19 +195,41 @@ func (journal *Journal) mutate(ctx context.Context,
 		return err
 	}
 	defer record.Clear()
-	assignment, err := taskassignments.DecodeTaskAssignment(read.Values[1].Value)
+	assignment, err := workqueue.DecodeAttempt(read.Values[2].Value)
 	if err != nil || record.Owner != journal.owner || assignment.TaskID != journal.owner.TaskID ||
-		assignment.AssignmentID != journal.assignmentID || assignment.Executor != taskjournal.TaskExecutorController ||
-		assignment.ExecutionMode != taskassignments.TaskExecutionModeForward ||
-		string(read.Values[3].Value) != journal.owner.TaskID ||
-		!bytes.Equal(read.Values[1].Value, read.Values[2].Value) {
+		assignment.ID != journal.attemptID || assignment.Executor != journal.identity ||
+		assignment.WorkItemID != journal.owner.WorkItemID || assignment.StartedAt == nil && !allowAssigned || assignment.FinishedAt != nil ||
+		string(read.Values[3].Value) != journal.owner.TaskID {
 		return errs.New(errs.KindStateConflict, "connector check Controller ownership changed")
+	}
+	digest, err := PlanHash(record)
+	if err != nil || assignment.Input.ID != record.Owner.PlanID || assignment.Input.SHA256 != digest {
+		return errs.New(errs.KindStateConflict, "connector check attempt changed its captured input")
+	}
+	item, err := workqueue.DecodeItem(read.Values[1].Value)
+	if err != nil || item.ID != journal.owner.WorkItemID || item.TaskID != journal.owner.TaskID ||
+		item.ActiveAttemptID != assignment.ID ||
+		(item.Phase != workexecution.Running && !(allowAssigned && item.Phase == workexecution.Assigned && assignment.StartedAt == nil && record.Phase == Ready)) ||
+		item.Input == nil || *item.Input != assignment.Input {
+		return errs.New(errs.KindStateConflict, "connector check execution ownership changed")
+	}
+	task, err := workqueue.DecodeTask(read.Values[4].Value)
+	if err != nil || task.ID != journal.owner.TaskID {
+		return errs.New(errs.KindStateConflict, "connector check Task ownership changed")
+	}
+	executor, err := workqueue.DecodeExecutor(read.Values[5].Value)
+	if err != nil || executor.Identity != journal.identity {
+		return errs.New(errs.KindStateConflict, "connector check executor was replaced")
+	}
+	if forward && record.Phase != Cleaning && (task.Stop != nil || item.ForwardRevoked ||
+		assignment.Direction != workexecution.Forward || !time.Now().UTC().Before(assignment.Deadline)) {
+		return errs.New(errs.KindStateConflict, "connector check no longer permits new probe effects")
 	}
 	conditions := make([]keyvalue.Condition, len(keys))
 	for index, key := range keys {
 		conditions[index] = keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision}
 	}
-	pinConditions, err := journal.secretPinConditions(ctx, record, read.ReadRevision)
+	pinConditions, err := journal.repository.secretPinConditions(ctx, record, read.ReadRevision)
 	if err != nil {
 		return err
 	}
@@ -221,6 +271,12 @@ func (journal *Journal) mutate(ctx context.Context,
 		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete,
 			Key: reference}, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[3]},
 			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: environmentReference})
+		// These at-most-two memberships were published with this operation, not
+		// through a separate staging root. Release only the exact pins compared
+		// above, together with proven cleanup and credential erasure.
+		for _, condition := range pinConditions {
+			mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: condition.Key})
+		}
 	}
 	result, err := journal.repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -233,7 +289,7 @@ func (journal *Journal) mutate(ctx context.Context,
 	return nil
 }
 
-func (journal *Journal) secretPinConditions(
+func (repository *Repository) secretPinConditions(
 	ctx context.Context,
 	record Record,
 	revision int64,
@@ -241,7 +297,7 @@ func (journal *Journal) secretPinConditions(
 	var conditions []keyvalue.Condition
 	for _, source := range record.SecretSources {
 		key := tasksecretpinrecord.Key(source.Pin.SecretID, source.Pin.OperationID)
-		read, err := journal.repository.store.GetMany(
+		read, err := repository.store.GetMany(
 			ctx,
 			keyvalue.GetManyRequest{Keys: []string{key}, Revision: revision},
 		)

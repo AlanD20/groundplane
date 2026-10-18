@@ -12,8 +12,8 @@ import (
 )
 
 // Existing Attaches must still match the authored consumer and backing
-// topology. The legacy preparation already owns that validation; select only
-// retained Attaches so it cannot prepare or publish a new Attach here.
+// topology. Select only retained Attaches: this validates candidates without
+// preparing another publication or generating credentials.
 func (service *Service) validateAuthoredExistingAttaches(
 	ctx context.Context,
 	environmentID, parentID string,
@@ -39,9 +39,9 @@ func (service *Service) validateAuthoredExistingAttaches(
 			EnvironmentID: environmentID, Desired: desired,
 		}
 	}
-	prepared, err := service.prepareBlueprintAttaches(
+	prepared, err := service.prepareBlueprintAttachCandidates(
 		ctx, environmentID, parentID, retained, changes, current,
-		func(ids.Kind, string) string { return "" }, false, service.now().UTC(),
+		func(ids.Kind, string) string { return "" }, service.now().UTC(),
 	)
 	defer prepared.clear()
 	return err

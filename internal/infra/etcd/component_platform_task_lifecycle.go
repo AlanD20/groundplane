@@ -270,7 +270,7 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 	task TaskRecord,
 	revision int64,
 ) error {
-	if dnsCheckTask(task) || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
+	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return nil
 	}

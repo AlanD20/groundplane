@@ -126,6 +126,21 @@ cancellation before interruption and recovery qualification. See [Blueprints](fe
 
 ### Execution and failure
 
+#### Accepted Task execution redesign
+
+The replacement Task model is accepted but not implemented. It separates resource
+state, execution and diagnostic history, with one operator Task containing typed
+work items and execution attempts. Resource reads must not depend on completed
+Tasks or retained diagnostics. Its execution contract must accommodate a remote
+Agent managing each explicitly selected host without implying multi-host placement,
+networking or failover support in the current MVP.
+
+The [replacement contract](decisions/task-execution-redesign.md) owns the pending
+execution protocol and clean-cutover design. It preserves feature semantics,
+typed authority and unknown-effect protection. There will be no legacy execution
+fallback; this decision does not authorize implementation or deletion of workload
+data. The following rules still apply to current execution and its replacement.
+
 Workload effects run through typed Agent Tasks. Native Controller Tasks own
 bootstrap, Runner, connection-check and persistence orchestration. Bootstrap
 and persistence-only operations do not require an Agent; a Backing access check

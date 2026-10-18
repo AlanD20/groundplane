@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
@@ -16,10 +16,10 @@ import (
 
 // Backup policy is a Controller effect of the visible Apply, not an Agent
 // no-op. Its prepared mutation joins runtime sealing under the same head,
-// parent claim and ledger epoch; a retry reads the already-sealed projection.
+// Task revision and ledger epoch; a retry reads the already-sealed projection.
 func (service *Service) prepareAuthoredRuntimeBackup(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	parent workexecution.Task,
 	source authoredRuntimeProjectionSource,
 	snapshot blueprintunits.Snapshot,
 	projection projectionrecord.EnvironmentComposeProjection,
@@ -29,7 +29,7 @@ func (service *Service) prepareAuthoredRuntimeBackup(
 		return blueprintplanning.BlueprintBackupPolicyPreparation{}, err
 	}
 	policy, prepared, err := service.prepareEnvironmentBlueprintBackup(
-		ctx, parent.Owner.EnvironmentID, parent.ID, snapshot.ReadRevision,
+		ctx, parent.Scope.EnvironmentID, parent.ID, snapshot.ReadRevision,
 		source.desired.Record.Input.Backup, projection,
 		preparedBlueprintAttaches{effective: attaches},
 		func(kind ids.Kind, name string) string {

@@ -12,7 +12,7 @@ import (
 )
 
 func (runner *Runner) Cleanup(
-	request scriptexecution.Request,
+	request scriptexecution.CleanupRequest,
 	body *scriptexecution.BodyEvidence,
 	containerEvidence *scriptexecution.ContainerEvidence,
 ) (scriptexecution.CleanupProof, error) {
@@ -20,12 +20,12 @@ func (runner *Runner) Cleanup(
 	if runner == nil || runner.client == nil || runner.bodies == nil {
 		return proof, errs.New(errs.KindInternal, "Script runner: runtime is not configured")
 	}
-	if err := validateRequest(request); err != nil {
+	if err := validateQuiescenceRequest(request.QuiescenceRequest); err != nil {
 		return proof, err
 	}
 	var prepared *preparedBody
 	if body != nil {
-		value, err := preparedBodyForEvidence(runner.bodies, request, *body)
+		value, err := preparedCapturedBody(runner.bodies, request.WorkItemID, request.ExecutionID, request.BodyMetadata, *body)
 		if err != nil {
 			return proof, err
 		}
@@ -34,7 +34,7 @@ func (runner *Runner) Cleanup(
 	}
 	containerID := ""
 	if containerEvidence != nil {
-		expected := containerEvidenceForRequest(request, containerEvidence.ID)
+		expected := containerEvidenceForProjection(request.Projection, containerEvidence.ID)
 		if !bytes.Equal(containerEvidence.OwnershipLabelsSHA256, expected.OwnershipLabelsSHA256) {
 			return proof, errs.New(errs.KindStateConflict, "Script runner: cleanup ownership digest differs")
 		}
@@ -51,12 +51,25 @@ func (runner *Runner) Cleanup(
 }
 
 func (runner *Runner) cleanup(
-	request scriptexecution.Request,
+	request scriptexecution.CleanupRequest,
 	containerID string,
 	prepared *preparedBody,
 ) error {
 	ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 	defer cancel()
+	// An absent creation receipt is not proof that Docker never created the
+	// container. Inspect its captured name before removing any mounted files.
+	named, nameErr := runner.client.ContainerInspect(ctx, request.Projection.Name, client.ContainerInspectOptions{})
+	if nameErr == nil {
+		if containerID == "" || named.Container.ID != containerID || named.Container.Name != "/"+request.Projection.Name {
+			return errs.New(errs.KindStateConflict, "Script cleanup requires the captured container receipt; artifacts retained")
+		}
+		if err := validateCleanupProjection(named, containerID, request.Projection); err != nil {
+			return err
+		}
+	} else if !containerderrdefs.IsNotFound(nameErr) {
+		return fmt.Errorf("inspect captured Script name before cleanup: %w", nameErr)
+	}
 	var cleanupErrors []error
 	containerAbsent := containerID == ""
 	containerOwned := containerID != ""
@@ -116,7 +129,7 @@ func (runner *Runner) cleanup(
 		}
 	}
 	if prepared != nil && containerAbsent {
-		if err := runner.bodies.RemoveEntries(request.AssignmentID, request.ExecutionID, request.Entries); err != nil {
+		if err := runner.bodies.RemoveEntries(request.WorkItemID, request.ExecutionID, request.Projection.EntryBindings); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("remove Entry evidence: %w", err))
 		}
 		if err := runner.bodies.Remove(*prepared); err != nil {
@@ -126,7 +139,7 @@ func (runner *Runner) cleanup(
 		cleanupErrors = append(cleanupErrors, errors.New("container absence is not proven; Script artifacts retained"))
 	}
 	if containerAbsent {
-		if err := runner.bodies.ProveExecutionAbsent(request.AssignmentID, request.ExecutionID); err != nil {
+		if err := runner.bodies.ProveExecutionAbsent(request.WorkItemID, request.ExecutionID); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("prove execution directory absence: %w", err))
 		}
 	}

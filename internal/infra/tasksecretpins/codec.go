@@ -47,16 +47,10 @@ func decodeSet(value []byte) (setRecord, error) {
 func validateSet(record setRecord) error {
 	if record.Schema != setSchema || ids.Validate(ids.KindOperation, record.OperationID) != nil ||
 		ids.Validate(ids.KindTask, record.TaskID) != nil || record.MembershipCount == 0 ||
+		ids.Validate(ids.KindWorkItem, record.WorkItemID) != nil ||
 		record.MembershipCount > MaximumPins || !validSHA256(record.MembershipSHA256) ||
 		record.PreparationCursor > record.MembershipCount || record.ReleaseCursor > record.PreparationCursor {
 		return corruption("secret pin set fields are invalid")
-	}
-	if record.Phase == phaseActive || record.Phase == phaseReleasing {
-		if ids.Validate(ids.KindTask, record.AttemptID) != nil {
-			return corruption("Secret pin active attempt identity is invalid")
-		}
-	} else if record.AttemptID != "" {
-		return corruption("unpublished Secret pin set has an active attempt")
 	}
 	switch record.Phase {
 	case phasePreparing:

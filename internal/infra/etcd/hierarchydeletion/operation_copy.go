@@ -8,7 +8,6 @@ func CloneHierarchyDeletionOperation(operation HierarchyDeletionOperation) Hiera
 	cloned.Tombstone.PlanDigest = cloneStringPointer(operation.Tombstone.PlanDigest)
 	cloned.Tombstone.Terminal = cloneHierarchyDeletionTerminal(operation.Tombstone.Terminal)
 	cloned.Fence.PlanDigest = cloneStringPointer(operation.Fence.PlanDigest)
-	cloned.Fence.ActiveActionOrdinal = cloneInt64Pointer(operation.Fence.ActiveActionOrdinal)
 	cloned.Intent = operation.Intent
 	return cloned
 }

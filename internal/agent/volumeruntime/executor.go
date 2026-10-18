@@ -13,7 +13,7 @@ import (
 )
 
 type Exchange interface {
-	Start(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
+	StartAttempt(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
 	VolumeCheckpoint(context.Context, *agentpb.VolumeWorkCheckpointRequest) (*agentpb.VolumeWorkCheckpointAck, error)
 	CompleteVolume(context.Context, *agentpb.VolumeWorkCompletionRequest) (*agentpb.VolumeWorkCompletionAck, error)
 	FailVolume(context.Context, *agentpb.VolumeWorkFailureRequest) (*agentpb.VolumeWorkFailureAck, error)
@@ -50,7 +50,7 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 	if err != nil || scope.EnvironmentID != input.procedure.EnvironmentId {
 		return workexecution.Attempt{}, invalidInput()
 	}
-	ack, err := exchange.Start(ctx, input.attempt)
+	ack, err := exchange.StartAttempt(ctx, input.attempt)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

@@ -14,6 +14,7 @@ type configRestoreFrameSlot struct {
 	frames           chan *agentpb.BackupConfigTransfer
 	queuedBytes      uint64
 	metadataAccepted bool
+	creditIssued     bool
 }
 
 func (exchange *configTransferExchange) acceptRestoreFrame(frame *agentpb.BackupConfigTransfer) error {
@@ -22,8 +23,11 @@ func (exchange *configTransferExchange) acceptRestoreFrame(frame *agentpb.Backup
 	if err := exchange.ctx.Err(); err != nil {
 		return err
 	}
-	slot := exchange.restores[frame.StepId]
-	if exchange.closed || slot == nil || slot.binding.TransferID == "" {
+	if frame == nil {
+		return errs.New(errs.KindValidationFailed, "Config Restore frame is required")
+	}
+	slot := exchange.restores[frame.SourceOrdinal]
+	if exchange.closed || slot == nil || !slot.creditIssued {
 		return errs.New(errs.KindStateConflict, "Config restore source has no issued credit")
 	}
 	owned, err := backupconfigtransfer.ValidateFrame(slot.binding, frame)
@@ -59,34 +63,37 @@ func (exchange *configTransferExchange) prepareRestoreCredit(credit *agentpb.Bac
 	if err := exchange.ctx.Err(); err != nil {
 		return err
 	}
-	slot := exchange.restores[credit.StepId]
+	if credit == nil {
+		return errs.New(errs.KindValidationFailed, "Config Restore credit is required")
+	}
+	slot := exchange.restores[credit.SourceOrdinal]
 	if exchange.closed || slot == nil {
 		return errs.New(errs.KindStateConflict, "Config restore credit has no sealed source")
 	}
 	binding := slot.binding
-	if binding.TransferID == "" {
-		binding.TransferID = credit.TransferId
-	}
 	validated, err := backupconfigtransfer.ValidateCredit(binding, credit)
 	if err != nil {
 		return err
 	}
 	slot.binding = binding
+	slot.creditIssued = true
 	slot.metadataAccepted = validated.GetMetadataAccepted() != nil || validated.GetValueCredit() != nil
 	return nil
 }
 
 func (exchange *configTransferExchange) readRestoreFrame(
 	ctx context.Context,
-	stepID string,
+	ordinal uint32,
 ) (*agentpb.BackupConfigTransfer, error) {
-	slot := exchange.restores[stepID]
+	slot := exchange.restores[ordinal]
 	if slot == nil {
 		return nil, errs.New(errs.KindInternal, "Config restore source inbox is missing")
 	}
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-exchange.done:
+		return nil, errs.New(errs.KindStateConflict, "Config Restore exchange is closed")
 	case <-exchange.ctx.Done():
 		return nil, exchange.ctx.Err()
 	case frame := <-slot.frames:
@@ -98,12 +105,13 @@ func (exchange *configTransferExchange) readRestoreFrame(
 }
 
 func (exchange *configTransferExchange) close() {
-	if exchange.volumes != nil {
-		exchange.volumes.close()
-	}
 	exchange.mu.Lock()
 	defer exchange.mu.Unlock()
+	if exchange.closed {
+		return
+	}
 	exchange.closed = true
+	close(exchange.done)
 	for _, slot := range exchange.restores {
 		clearRestoreFrameSlot(slot)
 	}

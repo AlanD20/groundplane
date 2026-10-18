@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -15,11 +14,7 @@ import (
 // ConfigTransferOwner binds progress to the exact native assignment. The
 // digest authenticates the sealed source; records contain no selected values.
 type ConfigTransferOwner struct {
-	Binding              backupconfigtransfer.Binding `json:"binding"`
-	AgentID              string                       `json:"agent_id"`
-	AgentGeneration      uint64                       `json:"agent_generation"`
-	AssignmentGeneration uint64                       `json:"assignment_generation"`
-	AuthoritySHA256      string                       `json:"authority_sha256"`
+	Binding backupconfigtransfer.Binding `json:"binding"`
 }
 
 type ConfigTransferCursor struct {
@@ -44,8 +39,8 @@ func ConfigTransferTaskPrefix(taskID string) string {
 
 func configTransferPrefix(binding backupconfigtransfer.Binding) string {
 	return ConfigTransferTaskPrefix(
-		binding.TaskID,
-	) + binding.AssignmentID + "/" + binding.StepID + "/" + binding.ExecutionID + "/"
+		binding.Attempt.TaskID,
+	) + binding.Attempt.ID + "/" + fmt.Sprintf("%d", binding.SourceOrdinal) + "/" + binding.TransferID + "/"
 }
 
 func ConfigTransferCursorKey(binding backupconfigtransfer.Binding) string {
@@ -61,8 +56,7 @@ func ConfigTransferCreditKey(binding backupconfigtransfer.Binding, sequence uint
 }
 
 func ValidateConfigTransferOwner(owner ConfigTransferOwner) error {
-	if owner.Binding.Validate() != nil || ids.Validate(ids.KindAgent, owner.AgentID) != nil ||
-		owner.AgentGeneration == 0 || owner.AssignmentGeneration == 0 || !recordcodec.ValidSHA256(owner.AuthoritySHA256) {
+	if owner.Binding.Validate() != nil {
 		return captureSnapshotConflict()
 	}
 	return nil
@@ -131,7 +125,7 @@ func DecodeConfigTransferCredit(value []byte) (ConfigTransferCredit, error) {
 func ValidateConfigTransferPruneEntry(taskID, key string, value []byte) error {
 	if strings.HasSuffix(key, "/restore-entry-cursor") {
 		cursor, err := decodeConfigRestoreEntryCursor(value)
-		if err != nil || cursor.Owner.Transfer.Binding.TaskID != taskID ||
+		if err != nil || cursor.Owner.Transfer.Binding.Attempt.TaskID != taskID ||
 			ConfigRestoreEntryCursorKey(cursor.Owner) != key {
 			return captureSnapshotConflict()
 		}
@@ -139,7 +133,7 @@ func ValidateConfigTransferPruneEntry(taskID, key string, value []byte) error {
 	}
 	if strings.Contains(key, "/restore-entry/") {
 		receipt, err := decodeConfigRestoreEntryReceipt(value)
-		if err != nil || receipt.Owner.Transfer.Binding.TaskID != taskID ||
+		if err != nil || receipt.Owner.Transfer.Binding.Attempt.TaskID != taskID ||
 			ConfigRestoreEntryReceiptKey(receipt.Owner, receipt.Ordinal) != key {
 			return captureSnapshotConflict()
 		}
@@ -147,7 +141,7 @@ func ValidateConfigTransferPruneEntry(taskID, key string, value []byte) error {
 	}
 	if strings.HasSuffix(key, "/restore-generation") {
 		record, err := DecodeConfigRestoreGeneration(value)
-		if err != nil || record.Owner.Transfer.Binding.TaskID != taskID ||
+		if err != nil || record.Owner.Transfer.Binding.Attempt.TaskID != taskID ||
 			ConfigRestoreGenerationKey(record.Owner) != key {
 			return captureSnapshotConflict()
 		}
@@ -158,13 +152,13 @@ func ValidateConfigTransferPruneEntry(taskID, key string, value []byte) error {
 	}
 	if strings.HasSuffix(key, "/cursor") {
 		cursor, err := DecodeConfigTransferCursor(value)
-		if err != nil || cursor.Owner.Binding.TaskID != taskID || ConfigTransferCursorKey(cursor.Owner.Binding) != key {
+		if err != nil || cursor.Owner.Binding.Attempt.TaskID != taskID || ConfigTransferCursorKey(cursor.Owner.Binding) != key {
 			return captureSnapshotConflict()
 		}
 		return nil
 	}
 	credit, err := DecodeConfigTransferCredit(value)
-	if err != nil || credit.Owner.Binding.TaskID != taskID ||
+	if err != nil || credit.Owner.Binding.Attempt.TaskID != taskID ||
 		ConfigTransferCreditKey(credit.Owner.Binding, credit.Credit.CreditSequence) != key {
 		return captureSnapshotConflict()
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"net/http"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -15,7 +16,7 @@ import (
 )
 
 func (service *Service) publish(ctx context.Context, source etcd.EdgeCheckSource, check checkrecord.Record,
-	task etcd.TaskRecord, locator idempotency.IdempotencyLocator, evidence requestidempotency.ProtectedEvidence,
+	task workexecution.Task, locator idempotency.IdempotencyLocator, evidence requestidempotency.ProtectedEvidence,
 ) (idempotency.IdempotencyResponse, error) {
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {

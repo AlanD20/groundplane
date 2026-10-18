@@ -4,11 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"fmt"
+	"github.com/AlanD20/groundplane/internal/agent/backupconfiguration"
+	"github.com/AlanD20/groundplane/internal/agent/backupsecrettransfer"
 	"github.com/AlanD20/groundplane/internal/agent/checkpointdelivery"
 	"sync"
 
+	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
+	"github.com/AlanD20/groundplane/internal/common/componentexecution"
+	"github.com/AlanD20/groundplane/internal/common/entryexecution"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
+	"github.com/AlanD20/groundplane/internal/common/removalexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -26,16 +33,19 @@ type nativeWaiter struct {
 // nativeExchange is scoped to one authenticated stream. Only the session writer
 // consumes outgoing; workers never call stream.Send concurrently.
 type nativeExchange struct {
-	mu       sync.Mutex
-	pending  map[nativeExchangeKey]*nativeWaiter
-	outgoing chan *agentpb.AgentMessage
-	done     chan struct{}
-	closed   bool
-	identity workexecution.Identity
+	backupConfigs *backupconfiguration.Inbox
+	backupVolumes map[string]*nativeVolumeSlot
+	backupSecrets *backupsecrettransfer.WorkInbox
+	mu            sync.Mutex
+	pending       map[nativeExchangeKey]*nativeWaiter
+	outgoing      chan *agentpb.AgentMessage
+	done          chan struct{}
+	closed        bool
+	identity      workexecution.Identity
 }
 
 func newNativeExchange() *nativeExchange {
-	return &nativeExchange{pending: make(map[nativeExchangeKey]*nativeWaiter), outgoing: make(chan *agentpb.AgentMessage, 256), done: make(chan struct{})}
+	return &nativeExchange{backupConfigs: backupconfiguration.NewInbox(), backupVolumes: make(map[string]*nativeVolumeSlot), backupSecrets: backupsecrettransfer.NewWorkInbox(), pending: make(map[nativeExchangeKey]*nativeWaiter), outgoing: make(chan *agentpb.AgentMessage, 256), done: make(chan struct{})}
 }
 
 func (exchange *nativeExchange) bindExecutor(registration *agentpb.WorkExecutorRegistration, agentID string, process [16]byte) error {
@@ -81,6 +91,7 @@ func (exchange *nativeExchange) request(ctx context.Context, message *agentpb.Ag
 		case response := <-waiter.response:
 			releaseexecution.ClearHookDelivery(response.GetReleaseHookDelivery())
 			releaseexecution.ClearConfigurationDelivery(response.GetReleaseConfigurationFileDelivery())
+			removalexecution.ClearConfigurationDelivery(response.GetServiceRemovalConfigurationFileDelivery())
 		default:
 		}
 	}()
@@ -107,9 +118,52 @@ func (exchange *nativeExchange) request(ctx context.Context, message *agentpb.Ag
 }
 
 func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool, error) {
+	if handled, err := exchange.acceptBackupVolume(message); handled {
+		return true, err
+	}
 	var identity *agentpb.WorkAttemptIdentity
 	kind, executionID := "", ""
 	switch {
+	case message.GetBackupConfigRecoveryPrepareAck() != nil:
+		ack := message.GetBackupConfigRecoveryPrepareAck()
+		identity, kind, executionID = ack.GetAssignment().GetAttempt(), "backup_config_recovery_prepare", fmt.Sprint(ack.SourceOrdinal)
+	case message.GetBackupWorkCompletionAck() != nil:
+		identity, kind = message.GetBackupWorkCompletionAck().Attempt, "backup_completion"
+	case message.GetBackupWorkFailureAck() != nil:
+		identity, kind = message.GetBackupWorkFailureAck().Attempt, "backup_failure"
+	case message.GetBackupRecoveryAck() != nil:
+		identity, kind = message.GetBackupRecoveryAck().Attempt, "backup_prune_recovery"
+	case message.GetBackupWorkCheckpointAck() != nil:
+		ack := message.GetBackupWorkCheckpointAck()
+		identity, kind, executionID = ack.Attempt, "backup_checkpoint", fmt.Sprintf("%d/%d", ack.SourceOrdinal, ack.CheckpointSequence)
+	case message.GetEntryConfigurationManifest() != nil:
+		manifest := message.GetEntryConfigurationManifest()
+		identity, kind, executionID = manifest.Attempt, "entry_configuration", manifest.StageId
+	case message.GetEntryConfigurationFileDelivery() != nil:
+		delivery := message.GetEntryConfigurationFileDelivery()
+		identity, kind, executionID = delivery.Attempt, "entry_configuration_file", delivery.StageId+"/"+delivery.GetFile().GetDestination()
+	case message.GetEntryConfigurationWorkCheckpointAck() != nil:
+		identity, kind = message.GetEntryConfigurationWorkCheckpointAck().Attempt, "entry_checkpoint"
+	case message.GetEntryConfigurationWorkCompletionAck() != nil:
+		identity, kind = message.GetEntryConfigurationWorkCompletionAck().Attempt, "entry_completion"
+	case message.GetEntryConfigurationWorkFailureAck() != nil:
+		identity, kind = message.GetEntryConfigurationWorkFailureAck().Attempt, "entry_failure"
+	case message.GetEntryConfigurationWorkRecoveryReportAck() != nil:
+		identity, kind = message.GetEntryConfigurationWorkRecoveryReportAck().Attempt, "entry_recovery"
+	case message.GetComponentConfigurationManifest() != nil:
+		manifest := message.GetComponentConfigurationManifest()
+		identity, kind, executionID = manifest.Attempt, "component_configuration", manifest.StageId
+	case message.GetComponentConfigurationFileDelivery() != nil:
+		delivery := message.GetComponentConfigurationFileDelivery()
+		identity, kind, executionID = delivery.Attempt, "component_configuration_file", delivery.StageId+"/"+delivery.GetFile().GetDestination()
+	case message.GetComponentWorkCheckpointAck() != nil:
+		identity, kind = message.GetComponentWorkCheckpointAck().Attempt, "component_checkpoint"
+	case message.GetComponentWorkCompletionAck() != nil:
+		identity, kind = message.GetComponentWorkCompletionAck().Attempt, "component_completion"
+	case message.GetComponentWorkFailureAck() != nil:
+		identity, kind = message.GetComponentWorkFailureAck().Attempt, "component_failure"
+	case message.GetComponentWorkRecoveryReportAck() != nil:
+		identity, kind = message.GetComponentWorkRecoveryReportAck().Attempt, "component_recovery"
 	case message.GetNetworkWorkCheckpointAck() != nil:
 		identity, kind = message.GetNetworkWorkCheckpointAck().Attempt, "network_checkpoint"
 	case message.GetNetworkWorkCompletionAck() != nil:
@@ -120,6 +174,32 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 		identity, kind = message.GetNetworkWorkRecoveryReportAck().Attempt, "network_recovery"
 	case message.GetVolumeWorkCheckpointAck() != nil:
 		identity, kind = message.GetVolumeWorkCheckpointAck().Attempt, "volume_checkpoint"
+	case message.GetServiceLifecycleCheckpointAck() != nil:
+		identity, kind = message.GetServiceLifecycleCheckpointAck().Attempt, "lifecycle_checkpoint"
+	case message.GetServiceLifecycleRecoveryReportAck() != nil:
+		identity, kind = message.GetServiceLifecycleRecoveryReportAck().Attempt, "lifecycle_recovery"
+	case message.GetServiceRemovalRecoveryCheckpointAck() != nil:
+		identity, kind = message.GetServiceRemovalRecoveryCheckpointAck().Attempt, "removal_recovery_checkpoint"
+	case message.GetServiceRemovalRecoveryCompletionAck() != nil:
+		identity, kind = message.GetServiceRemovalRecoveryCompletionAck().Attempt, "removal_recovery_completion"
+	case message.GetServiceRemovalRecoveryFailureAck() != nil:
+		identity, kind = message.GetServiceRemovalRecoveryFailureAck().Attempt, "removal_recovery_failure"
+	case message.GetServiceRemovalConfigurationManifest() != nil:
+		manifest := message.GetServiceRemovalConfigurationManifest()
+		identity, kind, executionID = manifest.Attempt, "removal_configuration", manifest.StageId
+	case message.GetServiceRemovalConfigurationFileDelivery() != nil:
+		delivery := message.GetServiceRemovalConfigurationFileDelivery()
+		identity, kind, executionID = delivery.Attempt, "removal_configuration_file", delivery.StageId+"/"+delivery.GetFile().GetDestination()
+	case message.GetServiceLifecycleCompletionAck() != nil:
+		identity, kind = message.GetServiceLifecycleCompletionAck().Attempt, "lifecycle_completion"
+		if stopped := message.GetServiceLifecycleCompletionAck().Stopped; stopped != nil {
+			identity = stopped.Attempt
+		}
+	case message.GetServiceLifecycleFailureAck() != nil:
+		identity, kind = message.GetServiceLifecycleFailureAck().Attempt, "lifecycle_failure"
+	case message.GetServiceLifecycleHookDelivery() != nil:
+		delivery := message.GetServiceLifecycleHookDelivery()
+		identity, kind, executionID = delivery.Attempt, "lifecycle_hook", delivery.StageId
 	case message.GetVolumeWorkCompletionAck() != nil:
 		identity, kind = message.GetVolumeWorkCompletionAck().Attempt, "volume_completion"
 	case message.GetVolumeWorkFailureAck() != nil:
@@ -157,6 +237,16 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 		identity, kind = message.GetEnvironmentRemovalCheckpointAck().Attempt, "environment_removal_checkpoint"
 	case message.GetAttachRemovalCheckpointAck() != nil:
 		identity, kind = message.GetAttachRemovalCheckpointAck().Attempt, "attach_removal_checkpoint"
+	case message.GetAttachProvisionCheckpointAck() != nil:
+		identity, kind = message.GetAttachProvisionCheckpointAck().Attempt, "attach_provision_checkpoint"
+	case message.GetAttachProvisionCompletionAck() != nil:
+		identity, kind = message.GetAttachProvisionCompletionAck().Attempt, "attach_provision_completion"
+	case message.GetAttachProvisionFailureAck() != nil:
+		identity, kind = message.GetAttachProvisionFailureAck().Attempt, "attach_provision_failure"
+	case message.GetAttachProvisionFactsAck() != nil:
+		identity, kind = message.GetAttachProvisionFactsAck().Attempt, "attach_provision_facts"
+	case message.GetAttachProvisionRecoveryReportAck() != nil:
+		identity, kind = message.GetAttachProvisionRecoveryReportAck().Attempt, "attach_provision_recovery"
 	case message.GetAttachRemovalCompletionAck() != nil:
 		identity, kind = message.GetAttachRemovalCompletionAck().Attempt, "attach_removal_completion"
 	case message.GetAttachRemovalFailureAck() != nil:
@@ -176,8 +266,11 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 	exchange.mu.Lock()
 	defer exchange.mu.Unlock()
 	fail := func() (bool, error) {
+		entryexecution.ClearConfigurationDelivery(message.GetEntryConfigurationFileDelivery())
+		componentexecution.ClearConfigurationDelivery(message.GetComponentConfigurationFileDelivery())
 		releaseexecution.ClearHookDelivery(message.GetReleaseHookDelivery())
 		releaseexecution.ClearConfigurationDelivery(message.GetReleaseConfigurationFileDelivery())
+		removalexecution.ClearConfigurationDelivery(message.GetServiceRemovalConfigurationFileDelivery())
 		return true, errs.New(errs.KindStateConflict, "native work response does not match a pending request")
 	}
 	if identity == nil || executionplan.RejectUnknown(message) != nil {
@@ -190,8 +283,11 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 	}
 	delete(exchange.pending, key)
 	if waiter.abandoned {
+		entryexecution.ClearConfigurationDelivery(message.GetEntryConfigurationFileDelivery())
+		componentexecution.ClearConfigurationDelivery(message.GetComponentConfigurationFileDelivery())
 		releaseexecution.ClearHookDelivery(message.GetReleaseHookDelivery())
 		releaseexecution.ClearConfigurationDelivery(message.GetReleaseConfigurationFileDelivery())
+		removalexecution.ClearConfigurationDelivery(message.GetServiceRemovalConfigurationFileDelivery())
 		return true, nil
 	}
 	waiter.response <- message
@@ -221,10 +317,26 @@ func (exchange *nativeExchange) close() {
 		return
 	}
 	exchange.closed = true
+	exchange.backupConfigs.Release("")
+	exchange.backupSecrets.ReleaseAll()
+	for id, slot := range exchange.backupVolumes {
+		close(slot.done)
+		delete(exchange.backupVolumes, id)
+	}
 	close(exchange.done)
 	for key, waiter := range exchange.pending {
 		waiter.abandoned = true
 		delete(exchange.pending, key)
+	}
+	// Workers are joined before session teardown. No producer remains that can
+	// enqueue plaintext after this final drain.
+	for {
+		select {
+		case message := <-exchange.outgoing:
+			backupconfigtransfer.ClearFrame(message.GetBackupConfigTransfer())
+		default:
+			return
+		}
 	}
 }
 
@@ -290,6 +402,14 @@ func (exchange *nativeExchange) FailEnvironmentRemoval(ctx context.Context, requ
 		return nil, err
 	}
 	return response.GetEnvironmentRemovalFailureAck(), nil
+}
+
+func (exchange *nativeExchange) StartAttempt(ctx context.Context, attempt workexecution.Attempt) (*agentpb.WorkStartAck, error) {
+	identity, err := workexecution.EncodeAgentAttempt(attempt)
+	if err != nil {
+		return nil, err
+	}
+	return exchange.Start(ctx, &agentpb.WorkStartRequest{Attempt: identity})
 }
 
 func (exchange *nativeExchange) Start(ctx context.Context, request *agentpb.WorkStartRequest) (*agentpb.WorkStartAck, error) {

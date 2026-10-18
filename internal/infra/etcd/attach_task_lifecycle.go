@@ -61,57 +61,6 @@ func (repository *TaskRepository) prepareAttachTaskClaim(
 	return encodeAttachTaskChange(change, provisioning)
 }
 
-func (repository *TaskRepository) prepareAttachTaskRetry(
-	ctx context.Context,
-	source TaskRecord,
-	retry TaskRecord,
-	revision int64,
-) (attachTaskChange, error) {
-	applies, err := taskOwnsAttachLifecycle(source)
-	if err != nil || !applies {
-		return attachTaskChange{}, err
-	}
-	if retry.Type != source.Type || retry.Target != source.Target {
-		return attachTaskChange{}, errs.New(errs.KindInternal, "Attach retry changed its durable target")
-	}
-	current, err := repository.readTaskAttach(ctx, source, revision)
-	if err != nil {
-		return attachTaskChange{}, err
-	}
-	retrying, err := attachrecord.RetryAttachOperation(current.Record, retry.ID)
-	if err != nil {
-		return attachTaskChange{}, err
-	}
-	change, err := encodeAttachTaskChange(attachTaskChange{
-		applies:    true,
-		conditions: []etcdstore.Condition{{Key: attachrecord.AttachKey(source.Target), ModRevision: current.Revision}},
-	}, retrying)
-	if err != nil {
-		return attachTaskChange{}, err
-	}
-	if source.Type == taskjournal.TaskDetach {
-		exclusionCondition, exclusionErr := attachrecord.RequireAttachBackupSourceExclusionAbsent(
-			ctx, repository.store, source.Target, revision,
-		)
-		if exclusionErr != nil {
-			clearAttachTaskChange(change)
-			return attachTaskChange{}, exclusionErr
-		}
-		change.conditions = append(change.conditions, exclusionCondition)
-	}
-	planReferenceKey, planReferenceValue, _, err := prepareAttachTaskPlanReference(retry)
-	if err != nil {
-		clearAttachTaskChange(change)
-		return attachTaskChange{}, err
-	}
-	change.conditions = append(change.conditions, etcdstore.Condition{Key: planReferenceKey})
-	change.mutations = append(change.mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue,
-	})
-	change.values = append(change.values, planReferenceValue)
-	return change, nil
-}
-
 func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,

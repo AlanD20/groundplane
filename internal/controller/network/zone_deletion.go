@@ -2,17 +2,13 @@ package network
 
 import (
 	"context"
-	"encoding/json"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
-	"math"
 	"net/http"
 	"time"
 
@@ -22,19 +18,20 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const (
 	zoneDeletionRoute                = "/zones/{id}"
-	zoneDeletionTimeoutSeconds       = int64(120)
 	backingZoneCascadeTimeoutSeconds = int64(24 * 60 * 60)
 	maximumZoneDeletionAttempts      = 3
 )
 
 type zoneDeletionRepository interface {
+	backingZoneHookInputs
+	CaptureBackingZoneDetaches(context.Context, string, string, int64) ([]attachremoval.DetachSnapshot, error)
 	ResolveResourceHost(context.Context) (workexecution.Placement, error)
 	PublishNetworkWork(context.Context, etcd.NetworkWorkPublication) (etcd.IdempotencyTransactionResult, error)
 	GetEnvironmentDesiredInput(
@@ -56,17 +53,6 @@ type zoneDeletionRepository interface {
 		context.Context,
 		blueprints.EnvironmentBlueprintStageRequest,
 	) (blueprints.EnvironmentBlueprintSeal, error)
-	BeginZoneDeletionWithTask(
-		context.Context,
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[zonerecord.Record],
-		environmentchanges.EnvironmentZoneRemovalAuthorities,
-		deletionrecord.DeletionTombstoneRecord,
-		environmentchanges.ZoneRemovalIntent,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type zoneDeletionEvidence struct {
@@ -195,16 +181,6 @@ func (service *durableZoneDeletionIdempotency) MatchesStaged(
 	existing idempotencyrecord.ProtectedIntentRecord,
 ) (bool, error) {
 	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
-}
-
-type zoneDeletionPlanResolver interface {
-	ResolveExecutionPlan(context.Context, etcd.TaskRecord) (*agentpb.ExecutionPlan, error)
-	PrepareZoneRemovalTask(
-		context.Context,
-		etcd.TaskRecord,
-		environmentchanges.ZoneRemovalIntent,
-		string,
-	) (etcd.TaskRecord, error)
 }
 
 type zoneDeletionService struct {
@@ -447,111 +423,8 @@ func (service *zoneDeletionService) removeZoneOnce(
 		claim.ProjectionSchema != blueprints.EnvironmentDesiredInputSchema {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone staged baseline changed")
 	}
-	if !backing {
-		return service.publishZoneRemovalWork(ctx, etcd.NetworkWorkPublication{
-			Project: project, Environment: environment, Zone: zone, Authorities: authorities,
-			Claim: claim, Projection: candidate,
-		}, projectionEvidence, affected, evidence)
-	}
-	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task := etcd.TaskRecord{
-		ID: claim.RevisionID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
-		Executor: taskjournal.TaskExecutorAgent, PlanID: zoneStableIDFromRevision(ids.KindPlan, claim.RevisionID),
-		Type: taskjournal.TaskRemove, Target: zoneID,
-		TimeoutSeconds: zoneDeletionTimeoutSeconds,
-		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	intent, err := environmentchanges.NewZoneRemovalIntent(
-		task.OperationID, task.ID, zone, authorities, claim, candidate, affected, now,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if backing {
-		task.Executor = taskjournal.TaskExecutorController
-		task.Params = map[string]string{
-			taskjournal.TaskResourceKindParam:          taskjournal.TaskResourceBackingZone,
-			taskjournal.TaskZoneEnvironmentParam:       environment.Record.ID,
-			taskjournal.TaskZoneImpactTokenParam:       impactToken,
-			taskjournal.TaskZoneRemovalOperationParam:  task.OperationID,
-			blueprints.EnvironmentDesiredRevisionParam: claim.RevisionID,
-		}
-		task.RenderGeneration = int32(candidate.RenderGeneration)
-		task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
-		task.TimeoutSeconds = backingZoneCascadeTimeoutSeconds
-		task.PlanHash, err = backingZoneCascadePlanHash(intent, impactToken)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
-	if candidate.RenderGeneration > math.MaxInt32 {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"Zone render generation exceeds Task limits",
-		)
-	}
-	desiredInput, err := controllerrevision.DeriveCurrentMutationDesiredInput(
-		ctx, service.repository, environment.Record.ID, projection.Record.RevisionID,
-		candidate, environment.Record.NetworkPool,
-		func(*core.BlueprintDesiredInput) error { return nil },
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
-		Claim: claim,
-		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Zone: &blueprints.EnvironmentZoneMutationAudit{
-			Action: blueprints.EnvironmentZoneMutationRemove, BaseRevisionID: projection.Record.RevisionID,
-			ZoneID: zone.Record.Desired.ID,
-		}},
-		DesiredInput: desiredInput, DependencyDigest: projectionEvidence.DependencyDigest,
-	}); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
-	}
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, ReplayTarget: &target, Intent: claim.Intent, Response: response,
-		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
-	}
-	tombstone := deletionrecord.DeletionTombstoneRecord{
-		TargetKind: deletionrecord.DeletionTargetZone, TargetID: zoneID, TargetRevision: zone.Revision,
-		TaskID: task.ID, Phase: deletionrecord.DeletionPhaseHostEffects, CreatedAt: now, UpdatedAt: now,
-	}
-	result, mutationErr := service.repository.BeginZoneDeletionWithTask(
-		ctx, environment, project, zone, authorities, tombstone, intent, task, marker,
-	)
-	if mutationErr != nil {
-		if !isUnknownZoneDeletionOutcome(mutationErr) {
-			return idempotencyrecord.IdempotencyResponse{}, mutationErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return cloneIdempotencyResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		return cloneIdempotencyResponse(resolution.Response), nil
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Zone deletion resolution is invalid",
-		)
-	}
+	return service.publishZoneRemovalWork(ctx, etcd.NetworkWorkPublication{
+		Project: project, Environment: environment, Zone: zone, Authorities: authorities,
+		Claim: claim, Projection: candidate,
+	}, projectionEvidence, affected, evidence, impactToken)
 }

@@ -23,56 +23,6 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 	routeOverride := make(map[string]routerecord.Record)
 	componentOverride := make(map[string]componentrecord.Record)
 	switch {
-	case task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceRoute:
-		mutationRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{environmentchanges.RouteMutationIntentKey(task.ID)}, Revision: revision,
-		})
-		if err != nil {
-			return "", nil, nil, err
-		}
-		if mutationRead == nil || mutationRead.ReadRevision != revision || len(mutationRead.Values) != 1 {
-			return "", nil, nil, errs.New(errs.KindInternal, "host-resolution Route intent read is incomplete")
-		}
-		if mutationRead.Values[0] == nil {
-			removalRead, removalErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-				Keys: []string{environmentchanges.RouteRemovalIntentKey(task.ID)}, Revision: revision,
-			})
-			if removalErr != nil {
-				return "", nil, nil, removalErr
-			}
-			if removalRead == nil || removalRead.ReadRevision != revision || len(removalRead.Values) != 1 {
-				return "", nil, nil, errs.New(
-					errs.KindInternal,
-					"host-resolution Route removal intent read is incomplete",
-				)
-			}
-			if removalRead.Values[0] != nil {
-				intent, decodeErr := environmentchanges.DecodeRouteRemovalIntent(removalRead.Values[0].Value)
-				if decodeErr != nil {
-					return "", nil, nil, decodeErr
-				}
-				if terminalStatus == taskjournal.TaskStatusCompleted {
-					removal = intent.RouteID
-				}
-			}
-		} else {
-			intent, decodeErr := environmentchanges.DecodeRouteMutationIntent(mutationRead.Values[0].Value)
-			if decodeErr != nil {
-				return "", nil, nil, decodeErr
-			}
-			if terminalStatus == taskjournal.TaskStatusCompleted {
-				route := intent.Route
-				if intent.Provider != nil {
-					route.Observed.Provider = routerecord.ProviderObservation{
-						ComponentID: intent.Provider.ComponentID, DefinitionDigest: intent.Provider.DefinitionDigest,
-						CatalogDigest: intent.Provider.CatalogDigest, InputRevision: intent.Provider.InputRevision,
-						InputGeneration: intent.Provider.InputGeneration,
-					}
-					route.Observed.Status = routerecord.ObservedServed
-				}
-				routeOverride[route.Desired.ID] = route
-			}
-		}
 	case task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceComponent ||
 		task.Params[componentTaskBlueprintProcedureParam] != "":
 		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{

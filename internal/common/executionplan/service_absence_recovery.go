@@ -34,8 +34,8 @@ func validateServiceAbsenceRecoveryPlan(
 		procedure.GetServiceId() != plan.GetTargetId() ||
 		ids.Validate(ids.KindConfig, procedure.GetArtifactId()) != nil ||
 		len(procedure.GetForwardStepIds()) != 1 ||
-		plan.GetCandidateReleaseProcedure() != nil || plan.GetComponentRecoveryProcedure() != nil ||
-		plan.GetManagedComponentProcedure() != nil || plan.GetEntryMutationProcedure() != nil {
+		plan.GetCandidateReleaseProcedure() != nil ||
+		plan.GetManagedComponentProcedure() != nil {
 		return invalidServiceAbsenceRecovery("procedure scope is invalid")
 	}
 	artifact := artifacts[procedure.GetArtifactId()]

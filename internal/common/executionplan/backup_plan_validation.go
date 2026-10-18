@@ -20,62 +20,91 @@ func validateBackupPrunePlan(plan *agentpb.ExecutionPlan) error {
 }
 
 func validateBackupExecutionPlan(plan *agentpb.ExecutionPlan, operation agentpb.PlanOperation) error {
-	maximum := MaximumBackupSources
-	if operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE {
-		maximum = MaximumBackupPrunePoints
-	}
-	if ids.Validate(ids.KindEnvironment, plan.TargetId) != nil || plan.Operation != operation ||
-		len(plan.Steps) == 0 || len(plan.Steps) > maximum {
-		return errs.New(errs.KindValidationFailed, "backup execution plan shape is invalid")
+	if plan == nil || plan.Operation != operation {
+		return errs.New(errs.KindValidationFailed, "backup execution plan operation is invalid")
 	}
 	if err := validateBackupPlanScope(plan.BackupScope, plan.TargetId); err != nil {
 		return err
 	}
-	steps := make(map[string]struct{}, len(plan.Steps))
-	executions := make(map[string]struct{}, len(plan.Steps))
+	authorities := make([]*agentpb.BackupStepAuthority, 0, len(plan.Steps))
 	for _, step := range plan.Steps {
 		if step == nil || ids.Validate(ids.KindStep, step.StepId) != nil || step.TimeoutSeconds == 0 ||
 			step.GetBackupStep() == nil || step.GetBackupStep().StepId != step.StepId {
 			return errs.New(errs.KindValidationFailed, "backup execution step binding is invalid")
 		}
-		authority := step.GetBackupStep()
+		authorities = append(authorities, step.GetBackupStep())
+	}
+	return ValidateBackupInput(BackupInput{Operation: operation, EnvironmentID: plan.TargetId,
+		Scope: plan.BackupScope, Steps: authorities, Artifacts: plan.Artifacts})
+}
+
+// BackupInput contains captured operation data, without scheduler or delivery
+// state. Attempts reuse these exact sources, object targets and artifacts.
+type BackupInput struct {
+	Operation     agentpb.PlanOperation
+	EnvironmentID string
+	Scope         *agentpb.BackupPlanScope
+	Steps         []*agentpb.BackupStepAuthority
+	Artifacts     []*agentpb.ComposeArtifact
+}
+
+// ValidateBackupInput checks the complete captured operation without constructing
+// a generic execution plan or consulting current desired state.
+func ValidateBackupInput(input BackupInput) error {
+	maximum := MaximumBackupSources
+	if input.Operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE {
+		maximum = MaximumBackupPrunePoints
+	}
+	if !backupOperation(input.Operation) || ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
+		len(input.Steps) == 0 || len(input.Steps) > maximum {
+		return errs.New(errs.KindValidationFailed, "backup captured input shape is invalid")
+	}
+	if err := RejectUnknown(input.Scope); err != nil {
+		return err
+	}
+	if err := validateBackupResourceScope(input.Scope, input.EnvironmentID); err != nil {
+		return err
+	}
+	steps := make(map[string]struct{}, len(input.Steps))
+	executions := make(map[string]struct{}, len(input.Steps))
+	for _, authority := range input.Steps {
 		if _, err := ValidateBackupStepAuthority(authority); err != nil {
 			return err
 		}
-		if _, exists := steps[step.StepId]; exists {
+		if _, exists := steps[authority.StepId]; exists {
 			return errs.New(errs.KindValidationFailed, "backup step is duplicated")
 		}
 		if _, exists := executions[authority.ExecutionId]; exists {
 			return errs.New(errs.KindValidationFailed, "backup execution is duplicated")
 		}
-		steps[step.StepId] = struct{}{}
+		steps[authority.StepId] = struct{}{}
 		executions[authority.ExecutionId] = struct{}{}
-		switch operation {
+		switch input.Operation {
 		case agentpb.PlanOperation_PLAN_OPERATION_BACKUP:
 			capture := authority.GetCapture()
 			if capture == nil ||
-				(capture.GetConfig() != nil && capture.GetConfig().EnvironmentId != plan.TargetId) ||
+				(capture.GetConfig() != nil && capture.GetConfig().EnvironmentId != input.EnvironmentID) ||
 				!backupCheckpointObjectKey(
 					capture.GetTarget().GetObjectKey(),
 					capture.GetTarget().GetConnector().GetPrefix(),
 					capture.PointId,
 				) {
-				return errs.New(errs.KindValidationFailed, "backup capture does not match its plan")
+				return errs.New(errs.KindValidationFailed, "backup capture does not match its captured input")
 			}
 			if !bytes.HasPrefix(
 				[]byte(capture.Target.ObjectKey),
-				[]byte(capture.Target.Connector.Prefix+plan.TargetId+"/"),
+				[]byte(capture.Target.Connector.Prefix+input.EnvironmentID+"/"),
 			) {
 				return errs.New(errs.KindValidationFailed, "backup capture belongs to another Environment")
 			}
 		case agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE:
 			if authority.GetPrune() == nil {
-				return errs.New(errs.KindValidationFailed, "backup prune does not match its plan")
+				return errs.New(errs.KindValidationFailed, "backup prune does not match its captured input")
 			}
 			for _, object := range authority.GetPrune().Objects {
 				if !bytes.HasPrefix(
 					[]byte(object.Object.ObjectKey),
-					[]byte(object.Object.Connector.Prefix+plan.TargetId+"/"),
+					[]byte(object.Object.Connector.Prefix+input.EnvironmentID+"/"),
 				) {
 					return errs.New(errs.KindValidationFailed, "backup prune belongs to another Environment")
 				}
@@ -85,19 +114,19 @@ func validateBackupExecutionPlan(plan *agentpb.ExecutionPlan, operation agentpb.
 			if restore == nil ||
 				!bytes.HasPrefix(
 					[]byte(restore.SourceObject.ObjectKey),
-					[]byte(restore.SourceObject.Connector.Prefix+plan.TargetId+"/"),
+					[]byte(restore.SourceObject.Connector.Prefix+input.EnvironmentID+"/"),
 				) {
 				return errs.New(errs.KindValidationFailed, "backup restore belongs to another Environment")
 			}
 			if config := restore.GetConfig(); config != nil {
 				scope, err := environmentpath.Parse(config.Files.VolumeRoot, config.Files.VolumeDir)
-				if err != nil || scope.ProjectID != plan.BackupScope.ProjectId || scope.EnvironmentID != plan.TargetId {
+				if err != nil || scope.ProjectID != input.Scope.ProjectId || scope.EnvironmentID != input.EnvironmentID {
 					return errs.New(errs.KindValidationFailed, "Config restore file directory belongs to another scope")
 				}
 			}
 		}
 	}
-	return validateBackupPlanArtifacts(plan)
+	return ValidateBackupArtifacts(input.EnvironmentID, input.Scope, input.Steps, input.Artifacts)
 }
 
 // SealBackupStepAuthority creates the one owned immutable step input used by

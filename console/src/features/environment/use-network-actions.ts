@@ -26,7 +26,12 @@ import {
 export type NetworkActions = {
   addZone: (
     envId: string,
-    input: { name: string; subnet: string; internal: boolean; allowGPDNS?: boolean },
+    input: {
+      name: string;
+      subnet: string;
+      internal: boolean;
+      allowGPDNS?: boolean;
+    },
   ) => Promise<Zone>;
   getZone: (zoneId: string) => Promise<Zone>;
   getZoneRemovalImpact: (zoneId: string) => Promise<ZoneRemovalImpactResponse>;
@@ -70,12 +75,9 @@ export function useNetworkActions({
 
   const reconcileZoneRemoval = (taskId: string, task: TaskResponse) => {
     const pending = pendingZoneRemovals.current.get(taskId);
-    if (
-      pending &&
-      ["completed", "failed", "timed_out", "aborted"].includes(task.status)
-    ) {
+    if (pending && task.task.finished_at) {
       pendingZoneRemovals.current.delete(taskId);
-      if (task.status === "completed") {
+      if (task.task.status === "succeeded") {
         update((draft) => {
           const environment = findEnvironment(draft, pending.envId);
           if (!environment) return;

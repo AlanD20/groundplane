@@ -21,6 +21,8 @@ const (
 	sessionWorker
 	sessionLog
 	sessionBulk
+	sessionNative
+	sessionNativeResult
 )
 
 type sessionEvent struct {
@@ -34,6 +36,8 @@ type sessionEvent struct {
 	worker        WorkerOutput
 	log           *agentpb.AgentMessage
 	bulk          *backupBulkFrame
+	native        *agentpb.AgentMessage
+	nativeResult  executionOutput
 }
 
 // Prefer ready control traffic, but force a queued bulk frame after at most
@@ -51,6 +55,8 @@ func nextSessionEvent(
 	logs <-chan *agentpb.AgentMessage,
 	ticks <-chan time.Time,
 	controlBurst int,
+	native <-chan *agentpb.AgentMessage,
+	nativeResults <-chan executionOutput,
 ) sessionEvent {
 	select {
 	case <-ctx.Done():
@@ -83,6 +89,10 @@ func nextSessionEvent(
 		return sessionEvent{kind: sessionReceived, received: result}
 	case output := <-pool.Outputs():
 		return sessionEvent{kind: sessionWorker, worker: output}
+	case message := <-native:
+		return sessionEvent{kind: sessionNative, native: message}
+	case result := <-nativeResults:
+		return sessionEvent{kind: sessionNativeResult, nativeResult: result}
 	case message := <-logs:
 		return sessionEvent{kind: sessionLog, log: message}
 	default:
@@ -106,6 +116,10 @@ func nextSessionEvent(
 		return sessionEvent{kind: sessionReceived, received: result}
 	case output := <-pool.Outputs():
 		return sessionEvent{kind: sessionWorker, worker: output}
+	case message := <-native:
+		return sessionEvent{kind: sessionNative, native: message}
+	case result := <-nativeResults:
+		return sessionEvent{kind: sessionNativeResult, nativeResult: result}
 	case message := <-logs:
 		return sessionEvent{kind: sessionLog, log: message}
 	case frame := <-pool.bulkFrames:

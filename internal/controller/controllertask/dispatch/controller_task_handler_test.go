@@ -23,7 +23,6 @@ func TestLocalAgentControllerTaskHandlerEnrollsFromImmutableTaskInput(t *testing
 	agents := &fakeControllerTaskLocalAgents{healthErr: errs.New(errs.KindAgentNotFound, "missing")}
 	handler, err := newTestResourceHandler(
 		agents,
-		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{},
 		&recordingControllerTaskExecutor{})
 
@@ -54,7 +53,6 @@ func TestLocalAgentControllerTaskHandlerReconcilesMatchingReplay(t *testing.T) {
 	}}}
 	handler, err := newTestResourceHandler(
 		agents,
-		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{},
 		&recordingControllerTaskExecutor{})
 
@@ -86,7 +84,6 @@ func TestLocalAgentControllerTaskHandlerReconcilesEnrollmentRetry(t *testing.T) 
 	}}}
 	handler, err := newTestResourceHandler(
 		agents,
-		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{})
 
 	if err != nil {
@@ -116,7 +113,6 @@ func TestLocalAgentControllerTaskHandlerRejectsAnotherEnrollmentOwner(t *testing
 	}}}
 	handler, err := newTestResourceHandler(
 		agents,
-		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{},
 		&recordingControllerTaskExecutor{})
 
@@ -136,7 +132,6 @@ func TestLocalAgentControllerTaskHandlerRejectsUnclosedParams(t *testing.T) {
 	task.Params["surprise"] = "value"
 	handler, err := newTestResourceHandler(
 		&fakeControllerTaskLocalAgents{},
-		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{})
 
 	if err != nil {

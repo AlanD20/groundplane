@@ -84,14 +84,10 @@ func validateOwnedContainer(
 	return nil
 }
 
-func validateCleanupContainer(
-	inspected client.ContainerInspectResult,
-	containerID string,
-	request scriptexecution.Request,
-) error {
+func validateCleanupProjection(inspected client.ContainerInspectResult, containerID string, projection *agentpb.ScriptRunnerProjection) error {
 	value := inspected.Container
-	if !validDockerContainerID(containerID) || value.ID != containerID || value.Config == nil ||
-		!hasExactGroundplaneLabels(value.Config.Labels, pairMap(request.Projection.Labels)) {
+	if projection == nil || !validDockerContainerID(containerID) || value.ID != containerID || value.Config == nil ||
+		!hasExactGroundplaneLabels(value.Config.Labels, pairMap(projection.Labels)) {
 		return errs.New(errs.KindStateConflict, "Script runner: captured container cleanup authority does not match")
 	}
 	return nil
@@ -116,13 +112,13 @@ func (runner *Runner) inspectOwnedContainer(
 func (runner *Runner) inspectCleanupContainer(
 	ctx context.Context,
 	containerID string,
-	request scriptexecution.Request,
+	request scriptexecution.CleanupRequest,
 ) (client.ContainerInspectResult, error) {
 	inspected, err := runner.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
 	if err != nil {
 		return inspected, err
 	}
-	if err := validateCleanupContainer(inspected, containerID, request); err != nil {
+	if err := validateCleanupProjection(inspected, containerID, request.Projection); err != nil {
 		return inspected, err
 	}
 	return inspected, nil

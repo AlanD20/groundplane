@@ -18,7 +18,6 @@ import (
 func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 	ctx context.Context,
 	run backupruntime.BackupRunRecord,
-	retrySource *backupRunRetrySource,
 	fixedRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	conditions := make([]etcdstore.Condition, 0, len(run.Sources)*2+3)
@@ -38,41 +37,41 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: revision})
 		return nil
 	}
-	if retrySource == nil {
-		sourceIDs := make([]string, len(run.Sources))
-		for index := range run.Sources {
-			sourceIDs[index] = run.Sources[index].SourceID
-		}
-		policyRead, err := repository.ReadFixedKeys(
-			ctx,
-			[]string{backuppolicy.BackupPolicyKey(run.EnvironmentID)},
-			fixedRevision,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-		defer etcdstore.ClearValues(policyRead.Values)
-		if policyRead.Values[0] == nil || policyRead.Values[0].ModRevision != run.PolicyRevision {
-			return nil, nil, errs.New(errs.KindStateConflict, "backup policy snapshot changed")
-		}
-		policy, decodeErr := backuppolicy.DecodeBackupPolicyRecord(policyRead.Values[0].Value)
-		if decodeErr != nil {
-			return nil, nil, backupruntime.CorruptBackupRuntimeRecord()
-		}
-		policyKeep, keepErr := checkedBackupRuntimeRetentionKeep(policy.Keep)
-		if keepErr != nil {
-			return nil, nil, keepErr
-		}
-		if !policy.Enabled || policy.EnvironmentID != run.EnvironmentID ||
-			policyKeep != run.RetentionKeep || policy.ConnectorID != run.ConnectorID ||
-			policy.Encryption != string(run.Encryption) ||
-			!slices.Equal(policy.SourceIDs, sourceIDs) {
-			return nil, nil, errs.New(errs.KindStateConflict, "backup policy snapshot changed")
-		}
-		if err := addCondition(backuppolicy.BackupPolicyKey(run.EnvironmentID), run.PolicyRevision); err != nil {
-			return nil, nil, err
-		}
+
+	sourceIDs := make([]string, len(run.Sources))
+	for index := range run.Sources {
+		sourceIDs[index] = run.Sources[index].SourceID
 	}
+	policyRead, err := repository.ReadFixedKeys(
+		ctx,
+		[]string{backuppolicy.BackupPolicyKey(run.EnvironmentID)},
+		fixedRevision,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer etcdstore.ClearValues(policyRead.Values)
+	if policyRead.Values[0] == nil || policyRead.Values[0].ModRevision != run.PolicyRevision {
+		return nil, nil, errs.New(errs.KindStateConflict, "backup policy snapshot changed")
+	}
+	policy, decodeErr := backuppolicy.DecodeBackupPolicyRecord(policyRead.Values[0].Value)
+	if decodeErr != nil {
+		return nil, nil, backupruntime.CorruptBackupRuntimeRecord()
+	}
+	policyKeep, keepErr := checkedBackupRuntimeRetentionKeep(policy.Keep)
+	if keepErr != nil {
+		return nil, nil, keepErr
+	}
+	if !policy.Enabled || policy.EnvironmentID != run.EnvironmentID ||
+		policyKeep != run.RetentionKeep || policy.ConnectorID != run.ConnectorID ||
+		policy.Encryption != string(run.Encryption) ||
+		!slices.Equal(policy.SourceIDs, sourceIDs) {
+		return nil, nil, errs.New(errs.KindStateConflict, "backup policy snapshot changed")
+	}
+	if err := addCondition(backuppolicy.BackupPolicyKey(run.EnvironmentID), run.PolicyRevision); err != nil {
+		return nil, nil, err
+	}
+
 	if run.Encryption == backupruntime.BackupRuntimeEncryptionAge {
 		keyRead, readErr := repository.ReadFixedKeys(ctx, []string{
 			backuppolicy.BackupKeyKey(run.EnvironmentID), backuppolicy.BackupKeyValueKey(run.EnvironmentID),
@@ -238,24 +237,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			}
 		case backupruntime.BackupRuntimeSourceConfig:
 			snapshot := source.Snapshot.Config
-			if retrySource != nil {
-				configConditions, configMutations, retryErr := repository.prepareBackupRetryConfigReferences(
-					ctx, run, source, retrySource.run.Record, fixedRevision,
-				)
-				if retryErr != nil {
-					etcdstore.ClearMutationValues(mutations)
-					return nil, nil, retryErr
-				}
-				for _, condition := range configConditions {
-					if err := addCondition(condition.Key, condition.ModRevision); err != nil {
-						etcdstore.ClearMutationValues(configMutations)
-						etcdstore.ClearMutationValues(mutations)
-						return nil, nil, err
-					}
-				}
-				mutations = append(mutations, configMutations...)
-				continue
-			}
+
 			if snapshot.ConfigSnapshotID != run.TaskID || snapshot.ReadRevision != fixedRevision {
 				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, errs.New(

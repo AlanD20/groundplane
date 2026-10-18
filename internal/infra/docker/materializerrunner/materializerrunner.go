@@ -16,6 +16,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
+	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -38,9 +39,12 @@ type Request struct {
 	VolumeDir  string
 	Stream     io.ReadCloser
 	VerifyOnly bool
+	Header     entrymaterialization.Header
 }
 
 type engineClient interface {
+	ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error)
+	ContainerStop(context.Context, string, client.ContainerStopOptions) (client.ContainerStopResult, error)
 	ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error)
 	ContainerAttach(context.Context, string, client.ContainerAttachOptions) (client.ContainerAttachResult, error)
 	ContainerStart(context.Context, string, client.ContainerStartOptions) (client.ContainerStartResult, error)
@@ -228,7 +232,9 @@ func createOptions(image string, request Request) client.ContainerCreateOptions 
 		command, capabilities = "verify-materialization", []string{"DAC_READ_SEARCH"}
 	}
 	return client.ContainerCreateOptions{
+		Name: helperName(OwnershipFromHeader(request.Header)),
 		Config: &container.Config{
+			Labels:          helperLabels(OwnershipFromHeader(request.Header)),
 			Image:           image,
 			User:            "0",
 			AttachStdin:     true,
@@ -258,6 +264,9 @@ func createOptions(image string, request Request) client.ContainerCreateOptions 
 }
 
 func validateRequest(volumeRoot string, request Request) error {
+	if err := validateOwnership(OwnershipFromHeader(request.Header)); err != nil {
+		return err
+	}
 	if _, err := environmentpath.Parse(volumeRoot, request.VolumeDir); err != nil {
 		return errs.New(errs.KindInternal, "materializer runner: environment volume path is invalid")
 	}

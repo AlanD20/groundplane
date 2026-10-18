@@ -18,8 +18,9 @@ func newTaskCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "task", Short: "Tasks — the one record set behind every action and the activity journal"}
 	cmd.AddCommand(newTaskJournalListCmd("List tasks", false))
 
-	var executionLimit int
-	var executionCursor string
+	var workLimit int64
+	var after string
+	var revision int64
 	show := &cobra.Command{
 		Use:   "show <id>",
 		Short: "Show a task (steps, current state)",
@@ -29,7 +30,7 @@ func newTaskCmd() *cobra.Command {
 			task, err := app.Client.ShowTask(
 				cmd.Context(),
 				args[0],
-				apiclient.TaskDetailOptions{ExecutionLimit: executionLimit, ExecutionCursor: executionCursor},
+				apiclient.TaskDetailOptions{Limit: workLimit, After: after, Revision: revision},
 			)
 			if err != nil {
 				return err
@@ -38,9 +39,10 @@ func newTaskCmd() *cobra.Command {
 			return app.Out.RenderOne(fields, values, task)
 		},
 	}
-	show.Flags().
-		IntVar(&executionLimit, "execution-limit", 0, "Blueprint resource changes per page (default 5; maximum 50)")
-	show.Flags().StringVar(&executionCursor, "execution-cursor", "", "continue a Blueprint resource-change page")
+	show.Flags().Int64Var(&workLimit, "limit", 25, "work items per page (1–100)")
+	show.Flags().StringVar(&after, "after", "", "last work item from the previous page")
+	show.Flags().Int64Var(&revision, "revision", 0, "snapshot revision from the previous page")
+	cmd.AddCommand(newTaskAttemptsCmd(), newTaskImageCmd(), newTaskStagesCmd(), newTaskAttemptEventsCmd())
 	cmd.AddCommand(show)
 
 	cmd.AddCommand(&cobra.Command{
@@ -64,19 +66,24 @@ func newTaskCmd() *cobra.Command {
 		},
 	})
 
-	cmd.AddCommand(&cobra.Command{
-		Use:   "retry <id>",
-		Short: "Retry a failed task or authorize a captured Blueprint Detach hook",
+	var retryWork string
+	var retryAttempt uint64
+	retry := &cobra.Command{
+		Use:   "retry <id> --work <work-id> --attempt <number>",
+		Short: "Authorize Retry of the selected captured work attempt",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			accepted, err := app.Client.RetryTask(cmd.Context(), target(app, args[0]))
+			accepted, err := app.Client.RetryTask(cmd.Context(), target(app, args[0]), apiTypes.TaskRetryRequest{WorkItemID: retryWork, Attempt: retryAttempt})
 			if err != nil {
 				return err
 			}
 			return renderDispatchedTask(cmd, accepted)
 		},
-	})
+	}
+	retry.Flags().StringVar(&retryWork, "work", "", "work item shown in Task details")
+	retry.Flags().Uint64Var(&retryAttempt, "attempt", 0, "recorded attempt count; 0 for work that failed before execution")
+	cmd.AddCommand(retry)
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "abort <id>",
@@ -95,60 +102,43 @@ func newTaskCmd() *cobra.Command {
 	return cmd
 }
 
-func renderTaskPage(cmd *cobra.Command, page apiTypes.Page[apiTypes.Task]) error {
-	headers := []string{
-		"ID", "TYPE", "TARGET", "STATUS", "WORKSPACE", "TENANT", "PROJECT", "ENVIRONMENT",
-		"ACTOR", "CREATED", "UPDATED", "STARTED", "FINISHED",
-	}
+func renderTaskPage(cmd *cobra.Command, page apiTypes.ExecutionPage[apiTypes.TaskSummary]) error {
+	headers := []string{"ID", "ACTION", "TARGET", "STATUS", "CREATED", "UPDATED"}
 	rows := make([][]string, len(page.Items))
 	for index, task := range page.Items {
-		rows[index] = []string{
-			task.ID, task.Type, task.Target, string(task.Status), string(task.WorkspaceType), task.TenantID,
-			task.ProjectID, task.EnvironmentID, string(task.Actor), taskTimestamp(task.CreatedAt),
-			taskTimestamp(task.UpdatedAt), nullableTaskTimestamp(task.StartedAt),
-			nullableTaskTimestamp(task.FinishedAt),
-		}
+		rows[index] = []string{task.ID, string(task.Action), task.TargetName, task.Status, taskTimestamp(task.CreatedAt), taskTimestamp(task.UpdatedAt)}
 	}
 	return fromContext(cmd).Out.Render(headers, rows, page)
 }
-
-func taskFields(task apiTypes.Task) map[string]any {
-	return map[string]any{
-		"target_name": task.TargetName, "resource_kind": task.ResourceKind, "executor": task.Executor,
-		"timeout_seconds": task.TimeoutSeconds, "failure": task.Failure, "recovery": task.Recovery, "result_summary": task.ResultSummary,
-		"image_fetch":              task.ImageFetch,
-		"executions":               task.Executions,
-		"interrupted_detach_retry": task.InterruptedDetachRetry,
-		"recovery_retry_available": task.RecoveryRetryAvailable,
-		"diagnostics_expired_at":   nullableTaskTimestamp(task.DiagnosticsExpiredAt),
-		"preparation":              task.Preparation,
-		"attempt_history":          task.AttemptHistory,
-		"id":                       task.ID, "operation_id": task.OperationID, "retry_of": task.RetryOf,
-		"plan_hash": task.PlanHash, "type": task.Type, "target": task.Target,
-		"status": task.Status, "workspace_type": task.WorkspaceType, "tenant_id": task.TenantID,
-		"project_id": task.ProjectID, "environment_id": task.EnvironmentID, "actor": task.Actor,
+func taskFields(details apiTypes.TaskDetails) map[string]any {
+	task := details.Task
+	return map[string]any{"id": task.ID, "action": task.Action, "target": task.TargetName,
+		"target_id": task.TargetID, "status": task.Status, "scope": task.Scope, "actor": task.Actor,
 		"created_at": taskTimestamp(task.CreatedAt), "updated_at": taskTimestamp(task.UpdatedAt),
-		"started_at":  nullableTaskTimestamp(task.StartedAt),
-		"finished_at": nullableTaskTimestamp(task.FinishedAt), "steps": task.Steps,
-	}
+		"deadline": taskTimestamp(task.Deadline), "finished_at": nullableTaskTimestamp(task.FinishedAt),
+		"counts": task.Counts, "cancel": task.Cancel, "history_expired": task.HistoryExpired,
+		"preparation": details.Preparation, "work": details.Work}
 }
 
 func newTaskJournalListCmd(short string, activity bool) *cobra.Command {
 	var workspace string
-	var limit int
-	var cursor string
-	var status, taskType, resourceKind string
+	var limit int64
+	var after string
+	var revision int64
+	var status, action string
+	var resourceKind string
 	list := &cobra.Command{
 		Use:   "list",
 		Short: short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			options, err := resolveTaskJournalListOptions(cmd, workspace, limit, cursor)
+			options, err := resolveTaskJournalListOptions(cmd, workspace, limit, after)
 			if err != nil {
 				return err
 			}
-			options.Status, options.Type, options.ResourceKind = status, taskType, resourceKind
-			var page apiTypes.Page[apiTypes.Task]
+			options.Status, options.Action, options.Revision = status, action, revision
+			options.ResourceKind = resourceKind
+			var page apiTypes.ExecutionPage[apiTypes.TaskSummary]
 			if activity {
 				page, err = fromContext(cmd).Client.ListActivity(cmd.Context(), options)
 			} else {
@@ -161,23 +151,23 @@ func newTaskJournalListCmd(short string, activity bool) *cobra.Command {
 		},
 	}
 	list.Flags().StringVar(&workspace, "workspace", "", "platform | <tenant slug>")
-	list.Flags().IntVar(&limit, "limit", 50, "page size from 1 through 200")
-	list.Flags().StringVar(&cursor, "cursor", "", "opaque next-page cursor")
+	list.Flags().Int64Var(&limit, "limit", 25, "page size from 1 through 100")
+	list.Flags().StringVar(&after, "after", "", "last Task inspected on the previous page")
+	list.Flags().Int64Var(&revision, "revision", 0, "snapshot revision from the previous page")
 	list.Flags().StringVar(&status, "status", "", "filter the whole journal by Task status")
-	list.Flags().StringVar(&taskType, "type", "", "filter by Task operation type")
-	list.Flags().
-		StringVar(&resourceKind, "resource-kind", "", "filter by resource kind, e.g. component, service or image")
+	list.Flags().StringVar(&action, "action", "", "filter by action, such as deploy or fetch")
+	list.Flags().StringVar(&resourceKind, "resource-kind", "", "filter by target resource kind, such as service or image")
 	return list
 }
 
 func resolveTaskJournalListOptions(
 	cmd *cobra.Command,
 	workspace string,
-	limit int,
-	cursor string,
+	limit int64,
+	after string,
 ) (apiclient.TaskListOptions, error) {
 	app := fromContext(cmd)
-	options := apiclient.TaskListOptions{Limit: limit, Cursor: cursor}
+	options := apiclient.TaskListOptions{Limit: limit, After: after, Scope: "all"}
 	if workspace != "" && (app.Scope.Environment != "" || app.Scope.Project != "" || app.Scope.Tenant != "") {
 		return apiclient.TaskListOptions{}, errs.New(
 			errs.KindValidationFailed,
@@ -189,7 +179,7 @@ func resolveTaskJournalListOptions(
 		if err != nil {
 			return apiclient.TaskListOptions{}, err
 		}
-		options.Environment = environmentID
+		options.Scope = environmentID
 		return options, nil
 	}
 	if app.Scope.Project != "" {
@@ -197,7 +187,7 @@ func resolveTaskJournalListOptions(
 		if err != nil {
 			return apiclient.TaskListOptions{}, err
 		}
-		options.Project = projectID
+		options.Scope = projectID
 		return options, nil
 	}
 	if app.Scope.Tenant != "" {
@@ -205,18 +195,21 @@ func resolveTaskJournalListOptions(
 		if err != nil {
 			return apiclient.TaskListOptions{}, err
 		}
-		options.Workspace = tenantID
+		options.Scope = tenantID
 		return options, nil
 	}
-	if workspace == "" || workspace == "platform" {
-		options.Workspace = workspace
+	if workspace == "" {
+		return options, nil
+	}
+	if workspace == "platform" {
+		options.Scope = workspace
 		return options, nil
 	}
 	tenantID, err := resolveTenantTarget(cmd, workspace)
 	if err != nil {
 		return apiclient.TaskListOptions{}, err
 	}
-	options.Workspace = tenantID
+	options.Scope = tenantID
 	return options, nil
 }
 

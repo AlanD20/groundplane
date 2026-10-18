@@ -1,0 +1,270 @@
+# Task execution redesign
+
+- Status: Accepted design; not implemented or qualified.
+- Scope: replace Task execution and its storage/protocol boundaries, preserving
+  existing feature behavior. This document does not authorize implementation.
+- Product owner: [Execution redesign](../mvp.md#accepted-task-execution-redesign).
+
+This is the single design reference for the replacement. The
+[existing execution decision](task-execution-and-event-delivery.md) describes the
+current mechanism. Where mechanisms differ, this contract governs the replacement;
+it does not make new behavior available in the installed product.
+
+## Why replace the execution machinery?
+
+The existing queue already claims work atomically. The problem is ownership:
+[claiming work](../../internal/infra/etcd/task_claim.go) knows feature-specific
+recovery rules, the [shared worker](../../internal/agent/worker_execution.go)
+dispatches and compensates many kinds of effects, and
+[plan validation](../../internal/common/executionplan/plan.go) knows their details.
+A feature change consequently crosses too many shared execution boundaries.
+
+Keep durable Tasks and typed execution. Replace this coupling with a small
+scheduler and complete operation implementations. Keep etcd as the control-plane
+store; a new broker or general workflow platform would not solve the ownership
+problem. Moving files or renaming existing structures alone is not this redesign.
+
+## Three independent responsibilities
+
+| Owner | Responsibility |
+| --- | --- |
+| Resource state | Desired configuration, last successfully applied configuration, live observations and stable ownership |
+| Execution | Accepted work, captured inputs, dependencies, assignment, checkpoints and result settlement |
+| History | Safe progress, diagnostics, original failure and retained outcomes for operators |
+
+Resource reads do not require successful execution or retained Task diagnostics.
+They show desired declarations and separately identify unavailable applied state
+or observation. Execution still requires its exact prepared inputs and ownership.
+Deleting history cannot delete a resource's applied configuration or release an
+unresolved execution's protection.
+
+## Task, work item and attempt
+
+A **Task** is one accepted operator or system action, with stable identity, actor,
+scope, captured intent and overall outcome. Ordinary actions have one work item.
+Blueprint Apply has one visible Task containing dependent resource work items;
+it does not manufacture hidden operator Tasks.
+
+A **work item** is a typed operation on explicit resources, assigned either to
+the Controller or to a particular host. It owns its dependencies, captured input
+references, conflict claims and execution result. It is not an arbitrary command.
+
+An **attempt** is one authorized execution of a work item, identified by its
+executor and increasing assignment generation. Redelivering an assignment or
+reconnecting does not create another attempt. Retry retains the Task and work-item
+identity and captured inputs; a request to use newer input is a new action.
+Recovery attempts are distinguishable from forward execution.
+
+Work moves from waiting to ready, assigned and running, then to a recorded
+outcome. Waiting always identifies the unmet dependency, conflict or unavailable
+executor. A lost connection is an observation, not a terminal outcome. Original
+action outcome, current attempt state and cleanup state remain distinct fields
+rather than one ambiguous status. Task success requires every required work item
+to settle successfully or be explicitly satisfied without repeating effects;
+superseded or failed required work cannot be reported as successful Apply.
+Failure handling for independent branches follows the captured operation policy,
+not an improvised scheduler decision. Dependencies are bounded and acyclic.
+
+Large inputs are immutable, bounded references rather than copies in every
+event or attempt. Their lifetime follows active execution and resource needs,
+not diagnostic retention. Secrets remain encrypted or transient protected
+material, never public Task input, events or error text.
+
+## Submission and scheduling
+
+Submission validates intent and atomically publishes the Task, accepted desired
+changes, replay identity and required ownership records. Same request key and
+same content return the same Task; different content under that key is rejected.
+No work becomes executable before its complete required inputs are durably
+prepared. Missing or invalid input is not repaired by reading newer desired state.
+
+Some inputs depend on preceding work, such as Custom Attach facts. Such a work
+item waits with a specific dependency reason. The Controller prepares it from
+the captured intent and exact accepted dependency outputs, then publishes its
+immutable executable input before assignment. It never seals nonexistent facts
+or silently switches to the latest Blueprint or Secret value.
+
+The scheduler owns dependencies, conflict claims, executor eligibility, capacity,
+deadlines and atomic assignment. It does not contain operation-specific Docker,
+SQL, deployment or recovery logic. Ready work is scheduled fairly; a blocked item
+does not occupy a worker slot or prevent unrelated ready work from being selected.
+Related items acquire their required conflict claims atomically before effects,
+not one resource at a time while holding partial claims indefinitely.
+
+The operation owner supplies validated preparation, conflict requirements and
+result settlement through a narrow boundary. Publication and settlement remain
+atomic with the affected resource state; modularization must not split these
+transactions into independently successful writes.
+
+## Operation ownership
+
+Each operation implementation owns execution, meaningful checkpoints, interruption
+inspection, safe retries and permitted cleanup. Deployment owns release strategy
+and candidate handling; Backup owns capture; Restore owns its destructive effects.
+They use the same scheduler and attempt lifecycle, not separate queue engines.
+
+The Controller selects desired configuration, dependencies and policy. The Agent
+executes the captured typed operation through compiled handlers. It cannot read a
+Blueprint to invent missing instructions or choose a newer configuration. Generic
+shell jobs, runtime plugins and permissive fallback decoders are not introduced.
+Existing explicitly authorized Script and Custom hook boundaries remain intact.
+
+An operation declares durable checkpoints at meaningful side-effect boundaries.
+The engine requires their persistence before the next action that depends on
+them. Progress output alone neither authorizes effects nor proves completion.
+Polling health or emitting ordinary progress does not require a fresh permission
+round trip for every message. Irreversible actions and traffic cutover still
+require the current operation-specific ownership and supersession checks.
+
+Controller-local operations, including software handoff and bootstrap, use the
+same execution concepts without inventing an Agent or depending on a process
+being replaced to report its own successful replacement.
+
+## Remote Agents and host ownership
+
+The execution boundary supports one Controller managing multiple hosts, with one
+active managing Agent per host. Host identity is stable across Agent replacement;
+an Agent process or connection is not the host identity. The initial migration
+can remain single-host without encoding a singleton host into execution records.
+
+Every host work item carries its target host identity. Assignment binds that host,
+the authenticated Agent identity and its current generation. Eligibility checks
+required operation capabilities, compatible protocol and capacity. An idle Agent
+on another host cannot take the work. Host-independent Controller work has no
+fabricated host target.
+
+Placement is separate from execution: it selects a host before work becomes
+assignable. Future manual or policy-based placement can reuse this boundary.
+This contract does not add placement controls, workload migration, automatic
+failover or cross-host networking to the MVP.
+
+Agents establish authenticated connections to the Controller. Remote transport
+must protect credentials and execution material in transit and bind credentials
+to the allowed host; the local channel is not permission to send tokens over
+plaintext public networks. Remote enrollment, certificate lifecycle and trust
+configuration require their own design before remote operation is enabled.
+
+Host operations do not rely on Controller access to the remote filesystem,
+Docker socket or SSH. Local Volumes, networks, images and conflict claims are
+host-scoped. Artifact references must be usable by the selected executor;
+Controller-local paths and localhost registry addresses are not remote locations.
+An image available on Host A is not assumed present on Host B. Existing explicit
+image Fetch behavior is unchanged.
+
+## Interruption, Retry and cancellation
+
+Delivery is at least once, not exactly-once external execution. An Agent durably
+records accepted assignment/checkpoint identity and redelivers retained results
+until acknowledged. Duplicate messages cannot authorize duplicate effects. On
+restart, the operation inspects its checkpoint and actual owned effects before
+continuing, cleaning up or reporting that operator attention is required.
+
+A missing heartbeat, timeout or disconnected stream does not prove that execution
+stopped. Assignment generations reject stale reports, but rejection alone cannot
+stop a Docker mutation. Before conflicting work starts, GP must establish that
+the old executor cannot continue those effects, through execution-side ownership
+checks and acknowledged termination or equivalent operation-specific proof.
+Unknown effects retain only the necessary conflict claims, not an unrelated
+host-wide execution lock. Host-wide faults may legitimately block the host and
+must be reported as such.
+
+Retry classification belongs to the operation: safe transient failures have
+finite attempts, backoff and a captured deadline. Invalid input fails promptly.
+Ambiguous custom commands do not automatically replay. Explicit Retry can grant
+another captured execution only under that operation's safety rules. Recovery
+cannot reread latest intent, undo arbitrary migrations or become a generic
+database rollback. Successful cleanup never changes the original failure to success.
+
+Latest-wins applies to conflicting desired-state work, not every Task on the host:
+
+- Superseded queued work does not start.
+- Running work stops at a defined safe boundary and resolves its owned effects.
+- New desired intent and irreversible forward permission are ordered atomically;
+  obsolete work cannot receive a new traffic-cutover grant.
+- A previously authorized external action may finish after newer intent arrives.
+  Its outcome must be reconciled before contradictory effects proceed.
+- Supersession revokes forward permission, not permission for captured cleanup.
+
+Abort is a request, not proof of termination. Completion can win the race. A Task
+cannot report clean cancellation while effects remain unknown. Task action outcome
+and cleanup status are separate: failure or cancellation can require attention;
+only verified settlement releases the affected resource claims.
+
+## History, diagnostics and storage pressure
+
+Keep small authoritative execution records and essential checkpoints in etcd.
+Detailed diagnostics have a separate bounded storage and retention boundary.
+The diagnostic backend and physical schema are implementation decisions, not a
+new required service. Neither raw output nor repeated full configuration snapshots
+belong in the control-plane journal.
+
+Critical checkpoint or result persistence failure stops dependent effects.
+Diagnostic storage failure is reported as incomplete diagnostics; it does not
+invent a successful stage or erase execution ownership. Events have stable replay
+identity, ordered delivery within a Task and explicit gaps after expiry. Clients
+can reconnect and deduplicate. Workload logs remain separate from Task diagnostics.
+
+Retention preserves original outcome, safe failure summary and replay identity
+for their defined retention periods. Active or unresolved work retains all inputs
+and evidence required for recovery. Applied resource state outlives execution
+history when the resource still depends on it. Cleanup cannot invalidate an
+active reader or a newly captured reference. Admission under storage pressure
+must reserve room for existing work to settle rather than continue unbounded
+publication; exact thresholds belong to the storage implementation.
+
+## Operator presentation
+
+Console, CLI and API expose the same Task, work-item and attempt meaning under
+the existing one-to-one surface rule. Internal work items are inspectable within
+their Task, not independently actionable public Tasks.
+
+The [Task execution viewer](../console-ux.md#task-execution-viewer) owns presentation:
+action summary, current outcome/blocker and a structured stage list, with detailed
+events and technical identifiers on demand. The read model must provide captured
+stage names, targets, expected/observed results, attempt identity, timing provenance,
+wait dependencies, original failure and separate cleanup status. Optional evidence
+is explicitly unavailable when absent. Clients do not parse prose or reconstruct
+historical facts from current resources. Operator-visible diagnostics stay bounded
+and secret-safe; shared execution does not need feature-specific UI branches to
+explain progress.
+
+## Breaking cutover, not compatibility
+
+Replace the execution storage model, Controller/Agent protocol and public Task
+projection together, regenerating clients from their owning sources. Remove old
+runtime readers, writers, hidden child-Task machinery and dispatch paths. Do not
+ship dual execution engines, legacy Task translators or compatibility fallbacks.
+Reject incompatible binaries before they can execute or mutate new-format state.
+
+Before cutover, stop new admission and settle or explicitly reconcile outstanding
+effects. Never reinterpret an old half-executed Task as a new work item. Historical
+Tasks may be exported outside the active execution store; importing them as live
+work is forbidden. Resource data may need a one-time offline conversion, not a
+permanent old-format reader. The exact conversion must be designed before migration.
+
+No compatibility requirement means no legacy execution path; it does not authorize
+deleting applications, databases or Volumes. A disposable reset is an alternative
+only with explicit scope and approval. No reset, deployment or migration is
+authorized by accepting this document.
+
+## Delivery boundary
+
+Write the complete agreed replacement, generated artifacts and removal of old
+execution paths before beginning validation. Do not use incremental implement/test
+cycles or write tests during implementation. Builds, typechecking, CI, browser
+checks and deployment belong to the subsequent QA phase. Source inspection,
+formatting and required code generation remain implementation work. After the
+implementation is fully written, perform bounded behavior qualification and fix
+failures. Do not turn this contract into a broad feature rewrite or a
+test-per-helper project.
+Required proof concerns duplicate delivery, crashes around effects/checkpoints,
+lost acknowledgements, safe cancellation/cutover races, isolated failures, bounded
+retry, retention safety and operation-specific recovery. Host routing must reject
+wrong-host execution; multiple-host runtime support needs separate live evidence.
+These are future acceptance obligations, not tests run by this documentation work.
+
+Remote installation and lifecycle, cross-host network/storage access, automatic
+placement and failover remain outside this redesign. Exact schemas, package names,
+diagnostic storage backend and the offline conversion procedure remain to be
+designed under these boundaries. They are not permission to weaken them or to
+retain the old execution engine.

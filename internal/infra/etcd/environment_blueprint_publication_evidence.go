@@ -15,12 +15,21 @@ type blueprintTransactionSizer interface {
 	transactionSize([]etcdstore.Condition, []etcdstore.Mutation) (int, error)
 }
 
+// desiredPublicationOwner binds staging to an action without depending on an
+// execution engine's Task representation.
+type desiredPublicationOwner struct {
+	TaskID           string
+	EnvironmentID    string
+	RevisionID       string
+	RenderGeneration uint64
+}
+
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	ctx context.Context,
 	claim blueprints.EnvironmentBlueprintStageClaim,
 	revision blueprints.EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
-	task TaskRecord,
+	owner desiredPublicationOwner,
 	marker idempotencyrecord.IdempotencyMarker,
 	expectedHeadRevision int64,
 ) (environmentBlueprintPublicationEvidence, error) {
@@ -28,8 +37,12 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
+	if owner.EnvironmentID != revision.EnvironmentID || owner.TaskID != claim.TaskID ||
+		owner.RevisionID != revision.RevisionID || owner.RenderGeneration != claim.RenderGeneration {
+		return environmentBlueprintPublicationEvidence{}, errs.New(errs.KindStateConflict, "Blueprint publication owner differs from its staged revision")
+	}
 	return repository.prepareEnvironmentBlueprintPublicationWithDigest(
-		ctx, claim, revision, digest, task, marker, expectedHeadRevision,
+		ctx, claim, revision, digest, marker, expectedHeadRevision,
 	)
 }
 
@@ -38,7 +51,6 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublicationWit
 	claim blueprints.EnvironmentBlueprintStageClaim,
 	revision blueprints.EnvironmentDesiredRevisionIdentity,
 	digest [sha256.Size]byte,
-	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	expectedHeadRevision int64,
 ) (environmentBlueprintPublicationEvidence, error) {
@@ -95,16 +107,12 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublicationWit
 	}
 	descriptorID, locatorDigest, err := blueprints.DecodeEnvironmentBlueprintStageLocator(result.Values[2].Value)
 	protectedDigest, digestErr := blueprints.ProtectedBlueprintIntentDigest(descriptor.Claim.Intent)
-	taskEnvironmentID, materializes, taskEnvironmentErr := desiredRevisionTaskEnvironment(task)
 	if err != nil || digestErr != nil || !blueprints.SameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) ||
 		descriptorID != descriptor.Claim.DescriptorID || locatorDigest != protectedDigest ||
 		descriptor.State != blueprints.EnvironmentBlueprintStageSealed || seal != blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor) ||
 		seal.EnvironmentID != revision.EnvironmentID || seal.RevisionID != revision.RevisionID ||
 		seal.BaselineHeadRevision != expectedHeadRevision || seal.DependencyDigest != digest ||
-		descriptor.Claim.TaskID != task.ID || taskEnvironmentErr != nil || !materializes ||
-		taskEnvironmentID != revision.EnvironmentID ||
-		task.Params[blueprints.EnvironmentDesiredRevisionParam] != revision.RevisionID ||
-		uint64(task.RenderGeneration) != descriptor.Claim.RenderGeneration || marker.TaskID != task.ID ||
+		descriptor.Claim.TaskID != revision.RevisionID || marker.TaskID != descriptor.Claim.TaskID ||
 		!blueprints.SameBlueprintProtectedIntent(marker.Intent, descriptor.Claim.Intent) {
 		return environmentBlueprintPublicationEvidence{}, errs.New(
 			errs.KindStateConflict,

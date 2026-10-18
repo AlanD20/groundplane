@@ -93,9 +93,8 @@ func (resolver *TaskPlanResolver) resolveServiceRemovalPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
-	reader, ok := resolver.services.(serviceRemovalPlanReader)
-	if !ok ||
-		reader == nil {
+	reader := resolver.services
+	if reader == nil {
 		return nil, errs.New(errs.KindInternal, "Service removal intent reader is not configured")
 	}
 	stored, found, err := reader.GetServiceRemovalIntent(ctx, task.ID)

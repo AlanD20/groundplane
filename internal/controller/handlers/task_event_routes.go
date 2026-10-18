@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/taskprogress"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -24,36 +22,9 @@ const (
 	positiveEventIDPattern = "^[1-9][0-9]{0,19}$"
 )
 
-type taskEventRunner interface {
-	Run(context.Context, func(taskjournal.TaskEventRecord) error) error
-}
-
-type taskEventStreamOpener interface {
-	OpenTaskEventStream(context.Context, string, uint64) (taskEventRunner, error)
-}
-
 type taskEventStreamInput struct {
 	ID          string `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
 	LastEventID string `header:"Last-Event-ID" required:"false" pattern:"^(0|[1-9][0-9]{0,19})$" doc:"Canonical decimal Task-event sequence; absent or 0 replays the retained journal. Trimmed resume cursors expire."`
-}
-
-type repositoryTaskEventStreamOpener struct {
-	repository *etcd.TaskRepository
-}
-
-func (opener repositoryTaskEventStreamOpener) OpenTaskEventStream(
-	ctx context.Context,
-	taskID string,
-	after uint64,
-) (taskEventRunner, error) {
-	task, err := opener.repository.GetTask(ctx, taskID)
-	if err != nil {
-		return nil, err
-	}
-	if taskjournal.IsInternalChild(task.Record.Params) {
-		return nil, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
-	}
-	return opener.repository.OpenTaskEventStream(ctx, taskID, after)
 }
 
 func (s *Server) registerTaskEventStream() {
@@ -137,14 +108,14 @@ func (s *Server) streamTaskEvents(w http.ResponseWriter, r *http.Request) {
 		s.writeTaskProblem(w, err)
 		return
 	}
-	if s.taskEventStreams == nil {
+	if s.taskInspection == nil {
 		s.writeTaskProblem(w, errs.New(errs.KindInternal, "task event repository is not configured"))
 		return
 	}
 
 	streamContext, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	stream, err := s.taskEventStreams.OpenTaskEventStream(streamContext, taskID, after)
+	stream, err := s.taskInspection.OpenTaskEventStream(streamContext, taskID, after)
 	if err != nil {
 		s.writeTaskProblem(w, normalizeTaskRouteError(err))
 		return
@@ -153,7 +124,7 @@ func (s *Server) streamTaskEvents(w http.ResponseWriter, r *http.Request) {
 	frames := make(chan []byte)
 	done := make(chan error, 1)
 	go func() {
-		streamErr := stream.Run(streamContext, func(record taskjournal.TaskEventRecord) error {
+		streamErr := stream.Run(streamContext, func(record executiondiagnostics.TaskEvent) error {
 			frame, frameErr := taskEventSSEFrame(record)
 			if frameErr != nil {
 				return frameErr
@@ -204,28 +175,10 @@ func parseLastTaskEventID(header http.Header) (uint64, error) {
 	return sequence, nil
 }
 
-func taskEventSSEFrame(record taskjournal.TaskEventRecord) ([]byte, error) {
-	state, err := taskEventAPIStatus(record.State)
-	if err != nil {
-		return nil, err
-	}
-	payload, err := taskprogress.DecodePayload(record.Payload)
-	if err != nil {
-		return nil, err
-	}
-	var operation *apiTypes.TaskControllerOperation
-	if payload.ControllerOperation != nil {
-		operation = &apiTypes.TaskControllerOperation{
-			Stage: payload.ControllerOperation.Stage,
-			Name:  payload.ControllerOperation.Name(),
-		}
-	}
+func taskEventSSEFrame(record executiondiagnostics.TaskEvent) ([]byte, error) {
 	data, err := json.Marshal(apiTypes.TaskEvent{
-		ControllerOperation: operation,
-		Sequence:            record.Sequence, StepID: record.Identity.StepID, State: state,
-		Attempt: record.Identity.Attempt, Ordinal: record.Identity.Ordinal, ReceivedAt: record.ReceivedAt,
-		HealthWait: payload.HealthWait,
-		Failure:    taskStepFailure(string(state), record.Identity.StepID, payload.Failure),
+		Sequence: record.Sequence, WorkItemID: record.WorkItemID, AttemptID: record.AttemptID,
+		AttemptSequence: record.AttemptSequence, RecordedAt: record.RecordedAt, Stage: record.Stage,
 	})
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)

@@ -71,7 +71,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 				return taskClaimCandidate{}, false, err
 			}
 			if task.ID != taskID || task.Executor != executor || task.Status != taskjournal.TaskStatusPending ||
-				task.idempotencyMarker == nil && !isMarkerlessHierarchyDeletionAgentChild(task) {
+				task.idempotencyMarker == nil {
 				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task is not claimable")
 			}
 			currentChild, err := repository.blueprintChildHeadAtRevision(ctx, task, revision)

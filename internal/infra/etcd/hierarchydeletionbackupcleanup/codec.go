@@ -1,6 +1,7 @@
 package hierarchydeletionbackupcleanup
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -25,6 +26,7 @@ func decodeCleanupIntent(value []byte) (cleanupIntent, error) {
 
 func validateCleanupIntent(record cleanupIntent) error {
 	if record.Schema != 1 || !hierarchydeletion.ValidHierarchyDeletionPrivateID(record.ParentOperationID, "del") ||
+		(record.DeleteAttempt != "" && (ids.Validate(ids.KindAttempt, record.DeleteAttempt) != nil || record.Selected == (backupruntime.BackupObjectIdentity{}))) ||
 		record.DeletionEpoch <= 0 || record.Ordinal < 0 || record.TargetID == "" || record.TargetRevision <= 0 ||
 		!hierarchydeletion.ValidHierarchyDeletionDigest(record.FixedInputDigest) ||
 		(record.ActionKind != hierarchydeletion.HierarchyDeletionRecoveryPointRemove &&

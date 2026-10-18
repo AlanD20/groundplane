@@ -129,12 +129,6 @@ func validateStep(
 	case *agentpb.ExecutionStep_CandidateRestorationCompensate:
 		value := payload.CandidateRestorationCompensate
 		return validateCandidateRestorationStep(operation, value.GetCandidateArtifactId(), value.GetServiceId(), value.GetCandidateReleaseId(), artifacts)
-	case *agentpb.ExecutionStep_ComponentRestorationProbe:
-		value := payload.ComponentRestorationProbe
-		return validateComponentRestorationStep(operation, value.GetComponentId(), value.GetCandidateArtifactId(), artifacts)
-	case *agentpb.ExecutionStep_ComponentRestorationCompensate:
-		value := payload.ComponentRestorationCompensate
-		return validateComponentRestorationStep(operation, value.GetComponentId(), value.GetCandidateArtifactId(), artifacts)
 	case *agentpb.ExecutionStep_ServiceAbsenceProbe:
 		value := payload.ServiceAbsenceProbe
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
@@ -222,17 +216,7 @@ func validateStep(
 		if apply.GetGeneration() != renderGeneration {
 			return errs.New(errs.KindValidationFailed, "Component action generation does not match its plan")
 		}
-		targetArtifacts := artifacts
-		if candidateID, captured := ComponentActionCandidateArtifactID(plan, apply.GetComponentId()); captured {
-			candidate := artifacts[candidateID]
-			if candidate == nil {
-				return errs.New(errs.KindValidationFailed, "Component action does not match its captured recovery candidate")
-			}
-			// The predecessor is retained solely for recovery; it is not a
-			// second forward target. The recovery procedure was validated first.
-			targetArtifacts = map[string]*agentpb.ComposeArtifact{candidate.GetArtifactId(): candidate}
-		}
-		return validateComponentContainerActionTarget(operation, apply, step, targetArtifacts, steps)
+		return validateComponentContainerActionTarget(operation, apply, step, artifacts, steps)
 	case *agentpb.ExecutionStep_HostResolutionApply:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY ||
 			!validHostResolutionAction(payload.HostResolutionApply.GetComponentId(),
@@ -265,20 +249,4 @@ func validateStep(
 	default:
 		return errs.New(errs.KindValidationFailed, "execution step payload is unsupported")
 	}
-}
-
-func validateComponentRestorationStep(
-	operation agentpb.PlanOperation,
-	componentID, candidateArtifactID string,
-	artifacts map[string]*agentpb.ComposeArtifact,
-) error {
-	artifact := artifacts[candidateArtifactID]
-	if (operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
-		operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE &&
-		operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE) ||
-		ids.Validate(ids.KindComponent, componentID) != nil ||
-		ids.Validate(ids.KindConfig, candidateArtifactID) != nil || artifact == nil {
-		return errs.New(errs.KindValidationFailed, "Component restoration step authority is invalid")
-	}
-	return nil
 }

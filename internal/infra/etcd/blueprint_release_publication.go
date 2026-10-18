@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -17,6 +18,7 @@ import (
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"slices"
 	"time"
@@ -125,6 +127,11 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 // before this fragment; the release marker makes them visible atomically with
 // the one Blueprint Task and desired head.
 type BlueprintReleasePublication struct {
+	taskID        string
+	workItemID    string
+	taskRevision  int64
+	itemRevision  int64
+	input         workexecution.Input
 	environmentID string
 	operationID   string
 	conditions    []etcdstore.Condition
@@ -137,6 +144,8 @@ type BlueprintReleasePublication struct {
 }
 
 type blueprintReleasePublicationInput struct {
+	Work            workqueue.View
+	Input           workexecution.Input
 	EnvironmentID   string
 	OperationID     string
 	Conditions      []etcdstore.Condition
@@ -148,13 +157,20 @@ type blueprintReleasePublicationInput struct {
 
 func newBlueprintReleasePublication(input blueprintReleasePublicationInput) (BlueprintReleasePublication, error) {
 	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
-		ids.Validate(ids.KindOperation, input.OperationID) != nil {
+		ids.Validate(ids.KindOperation, input.OperationID) != nil || input.Input.Validate() != nil ||
+		input.Work.Task.Task.Validate() != nil || input.Work.Item.Item.Validate() != nil ||
+		input.Work.Task.Task.Scope.EnvironmentID != input.EnvironmentID ||
+		input.Work.Item.Item.TaskID != input.Work.Task.Task.ID ||
+		input.Work.Task.Revision <= 0 || input.Work.Item.Revision <= 0 {
 		return BlueprintReleasePublication{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Release publication identity is invalid",
 		)
 	}
 	publication := BlueprintReleasePublication{
+		taskID: input.Work.Task.Task.ID, workItemID: input.Work.Item.Item.ID,
+		taskRevision: input.Work.Task.Revision, itemRevision: input.Work.Item.Revision,
+		input:         input.Input,
 		environmentID: input.EnvironmentID, operationID: input.OperationID,
 		conditions: append(
 			append([]etcdstore.Condition(nil), input.Conditions...),
@@ -169,59 +185,49 @@ func newBlueprintReleasePublication(input blueprintReleasePublicationInput) (Blu
 }
 
 func (publication BlueprintReleasePublication) IsZero() bool {
-	return publication.environmentID == "" && publication.operationID == "" &&
+	return publication.taskID == "" && publication.workItemID == "" && publication.input == (workexecution.Input{}) &&
+		publication.environmentID == "" && publication.operationID == "" &&
 		len(publication.conditions) == 0 && len(publication.mutations) == 0 && publication.retained == nil &&
 		publication.requirements == nil
 }
 
-func (publication BlueprintReleasePublication) validate(environmentID string, task TaskRecord) error {
-	marker := task.Params[TaskBlueprintRequirementGateSHA256Param]
-	blueprintChild := task.Params[taskjournal.TaskBlueprintParentParam] != ""
-	if blueprintChild && ((marker == "") != (publication.requirements == nil) ||
-		publication.requirements != nil && publication.requirements.validateForTask(task) != nil) ||
-		!blueprintChild && publication.requirements != nil {
-		return errs.New(errs.KindValidationFailed, "Blueprint Release requirement gate changed")
-	}
-	if publication.retained != nil {
-		if publication.environmentID != environmentID || publication.operationID != task.OperationID ||
-			len(
-				publication.retained.conditions,
-			) < 2 || publication.retained.conditions[0] != (etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), ModRevision: publication.retained.sourceRevision}) ||
-			publication.retained.sourceRevision < 0 || publication.retained.sourceReadRevision <= 0 || publication.retained.sourceReadRevision < publication.retained.sourceRevision {
-			return errs.New(errs.KindValidationFailed, "Blueprint retained runtime publication does not match its Task")
-		}
-		for _, condition := range publication.retained.conditions {
-			if !slices.Contains(publication.conditions, condition) {
-				return errs.New(errs.KindValidationFailed, "Blueprint retained runtime source comparison is absent")
-			}
-		}
-		if task.Params[releaserender.TaskReleasePublicationParam] == "" {
-			if len(publication.mutations) != 0 ||
-				!slices.Equal(publication.conditions, publication.retained.conditions) ||
-				publication.authority != nil ||
-				len(publication.members) != 0 ||
-				len(publication.sources.Conditions()) != 0 ||
-				len(publication.sources.Mutations()) != 0 {
-				return errs.New(
-					errs.KindValidationFailed,
-					"Blueprint retained runtime publication does not match its Task",
-				)
-			}
-			return nil
-		}
-	}
-	if publication.IsZero() {
-		if task.Params[releaserender.TaskReleasePublicationParam] != "" {
-			return errs.New(errs.KindValidationFailed, "Blueprint Task has no candidate Release publication")
-		}
-		return nil
-	}
-	if publication.environmentID != environmentID || publication.operationID != task.OperationID ||
-		releases.ValidatePublicationID(task.Params[releaserender.TaskReleasePublicationParam]) != nil ||
+// Change returns owned mutations for one atomic native work publication. The
+// coordinator joins desired-state/epoch and resolved resource comparisons before
+// committing; it cannot publish this fragment for another item or revision.
+func (publication BlueprintReleasePublication) Change(work workqueue.View, dependencies []workqueue.ItemSnapshot) (workqueue.Change, error) {
+	task, item := work.Task.Task, work.Item.Item
+	if publication.IsZero() || task.Validate() != nil || item.Validate() != nil ||
+		task.Action != workexecution.ActionApply || item.Operation != workexecution.Release ||
+		item.TaskID != task.ID || task.ID != publication.taskID || item.ID != publication.workItemID ||
+		task.Scope.EnvironmentID != publication.environmentID || publication.input.Validate() != nil ||
+		work.Task.Revision != publication.taskRevision || work.Item.Revision != publication.itemRevision ||
+		work.ReadRevision < work.Task.Revision || work.ReadRevision < work.Item.Revision ||
+		publication.retained != nil || publication.requirements != nil ||
+		task.Stop != nil || task.FinishedAt != nil || item.AttemptNumber != 0 || item.ForwardRevoked ||
 		len(publication.conditions) == 0 || len(publication.mutations) == 0 {
-		return errs.New(errs.KindValidationFailed, "Blueprint Release publication does not match its Task")
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Release publication no longer matches its waiting work")
 	}
-	return nil
+	for _, required := range []etcdstore.Condition{
+		{Key: workqueue.TaskKey(task.ID), ModRevision: work.Task.Revision},
+		{Key: workqueue.ItemKey(item.ID), ModRevision: work.Item.Revision},
+	} {
+		if !slices.Contains(publication.conditions, required) {
+			return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Blueprint Release publication is missing its work comparison")
+		}
+	}
+	guards, err := workqueue.DependencyConditions(item, dependencies)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	for _, dependency := range dependencies {
+		if dependency.Revision > work.ReadRevision {
+			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint prerequisite is newer than its captured work snapshot")
+		}
+	}
+	return workqueue.Change{
+		Conditions: append(slices.Clone(publication.conditions), guards...),
+		Mutations:  cloneBlueprintReleaseMutations(publication.mutations),
+	}, nil
 }
 
 func (publication BlueprintReleasePublication) classify(values []*etcdstore.KeyValue) error {
@@ -293,33 +299,57 @@ type PreparedBlueprintReleaseHooks struct {
 	key               string
 	revision          int64
 	snapshotRevisions map[string]int64
+	stage             blueprintReleaseHookStage
 }
 
-func blueprintReleaseHookStageKey(operationID string) string {
-	return "/v1/preparations/blueprint-release-hooks/" + operationID
+func blueprintReleaseHookStageKey(workItemID string) string {
+	return "/v1/preparations/blueprint-release-hooks/" + workItemID
 }
 
 type blueprintReleaseHookStage struct {
 	Schema      int
 	OperationID string
 	TaskID      string
+	WorkItemID  string
+	Input       workexecution.Input
 	Digest      string
 	Count       int
+	Snapshots   []blueprintHookSnapshot
+}
+
+type blueprintHookSnapshot struct {
+	ExecutionID string
+	SnapshotID  string
+	SHA256      string
 }
 
 func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(
 	ctx context.Context,
-	task TaskRecord,
-	hooks []ReleaseHookExecutionPublication,
+	work workqueue.View,
+	evidence ReleaseHookWorkPublication,
 ) (PreparedBlueprintReleaseHooks, error) {
-	if len(hooks) == 0 {
-		return PreparedBlueprintReleaseHooks{}, nil
+	if ctx == nil || ledger == nil || ledger.store == nil {
+		return PreparedBlueprintReleaseHooks{}, errs.New(errs.KindInternal, "Blueprint hook storage is unavailable")
 	}
-	fragment, err := prepareBlueprintReleaseHookPublicationFragment(task, hooks)
+	if work.Task.Revision <= 0 || work.Item.Revision <= 0 || work.Task.Task.ID != evidence.Task.ID ||
+		work.Item.Item.ID != evidence.Item.ID || work.Item.Item.TaskID != evidence.Task.ID ||
+		work.Task.Task.Stop != nil || work.Task.Task.FinishedAt != nil || work.Task.Task.CollectionStartedAt != nil ||
+		work.Item.Item.Phase == workexecution.Settled || work.Item.Item.AttemptNumber != 0 {
+		return PreparedBlueprintReleaseHooks{}, errs.New(errs.KindStateConflict, "Blueprint hook preparation no longer owns unstarted work")
+	}
+	for _, hook := range evidence.Hooks {
+		if hook.Execution.SourceMembershipCount != 0 || hook.Execution.SourceMembershipSHA256 != "" || hook.SnapshotRevision != 0 {
+			return PreparedBlueprintReleaseHooks{}, errs.New(errs.KindValidationFailed, "Blueprint hook preparation requires unpublished source inputs")
+		}
+	}
+	fragment, err := prepareBlueprintReleaseHookPublicationFragment(evidence)
 	if err != nil {
 		return PreparedBlueprintReleaseHooks{}, err
 	}
 	defer clearReleaseHookPublicationFragment(fragment)
+	if len(evidence.Hooks) == 0 {
+		return PreparedBlueprintReleaseHooks{}, nil
+	}
 	hash := sha256.New()
 	for _, mutation := range fragment.mutations {
 		hash.Write([]byte(mutation.Key))
@@ -328,16 +358,24 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(
 	}
 	stage := blueprintReleaseHookStage{
 		Schema:      1,
-		OperationID: task.OperationID,
-		TaskID:      task.ID,
+		OperationID: evidence.OperationID,
+		TaskID:      evidence.Task.ID,
+		WorkItemID:  evidence.Item.ID,
+		Input:       *evidence.Item.Input,
 		Digest:      hex.EncodeToString(hash.Sum(nil)),
-		Count:       len(hooks),
+		Count:       len(evidence.Hooks),
+	}
+	for index, hook := range evidence.Hooks {
+		digest := sha256.Sum256(fragment.mutations[index*2+1].Value)
+		stage.Snapshots = append(stage.Snapshots, blueprintHookSnapshot{
+			ExecutionID: hook.Execution.ID, SnapshotID: hook.Execution.SnapshotID, SHA256: hex.EncodeToString(digest[:]),
+		})
 	}
 	value, err := json.Marshal(stage)
 	if err != nil {
 		return PreparedBlueprintReleaseHooks{}, errs.Wrap(errs.KindInternal, err)
 	}
-	key := blueprintReleaseHookStageKey(task.OperationID)
+	key := blueprintReleaseHookStageKey(evidence.Item.ID)
 	read, err := ledger.store.Get(ctx, key)
 	if err != nil {
 		return PreparedBlueprintReleaseHooks{}, err
@@ -346,7 +384,9 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(
 	if read == nil || read.Entry == nil {
 		result, txErr := ledger.store.Transact(
 			ctx,
-			[]etcdstore.Condition{{Key: key}},
+			[]etcdstore.Condition{{Key: key},
+				{Key: workqueue.TaskKey(work.Task.Task.ID), ModRevision: work.Task.Revision},
+				{Key: workqueue.ItemKey(work.Item.Item.ID), ModRevision: work.Item.Revision}},
 			[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: value}},
 		)
 		if txErr != nil {
@@ -373,25 +413,30 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(
 	prepared := PreparedBlueprintReleaseHooks{
 		key:               key,
 		revision:          revision,
-		snapshotRevisions: make(map[string]int64, len(hooks)),
+		snapshotRevisions: make(map[string]int64, len(evidence.Hooks)),
+		stage:             stage,
 	}
-	for i := 0; i < len(fragment.mutations); i += 2 {
-		pair := fragment.mutations[i : i+2]
-		loaded, loadErr := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{pair[0].Key, pair[1].Key}})
+	// Only immutable snapshots are staged. Executions become visible together
+	// with the native work input and retained source root in final publication.
+	for i := 1; i < len(fragment.mutations); i += 2 {
+		snapshot := fragment.mutations[i]
+		loaded, loadErr := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{snapshot.Key}})
 		if loadErr != nil {
 			return PreparedBlueprintReleaseHooks{}, loadErr
 		}
-		if loaded == nil || len(loaded.Values) != 2 {
+		if loaded == nil || len(loaded.Values) != 1 {
 			return PreparedBlueprintReleaseHooks{}, errs.New(
 				errs.KindInternal,
 				"Blueprint hook preparation evidence is incomplete",
 			)
 		}
-		if loaded.Values[0] == nil && loaded.Values[1] == nil {
+		if loaded.Values[0] == nil {
 			result, txErr := ledger.store.Transact(
 				ctx,
-				[]etcdstore.Condition{{Key: key, ModRevision: revision}, {Key: pair[0].Key}, {Key: pair[1].Key}},
-				pair,
+				[]etcdstore.Condition{{Key: key, ModRevision: revision}, {Key: snapshot.Key},
+					{Key: workqueue.TaskKey(work.Task.Task.ID), ModRevision: work.Task.Revision},
+					{Key: workqueue.ItemKey(work.Item.Item.ID), ModRevision: work.Item.Revision}},
+				[]etcdstore.Mutation{snapshot},
 			)
 			if txErr != nil {
 				return PreparedBlueprintReleaseHooks{}, txErr
@@ -399,24 +444,25 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(
 			if !result.Succeeded {
 				loaded, loadErr = ledger.store.GetMany(
 					ctx,
-					etcdstore.GetManyRequest{Keys: []string{pair[0].Key, pair[1].Key}},
+					etcdstore.GetManyRequest{Keys: []string{snapshot.Key}},
 				)
 				if loadErr != nil {
 					return PreparedBlueprintReleaseHooks{}, loadErr
 				}
 			} else {
-				prepared.snapshotRevisions[hooks[i/2].Execution.SnapshotID] = result.Revision
+				prepared.snapshotRevisions[evidence.Hooks[i/2].Execution.SnapshotID] = result.Revision
 				continue
 			}
 		}
-		if loaded.Values[0] == nil || loaded.Values[1] == nil || !bytes.Equal(loaded.Values[0].Value, pair[0].Value) ||
-			!bytes.Equal(loaded.Values[1].Value, pair[1].Value) {
+		if loaded == nil || len(loaded.Values) != 1 || loaded.Values[0] == nil ||
+			loaded.Values[0].Key != snapshot.Key || loaded.Values[0].ModRevision <= 0 ||
+			!bytes.Equal(loaded.Values[0].Value, snapshot.Value) {
 			return PreparedBlueprintReleaseHooks{}, errs.New(
 				errs.KindStateConflict,
 				"Blueprint hook preparation changed",
 			)
 		}
-		prepared.snapshotRevisions[hooks[i/2].Execution.SnapshotID] = loaded.Values[1].ModRevision
+		prepared.snapshotRevisions[evidence.Hooks[i/2].Execution.SnapshotID] = loaded.Values[0].ModRevision
 	}
 	return prepared, nil
 }
@@ -493,27 +539,42 @@ func blueprintStagedSourceEvidenceFromStage(
 }
 
 func prepareBlueprintReleaseHookPublicationFragment(
-	task TaskRecord,
-	hooks []ReleaseHookExecutionPublication,
+	evidence ReleaseHookWorkPublication,
 ) (releaseHookPublicationFragment, error) {
 	fragment := releaseHookPublicationFragment{}
-	for _, hook := range hooks {
+	if evidence.Task.Validate() != nil || evidence.Item.Validate() != nil ||
+		evidence.Task.Action != workexecution.ActionApply || evidence.Item.Operation != workexecution.Release ||
+		evidence.Item.Placement.Executor != workexecution.Agent || len(evidence.Hooks) > 16 ||
+		evidence.Item.TaskID != evidence.Task.ID || evidence.Item.Input == nil ||
+		evidence.Item.AttemptNumber != 0 || evidence.Task.Stop != nil || evidence.Item.ForwardRevoked ||
+		evidence.Task.FinishedAt != nil || evidence.ReadRevision <= 0 ||
+		ids.Validate(ids.KindOperation, evidence.OperationID) != nil {
+		return fragment, errs.New(errs.KindValidationFailed, "Blueprint hooks require unstarted native work")
+	}
+	executionIDs := make(map[string]bool, len(evidence.Hooks))
+	snapshotIDs := make(map[string]bool, len(evidence.Hooks))
+	for _, hook := range evidence.Hooks {
 		execution := hook.Execution
-		if execution.ScriptSetGeneration == "" {
-			execution.ScriptSetGeneration = hook.Sources.Script.Record.ScriptSetGeneration
-		}
 		if scriptsourcequeries.ValidateStoredScriptContext(hook.Sources, execution) != nil ||
 			scriptexecutions.ValidateScriptExecutionRecord(
 				execution,
 			) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
-			!execution.ActiveReference || execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
-			execution.PlanHash != task.PlanHash || task.Params[releaserender.ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {
+			!execution.ActiveReference || execution.CurrentTaskID != evidence.Task.ID || execution.OperationID != evidence.OperationID ||
+			execution.WorkItemID != evidence.Item.ID || execution.WorkInput == nil || *execution.WorkInput != *evidence.Item.Input ||
+			execution.ServiceID != evidence.Item.TargetID || execution.EnvironmentID != evidence.Task.Scope.EnvironmentID ||
+			hook.Sources.Project.Record.ID != evidence.Task.Scope.ProjectID ||
+			hook.Sources.Project.Record.TenantID != evidence.Task.Scope.TenantID ||
+			executionIDs[execution.ID] || snapshotIDs[execution.SnapshotID] ||
+			execution.ScriptSetGeneration != hook.Sources.Script.Record.ScriptSetGeneration ||
+			hook.Sources.Revision != evidence.ReadRevision {
 			clearReleaseHookPublicationFragment(fragment)
 			return releaseHookPublicationFragment{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint release hook execution evidence is invalid",
 			)
 		}
+		executionIDs[execution.ID] = true
+		snapshotIDs[execution.SnapshotID] = true
 		executionValue, err := recordcodec.Encode("script-execution", execution)
 		if err != nil {
 			clearReleaseHookPublicationFragment(fragment)

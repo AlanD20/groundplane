@@ -78,7 +78,6 @@ func (repository *TaskRepository) GetTaskAssignment(
 		return TaskAssignment{}, err
 	}
 	var recovery *taskassignments.ReleaseRecoveryDirective
-	var componentRecovery *taskassignments.ReleaseRecoveryDirective
 	var serviceAbsenceRecovery *taskassignments.ReleaseRecoveryDirective
 	var managedNetworkRecovery *taskassignments.ReleaseRecoveryDirective
 	var attachRemovalRecovery *taskassignments.ReleaseRecoveryDirective
@@ -156,29 +155,6 @@ func (repository *TaskRepository) GetTaskAssignment(
 			}
 		}
 	}
-	if componentRecoveryTask(task) {
-		_, procedure, _, procedureErr := repository.componentRecoveryProcedureAtRevision(
-			ctx,
-			task,
-			indexed.ReadRevision,
-		)
-		digest, digestErr := componentRecoveryAuthorityDigest(procedure)
-		if procedureErr != nil || digestErr != nil || digest != assignment.ComponentRecoveryProcedureSHA256 {
-			return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
-		}
-		if assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
-			componentRecovery, err = repository.componentRecoveryDirectiveAtRevision(
-				ctx,
-				task,
-				assignment,
-				procedure,
-				indexed.ReadRevision,
-			)
-			if err != nil {
-				return TaskAssignment{}, err
-			}
-		}
-	}
 	return TaskAssignment{
 		Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
 			Record: assignment, Revision: claimValue.ModRevision, ReadRevision: indexed.ReadRevision,
@@ -187,7 +163,6 @@ func (repository *TaskRepository) GetTaskAssignment(
 			Record: task, Revision: taskValue.ModRevision, ReadRevision: indexed.ReadRevision,
 		},
 		ReleaseRecovery:        recovery,
-		ComponentRecovery:      componentRecovery,
 		ServiceAbsenceRecovery: serviceAbsenceRecovery,
 		ManagedNetworkRecovery: managedNetworkRecovery,
 		AttachRemovalRecovery:  attachRemovalRecovery,

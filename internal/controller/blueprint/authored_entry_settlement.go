@@ -8,40 +8,47 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachoutputs"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type authoredEntrySettlementRepository interface {
-	SettleBlueprintEntry(context.Context, etcd.BlueprintEntrySettlement) error
+	PrepareBlueprintEntrySettlement(context.Context, etcd.BlueprintEntrySettlement) (workqueue.Change, error)
 }
 
-// SettleEntry resolves one Entry from the parent's sealed input. The repository
-// owns the final head/epoch/parent compares and the atomic value plus receipt.
-func (service *Service) SettleEntry(
+// PrepareEntrySettlement resolves one Entry from captured input. The returned
+// value, receipt and work transition must commit together; preparation has no
+// storage effects. The caller clears the returned mutation values after commit.
+func (service *Service) PrepareEntrySettlement(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	work workqueue.View,
 	unit blueprintunits.Unit,
 	snapshot blueprintunits.Snapshot,
-) error {
-	if service == nil || ctx == nil || unit.Target.Kind != ids.KindEnvEntry || unit.Removal ||
-		snapshot.HeadTaskID != parent.ID || snapshot.EnvironmentID != parent.Owner.EnvironmentID {
-		return errs.New(errs.KindStateConflict, "Blueprint Entry settlement is not configured")
+) (workqueue.Change, error) {
+	parent := work.Task.Task
+	if service == nil || ctx == nil || unit.Target.Kind != ids.KindEnvEntry ||
+		snapshot.HeadTaskID != parent.ID || snapshot.EnvironmentID != parent.Scope.EnvironmentID ||
+		work.ReadRevision != snapshot.ReadRevision || work.Item.Item.TargetID != unit.Target.ID {
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry settlement is not configured")
+	}
+	if unit.Removal {
+		return service.prepareEntryOmission(ctx, work, unit)
 	}
 	settler, ok := service.repository.(authoredEntrySettlementRepository)
 	if !ok {
-		return errs.New(errs.KindInternal, "Blueprint Entry settlement repository is not configured")
+		return workqueue.Change{}, errs.New(errs.KindInternal, "Blueprint Entry settlement repository is not configured")
 	}
 	input, err := service.loadAuthoredParentInput(ctx, parent)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	records, err := projectionrecord.AuthoredEntryRecords(input.desired, input.identities)
 	if err != nil {
-		return err
+		return workqueue.Change{}, err
 	}
 	for _, record := range records {
 		if record.Entry.ID != unit.Target.ID {
@@ -49,164 +56,112 @@ func (service *Service) SettleEntry(
 		}
 		spec, found := input.desired.Input.Entries[record.BlueprintKey]
 		if !found {
-			return errs.New(errs.KindStateConflict, "Blueprint Entry authored source is missing")
+			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry authored source is missing")
 		}
 		desired, err := core.ProjectEntrySpec(record.BlueprintKey, spec, record.Entry.ID)
 		if err != nil {
-			return errs.Wrap(errs.KindValidationFailed, err)
+			return workqueue.Change{}, errs.Wrap(errs.KindValidationFailed, err)
 		}
+		var factConditions []keyvalue.Condition
 		generator := service.entryGeneration
 		if desired.Source.Kind == core.SourceFact {
-			resolver, err := service.authoredEntryFactResolver(ctx, input, snapshot)
+			if desired.Source.Fact == nil {
+				return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Blueprint Entry fact reference is missing")
+			}
+			resolver, err := service.authoredEntryFactResolver(ctx, input, snapshot, desired.Source.Fact.Attach)
 			if err != nil {
-				return err
+				return workqueue.Change{}, err
 			}
 			defer resolver.clear()
+			factConditions = resolver.conditions
 			generator = generator.WithFactResolver(resolver)
 		}
 		generation, err := generator.Generate(
-			ctx, parent.Owner.ProjectID, parent.Owner.EnvironmentID,
+			ctx, parent.Scope.ProjectID, parent.Scope.EnvironmentID,
 			desired, record.CurrentValueGenerationID, service.now().UTC(),
 		)
 		if err != nil {
-			return err
+			return workqueue.Change{}, err
 		}
 		defer entrygeneration.ClearEntryValueGeneration(&generation)
-		return settler.SettleBlueprintEntry(ctx, etcd.BlueprintEntrySettlement{
-			Parent: parent, Unit: unit, Entry: record, Generation: generation,
-			OperationID: ids.New(ids.KindOperation),
+		change, err := settler.PrepareBlueprintEntrySettlement(ctx, etcd.BlueprintEntrySettlement{
+			Work: work, Unit: unit, Entry: record, Generation: generation,
+			At: service.now().UTC(),
 		})
+		if err != nil {
+			return workqueue.Change{}, err
+		}
+		change.Conditions = append(change.Conditions, factConditions...)
+		return change, nil
 	}
-	return errs.New(errs.KindStateConflict, "Blueprint Entry is not in the authored revision")
+	return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry is not in the authored revision")
+}
+
+type appliedAttachBindingReader interface {
+	ReadAppliedAttachBinding(context.Context, string, string, int64) (attachments.AppliedBinding, []keyvalue.Condition, error)
 }
 
 type pinnedEntryFactResolver struct {
 	service       *Service
 	environmentID string
-	inputs        map[string]blueprintattachinputs.Generation
-	outputs       map[string]blueprintattachoutputs.Generation
-	bindings      map[string]bool
+	bindings      map[string]attachments.AppliedBinding
+	conditions    []keyvalue.Condition
 }
 
-func (service *Service) authoredEntryFactResolver(
-	ctx context.Context,
-	input authoredParentInput,
-	snapshot blueprintunits.Snapshot,
-) (*pinnedEntryFactResolver, error) {
-	reader, ok := service.repository.(authoredAttachGenerationReader)
+func (service *Service) authoredEntryFactResolver(ctx context.Context, input authoredParentInput, snapshot blueprintunits.Snapshot, attachName string) (*pinnedEntryFactResolver, error) {
+	reader, ok := service.repository.(appliedAttachBindingReader)
 	if !ok {
-		return nil, errs.New(errs.KindInternal, "Blueprint Attach fact reader is not configured")
+		return nil, errs.New(errs.KindInternal, "Applied Attach fact reader is not configured")
 	}
-	inputs, err := service.loadAuthoredAttachGenerationAuthority(ctx, input, snapshot)
-	if err != nil {
-		return nil, err
-	}
-	resolver := &pinnedEntryFactResolver{
-		service: service, environmentID: input.desired.EnvironmentID, inputs: inputs,
-		outputs:  make(map[string]blueprintattachoutputs.Generation),
-		bindings: make(map[string]bool),
-	}
-	failed := true
+	resolver := &pinnedEntryFactResolver{service: service, environmentID: input.desired.EnvironmentID, bindings: make(map[string]attachments.AppliedBinding)}
+	succeeded := false
 	defer func() {
-		if failed {
+		if !succeeded {
 			resolver.clear()
 		}
 	}()
-	for _, applied := range snapshot.Applied {
-		if applied.Record.Target.Kind != ids.KindAttach || applied.Record.State != blueprintunits.Applied {
+	applied := make(map[string]bool)
+	for _, receipt := range snapshot.Applied {
+		if receipt.Record.Target.Kind == ids.KindAttach && receipt.Record.State == blueprintunits.Applied {
+			applied[receipt.Record.Target.ID] = true
+		}
+	}
+	for _, identity := range input.identities.Attaches {
+		if identity.Name != attachName || !applied[identity.ID] {
 			continue
 		}
-		generation, found := inputs[applied.Record.Target.ID]
-		if found && (generation.Binding != nil || generation.Provision != nil) &&
-			applied.Record.ParentTaskID == generation.ParentTaskID &&
-			(applied.Record.ControllerAttachInputRevision > 0 ||
-				(generation.OwnerKind == blueprintattachinputs.OwnerChild && generation.OwnerTaskID == applied.Record.SourceTaskID)) {
-			resolver.bindings[generation.AttachID] = true
-			continue
-		}
-		if !found || generation.OwnerKind != blueprintattachinputs.OwnerChild ||
-			generation.OwnerTaskID != applied.Record.SourceTaskID {
-			continue
-		}
-		output, found, err := reader.GetBlueprintAttachOutputGeneration(
-			ctx, generation.AttachID, applied.Record.SourceTaskID, snapshot.ReadRevision,
-		)
+		binding, conditions, err := reader.ReadAppliedAttachBinding(ctx, resolver.environmentID, identity.ID, snapshot.ReadRevision)
 		if err != nil {
 			return nil, err
 		}
-		if !found || output.Record.EnvironmentID != input.desired.EnvironmentID ||
-			output.Record.ParentTaskID != generation.ParentTaskID ||
-			output.Record.OperationID != generation.OperationID ||
-			output.Record.PlanID != applied.Record.SourcePlanID ||
-			output.Record.AssignmentID != applied.Record.SourceAssignment ||
-			output.Record.ExecutionEpoch != applied.Record.ExecutionEpoch {
-			blueprintattachoutputs.Clear(&output.Record)
-			return nil, errs.New(errs.KindStateConflict, "Blueprint Attach output fact changed")
+		if binding.Consumer.Name != identity.Name {
+			binding.Clear()
+			return nil, errs.New(errs.KindStateConflict, "Applied Attach name differs from the Blueprint")
 		}
-		resolver.outputs[generation.AttachID] = output.Record
+		resolver.bindings[identity.Name] = binding
+		resolver.conditions = append(resolver.conditions, conditions...)
 	}
-	failed = false
+	succeeded = true
 	return resolver, nil
 }
 
-func (resolver *pinnedEntryFactResolver) ResolveFact(
-	ctx context.Context,
-	environmentID string,
-	reference core.FactRef,
-	destinationSecret bool,
-	consume secretvalue.PlaintextConsumer,
-) error {
+func (resolver *pinnedEntryFactResolver) ResolveFact(ctx context.Context, environmentID string, reference core.FactRef, destinationSecret bool, consume secretvalue.PlaintextConsumer) error {
 	if resolver == nil || environmentID != resolver.environmentID {
 		return errs.New(errs.KindStateConflict, "Blueprint Entry fact Environment changed")
 	}
-	for attachID, generation := range resolver.inputs {
-		if generation.AttachName != reference.Attach {
-			continue
-		}
-		if generation.Binding != nil || generation.Provision != nil {
-			if !resolver.bindings[attachID] {
-				return errs.New(errs.KindStateConflict, "Blueprint Attach binding is not applied")
-			}
-			if generation.Provision != nil && generation.Provision.HookOwnerOperationID != "" {
-				ownerID := generation.CredentialOwnerID
-				owner, found := resolver.inputs[ownerID]
-				output, produced := resolver.outputs[ownerID]
-				if !found || !produced || owner.OperationID != generation.Provision.HookOwnerOperationID ||
-					owner.ParentTaskID != generation.ParentTaskID {
-					return errs.New(errs.KindStateConflict, "Blueprint Attach credential hook result is not applied")
-				}
-				reference.Attach = owner.AttachName
-				return resolver.service.attachFacts.ResolveBlueprintOutputFact(
-					ctx,
-					owner,
-					output,
-					reference,
-					destinationSecret,
-					consume,
-				)
-			}
-			return resolver.service.attachFacts.ResolveCapturedAttachFact(
-				ctx, generation, reference, destinationSecret, consume,
-			)
-		}
-		output, found := resolver.outputs[attachID]
-		if !found {
-			return errs.New(errs.KindStateConflict, "Blueprint Attach output fact is not applied")
-		}
-		return resolver.service.attachFacts.ResolveBlueprintOutputFact(
-			ctx, generation, output, reference, destinationSecret, consume,
-		)
+	binding, found := resolver.bindings[reference.Attach]
+	if !found {
+		return errs.New(errs.KindStateConflict, "Blueprint Entry fact Attach is not applied")
 	}
-	return errs.New(errs.KindStateConflict, "Blueprint Entry fact Attach is not pinned")
+	return resolver.service.attachFacts.ResolveAppliedAttachFact(ctx, binding, reference, destinationSecret, consume)
 }
 
 func (resolver *pinnedEntryFactResolver) clear() {
 	if resolver == nil {
 		return
 	}
-	clearAuthoredAttachGenerationAuthority(resolver.inputs)
-	for key, output := range resolver.outputs {
-		blueprintattachoutputs.Clear(&output)
-		resolver.outputs[key] = output
+	for key, binding := range resolver.bindings {
+		binding.Clear()
+		delete(resolver.bindings, key)
 	}
 }

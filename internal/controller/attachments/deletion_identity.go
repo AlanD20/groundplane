@@ -3,7 +3,7 @@ package attachments
 import (
 	"context"
 
-	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	"github.com/AlanD20/groundplane/internal/controller/attachplan"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyattach "github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
@@ -15,7 +15,7 @@ import (
 func (service *FactService) ResolveDeletionIdentity(
 	ctx context.Context,
 	input hierarchyattach.Input,
-	consume taskplanning.AttachPlanIdentityConsumer,
+	consume attachplan.IdentityConsumer,
 ) error {
 	if ctx == nil || consume == nil || hierarchyattach.Validate(input) != nil ||
 		!input.Attach.OwnsCredential() || input.Facts == nil || input.Attach.HookBundle ||
@@ -32,16 +32,16 @@ func (service *FactService) ResolveDeletionIdentity(
 
 func consumeAttachTaskIdentity(
 	bundle *attachFactBundle,
-	consume taskplanning.AttachPlanIdentityConsumer,
+	consume attachplan.IdentityConsumer,
 ) error {
-	identity := taskplanning.AttachPlanIdentity{
+	identity := attachplan.Identity{
 		Authentication: bundle.Identity.Authentication,
 		Database:       bundle.Identity.Database, Role: bundle.Identity.Role,
 		Password: append([]byte(nil), bundle.Identity.Password...),
-		Grants:   make([]taskplanning.AttachPlanGrantIdentity, 0, len(bundle.Identity.Grants)),
+		Grants:   make([]attachplan.GrantIdentity, 0, len(bundle.Identity.Grants)),
 	}
 	for _, grant := range bundle.Identity.Grants {
-		identity.Grants = append(identity.Grants, taskplanning.AttachPlanGrantIdentity{
+		identity.Grants = append(identity.Grants, attachplan.GrantIdentity{
 			AttachID: grant.AttachID, Database: grant.Database,
 		})
 	}

@@ -106,29 +106,11 @@ func (repository *TaskRepository) taskRetentionCandidateBlocked(
 	if held, _, err := repository.resolverTaskPruneAuthority(ctx, task, revision); held || err != nil {
 		return held, err
 	}
-	if held, err := repository.connectorCheckRetentionHeld(ctx, task, revision); held || err != nil {
-		return held, err
-	}
-	if held, err := repository.backingCheckRetentionHeld(ctx, task, revision); held || err != nil {
-		return held, err
-	}
-	if held, err := repository.dnsCheckRetentionHeld(ctx, task, revision); held || err != nil {
-		return held, err
-	}
-	if held, err := repository.edgeCheckRetentionHeld(ctx, task, revision); held || err != nil {
-		return held, err
-	}
-	if held, err := repository.runnerCheckRetentionHeld(ctx, task, revision); held || err != nil {
-		return held, err
-	}
 	if taskOwnsBlueprintRevision(task) {
 		_, held, err := blueprintretention.Guards(ctx, repository.store, task.Owner.EnvironmentID, task.ID, revision)
 		if held || err != nil {
 			return held, err
 		}
-	}
-	if held, err := repository.hierarchyDeletionChildPruneHeld(ctx, task, revision); held || err != nil {
-		return held, err
 	}
 	if task.Type != taskjournal.TaskScript {
 		return false, nil

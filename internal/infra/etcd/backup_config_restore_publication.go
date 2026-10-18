@@ -5,6 +5,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -24,7 +25,26 @@ func (repository *BackupRuntimeRepository) PublishConfigRestore(
 	projection environmentprojection.EnvironmentComposeProjection,
 	identities environmentprojection.EnvironmentOwnedIdentities,
 ) error {
-	authority, err := repository.loadConfigRestorePublication(ctx, generation)
+	return repository.publishConfigRestore(ctx, generation, projection, identities, nil)
+}
+
+func (repository *BackupRuntimeRepository) ResumeConfigRestorePublication(ctx context.Context,
+	generation etcdstore.Versioned[backupconfiguration.ConfigRestoreGenerationRecord],
+	projection environmentprojection.EnvironmentComposeProjection, identities environmentprojection.EnvironmentOwnedIdentities,
+	recovery workexecution.Attempt,
+) error {
+	if recovery.Direction != workexecution.Recovery {
+		return configTransferAuthorityConflict()
+	}
+	return repository.publishConfigRestore(ctx, generation, projection, identities, &recovery)
+}
+
+func (repository *BackupRuntimeRepository) publishConfigRestore(ctx context.Context,
+	generation etcdstore.Versioned[backupconfiguration.ConfigRestoreGenerationRecord],
+	projection environmentprojection.EnvironmentComposeProjection, identities environmentprojection.EnvironmentOwnedIdentities,
+	recovery *workexecution.Attempt,
+) error {
+	authority, err := repository.loadConfigRestorePublication(ctx, generation, recovery)
 	if err != nil {
 		return err
 	}
@@ -33,7 +53,7 @@ func (repository *BackupRuntimeRepository) PublishConfigRestore(
 		return err
 	}
 	defer metadata.clear()
-	if err := repository.stageConfigRestoreMetadata(ctx, generation, metadata); err != nil {
+	if err := repository.stageConfigRestoreMetadata(ctx, generation, metadata, recovery); err != nil {
 		return err
 	}
 	owner := generation.Record.Owner
@@ -73,7 +93,7 @@ func (repository *BackupRuntimeRepository) PublishConfigRestore(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		authority, err = repository.loadConfigRestorePublication(ctx, generation)
+		authority, err = repository.loadConfigRestorePublication(ctx, generation, recovery)
 		if err != nil {
 			return err
 		}
@@ -143,7 +163,7 @@ func (repository *BackupRuntimeRepository) PublishConfigRestore(
 			}
 		case backupruntime.BackupRestoreCanonicalComplete, backupruntime.BackupRestoreMaterializing,
 			backupruntime.BackupRestoreVerified, backupruntime.BackupRestoreCompleted:
-			return repository.cleanupConfigRestoreEntries(ctx, generation, deleted)
+			return repository.cleanupConfigRestoreEntries(ctx, generation, deleted, recovery)
 		default:
 			return configTransferAuthorityConflict()
 		}
@@ -159,6 +179,9 @@ func (repository *BackupRuntimeRepository) commitConfigRestorePublication(ctx co
 		at = next.UpdatedAt.Add(time.Nanosecond)
 	}
 	next.UpdatedAt = at
+	if authority.recovering {
+		next.State, next.Verification = backupruntime.BackupRestoreRecoveryRequired, backupruntime.BackupVerificationFailed
+	}
 	value, err := backupruntime.EncodeBackupRestoreRecord(next)
 	if err != nil {
 		return err

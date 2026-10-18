@@ -17,18 +17,17 @@ const (
 )
 
 type TaskResult struct {
-	AssignmentID                  string
-	TaskID                        string
-	PlanHash                      PlanHash
-	Terminal                      TaskTerminal
-	ExitCode                      int32
-	ExecutionEpoch                uint32
-	ReleaseRecoveryRecordSHA256   []byte
-	ComponentRecoveryRecordSHA256 []byte
-	Compose                       *agentpb.ComposeTaskResult
-	EnvironmentDirectory          *agentpb.EnvironmentDirectoryTaskResult
-	Backup                        *agentpb.BackupTaskResult
-	AssignmentGeneration          uint64
+	AssignmentID                string
+	TaskID                      string
+	PlanHash                    PlanHash
+	Terminal                    TaskTerminal
+	ExitCode                    int32
+	ExecutionEpoch              uint32
+	ReleaseRecoveryRecordSHA256 []byte
+	Compose                     *agentpb.ComposeTaskResult
+	EnvironmentDirectory        *agentpb.EnvironmentDirectoryTaskResult
+	Backup                      *agentpb.BackupTaskResult
+	AssignmentGeneration        uint64
 }
 
 type TaskProgressState uint8

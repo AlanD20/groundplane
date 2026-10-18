@@ -11,8 +11,6 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
-	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 
@@ -28,9 +26,6 @@ type routeProviderStateReader interface {
 		string,
 		int64,
 	) (etcdstore.Versioned[componentplanning.Runtime], bool, error)
-	ListRoutes(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[routerecord.Record], error)
-	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
-	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
 }
 
 // ResolveComponentTaskRouteProvider pins the registered HTTP router input for
@@ -96,7 +91,46 @@ func ResolveComponentTaskRouteProvider(
 	return selected, true, nil
 }
 
-func (resolver *TaskPlanResolver) pinRouteProvider(
+// RouteProviderCapture owns immutable router selection and rendering independently
+// of Task scheduling and execution.
+type RouteProviderCapture struct {
+	state   routeProviderStateReader
+	catalog []componentrender.EnvironmentComponentRegistration
+}
+
+func NewRouteProviderCapture(state routeProviderStateReader, catalog []componentrender.EnvironmentComponentRegistration) (*RouteProviderCapture, error) {
+	if state == nil {
+		return nil, errs.New(errs.KindInternal, "Route runtime snapshot reader is required")
+	}
+	if err := componentrender.ValidateEnvironmentComponentCatalog(catalog); err != nil {
+		return nil, err
+	}
+	return &RouteProviderCapture{state: state, catalog: componentrender.CloneEnvironmentComponentCatalog(catalog)}, nil
+}
+
+// InactiveKinds identifies every registered router implementation, including
+// providers omitted from the current desired projection. Persistence checks
+// their retained runtimes before a metadata-only Route decision is accepted.
+func (resolver *RouteProviderCapture) InactiveKinds(projection projectionrecord.EnvironmentComposeProjection) ([]core.ComponentKind, error) {
+	if resolver == nil {
+		return nil, errs.New(errs.KindInternal, "Route provider catalog is unavailable")
+	}
+	if _, _, found, err := resolver.routeProviderRegistration(projection); err != nil || found {
+		if err != nil {
+			return nil, err
+		}
+		return nil, errs.New(errs.KindStateConflict, "Route changes require execution while a router is enabled")
+	}
+	var kinds []core.ComponentKind
+	for _, registration := range resolver.catalog {
+		if definitionProvides(registration.Definition, componentsdk.CapabilityHTTPRouter) {
+			kinds = append(kinds, registration.Kind)
+		}
+	}
+	return kinds, nil
+}
+
+func (resolver *RouteProviderCapture) Capture(
 	ctx context.Context,
 	environmentID string,
 	projectionRevision int64,
@@ -112,8 +146,7 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 	if err != nil || !found {
 		return nil, err
 	}
-	environment, inputRevision, err := resolver.routeProviderEnvironment(
-		ctx,
+	environment, inputRevision, err := routeProviderEnvironment(
 		environmentID,
 		projectionRevision,
 		projection,
@@ -136,17 +169,17 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 	if projectionRevision <= 0 || projectionRevision > inputRevision {
 		return nil, errs.New(errs.KindStateConflict, "Route provider projection is newer than its fixed snapshot")
 	}
-	if resolver.routeState == nil {
+	if resolver.state == nil {
 		return nil, errs.New(errs.KindInternal, "Route runtime snapshot reader is unavailable")
 	}
-	readRevision, err := resolver.routeState.SnapshotRevision(ctx)
+	readRevision, err := resolver.state.SnapshotRevision(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if readRevision < inputRevision {
 		return nil, errs.New(errs.KindStateConflict, "Route runtime snapshot precedes its selected desired input")
 	}
-	runtime, present, err := resolver.routeState.GetRouteProviderRuntimeAtRevision(ctx, component.ID, readRevision)
+	runtime, present, err := resolver.state.GetRouteProviderRuntimeAtRevision(ctx, component.ID, readRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +208,7 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 	}, nil
 }
 
-func (resolver *TaskPlanResolver) routeProviderRegistration(
+func (resolver *RouteProviderCapture) routeProviderRegistration(
 	projection projectionrecord.EnvironmentComposeProjection,
 ) (componentrender.EnvironmentComponentRegistration, core.Component, bool, error) {
 	var selected componentrender.EnvironmentComponentRegistration
@@ -189,7 +222,7 @@ func (resolver *TaskPlanResolver) routeProviderRegistration(
 		if !candidate.Enabled {
 			continue
 		}
-		for _, registration := range resolver.componentCatalog {
+		for _, registration := range resolver.catalog {
 			if registration.Kind != candidate.Kind || registration.ProjectHTTPRouter == nil ||
 				registration.PlanHTTPRouter == nil || !definitionProvides(registration.Definition, componentsdk.CapabilityHTTPRouter) {
 				continue
@@ -215,8 +248,7 @@ func definitionProvides(definition componentsdk.Definition, capability component
 	return false
 }
 
-func (resolver *TaskPlanResolver) routeProviderEnvironment(
-	ctx context.Context,
+func routeProviderEnvironment(
 	environmentID string,
 	projectionRevision int64,
 	projection projectionrecord.EnvironmentComposeProjection,
@@ -262,7 +294,7 @@ func (resolver *TaskPlanResolver) routeProviderEnvironment(
 	return environment, projectionRevision, nil
 }
 
-func (resolver *TaskPlanResolver) renderPinnedRouteProvider(
+func (resolver *RouteProviderCapture) Render(
 	pin environmentchanges.RouteProviderPin,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) (componentsdk.EnvironmentPlan, core.Component, [sha256.Size]byte, [sha256.Size]byte, error) {
@@ -283,7 +315,7 @@ func (resolver *TaskPlanResolver) renderPinnedRouteProvider(
 	var definitionDigest, catalogDigest [sha256.Size]byte
 	copy(definitionDigest[:], definitionBytes)
 	copy(catalogDigest[:], catalogBytes)
-	for _, registration := range resolver.componentCatalog {
+	for _, registration := range resolver.catalog {
 		if registration.Definition.Digest() != definitionDigest || registration.CatalogDigest != catalogDigest {
 			continue
 		}
@@ -307,4 +339,20 @@ func (resolver *TaskPlanResolver) renderPinnedRouteProvider(
 		errs.KindStateConflict,
 		"pinned Route provider is not registered",
 	)
+}
+
+func (resolver *RouteProviderCapture) Configuration(
+	pin environmentchanges.RouteProviderPin,
+	projection projectionrecord.EnvironmentComposeProjection,
+) ([]byte, error) {
+	plan, _, _, _, err := resolver.Render(pin, projection)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range plan.Files {
+		if file.Path == pin.Destination {
+			return append([]byte(nil), file.Content...), nil
+		}
+	}
+	return nil, errs.New(errs.KindStateConflict, "pinned Route provider did not emit its managed configuration")
 }

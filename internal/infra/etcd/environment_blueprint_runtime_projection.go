@@ -2,9 +2,13 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"sort"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
@@ -14,10 +18,9 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -44,7 +47,7 @@ type BlueprintRuntimeComponentReceipt struct {
 // derived runtime projection. The desired input and owned identities remain
 // immutable revision records; this seal never advances applied runtime state.
 type BlueprintRuntimeProjectionSeal struct {
-	Parent                  TaskRecord
+	Parent                  workexecution.Task
 	SnapshotReadRevision    int64
 	ExpectedHeadRevision    int64
 	ExpectedEpochRevision   int64
@@ -160,13 +163,11 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 	}
 	parent := input.Parent
 	projection := input.Projection
-	if validateBlueprintParentClaimTask(parent) != nil ||
-		parent.Status != taskjournal.TaskStatusRunning ||
-		parent.Owner.EnvironmentID == "" ||
-		parent.Params[blueprints.EnvironmentDesiredRevisionParam] != parent.ID ||
-		projection.EnvironmentID != parent.Owner.EnvironmentID ||
+	if parent.Validate() != nil || parent.Action != workexecution.ActionApply ||
+		parent.Stop != nil || parent.FinishedAt != nil || parent.CollectionStartedAt != nil ||
+		parent.Scope.EnvironmentID == "" || parent.TargetID != parent.Scope.EnvironmentID ||
+		projection.EnvironmentID != parent.Scope.EnvironmentID ||
 		projection.RevisionID != parent.ID ||
-		projection.RenderGeneration != uint64(parent.RenderGeneration) ||
 		input.SnapshotReadRevision <= 0 ||
 		input.ExpectedHeadRevision <= 0 || input.ExpectedEpochRevision < 0 ||
 		input.DesiredRootRevision <= 0 || input.OwnedIdentitiesRevision <= 0 ||
@@ -186,19 +187,34 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 		return errs.New(errs.KindValidationFailed, "Blueprint runtime Backup policy authority is missing")
 	}
 	backup, err := blueprintplanning.PrepareBlueprintBackupPolicyPublication(
-		blueprintplanning.TaskIdentity{ID: parent.ID, Target: parent.Owner.EnvironmentID},
-		projection, blueprintplanning.BlueprintAttachTaskPreparation{}, input.BackupPreparation,
+		blueprintplanning.TaskIdentity{ID: parent.ID, Target: parent.Scope.EnvironmentID},
+		projection, input.BackupPreparation,
 	)
 	if err != nil {
 		return err
 	}
 	defer blueprintplanning.ClearPreparedBlueprintBackupPolicyPublication(backup)
-	expectedOwner, err := taskjournal.EnvironmentTaskOwner(input.Project.Record, input.Environment.Record)
+	if parent.Scope.EnvironmentID != input.Environment.Record.ID || parent.Scope.ProjectID != input.Project.Record.ID ||
+		input.Environment.Record.ProjectID != input.Project.Record.ID || parent.Scope.TenantID != input.Project.Record.TenantID {
+		return errs.New(errs.KindStateConflict, "Blueprint runtime projection hierarchy changed")
+	}
+	desired, found, err := blueprints.ReadDesiredInputRevision(ctx, repository.store,
+		projection.EnvironmentID, parent.ID, input.SnapshotReadRevision)
 	if err != nil {
 		return err
 	}
-	if expectedOwner != parent.Owner {
-		return errs.New(errs.KindStateConflict, "Blueprint runtime projection hierarchy changed")
+	if !found || desired.Revision != input.DesiredRootRevision || desired.Record.EnvironmentID != projection.EnvironmentID ||
+		desired.Record.RevisionID != parent.ID || desired.Record.RenderGeneration != projection.RenderGeneration {
+		return errs.New(errs.KindStateConflict, "Blueprint runtime captured input changed")
+	}
+	captured, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(desired.Record)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(captured)
+	clear(captured)
+	if hex.EncodeToString(digest[:]) != parent.Intent.SHA256 {
+		return errs.New(errs.KindStateConflict, "Blueprint runtime captured input hash changed")
 	}
 	identitiesKey := blueprints.EnvironmentBlueprintOwnedIdentitiesKey(projection.EnvironmentID, parent.ID)
 	identitiesRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -214,6 +230,7 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 	defer etcdstore.ClearValues(identitiesRead.Values)
 	identities, err := projectionrecord.DecodeEnvironmentOwnedIdentities(identitiesRead.Values[0].Value)
 	if err != nil || identities.EnvironmentID != projection.EnvironmentID ||
+		identities.RenderGeneration != projection.RenderGeneration ||
 		identities.RevisionID != parent.ID || len(identities.Attaches) != len(input.Attaches) ||
 		len(identities.Components) != len(input.ComponentReceipts) {
 		return errs.New(errs.KindStateConflict, "Blueprint runtime Attach identities changed")
@@ -261,37 +278,30 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 		return err
 	}
 	defer clear(value)
-	parentKey := taskjournal.TaskStorageKey(parent.ID)
-	claimKey := taskjournal.BlueprintParentClaimKey(parent.ID)
+	parentKey := workqueue.TaskKey(parent.ID)
 	headKey := blueprints.EnvironmentBlueprintHeadKey(projection.EnvironmentID)
 	epochKey := blueprintunits.EpochKey(projection.EnvironmentID)
-	stopKey := taskjournal.BlueprintParentAbortKey(parent.ID)
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{parentKey, claimKey}})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{parentKey}})
 	if err != nil {
 		return err
 	}
-	if read == nil || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
-		return errs.New(errs.KindStateConflict, "Blueprint runtime projection parent claim is unavailable")
+	if read == nil || len(read.Values) != 1 || read.Values[0] == nil {
+		return errs.New(errs.KindStateConflict, "Blueprint runtime projection Task is unavailable")
 	}
 	defer etcdstore.ClearValues(read.Values)
-	storedParent, parentErr := DecodeTaskRecord(read.Values[0].Value)
-	claimID, claimErr := idempotencyrecord.DecodeTaskReference(read.Values[1].Value)
-	if parentErr != nil || claimErr != nil || claimID != parent.ID ||
-		validateBlueprintParentClaimTask(storedParent) != nil ||
-		storedParent.Status != taskjournal.TaskStatusRunning ||
-		storedParent.Owner != parent.Owner || storedParent.ID != parent.ID ||
-		storedParent.PlanID != parent.PlanID ||
-		storedParent.RenderGeneration != parent.RenderGeneration ||
-		storedParent.Params[blueprints.EnvironmentDesiredRevisionParam] != parent.ID {
-		return errs.New(errs.KindStateConflict, "Blueprint runtime projection parent claim changed")
+	storedParent, parentErr := workqueue.DecodeTask(read.Values[0].Value)
+	if parentErr != nil || storedParent.Action != workexecution.ActionApply ||
+		storedParent.Stop != nil || storedParent.FinishedAt != nil || storedParent.CollectionStartedAt != nil ||
+		!time.Now().UTC().Before(storedParent.Deadline) ||
+		storedParent.Scope != parent.Scope || storedParent.ID != parent.ID ||
+		storedParent.TargetID != parent.TargetID || storedParent.Intent != parent.Intent {
+		return errs.New(errs.KindStateConflict, "Blueprint runtime projection Task authority changed")
 	}
 	conditions := []etcdstore.Condition{
 		{Key: blueprints.EnvironmentBlueprintEffectiveProjectionKey(projection.EnvironmentID, parent.ID)},
 		{Key: headKey, ModRevision: input.ExpectedHeadRevision},
 		{Key: epochKey, ModRevision: input.ExpectedEpochRevision},
 		{Key: parentKey, ModRevision: read.Values[0].ModRevision},
-		{Key: claimKey, ModRevision: read.Values[1].ModRevision},
-		{Key: stopKey},
 		{
 			Key:         blueprints.EnvironmentBlueprintRootKey(projection.EnvironmentID, parent.ID),
 			ModRevision: input.DesiredRootRevision,
@@ -473,10 +483,9 @@ func blueprintRuntimeComponentReceiptMatches(
 	authority BlueprintRuntimeComponent,
 ) bool {
 	receipt := applied.Record
-	if receipt.SourceTaskID != "" {
+	if receipt.Execution != nil {
 		return authority.RuntimePresent &&
-			receipt.SourceTaskID == authority.Runtime.Record.TaskID &&
-			receipt.SourcePlanID == authority.Runtime.Record.PlanID &&
+			*receipt.Execution == authority.Runtime.Record.Execution &&
 			receipt.ParentTaskID == authority.Runtime.Record.RevisionID
 	}
 	component := authority.Component

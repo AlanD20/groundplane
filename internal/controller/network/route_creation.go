@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -99,23 +100,7 @@ func (service *routeMutationService) createRouteOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	preparation, err := service.prepareRouteMutationTask(
-		ctx, environment, project, record, nil, idempotencyKey,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	record = preparation.Intent.Route
-	response, marker, err := service.routeResponseMarker(locator, evidence, record, preparation.Task.ID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.BeginRouteMutationWithTask(
-		ctx, environment, project, target, nil, record, preparation.Intent, preparation.Task, marker,
-	)
-	return service.resolveRouteMutation(ctx, locator, evidence, result, mutationErr, response)
+	return service.acceptRouteWork(ctx, environment, project, target, nil, record, workexecution.ActionCreate, locator, evidence)
 }
 
 func validateRouteCreationInput(input apiTypes.RouteCreate) error {

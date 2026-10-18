@@ -3,15 +3,10 @@ package etcd
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"maps"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -23,130 +18,6 @@ type backingZoneTaskChange struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
 	values     [][]byte
-}
-
-func (repository *TaskRepository) prepareBackingZoneTaskRetry(
-	ctx context.Context,
-	source TaskRecord,
-	retry TaskRecord,
-	revision int64,
-) (backingZoneTaskChange, error) {
-	if source.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
-		return repository.prepareZoneRemovalTaskRetry(ctx, source, retry, revision)
-	}
-	_, err := taskOwnsBackingZoneCascade(source)
-	return backingZoneTaskChange{}, err
-}
-
-func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
-	ctx context.Context, source TaskRecord, retry TaskRecord, revision int64,
-) (backingZoneTaskChange, error) {
-	operationID := source.Params[taskjournal.TaskZoneRemovalOperationParam]
-	if ids.Validate(ids.KindOperation, operationID) != nil || source.FinishedAt == nil || retry.RetryOf != source.ID ||
-		retry.Executor != source.Executor || retry.Type != source.Type || retry.Target != source.Target ||
-		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash ||
-		retry.RenderGeneration != source.RenderGeneration || !maps.Equal(retry.Params, source.Params) {
-		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry changed its pinned Task")
-	}
-	keys := []string{
-		environmentchanges.ZoneRemovalIntentKey(
-			operationID,
-		), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
-		blueprints.EnvironmentBlueprintHeadKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
-		environmentchanges.ComponentTaskActiveEnvironmentKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
-	}
-	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
-	if err != nil {
-		return backingZoneTaskChange{}, err
-	}
-	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil || state.Values[1] != nil ||
-		state.Values[4] != nil {
-		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone is not available for removal retry")
-	}
-	intent, err := environmentchanges.DecodeZoneRemovalIntent(state.Values[0].Value)
-	if err != nil || validateZoneRemovalTaskOwner(source, intent) != nil || intent.Status != source.Status ||
-		intent.TerminalAt == nil || !intent.TerminalAt.Equal(*source.FinishedAt) ||
-		!environmentchanges.ZoneRemovalAppliedEvidenceMatches(intent, state.Values[3]) {
-		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry authority changed")
-	}
-	if intent.Authored != nil {
-		return backingZoneTaskChange{}, errs.New(
-			errs.KindTaskNotRetryable,
-			"authored Zone removal recovery must retain the original Blueprint execution claim",
-		)
-	}
-	if state.Values[2] == nil || state.Values[2].ModRevision != intent.DesiredHeadRevision {
-		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry head changed")
-	}
-	headID, decodeErr := idempotencyrecord.DecodeTaskReference(state.Values[2].Value)
-	if decodeErr != nil || headID != intent.DesiredProjection.RevisionID {
-		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry head changed")
-	}
-	if _, err := projectedZoneRemovalTarget(intent, revision); err != nil {
-		return backingZoneTaskChange{}, err
-	}
-	retryIntent, err := environmentchanges.TransferZoneRemovalIntent(intent, retry.ID, retry.CreatedAt)
-	if err != nil {
-		return backingZoneTaskChange{}, err
-	}
-	if err := validateZoneRemovalTaskOwner(retry, retryIntent); err != nil {
-		return backingZoneTaskChange{}, err
-	}
-	hierarchy := composeHierarchyRepository(repository.store)
-	publication, err := hierarchy.prepareEnvironmentDirectPublication(
-		ctx,
-		retryIntent.Claim,
-		blueprints.EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: retryIntent.EnvironmentID,
-			RevisionID:    retryIntent.Claim.RevisionID,
-		},
-		retryIntent.CandidateProjection,
-		idempotencyrecord.IdempotencyMarker{
-			Locator: retryIntent.Claim.Locator,
-			Intent:  retryIntent.Claim.Intent,
-		},
-		retryIntent.DesiredHeadRevision,
-	)
-	if err != nil {
-		return backingZoneTaskChange{}, err
-	}
-	intentValue, err := environmentchanges.EncodeZoneRemovalIntent(retryIntent)
-	if err != nil {
-		clear(publication.publishedDescriptor)
-		return backingZoneTaskChange{}, err
-	}
-	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(deletionrecord.DeletionTombstoneRecord{
-		TargetKind: deletionrecord.DeletionTargetZone, TargetID: retry.Target, TargetRevision: intent.ZoneRevision,
-		TaskID: retry.ID, Phase: deletionrecord.DeletionPhaseHostEffects, CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt,
-	})
-	if err != nil {
-		clear(publication.publishedDescriptor)
-		clear(intentValue)
-		return backingZoneTaskChange{}, err
-	}
-	return backingZoneTaskChange{
-		applies: true,
-		conditions: []etcdstore.Condition{
-			{Key: keys[0], ModRevision: state.Values[0].ModRevision},
-			{Key: keys[1]},
-			{Key: keys[2], ModRevision: state.Values[2].ModRevision},
-			{Key: keys[3], ModRevision: etcdstore.RevisionOf(state.Values[3])},
-			{Key: keys[4]},
-			{
-				Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
-				ModRevision: publication.rootRevision,
-			},
-			{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
-			{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
-		},
-		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: keys[0], Value: intentValue},
-			{Type: etcdstore.MutationPut, Key: keys[1], Value: tombstoneValue},
-			{Type: etcdstore.MutationPut, Key: keys[4], Value: []byte(retry.ID)},
-		},
-		values: [][]byte{intentValue, tombstoneValue, publication.publishedDescriptor},
-	}, nil
 }
 
 func (repository *TaskRepository) prepareBackingZoneTaskAcknowledgement(

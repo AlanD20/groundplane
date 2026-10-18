@@ -11,13 +11,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (service *zoneDeletionService) publishZoneRemovalWork(ctx context.Context, request etcd.NetworkWorkPublication,
-	projectionEvidence controllerrevision.ProjectionEvidence, affected []string, evidence zoneDeletionEvidence,
+	projectionEvidence controllerrevision.ProjectionEvidence, affected []string, evidence zoneDeletionEvidence, impactToken string,
 ) (idempotency.IdempotencyResponse, error) {
 	placement, err := service.repository.ResolveResourceHost(ctx)
 	if err != nil {
@@ -29,6 +30,24 @@ func (service *zoneDeletionService) publishZoneRemovalWork(ctx context.Context, 
 		request.Zone.Record.Desired.ID, request.Zone.Record.Desired.Name, request.Zone.Record.Desired.Subnet, affected)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
+	}
+	var cascade capturedBackingZoneWork
+	defer cascade.Clear()
+	if request.Project.Record.Kind == hierarchy.ProjectKindBacking {
+		snapshots, err := service.repository.CaptureBackingZoneDetaches(ctx, request.Project.Record.ID,
+			request.Zone.Record.Desired.ID, request.Zone.ReadRevision)
+		if err != nil {
+			return idempotency.IdempotencyResponse{}, err
+		}
+		cascade, err = captureBackingZoneWork(ctx, service.repository, request.Task, request.Item,
+			request.Zone.ReadRevision, impactToken, snapshots)
+		if err != nil {
+			return idempotency.IdempotencyResponse{}, err
+		}
+		request.Task = cascade.Graph.Task
+		request.Item = cascade.Graph.Items[len(cascade.Graph.Items)-1]
+		request.Cascade = &etcd.NetworkCascadePublication{SnapshotRevision: cascade.Graph.SnapshotRevision,
+			Items: cascade.Graph.Items, Inputs: cascade.Inputs, Captures: cascade.Hooks}
 	}
 	desired, err := controllerrevision.DeriveCurrentMutationDesiredInput(ctx, service.repository,
 		request.Environment.Record.ID, request.Authorities.Desired.Record.RevisionID, request.Projection,

@@ -1,208 +1,86 @@
 package etcd
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
-	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
-func (repository *ScriptRepository) GetScriptExecutionPlan(
-	ctx context.Context,
-	task TaskRecord,
-) (*agentpb.ExecutionPlan, error) {
-	executionID := task.Params[scriptexecutions.ScriptExecutionIDParam]
-	if ctx == nil || repository == nil || repository.store == nil || task.Type != taskjournal.TaskScript ||
-		!scriptexecutions.ValidRawScriptExecutionID(executionID) || len(task.Steps) != 1 {
-		return nil, errs.New(errs.KindValidationFailed, "Script execution plan request is invalid")
+type ScriptWorkArtifacts struct {
+	Input      ScriptWorkInput
+	Snapshot   *agentpb.ResolvedRunnerSnapshot
+	Projection *agentpb.ScriptRunnerProjection
+	Run        *agentpb.RunScript
+	Body       *agentpb.ScriptBodyArtifact
+}
+
+func (artifacts *ScriptWorkArtifacts) Clear() {
+	if artifacts == nil {
+		return
 	}
-	read, err := repository.store.Get(ctx, scriptexecutions.ScriptExecutionKey(executionID))
+	artifacts.Input.Execution.Clear()
+	if artifacts.Body != nil {
+		clear(artifacts.Body.Body)
+		artifacts.Body.Body = nil
+	}
+}
+
+// ResolveScriptWorkArtifacts reads only captured generations at the native work
+// revision. It never reconstructs a generic plan or chooses current desired input.
+func (repository *ScriptRepository) ResolveScriptWorkArtifacts(ctx context.Context, view workqueue.View) (*ScriptWorkArtifacts, error) {
+	input, err := repository.LoadRetainedScriptWork(ctx, view)
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.Entry == nil {
-		return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
-	}
-	record, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](read.Entry.Value, "script-execution")
-	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.CurrentTaskID != task.ID ||
-		record.OperationID != task.OperationID || record.StepID != task.Steps[0].ID || record.PlanHash != task.PlanHash {
-		return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
-	}
-	if _, err := repository.manualScriptExecutionAuthority(ctx, task, record, read.ReadRevision); err != nil {
-		return nil, err
-	}
-	plan := &agentpb.ExecutionPlan{}
-	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(record.Plan, plan); err != nil {
-		return nil, errs.New(errs.KindInternal, "Script execution plan is corrupt")
-	}
-	validated, err := executionplan.Validate(plan)
-	if err != nil || hex.EncodeToString(validated.PlanHash) != task.PlanHash {
-		return nil, errs.New(errs.KindInternal, "Script execution plan is corrupt")
-	}
-	return validated, nil
+	return repository.resolveScriptWorkArtifacts(ctx, view, input)
 }
 
-func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
-	ctx context.Context,
-	task TaskRecord,
-) (*agentpb.ExecutionPlan, bool, error) {
-	if ctx == nil || repository == nil || repository.store == nil ||
-		(task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback &&
-			(task.Type != taskjournal.TaskUpdate || task.Params[releaserender.TaskReleasePublicationParam] == "")) {
-		return nil, false, errs.New(errs.KindValidationFailed, "release Script execution plan request is invalid")
+func (repository *ScriptRepository) resolveScriptWorkArtifacts(ctx context.Context, view workqueue.View, input ScriptWorkInput) (*ScriptWorkArtifacts, error) {
+	artifacts := &ScriptWorkArtifacts{
+		Input: input, Snapshot: &agentpb.ResolvedRunnerSnapshot{},
+		Projection: &agentpb.ScriptRunnerProjection{}, Run: &agentpb.RunScript{},
+		Body: &agentpb.ScriptBodyArtifact{Metadata: &agentpb.ScriptBodyArtifactMetadata{}},
 	}
-	executionIDs := make(map[string]string)
-	for _, step := range task.Steps {
-		if executionID := task.Params[releaserender.ReleaseHookStepExecutionParam(step.ID)]; executionID != "" {
-			if !scriptexecutions.ValidRawScriptExecutionID(executionID) {
-				return nil, false, errs.New(errs.KindInternal, "release Script execution identity is corrupt")
-			}
-			executionIDs[step.ID] = executionID
-		}
+	fail := func(err error) (*ScriptWorkArtifacts, error) { artifacts.Clear(); return nil, err }
+	execution := input.Execution
+	if proto.Unmarshal(execution.Snapshot, artifacts.Snapshot) != nil ||
+		proto.Unmarshal(execution.RunnerProjection, artifacts.Projection) != nil ||
+		proto.Unmarshal(execution.Run, artifacts.Run) != nil ||
+		proto.Unmarshal(execution.BodyMetadata, artifacts.Body.Metadata) != nil {
+		return fail(errs.New(errs.KindInternal, "Script captured artifact metadata is invalid"))
 	}
-	if len(executionIDs) == 0 {
-		return nil, false, nil
-	}
-	var sealed *agentpb.ExecutionPlan
-	var sealedBytes []byte
-	for stepID, executionID := range executionIDs {
-		read, err := repository.store.Get(ctx, scriptexecutions.ScriptExecutionKey(executionID))
-		if err != nil {
-			return nil, false, err
-		}
-		if read == nil || read.Entry == nil {
-			return nil, false, errs.New(errs.KindStateConflict, "release Script execution record is missing")
-		}
-		record, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](read.Entry.Value, "script-execution")
-		if err != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != executionID ||
-			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID || record.StepID != stepID ||
-			record.PlanHash != task.PlanHash {
-			return nil, false, errs.New(errs.KindInternal, "release Script execution record is corrupt")
-		}
-		if task.Type == taskjournal.TaskUpdate {
-			if authorityErr := repository.validateBlueprintScriptExecutionAuthority(
-				ctx, task, record, read.ReadRevision,
-			); authorityErr != nil {
-				return nil, false, authorityErr
-			}
-		}
-		if sealed == nil {
-			sealed = &agentpb.ExecutionPlan{}
-			if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(record.Plan, sealed); err != nil {
-				return nil, false, errs.New(errs.KindInternal, "release Script execution plan is corrupt")
-			}
-			validated, err := executionplan.Validate(sealed)
-			if err != nil || hex.EncodeToString(validated.PlanHash) != task.PlanHash {
-				return nil, false, errs.New(errs.KindInternal, "release Script execution plan is corrupt")
-			}
-			sealed = validated
-			sealedBytes = append([]byte(nil), record.Plan...)
-		} else if !bytes.Equal(record.Plan, sealedBytes) {
-			return nil, false, errs.New(errs.KindInternal, "release Script execution plans disagree")
-		}
-	}
-	for _, step := range sealed.Steps {
-		if step.GetRunScript() != nil && executionIDs[step.StepId] != step.GetRunScript().ScriptExecutionId {
-			return nil, false, errs.New(errs.KindInternal, "release Script execution plan authority is incomplete")
-		}
-	}
-	return sealed, true, nil
-}
-
-func scriptAssignmentTaskOwnsPlan(task TaskRecord, plan *agentpb.ExecutionPlan) bool {
-	if task.Type == taskjournal.TaskScript || task.Type == taskjournal.TaskDeploy ||
-		task.Type == taskjournal.TaskRollback {
-		return true
-	}
-	return task.Type == taskjournal.TaskUpdate && task.Params[releaserender.TaskReleasePublicationParam] != "" &&
-		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY && plan.TargetId == task.Target
-}
-
-// ResolveScriptAssignmentArtifacts returns the private body bytes only after
-// the durable execution, sealed plan, and immutable generation agree.
-func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
-	ctx context.Context,
-	task TaskRecord,
-	plan *agentpb.ExecutionPlan,
-) (*agentpb.ScriptAssignmentArtifacts, error) {
-	validated, err := executionplan.Validate(plan)
+	metadata := artifacts.Body.Metadata
+	key := scriptrecord.ScriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration,
+		metadata.ScriptId, metadata.Generation)
+	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
 	if err != nil {
-		return nil, err
+		return fail(err)
 	}
-	if ctx == nil || repository == nil || repository.store == nil || len(validated.ScriptBodyArtifacts) == 0 ||
-		!scriptAssignmentTaskOwnsPlan(task, validated) ||
-		hex.EncodeToString(validated.PlanHash) != task.PlanHash {
-		return nil, errs.New(errs.KindValidationFailed, "Script assignment artifact request is invalid")
+	if read != nil {
+		defer keyvalue.ClearValues(read.Values)
 	}
-	steps := make(map[string]string, len(validated.ScriptBodyArtifacts))
-	for _, step := range validated.Steps {
-		if run := step.GetRunScript(); run != nil {
-			steps[run.ScriptExecutionId] = step.StepId
-		}
+	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil ||
+		read.Values[0].Key != key || read.Values[0].ModRevision <= 0 || read.Values[0].ModRevision > view.ReadRevision {
+		return fail(errs.New(errs.KindStateConflict, "Script captured body generation is unavailable"))
 	}
-	artifacts := &agentpb.ScriptAssignmentArtifacts{}
-	for _, metadata := range validated.ScriptBodyArtifacts {
-		executionRead, readErr := repository.store.Get(
-			ctx,
-			scriptexecutions.ScriptExecutionKey(metadata.ScriptExecutionId),
-		)
-		if readErr != nil {
-			return nil, readErr
-		}
-		if executionRead == nil || executionRead.Entry == nil {
-			return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
-		}
-		execution, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](
-			executionRead.Entry.Value,
-			"script-execution",
-		)
-		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
-			execution.CurrentTaskID != task.ID ||
-			execution.OperationID != task.OperationID ||
-			execution.StepID != steps[metadata.ScriptExecutionId] ||
-			execution.PlanHash != task.PlanHash ||
-			!execution.ActiveReference {
-			return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
-		}
-		if task.Type == taskjournal.TaskScript {
-			if _, err := repository.manualScriptExecutionAuthority(ctx, task, execution, executionRead.ReadRevision); err != nil {
-				return nil, err
-			}
-		}
-		bodyRead, readErr := repository.store.Get(ctx, scriptrecord.ScriptSetBodyGenerationKey(
-			execution.EnvironmentID, execution.ScriptSetGeneration, metadata.ScriptId, metadata.Generation,
-		))
-		if readErr != nil {
-			return nil, readErr
-		}
-		if bodyRead == nil || bodyRead.Entry == nil {
-			return nil, errs.New(errs.KindInternal, "Script body generation is missing")
-		}
-		body, decodeErr := scriptrecord.DecodeScriptBodyGeneration(bodyRead.Entry.Value)
-		if decodeErr != nil || body.ScriptID != metadata.ScriptId || body.Generation != metadata.Generation ||
-			body.BodySize != metadata.Size || body.BodySHA256 != hex.EncodeToString(metadata.Sha256) ||
-			execution.BodySHA256 != body.BodySHA256 {
-			return nil, errs.New(errs.KindInternal, "Script body generation does not match its execution")
-		}
-		ownedBody := []byte(body.Body)
-		digest := sha256.Sum256(ownedBody)
-		if len(ownedBody) != int(metadata.Size) || hex.EncodeToString(digest[:]) != body.BodySHA256 {
-			clear(ownedBody)
-			return nil, errs.New(errs.KindInternal, "Script body generation content is corrupt")
-		}
-		artifacts.Bodies = append(artifacts.Bodies, &agentpb.ScriptBodyArtifact{
-			Metadata: proto.Clone(metadata).(*agentpb.ScriptBodyArtifactMetadata), Body: ownedBody,
-		})
+	body, err := scriptrecord.DecodeScriptBodyGeneration(read.Values[0].Value)
+	if err != nil || body.ScriptID != metadata.ScriptId || body.Generation != metadata.Generation ||
+		body.BodySize != metadata.Size || body.BodySHA256 != hex.EncodeToString(metadata.Sha256) ||
+		execution.BodySHA256 != body.BodySHA256 {
+		return fail(errs.New(errs.KindInternal, "Script body generation does not match captured work"))
 	}
+	artifacts.Body.Body = []byte(body.Body)
+	digest := sha256.Sum256(artifacts.Body.Body)
+	if len(artifacts.Body.Body) != int(metadata.Size) || hex.EncodeToString(digest[:]) != body.BodySHA256 {
+		return fail(errs.New(errs.KindInternal, "Script body content does not match captured digest"))
+	}
+	artifacts.Input.Conditions = append(artifacts.Input.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
 	return artifacts, nil
 }

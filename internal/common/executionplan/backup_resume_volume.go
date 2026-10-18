@@ -14,10 +14,10 @@ var volumeCheckpointMarshal = proto.MarshalOptions{Deterministic: true}
 // A Volume restore projects only accepted typed receipts. An intent remains
 // visible until its exact completion; a restart must resolve that intent
 // instead of deriving a fresh mutation from the current filesystem.
-func replayBackupVolumeRestore(replay *BackupStepResumeReplay,
+func advanceBackupVolumeRestore(step *agentpb.BackupStepAuthority,
+	resume *agentpb.BackupRestoreResume, services []*agentpb.BackupServiceFact,
 	checkpoint *agentpb.BackupVolumeCheckpoint,
 ) error {
-	step, resume := replay.step, replay.restore
 	if resume.GetArtifactValidated() == nil && resume.GetVolumeProgress() == nil {
 		return backupResumeHistoryInvalid()
 	}
@@ -43,7 +43,7 @@ func replayBackupVolumeRestore(replay *BackupStepResumeReplay,
 		if stopped == nil || resume.GetVolumeProgress() == nil && resume.GetArtifactValidated() == nil ||
 			progress.ConstructionCursor != 0 || progress.ServicePhase == agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_RESTARTED ||
 			progress.ServiceCursor != uint32(len(step.ConsumerServiceIds)) ||
-			stopped.StoppedCount != volumeRunningConsumerCount(replay.authority, step.ConsumerServiceIds) {
+			stopped.StoppedCount != volumeRunningConsumerCount(services, step.ConsumerServiceIds) {
 			return backupResumeHistoryInvalid()
 		}
 		progress.ServicePhase = agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_STOPPED
@@ -231,10 +231,10 @@ func validVolumeServiceTransition(service *agentpb.BackupVolumeServiceProgress,
 	}
 }
 
-func volumeRunningConsumerCount(authority *agentpb.BackupTaskAuthority, consumers []string) uint32 {
+func volumeRunningConsumerCount(services []*agentpb.BackupServiceFact, consumers []string) uint32 {
 	var count uint32
 	for _, serviceID := range consumers {
-		for _, fact := range authority.GetServices() {
+		for _, fact := range services {
 			if fact.ServiceId == serviceID && fact.GetPriorRuntimeIntent().GetKind() ==
 				agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING {
 				count++

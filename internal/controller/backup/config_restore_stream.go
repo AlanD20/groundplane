@@ -2,81 +2,51 @@ package backup
 
 import (
 	"context"
-	"encoding/hex"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// StreamBackupConfigRestore receives the selected archive's authenticated
-// values, not live Entry mutations. Bulk reception runs outside Connect so
-// transactions and replay cannot block heartbeat, abort or readiness messages.
-func (service *BackupCheckpointService) StreamBackupConfigRestore(
+// StreamConfigRestore receives only the archive captured by the native work
+// input. Its final credit follows durable generation publication.
+func (service *AgentWork) StreamConfigRestore(
 	ctx context.Context,
-	agentID string,
-	agentGeneration uint64,
-	authority *agentpb.BackupTaskAuthority,
-	stepID string,
+	authorization agentregistration.WorkAuthorization,
+	binding backupconfigtransfer.Binding,
 	transport backupconfigtransfer.ReceiverTransport,
 ) error {
-	if service == nil || service.configSnapshots == nil || service.configRestores == nil || ctx == nil ||
-		transport == nil {
+	if service == nil || service.configRuntime == nil || service.configRestores == nil ||
+		service.configSnapshots == nil || ctx == nil || transport == nil {
 		return configSnapshotInvalid()
 	}
-	digest, err := executionplan.BackupTaskAuthorityDigest(authority)
-	if err != nil {
+	if _, err := authorization.Conditions(); err != nil {
 		return err
 	}
-	claim, err := service.repository.GetBackupCheckpointAssignment(ctx, authority.TaskId)
-	if err != nil {
-		return err
-	}
-	assignment := claim.Record
-	if assignment.AgentID != agentID || assignment.AgentGeneration != agentGeneration ||
-		assignment.AssignmentID != authority.AssignmentId || assignment.BackupAuthorityFence == nil ||
-		assignment.BackupAuthorityFence.AssignmentGeneration != authority.AssignmentGeneration ||
-		assignment.BackupAuthorityFence.AuthoritySHA256 != hex.EncodeToString(digest) {
+	if binding.Validate() != nil || binding.Attempt.Executor != authorization.Identity() ||
+		binding.Direction != agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_RESTORE {
 		return configSnapshotGuardConflict()
 	}
-	var step *agentpb.BackupStepAuthority
-	for _, candidate := range authority.Steps {
-		if candidate.StepId == stepID {
-			step = candidate
-			break
-		}
+	attempt := binding.Attempt
+	view, err := service.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	if err != nil {
+		return err
 	}
+	assignment, _, err := service.inputs.LoadConfigTransfer(ctx, service.queue, binding, view.Work.ReadRevision)
+	if err != nil {
+		return err
+	}
+	step := assignment.Input.Steps[binding.SourceOrdinal]
 	config := step.GetRestore().GetConfig()
-	if config == nil || !assignment.BackupAuthorityFence.MatchesCheckpoint(authority.AssignmentGeneration,
-		step.StepId, step.ExecutionId, hex.EncodeToString(step.StepDigest)) {
+	if config == nil {
 		return configSnapshotGuardConflict()
 	}
 	ctx, cancel := context.WithDeadline(ctx, time.Unix(0, int64(step.StepDeadlineUnixNano)))
 	defer cancel()
-	cursor, found, err := service.repository.ReadConfigTransferCursor(ctx, authority.TaskId, authority.AssignmentId,
-		step.StepId, step.ExecutionId, claim.ReadRevision)
-	if err != nil {
-		return err
-	}
-	binding := backupconfigtransfer.Binding{TaskID: authority.TaskId, AssignmentID: authority.AssignmentId,
-		StepID: step.StepId, ExecutionID: step.ExecutionId,
-		Direction: agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_RESTORE}
-	if found {
-		binding.TransferID = cursor.Record.Owner.Binding.TransferID
-	} else {
-		binding.TransferID = ids.NewULID()
-	}
 	content := config.GetExpectedArchive().GetContent()
-	owner, err := configRestoreTransferOwner(backupconfiguration.ConfigTransferOwner{
-		Binding:              binding,
-		AgentID:              agentID,
-		AgentGeneration:      agentGeneration,
-		AssignmentGeneration: authority.AssignmentGeneration,
-		AuthoritySHA256:      hex.EncodeToString(step.StepDigest),
-	}, step.GetRestore())
+	owner, err := configRestoreTransferOwner(backupconfiguration.ConfigTransferOwner{Binding: binding}, step.GetRestore())
 	if err != nil {
 		return err
 	}
@@ -84,7 +54,7 @@ func (service *BackupCheckpointService) StreamBackupConfigRestore(
 		ctx,
 		owner,
 		content,
-		service.repository,
+		service.configRuntime,
 		service.configSnapshots.protector,
 	)
 	if err != nil {
@@ -125,20 +95,20 @@ func (service *BackupCheckpointService) StreamBackupConfigRestore(
 
 // The final grant cannot precede durable complete-generation publication.
 // Reconnect repeats only this exact seal before redelivering a lost final grant.
-func (service *BackupCheckpointService) sealConfigRestoreCompletion(ctx context.Context,
+func (service *AgentWork) sealConfigRestoreCompletion(ctx context.Context,
 	owner backupconfiguration.ConfigRestoreTransferOwner, pointID string, receiver *ConfigRestoreReceiver,
 ) error {
 	completed, err := receiver.Completed()
 	if err != nil {
 		return err
 	}
-	_, err = service.repository.SealConfigRestoreGeneration(ctx, backupconfiguration.ConfigRestoreGenerationRecord{
+	_, err = service.configRuntime.SealConfigRestoreGeneration(ctx, backupconfiguration.ConfigRestoreGenerationRecord{
 		Owner: owner, Completed: completed,
 	})
 	if err != nil {
 		return err
 	}
-	current, err := service.repository.GetBackupRestore(ctx, owner.Transfer.Binding.TaskID)
+	current, err := service.configRuntime.GetBackupRestore(ctx, owner.Transfer.Binding.Attempt.TaskID)
 	if err != nil {
 		return err
 	}
@@ -160,7 +130,7 @@ func (service *BackupCheckpointService) sealConfigRestoreCompletion(ctx context.
 	}
 	defer publication.Clear()
 	if current.Record.ConfigProgress.RevisionRootRevision > 0 {
-		return service.repository.PublishConfigRestore(
+		return service.configRuntime.PublishConfigRestore(
 			ctx,
 			publication.SourceSeal,
 			publication.Projection,

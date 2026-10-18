@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
+	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,7 +21,7 @@ func (c *Client) runSession(
 	if err := ctx.Err(); err != nil {
 		return false, nil
 	}
-	if c.releaseExecutor == nil || c.releaseRecoveryExecutor == nil || c.scriptExecutor == nil || c.hierarchyExecutor == nil || c.attachRemovalExecutor == nil || c.volumeExecutor == nil || c.networkExecutor == nil {
+	if c.backupExecutor == nil || c.removalRecovery == nil || c.lifecycleExecutor == nil || c.releaseExecutor == nil || c.releaseRecoveryExecutor == nil || c.scriptExecutor == nil || c.hierarchyExecutor == nil || c.attachRemovalExecutor == nil || c.attachProvisionExecutor == nil || c.volumeExecutor == nil || c.networkExecutor == nil || c.componentExecutor == nil || c.entryExecutor == nil {
 		return false, errs.New(errs.KindInternal, "native Release executor is not configured")
 	}
 	if err := c.processOwnership.Check(); err != nil {
@@ -97,7 +98,7 @@ func (c *Client) runSession(
 		poolCancel()
 		<-workersDone
 	}()
-	releases, err := newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, native, c.processOwnership)
+	releases, err := newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, native, c.processOwnership)
 	if err != nil {
 		return false, err
 	}
@@ -174,7 +175,9 @@ func (c *Client) runSession(
 				return agentChannelTransportResult(ctx, err, "agent: send readiness after Release completion", false)
 			}
 		case sessionNative:
-			if err := stream.Send(event.native); err != nil {
+			err := stream.Send(event.native)
+			backupconfigtransfer.ClearFrame(event.native.GetBackupConfigTransfer())
+			if err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send native work request", false)
 			}
 		case sessionEnded:
@@ -232,6 +235,19 @@ func (c *Client) runSession(
 			if err := c.processOwnership.Check(); err != nil {
 				return false, err
 			}
+			if transfer := result.message.GetBackupWorkSecretTransfer(); transfer != nil {
+				if err := native.acceptBackupSecrets(streamCtx, transfer); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if handled, err := native.acceptBackupConfig(streamCtx, result.message); handled {
+				if err != nil {
+					return false, err
+				}
+				continue
+			}
 			if handled, err := native.accept(result.message); handled {
 				if err != nil {
 					return false, err
@@ -248,6 +264,22 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
+			if assignment := result.message.GetAttachProvisionRecoveryAssignment(); assignment != nil {
+				if err := releases.submitProvisionRecovery(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetAttachProvisionAssignment(); assignment != nil {
+				err := releases.submitAttachProvision(assignment, c.availableWorkCapacity())
+				attachexecution.ClearProvision(assignment.Provision)
+				if err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			if assignment := result.message.GetAttachRemovalAssignment(); assignment != nil {
 				err := releases.submitAttachRemoval(assignment, c.availableWorkCapacity())
 				attachexecution.ClearRemoval(assignment.Removal)
@@ -257,8 +289,50 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
+			if assignment := result.message.GetEntryConfigurationWorkAssignment(); assignment != nil {
+				if err := releases.submitEntry(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetComponentWorkAssignment(); assignment != nil {
+				if err := releases.submitComponent(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			if assignment := result.message.GetNetworkWorkAssignment(); assignment != nil {
 				if err := releases.submitNetwork(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetServiceRemovalRecoveryAssignment(); assignment != nil {
+				if err := releases.submitRemovalRecovery(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetBackupWorkAssignment(); assignment != nil {
+				if err := releases.submitBackup(assignment, c.availableWorkCapacity(), staging.runtime); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetBackupRecoveryAssignment(); assignment != nil {
+				if err := releases.submitBackupRecovery(assignment, c.availableWorkCapacity(), staging.runtime); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetServiceLifecycleAssignment(); assignment != nil {
+				if err := releases.submitLifecycle(assignment, c.availableWorkCapacity()); err != nil {
 					return false, err
 				}
 				receiveNext(streamCtx, stream, received)
@@ -375,7 +449,7 @@ func (c *Client) runSession(
 				releases.close()
 				config = proto.Clone(next).(*agentpb.AgentConfig)
 				poolCancel, workersDone = c.startWorkerPool(streamCtx, int(config.MaxConcurrentTasks))
-				releases, err = newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, native, c.processOwnership)
+				releases, err = newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, native, c.processOwnership)
 				if err != nil {
 					return false, err
 				}
@@ -393,13 +467,7 @@ func (c *Client) runSession(
 				}
 				continue
 			}
-			if acknowledgement := result.message.GetBackupCheckpointAck(); acknowledgement != nil {
-				if err := c.pool.AcceptBackupCheckpointAck(acknowledgement); err != nil {
-					return false, err
-				}
-				receiveNext(streamCtx, stream, received)
-				continue
-			}
+
 			if acknowledgement := result.message.GetScriptCheckpointAck(); acknowledgement != nil {
 				if err := c.pool.AcceptScriptCheckpointAck(acknowledgement); err != nil {
 					return false, err
@@ -442,25 +510,12 @@ func (c *Client) runSession(
 				}
 				continue
 			}
-			if output.BackupCheckpoint != nil {
-				if err := c.sendBackupCheckpoint(stream, output.BackupCheckpoint); err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: send Backup checkpoint", false)
-				}
-				continue
-			}
+
 			if output.BackupConfigCredit != nil {
 				if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupConfigCredit{
 					BackupConfigCredit: output.BackupConfigCredit,
 				}}); err != nil {
 					return agentChannelTransportResult(ctx, err, "agent: send Config credit", false)
-				}
-				continue
-			}
-			if output.BackupVolumeCredit != nil {
-				if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupVolumeManifestAckCredit{
-					BackupVolumeManifestAckCredit: output.BackupVolumeCredit,
-				}}); err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: send Volume manifest credit", false)
 				}
 				continue
 			}

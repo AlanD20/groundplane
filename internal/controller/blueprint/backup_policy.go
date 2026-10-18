@@ -179,7 +179,7 @@ func (service *Service) prepareEnvironmentBlueprintBackup(
 			EnvironmentID: environmentID, TaskID: taskID, ReadRevision: readRevision,
 			Enabled: authored.Enabled, Frequency: authored.Frequency, Keep: authored.Keep,
 			Encryption: authored.Encryption, ConnectorName: authored.Connector, Sources: sources,
-			Projection: projection, AttachPreparation: attaches.publication, CreatedAt: createdAt,
+			Projection: projection, CreatedAt: createdAt,
 		},
 	)
 	if err != nil {

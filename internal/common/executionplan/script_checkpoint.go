@@ -1,10 +1,8 @@
 package executionplan
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/binary"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -26,22 +24,16 @@ func ValidateScriptCheckpointRequest(
 	}
 	if ids.Validate(ids.KindTask, owned.TaskId) != nil || ids.Validate(ids.KindOperation, owned.OperationId) != nil ||
 		ids.Validate(
-			ids.KindAssignment,
-			owned.AssignmentId,
-		) != nil || ids.Validate(ids.KindStep, owned.StepId) != nil ||
-		!validScriptCheckpointExecutionID(owned.ScriptExecutionId) || len(owned.PlanHash) != sha256.Size ||
-		len(owned.ControlPayloadSha256) != sha256.Size {
+			ids.KindAttempt,
+			owned.AttemptId,
+		) != nil || ids.Validate(ids.KindWorkItem, owned.WorkItemId) != nil ||
+		!validScriptCheckpointExecutionID(owned.ScriptExecutionId) || len(owned.InputSha256) != sha256.Size ||
+		ids.Validate(ids.KindPlan, owned.InputId) != nil || owned.Sequence == 0 || ids.Validate(ids.KindStep, owned.StageId) != nil ||
+		owned.RecordedAt == nil || owned.RecordedAt.CheckValid() != nil || owned.RecordedAt.AsTime().IsZero() {
 		return nil, errs.New(errs.KindValidationFailed, "Script checkpoint delivery identity is invalid")
 	}
 	if err := validateScriptCheckpointTransition(owned); err != nil {
 		return nil, err
-	}
-	digest, err := ComputeScriptCheckpointPayloadDigest(owned)
-	if err != nil {
-		return nil, err
-	}
-	if subtle.ConstantTimeCompare(digest, owned.ControlPayloadSha256) != 1 {
-		return nil, errs.New(errs.KindValidationFailed, "Script checkpoint control payload digest does not match")
 	}
 	return owned, nil
 }
@@ -56,46 +48,12 @@ func ComputeScriptCheckpointPayloadDigest(request *agentpb.ScriptCheckpointReque
 	if err := validateScriptCheckpointTransition(request); err != nil {
 		return nil, err
 	}
-	var encoded bytes.Buffer
-	encoded.WriteString("groundplane.script.checkpoint.v1")
-	encoded.WriteByte(0)
-	writeCheckpointUint32(&encoded, uint32(request.ExpectedState))
-	writeCheckpointUint32(&encoded, uint32(request.State))
-	switch evidence := request.Evidence.(type) {
-	case *agentpb.ScriptCheckpointRequest_StartAuthorized:
-		encoded.WriteByte(1)
-	case *agentpb.ScriptCheckpointRequest_BodyPrepared:
-		encoded.Write(evidence.BodyPrepared.BodySha256)
-		writeCheckpointUint32(&encoded, evidence.BodyPrepared.Uid)
-		writeCheckpointUint32(&encoded, evidence.BodyPrepared.Gid)
-		writeCheckpointUint64(&encoded, evidence.BodyPrepared.Device)
-		writeCheckpointUint64(&encoded, evidence.BodyPrepared.Inode)
-		writeCheckpointString(&encoded, evidence.BodyPrepared.Leaf)
-	case *agentpb.ScriptCheckpointRequest_ContainerCreated:
-		writeCheckpointString(&encoded, evidence.ContainerCreated.ContainerId)
-		encoded.Write(evidence.ContainerCreated.OwnershipLabelsSha256)
-	case *agentpb.ScriptCheckpointRequest_Outcome:
-		writeCheckpointUint32(&encoded, uint32(evidence.Outcome.Reason))
-		if evidence.Outcome.ExitCode == nil {
-			encoded.WriteByte(0)
-		} else {
-			encoded.WriteByte(1)
-			writeCheckpointUint32(&encoded, uint32(evidence.Outcome.GetExitCode()))
-		}
-		writeCheckpointBool(&encoded, evidence.Outcome.OutputTruncated)
-		observed := evidence.Outcome.ObservedAt.AsTime()
-		writeCheckpointUint64(&encoded, uint64(observed.Unix()))
-		writeCheckpointUint32(&encoded, uint32(observed.Nanosecond()))
-	case *agentpb.ScriptCheckpointRequest_Cleanup:
-		writeCheckpointString(&encoded, evidence.Cleanup.ContainerId)
-		writeCheckpointUint64(&encoded, evidence.Cleanup.BodyDevice)
-		writeCheckpointUint64(&encoded, evidence.Cleanup.BodyInode)
-		writeCheckpointString(&encoded, evidence.Cleanup.BodyLeaf)
-		writeCheckpointBool(&encoded, evidence.Cleanup.ContainerAbsent)
-		writeCheckpointBool(&encoded, evidence.Cleanup.BodyAbsent)
-		writeCheckpointBool(&encoded, evidence.Cleanup.ExecutionDirectoryAbsent)
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(request)
+	if err != nil {
+		return nil, errs.Wrap(errs.KindValidationFailed, err)
 	}
-	digest := sha256.Sum256(encoded.Bytes())
+	digest := sha256.Sum256(encoded)
+	clear(encoded)
 	return append([]byte(nil), digest[:]...), nil
 }
 
@@ -110,11 +68,17 @@ func ValidateScriptCheckpointAck(
 	if err := RejectUnknown(owned); err != nil {
 		return nil, err
 	}
+	digest, err := ComputeScriptCheckpointPayloadDigest(request)
+	if err != nil {
+		return nil, err
+	}
 	if owned.TaskId != request.TaskId || owned.OperationId != request.OperationId ||
-		owned.AssignmentId != request.AssignmentId || owned.StepId != request.StepId ||
+		owned.AttemptId != request.AttemptId || owned.WorkItemId != request.WorkItemId ||
+		owned.Sequence != request.Sequence || owned.StageId != request.StageId ||
 		owned.ScriptExecutionId != request.ScriptExecutionId || owned.State != request.State ||
-		len(owned.ControlPayloadSha256) != sha256.Size ||
-		subtle.ConstantTimeCompare(owned.ControlPayloadSha256, request.ControlPayloadSha256) != 1 {
+		ids.Validate(ids.KindPlan, owned.EvidenceId) != nil ||
+		len(owned.EvidenceSha256) != sha256.Size || len(owned.RequestSha256) != sha256.Size ||
+		subtle.ConstantTimeCompare(owned.RequestSha256, digest) != 1 {
 		return nil, errs.New(errs.KindValidationFailed, "Script checkpoint acknowledgement identity is invalid")
 	}
 	return owned, nil
@@ -339,35 +303,4 @@ func validScriptCheckpointContainerID(value string) bool {
 		}
 	}
 	return true
-}
-
-func writeCheckpointBool(target *bytes.Buffer, value bool) {
-	if value {
-		target.WriteByte(1)
-		return
-	}
-	target.WriteByte(0)
-}
-
-func writeCheckpointString(target *bytes.Buffer, value string) {
-	writeCheckpointUint32(target, uint32(len(value)))
-	target.WriteString(value)
-}
-
-func writeCheckpointUint32(target *bytes.Buffer, value uint32) {
-	var encoded [4]byte
-	binary.BigEndian.PutUint32(encoded[:], value)
-	target.Write(encoded[:])
-}
-
-func writeCheckpointUint64(target *bytes.Buffer, value uint64) {
-	var encoded [8]byte
-	binary.BigEndian.PutUint64(encoded[:], value)
-	target.Write(encoded[:])
-}
-
-func writeCheckpointInt32(target *bytes.Buffer, value int32) {
-	var encoded [4]byte
-	binary.BigEndian.PutUint32(encoded[:], uint32(value))
-	target.Write(encoded[:])
 }

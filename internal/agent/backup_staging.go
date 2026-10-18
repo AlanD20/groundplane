@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/AlanD20/groundplane/internal/agent/backupruntime"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/infra/agentstagingjournal"
 	"github.com/AlanD20/groundplane/internal/infra/backupstage"
@@ -18,6 +19,7 @@ import (
 )
 
 type backupStagingState struct {
+	runtime   *backupruntime.Staging
 	mu        sync.Mutex
 	active    map[backupstage.IDs]*backupstage.Stage
 	cleaned   map[backupstage.IDs]bool
@@ -65,7 +67,7 @@ func openBackupStaging(ctx context.Context, journal *agentstagingjournal.Journal
 		holdIDs:   make(map[backupstage.IDs]bool),
 	}
 	for _, entry := range recovery.Inventory() {
-		key, err := executionplan.BackupStagingRecoveryKey(entry.IDs.Task, entry.IDs.Step, entry.IDs.Point)
+		key, err := executionplan.BackupSourceStagingKey(entry.IDs.Task, entry.IDs.Step, entry.IDs.Point)
 		if err != nil {
 			_ = recovery.Close(ctx)
 			return nil, err
@@ -193,7 +195,7 @@ func (state *backupStagingState) applyPlan(
 		return nil, err
 	}
 	for _, disposition := range plan.Dispositions {
-		if err := inspectDatabaseStaging(ctx, disposition); err != nil {
+		if err := backupruntime.InspectDatabaseStaging(ctx, disposition); err != nil {
 			return nil, err
 		}
 	}
@@ -309,6 +311,9 @@ func (state *backupStagingState) acceptReceipt(
 		return err
 	}
 	if state.ready {
+		if state.runtime == nil {
+			return invalidAgentStaging()
+		}
 		return nil
 	}
 	stager, prepared, err := state.recovery.Complete(ctx)
@@ -323,6 +328,15 @@ func (state *backupStagingState) acceptReceipt(
 			state.prepared = append(state.prepared, entry)
 		}
 	}
+	runtime, err := backupruntime.NewStaging(state.stager, state.prepared, state.inventory, state.plan)
+	if err != nil {
+		return err
+	}
+	// Ownership moves once, after the durable recovery receipt. The old worker
+	// pool cannot open another stage through the startup coordinator.
+	state.runtime = runtime
+	state.stager = nil
+	state.prepared = nil
 	return nil
 }
 
@@ -343,7 +357,11 @@ func (state *backupStagingState) close(ctx context.Context) error {
 	for _, stage := range state.held {
 		result = errors.Join(result, stage.Suspend(ctx))
 	}
-	result = errors.Join(result, state.stager.Close(ctx))
+	if state.runtime != nil {
+		result = errors.Join(result, state.runtime.Close(ctx))
+	} else if state.stager != nil {
+		result = errors.Join(result, state.stager.Close(ctx))
+	}
 	if result == nil {
 		return nil
 	}

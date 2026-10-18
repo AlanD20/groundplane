@@ -33,7 +33,7 @@ func validateDatabaseStagingGuard(disposition *agentpb.BackupStagingDisposition)
 			serviceID = mysql.DatabaseServiceId
 		}
 	}
-	key, err := BackupStagingRecoveryKey(guard.TaskId, step.StepId, pointID)
+	key, err := BackupSourceStagingKey(guard.TaskId, step.ExecutionId, pointID)
 	if err != nil || !bytes.Equal(key, disposition.RecoveryKeySha256) || serviceID == "" ||
 		serviceID != guard.DatabaseService.ServiceId {
 		return invalidBackupStaging()

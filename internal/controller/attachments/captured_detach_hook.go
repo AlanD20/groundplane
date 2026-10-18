@@ -7,7 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
-	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	"github.com/AlanD20/groundplane/internal/controller/attachplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -16,7 +16,7 @@ import (
 // encrypted input capture. Missing capture is an error; it never reads latest
 // Secrets or manufactures a TaskRecord to resolve a native operation.
 func (service *FactService) ResolveCapturedDetachHook(ctx context.Context, source attachremoval.Input,
-	consume taskplanning.BackingHookInputConsumer,
+	consume attachplan.HookInputConsumer,
 ) error {
 	if ctx == nil || consume == nil || attachremoval.Validate(source) != nil || !source.Attach.HookBundle ||
 		!source.Attach.OwnsCredential() || source.Facts == nil || source.Backing.Desired.Hooks == nil || source.Backing.Desired.Hooks.Detach == nil {

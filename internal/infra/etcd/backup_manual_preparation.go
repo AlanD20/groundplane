@@ -4,6 +4,8 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -20,15 +22,31 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	if err != nil {
 		return PreparedManualBackupRun{}, err
 	}
+	host, err := hostbindings.ReadLocal(ctx, repository.store, sources.ReadRevision)
+	if err != nil {
+		return PreparedManualBackupRun{}, err
+	}
 	plan, err := repository.prepareBackupRunPublication(ctx, sources.Run, sources.Lock, sources.ReadRevision)
 	if err != nil {
 		return PreparedManualBackupRun{}, err
 	}
+	actor := taskjournal.TaskActorOperator
+	if sources.Run.Initiator == backupruntime.BackupRunInitiatorSchedule {
+		actor = taskjournal.TaskActorSystem
+	}
+	initiation, err := newTaskInitiation(sources.Owner, actor)
+	if err != nil {
+		plan.clear()
+		return PreparedManualBackupRun{}, err
+	}
+	plan.hostID, plan.initiation = host.Binding.HostID, initiation
+	plan.conditions = append(plan.conditions, host.Conditions...)
 	publication := &PreparedBackupRunPublication{
 		state: prepareBackupRunPublicationState(repository, plan, sources.Scope, sources.Authority, sources.Artifacts),
 	}
 	return PreparedManualBackupRun{
-		Scope: sources.Scope, Authority: sources.Authority, Artifacts: sources.Artifacts,
+		HostID: host.Binding.HostID,
+		Scope:  sources.Scope, Authority: sources.Authority, Artifacts: sources.Artifacts,
 		Run: backupruntime.CloneBackupRunPublicationRecord(sources.Run), Owner: sources.Owner, Publication: publication,
 	}, nil
 }

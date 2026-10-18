@@ -31,10 +31,6 @@ func blueprintChildTerminalResultVerified(
 		return verifiedComponent && result != nil &&
 			result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired
 	}
-	if task.Params[taskjournal.TaskBlueprintEntryUnitParam] != "" {
-		return authoredBlueprintEntryRemovalTask(task) && result != nil &&
-			result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired
-	}
 	if task.Params[taskjournal.TaskBlueprintServiceUnitParam] != "" {
 		return authoredBlueprintServiceRemovalTask(task) && result != nil &&
 			result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired
@@ -97,11 +93,7 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 		task.Params[releaserender.TaskReleasePublicationParam] != ""
 	verifiedNetworkEffect := verifiedResult && blueprintNetworkChildTaskMatches(task, execution.Unit)
 	verifiedVolumeEffect := verifiedResult && blueprintVolumeChildTaskMatches(task, execution.Unit)
-	verifiedAttachEffect := verifiedResult && blueprintAttachChildTaskMatches(task, execution.Unit)
 	verifiedComponentEffect := verifiedResult && blueprintComponentChildTaskMatches(task, execution.Unit)
-	verifiedEntryEffect := verifiedResult && execution.Unit.Removal &&
-		execution.Unit.Target.Kind == ids.KindEnvEntry && authoredBlueprintEntryRemovalTask(task) &&
-		task.Params[taskjournal.TaskBlueprintEntryUnitParam] == execution.Unit.Target.ID
 	verifiedServiceRemovalEffect := verifiedResult && execution.Unit.Removal &&
 		execution.Unit.Target.Kind == ids.KindService && authoredBlueprintServiceRemovalTask(task) &&
 		task.Params[taskjournal.TaskBlueprintServiceUnitParam] == execution.Unit.Target.ID
@@ -109,7 +101,7 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 		execution.Unit.Target.Kind == ids.KindNetwork && authoredBlueprintZoneRemovalTask(task) &&
 		task.Params[taskjournal.TaskBlueprintNetworkUnitParam] == execution.Unit.Target.ID
 	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect || verifiedVolumeEffect ||
-		verifiedAttachEffect || verifiedComponentEffect || verifiedEntryEffect || verifiedServiceRemovalEffect ||
+		verifiedComponentEffect || verifiedServiceRemovalEffect ||
 		verifiedZoneRemovalEffect
 	if status != taskjournal.TaskStatusCompleted &&
 		(!taskassignments.ValidTerminalTaskStatus(status) || !verifiedEffect) {

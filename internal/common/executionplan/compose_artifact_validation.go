@@ -14,6 +14,21 @@ import (
 )
 
 func validateArtifact(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact) error {
+	if err := validateArtifactContent(artifact); err != nil {
+		return err
+	}
+	if err := validateServices(plan, artifact); err != nil {
+		return err
+	}
+	if err := validateNetworks(plan, artifact); err != nil {
+		return err
+	}
+	return validateVolumes(plan, artifact)
+}
+
+// validateArtifactContent checks immutable bytes and ownership independently
+// of either the retired plan model or a particular native operation.
+func validateArtifactContent(artifact *agentpb.ComposeArtifact) error {
 	if artifact == nil {
 		return errs.New(errs.KindValidationFailed, "execution plan contains an empty artifact")
 	}
@@ -60,13 +75,7 @@ func validateArtifact(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 			name,
 		)
 	}
-	if err := validateServices(plan, artifact); err != nil {
-		return err
-	}
-	if err := validateNetworks(plan, artifact); err != nil {
-		return err
-	}
-	return validateVolumes(plan, artifact)
+	return nil
 }
 
 func validateNetworks(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact) error {

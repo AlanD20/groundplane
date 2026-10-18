@@ -9,7 +9,7 @@ import (
 // DNS depends on the selected Zone and named Service, never the whole Project
 // or Tenant whose labels appear in its namespace. A missing Service remains a
 // real waiting record and must still settle the absence of its DNS answer.
-func (planner *authoredUnitPlanner) planDNSUnits(serviceBlocked map[string]bool) (bool, error) {
+func (planner *authoredUnitPlanner) planDNSUnits() (bool, error) {
 	complete := true
 	for _, label := range sortedAuthoredMapKeys(planner.input.desired.Input.DNS) {
 		spec := planner.input.desired.Input.DNS[label]
@@ -27,11 +27,6 @@ func (planner *authoredUnitPlanner) planDNSUnits(serviceBlocked map[string]bool)
 			zoneID = zone.ID
 			reads = append(reads, authoredResourceKey(ids.KindNetwork, zoneID))
 			if service, exists := planner.identities[ids.KindService][spec.Service]; exists {
-				if serviceBlocked[spec.Service] {
-					planner.block(identity)
-					complete = false
-					continue
-				}
 				serviceID = service.ID
 				reads = append(reads, authoredResourceKey(ids.KindService, serviceID))
 			}

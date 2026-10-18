@@ -68,11 +68,10 @@ func operationForTarget(target TargetKind) OperationKind {
 type Phase string
 
 const (
-	PhasePlanning    Phase = "planning"
-	PhaseExecuting   Phase = "executing"
-	PhaseSummarizing Phase = "summarizing"
-	PhaseFinalizing  Phase = "finalizing"
-	PhaseRetained    Phase = "retained"
+	PhasePlanning   Phase = "planning"
+	PhaseExecuting  Phase = "executing"
+	PhaseFinalizing Phase = "finalizing"
+	PhaseRetained   Phase = "retained"
 )
 
 type ActionState string
@@ -97,7 +96,6 @@ type TaskAccepted struct {
 
 type Operation struct {
 	ID                string
-	TaskOperationID   string
 	Kind              OperationKind
 	TargetKind        TargetKind
 	TargetID          string
@@ -167,22 +165,12 @@ type PlannedAction struct {
 	PrerequisiteOrdinals []int
 	ProcedureInput       ProcedureInput
 }
-type Summary struct {
-	ActionCount             int
-	SucceededCount          int
-	FailedCount             int
-	ReceiptCount            int
-	ReceiptSummaryDigest    string
-	CompletionSummaryDigest string
-	Completed               bool
-}
 type Plan struct{ Actions []PlannedAction }
 
 const (
-	PlanBatchSize      = 47
-	ExecutionBatchSize = 1
-	OperationDeadline  = 6 * time.Hour
-	TaskRetention      = 90 * 24 * time.Hour
+	PlanBatchSize     = 24
+	OperationDeadline = 6 * time.Hour
+	TaskRetention     = 90 * 24 * time.Hour
 )
 
 func stableOperationID(kind OperationKind, targetID, idempotencyKey string) string {
@@ -200,13 +188,6 @@ func stableActionID(
 	value := fmt.Sprintf("%s\x00%020d\x00%s\x00%s\x00%s", operationID, ordinal, kind, targetKind, targetID)
 	sum := sha256.Sum256([]byte(value))
 	return "act_" + hex.EncodeToString(sum[:16])
-}
-func taskOperationID(taskID string) (string, error) {
-	separator := strings.IndexByte(taskID, '_')
-	if separator <= 0 || separator == len(taskID)-1 {
-		return "", errs.Newf(errs.KindInternal, "hierarchy deletion task id %q has no canonical suffix", taskID)
-	}
-	return "op_" + taskID[separator+1:], nil
 }
 
 func validateRequest(request DeleteRequest) error {

@@ -21,12 +21,25 @@ type Complete struct {
 	Revision int64
 }
 
+type HistoryReader interface {
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+}
+
 // ReadComplete reconstructs every frame at one fixed MVCC revision. A cursor
 // alone, or a page that omits a native frame, never proves a complete tree.
 func (repository *Repository) ReadComplete(ctx context.Context, owner Owner,
 	revision int64,
 ) (Complete, error) {
-	cursor, found, err := repository.Read(ctx, owner, revision)
+	if repository == nil {
+		return Complete{}, invalidLedger()
+	}
+	return ReadComplete(ctx, repository.store, owner, revision)
+}
+
+// ReadComplete allows settlement to verify the ledger without a writing port.
+func ReadComplete(ctx context.Context, reader HistoryReader, owner Owner, revision int64) (Complete, error) {
+	cursor, found, err := ReadCursor(ctx, reader, owner, revision)
 	if err != nil {
 		return Complete{}, err
 	}
@@ -49,7 +62,7 @@ func (repository *Repository) ReadComplete(ctx context.Context, owner Owner,
 	var next uint64 = 1
 	pageStart := ""
 	for {
-		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
+		page, err := reader.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix(owner.Binding) + "frame/", StartExclusive: pageStart,
 			Revision: cursor.ReadRevision, Limit: 32})
 		if err != nil {

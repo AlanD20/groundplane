@@ -24,11 +24,15 @@ func ValidateDatabaseRestoreExecutionPlan(record BackupRestoreRecord, plan *agen
 		validated.TargetId != record.EnvironmentID || len(validated.Steps) != 1 || validated.BackupScope == nil {
 		return invalidBackupRuntimeRecord("database Restore execution plan is invalid")
 	}
+	return validateDatabaseRestoreInput(record, validated.BackupScope, validated.Steps[0].GetBackupStep(), validated.Artifacts)
+}
+
+func validateDatabaseRestoreInput(record BackupRestoreRecord, scope *agentpb.BackupPlanScope,
+	step *agentpb.BackupStepAuthority, artifacts []*agentpb.ComposeArtifact,
+) error {
 	if err := ValidateRestoreVersionReview(record); err != nil {
 		return err
 	}
-	scope := validated.BackupScope
-	step := validated.Steps[0].GetBackupStep()
 	if step == nil || step.GetRestore() == nil {
 		return invalidBackupRuntimeRecord("database Restore Step is missing")
 	}
@@ -144,10 +148,10 @@ func ValidateDatabaseRestoreExecutionPlan(record BackupRestoreRecord, plan *agen
 		}
 		artifactIDs[service.ArtifactID] = service.ArtifactSHA256
 	}
-	if len(validated.Artifacts) != len(artifactIDs) {
+	if len(artifacts) != len(artifactIDs) {
 		return invalidBackupRuntimeRecord("PostgreSQL Restore artifact set changed")
 	}
-	for _, artifact := range validated.Artifacts {
+	for _, artifact := range artifacts {
 		expected, found := artifactIDs[artifact.ArtifactId]
 		if !found {
 			return invalidBackupRuntimeRecord("PostgreSQL Restore artifact is not selected")
@@ -165,7 +169,7 @@ func ValidateDatabaseRestoreExecutionPlan(record BackupRestoreRecord, plan *agen
 	if mysql := restore.GetMysql(); mysql != nil {
 		fact := databaseRestoreScopeService(scope, databaseServiceID)
 		matches := 0
-		for _, artifact := range validated.Artifacts {
+		for _, artifact := range artifacts {
 			for _, service := range artifact.Services {
 				if fact != nil && service.ServiceId == databaseServiceID && service.ComposeName == fact.CurrentName {
 					imageReference := sha256.Sum256([]byte(service.ImageReference))

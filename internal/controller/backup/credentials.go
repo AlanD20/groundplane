@@ -6,9 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"filippo.io/age"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	backupsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/backupsecrets"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"time"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -22,10 +25,7 @@ import (
 )
 
 type backupSecretEvidenceReader interface {
-	ResolveBackupSecretEvidence(
-		context.Context,
-		backupsecret.Request,
-	) (backupsecrets.Evidence, error)
+	ResolveWorkSecretEvidence(context.Context, *workqueue.Repository, agentregistration.WorkAuthorization, *agentpb.WorkAttemptIdentity, uint32) (backupsecrets.WorkEvidence, error)
 }
 
 // BackupSecretResolver converts one fixed-revision durable evidence snapshot
@@ -53,32 +53,9 @@ func NewBackupSecretResolver(
 	return &BackupSecretResolver{reader: reader, protector: protector, identities: identities}, nil
 }
 
-// ResolveBackupSecretSlots is the composition seam for an authenticated Agent
-// dispatch. The durable reader fences Task, claim, assignment, Agent
-// generation, sealed plan, and selected step at one MVCC revision.
-func (resolver *BackupSecretResolver) ResolveBackupSecretSlots(
-	ctx context.Context,
-	request backupsecret.Request,
+func (resolver *BackupSecretResolver) openCapturedSlots(ctx context.Context, taskID string, deadline time.Time,
+	step *agentpb.BackupStepAuthority, evidence backupsecrets.Evidence, purposes []agentpb.BackupSecretSlotPurpose,
 ) (map[agentpb.BackupSecretSlotPurpose][]byte, error) {
-	if resolver == nil || resolver.reader == nil || resolver.protector == nil {
-		return nil, errs.New(errs.KindInternal, "backup secret resolver is not configured")
-	}
-	if ctx == nil {
-		return nil, errs.New(errs.KindInternal, "backup secret resolver context is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	purposes, err := backupsecret.Purposes(request.Step)
-	if err != nil {
-		return nil, err
-	}
-	evidence, err := resolver.reader.ResolveBackupSecretEvidence(ctx, request)
-	defer evidence.Clear()
-	if err != nil {
-		return nil, err
-	}
-
 	slots := make(map[agentpb.BackupSecretSlotPurpose][]byte, len(purposes))
 	ok := false
 	defer func() {
@@ -154,7 +131,7 @@ func (resolver *BackupSecretResolver) ResolveBackupSecretSlots(
 	}
 	for _, purpose := range purposes {
 		if purpose == agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_OPERATOR_OLD_AGE_IDENTITY {
-			identity, resolveErr := resolver.identities.copy(ctx, request, evidence)
+			identity, resolveErr := resolver.identities.copy(ctx, taskID, deadline, step, evidence)
 			if resolveErr != nil {
 				return nil, resolveErr
 			}

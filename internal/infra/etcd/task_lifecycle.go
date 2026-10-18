@@ -18,12 +18,10 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 	mutations []etcdstore.Mutation,
 	materializationChange bool,
 	attachChange bool,
-	entryChange bool,
 	serviceChange bool,
-	connectorChange bool,
 ) (*environmentfence.MutationBinding, error) {
 	environmentID, applies, err := ordinaryTaskEnvironmentMutationTarget(
-		task, materializationChange, attachChange, entryChange, serviceChange, connectorChange,
+		task, materializationChange, attachChange, serviceChange,
 	)
 	if err != nil || !applies {
 		return nil, err

@@ -78,9 +78,6 @@ func execute(
 			ctx, taskRunner, owned.TimeoutSeconds, artifact, apply, recipe,
 		)
 	}
-	if step.GetComponentRestorationProbe() != nil {
-		return componentConfigurationRestorationResponse(ctx, taskRunner, owned, artifact, catalog, false)
-	}
 	if step.GetRollingTrafficSwitch() != nil || step.GetRollingReleaseAcknowledge() != nil {
 		return executeRollingProxy(ctx, taskRunner, owned, artifact, step)
 	}
@@ -146,10 +143,6 @@ func execute(
 		Schema:     SchemaVersion,
 		Outcome:    agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
 		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
-	}
-	if step.GetComponentRestorationCompensate() != nil &&
-		executionplan.ComponentConfigurationProofRequired(owned.GetPlan()) {
-		return componentConfigurationRestorationResponse(executionCtx, taskRunner, owned, artifact, catalog, true)
 	}
 	if compensate := step.GetServiceRecreateCompensate(); compensate != nil {
 		response.RecreateEvidence = &agentpb.ServiceRecreateEvidence{

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -19,6 +20,11 @@ func (repository *InputRepository) PrepareDetachRetry(ctx context.Context, view 
 	previous workqueue.AttemptSnapshot, at time.Time,
 ) (workqueue.Change, error) {
 	item, task := view.Item.Item, view.Task.Task
+	if task.Action == workexecution.ActionRemove && item.AttemptNumber == 0 && item.Result != nil &&
+		item.Result.ID == ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "cascade-publication-rejection") {
+		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable,
+			"Zone removal was rejected before execution; submit a new removal to capture current consumers and approval")
+	}
 	if item.Operation != workexecution.Detach || item.Input == nil || item.ActiveAttemptID != "" || task.CollectionStartedAt != nil ||
 		item.TaskID != task.ID || at.IsZero() || at.Before(item.UpdatedAt) {
 		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Detach has no retained idle work to retry")

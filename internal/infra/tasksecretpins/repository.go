@@ -10,7 +10,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type Repository struct{ store Store }
+type Repository struct {
+	store             Store
+	preparationGuards []Condition
+}
 
 func NewRepository(store Store) (*Repository, error) {
 	if store == nil {
@@ -23,17 +26,18 @@ func (repository *Repository) Prepare(
 	ctx context.Context,
 	operationID string,
 	taskID string,
+	workItemID string,
 	pins []tasksecretpinrecord.Record,
 ) (Prepared, error) {
 	if ctx == nil {
 		return Prepared{}, validation("secret pin preparation context is missing")
 	}
-	canonical, digest, err := canonicalPins(operationID, taskID, pins)
+	canonical, digest, err := canonicalPins(operationID, taskID, workItemID, pins)
 	if err != nil {
 		return Prepared{}, err
 	}
 	expected := setRecord{
-		Schema: setSchema, OperationID: operationID, TaskID: taskID,
+		Schema: setSchema, OperationID: operationID, TaskID: taskID, WorkItemID: workItemID,
 		MembershipCount: uint64(len(canonical)), MembershipSHA256: digest, Phase: phasePreparing,
 	}
 	descriptor, revision, err := repository.ensurePreparation(ctx, expected)
@@ -114,6 +118,7 @@ func matchingPreparation(value *KeyValue, expected setRecord) (setRecord, int64,
 
 func sameSet(left, right setRecord) bool {
 	return left.OperationID == right.OperationID && left.TaskID == right.TaskID &&
+		left.WorkItemID == right.WorkItemID &&
 		left.MembershipCount == right.MembershipCount && left.MembershipSHA256 == right.MembershipSHA256
 }
 
@@ -243,6 +248,7 @@ func (repository *Repository) transact(
 	conditions []Condition,
 	mutations []Mutation,
 ) (TransactionResult, error) {
+	conditions = append(append([]Condition(nil), conditions...), repository.preparationGuards...)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return TransactionResult{}, errs.Wrap(errs.KindStorageUnavailable, err)

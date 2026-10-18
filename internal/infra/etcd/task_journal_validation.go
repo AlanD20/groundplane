@@ -13,31 +13,13 @@ import (
 )
 
 func ValidateTaskRecord(record TaskRecord) error {
-	if err := validateEdgeCheckTask(record); err != nil {
-		return err
-	}
-	if err := validateRunnerCheckTask(record); err != nil {
-		return err
-	}
-	if err := validateDNSCheckTask(record); err != nil {
-		return err
-	}
-	if err := validateBackingCheckTask(record); err != nil {
-		return err
-	}
 	if err := validateSoftwarePreparationTask(record); err != nil {
 		return err
 	}
 	if err := validateSoftwareActivationTask(record); err != nil {
 		return err
 	}
-	if err := validateImageFetchTask(record); err != nil {
-		return err
-	}
 	if _, _, err := taskConfigurationCondition(record); err != nil {
-		return err
-	}
-	if err := validateTaskEntryRuntime(record); err != nil {
 		return err
 	}
 	if err := recordcodec.ValidateID(ids.KindTask, record.ID); err != nil {
@@ -80,7 +62,7 @@ func ValidateTaskRecord(record TaskRecord) error {
 			record.Owner.EnvironmentID == "" || record.Target != record.Owner.EnvironmentID ||
 			record.Params[blueprints.EnvironmentDesiredRevisionParam] != record.ID ||
 			len(record.Steps) != 0 || len(record.Materializations) != 0 ||
-			record.Configuration != nil || record.EntryRuntime != nil || record.Result != nil) {
+			record.Configuration != nil || record.Result != nil) {
 		return errs.New(errs.KindValidationFailed, "Blueprint parent Task shape is invalid")
 	}
 	if record.BlueprintFailure != nil {

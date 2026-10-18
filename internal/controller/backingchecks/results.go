@@ -90,8 +90,8 @@ func accessCheckResult(record checkrecord.Record, stale bool) apiTypes.BackingCh
 		ExecutionLocation: "consumer workload network", Configuration: configuration, Stale: stale,
 		Phase: string(record.Phase), Outcome: string(record.Outcome), Failure: record.Failure,
 		Stages: []apiTypes.BackingCheckStage{}, CleanupRequired: record.Phase == checkrecord.CleanupRequired,
-		CleanupTaskID: record.TransferredTo, CreatedAt: record.CreatedAt.Format(time.RFC3339)}
-	if record.CleanupPending && record.Phase != checkrecord.Transferred {
+		CreatedAt: record.CreatedAt.Format(time.RFC3339)}
+	if record.CleanupPending {
 		result.HelperName = backingaccess.HelperName(record.HelperTaskID)
 	}
 	if record.Observation != nil {

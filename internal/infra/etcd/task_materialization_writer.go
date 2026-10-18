@@ -52,10 +52,6 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 	environmentID string,
 	readRevision int64,
 ) (taskMaterializationWriterRecord, []etcdstore.Condition, error) {
-	entryRuntimeConditions, err := repository.entryRuntimeClaimConditions(ctx, record, readRevision)
-	if err != nil {
-		return taskMaterializationWriterRecord{}, nil, err
-	}
 	configurationConditions, err := repository.runtimeConfigurationClaimConditions(
 		ctx,
 		record,
@@ -64,13 +60,12 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 	if err != nil {
 		return taskMaterializationWriterRecord{}, nil, err
 	}
-	entryRuntimeConditions = append(entryRuntimeConditions, configurationConditions...)
 	if !taskHasBlueprintCandidateAppliedAuthority(record) {
 		writer := taskMaterializationWriter(record, environmentID, nil)
 		if err := validateTaskMaterializationWriterForTask(writer, record, environmentID); err != nil {
 			return taskMaterializationWriterRecord{}, nil, err
 		}
-		return writer, entryRuntimeConditions, nil
+		return writer, configurationConditions, nil
 	}
 	predecessor, predecessorCondition, err := repository.readTaskMaterializationAppliedPredecessor(
 		ctx, environmentID, record, readRevision,
@@ -78,7 +73,7 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 	if err != nil {
 		return taskMaterializationWriterRecord{}, nil, err
 	}
-	conditions := append(entryRuntimeConditions, predecessorCondition)
+	conditions := append(configurationConditions, predecessorCondition)
 	if record.RetryOf != "" && record.Type == taskjournal.TaskUpdate &&
 		record.Params[releaserender.TaskReleasePublicationParam] != "" {
 		authority, authorityCondition, authorityErr := repository.blueprintCandidateAttemptAuthority(
@@ -224,14 +219,6 @@ func (repository *TaskRepository) prepareTaskMaterializationAcknowledgement(
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
-	runtime, err := repository.prepareEntryRuntimeAcknowledgement(ctx, terminal, assignment, readRevision)
-	if err != nil {
-		clearTaskMaterializationProjectionChange(change)
-		return taskMaterializationProjectionChange{}, err
-	}
-	change.applies = change.applies || runtime.applies
-	change.conditions = append(change.conditions, runtime.conditions...)
-	change.mutations = append(change.mutations, runtime.mutations...)
 	configuration, err := prepareRuntimeConfigurationAcknowledgement(terminal)
 	if err != nil {
 		clearTaskMaterializationProjectionChange(change)
@@ -305,11 +292,9 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	// Blueprint Apply can execute Components even without native Releases.
 	volumeIdentity := record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume &&
 		(record.Type == taskjournal.TaskCreate || record.Type == taskjournal.TaskUpdate)
-	entryMutation := record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry &&
-		record.Type == taskjournal.TaskUpdate
 	configuredApply := record.Params[componentTaskBlueprintProcedureParam] == componentTaskBlueprintProcedureNone
 	if volumeIdentity ||
-		record.Type == taskjournal.TaskUpdate && !entryMutation && !configuredApply && !taskHasBlueprintCandidateAppliedAuthority(record) &&
+		record.Type == taskjournal.TaskUpdate && !configuredApply && !taskHasBlueprintCandidateAppliedAuthority(record) &&
 			state.Values[1] != nil {
 		if state.Values[1] != nil {
 			if _, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[1].Value); err != nil {
@@ -458,8 +443,7 @@ func taskEnvironmentWriter(record TaskRecord) (string, bool, error) {
 		if record.Target != record.Owner.EnvironmentID ||
 			recordcodec.ValidateID(ids.KindEnvironment, record.Target) != nil ||
 			len(record.Materializations) != 0 ||
-			record.Configuration != nil ||
-			record.EntryRuntime != nil {
+			record.Configuration != nil {
 			return "", false, errs.New(errs.KindValidationFailed, "release network writer ownership is invalid")
 		}
 		return record.Owner.EnvironmentID, true, nil

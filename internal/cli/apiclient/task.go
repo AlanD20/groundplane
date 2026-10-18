@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
@@ -21,30 +22,31 @@ import (
 
 const taskEventReconnectDelay = time.Second
 
-// TaskListOptions is the one query contract shared by Task and Activity.
-// Environment, Project, and Workspace are mutually exclusive stable API
-// identifiers; an empty set selects the global journal.
-type TaskListOptions struct {
-	Limit        int
-	Cursor       string
-	Environment  string
-	Project      string
-	Workspace    string
-	Status       string
-	Type         string
-	ResourceKind string
-}
-
-func (c *Client) RetryTask(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RetryTask(ctx context.Context, id string, input apiTypes.TaskRetryRequest) (apiTypes.TaskAccepted, error) {
+	if ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil {
+		return apiTypes.TaskAccepted{}, errs.New(errs.KindValidationFailed, "Retry requires a work item and attempt number")
+	}
+	if input.Attempt == 0 && input.QueuedFailureAt == nil {
+		captured, err := c.captureQueuedTaskRetry(ctx, id, input.WorkItemID)
+		if err != nil {
+			return apiTypes.TaskAccepted{}, err
+		}
+		input.QueuedFailureAt = &captured
+	}
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
 	path := "/api/v1/tasks/" + id + "/retry"
-	response, err := client.TaskRetryWithResponse(
+	body, err := json.Marshal(input)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, errs.Wrap(errs.KindInternal, err)
+	}
+	response, err := client.TaskRetryWithBodyWithResponse(
 		ctx,
 		id,
 		&generated.TaskRetryParams{IdempotencyKey: ids.NewULID()},
+		"application/json", bytes.NewReader(body),
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
@@ -54,7 +56,14 @@ func (c *Client) RetryTask(ctx context.Context, id string) (apiTypes.TaskAccepte
 	); err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+	accepted, err := generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	if accepted.TaskID != id {
+		return apiTypes.TaskAccepted{}, errs.New(errs.KindInternal, "Retry returned a different Task identity")
+	}
+	return accepted, nil
 }
 
 func (c *Client) AbortTask(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
@@ -77,199 +86,6 @@ func (c *Client) AbortTask(ctx context.Context, id string) (apiTypes.TaskAccepte
 		return apiTypes.TaskAccepted{}, err
 	}
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
-}
-
-func (c *Client) ListTasks(
-	ctx context.Context,
-	options TaskListOptions,
-) (apiTypes.Page[apiTypes.Task], error) {
-	client, err := c.generatedHumanClient()
-	if err != nil {
-		return apiTypes.Page[apiTypes.Task]{}, err
-	}
-	params, err := taskListParams(options)
-	if err != nil {
-		return apiTypes.Page[apiTypes.Task]{}, err
-	}
-	response, err := client.TaskListWithResponse(ctx, params)
-	if err != nil {
-		return apiTypes.Page[apiTypes.Task]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/tasks", err)
-	}
-	if err := generatedResponseError(
-		http.MethodGet, "/api/v1/tasks", response.HTTPResponse, response.Body, http.StatusOK,
-	); err != nil {
-		return apiTypes.Page[apiTypes.Task]{}, err
-	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.PageTask{}
-		if err := decodeSingleJSON(
-			http.MethodGet,
-			"/api/v1/tasks",
-			bytes.NewReader(response.Body),
-			parsed,
-		); err != nil {
-			return apiTypes.Page[apiTypes.Task]{}, err
-		}
-	}
-	page, err := taskPageFromGenerated(*parsed)
-	if err != nil {
-		return apiTypes.Page[apiTypes.Task]{}, err
-	}
-	return page, nil
-}
-
-func (c *Client) ListActivity(
-	ctx context.Context,
-	options TaskListOptions,
-) (apiTypes.Page[apiTypes.Task], error) {
-	client, err := c.generatedHumanClient()
-	if err != nil {
-		return apiTypes.Page[apiTypes.Task]{}, err
-	}
-	base, err := taskListParams(options)
-	if err != nil {
-		return apiTypes.Page[apiTypes.Task]{}, err
-	}
-	params := &generated.ActivityListParams{
-		Limit: base.Limit, Cursor: base.Cursor, Environment: base.Environment,
-		Project: base.Project, Workspace: base.Workspace,
-		Type: base.Type, ResourceKind: base.ResourceKind,
-	}
-	if base.Status != nil {
-		status := generated.ActivityListParamsStatus(*base.Status)
-		params.Status = &status
-	}
-	response, err := client.ActivityListWithResponse(ctx, params)
-	if err != nil {
-		return apiTypes.Page[apiTypes.Task]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/activity", err)
-	}
-	if err := generatedResponseError(
-		http.MethodGet, "/api/v1/activity", response.HTTPResponse, response.Body, http.StatusOK,
-	); err != nil {
-		return apiTypes.Page[apiTypes.Task]{}, err
-	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.PageTask{}
-		if err := decodeSingleJSON(
-			http.MethodGet,
-			"/api/v1/activity",
-			bytes.NewReader(response.Body),
-			parsed,
-		); err != nil {
-			return apiTypes.Page[apiTypes.Task]{}, err
-		}
-	}
-	page, err := taskPageFromGenerated(*parsed)
-	if err != nil {
-		return apiTypes.Page[apiTypes.Task]{}, err
-	}
-	return page, nil
-}
-
-func taskListParams(options TaskListOptions) (*generated.TaskListParams, error) {
-	scopeCount := 0
-	for _, value := range []string{options.Environment, options.Project, options.Workspace} {
-		if value != "" {
-			scopeCount++
-		}
-	}
-	if scopeCount > 1 {
-		return nil, errs.New(
-			errs.KindValidationFailed,
-			"task journal accepts only one of environment, project, or workspace",
-		)
-	}
-	params := &generated.TaskListParams{}
-	if options.Status != "" {
-		value := generated.TaskListParamsStatus(options.Status)
-		params.Status = &value
-	}
-	if options.Type != "" {
-		params.Type = &options.Type
-	}
-	if options.ResourceKind != "" {
-		params.ResourceKind = &options.ResourceKind
-	}
-	if options.Limit != 0 {
-		value := int64(options.Limit)
-		params.Limit = &value
-	}
-	if options.Cursor != "" {
-		params.Cursor = &options.Cursor
-	}
-	if options.Environment != "" {
-		params.Environment = &options.Environment
-	}
-	if options.Project != "" {
-		params.Project = &options.Project
-	}
-	if options.Workspace != "" {
-		params.Workspace = &options.Workspace
-	}
-	return params, nil
-}
-
-func taskPageFromGenerated(parsed generated.PageTask) (apiTypes.Page[apiTypes.Task], error) {
-	items := []generated.Task(nil)
-	if parsed.Items != nil {
-		items = *parsed.Items
-	}
-	page := apiTypes.Page[apiTypes.Task]{Items: make([]apiTypes.Task, len(items))}
-	if parsed.NextCursor != nil {
-		page.NextCursor = *parsed.NextCursor
-	}
-	for index, item := range items {
-		task, err := taskFromGenerated(item)
-		if err != nil {
-			return apiTypes.Page[apiTypes.Task]{}, err
-		}
-		page.Items[index] = task
-	}
-	return page, nil
-}
-
-type TaskDetailOptions struct {
-	ExecutionLimit  int
-	ExecutionCursor string
-}
-
-func (c *Client) ShowTask(ctx context.Context, id string, options TaskDetailOptions) (apiTypes.Task, error) {
-	client, err := c.generatedHumanClient()
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	path := "/api/v1/tasks/" + id
-	params := &generated.TaskShowParams{}
-	if options.ExecutionLimit != 0 {
-		limit := int64(options.ExecutionLimit)
-		params.ExecutionLimit = &limit
-	}
-	if options.ExecutionCursor != "" {
-		params.ExecutionCursor = &options.ExecutionCursor
-	}
-	response, err := client.TaskShowWithResponse(ctx, id, params)
-	if err != nil {
-		return apiTypes.Task{}, generatedCallError(ctx, http.MethodGet, path, err)
-	}
-	if err := generatedResponseError(
-		http.MethodGet, path, response.HTTPResponse, response.Body, http.StatusOK,
-	); err != nil {
-		return apiTypes.Task{}, err
-	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.Task{}
-		if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.Task{}, err
-		}
-	}
-	task, err := taskFromGenerated(*parsed)
-	if err != nil {
-		return apiTypes.Task{}, err
-	}
-	return task, nil
 }
 
 func valueOrEmpty(value *string) string {
@@ -316,7 +132,7 @@ func (c *Client) StreamTaskEvents(
 			}
 			continue
 		}
-		if terminalPublicTaskStatus(task.Status) {
+		if task.Task.FinishedAt != nil {
 			return nil
 		}
 		if err := waitForTaskEventReconnect(ctx); err != nil {
@@ -468,51 +284,12 @@ func decodeTaskEventFrame(path string, frameID string, data string) (uint64, api
 	if err := decodeSingleJSON(http.MethodGet, path, strings.NewReader(data), &event); err != nil {
 		return 0, apiTypes.TaskEvent{}, err
 	}
-	if event.Sequence != sequence || (event.StepID == "") != (event.ControllerOperation != nil) ||
-		event.Attempt == 0 || event.Ordinal == 0 || event.ReceivedAt.IsZero() ||
-		!validPublicTaskStatus(event.State) {
+	if event.Sequence != sequence || event.AttemptSequence == 0 || event.RecordedAt.IsZero() ||
+		ids.Validate(ids.KindWorkItem, event.WorkItemID) != nil || ids.Validate(ids.KindAttempt, event.AttemptID) != nil ||
+		event.Stage.Validate() != nil {
 		return 0, apiTypes.TaskEvent{}, errs.New(errs.KindInternal, "apiclient: Task event data is invalid")
 	}
-	if operation := event.ControllerOperation; operation != nil {
-		if operation.Stage == "" || len(operation.Stage) > 128 || operation.Name == "" ||
-			len(operation.Name) > 256 || event.HealthWait != nil {
-			return 0, apiTypes.TaskEvent{}, errs.New(errs.KindInternal, "apiclient: Controller operation is invalid")
-		}
-	}
-	if event.HealthWait.Validate() != nil ||
-		event.HealthWait != nil && (event.State != apiTypes.TaskRunning || event.Ordinal < 2) {
-		return 0, apiTypes.TaskEvent{}, errs.New(errs.KindInternal, "apiclient: Task health observation is invalid")
-	}
-	if failure := event.Failure; failure != nil {
-		if failure.Status != string(event.State) || failure.StepID != event.StepID ||
-			!terminalPublicTaskStatus(event.State) || event.State == apiTypes.TaskCompleted ||
-			failure.Summary == "" || len(failure.Summary) > 1024 || len(failure.Code) > 128 || event.HealthWait != nil {
-			return 0, apiTypes.TaskEvent{}, errs.New(
-				errs.KindInternal,
-				"apiclient: Task failure observation is invalid",
-			)
-		}
-	}
 	return sequence, event, nil
-}
-
-func validPublicTaskStatus(status apiTypes.TaskStatus) bool {
-	switch status {
-	case apiTypes.TaskPending, apiTypes.TaskRunning, apiTypes.TaskCompleted,
-		apiTypes.TaskFailed, apiTypes.TaskAborted, apiTypes.TaskTimedOut:
-		return true
-	default:
-		return false
-	}
-}
-
-func terminalPublicTaskStatus(status apiTypes.TaskStatus) bool {
-	switch status {
-	case apiTypes.TaskCompleted, apiTypes.TaskFailed, apiTypes.TaskAborted, apiTypes.TaskTimedOut:
-		return true
-	default:
-		return false
-	}
 }
 
 func waitForTaskEventReconnect(ctx context.Context) error {

@@ -9,14 +9,12 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerconnectioncheck"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerchecks"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"github.com/AlanD20/groundplane/internal/infra/runnerjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -25,21 +23,19 @@ const runnerCheckRoute = "/runners/{id}/checks"
 
 type ConnectionCheckService struct {
 	runners     *etcd.RunnerRepository
-	plans       *runnerjournal.Journal
 	records     *runnerchecks.Repository
 	idempotency *etcd.IdempotencyRepository
 	coordinator *requestidempotency.Coordinator
 }
 
-func NewConnectionCheckService(runnerRecords *etcd.RunnerRepository, plans *runnerjournal.Journal,
+func NewConnectionCheckService(runnerRecords *etcd.RunnerRepository,
 	records *runnerchecks.Repository, evidence *etcd.IdempotencyRepository, coordinator *requestidempotency.Coordinator,
 ) (*ConnectionCheckService, error) {
-	if runnerRecords == nil || plans == nil || records == nil || evidence == nil || coordinator == nil {
+	if runnerRecords == nil || records == nil || evidence == nil || coordinator == nil {
 		return nil, errs.New(errs.KindInternal, "Runner diagnostic admission dependencies are required")
 	}
 	return &ConnectionCheckService{
 		runners:     runnerRecords,
-		plans:       plans,
 		records:     records,
 		idempotency: evidence,
 		coordinator: coordinator,
@@ -109,7 +105,7 @@ func (service *ConnectionCheckService) CheckConnections(ctx context.Context, run
 		return idempotency.IdempotencyResponse{}, err
 	}
 	runtime := source.Runner()
-	plan, err := service.plans.ReadyPlan(ctx, runnerID, runtime.RuntimeEpoch, runtime.CreateTaskID)
+	plan, err := service.runners.LoadAppliedRunnerPlan(ctx, runnerID, runtime.RuntimeEpoch, runtime.ContainerID)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
@@ -119,6 +115,7 @@ func (service *ConnectionCheckService) CheckConnections(ctx context.Context, run
 	now := time.Now().UTC()
 	owner := runnerchecks.Owner{
 		TaskID:      ids.New(ids.KindTask),
+		WorkItemID:  ids.New(ids.KindWorkItem),
 		PlanID:      ids.New(ids.KindPlan),
 		OperationID: ids.New(ids.KindOperation),
 	}
@@ -138,16 +135,12 @@ func (service *ConnectionCheckService) CheckConnections(ctx context.Context, run
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
-	taskOwner, err := runners.TaskOwner(runtime.Desired)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	task := etcd.TaskRecord{ID: owner.TaskID, OperationID: owner.OperationID, PlanID: owner.PlanID, PlanHash: hash,
-		Owner: taskOwner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
-		RenderGeneration: 1, Type: taskjournal.TaskCheck, Target: runnerID, TargetName: runtime.Desired.Slug, IdempotencyKey: key,
-		Params: map[string]string{taskjournal.TaskResourceKindParam: runners.TaskResourceRunner,
-			taskjournal.TaskRunnerCheckInputParam: record.InputSHA256}, TimeoutSeconds: 60,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now}
+	task := workexecution.Task{ID: owner.TaskID, Actor: workexecution.OperatorActor,
+		Scope: workexecution.Scope{TenantID: runtime.Desired.TenantID,
+			ProjectID: runtime.Desired.ProjectID(), EnvironmentID: runtime.Desired.EnvironmentID()},
+		Action: workexecution.ActionCheck, TargetID: runnerID, TargetName: runtime.Desired.Slug,
+		Intent: workexecution.Input{ID: owner.PlanID, SHA256: hash}, ExpectedItems: 1,
+		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Minute)}
 	return service.publish(ctx, source, record, task, locator, evidence)
 }
 
@@ -155,7 +148,7 @@ func (service *ConnectionCheckService) publish(
 	ctx context.Context,
 	source etcd.RunnerCheckSource,
 	record runnerchecks.Record,
-	task etcd.TaskRecord,
+	task workexecution.Task,
 	locator idempotency.IdempotencyLocator,
 	evidence requestidempotency.ProtectedEvidence,
 ) (idempotency.IdempotencyResponse, error) {
@@ -185,7 +178,7 @@ func (service *ConnectionCheckService) publish(
 	}
 	marker.ReplayTarget = &idempotency.IdempotencyReplayTarget{
 		Kind: idempotency.IdempotencyReplayTargetRunner,
-		ID:   task.Target,
+		ID:   task.TargetID,
 	}
 	result, err := service.runners.CreateRunnerCheck(ctx, source, record, task, marker)
 	if err != nil {

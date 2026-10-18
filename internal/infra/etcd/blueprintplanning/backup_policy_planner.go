@@ -23,8 +23,6 @@ func NewBackupPolicyPlanner(store blueprintReadStore, policy *backuppolicymutati
 type TaskIdentity struct{ ID, Target string }
 
 // Conditions and Mutations borrow buffers until the enclosing publication clears them.
-func (publication AttachPublication) Conditions() []keyvalue.Condition { return publication.conditions }
-func (publication AttachPublication) Mutations() []keyvalue.Mutation   { return publication.mutations }
 func (publication BackupPolicyPublication) Conditions() []keyvalue.Condition {
 	return publication.conditions
 }

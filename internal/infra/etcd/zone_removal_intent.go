@@ -90,6 +90,6 @@ func authoredBlueprintZoneRemovalTask(task TaskRecord) bool {
 		task.Params[taskjournal.TaskZoneEnvironmentParam] == task.Owner.EnvironmentID &&
 		ids.Validate(ids.KindOperation, task.Params[taskjournal.TaskZoneRemovalOperationParam]) == nil &&
 		len(task.Steps) == 1 && task.Steps[0].Kind == taskjournal.TaskStepOperation &&
-		len(task.Materializations) == 0 && task.EntryRuntime == nil && task.Configuration == nil &&
+		len(task.Materializations) == 0 && task.Configuration == nil &&
 		len(task.ComponentActionStepIDs) == 0 && len(task.ManagedComponentTeardownSources) == 0
 }

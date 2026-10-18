@@ -28,7 +28,6 @@ type TaskResultData struct {
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
 	RollingEvidence                 []rollingrelease.Completion         `json:"rolling_evidence,omitempty"`
 	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`
-	ComponentRestorationEvidence    *TaskComponentRestorationEvidence   `json:"component_restoration_evidence,omitempty"`
 	ServiceAbsenceEvidence          *TaskServiceAbsenceEvidence         `json:"service_absence_evidence,omitempty"`
 	DNSResolverCandidateObservation *TaskDNSResolverObservationEvidence `json:"dns_resolver_candidate_observation,omitempty"`
 	DNSResolverRollbackObservation  *TaskDNSResolverObservationEvidence `json:"dns_resolver_rollback_observation,omitempty"`
@@ -54,13 +53,12 @@ func TaskResultToData(result *TaskResultRecord) *TaskResultData {
 		Kind: result.Kind, ExitCode: result.ExitCode, FailedStepID: result.FailedStepID,
 		BackingObservations: backingruntimefact.CloneObservations(result.BackingObservations),
 		Diagnostic:          result.Diagnostic, ReconciliationRequired: result.ReconciliationRequired,
-		Projects:                     make([]taskObservedProjectSummaryData, len(result.Projects)),
-		ProxyEvidence:                append([]TaskProxyEvidence(nil), result.ProxyEvidence...),
-		RecreateEvidence:             append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
-		RollingEvidence:              append([]rollingrelease.Completion(nil), result.RollingEvidence...),
-		CandidateAbsenceEvidence:     CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence),
-		ComponentRestorationEvidence: CloneTaskComponentRestorationEvidence(result.ComponentRestorationEvidence),
-		ServiceAbsenceEvidence:       CloneTaskServiceAbsenceEvidence(result.ServiceAbsenceEvidence),
+		Projects:                 make([]taskObservedProjectSummaryData, len(result.Projects)),
+		ProxyEvidence:            append([]TaskProxyEvidence(nil), result.ProxyEvidence...),
+		RecreateEvidence:         append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
+		RollingEvidence:          append([]rollingrelease.Completion(nil), result.RollingEvidence...),
+		CandidateAbsenceEvidence: CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence),
+		ServiceAbsenceEvidence:   CloneTaskServiceAbsenceEvidence(result.ServiceAbsenceEvidence),
 	}
 	data.DNSResolverCandidateObservation = CloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverCandidateObservation,
@@ -87,13 +85,12 @@ func TaskResultFromData(data *TaskResultData) (*TaskResultRecord, error) {
 		Kind: data.Kind, ExitCode: data.ExitCode, FailedStepID: data.FailedStepID,
 		BackingObservations: backingruntimefact.CloneObservations(data.BackingObservations),
 		Diagnostic:          data.Diagnostic, ReconciliationRequired: data.ReconciliationRequired,
-		Projects:                     make([]TaskObservedProjectSummary, len(data.Projects)),
-		ProxyEvidence:                append([]TaskProxyEvidence(nil), data.ProxyEvidence...),
-		RecreateEvidence:             append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),
-		RollingEvidence:              append([]rollingrelease.Completion(nil), data.RollingEvidence...),
-		CandidateAbsenceEvidence:     CloneTaskCandidateAbsenceEvidence(data.CandidateAbsenceEvidence),
-		ComponentRestorationEvidence: CloneTaskComponentRestorationEvidence(data.ComponentRestorationEvidence),
-		ServiceAbsenceEvidence:       CloneTaskServiceAbsenceEvidence(data.ServiceAbsenceEvidence),
+		Projects:                 make([]TaskObservedProjectSummary, len(data.Projects)),
+		ProxyEvidence:            append([]TaskProxyEvidence(nil), data.ProxyEvidence...),
+		RecreateEvidence:         append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),
+		RollingEvidence:          append([]rollingrelease.Completion(nil), data.RollingEvidence...),
+		CandidateAbsenceEvidence: CloneTaskCandidateAbsenceEvidence(data.CandidateAbsenceEvidence),
+		ServiceAbsenceEvidence:   CloneTaskServiceAbsenceEvidence(data.ServiceAbsenceEvidence),
 	}
 	if data.DNSResolverCandidateObservation != nil {
 		evidence := *data.DNSResolverCandidateObservation

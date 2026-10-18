@@ -1,10 +1,7 @@
 package blueprintunits
 
 import (
-	"slices"
-
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core/blueprintreconcile"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -12,7 +9,7 @@ import (
 // The Route receipt compares the immutable authored root in one transaction.
 // Ensure settles metadata before router execution; removal requires the caller
 // to join exact acknowledged withdrawal and metadata retirement in that commit.
-func PrepareControllerRouteSettlement(
+func prepareControllerRouteReceipt(
 	snapshot Snapshot,
 	unit Unit,
 	operationID string,
@@ -26,15 +23,6 @@ func PrepareControllerRouteSettlement(
 	}
 	if !desiredControllerUnitMatches(snapshot.Desired.Record.Units, unit) {
 		return MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint Route unit changed")
-	}
-	selection, err := Select(snapshot)
-	if err != nil {
-		return MutationPlan{}, err
-	}
-	if !slices.Contains(selection.Ready, blueprintreconcile.ResourceKey{
-		Kind: unit.Target.Kind, ID: unit.Target.ID,
-	}) {
-		return MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint Route unit is not ready")
 	}
 	state := Applied
 	if unit.Removal {

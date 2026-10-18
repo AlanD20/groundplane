@@ -13,13 +13,20 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+type authoredAttachFactReader interface {
+	GetAttachFactsVersioned(
+		context.Context,
+		etcdstore.Versioned[attachrecord.Record],
+	) (etcdstore.Versioned[attachrecord.EncryptedFacts], bool, error)
+}
+
 func (service *Service) captureAuthoredAttachBinding(
 	ctx context.Context, parentID string, spec core.AttachmentSpec,
 	consumer etcdstore.Versioned[attachrecord.Record],
 	current []etcdstore.Versioned[attachrecord.Record],
 	allocator *desiredrevision.BlueprintIdentityAllocator,
 ) (etcd.BlueprintAttachInputGenerationPublication, error) {
-	reader, ok := service.repository.(authoredAttachRemovalFactReader)
+	reader, ok := service.repository.(authoredAttachFactReader)
 	if !ok {
 		return etcd.BlueprintAttachInputGenerationPublication{}, errs.New(
 			errs.KindInternal,
@@ -84,7 +91,7 @@ func (service *Service) captureAuthoredAttachBinding(
 	if err != nil {
 		return etcd.BlueprintAttachInputGenerationPublication{}, err
 	}
-	fingerprint, err := authoredUnitFingerprint("attach-spec", spec)
+	fingerprint, err := core.AttachmentSpecFingerprint(spec)
 	if err != nil {
 		return etcd.BlueprintAttachInputGenerationPublication{}, err
 	}

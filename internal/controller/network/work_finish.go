@@ -14,7 +14,7 @@ import (
 // atomically settled the host result and resource state.
 func (owner *AgentWork) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
 	task := finished.Task.Task
-	if task.Action == workexecution.ActionRemove && task.Scope.TenantID == "" && task.ExpectedItems > 1 {
+	if task.Action == workexecution.ActionRemove && task.Scope.TenantID == "" {
 		return owner.inputs.PrepareCascadeFinish(ctx, finished)
 	}
 	if task.ExpectedItems != 1 || len(finished.Items) != 1 || task.Action != workexecution.ActionRemove {

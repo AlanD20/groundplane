@@ -10,7 +10,6 @@ import (
 	runners "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -23,14 +22,12 @@ func hierarchyDeletionAgentNode(
 	prerequisites []string,
 	parentOperationID string,
 ) HierarchyDeletionMembershipNode {
-	taskType := taskjournal.TaskRemove
 	return HierarchyDeletionMembershipNode{
 		NodeID: nodeID, TargetKind: targetKind, TargetID: targetID, ActionKind: action,
 		TargetRevision: targetRevision, PrerequisiteNodeIDs: append([]string(nil), prerequisites...),
 		ProcedureInput: HierarchyDeletionProcedureInput{
 			Kind: hierarchydeletion.HierarchyDeletionProcedureAgent,
-			AgentChild: &HierarchyDeletionAgentInput{
-				TaskType:       taskType,
+			AgentWork: &HierarchyDeletionAgentInput{
 				TypedProcedure: hierarchyDeletionAgentProcedure(action),
 				InputDigest: hierarchydeletion.HierarchyDeletionFoldDigest(
 					"groundplane-deletion-agent-input-v1", parentOperationID, nodeID,

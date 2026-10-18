@@ -145,6 +145,24 @@ func (authority *Authority) Prepare(
 	}, nil
 }
 
+// PrepareOwned retains sources only while the captured work owner remains current.
+func (authority *Authority) PrepareOwned(ctx context.Context, operationID string,
+	members []scriptsourceevidence.ScriptSourcePreparationMember, guards []etcdstore.Condition,
+) (PreparedSourceSet, error) {
+	converted, err := authority.validateMembers(ctx, operationID, members, true)
+	if err != nil {
+		return PreparedSourceSet{}, err
+	}
+	prepared, err := authority.repository.PrepareOwned(ctx, operationID, converted, scriptSourceReleaseGuards(guards))
+	if err != nil {
+		return PreparedSourceSet{}, ref.ToApplicationError(err)
+	}
+	return PreparedSourceSet{
+		prepared: prepared, descriptorRevision: prepared.DescriptorRevision(),
+		membershipCount: prepared.MembershipCount(), membershipSHA256: prepared.MembershipSHA256(),
+	}, nil
+}
+
 // Abandon releases a matching preparation's exact committed membership prefix.
 // Current source records are deliberately not re-adopted during cleanup.
 func (authority *Authority) Abandon(
@@ -166,6 +184,19 @@ func (authority *Authority) RecoverPreparations(ctx context.Context) error {
 		return errs.New(errs.KindValidationFailed, "Script source recovery authority is missing")
 	}
 	return ref.ToApplicationError(authority.repository.RecoverPreparations(ctx))
+}
+
+// AbandonOwnedPreparation is the bounded live counterpart to startup recovery.
+// Its owner supplies immutable operation identity plus stopped-work CAS guards.
+func (authority *Authority) AbandonOwnedPreparation(ctx context.Context, operationID string, guards []etcdstore.Condition) (bool, error) {
+	done, err := authority.repository.AbandonOwnedPreparation(ctx, operationID, scriptSourceReleaseGuards(guards))
+	return done, ref.ToApplicationError(err)
+}
+
+// DiscardUnpublishedPreparation never releases an activated source hold.
+func (authority *Authority) DiscardUnpublishedPreparation(ctx context.Context, operationID string, guards []etcdstore.Condition) (bool, error) {
+	done, err := authority.repository.DiscardUnpublishedPreparation(ctx, operationID, scriptSourceReleaseGuards(guards))
+	return done, ref.ToApplicationError(err)
 }
 
 func (authority *Authority) FinalPublicationFragment(

@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/hierarchyexecution"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/lifecycleexecution"
 	"github.com/AlanD20/groundplane/internal/common/networkexecution"
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/internal/common/volumeexecution"
@@ -131,6 +132,36 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 			terminal.FinishedAt.Before(record.UpdatedAt) {
 			return conflict()
 		}
+		if recovery := record.AttachProvisionRecovery; recovery != nil {
+			if recovery.Receipt == nil || recovery.Receipt.Outcome != terminal.Outcome ||
+				!recovery.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *recovery.Receipt.Result != *terminal.Result {
+				return conflict()
+			}
+		}
+		if backup := record.Backup; backup != nil {
+			saved := backup.Completion
+			if saved == nil || saved.Outcome != terminal.Outcome || !saved.FinishedAt.Equal(*terminal.FinishedAt) ||
+				*saved.Result != *terminal.Result {
+				return conflict()
+			}
+		}
+		if failure := record.AttachProvisionFailure; failure != nil {
+			if failure.Receipt == nil || failure.Receipt.Outcome != terminal.Outcome ||
+				!failure.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *failure.Receipt.Result != *terminal.Result {
+				return conflict()
+			}
+			if record.AttachProvision != nil {
+				// Keep command/process evidence until provisioning inspection and
+				// settlement account for all authorized effects.
+				return nil
+			}
+		} else if provision := record.AttachProvision; provision != nil {
+			saved := provision.Completion
+			if saved == nil || saved.Outcome != terminal.Outcome || !saved.FinishedAt.Equal(*terminal.FinishedAt) ||
+				*saved.Result != *terminal.Result {
+				return conflict()
+			}
+		}
 		if recovery := record.AttachRecovery; recovery != nil {
 			if recovery.Receipt == nil || recovery.Receipt.Outcome != terminal.Outcome ||
 				!recovery.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *recovery.Receipt.Result != *terminal.Result {
@@ -176,6 +207,41 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 				removal.Report.Progress.Phase != hierarchyexecution.EnvironmentRemoved ||
 				terminal.Outcome != workexecution.Succeeded || *terminal.Result != checkpoint.Evidence {
 				return conflict()
+			}
+		}
+		if entry := record.EntryConfiguration; entry != nil {
+			// The failed forward boundary remains until restoration is proved.
+			receipt := entry.Completion
+			if entry.Failure != nil {
+				receipt = entry.Failure.Receipt
+			}
+			if receipt == nil || entry.Failure == nil && !entry.Acknowledged || receipt.Outcome != terminal.Outcome ||
+				!receipt.FinishedAt.Equal(*terminal.FinishedAt) || *receipt.Result != *terminal.Result ||
+				!workexecution.SameAssignment(*receipt, terminal) || terminal.StartedAt == nil ||
+				!receipt.StartedAt.Equal(*terminal.StartedAt) {
+				return conflict()
+			}
+			if entry.Failure != nil && entry.Progress.Sequence != 0 {
+				// Terminal failure acknowledges delivery, not the end of an
+				// authorized file/workload effect. Keep its inspection boundary.
+				return nil
+			}
+		}
+		if recovery := record.EntryRecovery; recovery != nil {
+			receipt := recovery.Receipt
+			if receipt == nil || receipt.Outcome != terminal.Outcome || receipt.FinishedAt == nil || receipt.Result == nil ||
+				!receipt.FinishedAt.Equal(*terminal.FinishedAt) || *receipt.Result != *terminal.Result ||
+				!workexecution.SameAssignment(*receipt, terminal) || terminal.StartedAt == nil || !receipt.StartedAt.Equal(*terminal.StartedAt) {
+				return conflict()
+			}
+			if receipt.Outcome != workexecution.Succeeded {
+				return nil
+			}
+		}
+		if record.Component != nil || record.ComponentRecovery != nil {
+			keep, err := journal.retireComponent(ctx, *record, terminal)
+			if err != nil || keep {
+				return err
 			}
 		}
 		if recovery := record.NetworkRecovery; recovery != nil {
@@ -226,6 +292,32 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 			if terminal.Outcome == workexecution.Succeeded {
 				if err := journal.retireRecoveredVolume(ctx, *recovery); err != nil {
 					return err
+				}
+			}
+		}
+		if recovery := record.LifecycleRecovery; recovery != nil {
+			receipt := recovery.Receipt
+			if receipt == nil || receipt.FinishedAt == nil || receipt.Result == nil ||
+				receipt.Outcome != terminal.Outcome || !receipt.FinishedAt.Equal(*terminal.FinishedAt) || *receipt.Result != *terminal.Result {
+				return conflict()
+			}
+		}
+		if lifecycle := record.Lifecycle; lifecycle != nil {
+			receipt := lifecycle.Completion
+			if lifecycle.Failure != nil {
+				receipt = lifecycle.Failure.Receipt
+			}
+			if receipt == nil || receipt.Outcome != terminal.Outcome || !receipt.FinishedAt.Equal(*terminal.FinishedAt) || *receipt.Result != *terminal.Result {
+				return conflict()
+			}
+			if lifecycle.Failure != nil {
+				failure, err := lifecycleexecution.DecodeFailureStages(terminal, lifecycle.Stages, lifecycle.Failure.Evidence, *terminal.Result)
+				if err != nil {
+					return err
+				}
+				// Interrupted effects remain available to recovery inspection.
+				if lifecycle.Progress.BeganAt != nil || failure.Checkpoint != nil && failure.Checkpoint.Sequence%2 == 1 {
+					return nil
 				}
 			}
 		}

@@ -8,6 +8,7 @@ import (
 	registeredcatalog "github.com/AlanD20/groundplane-component-sdk/catalog"
 	"github.com/AlanD20/groundplane/internal/common/envoyrouter"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	"github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -15,13 +16,13 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (resolver *TaskPlanResolver) containerActivation(action *agentpb.ComponentApply) (
+func containerActivation(catalog []componentrender.EnvironmentComponentRegistration, action *agentpb.ComponentApply) (
 	registeredcatalog.ContainerConfigActivation, string, core.ComponentKind, error,
 ) {
-	if resolver == nil || action == nil {
+	if action == nil {
 		return "", "", "", errs.New(errs.KindInternal, "container Component action resolver is missing")
 	}
-	for _, registration := range resolver.componentCatalog {
+	for _, registration := range catalog {
 		managed := registration.ManagedConfiguration
 		definitionDigest := registration.Definition.Digest()
 		if managed != nil && string(managed.ActionID) == action.GetActionId() &&
@@ -38,7 +39,7 @@ func (resolver *TaskPlanResolver) containerActivation(action *agentpb.ComponentA
 func (resolver *TaskPlanResolver) bindContainerConfigTransition(
 	ctx context.Context, task etcd.TaskRecord, action *agentpb.ComponentApply,
 ) error {
-	activation, destination, implementation, err := resolver.containerActivation(action)
+	activation, destination, implementation, err := containerActivation(resolver.componentCatalog, action)
 	if err != nil {
 		return err
 	}

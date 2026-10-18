@@ -84,18 +84,6 @@ func bindNativePredecessor(
 	return captured, nil
 }
 
-func nativePredecessors(
-	input prepareInput,
-	members []releaserender.ReleaseTaskRenderMember,
-) []etcd.BlueprintNativePredecessor {
-	captures := nativePredecessorCaptures(input, members)
-	result := make([]etcd.BlueprintNativePredecessor, len(captures))
-	for index, capture := range captures {
-		result[index] = capture.Runtime()
-	}
-	return result
-}
-
 func nativePredecessorCaptures(
 	input prepareInput,
 	members []releaserender.ReleaseTaskRenderMember,
@@ -104,6 +92,10 @@ func nativePredecessorCaptures(
 	for _, member := range members {
 		if captured, found := input.Workloads.predecessors[member.Render.ServiceName]; found {
 			result = append(result, captured.native)
+		} else {
+			result = append(result, etcd.BlueprintNativePredecessorCapture{
+				ServiceID: member.Render.ServiceID, FixedReadRevision: input.Environment.ReadRevision,
+			})
 		}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ServiceID < result[j].ServiceID })

@@ -83,7 +83,7 @@ func ControllerDisabledComponentPublicationMatches(
 ) bool {
 	receipt := applied.Record
 	return receipt.Target.Kind == ids.KindComponent && receipt.ControllerOperationID != "" &&
-		receipt.SourceTaskID == "" && receipt.ControllerComponentRecordRevision > 0 &&
+		receipt.Execution == nil && receipt.ControllerComponentRecordRevision > 0 &&
 		receipt.ControllerComponentRecordRevision < applied.Revision && applied.Revision == componentRevision &&
 		receipt.ControllerComponentRuntimeRevision == runtimeRevision
 }

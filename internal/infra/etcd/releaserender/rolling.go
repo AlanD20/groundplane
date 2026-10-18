@@ -7,7 +7,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -143,13 +142,11 @@ func rollingRetainedPredecessor(input ReleaseRenderInput) ([]rollingrelease.Repl
 	if input.PriorRuntime == nil || len(input.PriorRuntime.RetainedPriorArtifact) == 0 {
 		return nil, nil
 	}
-	artifact, err := taskassignments.OpenRestorationWitness(
-		input.EnvironmentID,
-		input.PriorRuntime.RetainedPriorArtifact,
-	)
+	runtime, err := openOrdinaryPriorRuntime(input)
 	if err != nil {
 		return nil, err
 	}
+	artifact := runtime.Retained
 	if input.PriorStrategy != domain.StrategyBlueGreen || len(artifact.GetServices()) != 1 {
 		return nil, errs.New(
 			errs.KindValidationFailed,

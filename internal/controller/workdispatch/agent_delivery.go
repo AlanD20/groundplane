@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/hierarchyexecution"
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
@@ -40,8 +41,24 @@ type DetachDeliveryOwner interface {
 	DetachAssignment(context.Context, workqueue.ResumeView) (*agentpb.ControllerMessage, error)
 }
 
+type AttachDeliveryOwner interface {
+	LoadRecoveryAssignment(context.Context, workqueue.ResumeView) (*agentpb.AttachProvisionRecoveryAssignment, error)
+	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.AttachProvisionAssignment, error)
+	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
+}
+
 type NetworkDeliveryOwner interface {
 	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.NetworkWorkAssignment, error)
+	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
+}
+
+type ComponentDeliveryOwner interface {
+	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.ComponentWorkAssignment, error)
+	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
+}
+
+type EntryDeliveryOwner interface {
+	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.EntryConfigurationWorkAssignment, error)
 	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
 }
 
@@ -50,24 +67,52 @@ type VolumeDeliveryOwner interface {
 	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
 }
 
+type LifecycleDeliveryOwner interface {
+	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.ServiceLifecycleAssignment, error)
+	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
+}
+
+type ServiceRemovalDeliveryOwner interface {
+	LifecycleDeliveryOwner
+	LoadRemovalRecoveryAssignment(context.Context, workqueue.ResumeView) (*agentpb.ServiceRemovalRecoveryAssignment, error)
+}
+
+type BackupDeliveryOwner interface {
+	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.BackupWorkAssignment, error)
+	LoadRecoveryAssignment(context.Context, workqueue.ResumeView) (*agentpb.BackupRecoveryAssignment, error)
+	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
+}
+
 // AgentDeliveries joins bounded scheduling and immutable assignment delivery.
 // Sending input grants no effects: the Agent must obtain Start and checkpoints.
 type AgentDeliveries struct {
-	queue     *workqueue.Repository
-	scheduler *Scheduler
-	releases  ReleaseDeliveryOwner
-	scripts   ScriptDeliveryOwner
-	hierarchy HierarchyDeliveryOwner
-	detaches  DetachDeliveryOwner
-	networks  NetworkDeliveryOwner
-	volumes   VolumeDeliveryOwner
+	queue      *workqueue.Repository
+	scheduler  *Scheduler
+	releases   ReleaseDeliveryOwner
+	scripts    ScriptDeliveryOwner
+	hierarchy  HierarchyDeliveryOwner
+	detaches   DetachDeliveryOwner
+	attaches   AttachDeliveryOwner
+	networks   NetworkDeliveryOwner
+	components ComponentDeliveryOwner
+	entries    EntryDeliveryOwner
+	volumes    VolumeDeliveryOwner
+	lifecycles LifecycleDeliveryOwner
+	removals   ServiceRemovalDeliveryOwner
+	backups    BackupDeliveryOwner
 }
 
-func NewAgentDeliveries(queue *workqueue.Repository, scheduler *Scheduler, releases ReleaseDeliveryOwner, scripts ScriptDeliveryOwner, hierarchy HierarchyDeliveryOwner, volumes VolumeDeliveryOwner, networks NetworkDeliveryOwner, detaches DetachDeliveryOwner) (*AgentDeliveries, error) {
-	if queue == nil || scheduler == nil || scheduler.queue != queue || releases == nil || scripts == nil || hierarchy == nil || volumes == nil || networks == nil || detaches == nil {
+func NewAgentDeliveries(queue *workqueue.Repository, scheduler *Scheduler, releases ReleaseDeliveryOwner, scripts ScriptDeliveryOwner, hierarchy HierarchyDeliveryOwner, volumes VolumeDeliveryOwner, networks NetworkDeliveryOwner, detaches DetachDeliveryOwner, components ComponentDeliveryOwner, entries EntryDeliveryOwner, attaches AttachDeliveryOwner, lifecycles LifecycleDeliveryOwner, removals ServiceRemovalDeliveryOwner, backups BackupDeliveryOwner) (*AgentDeliveries, error) {
+	if backups == nil {
+		return nil, errs.New(errs.KindInternal, "Agent delivery requires a Backup owner")
+	}
+	if lifecycles == nil || removals == nil {
+		return nil, errs.New(errs.KindInternal, "Agent delivery requires a Service lifecycle owner")
+	}
+	if queue == nil || scheduler == nil || scheduler.queue != queue || releases == nil || scripts == nil || hierarchy == nil || volumes == nil || networks == nil || detaches == nil || components == nil || entries == nil || attaches == nil {
 		return nil, errs.New(errs.KindInternal, "Agent delivery requires one queue, scheduler and Release owner")
 	}
-	return &AgentDeliveries{queue: queue, scheduler: scheduler, releases: releases, scripts: scripts, hierarchy: hierarchy, volumes: volumes, networks: networks, detaches: detaches}, nil
+	return &AgentDeliveries{backups: backups, removals: removals, queue: queue, scheduler: scheduler, releases: releases, scripts: scripts, hierarchy: hierarchy, volumes: volumes, networks: networks, detaches: detaches, components: components, entries: entries, attaches: attaches, lifecycles: lifecycles}, nil
 }
 
 // Dispatch keeps delivered identity only for currently reserved slots. A new
@@ -158,6 +203,7 @@ func (delivery *AgentDeliveries) Dispatch(ctx context.Context, authorization age
 		workexecution.ClearScriptAssignment(message.GetScriptWorkAssignment())
 		attachexecution.ClearRemoval(message.GetAttachRemovalAssignment().GetRemoval())
 		attachexecution.ClearRecoveryAssignment(message.GetAttachRecoveryAssignment())
+		attachexecution.ClearProvision(message.GetAttachProvisionAssignment().GetProvision())
 		if err != nil {
 			return issues, err
 		}
@@ -172,6 +218,71 @@ func (delivery *AgentDeliveries) Dispatch(ctx context.Context, authorization age
 
 func (delivery *AgentDeliveries) message(ctx context.Context, view workqueue.ResumeView) (*agentpb.ControllerMessage, error) {
 	switch view.Work.Item.Item.Operation {
+	case workexecution.Backup, workexecution.Restore, workexecution.BackupPrune:
+		if view.Attempt.Attempt.Direction == workexecution.Recovery {
+			assignment, err := delivery.backups.LoadRecoveryAssignment(ctx, view)
+			if err != nil {
+				return nil, err
+			}
+			owned, attempt, _, err := executionplan.OpenBackupRecoveryAssignment(assignment, view.Attempt.Attempt.Executor)
+			if err != nil || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
+				return nil, errs.New(errs.KindStateConflict, "Backup recovery delivery differs from its durable assignment")
+			}
+			return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupRecoveryAssignment{BackupRecoveryAssignment: owned}}, nil
+		}
+		assignment, err := delivery.backups.LoadWorkAssignment(ctx, view)
+		if err != nil {
+			return nil, err
+		}
+		owned, attempt, err := executionplan.OpenBackupWorkAssignment(assignment, view.Attempt.Attempt.Executor)
+		if err != nil || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
+			return nil, errs.New(errs.KindStateConflict, "Backup delivery differs from its durable assignment")
+		}
+		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupWorkAssignment{BackupWorkAssignment: owned}}, nil
+	case workexecution.ServiceRemoval:
+		return delivery.removalMessage(ctx, view)
+	case workexecution.Attach:
+		if view.Attempt.Attempt.Direction == workexecution.Recovery {
+			assignment, err := delivery.attaches.LoadRecoveryAssignment(ctx, view)
+			if err != nil {
+				return nil, err
+			}
+			input, err := attachexecution.DecodeProvisionRecoveryAssignment(assignment, view.Attempt.Attempt.Executor)
+			if err != nil || !workexecution.SameAssignment(input.Attempt, view.Attempt.Attempt) {
+				return nil, errs.New(errs.KindStateConflict, "Attach inspection delivery differs from its durable assignment")
+			}
+			return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_AttachProvisionRecoveryAssignment{AttachProvisionRecoveryAssignment: assignment}}, nil
+		}
+		assignment, err := delivery.attaches.LoadWorkAssignment(ctx, view)
+		if err != nil {
+			return nil, err
+		}
+		attempt, err := workexecution.DecodeAgentAttempt(assignment.GetAttempt(), view.Attempt.Attempt.Executor)
+		if err != nil || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
+			attachexecution.ClearProvision(assignment.GetProvision())
+			return nil, errs.New(errs.KindStateConflict, "Attach delivery differs from its durable assignment")
+		}
+		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_AttachProvisionAssignment{AttachProvisionAssignment: assignment}}, nil
+	case workexecution.EntryConfiguration:
+		assignment, err := delivery.entries.LoadWorkAssignment(ctx, view)
+		if err != nil {
+			return nil, err
+		}
+		attempt, err := workexecution.DecodeAgentAttempt(assignment.GetAttempt(), view.Attempt.Attempt.Executor)
+		if err != nil || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
+			return nil, errs.New(errs.KindStateConflict, "Entry delivery differs from its durable assignment")
+		}
+		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_EntryConfigurationWorkAssignment{EntryConfigurationWorkAssignment: assignment}}, nil
+	case workexecution.Component:
+		assignment, err := delivery.components.LoadWorkAssignment(ctx, view)
+		if err != nil {
+			return nil, err
+		}
+		attempt, err := workexecution.DecodeAgentAttempt(assignment.GetAttempt(), view.Attempt.Attempt.Executor)
+		if err != nil || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
+			return nil, errs.New(errs.KindStateConflict, "Component delivery differs from its durable assignment")
+		}
+		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ComponentWorkAssignment{ComponentWorkAssignment: assignment}}, nil
 	case workexecution.Network:
 		assignment, err := delivery.networks.LoadWorkAssignment(ctx, view)
 		if err != nil {
@@ -182,6 +293,16 @@ func (delivery *AgentDeliveries) message(ctx context.Context, view workqueue.Res
 			return nil, errs.New(errs.KindStateConflict, "Network delivery differs from its durable assignment")
 		}
 		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_NetworkWorkAssignment{NetworkWorkAssignment: assignment}}, nil
+	case workexecution.ServiceLifecycle:
+		assignment, err := delivery.lifecycles.LoadWorkAssignment(ctx, view)
+		if err != nil {
+			return nil, err
+		}
+		attempt, err := workexecution.DecodeAgentAttempt(assignment.GetAttempt(), view.Attempt.Attempt.Executor)
+		if err != nil || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
+			return nil, errs.New(errs.KindStateConflict, "Service lifecycle delivery differs from its durable assignment")
+		}
+		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ServiceLifecycleAssignment{ServiceLifecycleAssignment: assignment}}, nil
 	case workexecution.Volume:
 		assignment, err := delivery.volumes.LoadWorkAssignment(ctx, view)
 		if err != nil {

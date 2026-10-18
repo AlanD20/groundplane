@@ -94,7 +94,7 @@ func (repository *TaskRepository) finishPendingRemovalDNSWithdrawal(ctx context.
 		return false, err
 	}
 	defer plan.clear()
-	var change routeTaskChange
+	var change removalTaskChange
 	if zoneRemoval {
 		change.conditions, change.mutations, err = repository.prepareZoneRemovalAcknowledgement(ctx, current.Record,
 			status, *plan.record.FinishedAt, current.ReadRevision, taskassignments.TaskAssignmentRecord{})
@@ -111,7 +111,7 @@ func (repository *TaskRepository) finishPendingRemovalDNSWithdrawal(ctx context.
 	if err != nil {
 		return false, err
 	}
-	defer clearRouteTaskChange(change)
+	defer clearRemovalTaskChange(change)
 	if !change.applies {
 		return false, errs.New(errs.KindInternal, "waiting removal has no native terminal transition")
 	}
@@ -132,7 +132,7 @@ func (repository *TaskRepository) finishPendingRemovalDNSWithdrawal(ctx context.
 	conditions = unique
 	mutations := append(plan.mutations, change.mutations...)
 	binding, err := repository.bindOrdinaryTaskEnvironmentMutation(ctx, current.Record,
-		current.ReadRevision, conditions, mutations, false, false, false, !zoneRemoval, false)
+		current.ReadRevision, conditions, mutations, false, false, !zoneRemoval)
 	if err != nil {
 		return false, err
 	}

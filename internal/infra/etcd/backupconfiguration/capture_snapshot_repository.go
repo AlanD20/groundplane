@@ -39,10 +39,9 @@ type CaptureSnapshotWriteAuthority struct {
 	Expected      *agentpb.BackupConfigCaptureAuthority
 }
 
-// CaptureSnapshotAuthorityGuard validates the current Task/run, immutable
-// procedure and Environment lock at the supplied snapshot-read revision. It
-// returns their positive-revision CAS fences; the Task codec remains owned by
-// the root repository, rather than being copied into this child package.
+// CaptureSnapshotAuthorityGuard validates native work, captured source and the
+// Environment lock at the supplied revision. Execution codecs stay outside
+// this snapshot repository; writes include the returned CAS fences.
 type CaptureSnapshotAuthorityGuard func(context.Context, CaptureSnapshotWriteAuthority, int64) ([]etcdstore.Condition, error)
 
 type CaptureSnapshotRepository struct {

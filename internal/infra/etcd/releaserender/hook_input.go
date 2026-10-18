@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/oklog/ulid/v2"
@@ -30,19 +31,21 @@ func ReleaseHookStepExecutionParam(stepID string) string {
 // execution. Runner bytes are protobuf encodings of the sealed snapshot and
 // applied projection; Script body bytes remain in the durable generation.
 type ReleaseHookRenderInput struct {
-	ScriptID                string          `json:"script_id"`
-	ScriptSlug              string          `json:"script_slug"`
-	ServiceID               string          `json:"service_id"`
-	When                    core.ScriptHook `json:"when"`
-	Order                   uint16          `json:"order,omitempty"`
-	ScriptGeneration        uint64          `json:"script_generation"`
-	ScriptExecutionID       string          `json:"script_execution_id"`
-	RunnerSnapshotID        string          `json:"runner_snapshot_id"`
-	BodySize                uint32          `json:"body_size"`
-	BodySHA256              string          `json:"body_sha256"`
-	ServiceDefinitionSHA256 string          `json:"service_definition_sha256"`
-	RunnerSnapshot          []byte          `json:"runner_snapshot"`
-	RunnerProjection        []byte          `json:"runner_projection"`
+	Input                   workexecution.Input `json:"input"`
+	ScriptSetGeneration     string              `json:"script_set_generation"`
+	ScriptID                string              `json:"script_id"`
+	ScriptSlug              string              `json:"script_slug"`
+	ServiceID               string              `json:"service_id"`
+	When                    core.ScriptHook     `json:"when"`
+	Order                   uint16              `json:"order,omitempty"`
+	ScriptGeneration        uint64              `json:"script_generation"`
+	ScriptExecutionID       string              `json:"script_execution_id"`
+	RunnerSnapshotID        string              `json:"runner_snapshot_id"`
+	BodySize                uint32              `json:"body_size"`
+	BodySHA256              string              `json:"body_sha256"`
+	ServiceDefinitionSHA256 string              `json:"service_definition_sha256"`
+	RunnerSnapshot          []byte              `json:"runner_snapshot"`
+	RunnerProjection        []byte              `json:"runner_projection"`
 }
 
 func cloneReleaseHookRenderInputs(input []ReleaseHookRenderInput) []ReleaseHookRenderInput {
@@ -67,7 +70,7 @@ func validateReleaseHookRenderInputs(hooks []ReleaseHookRenderInput, serviceID s
 	seenExecutions := make(map[string]struct{}, len(hooks))
 	for _, hook := range hooks {
 		if ids.Validate(ids.KindScript, hook.ScriptID) != nil || hook.ServiceID != serviceID || hook.ScriptSlug == "" ||
-			hook.ScriptGeneration == 0 {
+			hook.ScriptGeneration == 0 || hook.Input.Validate() != nil || hook.ScriptSetGeneration == "" {
 			return errs.New(errs.KindValidationFailed, "release hook identity is invalid")
 		}
 		if _, exists := seenSlugs[hook.ScriptSlug]; exists {

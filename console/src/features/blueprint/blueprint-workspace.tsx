@@ -123,15 +123,11 @@ export function BlueprintWorkspace({
       void getTask(pendingApply.taskId!)
         .then((task) => {
           if (!active) return;
-          if (task.id !== pendingApply.taskId)
+          if (task.task.id !== pendingApply.taskId)
             throw new Error("Controller returned a different Task.");
           setResolveError("");
-          if (
-            ["completed", "failed", "timed_out", "aborted"].includes(
-              task.status,
-            )
-          ) {
-            settleBlueprintApply(task.id);
+          if (task.task.finished_at) {
+            settleBlueprintApply(task.task.id);
             refreshRecovery();
           }
         })
@@ -208,12 +204,12 @@ export function BlueprintWorkspace({
   currentDraft.current = { draft, editing };
   useEffect(
     () =>
-      subscribeTerminalTasks((task) => {
-        if (task.environment_id !== environment.id) return;
+      subscribeTerminalTasks(({ task }) => {
+        if (task.scope.environment_id !== environment.id) return;
         const ownCompletedApply =
           task.id === submitted.current?.taskId &&
           (!submitted.current.service || !!serviceName) &&
-          task.status === "completed" &&
+          task.status === "succeeded" &&
           submitted.current.document === currentDraft.current.draft;
         if (!currentDraft.current.editing || ownCompletedApply) {
           submitted.current = null;

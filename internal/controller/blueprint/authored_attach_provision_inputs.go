@@ -71,7 +71,7 @@ func (service *Service) prepareAuthoredAttachProvisionInputs(
 		byID[candidate.Record.ID] = attachinputs.BindingRecord{Record: candidate.Record}
 		factsByID[candidate.Record.ID] = candidate.Facts
 	}
-	reader, ok := service.repository.(authoredAttachRemovalFactReader)
+	reader, ok := service.repository.(authoredAttachFactReader)
 	if !ok {
 		return nil, errs.New(errs.KindInternal, "Attach provisioning fact reader is unavailable")
 	}
@@ -122,7 +122,7 @@ func (service *Service) prepareAuthoredAttachProvisionInputs(
 			encrypted.Ciphertext = slices.Clone(facts.Ciphertext)
 		}
 		operationID := allocator.Named(ids.KindOperation, "attach-input:"+candidate.Record.Name)
-		fingerprint, err := authoredUnitFingerprint("attach-spec", specs[candidate.Record.Name])
+		fingerprint, err := core.AttachmentSpecFingerprint(specs[candidate.Record.Name])
 		if err != nil {
 			clear(encrypted.Ciphertext)
 			return nil, err
@@ -183,7 +183,7 @@ func (service *Service) prepareAuthoredAttachProvisionInputs(
 		if err != nil {
 			return nil, err
 		}
-		fingerprint, err := authoredUnitFingerprint("attach-spec", spec)
+		fingerprint, err := core.AttachmentSpecFingerprint(spec)
 		if err != nil {
 			return nil, err
 		}

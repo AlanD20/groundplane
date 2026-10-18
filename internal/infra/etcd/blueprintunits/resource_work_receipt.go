@@ -21,8 +21,31 @@ func (repository *Repository) PrepareVolumeCompletionReceipt(ctx context.Context
 	return repository.prepareForwardResourceReceipt(ctx, view, ids.KindVolume, workexecution.Volume, false)
 }
 
+func (repository *Repository) PrepareServiceRemovalReceipt(ctx context.Context, view workqueue.ResumeView) (workqueue.Change, error) {
+	return repository.prepareForwardResourceReceipt(ctx, view, ids.KindService, workexecution.ServiceRemoval, true)
+}
+
+// Attach results include durable fact publication, not only command progress.
+func (repository *Repository) PrepareAttachCompletionReceipt(ctx context.Context, view workqueue.ResumeView, result workexecution.Input) (workqueue.Change, error) {
+	return repository.prepareResourceCompletionReceipt(ctx, view, ids.KindAttach, workexecution.Attach, resourceReceiptEvidence{
+		direction: workexecution.Forward, result: result,
+	})
+}
+
 func (repository *Repository) PrepareNetworkCompletionReceipt(ctx context.Context, view workqueue.ResumeView, removed bool) (workqueue.Change, error) {
 	return repository.prepareForwardResourceReceipt(ctx, view, ids.KindNetwork, workexecution.Network, removed)
+}
+
+// Component work may reserve dependent Service writes for a proxy switch, but
+// this receipt acknowledges only the Component; each Service settles itself.
+func (repository *Repository) PrepareComponentCompletionReceipt(ctx context.Context, view workqueue.ResumeView, removed, disabled bool) (workqueue.Change, error) {
+	checkpoint := view.Checkpoint.Record
+	if checkpoint == nil || checkpoint.AttemptID != view.Attempt.Attempt.ID || removed && !disabled {
+		return workqueue.Change{}, invalidRecord()
+	}
+	return repository.prepareResourceCompletionReceipt(ctx, view, ids.KindComponent, workexecution.Component, resourceReceiptEvidence{
+		direction: workexecution.Forward, result: checkpoint.Evidence, removal: removed, absent: disabled,
+	})
 }
 
 func (repository *Repository) prepareForwardResourceReceipt(ctx context.Context, view workqueue.ResumeView,
@@ -91,7 +114,7 @@ func (repository *Repository) prepareResourceCompletionReceipt(ctx context.Conte
 		break
 	}
 	if unit == nil || unit.Target.Kind != kind || unit.Removal != proof.removal ||
-		len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
+		!slices.Contains(unit.Writes, unit.Target) || operation != workexecution.Component && len(unit.Writes) != 1 {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint resource receipt has no captured storage effect")
 	}
 	snapshot, err := repository.LoadAtRevision(ctx, task.Scope.EnvironmentID, view.Work.ReadRevision)

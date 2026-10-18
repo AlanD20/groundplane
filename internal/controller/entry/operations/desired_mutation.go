@@ -2,9 +2,9 @@ package operations
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
@@ -12,18 +12,15 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/entrywork"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 	"time"
@@ -37,7 +34,8 @@ type entryDesiredMutationRepository interface {
 		idempotencyrecord.ProtectedIntentRecord,
 		time.Time,
 	) error
-	controllerrevision.Repository
+	controllerrevision.ClaimRepository
+	StageEnvironmentBlueprintRevision(context.Context, blueprints.EnvironmentBlueprintStageRequest) (blueprints.EnvironmentBlueprintSeal, error)
 	GetEnvironmentDesiredInput(
 		context.Context,
 		string,
@@ -65,41 +63,39 @@ type entryDesiredMutationRepository interface {
 	BindBlueprintEntryEnvironment(context.Context, string, string) error
 }
 
+type entryRuntimeCapture interface {
+	CaptureEntryMutationRuntime(context.Context, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]) (taskplanning.EntryMutationRuntime, error)
+}
+
 type entryDesiredMutationService struct {
-	volumeRoot  string
-	repository  entryDesiredMutationRepository
-	generator   entryCreationGenerator
-	materials   materializationResolver
-	creation    entryCreationIdempotency
-	edit        entryEditIdempotency
-	removal     entryDesiredRemovalIdempotency
-	removePlans *taskplanning.EntryRemovalPlanner
-	plans       *taskplanning.TaskPlanResolver
-	now         func() time.Time
+	repository entryDesiredMutationRepository
+	generator  entryCreationGenerator
+	materials  materializationResolver
+	creation   entryCreationIdempotency
+	edit       entryEditIdempotency
+	removal    entryDesiredRemovalIdempotency
+	work       *etcd.HierarchyRepository
+	runtime    entryRuntimeCapture
+	now        func() time.Time
 }
 
 func NewDesiredMutationService(
-	volumeRoot string,
 	repository entryDesiredMutationRepository,
 	generator entryCreationGenerator,
 	materials materializationResolver,
 	creation entryCreationIdempotency,
 	edit entryEditIdempotency,
 	removal entryDesiredRemovalIdempotency,
-	plans *taskplanning.TaskPlanResolver,
+	runtime entryRuntimeCapture,
 	hierarchy *etcd.HierarchyRepository,
 ) (*entryDesiredMutationService, error) {
-	if environmentpath.ValidateRoot(volumeRoot) != nil || repository == nil || generator == nil || materials == nil ||
-		creation == nil || edit == nil || removal == nil {
+	if repository == nil || generator == nil || materials == nil ||
+		creation == nil || edit == nil || removal == nil || hierarchy == nil || runtime == nil {
 		return nil, errs.New(errs.KindInternal, "Entry desired mutation service is not configured")
 	}
-	removePlans, err := taskplanning.NewEntryRemovalPlanner(plans, materials, hierarchy)
-	if err != nil {
-		return nil, err
-	}
 	return &entryDesiredMutationService{
-		volumeRoot: volumeRoot, repository: repository, generator: generator, materials: materials,
-		creation: creation, edit: edit, removal: removal, removePlans: removePlans, plans: plans, now: time.Now,
+		repository: repository, generator: generator, materials: materials,
+		creation: creation, edit: edit, removal: removal, runtime: runtime, work: hierarchy, now: time.Now,
 	}, nil
 }
 
@@ -194,11 +190,18 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		)
 	}
 	runtime := taskplanning.EntryMutationRuntime{Projection: current.Record}
+	var removalConfiguration etcd.EntryRemovalConfiguration
 	if request.action != entryDesiredMutationRemove {
-		runtime, err = service.plans.CaptureEntryMutationRuntime(ctx, current)
+		runtime, err = service.runtime.CaptureEntryMutationRuntime(ctx, current)
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
+	} else {
+		removalConfiguration, err = service.work.ReadEntryRemovalConfiguration(ctx, request.environmentID, current.ReadRevision)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		runtime.EpochRevision = removalConfiguration.EpochRevision
 	}
 	now := service.now().UTC()
 	candidateTaskID := ids.New(ids.KindTask)
@@ -273,32 +276,10 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	var references []materializationrecord.Record
-	if request.action != entryDesiredMutationRemove {
-		references, err = service.entryMaterializations(ctx, request.environmentID, allocator, materializations)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
-	planID := entryStableIDFromRevision(ids.KindPlan, claim.RevisionID)
-	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task := etcd.TaskRecord{
-		ID: claim.TaskID, OperationID: allocator.Named(ids.KindOperation, "entry-operation"),
-		IdempotencyKey: request.idempotencyKey, Owner: owner, Actor: taskjournal.TaskActorOperator,
-		Executor: taskjournal.TaskExecutorAgent, PlanID: planID,
-		RenderGeneration: int32(generation), Type: taskjournal.TaskUpdate, Target: request.environmentID,
-		Materializations: references,
-		TimeoutSeconds:   controllerrevision.TaskTimeoutSeconds, Status: taskjournal.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
-	}
 	if request.action == entryDesiredMutationRemove {
-		task.Type, task.Target = taskjournal.TaskRemove, request.entryID
-		task, err = service.removePlans.PrepareDesiredEntryRemoval(ctx, task, claim)
+		references, err = service.removalSources(ctx, request.entryID, removalConfiguration.Files, allocator)
 	} else {
-		task, err = runtime.PrepareTask(service.volumeRoot, task, candidate,
-			allocator.Named(ids.KindStep, "entry-compose-apply"))
+		references, err = service.entryMaterializations(ctx, request.environmentID, allocator, materializations)
 	}
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -319,7 +300,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: request.locator, ReplayTarget: &target, Intent: claim.Intent, Response: response,
-		TaskID: task.ID, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
+		TaskID: claim.TaskID, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
 	projectionEvidence, err := controllerrevision.PreflightProjection(candidate)
 	if err != nil {
@@ -364,26 +345,34 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	result, publicationErr := service.repository.PublishEnvironmentDesiredRevisionWithTask(
-		ctx,
-		project,
-		environment,
-		expectedHeadRevision,
-		claim,
-		blueprints.EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: request.environmentID,
-			RevisionID:    claim.RevisionID,
-		},
-		candidate,
-		nil,
-		nil,
-		nil,
-		groupstore.ReleaseGroupBlueprintPreparedMutation{},
-		componentplanning.ComponentTaskPreparation{},
-		blueprintplanning.BlueprintAttachTaskPreparation{},
-		task,
-		marker,
-	)
+	workAction := workexecution.ActionUpdate
+	targetName := ""
+	var removal *entrywork.Removal
+	switch request.action {
+	case entryDesiredMutationCreate:
+		workAction = workexecution.ActionCreate
+	case entryDesiredMutationRemove:
+		workAction = workexecution.ActionRemove
+		removal = &entrywork.Removal{EntryID: request.entryID, BaseRevisionID: current.Record.RevisionID,
+			HeadRevision: expectedHeadRevision, DescriptorID: claim.DescriptorID, RevisionID: claim.RevisionID}
+	}
+	if candidateRecord != nil {
+		targetName = candidateRecord.Entry.Key
+		if targetName == "" {
+			targetName = candidateRecord.Entry.Path
+		}
+	} else if previous != nil {
+		targetName = previous.Entry.Key
+		if targetName == "" {
+			targetName = previous.Entry.Path
+		}
+	}
+	result, publicationErr := service.publishConfiguration(ctx, entryConfigurationPublication{
+		Project: project, Environment: environment, Claim: claim, Runtime: runtime,
+		Candidate: candidate, ReadRevision: current.ReadRevision, Files: references,
+		Marker: marker, Action: workAction, TargetID: targetEntryID, TargetName: targetName,
+		Removal: removal, ConfigurationRevision: removalConfiguration.HeadRevision,
+	})
 	if publicationErr != nil {
 		if !isUnknownEntryCreationOutcome(publicationErr) {
 			return idempotencyrecord.IdempotencyResponse{}, publicationErr

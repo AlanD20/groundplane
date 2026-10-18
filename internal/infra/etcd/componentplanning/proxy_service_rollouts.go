@@ -13,7 +13,7 @@ import (
 
 type ProxyServiceRolloutReference struct {
 	ServiceID           string `json:"service_id"`
-	TaskID              string `json:"task_id"`
+	WorkItemID          string `json:"work_item_id"`
 	SHA256              string `json:"sha256"`
 	Revision            int64  `json:"revision"`
 	NativeRevision      int64  `json:"native_revision"`
@@ -43,7 +43,7 @@ func ProxyServiceNativeRolloutKey(environmentID, parentID, taskID string) string
 func (reference ProxyServiceRolloutReference) Validate() error {
 	digest, err := hex.DecodeString(reference.SHA256)
 	if ids.Validate(ids.KindService, reference.ServiceID) != nil ||
-		ids.Validate(ids.KindTask, reference.TaskID) != nil ||
+		ids.Validate(ids.KindWorkItem, reference.WorkItemID) != nil ||
 		reference.Revision <= 0 ||
 		reference.NativeRevision <= 0 ||
 		err != nil ||
@@ -54,17 +54,17 @@ func (reference ProxyServiceRolloutReference) Validate() error {
 	return nil
 }
 
-func (preparation ComponentTaskPreparation) WithProxyServiceRollouts(
+func BindProxyServiceRollouts(captured ProxyServicePreflight,
 	rollouts []ProxyServiceRolloutReference,
-) (ComponentTaskPreparation, error) {
-	if preparation.proxyServicePreflight == nil || preparation.proxyServicePreflight.CandidateInput == nil {
-		return ComponentTaskPreparation{}, errs.New(
+) (*ProxyServicePreflight, []keyvalue.Condition, error) {
+	if captured.validate() != nil || captured.CandidateInput == nil {
+		return nil, nil, errs.New(
 			errs.KindValidationFailed,
 			"pre-switch rollouts require a complete candidate Environment input",
 		)
 	}
-	result := cloneComponentTaskPreparation(preparation)
-	preflight := result.proxyServicePreflight
+	preflight := cloneProxyServicePreflight(&captured)
+	var conditions []keyvalue.Condition
 	expected := 0
 	for _, source := range preflight.Services {
 		if source.ReplacementRequired {
@@ -72,14 +72,14 @@ func (preparation ComponentTaskPreparation) WithProxyServiceRollouts(
 		}
 	}
 	if len(rollouts) != expected {
-		return ComponentTaskPreparation{}, errs.New(
+		return nil, nil, errs.New(
 			errs.KindValidationFailed,
 			"pre-switch Service rollout membership is incomplete",
 		)
 	}
 	for ordinal, rollout := range rollouts {
 		if rollout.Validate() != nil || ordinal > 0 && rollouts[ordinal-1].ServiceID >= rollout.ServiceID {
-			return ComponentTaskPreparation{}, errs.New(
+			return nil, nil, errs.New(
 				errs.KindValidationFailed,
 				"pre-switch Service rollout membership is invalid",
 			)
@@ -89,31 +89,35 @@ func (preparation ComponentTaskPreparation) WithProxyServiceRollouts(
 			func(source ProxyServiceSource) bool { return source.ServiceID == rollout.ServiceID },
 		)
 		if index < 0 || !preflight.Services[index].ReplacementRequired ||
-			rollout.TaskID == preflight.CandidateInput.SourceID ||
-			rollout.TaskID == preflight.ParentTaskID {
-			return ComponentTaskPreparation{}, errs.New(
+			rollout.WorkItemID == preflight.CandidateInput.SourceID ||
+			rollout.WorkItemID == preflight.ParentTaskID {
+			return nil, nil, errs.New(
 				errs.KindValidationFailed,
 				"pre-switch Service rollout belongs to another selection",
 			)
 		}
+		if existing := preflight.Services[index].Rollout; existing != nil &&
+			(existing.ServiceID != rollout.ServiceID || existing.WorkItemID != rollout.WorkItemID ||
+				existing.SHA256 != rollout.SHA256 || existing.Revision != rollout.Revision || existing.NativeRevision != rollout.NativeRevision) {
+			return nil, nil, errs.New(errs.KindStateConflict, "Service work already captured a different rollout")
+		}
 		owned := rollout
 		preflight.Services[index].Rollout = &owned
-		result.proxyServiceConditions = append(
-			result.proxyServiceConditions,
+		conditions = append(
+			conditions,
 			keyvalue.Condition{
-				Key:         ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, rollout.TaskID),
+				Key:         ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, rollout.WorkItemID),
 				ModRevision: rollout.Revision,
 			},
 			keyvalue.Condition{
 				Key: ProxyServiceNativeRolloutKey(
 					preflight.EnvironmentID,
 					preflight.ParentTaskID,
-					rollout.TaskID,
+					rollout.WorkItemID,
 				),
 				ModRevision: rollout.NativeRevision,
 			},
 		)
 	}
-	result.proxyServiceConditionCount += 2 * len(rollouts)
-	return result, nil
+	return preflight, conditions, nil
 }

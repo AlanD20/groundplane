@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
-	"github.com/AlanD20/groundplane/internal/common/backupvolumetransfer"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -17,66 +16,13 @@ const maximumControlBurst = 4
 // Cancellation never clears a buffer while the writer could still be using it.
 type backupBulkFrame struct {
 	frame       *agentpb.BackupConfigTransfer
-	volume      *agentpb.BackupVolumeManifestTransfer
 	ctx         context.Context
 	reservation *taskReservation
 	completed   chan error
 }
 
 func (frame *backupBulkFrame) taskID() string {
-	if frame.volume != nil {
-		return frame.volume.TaskId
-	}
 	return frame.frame.TaskId
-}
-
-func (pool *WorkerPool) publishBackupVolumeFrame(ctx context.Context,
-	frame *agentpb.BackupVolumeManifestTransfer) error {
-	if ctx == nil || frame == nil {
-		return errs.New(errs.KindValidationFailed, "agent: Volume bulk frame is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	binding, err := pool.volumeBinding(
-		frame.TaskId,
-		frame.AssignmentId,
-		frame.StepId,
-		frame.TransferId,
-		frame.Direction,
-	)
-	if err != nil {
-		return err
-	}
-	owned, err := backupvolumetransfer.ValidateFrame(binding, frame)
-	if err != nil {
-		return err
-	}
-	pool.mu.Lock()
-	reservation := pool.reservations[frame.TaskId]
-	if pool.stopped || reservation == nil || reservation.terminalProduced || reservation.ctx.Err() != nil ||
-		pool.bulkPending[frame.TaskId] != nil {
-		pool.mu.Unlock()
-		return errs.New(errs.KindStateConflict, "agent: Volume bulk assignment is not active")
-	}
-	queued := &backupBulkFrame{volume: owned, ctx: ctx, reservation: reservation, completed: make(chan error, 1)}
-	pool.bulkPending[frame.TaskId] = queued
-	select {
-	case pool.bulkFrames <- queued:
-		pool.mu.Unlock()
-	default:
-		delete(pool.bulkPending, frame.TaskId)
-		pool.mu.Unlock()
-		return errs.New(errs.KindInternal, "agent: Volume bulk queue exceeds reserved capacity")
-	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-reservation.ctx.Done():
-		return reservation.ctx.Err()
-	case err := <-queued.completed:
-		return err
-	}
 }
 
 func (pool *WorkerPool) publishBackupConfigFrame(ctx context.Context, frame *agentpb.BackupConfigTransfer) error {
@@ -144,15 +90,7 @@ func (pool *WorkerPool) sendBackupBulkFrame(stream agentStream, queued *backupBu
 		pool.finishBackupBulkFrame(queued, err)
 		return nil // An aborted producer cannot invalidate other assignments.
 	}
-	if queued.volume != nil {
-		err = stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupVolumeManifestTransfer{
-			BackupVolumeManifestTransfer: queued.volume,
-		}})
-	} else {
-		err = stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupConfigTransfer{
-			BackupConfigTransfer: queued.frame,
-		}})
-	}
+	err = stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupConfigTransfer{BackupConfigTransfer: queued.frame}})
 	pool.finishBackupBulkFrame(queued, err)
 	return err
 }

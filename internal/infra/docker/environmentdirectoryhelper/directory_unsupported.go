@@ -10,6 +10,14 @@ import (
 
 type Creator struct{}
 
+func (Creator) InspectManagedVolume(context.Context, ManagedVolumeInspectRequest) (ManagedVolumeObservation, error) {
+	return ManagedVolumeObservation{}, errs.New(errs.KindNotImplemented, "Volume directory inspection requires Linux")
+}
+
+func (Creator) Absent(context.Context, string, string) (bool, error) {
+	return false, errs.New(errs.KindNotImplemented, "Environment directory inspection requires Linux")
+}
+
 func (Creator) Create(context.Context, string, string) error {
 	return errs.New(errs.KindNotImplemented, "Environment directory creation requires Linux")
 }

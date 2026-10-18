@@ -6,6 +6,7 @@ import (
 	"context"
 	cryptorand "crypto/rand"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/agent/backupruntime"
 	"io"
 	"log/slog"
 	"math/rand/v2"
@@ -15,20 +16,24 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
+	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	logstream "github.com/AlanD20/groundplane/internal/agent/logstream"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
 	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
+	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
 	"github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
-	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -65,6 +70,9 @@ type reconnectWaiter func(context.Context, uint) error
 // Client owns one authenticated, single-use Controller stream. Identity and
 // credential material are deliberately private and are never logged.
 type Client struct {
+	lifecycleExecutor  *lifecycleruntime.Executor
+	backupExecutor     *backupruntime.Executor
+	removalRecovery    *removalruntime.Runtime
 	socketPath         string
 	agentID            string
 	token              [agentprotocol.RawTokenBytes]byte
@@ -83,8 +91,11 @@ type Client struct {
 	releaseExecutor         *releaseruntime.Executor
 	hierarchyExecutor       *hierarchyruntime.Executor
 	networkExecutor         *networkruntime.Executor
+	componentExecutor       *componentruntime.Executor
+	entryExecutor           *entryruntime.Executor
 	volumeExecutor          *volumeruntime.Executor
 	attachRemovalExecutor   *hierarchyruntime.AttachExecutor
+	attachProvisionExecutor *attachruntime.Executor
 	scriptExecutor          *scriptruntime.Executor
 	releaseRecoveryExecutor *releaseruntime.RecoveryExecutor
 	processOwnership        *agentownership.Lease
@@ -257,15 +268,6 @@ func (c *Client) Run(ctx context.Context) error {
 			reconnectAttempt++
 		}
 	}
-}
-
-func (c *Client) sendBackupCheckpoint(
-	stream agentStream,
-	request *agentpb.BackupCheckpointRequest,
-) error {
-	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupCheckpointRequest{
-		BackupCheckpointRequest: proto.Clone(request).(*agentpb.BackupCheckpointRequest),
-	}})
 }
 
 func (c *Client) sendScriptCheckpoint(
@@ -446,14 +448,12 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 			ScriptCheckpoints:  assignment.ScriptCheckpoints,
 			AutomaticReconcile: assignment.GetAutomaticReconcile(), ExecutionEpoch: assignment.GetExecutionEpoch(),
 			ExecutionMode: assignment.GetExecutionMode(), ForwardDeadline: assignment.ForwardDeadline.AsTime(),
-			RecoveryDeadline:              assignment.RecoveryDeadline.AsTime(),
-			Deadline:                      executionDeadline,
-			RecoveryProofRequired:         recoveryProofRequired,
-			RestorationAuthority:          assignment.GetRestorationAuthority(),
-			ReleaseRecoveryDirective:      assignment.GetReleaseRecoveryDirective(),
-			ReleaseRecoveryRecordSHA256:   append([]byte(nil), assignment.GetReleaseRecoveryRecordSha256()...),
-			ComponentRecoveryDirective:    assignment.GetComponentRecoveryDirective(),
-			ComponentRecoveryRecordSHA256: append([]byte(nil), assignment.GetComponentRecoveryRecordSha256()...),
+			RecoveryDeadline:            assignment.RecoveryDeadline.AsTime(),
+			Deadline:                    executionDeadline,
+			RecoveryProofRequired:       recoveryProofRequired,
+			RestorationAuthority:        assignment.GetRestorationAuthority(),
+			ReleaseRecoveryDirective:    assignment.GetReleaseRecoveryDirective(),
+			ReleaseRecoveryRecordSHA256: append([]byte(nil), assignment.GetReleaseRecoveryRecordSha256()...),
 		})
 	}
 	if abort := message.GetTaskAbort(); abort != nil {
@@ -464,29 +464,6 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 	}
 	if transfer := message.GetManagedConfigTransfer(); transfer != nil {
 		return false, c.pool.AcceptManagedConfigTransfer(ctx, transfer)
-	}
-	if transfer := message.GetBackupConfigTransfer(); transfer != nil {
-		defer backupconfigtransfer.ClearFrame(transfer)
-		return false, c.pool.backupConfigs.AcceptFrame(ctx, transfer)
-	}
-	if credit := message.GetBackupConfigCredit(); credit != nil {
-		return false, c.pool.backupConfigs.AcceptCredit(ctx, credit)
-	}
-	if credit := message.GetBackupVolumeManifestAckCredit(); credit != nil {
-		return false, c.pool.AcceptBackupVolumeManifestCredit(credit)
-	}
-	if frame := message.GetBackupVolumeManifestTransfer(); frame != nil {
-		return false, c.pool.AcceptBackupVolumeManifestFrame(frame)
-	}
-	if transfer := message.GetBackupSecretSlotTransfer(); transfer != nil {
-		chunk := transfer.GetChunk()
-		if chunk != nil {
-			defer func() {
-				clear(chunk.Content)
-				chunk.Content = nil
-			}()
-		}
-		return false, c.pool.AcceptBackupSecretSlotTransfer(ctx, transfer)
 	}
 	if message.GetShutdown() != nil {
 		return true, nil

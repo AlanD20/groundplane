@@ -71,7 +71,6 @@ type EdgeCheckResult struct {
 	CertificateExpiresAt string                 `json:"certificate_expires_at,omitempty"`
 	CleanupRequired      bool                   `json:"cleanup_required"`
 	HelperName           string                 `json:"helper_name,omitempty"`
-	CleanupTaskID        string                 `json:"cleanup_task_id,omitempty"`
 	CreatedAt            string                 `json:"created_at"`
 	StartedAt            string                 `json:"started_at,omitempty"`
 	FinishedAt           string                 `json:"finished_at,omitempty"`

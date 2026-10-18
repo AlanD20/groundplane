@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -169,7 +170,7 @@ func (service *CheckService) admitConnectionCheck(ctx context.Context, environme
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	checkOwner := connectorchecks.Owner{TaskID: ids.New(ids.KindTask), PlanID: ids.New(ids.KindPlan),
+	checkOwner := connectorchecks.Owner{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
 		OperationID: ids.New(ids.KindOperation), EnvironmentID: environmentID}
 	credentials, sources, err := service.captureCredentials(ctx, source, checkOwner.OperationID, replacements)
 	if err != nil {
@@ -194,18 +195,17 @@ func (service *CheckService) admitConnectionCheck(ctx context.Context, environme
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	task := etcd.TaskRecord{ID: checkOwner.TaskID, OperationID: checkOwner.OperationID,
-		PlanID: checkOwner.PlanID, PlanHash: planHash, Owner: owner, Actor: taskjournal.TaskActorOperator,
-		Executor: taskjournal.TaskExecutorController, RenderGeneration: 1, Type: taskjournal.TaskCheck,
-		Target: candidate.Connector.ID, TargetName: candidate.Connector.Name, IdempotencyKey: locator.Key,
-		Params: map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceConnector,
-			taskjournal.TaskConnectorCheckInputParam: check.ConfigurationSHA256}, TimeoutSeconds: 60,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now}
+	task := workexecution.Task{ID: checkOwner.TaskID,
+		Intent: workexecution.Input{ID: checkOwner.PlanID, SHA256: planHash},
+		Scope:  workexecution.Scope{TenantID: owner.TenantID, ProjectID: owner.ProjectID, EnvironmentID: owner.EnvironmentID},
+		Actor:  workexecution.OperatorActor, Action: workexecution.ActionCheck,
+		TargetID: candidate.Connector.ID, TargetName: candidate.Connector.Name,
+		ExpectedItems: 1, Deadline: now.Add(time.Minute), CreatedAt: now, UpdatedAt: now}
 	return service.publishConnectionCheck(ctx, source, check, task, locator, evidence)
 }
 
 func (service *CheckService) publishConnectionCheck(ctx context.Context, source etcd.ConnectorCheckSource,
-	check connectorchecks.Record, task etcd.TaskRecord, locator idempotencyrecord.IdempotencyLocator,
+	check connectorchecks.Record, task workexecution.Task, locator idempotencyrecord.IdempotencyLocator,
 	evidence requestidempotency.ProtectedEvidence,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})

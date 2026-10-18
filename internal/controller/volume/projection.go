@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -154,7 +153,7 @@ func buildVolumeMutationProjection(
 		return projectionrecord.EnvironmentComposeProjection{}, nil, nil, err
 	}
 	if request.action == volumeMutationActionRemove {
-		cleanupArtifactID, cleanupErr := taskplanning.StableVolumeCleanupArtifactID(
+		cleanupArtifactID, cleanupErr := cleanupArtifactIdentity(
 			stableIDFromTask(ids.KindConfig, revisionID),
 		)
 		if cleanupErr != nil {

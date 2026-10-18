@@ -29,9 +29,17 @@ func executeManagedVolumeEnsure(
 	artifact *agentpb.ComposeArtifact,
 	ensure *agentpb.ManagedVolumeEnsure,
 ) (*agentpb.ComposeHelperResponse, error) {
+	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	defer cancel()
+	return prepareCapturedVolume(executionCtx, taskRunner, artifact, ensure.GetVolumeId(), ensure.GetRequireExisting())
+}
+
+func prepareCapturedVolume(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact,
+	volumeID string, requireExisting bool,
+) (*agentpb.ComposeHelperResponse, error) {
 	var selected *agentpb.ComposeVolume
 	for _, volume := range artifact.GetVolumes() {
-		if volume.GetVolumeId() == ensure.GetVolumeId() {
+		if volume.GetVolumeId() == volumeID {
 			selected = volume
 			break
 		}
@@ -77,10 +85,8 @@ func executeManagedVolumeEnsure(
 			&agentpb.LabelPair{Key: key, Value: value},
 		)
 	}
-	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-	defer cancel()
-	if ensure.RequireExisting {
-		inspection, exists, failure, err := inspectManagedComposeVolume(executionCtx, taskRunner, selected.DockerName)
+	if requireExisting {
+		inspection, exists, failure, err := inspectManagedComposeVolume(ctx, taskRunner, selected.DockerName)
 		if err != nil || failure != nil {
 			return failure, err
 		}
@@ -89,7 +95,7 @@ func executeManagedVolumeEnsure(
 		}
 		return completedResponse(), nil
 	}
-	response, err := ensureManagedComposeVolumes(executionCtx, taskRunner, owned)
+	response, err := ensureManagedComposeVolumes(ctx, taskRunner, owned)
 	if err != nil || response != nil {
 		return response, err
 	}

@@ -117,20 +117,17 @@ export function useConnectorStore(
       const pending = pendingConnectorRemovals.current.get(taskId);
       if (!pending) return;
       if (
-        task.type !== "remove" ||
-        task.target !== pending.connectorId ||
-        task.environment_id !== pending.environmentId
+        task.task.action !== "remove" ||
+        task.task.target_id !== pending.connectorId ||
+        task.task.scope.environment_id !== pending.environmentId
       ) {
         clearPendingConnectorRemoval(taskId);
         await refreshConnectorEnvironment(pending.environmentId);
         return;
       }
-      if (
-        !["completed", "failed", "timed_out", "aborted"].includes(task.status)
-      )
-        return;
+      if (!task.task.finished_at) return;
       clearPendingConnectorRemoval(taskId);
-      if (task.status !== "completed") return;
+      if (task.task.status !== "succeeded") return;
       update((draft) => {
         draft.connectors = draft.connectors.filter(
           (candidate) => candidate.id !== pending.connectorId,

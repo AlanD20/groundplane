@@ -5,80 +5,15 @@ import (
 	taskdispatch "github.com/AlanD20/groundplane/internal/controller/controllertask/dispatch"
 
 	"github.com/AlanD20/groundplane/internal/app/softwareplatform"
-	"github.com/AlanD20/groundplane/internal/controller/backingchecks"
-	"github.com/AlanD20/groundplane/internal/controller/connectors"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
-	"github.com/AlanD20/groundplane/internal/controller/dnsresolver"
-	"github.com/AlanD20/groundplane/internal/controller/edgechecks"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	checkrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorchecks"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/dnschecks"
-	edgerecord "github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 )
 
 func (platform *Platform) newSoftwareRuntime(
 	dependencies ExecutionDependencies,
 ) (*softwareplatform.Composition, controllertask.Handler, error) {
-	checkRecords, err := connectorchecks.NewRepository(platform.dependencies.Store)
-	if err != nil {
-		return nil, nil, err
-	}
-	checks, err := connectors.NewCheckExecutor(
-		checkRecords,
-		platform.dependencies.Tasks,
-		platform.dependencies.Protector,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	backingRecords, err := checkrecord.NewRepository(platform.dependencies.Store)
-	if err != nil {
-		return nil, nil, err
-	}
-	backingChecks, err := backingchecks.NewExecutor(
-		backingRecords,
-		platform.dependencies.Tasks,
-		platform.dependencies.Channel.Registry,
-		platform.dependencies.Protector,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	dnsRecords, err := dnschecks.NewRepository(platform.dependencies.Store)
-	if err != nil {
-		return nil, nil, err
-	}
-	dnsExecutor, err := dnsresolver.NewConnectionCheckExecutor(
-		dnsRecords,
-		platform.dependencies.Tasks,
-		platform.dependencies.Channel.Registry,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	edgeRecords, err := edgerecord.NewRepository(platform.dependencies.Store)
-	if err != nil {
-		return nil, nil, err
-	}
-	edgeExecutor, err := edgechecks.NewExecutor(
-		edgeRecords,
-		platform.dependencies.Tasks,
-		platform.dependencies.Channel.Registry,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
 	handler, err := taskdispatch.NewResourceHandler(
 		platform.agents,
-		dependencies.BackingZones,
-		dependencies.Images,
-		checks,
-		backingChecks,
-		dnsExecutor,
-		edgeExecutor,
-		dependencies.RunnerChecks,
-		dependencies.RunnerLifecycle,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -125,13 +60,9 @@ func (platform *Platform) newTaskRuntime(
 	if err != nil {
 		return nil, err
 	}
-	deletions, err := taskdispatch.NewHierarchyDispatcher(rotations, dependencies.Hierarchy)
-	if err != nil {
-		return nil, err
-	}
 	runtime, err := controllertask.New(
 		platform.dependencies.Tasks,
-		deletions,
+		rotations,
 		platformUpdates,
 		platform.dependencies.Tick,
 		platform.dependencies.Logger,

@@ -3,8 +3,6 @@ package network
 import (
 	"context"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -29,26 +27,6 @@ type routeMutationRepository interface {
 	GetEnvironmentComposeProjection(
 		context.Context, string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
-	BeginRouteMutationWithTask(
-		context.Context,
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[servicerecord.ServiceRecord],
-		*etcdstore.Versioned[routerecord.Record],
-		routerecord.Record,
-		environmentchanges.RouteMutationIntent,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-}
-
-type routeMutationTaskPlanner interface {
-	PrepareRouteMutationTask(
-		context.Context,
-		etcd.TaskRecord,
-		environmentchanges.RouteMutationIntent,
-		environmentchanges.RouteMutationProcedureIDs,
-	) (etcd.RouteMutationTaskPreparation, error)
 }
 
 type routeMutationEvidence struct {
@@ -59,34 +37,19 @@ type routeMutationEvidence struct {
 type routeMutationService struct {
 	repository  routeMutationRepository
 	idempotency routeMutationIdempotency
-	planner     routeMutationTaskPlanner
-	deletions   *routeRemovalService
+	publisher   *RouteWorkPublisher
 	now         func() time.Time
 }
 
 func newRouteMutationService(
 	repository routeMutationRepository,
 	idempotency routeMutationIdempotency,
-	planner routeMutationTaskPlanner,
+	publisher *RouteWorkPublisher,
 ) (*routeMutationService, error) {
-	if repository == nil || idempotency == nil || planner == nil {
+	if repository == nil || idempotency == nil || publisher == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutation service is not configured")
 	}
 	return &routeMutationService{
-		repository: repository, idempotency: idempotency, planner: planner, now: time.Now,
+		repository: repository, idempotency: idempotency, publisher: publisher, now: time.Now,
 	}, nil
-}
-
-func (service *routeMutationService) RemoveRoute(
-	ctx context.Context,
-	routeID string,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if service == nil || service.deletions == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Route deletion service is not configured",
-		)
-	}
-	return service.deletions.RemoveRoute(ctx, routeID, idempotencyKey)
 }

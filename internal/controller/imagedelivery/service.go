@@ -4,20 +4,18 @@ package imagedelivery
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/distribution/reference"
 )
 
 const FetchRoute = "/images/fetch"
@@ -32,28 +30,17 @@ type Registry interface {
 }
 
 type TaskStore interface {
-	CreateTask(
-		context.Context,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-	CreateImageFetchTask(
-		context.Context,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-	ImageTagCommitCompleted(context.Context, etcd.TaskRecord) (bool, error)
-	BeginImageTagCommit(context.Context, etcd.TaskRecord) (bool, error)
-	CompleteImageTagCommit(context.Context, etcd.TaskRecord, time.Time) error
-	AbandonImageTagCommit(context.Context, etcd.TaskRecord) error
+	CreateImageOperation(context.Context, imageoperations.Input, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 }
 
 type Service struct {
-	registry Registry
-	tasks    TaskStore
-	evidence requestidempotency.EvidenceRepository
-	intents  *requestidempotency.Coordinator
-	store    ImageStore
+	registry    Registry
+	tasks       TaskStore
+	evidence    requestidempotency.EvidenceRepository
+	intents     *requestidempotency.Coordinator
+	store       ImageStore
+	operations  *imageoperations.Repository
+	diagnostics *executiondiagnostics.Repository
 }
 
 func New(
@@ -62,11 +49,16 @@ func New(
 	tasks TaskStore,
 	evidence requestidempotency.EvidenceRepository,
 	intents *requestidempotency.Coordinator,
+	diagnostics *executiondiagnostics.Repository,
 ) (*Service, error) {
-	if registry == nil || store == nil || tasks == nil || evidence == nil || intents == nil {
+	if registry == nil || store == nil || tasks == nil || evidence == nil || intents == nil || diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "image delivery dependencies are incomplete")
 	}
-	return &Service{registry: registry, store: store, tasks: tasks, evidence: evidence, intents: intents}, nil
+	operations, err := imageoperations.NewRepository(store)
+	if err != nil {
+		return nil, err
+	}
+	return &Service{registry: registry, store: store, tasks: tasks, evidence: evidence, intents: intents, operations: operations, diagnostics: diagnostics}, nil
 }
 
 func (service *Service) FetchImage(
@@ -132,7 +124,7 @@ func (service *Service) accept(
 	// Resolution precedes publication but follows replay lookup. The atomic
 	// marker selects one winning plan when requests race; no pull happens here.
 	now := time.Now().UTC()
-	task, raw, err := service.prepare(ctx, requested, key, now, remove)
+	input, raw, err := service.prepareOperation(ctx, requested, now, remove)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -149,15 +141,9 @@ func (service *Service) accept(
 	defer clear(intent.Ciphertext)
 	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, Intent: intent, Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+		Locator: locator, Intent: intent, Response: response, TaskID: input.TaskID, CreatedAt: now, UpdatedAt: now,
 	}
-	var result etcd.IdempotencyTransactionResult
-	var publicationErr error
-	if remove {
-		result, publicationErr = service.tasks.CreateTask(ctx, task, marker)
-	} else {
-		result, publicationErr = service.tasks.CreateImageFetchTask(ctx, task, marker)
-	}
+	result, publicationErr := service.tasks.CreateImageOperation(ctx, input, marker)
 	var resolution requestidempotency.Resolution
 	if publicationErr != nil {
 		if !errors.Is(publicationErr, context.DeadlineExceeded) &&
@@ -182,79 +168,4 @@ func replay(resolution requestidempotency.Resolution) (idempotencyrecord.Idempot
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "image fetch replay is invalid")
 	}
 	return requestidempotency.CloneResponse(resolution.Response), nil
-}
-
-func newTask(plan imagefetch.Plan, key string, now time.Time) (etcd.TaskRecord, error) {
-	input, hash, err := imagefetch.Encode(plan)
-	if err != nil {
-		return etcd.TaskRecord{}, err
-	}
-	task := etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), PlanID: ids.New(ids.KindPlan),
-		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
-		IdempotencyKey: key, Type: taskjournal.TaskFetch, Target: plan.Reference(), PlanHash: hash, RenderGeneration: 1,
-		Params: map[string]string{
-			taskjournal.TaskResourceKindParam:    taskjournal.TaskResourceImage,
-			taskjournal.TaskImageFetchInputParam: input,
-		},
-		TimeoutSeconds: imagefetch.TimeoutSeconds, Status: taskjournal.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	return task, etcd.ValidateTaskRecord(task)
-}
-
-// Execute runs under the existing durable Controller claim, timeout and abort
-// machinery. A crash after pull is safe: replay inspects the same pinned image.
-func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error {
-	if err := etcd.ValidateTaskRecord(task); err != nil {
-		return err
-	}
-	if task.Executor != taskjournal.TaskExecutorController ||
-		task.Status != taskjournal.TaskStatusRunning {
-		return errs.New(errs.KindValidationFailed, "image fetch requires a running Controller Task")
-	}
-	if task.Type == taskjournal.TaskRemove {
-		return service.executeRemoval(ctx, task)
-	}
-	plan, err := imagefetch.Decode(task.Params[taskjournal.TaskImageFetchInputParam], task.PlanHash)
-	if err != nil {
-		return err
-	}
-	return service.executeFetch(ctx, task, plan)
-}
-
-func (service *Service) prepare(
-	ctx context.Context,
-	requested, key string,
-	now time.Time,
-	remove bool,
-) (etcd.TaskRecord, []byte, error) {
-	if remove {
-		return service.prepareRemoval(ctx, requested, key, now)
-	}
-	named, err := imagefetch.ParseRequested(requested)
-	if err != nil {
-		return etcd.TaskRecord{}, nil, err
-	}
-	if reference.Domain(named) == "localhost:5000" {
-		return etcd.TaskRecord{}, nil, errs.New(
-			errs.KindValidationFailed,
-			"Use registry.groundplane.internal:5000 to fetch from GP's private registry; localhost:5000 is the installer's host-local reference",
-		)
-	}
-	plan, err := service.registry.Resolve(ctx, requested)
-	if err != nil {
-		return etcd.TaskRecord{}, nil, err
-	}
-	if plan.Requested != requested {
-		return etcd.TaskRecord{}, nil, errs.New(errs.KindInternal, "registry resolved another image request")
-	}
-	task, err := newTask(plan, key, now)
-	if err != nil {
-		return task, nil, err
-	}
-	raw, err := json.Marshal(
-		apiTypes.ImageFetchAccepted{TaskID: task.ID, Image: plan.Reference(), ConfigDigest: plan.ConfigDigest},
-	)
-	return task, raw, err
 }

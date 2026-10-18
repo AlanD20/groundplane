@@ -85,18 +85,6 @@ func (repository *TaskRepository) drainTaskPruneIntent(
 	current etcdstore.Versioned[taskjournal.PruneIntent],
 ) error {
 	var err error
-	for !current.Record.BackupCheckpointCursorsComplete {
-		current, err = repository.pruneTaskBackupCheckpointBatch(ctx, current, true)
-		if err != nil {
-			return err
-		}
-	}
-	for !current.Record.BackupCheckpointDeduplicationsComplete {
-		current, err = repository.pruneTaskBackupCheckpointBatch(ctx, current, false)
-		if err != nil {
-			return err
-		}
-	}
 	for !current.Record.BackupConfigTransfersComplete {
 		current, err = repository.pruneTaskConfigTransferBatch(ctx, current)
 		if err != nil {

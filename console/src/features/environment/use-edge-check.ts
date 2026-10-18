@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { newULID } from "@/lib/utils";
-import { retryTask } from "@/features/task/api";
+import { retryTask, type TaskRetryRequest } from "@/features/task/api";
+import { captureCleanupRetry } from "@/features/task/cleanup-retry";
 import {
   edgeCheckRequest,
   getEdgeCheck,
@@ -18,7 +19,10 @@ const pendingChecks = new Map<
   string,
   { key: string; submission?: EdgeCheckSubmission }
 >();
-const pendingCleanup = new Map<string, string>();
+const pendingCleanup = new Map<
+  string,
+  { key: string; input?: TaskRetryRequest }
+>();
 const runningPhases = new Set([
   "ready",
   "private_checking",
@@ -244,13 +248,15 @@ export function useEdgeCheck(
     busy.current = true;
     setSending(true);
     setError(null);
-    let key = pendingCleanup.get(taskId);
-    if (!key) {
-      key = newULID();
-      pendingCleanup.set(taskId, key);
+    let captured = pendingCleanup.get(taskId);
+    if (!captured) {
+      captured = { key: newULID() };
+      pendingCleanup.set(taskId, captured);
     }
     try {
-      const next = await retryTask(taskId, key);
+      captured.input ??= await captureCleanupRetry(taskId, "edge_check");
+      if (generation.current !== current) return;
+      const next = await retryTask(taskId, captured.input, captured.key);
       pendingCleanup.delete(taskId);
       if (generation.current === current) {
         setResult(null);

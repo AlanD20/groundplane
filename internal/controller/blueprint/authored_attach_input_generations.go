@@ -123,7 +123,7 @@ func (service *Service) prepareAuthoredAttachInputGenerations(
 			)
 		}
 		attachID := attachIDByName[name]
-		authoredSpecSHA256, err := authoredUnitFingerprint("attach-spec", spec)
+		authoredSpecSHA256, err := core.AttachmentSpecFingerprint(spec)
 		if err != nil {
 			return nil, err
 		}

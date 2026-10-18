@@ -3,8 +3,8 @@ package hierarchydeletion
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 )
 
@@ -12,7 +12,7 @@ type HierarchyDeletionOperation struct {
 	Tombstone         HierarchyDeletionTombstone
 	RootTaskID        string
 	MarkerLocator     idempotencyrecord.IdempotencyLocator
-	Owner             taskjournal.TaskOwner
+	Scope             workexecution.Scope
 	TombstoneRevision int64
 	Fence             HierarchyDeletionCleanupFence
 	FenceRevision     int64

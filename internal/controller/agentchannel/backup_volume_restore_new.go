@@ -5,33 +5,28 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/backupvolume"
 	"github.com/AlanD20/groundplane/internal/common/backupvolumetransfer"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func (server *Server) sendBackupVolumeRestoreNew(stream agentpb.AgentChannel_ConnectServer,
-	claim etcd.TaskAssignment, assignment *agentpb.TaskAssignment, stepID string,
-	exchange *configTransferExchange,
+	authorization agentregistration.WorkAuthorization, assignment *agentpb.BackupWorkAssignment, ordinal uint32,
+	exchange *volumeManifestExchange,
 ) error {
-	if server.checkpoints == nil || exchange == nil || exchange.volumes == nil {
+	if server.backupWorkReports == nil || exchange == nil || assignment == nil || assignment.Input == nil || uint64(ordinal) >= uint64(len(assignment.Input.Steps)) {
 		return errs.New(errs.KindInternal, "Volume Restore manifest sender is unavailable")
 	}
-	step := backupVolumeStep(assignment.BackupAuthority, stepID)
+	step := assignment.Input.Steps[ordinal]
 	if step == nil || step.GetRestore().GetVolume() == nil {
 		return errs.New(errs.KindStateConflict, "Volume Restore step is unavailable")
 	}
 	direction := agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW
-	transferID, err := backupvolumetransfer.TransferID(step.ExecutionId, direction)
+	binding, err := backupvolumetransfer.Bind(assignment, authorization.Identity(), ordinal, direction)
 	if err != nil {
 		return err
 	}
-	binding := backupvolumetransfer.Binding{TaskID: assignment.TaskId, AssignmentID: assignment.AssignmentId,
-		StepID: stepID, TransferID: transferID, Direction: direction}
-	copy(binding.AuthorityDigest[:], step.StepDigest)
-	complete, err := server.checkpoints.ReadRestoreNewVolumeManifest(stream.Context(),
-		claim.Assignment.Record.AgentID, claim.Assignment.Record.AgentGeneration,
-		assignment.TaskId, assignment.AssignmentId, stepID)
+	complete, err := server.backupWorkReports.ReadRestoreNewVolumeManifest(stream.Context(), authorization, assignment.Attempt, ordinal)
 	if err != nil {
 		return err
 	}
@@ -50,7 +45,7 @@ func (server *Server) sendBackupVolumeRestoreNew(stream agentpb.AgentChannel_Con
 	if err != nil {
 		return err
 	}
-	credit, err := exchange.volumes.readCredit(stream.Context(), transferID)
+	credit, err := exchange.readCredit(stream.Context(), binding.TransferID)
 	if err != nil {
 		return err
 	}
@@ -64,7 +59,7 @@ func (server *Server) sendBackupVolumeRestoreNew(stream agentpb.AgentChannel_Con
 			BackupVolumeManifestTransfer: frame}}); err != nil {
 			return err
 		}
-		credit, err = exchange.volumes.readCredit(stream.Context(), transferID)
+		credit, err = exchange.readCredit(stream.Context(), binding.TransferID)
 		if err != nil {
 			return err
 		}

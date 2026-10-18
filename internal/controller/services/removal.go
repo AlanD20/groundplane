@@ -2,21 +2,23 @@ package services
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/serviceremovalwork"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 	"net/http"
+	"time"
 )
 
 func (service *serviceMutationService) RemoveService(
@@ -156,40 +158,18 @@ func (service *serviceMutationService) removeServiceOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
+	seal, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
 		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Service: &blueprints.EnvironmentServiceMutationAudit{
 			Action: blueprints.EnvironmentServiceMutationRemove, BaseRevisionID: projection.Record.RevisionID,
 			ServiceID: serviceID,
 		}},
 		DesiredInput: desiredInput, DependencyDigest: projectionEvidence.DependencyDigest,
-	}); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
+	})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	taskID := claim.TaskID
-	task := etcd.TaskRecord{
-		ID: taskID, OperationID: serviceStableIDFromRevision(ids.KindOperation, taskID),
-		IdempotencyKey: idempotencyKey, Owner: owner, Actor: taskjournal.TaskActorOperator,
-		Executor: taskjournal.TaskExecutorAgent, PlanID: serviceStableIDFromRevision(ids.KindPlan, taskID),
-		Type: taskjournal.TaskRemove, Target: serviceID, TimeoutSeconds: serviceLifecycleAgentTimeoutSeconds,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
-	}
-	removalIntent, err := environmentchanges.NewServiceRemovalIntent(
-		taskID, current, projection, expectedHeadRevision, claim, candidate, claim.CreatedAt,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if service.lifecycle == nil || service.lifecycle.plans == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Service removal planner is not configured",
-		)
-	}
 	runtimeSource, err := service.repository.GetServiceRemovalRuntime(
 		ctx,
 		intentValue.environmentID,
@@ -199,16 +179,21 @@ func (service *serviceMutationService) removeServiceOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	removalIntent.AcknowledgedRuntimeRevision = runtimeSource.Revision
-	if runtimeSource.Revision != 0 {
-		removalIntent.AcknowledgedRuntime = &runtimeSource.Record
+	input := serviceremovalwork.Input{
+		TaskID: taskID, WorkItemID: serviceStableIDFromRevision(ids.KindWorkItem, taskID),
+		PlanID:    serviceStableIDFromRevision(ids.KindPlan, taskID),
+		Scope:     workexecution.Scope{TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID},
+		ServiceID: serviceID, ServiceName: current.Record.Desired.Name, ServiceRevision: current.Revision,
+		RuntimeRevision: servicerecord.ServiceRuntimeRevision(current), RuntimeSourceRevision: runtimeSource.Revision,
+		DesiredRevisionID: claim.RevisionID, DesiredSHA256: hex.EncodeToString(seal.ProjectionSHA256[:]),
+		BaseRevisionID: projection.Record.RevisionID, HeadRevision: expectedHeadRevision,
+		Generation: generation, CreatedAt: claim.CreatedAt,
 	}
-	task, err = service.lifecycle.plans.PrepareServiceRemovalTask(
-		ctx, task, removalIntent,
-		serviceStableIDFromRevision(ids.KindConfig, taskID), serviceStableIDFromRevision(ids.KindStep, taskID),
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	timeout := serviceLifecycleControlTimeoutSeconds
+	if runtimeSource.Revision != 0 {
+		input.Runtime = &runtimeSource.Record
+		input.HostID = runtimeSource.Record.Source.Executor.HostID
+		timeout = serviceLifecycleAgentTimeoutSeconds
 	}
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
@@ -223,13 +208,11 @@ func (service *serviceMutationService) removeServiceOnce(
 		Locator: locator, ReplayTarget: &target, Intent: claim.Intent, Response: response, TaskID: taskID,
 		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
-	tombstone := deletionrecord.DeletionTombstoneRecord{
-		TargetKind: deletionrecord.DeletionTargetService, TargetID: serviceID, TargetRevision: current.Revision,
-		TaskID: taskID, Phase: deletionrecord.DeletionPhaseHostEffects, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
-	}
-	result, mutationErr := service.repository.BeginServiceRemovalWithTask(
-		ctx, tenant, project, environment, current, projection, tombstone, removalIntent, task, marker,
-	)
+	result, mutationErr := service.repository.PublishServiceRemoval(ctx, etcd.ServiceRemovalPublication{
+		Tenant: tenant, Project: project, Environment: environment, Service: current,
+		Baseline: projection, Candidate: candidate, Claim: claim, Input: input,
+		Deadline: claim.CreatedAt.Add(time.Duration(timeout) * time.Second), Marker: marker,
+	})
 	return service.resolveServiceMutation(ctx, locator, evidence, result, mutationErr, response)
 }
 

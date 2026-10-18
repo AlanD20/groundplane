@@ -19,12 +19,8 @@ export function ControllerUpdateProgress() {
   const [error, setError] = useState<string | null>(null);
   if (!taskID) return null;
   const summary = host?.controller.update.last_update;
-  const status =
-    task?.id === taskID
-      ? task.status
-      : summary?.task_id === taskID
-        ? summary.status
-        : "pending";
+  const currentTask = task?.task.id === taskID ? task.task : null;
+  const status = currentTask?.status ?? "unknown";
   const phase = summary?.task_id === taskID ? summary.phase : "";
 
   async function inspect() {
@@ -54,27 +50,30 @@ export function ControllerUpdateProgress() {
         aria-live="polite"
       >
         <h3 className="text-sm font-medium">Latest update</h3>
-        <StatusBadge
-          status={status}
-          label={status === "aborted" ? "Aborted" : undefined}
-        />
+        <StatusBadge status={status} />
       </div>
       <code className="break-all text-xs text-muted-foreground">{taskID}</code>
       {phase ? (
         <p className="text-xs">
-          Recovery phase: <span className="font-mono">{phase}</span>
+          Software handoff: <span className="font-mono">{phase}</span>
         </p>
       ) : null}
-      {["failed", "timed_out", "aborted"].includes(status) ? (
+      {currentTask?.finished_at && status !== "succeeded" ? (
         <p className="text-xs text-muted-foreground">
-          Update failed. Inspect the Task for details.
+          Update {status.replaceAll("_", " ")}. Inspect the Task for details.
         </p>
       ) : null}
-      {status === "pending" || status === "running" ? (
+      {currentTask && !currentTask.finished_at ? (
         <p className="text-xs text-muted-foreground">
-          Updating; reconnecting automatically after restart.
+          Update is still active. This view reconnects automatically after
+          restart.
         </p>
       ) : null}
+      {!currentTask && (
+        <p className="text-xs text-muted-foreground">
+          Waiting for this Task’s recorded state. No outcome has been confirmed.
+        </p>
+      )}
       {controllerUpdateConnectionError ? (
         <p role="status" className="text-xs text-warning">
           Reconnecting to the same Task. Last read:{" "}

@@ -176,9 +176,86 @@ visible where they affect a decision. State each consequence once, briefly.
 Before confirmation, show the chosen inputs and actual impact, never a speculative
 numbered Task checklist. After acceptance, show recorded progress and failures.
 
-Task inspectors put the execution terminal first, with step details collapsed
-below. Use compact copyable references and timing beside the title. Avoid separate
-walls of identifiers, repeated status summaries and implementation terminology.
+Task inspection follows the [execution viewer contract](#task-execution-viewer).
+Use compact copyable references and timing beside the title. Avoid separate walls
+of identifiers, repeated status summaries and implementation terminology.
+
+## Task execution viewer
+
+Accepted target for the [Task redesign](decisions/task-execution-redesign.md), not
+implemented. This replaces the terminal-first presentation requirement. Keep the
+existing dedicated Task drawer and shared controls; a terminal-styled event dump
+is not the primary explanation of an operation.
+
+The first screen must answer four questions without opening technical details:
+what action is happening, what has finished, what is waiting or failed, and what
+the operator can do next. Use this reading order:
+
+1. **Action summary:** action and linked resource, scope, host, status and elapsed
+   time. Show the selected readable image tag or source ref when relevant, with
+   its captured digest available on demand. Do not repeat this metadata per step.
+2. **Current result or blocker:** one concise explanation of the active stage,
+   failure, dependency or required intervention. Report serving-runtime impact
+   only when verified; distinguish unknown impact from a preserved old release.
+3. **Execution:** a structured list of named stages with status, duration and a
+   short useful result. Expand a stage for its evidence and attempts.
+4. **Contextual actions:** valid actions supplied by the Controller, such as Abort,
+   Retry execution or Retry cleanup, plus links to the affected resource and its
+   logs when available. Explain unavailable relevant actions without inventing
+   repair buttons or presenting every action as available.
+
+### Execution detail, not numbered filler
+
+Stage names describe work: Prepare configuration, Start candidate, Check readiness,
+Switch traffic, Drain previous containers. Use operation-specific stages for
+Backup, image Fetch and other actions, not a deployment checklist everywhere.
+Derive stages from captured execution information. Distinguish planned/not-started,
+running, succeeded, failed, skipped and cancelled states; skipped includes its
+reason. A healthcheck retry updates its stage rather than appending repeated rows.
+No fabricated percentage, timer-based progress or animation implying execution
+while the Agent is disconnected. A completed-stage count is not elapsed-work
+percentage, especially while dependencies are still preparing more work.
+
+Expanded stage details show the exact safe target, expected condition, observed
+result, start/end times, deadline, execution attempt and diagnostic code when
+recorded. For example, a readiness failure can show TCP port 8080, connection
+refused, elapsed wait and remaining deadline. An image Fetch can show bytes/layers
+only when the executor actually reports them. Mark Controller receipt times as
+receipt times; do not present them as measured process start times.
+
+Keep low-level events in a searchable, filterable execution-log disclosure with
+timestamps and copy support for safe diagnostic text. Do not require that view to
+understand a failure. Put Task/attempt IDs, digests and protocol metadata in
+Technical details. Never expose credentials, secret values, arbitrary subprocess
+output or sensitive command arguments to make the display appear more complete.
+
+### Failures, waiting and grouped work
+
+Show the original failed stage, concrete cause, affected runtime and next available
+action together. Cleanup has its own status and stages below the original failure;
+successful cleanup never produces an overall green success for the failed action.
+Earlier attempts remain inspectable, not overwritten by the current attempt.
+
+Waiting names the dependency or conflicting Task and links to it. Agent connection
+loss shows the last received update and explains that execution outcome is not
+yet known. Expired or missing diagnostics are explicitly unavailable, not blank
+steps or reconstructed success.
+
+Blueprint Apply groups work by resource with running/failed/waiting/completed
+counts and status filters. Each resource expands into the same stage viewer;
+independent parallel work is not drawn as one fictional serial sequence. Preserve
+existing pagination for long collections. Surface failed and blocked resources
+without requiring the operator to open every item.
+
+Live updates preserve expanded stages, selected filters and reading position.
+Follow-live scrolling is explicit; scrolling back pauses it and offers a return
+to the latest event. Opening a Task never silently reruns it. Use text and icons
+as well as color, keyboard-accessible disclosures and contained long values.
+
+The redesign's read model must supply these structured facts consistently to
+Console, CLI and API. The Console must not parse backend prose or poll current
+resource state to invent historical execution details. These requirements specify
+information hierarchy and behavior, not a completed visual prototype or UI parity.
 
 ## Locked reference design
 

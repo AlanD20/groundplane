@@ -1,13 +1,15 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"math"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,15 +21,31 @@ type ReleaseHookExecutionPublication struct {
 	SnapshotRevision int64
 }
 
+type ReleaseHookWorkPublication struct {
+	Task         workexecution.Task
+	Item         workexecution.Item
+	OperationID  string
+	ReadRevision int64
+	Hooks        []ReleaseHookExecutionPublication
+}
+
 type releaseHookPublicationFragment struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
 }
 
 func prepareReleaseHookPublicationFragment(
-	evidence ReleasePublicationEvidence,
+	evidence ReleaseHookWorkPublication,
 ) (releaseHookPublicationFragment, error) {
 	fragment := releaseHookPublicationFragment{}
+	if evidence.Task.Validate() != nil || evidence.Item.Validate() != nil ||
+		evidence.Item.TaskID != evidence.Task.ID || evidence.Item.Operation != workexecution.Release ||
+		evidence.Item.Placement.Executor != workexecution.Agent || evidence.Item.Input == nil ||
+		evidence.Item.AttemptNumber != 0 || evidence.Item.ForwardRevoked || evidence.Task.Stop != nil ||
+		evidence.Task.FinishedAt != nil || evidence.ReadRevision <= 0 ||
+		ids.Validate(ids.KindOperation, evidence.OperationID) != nil || len(evidence.Hooks) > 16 {
+		return fragment, errs.New(errs.KindValidationFailed, "release hook publication requires unstarted native work")
+	}
 	updatedScripts := make(map[string]scriptrecord.Record)
 	scriptRevisions := make(map[string]int64)
 	conditionKeys := make(map[string]struct{})
@@ -41,23 +59,23 @@ func prepareReleaseHookPublicationFragment(
 	for _, hook := range evidence.Hooks {
 		sources, execution := hook.Sources, hook.Execution
 		generation := sources.Script.Record.ScriptSetGeneration
-		if execution.ScriptSetGeneration != "" && execution.ScriptSetGeneration != generation {
+		if execution.ScriptSetGeneration != generation {
 			return releaseHookPublicationFragment{}, errs.New(
 				errs.KindValidationFailed, "release hook execution evidence is invalid",
 			)
 		}
-		// RunScript plans do not carry Script-set storage ownership. Bind it
-		// from the frozen source snapshot at the atomic publication boundary,
-		// as manual Script publication does before validating the record.
-		execution.ScriptSetGeneration = generation
 		if err := validateScriptExecutionSources(sources, execution); err != nil ||
 			scriptexecutions.ValidateScriptExecutionRecord(
 				execution,
 			) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			!execution.ActiveReference || execution.CurrentTaskID != evidence.Task.ID ||
-			execution.OperationID != evidence.Task.OperationID || execution.PlanHash != evidence.Task.PlanHash ||
-			evidence.Task.Params[releaserender.ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID ||
-			sources.Revision != evidence.Manifest.ReadRevision {
+			execution.OperationID != evidence.OperationID || execution.WorkItemID != evidence.Item.ID ||
+			execution.WorkInput == nil || *execution.WorkInput != *evidence.Item.Input ||
+			execution.ServiceID != evidence.Item.TargetID ||
+			execution.EnvironmentID != evidence.Task.Scope.EnvironmentID ||
+			sources.Project.Record.ID != evidence.Task.Scope.ProjectID ||
+			sources.Project.Record.TenantID != evidence.Task.Scope.TenantID ||
+			execution.SourceMembershipCount == 0 || sources.Revision != evidence.ReadRevision {
 			return releaseHookPublicationFragment{}, errs.New(
 				errs.KindValidationFailed,
 				"release hook execution evidence is invalid",
@@ -163,6 +181,17 @@ func prepareReleaseHookPublicationFragment(
 		)
 	}
 	return fragment, nil
+}
+
+// PrepareReleaseHookWork returns writes for the native Release publication
+// transaction. Its caller joins source-set publication, captured Release input,
+// work readiness and all resource comparisons; it must not commit this alone.
+func PrepareReleaseHookWork(evidence ReleaseHookWorkPublication) (workqueue.Change, error) {
+	fragment, err := prepareReleaseHookPublicationFragment(evidence)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	return workqueue.Change{Conditions: fragment.conditions, Mutations: fragment.mutations}, nil
 }
 
 func clearReleaseHookPublicationFragment(fragment releaseHookPublicationFragment) {

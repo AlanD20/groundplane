@@ -17,22 +17,21 @@ import (
 )
 
 type releaseExecutionState struct {
-	err                  error
-	exitCode             int32
-	failedStepID         string
-	diagnostic           agentpb.ComposeHelperDiagnostic
-	reconciliation       bool
-	projects             map[string]*agentpb.ObservedProject
-	evidence             map[string]*agentpb.ServiceProxyEvidence
-	recreate             map[string]*agentpb.ServiceRecreateEvidence
-	rolling              map[string]*agentpb.RollingReleaseEvidence
-	absence              map[string]*agentpb.CandidateAbsenceEvidence
-	componentRestoration *agentpb.ComponentRestorationEvidence
-	serviceAbsence       *agentpb.ServiceAbsenceEvidence
-	probeRequired        map[string]bool
-	completed            map[string]struct{}
-	recoveryClosed       bool
-	restored             bool
+	err            error
+	exitCode       int32
+	failedStepID   string
+	diagnostic     agentpb.ComposeHelperDiagnostic
+	reconciliation bool
+	projects       map[string]*agentpb.ObservedProject
+	evidence       map[string]*agentpb.ServiceProxyEvidence
+	recreate       map[string]*agentpb.ServiceRecreateEvidence
+	rolling        map[string]*agentpb.RollingReleaseEvidence
+	absence        map[string]*agentpb.CandidateAbsenceEvidence
+	serviceAbsence *agentpb.ServiceAbsenceEvidence
+	probeRequired  map[string]bool
+	completed      map[string]struct{}
+	recoveryClosed bool
+	restored       bool
 
 	componentMutationAttempted bool
 }
@@ -102,7 +101,6 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 	if terminal != TaskTerminalCompleted &&
 		reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
 		(reservation.assignment.Plan.GetCandidateReleaseProcedure() != nil ||
-			reservation.assignment.Plan.GetComponentRecoveryProcedure() != nil ||
 			reservation.assignment.Plan.GetServiceAbsenceRecoveryProcedure() != nil) &&
 		!state.restored {
 		// Even a pre-hook failure needs an exact predecessor/absence probe.
@@ -122,10 +120,9 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 	result := TaskResult{
 		AssignmentID: reservation.assignment.AssignmentID, TaskID: reservation.assignment.TaskID,
 		PlanHash: taskassignment.PlanDigest(reservation.assignment.Plan), Terminal: terminal, ExitCode: state.exitCode,
-		ExecutionEpoch:                reservation.assignment.ExecutionEpoch,
-		ReleaseRecoveryRecordSHA256:   append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
-		ComponentRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ComponentRecoveryRecordSHA256...),
-		Compose:                       releaseComposeTaskResult(state),
+		ExecutionEpoch:              reservation.assignment.ExecutionEpoch,
+		ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
+		Compose:                     releaseComposeTaskResult(state),
 	}
 	if state.err != nil && p.logger != nil {
 		p.logger.Error("agent: release step failed", "task_id", reservation.assignment.TaskID, "error", state.err)
@@ -356,9 +353,6 @@ func (p *WorkerPool) runReleaseStep(
 		delete(state.evidence, result.RollingEvidence.GetServiceId())
 		delete(state.recreate, result.RollingEvidence.GetServiceId())
 	}
-	if result.ComponentRestorationEvidence != nil {
-		state.componentRestoration = proto.CloneOf(result.ComponentRestorationEvidence)
-	}
 	if result.ServiceAbsenceEvidence != nil {
 		state.serviceAbsence = proto.CloneOf(result.ServiceAbsenceEvidence)
 	}
@@ -367,7 +361,6 @@ func (p *WorkerPool) runReleaseStep(
 	if err == nil && step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
 		state.restored = pair != nil ||
 			composeruntime.ReleaseRestorationEvidenceProven(reservation.assignment, step, result) ||
-			composeruntime.ComponentRestorationEvidenceProven(reservation.assignment, result) ||
 			composeruntime.ServiceAbsenceEvidenceProven(reservation.assignment, result)
 		if !state.restored {
 			err = errs.New(errs.KindInternal, "agent: release compensation returned no exact restoration proof")
@@ -379,9 +372,7 @@ func (p *WorkerPool) runReleaseStep(
 		if pair != nil {
 			required = result.RestorationRequired
 		} else {
-			if step.GetComponentRestorationProbe() != nil {
-				required, err = composeruntime.ComponentRestorationProbeStatus(reservation.assignment, result)
-			} else if step.GetServiceAbsenceProbe() != nil {
+			if step.GetServiceAbsenceProbe() != nil {
 				required, err = composeruntime.ServiceAbsenceProbeStatus(reservation.assignment, result)
 			} else {
 				required, err = composeruntime.ReleaseProbeEvidenceStatus(reservation.assignment, step, result)
@@ -493,7 +484,6 @@ func releaseComposeTaskResult(state *releaseExecutionState) *agentpb.ComposeTask
 	for _, serviceID := range rollingIDs {
 		result.RollingEvidence = append(result.RollingEvidence, proto.CloneOf(state.rolling[serviceID]))
 	}
-	result.ComponentRestorationEvidence = state.componentRestoration
 	result.ServiceAbsenceEvidence = state.serviceAbsence
 	return result
 }
@@ -506,9 +496,6 @@ func releaseCompensationEnabled(step *agentpb.ExecutionStep) bool {
 		return value.Enabled
 	}
 	if step.GetCandidateRestorationCompensate() != nil {
-		return true
-	}
-	if step.GetComponentRestorationCompensate() != nil {
 		return true
 	}
 	if procedure := step.GetComposeRemove(); procedure != nil {

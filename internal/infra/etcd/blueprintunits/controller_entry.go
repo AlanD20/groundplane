@@ -1,41 +1,13 @@
 package blueprintunits
 
 import (
-	"slices"
-
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core/blueprintreconcile"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PrepareControllerEntrySettlement records a Controller-owned value effect
-// without manufacturing an Agent execution. The caller must join these
-// mutations atomically to creation of the exact Entry value generation.
-func PrepareControllerEntrySettlement(
-	snapshot Snapshot,
-	unit Unit,
-	operationID string,
-	valueGenerationID string,
-) (MutationPlan, error) {
-	if unit.Removal {
-		return MutationPlan{}, invalidRecord()
-	}
-	return prepareControllerEntryReceipt(snapshot, unit, operationID, valueGenerationID)
-}
-
-// PrepareControllerEntryRemoval acknowledges retirement of one exact value
-// generation. The caller must atomically prove no applied files require Agent
-// cleanup and remove the definition, lookup and unreferenced generations.
-func PrepareControllerEntryRemoval(
-	snapshot Snapshot, unit Unit, operationID, valueGenerationID string,
-) (MutationPlan, error) {
-	if !unit.Removal {
-		return MutationPlan{}, invalidRecord()
-	}
-	return prepareControllerEntryReceipt(snapshot, unit, operationID, valueGenerationID)
-}
-
+// Entry decision admission owns dependency and conflict fencing. The caller
+// joins this resource receipt with the native work result and exact value writes.
 func prepareControllerEntryReceipt(
 	snapshot Snapshot, unit Unit, operationID, valueGenerationID string,
 ) (MutationPlan, error) {
@@ -48,15 +20,6 @@ func prepareControllerEntryReceipt(
 	}
 	if !desiredControllerUnitMatches(snapshot.Desired.Record.Units, unit) {
 		return MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint Entry unit is not desired")
-	}
-	selection, err := Select(snapshot)
-	if err != nil {
-		return MutationPlan{}, err
-	}
-	if !slices.Contains(selection.Ready, blueprintreconcile.ResourceKey{
-		Kind: unit.Target.Kind, ID: unit.Target.ID,
-	}) {
-		return MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint Entry unit is not ready")
 	}
 	state := Applied
 	if unit.Removal {

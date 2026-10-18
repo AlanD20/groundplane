@@ -36,18 +36,17 @@ type Runtime struct {
 }
 
 type StepResult struct {
-	Observed                     *agentpb.ObservedProject
-	ExitCode                     int32
-	Diagnostic                   agentpb.ComposeHelperDiagnostic
-	MutationAttempted            bool
-	ReconciliationRequired       bool
-	RestorationRequired          bool
-	ProxyEvidence                *agentpb.ServiceProxyEvidence
-	RecreateEvidence             *agentpb.ServiceRecreateEvidence
-	RollingEvidence              *agentpb.RollingReleaseEvidence
-	CandidateAbsenceEvidence     *agentpb.CandidateAbsenceEvidence
-	ComponentRestorationEvidence *agentpb.ComponentRestorationEvidence
-	ServiceAbsenceEvidence       *agentpb.ServiceAbsenceEvidence
+	Observed                 *agentpb.ObservedProject
+	ExitCode                 int32
+	Diagnostic               agentpb.ComposeHelperDiagnostic
+	MutationAttempted        bool
+	ReconciliationRequired   bool
+	RestorationRequired      bool
+	ProxyEvidence            *agentpb.ServiceProxyEvidence
+	RecreateEvidence         *agentpb.ServiceRecreateEvidence
+	RollingEvidence          *agentpb.RollingReleaseEvidence
+	CandidateAbsenceEvidence *agentpb.CandidateAbsenceEvidence
+	ServiceAbsenceEvidence   *agentpb.ServiceAbsenceEvidence
 }
 
 func New(helper Helper, observer Observer) (*Runtime, error) {
@@ -144,8 +143,6 @@ func (runtime *Runtime) ExecuteStep(
 		return runtime.verifyReleaseRestorationPostcondition(ctx, assignment, step, result, err)
 	case *agentpb.ExecutionStep_CandidateRestorationProbe, *agentpb.ExecutionStep_CandidateRestorationCompensate:
 		return runtime.candidateRestoration(ctx, assignment, step)
-	case *agentpb.ExecutionStep_ComponentRestorationProbe, *agentpb.ExecutionStep_ComponentRestorationCompensate:
-		return runtime.componentRestoration(ctx, assignment, step)
 	case *agentpb.ExecutionStep_ServiceAbsenceProbe:
 		return runtime.serviceAbsence(ctx, assignment, step)
 	default:
@@ -345,16 +342,6 @@ func (runtime *Runtime) mutate(
 		response.GetDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE {
 		result.ReconciliationRequired = true
 		return result, errs.New(errs.KindInternal, "agent: Compose helper returned an inconsistent success response")
-	}
-	if evidence := response.GetComponentRestorationEvidence(); evidence != nil {
-		if step.GetComponentRestorationCompensate() == nil {
-			result.ReconciliationRequired = true
-			return result, errs.New(
-				errs.KindInternal,
-				"agent: Component configuration evidence belongs to another operation",
-			)
-		}
-		result.ComponentRestorationEvidence = proto.CloneOf(evidence)
 	}
 	return result, nil
 }

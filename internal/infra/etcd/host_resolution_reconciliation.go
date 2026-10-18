@@ -93,9 +93,8 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	materializationChange taskMaterializationProjectionChange,
 ) (hostResolutionReconciliationChange, error) {
 	resource := task.Params[taskjournal.TaskResourceKindParam]
-	if dnsCheckTask(task) ||
-		resource != taskjournal.TaskResourceRoute && resource != taskjournal.TaskResourceComponent &&
-			task.Params[componentTaskBlueprintProcedureParam] == "" {
+	if resource != taskjournal.TaskResourceRoute && resource != taskjournal.TaskResourceComponent &&
+		task.Params[componentTaskBlueprintProcedureParam] == "" {
 		return hostResolutionReconciliationChange{}, nil
 	}
 	if revision <= 0 {

@@ -37,7 +37,6 @@ func (repository *Planner) freezeIndexedResource(
 				nodeID, descriptor.targetKind, target.id, descriptor.actionKind,
 				target.revision, nil, operation.OperationID,
 			)
-			node.fixedInputDigest = target.digest
 			nodes = append(nodes, node)
 		}
 	}

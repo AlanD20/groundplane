@@ -11,13 +11,13 @@ import (
 	contract "github.com/AlanD20/groundplane/internal/common/edgeconnectioncheck"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/serviceobservation"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	checkrecord "github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -152,6 +152,7 @@ func (service *Service) admitSource(ctx context.Context, environmentID string, s
 ) (idempotency.IdempotencyResponse, error) {
 	checkOwner := checkrecord.Owner{
 		TaskID:        ids.New(ids.KindTask),
+		WorkItemID:    ids.New(ids.KindWorkItem),
 		PlanID:        ids.New(ids.KindPlan),
 		OperationID:   ids.New(ids.KindOperation),
 		EnvironmentID: environmentID,
@@ -179,10 +180,6 @@ func (service *Service) admitSource(ctx context.Context, environmentID string, s
 		return idempotency.IdempotencyResponse{}, err
 	}
 	environment, project := source.Scope()
-	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
 	now := time.Now().UTC()
 	check, err := checkrecord.NewRecord(checkOwner, configuration, now)
 	if err != nil {
@@ -196,30 +193,12 @@ func (service *Service) admitSource(ctx context.Context, environmentID string, s
 	if len(targetName) > 160 {
 		targetName = targetName[:157] + "..."
 	}
-	resourceKind := taskjournal.TaskResourceRoute
-	if configuration.Request.RouteID == "" {
-		resourceKind = taskjournal.TaskResourceComponent
-	}
-	task := etcd.TaskRecord{
-		ID:               checkOwner.TaskID,
-		OperationID:      checkOwner.OperationID,
-		PlanID:           checkOwner.PlanID,
-		PlanHash:         hash,
-		Owner:            owner,
-		Actor:            taskjournal.TaskActorOperator,
-		Executor:         taskjournal.TaskExecutorController,
-		RenderGeneration: 1,
-		Type:             taskjournal.TaskCheck,
-		Target:           configuration.Request.TargetID(),
-		TargetName:       targetName,
-		IdempotencyKey:   locator.Key,
-		Params: map[string]string{taskjournal.TaskResourceKindParam: resourceKind,
-			taskjournal.TaskEdgeCheckInputParam: check.ConfigurationSHA256},
-		TimeoutSeconds:    contract.TaskTimeoutSeconds,
-		Status:            taskjournal.TaskStatusPending,
-		NextEventSequence: 1,
-		CreatedAt:         now,
-		UpdatedAt:         now,
+	task := workexecution.Task{
+		ID: checkOwner.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionCheck,
+		Scope:    workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID},
+		TargetID: configuration.Request.TargetID(), TargetName: targetName,
+		Intent: workexecution.Input{ID: checkOwner.PlanID, SHA256: hash}, ExpectedItems: 1,
+		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(contract.TaskTimeoutSeconds) * time.Second),
 	}
 	return service.publish(ctx, source, check, task, locator, evidence)
 }

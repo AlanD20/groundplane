@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backingaccess"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -137,6 +138,7 @@ func (service *Service) admit(ctx context.Context, environmentID string, input a
 	}
 	checkOwner := checkrecord.Owner{
 		TaskID:        ids.New(ids.KindTask),
+		WorkItemID:    ids.New(ids.KindWorkItem),
 		PlanID:        ids.New(ids.KindPlan),
 		OperationID:   ids.New(ids.KindOperation),
 		EnvironmentID: environmentID,
@@ -169,11 +171,10 @@ func (service *Service) admit(ctx context.Context, environmentID string, input a
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
-	task := etcd.TaskRecord{ID: checkOwner.TaskID, OperationID: checkOwner.OperationID, PlanID: checkOwner.PlanID,
-		PlanHash: hash, Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
-		RenderGeneration: 1, Type: taskjournal.TaskCheck, Target: input.AttachID, TargetName: facts.Consumer.Record.Name,
-		IdempotencyKey: locator.Key, Params: map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceAttach,
-			taskjournal.TaskBackingCheckInputParam: check.ConfigurationSHA256}, TimeoutSeconds: 60,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now}
+	task := workexecution.Task{ID: checkOwner.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionCheck,
+		Scope:    workexecution.Scope{TenantID: owner.TenantID, ProjectID: owner.ProjectID, EnvironmentID: owner.EnvironmentID},
+		TargetID: input.AttachID, TargetName: facts.Consumer.Record.Name,
+		Intent: workexecution.Input{ID: checkOwner.PlanID, SHA256: hash}, ExpectedItems: 1,
+		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(60 * time.Second)}
 	return service.publish(ctx, source, check, task, locator, evidence)
 }

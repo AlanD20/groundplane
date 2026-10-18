@@ -19,6 +19,7 @@ import (
 
 type Owner struct {
 	TaskID        string `json:"task_id"`
+	WorkItemID    string `json:"work_item_id"`
 	PlanID        string `json:"plan_id"`
 	OperationID   string `json:"operation_id"`
 	EnvironmentID string `json:"environment_id"`
@@ -38,7 +39,6 @@ const (
 	Cleaning        Phase = "cleaning"
 	Finished        Phase = "finished"
 	CleanupRequired Phase = "cleanup_required"
-	Transferred     Phase = "transferred"
 )
 
 type Outcome string
@@ -71,8 +71,6 @@ type Record struct {
 	CreatedAt           time.Time                             `json:"created_at"`
 	StartedAt           *time.Time                            `json:"started_at,omitempty"`
 	FinishedAt          *time.Time                            `json:"finished_at,omitempty"`
-	RetryOf             string                                `json:"retry_of,omitempty"`
-	TransferredTo       string                                `json:"transferred_to,omitempty"`
 }
 
 func Key(taskID string) string { return "/v1/private/connector-checks/" + taskID }
@@ -143,7 +141,7 @@ func configurationDigest(record Record) (string, error) {
 
 func (record Record) Validate() error {
 	owner, connector := record.Owner, record.Connector.Connector
-	if record.Schema != 1 || ids.Validate(ids.KindTask, owner.TaskID) != nil ||
+	if record.Schema != 1 || ids.Validate(ids.KindTask, owner.TaskID) != nil || ids.Validate(ids.KindWorkItem, owner.WorkItemID) != nil ||
 		ids.Validate(ids.KindPlan, owner.PlanID) != nil || ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
 		ids.Validate(ids.KindEnvironment, owner.EnvironmentID) != nil ||
 		connectorrecord.ValidateRecord(record.Connector) != nil || connector.EnvironmentID != owner.EnvironmentID ||
@@ -166,21 +164,6 @@ func (record Record) Validate() error {
 		}
 	}
 	if record.StartedAt != nil && (!validTime(*record.StartedAt) || record.StartedAt.Before(record.CreatedAt)) {
-		return invalidRecord()
-	}
-	if record.RetryOf != "" && (ids.Validate(ids.KindTask, record.RetryOf) != nil || record.RetryOf == owner.TaskID) {
-		return invalidRecord()
-	}
-	if record.Phase == Transferred {
-		if ids.Validate(ids.KindTask, record.TransferredTo) != nil || record.TransferredTo == owner.TaskID ||
-			record.Credentials != nil || record.StartedAt == nil || !record.RequiresCleanup() ||
-			record.FinishedAt == nil || !validTime(*record.FinishedAt) || record.FinishedAt.Before(*record.StartedAt) ||
-			record.Outcome != Failed || !validFailure(record.Failure) {
-			return invalidRecord()
-		}
-		return nil
-	}
-	if record.TransferredTo != "" {
 		return invalidRecord()
 	}
 	if record.Phase == CleanupRequired {
@@ -334,11 +317,12 @@ func (record *Record) Clear() {
 func PlanHash(record Record) (string, error) {
 	encoded, err := json.Marshal(struct {
 		Procedure           string `json:"procedure"`
+		WorkItemID          string `json:"work_item_id"`
 		PlanID              string `json:"plan_id"`
 		OperationID         string `json:"operation_id"`
 		EnvironmentID       string `json:"environment_id"`
 		ConfigurationSHA256 string `json:"configuration_sha256"`
-	}{"connector-check-v1", record.Owner.PlanID, record.Owner.OperationID, record.Owner.EnvironmentID, record.ConfigurationSHA256})
+	}{"connector-check", record.Owner.WorkItemID, record.Owner.PlanID, record.Owner.OperationID, record.Owner.EnvironmentID, record.ConfigurationSHA256})
 	if err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}

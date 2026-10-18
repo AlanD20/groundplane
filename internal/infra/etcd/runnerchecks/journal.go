@@ -1,49 +1,64 @@
 package runnerchecks
 
 import (
-	"bytes"
 	"context"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerconnectioncheck"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type Journal struct {
-	repository   *Repository
-	owner        Owner
-	assignmentID string
+	repository *Repository
+	owner      Owner
+	attemptID  string
+	identity   workexecution.Identity
 }
 
-func NewJournal(repository *Repository, owner Owner, assignmentID string) (*Journal, error) {
+func NewJournal(repository *Repository, owner Owner, attemptID string, identity workexecution.Identity) (*Journal, error) {
 	if repository == nil || ids.Validate(ids.KindTask, owner.TaskID) != nil ||
 		ids.Validate(ids.KindPlan, owner.PlanID) != nil ||
 		ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
-		ids.Validate(ids.KindAssignment, assignmentID) != nil {
-		return nil, errs.New(errs.KindValidationFailed, "Runner diagnostic journal requires its Controller assignment")
+		ids.Validate(ids.KindWorkItem, owner.WorkItemID) != nil || ids.Validate(ids.KindAttempt, attemptID) != nil ||
+		identity.Validate() != nil || identity.Executor != workexecution.Controller {
+		return nil, errs.New(errs.KindValidationFailed, "Runner check journal requires its exact Controller assignment")
 	}
-	return &Journal{repository: repository, owner: owner, assignmentID: assignmentID}, nil
+	return &Journal{repository: repository, owner: owner, attemptID: attemptID, identity: identity}, nil
 }
-func (journal *Journal) Start(ctx context.Context, at time.Time) error {
-	return journal.mutate(ctx, func(record *Record, deadline time.Time) error { return record.Start(at, deadline) })
+
+func (journal *Journal) Start(ctx context.Context, now time.Time) error {
+	return journal.mutate(ctx, true, func(record *Record, deadline time.Time) error { return record.Start(now, deadline) })
 }
-func (journal *Journal) Finish(ctx context.Context, result runnerconnectioncheck.Result, at time.Time) error {
-	return journal.mutate(ctx, func(record *Record, _ time.Time) error { return record.Finish(result, at) })
+
+func (journal *Journal) Finish(ctx context.Context, result runnerconnectioncheck.Result, now time.Time) error {
+	return journal.mutate(ctx, false, func(record *Record, _ time.Time) error { return record.Finish(result, now) })
 }
-func (journal *Journal) Stop(ctx context.Context, failure string, at time.Time) error {
-	return journal.mutate(ctx, func(record *Record, _ time.Time) error { return record.Stop(failure, at) })
+
+func (journal *Journal) Stop(ctx context.Context, failure string, now time.Time) error {
+	return journal.mutate(ctx, false, func(record *Record, _ time.Time) error { return record.Stop(failure, now) })
 }
-func (journal *Journal) mutate(ctx context.Context, change func(*Record, time.Time) error) error {
-	keys := []string{
-		RecordKey(journal.owner.TaskID),
-		taskjournal.ControllerTaskClaimKey(journal.owner.TaskID),
-		taskjournal.TaskAssignmentIndexKey(journal.owner.TaskID),
-		OperationKey(journal.owner.OperationID),
-	}
+
+func (journal *Journal) mutate(ctx context.Context, forward bool, change func(*Record, time.Time) error) error {
+	return journal.mutateState(ctx, forward, false, change)
+}
+
+func (journal *Journal) RejectAssigned(ctx context.Context, failure string, at time.Time) error {
+	return journal.mutateState(ctx, false, true, func(record *Record, _ time.Time) error {
+		if record.Phase != Ready {
+			return errs.New(errs.KindStateConflict, "Runner check already started")
+		}
+		return record.Stop(failure, at)
+	})
+}
+
+func (journal *Journal) mutateState(ctx context.Context, forward, assignedOnly bool, change func(*Record, time.Time) error) error {
+	keys := []string{RecordKey(journal.owner.TaskID), workqueue.AttemptKey(journal.attemptID),
+		workqueue.ItemKey(journal.owner.WorkItemID), OperationKey(journal.owner.OperationID),
+		workqueue.TaskKey(journal.owner.TaskID), workqueue.ExecutorKey(journal.identity)}
 	read, err := journal.repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		return err
@@ -52,26 +67,45 @@ func (journal *Journal) mutate(ctx context.Context, change func(*Record, time.Ti
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
-		return errs.New(errs.KindInternal, "Runner diagnostic journal read is incomplete")
+		return errs.New(errs.KindInternal, "Runner check journal read is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	for _, value := range read.Values {
 		if value == nil {
-			return errs.New(errs.KindStateConflict, "Runner diagnostic no longer owns its Controller claim")
+			return errs.New(errs.KindStateConflict, "Runner check no longer has its Controller claim")
 		}
 	}
 	record, err := Decode(read.Values[0].Value)
 	if err != nil {
 		return err
 	}
-	assignment, err := taskassignments.DecodeTaskAssignment(read.Values[1].Value)
+	assignment, err := workqueue.DecodeAttempt(read.Values[1].Value)
 	if err != nil || record.Owner != journal.owner || assignment.TaskID != journal.owner.TaskID ||
-		assignment.AssignmentID != journal.assignmentID ||
-		assignment.Executor != taskjournal.TaskExecutorController ||
-		assignment.ExecutionMode != taskassignments.TaskExecutionModeForward ||
-		!bytes.Equal(read.Values[1].Value, read.Values[2].Value) ||
-		string(read.Values[3].Value) != record.Owner.TaskID {
-		return errs.New(errs.KindStateConflict, "Runner diagnostic Controller ownership changed")
+		assignment.ID != journal.attemptID || assignment.Executor != journal.identity ||
+		assignment.WorkItemID != journal.owner.WorkItemID || assignment.Direction != workexecution.Forward ||
+		(assignment.StartedAt == nil) != assignedOnly || assignment.FinishedAt != nil || string(read.Values[3].Value) != record.Owner.TaskID {
+		return errs.New(errs.KindStateConflict, "Runner check Controller ownership changed")
+	}
+	item, err := workqueue.DecodeItem(read.Values[2].Value)
+	if err != nil || item.ID != journal.owner.WorkItemID || item.TaskID != journal.owner.TaskID ||
+		(!assignedOnly && item.Phase != workexecution.Running || assignedOnly && item.Phase != workexecution.Assigned) ||
+		item.ActiveAttemptID != assignment.ID || item.Input == nil || *item.Input != assignment.Input {
+		return errs.New(errs.KindStateConflict, "Runner check work ownership changed")
+	}
+	digest, err := PlanHash(record)
+	if err != nil || assignment.Input.ID != record.Owner.PlanID || digest != assignment.Input.SHA256 {
+		return errs.New(errs.KindStateConflict, "Runner check captured input changed")
+	}
+	task, err := workqueue.DecodeTask(read.Values[4].Value)
+	if err != nil || task.ID != journal.owner.TaskID {
+		return errs.New(errs.KindStateConflict, "Runner check Task ownership changed")
+	}
+	executor, err := workqueue.DecodeExecutor(read.Values[5].Value)
+	if err != nil || executor.Identity != journal.identity {
+		return errs.New(errs.KindStateConflict, "Runner check executor was replaced")
+	}
+	if forward && (task.Stop != nil || item.ForwardRevoked || !time.Now().UTC().Before(assignment.Deadline)) {
+		return errs.New(errs.KindStateConflict, "Runner check no longer permits queries")
 	}
 	activeKey := ActiveKey(record.Source.RunnerID)
 	active, err := journal.repository.store.GetMany(
@@ -85,11 +119,11 @@ func (journal *Journal) mutate(ctx context.Context, change func(*Record, time.Ti
 		if active != nil {
 			keyvalue.ClearValues(active.Values)
 		}
-		return errs.New(errs.KindInternal, "Runner diagnostic active ownership read is incomplete")
+		return errs.New(errs.KindInternal, "Runner check active ownership read is incomplete")
 	}
 	defer keyvalue.ClearValues(active.Values)
 	if active.Values[0] == nil || string(active.Values[0].Value) != record.Owner.TaskID {
-		return errs.New(errs.KindStateConflict, "Runner diagnostic active ownership changed")
+		return errs.New(errs.KindStateConflict, "Runner check active ownership changed")
 	}
 	conditions := make([]keyvalue.Condition, 0, len(keys)+1)
 	for index, key := range keys {
@@ -105,11 +139,8 @@ func (journal *Journal) mutate(ctx context.Context, change func(*Record, time.Ti
 	}
 	mutations := []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: keys[0], Value: value}}
 	if record.Phase == Finished {
-		mutations = append(
-			mutations,
-			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[3]},
-			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: activeKey},
-		)
+		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[3]},
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: activeKey})
 	}
 	result, err := journal.repository.store.Transact(ctx, conditions, mutations)
 	keyvalue.ClearValues(result.FailureReads)
@@ -117,7 +148,7 @@ func (journal *Journal) mutate(ctx context.Context, change func(*Record, time.Ti
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Runner diagnostic journal raced its Controller assignment")
+		return errs.New(errs.KindStateConflict, "Runner check journal raced its Controller assignment")
 	}
 	return nil
 }

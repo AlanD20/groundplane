@@ -7,14 +7,16 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // ProxySourceHold names the visible Apply's ordinary source-reference root.
-// Child Tasks acquire their own references before this parent may finish.
+// Dependent work acquires its references before this Apply releases the root.
 type ProxySourceHold struct {
 	OperationID      string `json:"operation_id"`
 	MembershipCount  uint64 `json:"membership_count"`
@@ -62,15 +64,37 @@ func (hold ProxySourceHold) Validate() error {
 	return nil
 }
 
-func (preparation ComponentTaskPreparation) WithProxySourceHold(hold ProxySourceHold,
+// ProxySourceOperationID gives the visible Apply one source-retention owner.
+func ProxySourceOperationID(task workexecution.Task) (string, error) {
+	if task.Validate() != nil || task.Action != workexecution.ActionApply || task.Scope.EnvironmentID == "" {
+		return "", errs.New(errs.KindValidationFailed, "Proxy sources require a captured Apply")
+	}
+	return ids.DeriveAt(ids.KindOperation, task.CreatedAt, task.ID, "proxy-sources"), nil
+}
+
+// BindWorkProxySourceHold returns source activation writes for the same
+// transaction that seals executable work input. It never commits independently.
+func BindWorkProxySourceHold(work workqueue.View, preflight ProxyServicePreflight, hold ProxySourceHold,
 	fragment scriptsourcepublication.ScriptSourcePublicationFragment,
-) (ComponentTaskPreparation, error) {
-	if hold.Validate() != nil || preparation.proxyServicePreflight == nil ||
-		preparation.proxyServicePreflight.CandidateInput == nil || len(fragment.StagedRequirements()) != 0 {
-		return ComponentTaskPreparation{}, errs.New(
-			errs.KindValidationFailed,
-			"pending proxy source hold requires captured existing sources",
-		)
+) (*ProxyServicePreflight, workqueue.Change, error) {
+	task, item := work.Task.Task, work.Item.Item
+	operationID, err := ProxySourceOperationID(task)
+	if err != nil {
+		return nil, workqueue.Change{}, err
+	}
+	if work.ReadRevision <= 0 || work.Task.Revision <= 0 || work.Item.Revision <= 0 ||
+		item.Validate() != nil || item.TaskID != task.ID || item.Operation != workexecution.Component ||
+		(item.Phase != workexecution.Waiting && item.Phase != workexecution.Ready) ||
+		item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.ForwardRevoked ||
+		task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
+		hold.Validate() != nil || hold.OperationID != operationID || preflight.validate() != nil ||
+		preflight.ParentTaskID != task.ID || preflight.EnvironmentID != task.Scope.EnvironmentID ||
+		preflight.CandidateInput == nil || preflight.CandidateInput.ComponentID != item.TargetID ||
+		len(fragment.StagedRequirements()) != 0 {
+		return nil, workqueue.Change{}, errs.New(errs.KindValidationFailed, "Proxy source hold differs from captured work")
+	}
+	if preflight.SourceHold != nil && *preflight.SourceHold != hold {
+		return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "Proxy work already holds different sources")
 	}
 	rootKey := scriptsourceevidence.ScriptSourceRootKey(hold.OperationID)
 	rootFound := false
@@ -82,7 +106,7 @@ func (preparation ComponentTaskPreparation) WithProxySourceHold(hold ProxySource
 		if err != nil || mutation.Type != keyvalue.MutationPut || mutation.Prefix || rootFound ||
 			root.OperationID != hold.OperationID || root.MembershipCount != hold.MembershipCount ||
 			root.MembershipSHA256 != hold.MembershipSHA256 || root.Phase != scriptsourceevidence.ScriptOperationSourceActive {
-			return ComponentTaskPreparation{}, errs.New(
+			return nil, workqueue.Change{}, errs.New(
 				errs.KindValidationFailed,
 				"pending proxy source hold differs from its publication",
 			)
@@ -90,19 +114,21 @@ func (preparation ComponentTaskPreparation) WithProxySourceHold(hold ProxySource
 		rootFound = true
 	}
 	if !rootFound {
-		return ComponentTaskPreparation{}, errs.New(
+		return nil, workqueue.Change{}, errs.New(
 			errs.KindValidationFailed,
 			"pending proxy source hold has no root publication",
 		)
 	}
-	result := cloneComponentTaskPreparation(preparation)
+	result := cloneProxyServicePreflight(&preflight)
 	owned := hold
-	result.proxyServicePreflight.SourceHold = &owned
-	conditions := fragment.Conditions()
-	result.proxyServiceConditions = append(result.proxyServiceConditions, conditions...)
-	result.proxyServiceConditionCount += len(conditions)
-	result.proxySourceMutations = cloneProxySourceMutations(fragment.Mutations())
-	return result, nil
+	result.SourceHold = &owned
+	change := workqueue.Change{
+		Conditions: append(slices.Clone(fragment.Conditions()),
+			keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: work.Task.Revision},
+			keyvalue.Condition{Key: workqueue.ItemKey(item.ID), ModRevision: work.Item.Revision}),
+		Mutations: cloneProxySourceMutations(fragment.Mutations()),
+	}
+	return result, change, nil
 }
 
 func cloneProxySourceMutations(mutations []keyvalue.Mutation) []keyvalue.Mutation {
@@ -111,16 +137,4 @@ func cloneProxySourceMutations(mutations []keyvalue.Mutation) []keyvalue.Mutatio
 		result[index].Value = slices.Clone(result[index].Value)
 	}
 	return result
-}
-
-func (publication Publication) ValidateProxySourceHoldParent(parentID, operationID string) error {
-	preflight := publication.preparation.proxyServicePreflight
-	if preflight == nil || preflight.SourceHold == nil {
-		return nil
-	}
-	if preflight.ParentTaskID != parentID || preflight.SourceHold.OperationID != operationID ||
-		preflight.SourceHold.Validate() != nil {
-		return errs.New(errs.KindStateConflict, "pending proxy source hold belongs to another Apply")
-	}
-	return nil
 }

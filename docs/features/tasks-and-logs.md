@@ -4,6 +4,10 @@ Tasks record asynchronous operations. Activity presents the same records in thei
 Platform, Tenant, Project or Environment scope. Workload logs are a separate,
 transient stream.
 
+The [Task execution redesign](../decisions/task-execution-redesign.md) is accepted
+but unavailable. This guide describes the current operator behavior; it does not
+claim that the replacement or remote-Agent scheduling has shipped.
+
 ## Follow an operation
 
 A Task has stable identity, its initiating workspace, operator/system actor,

@@ -14,7 +14,6 @@ import (
 func TestControllerTaskHandlerCannotBypassAgentUpdateRecovery(t *testing.T) {
 	handler, err := newTestResourceHandler(
 		&fakeControllerTaskLocalAgents{},
-		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{},
 		&recordingControllerTaskExecutor{})
 

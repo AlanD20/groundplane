@@ -11,14 +11,17 @@ import (
 
 // PrepareConfigRestoreCheckpoint changes only native progress. Its writer
 // must atomically fence the selected plan, receipt and full staged generation.
-func PrepareConfigRestoreCheckpoint(current BackupRestoreRecord, request *agentpb.BackupCheckpointRequest,
+func PrepareConfigRestoreCheckpoint(current BackupRestoreRecord, input *agentpb.BackupWorkInput,
+	request *agentpb.BackupWorkCheckpointRequest,
 	publication BackupRestoreConfigProgress, at time.Time,
 ) (BackupRestoreRecord, error) {
 	if ValidateBackupRestoreRecord(current) != nil || current.Point.SourceKind != BackupRuntimeSourceConfig ||
-		request == nil || request.TaskId != current.TaskID || !ValidBackupRuntimeInstant(at) || !at.After(current.UpdatedAt) {
+		request == nil || request.GetAttempt().GetTaskId() != current.TaskID ||
+		ValidateRestoreWorkInput(current, input) != nil ||
+		!ValidBackupRuntimeInstant(at) || !at.After(current.UpdatedAt) {
 		return BackupRestoreRecord{}, invalidBackupRuntimeRecord("config restore checkpoint identity is invalid")
 	}
-	if _, err := executionplan.ValidateBackupCheckpointRequest(request, request.CheckpointSequence); err != nil {
+	if err := executionplan.RejectUnknown(request); err != nil {
 		return BackupRestoreRecord{}, err
 	}
 	next := CloneBackupRestoreRecord(current)

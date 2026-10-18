@@ -6,7 +6,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -53,23 +52,14 @@ func (service *Service) loadAuthoredRuntimeAttaches(
 				continue
 			}
 			receipt, acknowledged := applied[versioned.Record.ID]
-			matchesSource := receipt.SourceTaskID == versioned.Record.TaskID
+			matchesSource := receipt.Execution != nil && receipt.Execution.Validate() == nil &&
+				receipt.Execution.TaskID == versioned.Record.TaskID && receipt.ParentTaskID == versioned.Record.TaskID
 			if receipt.ControllerAttachInputRevision > 0 {
-				reader, ok := service.repository.(authoredAttachGenerationReader)
-				if !ok {
-					return nil, errs.New(errs.KindInternal, "Blueprint Attach input reader is unavailable")
-				}
-				generation, found, err := reader.GetBlueprintAttachInputGeneration(
-					ctx,
-					receipt.ParentTaskID,
-					versioned.Record.ID,
-				)
+				digest, err := attachrecord.BindingDigest(versioned.Record)
 				if err != nil {
 					return nil, err
 				}
-				matchesSource = found && generation.Revision == receipt.ControllerAttachInputRevision &&
-					generation.Record.MatchesControllerBinding(versioned.Record, versioned.Revision)
-				attachinputs.Clear(&generation.Record)
+				matchesSource = digest == receipt.ControllerAttachBindingSHA256
 			}
 			if versioned.Record.EnvironmentID != environmentID ||
 				versioned.Record.Name != identity.Name ||

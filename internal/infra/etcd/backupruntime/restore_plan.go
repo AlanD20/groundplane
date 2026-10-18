@@ -38,11 +38,14 @@ func ValidateConfigRestoreExecutionPlan(record BackupRestoreRecord, plan *agentp
 		len(validated.Steps) != 1 || validated.BackupScope == nil {
 		return invalidBackupRuntimeRecord("config restore execution plan is invalid")
 	}
-	target, scope := record.CurrentTarget.Config, validated.BackupScope
-	step := validated.Steps[0].GetBackupStep()
+	return validateConfigRestoreInput(record, validated.BackupScope, validated.Steps[0].GetBackupStep())
+}
+
+func validateConfigRestoreInput(record BackupRestoreRecord, scope *agentpb.BackupPlanScope, step *agentpb.BackupStepAuthority) error {
+	target := record.CurrentTarget.Config
 	restore := step.GetRestore()
 	config := restore.GetConfig()
-	if scope.EnvironmentId != record.EnvironmentID ||
+	if target == nil || scope.EnvironmentId != record.EnvironmentID ||
 		scope.Environment.GetModRevision() != target.EnvironmentRevision ||
 		len(step.GetConsumerServiceIds()) != 0 ||
 		restore == nil ||

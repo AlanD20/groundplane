@@ -52,8 +52,7 @@ func validateCapturedBinding(generation Generation) error {
 		len(generation.Hook.Facts) != 0 || len(generation.Hook.Inputs) != 0
 	hasPrivateInputs := generation.ResolvedInputs != nil || len(generation.SecretSources) != 0 ||
 		generation.SecretPins != nil
-	if binding == nil || generation.Provision != nil || hasHook || hasPrivateInputs ||
-		generation.OwnerKind == OwnerChild || generation.Transfer != nil {
+	if binding == nil || generation.Provision != nil || hasHook || hasPrivateInputs {
 		return errs.New(errs.KindValidationFailed, "captured Attach binding has conflicting execution authority")
 	}
 	consumer, credential := binding.Consumer.Record, binding.Credential.Record

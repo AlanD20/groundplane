@@ -25,11 +25,16 @@ import { TaskPagination } from "./task-pagination";
 const filters = [
   { value: "all", label: "All statuses" },
   { value: "running", label: "Running" },
-  { value: "pending", label: "Queued" },
-  { value: "completed", label: "Completed" },
+  { value: "queued", label: "Queued" },
+  { value: "preparing", label: "Preparing" },
+  { value: "waiting", label: "Waiting" },
+  { value: "attention_required", label: "Needs attention" },
+  { value: "stopping", label: "Stopping" },
+  { value: "finishing", label: "Finishing" },
+  { value: "succeeded", label: "Succeeded" },
   { value: "failed", label: "Failed" },
-  { value: "timed_out", label: "Timed out" },
-  { value: "aborted", label: "Aborted" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "superseded", label: "Superseded" },
 ];
 
 export function TaskList({
@@ -98,18 +103,25 @@ export function TaskList({
                 "service",
                 "image",
                 "agent",
-                "controller",
-                "etcd",
+                "configuration",
+                "host",
                 "runner",
                 "route",
                 "entry",
                 "secret",
                 "volume",
-                "backing_zone",
+                "backing_service",
+                "zone",
+                "attach",
+                "dns",
                 "connector",
                 "script",
                 "release_group",
-                "hierarchy_deletion",
+                "tenant",
+                "project",
+                "environment",
+                "backup_source",
+                "recovery_point",
               ].map((value) => ({
                 value,
                 label: value
@@ -204,7 +216,9 @@ export function TaskList({
       )}
       {!journal.loading && visible.length === 0 && (
         <p className="py-4 text-center text-xs text-muted-foreground">
-          No recorded Tasks match these filters.
+          {journal.scanLimited
+            ? "No matches in this history segment. Continue to search older Tasks."
+            : "No recorded Tasks match these filters."}
         </p>
       )}
       <ResourceTable>

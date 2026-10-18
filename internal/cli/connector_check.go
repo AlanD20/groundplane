@@ -112,7 +112,7 @@ func newConnectorCheckResultCmd() *cobra.Command {
 				"execution_location": result.ExecutionLocation, "configuration": result.Configuration,
 				"stages": result.Stages, "secret_sources": result.SecretSources,
 				"cleanup_required": result.CleanupRequired, "object_key": result.ObjectKey,
-				"multipart_key": result.MultipartKey, "upload_ids": result.UploadIDs, "cleanup_task_id": result.CleanupTaskID}
+				"multipart_key": result.MultipartKey, "upload_ids": result.UploadIDs}
 			headers, values := fieldsOfVia(fields)
 			return fromContext(cmd).Out.RenderOne(headers, values, result)
 		},

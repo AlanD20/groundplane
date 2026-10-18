@@ -14,6 +14,8 @@ import (
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"slices"
 	"sort"
 	"time"
@@ -23,7 +25,6 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 // BlueprintNativePredecessorCapture is transient fixed-revision publication
@@ -208,20 +209,20 @@ func validateNativeRestorationDescriptor(
 }
 
 type BlueprintReleasePublicationEvidence struct {
-	RenderingInput             projectionrecord.EnvironmentComposeProjection
-	ServiceRollout             *etcdstore.Versioned[releaserender.BlueprintServiceRolloutCapture]
-	ProxyAddresses             networkreservations.ProxyAddresses
-	NativePredecessors         []BlueprintNativePredecessorCapture
-	Manifest                   releases.VersionedReleaseManifest
-	EnvironmentID              string
-	Task                       TaskRecord
-	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor
-	Plan                       *agentpb.ExecutionPlan
-	Hooks                      []ReleaseHookExecutionPublication
-	PublishedAt                time.Time
-	SourcePrepared             scriptsourcepublication.PreparedSourceSet
-	SourceMembers              []scriptsourceevidence.ScriptSourcePreparationMember
-	HookPrepared               PreparedBlueprintReleaseHooks
+	StorageConditions  []etcdstore.Condition
+	RenderingInput     projectionrecord.EnvironmentComposeProjection
+	ServiceRollout     *etcdstore.Versioned[releaserender.BlueprintServiceRolloutCapture]
+	ProxyAddresses     networkreservations.ProxyAddresses
+	NativePredecessors []BlueprintNativePredecessorCapture
+	Manifest           releases.VersionedReleaseManifest
+	EnvironmentID      string
+	Work               workqueue.View
+	PreparedInput      PreparedBlueprintWorkInput
+	HookWork           ReleaseHookWorkPublication
+	PublishedAt        time.Time
+	SourcePrepared     scriptsourcepublication.PreparedSourceSet
+	SourceMembers      []scriptsourceevidence.ScriptSourcePreparationMember
+	HookPrepared       PreparedBlueprintReleaseHooks
 }
 
 func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
@@ -231,10 +232,21 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 	if len(evidence.NativePredecessors) > 0 && evidence.RenderingInput.EnvironmentID != evidence.EnvironmentID {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint predecessor rendering input changed")
 	}
-	native := make([]BlueprintNativePredecessor, len(evidence.NativePredecessors))
-	for index, capture := range evidence.NativePredecessors {
-		native[index] = capture.Runtime()
-		if capture.Serving == nil && capture.RetainedPriorReleaseID != "" {
+	member, conditions, err := ledger.blueprintWorkManifestMember(ctx, evidence)
+	if err != nil {
+		return nil, err
+	}
+	if len(evidence.NativePredecessors) != 1 || evidence.NativePredecessors[0].ServiceID != member.Render.ServiceID {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Release requires its selected Service predecessor or explicit absence")
+	}
+	for _, capture := range evidence.NativePredecessors {
+		if capture.FixedReadRevision <= 0 || capture.ProjectionRevision < 0 ||
+			capture.ProjectionRevision > capture.FixedReadRevision || capture.RuntimeRevision < 0 ||
+			capture.RuntimeRevision > capture.FixedReadRevision {
+			return nil, releases.CorruptReleaseRecord()
+		}
+		if capture.Serving == nil && (capture.RetainedPriorReleaseID != "" || capture.RuntimeRevision != 0 ||
+			len(capture.CurrentArtifact) != 0 || len(capture.RetainedPriorArtifact) != 0) {
 			return nil, releases.CorruptReleaseRecord()
 		}
 		if capture.Serving != nil && (releaserender.ValidateServiceLifecycleRelease(*capture.Serving,
@@ -243,26 +255,32 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 			return nil, releases.CorruptReleaseRecord()
 		}
 	}
-	if err := validateBlueprintNativePredecessors(native, evidence.Plan.GetCandidateReleaseProcedure(), evidence.EnvironmentID); err != nil {
-		return nil, err
-	}
 	references, err := blueprintNativePredecessorReferences(evidence.NativePredecessors)
 	if err != nil {
 		return nil, err
 	}
-	_, conditions, err := ledger.tasks.blueprintNativePredecessorsAtRevision(
-		ctx,
-		evidence.Task,
-		releases.ReleasePublicationMarker{
-			NativePredecessors: references,
-		},
-		evidence.Manifest.Record,
-		evidence.Manifest.Revision,
-	)
+	_, err = resolveBlueprintNativePredecessors(references, []releaserender.ReleaseTaskRenderMember{member})
 	if err != nil {
 		return nil, err
 	}
 	for _, captured := range evidence.NativePredecessors {
+		if captured.Serving == nil && captured.ProjectionRevision == 0 {
+			keys := []string{releases.ReleaseProjectionKey(captured.ServiceID), serviceruntimerecord.Key(captured.ServiceID)}
+			read, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: captured.FixedReadRevision})
+			if err != nil {
+				return nil, err
+			}
+			if read == nil || read.ReadRevision != captured.FixedReadRevision || len(read.Values) != len(keys) {
+				return nil, releases.CorruptReleaseRecord()
+			}
+			absent := read.Values[0] == nil && read.Values[1] == nil
+			etcdstore.ClearValues(read.Values)
+			if !absent {
+				return nil, errs.New(errs.KindStateConflict, "Blueprint first deployment found existing Service runtime")
+			}
+			conditions = append(conditions, etcdstore.Condition{Key: keys[0]}, etcdstore.Condition{Key: keys[1]})
+			continue
+		}
 		scope, err := ledger.LoadPlanningScopeForCapturedInput(ctx, evidence.RenderingInput, captured.FixedReadRevision)
 		if err != nil {
 			return nil, err
@@ -323,20 +341,15 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 				ModRevision: applied.Revision,
 			},
 		)
-		for _, value := range [][]byte{captured.CurrentArtifact, captured.RetainedPriorArtifact} {
-			if len(value) == 0 {
-				continue
+		if captured.Serving == nil {
+			if captured.RuntimeRevision != 0 || len(captured.CurrentArtifact) != 0 || len(captured.RetainedPriorArtifact) != 0 {
+				return nil, releases.CorruptReleaseRecord()
 			}
-			found := false
-			for _, artifact := range evidence.Plan.GetArtifacts() {
-				encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-				if err == nil && bytes.Equal(encoded, value) {
-					found = true
-				}
-			}
-			if !found {
-				return nil, errs.New(errs.KindValidationFailed, "Blueprint native predecessor is not PlanHash bound")
-			}
+			conditions = append(conditions, etcdstore.Condition{Key: serviceruntimerecord.Key(captured.ServiceID)})
+		} else if source.Runtime == nil ||
+			!bytes.Equal(source.Runtime.Record.Runtime.CurrentArtifact, captured.CurrentArtifact) ||
+			!bytes.Equal(source.Runtime.Record.Runtime.RetainedPriorArtifact, captured.RetainedPriorArtifact) {
+			return nil, errs.New(errs.KindStateConflict, "Blueprint predecessor bytes differ from the acknowledged Service runtime")
 		}
 	}
 	return conditions, nil

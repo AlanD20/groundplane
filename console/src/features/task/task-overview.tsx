@@ -1,17 +1,8 @@
-import { CompactReference } from "@/components/common/compact-reference";
-import { Disclosure } from "@/components/common/disclosure";
-import { TaskJournalMetadata } from "@/components/common/task-journal-metadata";
-import { TaskLink } from "@/components/common/task-link";
-import { useStore } from "@/lib/store";
 import {
   resolveTaskOperationSurface,
   type TaskNavigationContext,
 } from "@/lib/task-navigation";
 import type { ActivityEntry } from "@/lib/types";
-import { ArrowUpRight, Clock3 } from "lucide-react";
-import { ContextLink } from "@/components/common/context-link";
-import { TaskExecutionTerminal } from "./task-execution-terminal";
-import type { ReactNode } from "react";
 
 export function taskPresentation(
   task: ActivityEntry,
@@ -132,154 +123,8 @@ export function taskPresentation(
   };
 }
 
-export function TaskOverview({
-  task,
-  children,
-}: {
-  task: ActivityEntry;
-  children?: ReactNode;
-}) {
-  return (
-    <>
-      {children ?? <TaskExecutionTerminal task={task} />}
-      {task.note && (
-        <section className="space-y-1 rounded-lg border border-border p-3 text-sm">
-          <h3 className="text-xs font-medium text-muted-foreground">
-            Task note
-          </h3>
-          <p className="break-words [overflow-wrap:anywhere]">{task.note}</p>
-        </section>
-      )}
-    </>
-  );
-}
-
-export function TaskIdentity({
-  task,
-  onClose,
-}: {
-  task: ActivityEntry;
-  onClose: () => void;
-}) {
-  const store = useStore();
-  const view = taskPresentation(task, store);
-  const steps = task.steps ?? [];
-  const done = steps.filter((step) => step.state === "done").length;
-  const duration = task.startedAt
-    ? Math.max(
-        0,
-        Math.floor(
-          ((task.finishedAt ? Date.parse(task.finishedAt) : Date.now()) -
-            Date.parse(task.startedAt)) /
-            1000,
-        ),
-      )
-    : null;
-  return (
-    <div className="w-full min-w-0 space-y-2">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <CompactReference label="Task" value={task.id} />
-        {duration !== null && (
-          <span
-            className="inline-flex items-center gap-1"
-            title={task.finishedAt ? "Execution time" : "Elapsed"}
-          >
-            <Clock3 aria-hidden className="size-3.5" />
-            {durationLabel(duration)}
-          </span>
-        )}
-        {steps.length > 0 && (
-          <span>
-            {done}/{steps.length} steps
-          </span>
-        )}
-        {view.destination && (
-          <ContextLink
-            to={view.destination.href}
-            onClick={onClose}
-            className="inline-flex items-center gap-1 text-primary hover:underline"
-          >
-            {view.destination.label}
-            <ArrowUpRight aria-hidden className="size-3.5" />
-          </ContextLink>
-        )}
-      </div>
-      <Disclosure
-        summary="Details"
-        summaryClassName="text-xs text-muted-foreground"
-      >
-        <div className="space-y-3 border-t border-border pt-3 mt-3">
-          <TaskJournalMetadata entry={task} />
-          <div className="flex flex-wrap gap-3">
-            <CompactReference label="Target" value={task.target} />
-            {task.operationId && (
-              <CompactReference label="Operation" value={task.operationId} />
-            )}
-            {task.planHash && (
-              <CompactReference label="Plan" value={task.planHash} />
-            )}
-          </div>
-          <dl className="grid grid-cols-2 gap-3 text-xs">
-            <Info
-              label="Executor"
-              value={
-                task.executor ? executorLabel(task.executor) : "Not recorded"
-              }
-            />
-            <Info
-              label="Time limit"
-              value={
-                task.timeoutSeconds
-                  ? durationLabel(task.timeoutSeconds)
-                  : "Not recorded"
-              }
-            />
-            {task.taskState && (
-              <Info label="Execution state" value={task.taskState} />
-            )}
-          </dl>
-          {task.retryOf && (
-            <div className="text-xs">
-              Retry of <TaskLink taskId={task.retryOf} onClick={onClose} />
-            </div>
-          )}
-        </div>
-      </Disclosure>
-    </div>
-  );
-}
-
-function durationLabel(seconds: number) {
-  if (seconds < 1) return "<1s";
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  if (minutes < 60)
-    return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const minuteRemainder = minutes % 60;
-  return minuteRemainder ? `${hours}h ${minuteRemainder}m` : `${hours}h`;
-}
-
-function executorLabel(executor: NonNullable<ActivityEntry["executor"]>) {
-  if (executor === "agent") return "Agent";
-  if (executor === "blueprint") return "Blueprint coordinator";
-  if (executor === "software") return "Software coordinator";
-  return "Controller";
-}
-
 function resourceKindLabel(kind?: string) {
-  if (!kind) return undefined;
   return kind
-    .replaceAll("_", " ")
+    ?.replaceAll("_", " ")
     .replace(/^./, (letter) => letter.toUpperCase());
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words">{value}</dd>
-    </div>
-  );
 }

@@ -2,16 +2,14 @@ package secrets
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/secretremoval"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -32,12 +30,13 @@ const (
 type secretDeletionRepository interface {
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetSecret(context.Context, string) (etcdstore.Versioned[secretrecord.Record], error)
-	BeginSecretDeletionWithTask(
+	CaptureSecretRemoval(context.Context, secretrecord.Owner, etcdstore.Versioned[secretrecord.Record], string, string, string, time.Time) (secretremoval.Input, error)
+	PublishSecretRemoval(
 		context.Context,
 		secretrecord.Owner,
 		etcdstore.Versioned[secretrecord.Record],
-		deletionrecord.DeletionTombstoneRecord,
-		etcd.TaskRecord,
+		secretremoval.Input,
+		workexecution.Task,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -272,37 +271,20 @@ func (service *secretDeletionService) deleteSecretOnce(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 
-	taskOwner := taskjournal.PlatformTaskOwner()
-	if owner.Project != nil {
-		taskOwner, err = taskjournal.ProjectTaskOwner(owner.Project.Record)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
 	now := service.now().UTC()
-	task := etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
-		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
-		Type: taskjournal.TaskRemove, Target: secretID,
-		Params: map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceSecret},
-		Steps: []taskjournal.TaskStepRecord{
-			{
-				Kind:           taskjournal.TaskStepOperation,
-				ID:             ids.New(ids.KindStep),
-				Action:         "Remove Secret",
-				Description:    "Delete the unreferenced Secret and its encrypted value.",
-				Target:         secretID,
-				TimeoutSeconds: uint32(secretDeletionTimeoutSeconds),
-			},
-		},
-		TimeoutSeconds: secretDeletionTimeoutSeconds,
-		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	task.PlanHash, err = secretDeletionPlanHash(secretID)
+	input, err := service.repository.CaptureSecretRemoval(ctx, owner, current,
+		ids.New(ids.KindTask), ids.New(ids.KindWorkItem), ids.New(ids.KindPlan), now)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	ref, err := input.Reference()
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	task := workexecution.Task{ID: input.TaskID, Action: workexecution.ActionRemove, Actor: workexecution.OperatorActor,
+		Scope:    workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID},
+		TargetID: secretID, TargetName: current.Record.Secret.Key, Intent: ref, ExpectedItems: 1,
+		CreatedAt: now, Deadline: now.Add(time.Duration(secretDeletionTimeoutSeconds) * time.Second)}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -317,13 +299,8 @@ func (service *secretDeletionService) deleteSecretOnce(
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	tombstone := deletionrecord.DeletionTombstoneRecord{
-		TargetKind: deletionrecord.DeletionTargetSecret, TargetID: secretID,
-		TargetRevision: current.Revision, TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing,
-		CreatedAt: now, UpdatedAt: now,
-	}
-	result, deleteErr := service.repository.BeginSecretDeletionWithTask(
-		ctx, owner, current, tombstone, task, marker,
+	result, deleteErr := service.repository.PublishSecretRemoval(
+		ctx, owner, current, input, task, marker,
 	)
 	if deleteErr != nil {
 		if !isUnknownSecretDeletionOutcome(deleteErr) {
@@ -347,20 +324,6 @@ func (service *secretDeletionService) deleteSecretOnce(
 			"Secret deletion resolution is invalid",
 		)
 	}
-}
-
-func secretDeletionPlanHash(secretID string) (string, error) {
-	value, err := json.Marshal(struct {
-		Version  int    `json:"version"`
-		Type     string `json:"type"`
-		SecretID string `json:"secret_id"`
-	}{Version: 1, Type: string(taskjournal.TaskRemove), SecretID: secretID})
-	if err != nil {
-		return "", errs.Wrap(errs.KindInternal, err)
-	}
-	digest := sha256.Sum256(value)
-	clear(value)
-	return hex.EncodeToString(digest[:]), nil
 }
 
 func isUnknownSecretDeletionOutcome(err error) bool {

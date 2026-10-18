@@ -121,7 +121,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			return nil, errs.New(errs.KindInternal, "ordinary release predecessor authority is partial")
 		}
 		images[member.Render.ServiceName] = member.Render.CandidateWorkload
-		initialProxy, err := capturedInitialProxyConfig(member)
+		initialProxy, err := releaserender.InitialProxyConfiguration(member)
 		if err != nil {
 			return nil, err
 		}
@@ -185,7 +185,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			if err := applyExternalReleaseDependencies(project, selected, dependencyPlan); err != nil {
 				return nil, err
 			}
-			return managedAttachExternalNetworks(project)
+			return composerender.ManagedAttachExternalNetworks(project)
 		},
 		labels,
 	)

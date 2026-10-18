@@ -10,7 +10,6 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	releasedomain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -26,12 +25,10 @@ import (
 type TaskPlanResolver struct {
 	volumeRoot            string
 	blueprints            blueprintPlanStateReader
-	attaches              attachPlanRecordReader
-	services              attachPlanServiceReader
-	attachIdentities      attachPlanIdentityResolver
+	services              servicePlanSources
+	backingCreationHooks  backingCreationHookInputs
 	componentCatalog      []componentrender.EnvironmentComponentRegistration
 	serviceProxyImages    map[serviceproxy.Implementation]*releasedomain.ProxyImage
-	routeState            routeProviderStateReader
 	releases              *etcd.ReleaseLedger
 	backupRuns            backupRunPlanReader
 	componentPlans        ComponentTaskPlanResolver
@@ -67,9 +64,6 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	if task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback {
 		return resolver.resolveReleasePlan(ctx, task)
 	}
-	if task.Type == taskjournal.TaskStart || task.Type == taskjournal.TaskStop || task.Type == taskjournal.TaskDestroy {
-		return resolver.resolveServiceLifecyclePlan(ctx, task)
-	}
 	if ctx == nil {
 		return nil, errs.New(errs.KindInternal, "execution plan resolution context is required")
 	}
@@ -88,16 +82,6 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	if task.Params[taskjournal.TaskReleaseNetworkParentParam] != "" {
 		return resolver.resolveReleaseNetworkPlan(ctx, task)
 	}
-	if task.Type != taskjournal.TaskRemove && taskjournal.IsBlueprintChild(task.Params) &&
-		task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != "" {
-		return resolver.resolveBlueprintNetworkUnitPlan(ctx, task)
-	}
-	if taskjournal.IsBlueprintChild(task.Params) && task.Params[attachinputs.TaskAttachIDParam] != "" {
-		return resolver.resolveBlueprintAttachUnitPlan(ctx, task)
-	}
-	if taskjournal.IsBlueprintChild(task.Params) && task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
-		return resolver.resolveBlueprintComponentUnitPlan(ctx, task)
-	}
 	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceComponent {
 		if resolver.componentPlans == nil {
 			return nil, errs.New(errs.KindInternal, "Component Task plan resolver is not configured")
@@ -108,9 +92,6 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		task.Type == taskjournal.TaskRestore {
 		return resolver.resolveBackupRunPlan(ctx, task)
 	}
-	if task.Type == taskjournal.TaskAttach || task.Type == taskjournal.TaskDetach {
-		return resolver.resolveAttachPlan(ctx, task)
-	}
 	if _, backingCreation := task.Params[taskjournal.TaskBackingServiceCreationParam]; task.Type == taskjournal.TaskUpdate &&
 		backingCreation {
 		return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
@@ -118,21 +99,12 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	if task.Type == taskjournal.TaskUpdate {
 		return resolver.resolveUpdatePlan(ctx, task)
 	}
-	if task.Type == taskjournal.TaskCreate && ids.Validate(ids.KindRoute, task.Target) == nil {
-		return resolver.resolveRouteMutationPlan(ctx, task)
-	}
 	if task.Type == taskjournal.TaskRemove {
 		if ids.Validate(ids.KindEnvironment, task.Target) == nil {
 			return resolver.resolveEnvironmentRemovalPlan(ctx, task)
 		}
 		if ids.Validate(ids.KindNetwork, task.Target) == nil {
 			return resolver.resolveZoneRemovalPlan(ctx, task)
-		}
-		if ids.Validate(ids.KindRoute, task.Target) == nil {
-			return resolver.resolveRouteRemovalPlan(ctx, task)
-		}
-		if ids.Validate(ids.KindEnvEntry, task.Target) == nil {
-			return resolver.resolveEntryRemovalPlan(ctx, task)
 		}
 		if ids.Validate(ids.KindService, task.Target) == nil {
 			return resolver.resolveServiceRemovalPlan(ctx, task)

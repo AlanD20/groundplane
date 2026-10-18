@@ -63,6 +63,12 @@ func EncodeConsumerHelperRequest(input RemovalInput, progress RemovalProgress, i
 // OpenConsumerHelperRequest verifies the start grant and exact acknowledged
 // command. It needs no adapter credentials or hook plaintext.
 func OpenConsumerHelperRequest(ctx context.Context, request *agentpb.AttachConsumerHelperRequest) (ConsumerHelperInput, error) {
+	if request != nil && len(request.ProvisionRecovery) != 0 {
+		return openProvisionConsumerRecoveryHelper(ctx, request)
+	}
+	if request != nil && request.ProvisionAcknowledgement != nil {
+		return openProvisionConsumerHelper(ctx, request)
+	}
 	if request != nil && len(request.Recovery) != 0 {
 		return openConsumerRecoveryHelper(ctx, request)
 	}
@@ -121,6 +127,9 @@ func validateConsumerAuthority(ctx context.Context, authority RemovalAuthority, 
 	if err := executionplan.ValidateAttachConsumerTransition(ctx, consumer); err != nil {
 		return err
 	}
+	if consumer.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT {
+		return invalid("Detach command cannot authorize a network connection")
+	}
 	raw, err := (proto.MarshalOptions{Deterministic: true}).Marshal(consumer)
 	if err != nil {
 		return invalid("consumer input cannot be encoded")
@@ -146,8 +155,16 @@ func ValidateConsumerHelperResponse(input ConsumerHelperInput, response *agentpb
 	if (workexecution.Input{ID: response.Input.InputId, SHA256: hex.EncodeToString(response.Input.Sha256)}) != input.Attempt.Input {
 		return invalid("consumer helper response belongs to a different input")
 	}
-	if !input.InspectOnly && !response.Detached {
-		return invalid("Detach consumer helper has not proved endpoint removal")
+	if response.Connected && response.Detached {
+		return invalid("consumer helper reports contradictory membership")
+	}
+	if !input.InspectOnly {
+		if input.Consumer.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT && !response.Connected {
+			return invalid("Attach consumer helper has not proved endpoint connection")
+		}
+		if input.Consumer.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT && !response.Detached {
+			return invalid("Detach consumer helper has not proved endpoint removal")
+		}
 	}
 	return nil
 }

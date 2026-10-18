@@ -211,9 +211,6 @@ func (planner *authoredUnitPlanner) componentDependencies(
 		for _, kind := range []ids.Kind{ids.KindEnvEntry, ids.KindAttach} {
 			for _, identity := range planner.identities[kind] {
 				key := authoredResourceKey(kind, identity.ID)
-				if planner.blocked[key] {
-					return nil, nil, false, nil
-				}
 				dependencies = append(dependencies, key)
 			}
 		}
@@ -226,9 +223,6 @@ func (planner *authoredUnitPlanner) componentDependencies(
 		}
 		for _, identity := range planner.identities[ids.KindRoute] {
 			key := authoredResourceKey(ids.KindRoute, identity.ID)
-			if planner.blocked[key] {
-				return nil, nil, false, nil
-			}
 			dependencies = append(dependencies, key)
 		}
 	}
@@ -302,9 +296,6 @@ func (planner *authoredUnitPlanner) scriptDependencies(
 				return nil, nil, false, planner.missingInput("Script Entry", name)
 			}
 			key := authoredResourceKey(ids.KindEnvEntry, identity.ID)
-			if planner.blocked[key] {
-				return nil, nil, false, nil
-			}
 			dependencies = append(dependencies, key)
 		}
 	}

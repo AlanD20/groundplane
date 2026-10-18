@@ -22,7 +22,6 @@ func TestControllerTaskHandlerExecutesExactAgentRemoval(t *testing.T) {
 	agents := &removalTaskAgents{}
 	handler, err := newTestResourceHandler(
 		agents,
-		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{},
 		&recordingControllerTaskExecutor{})
 
@@ -55,7 +54,6 @@ func TestControllerTaskHandlerRejectsInvalidAgentRemovalParameters(t *testing.T)
 			agents := &removalTaskAgents{}
 			handler, err := newTestResourceHandler(
 				agents,
-				testBackingZoneCascade(t),
 				&fakeControllerTaskRunners{},
 				&recordingControllerTaskExecutor{})
 

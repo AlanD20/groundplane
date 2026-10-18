@@ -12,26 +12,25 @@ const (
 	OperatorOldAgeIdentitySlotID = "operator-old-age-identity"
 )
 
-// Purposes is shared by slot delivery and worker reservation. The encryption
-// authority selects which identity is required; the receiver never guesses an
-// old-era restore identity from the Environment's current key.
-func Purposes(step *agentpb.ExecutionStep) ([]agentpb.BackupSecretSlotPurpose, error) {
-	if step == nil || step.GetBackupStep() == nil {
-		return nil, errs.New(errs.KindValidationFailed, "backup secret step authority is required")
+// SourcePurposes selects slots directly from captured Backup input, independent
+// of the superseded generic execution-step envelope.
+func SourcePurposes(step *agentpb.BackupStepAuthority) ([]agentpb.BackupSecretSlotPurpose, error) {
+	if step == nil {
+		return nil, errs.New(errs.KindValidationFailed, "backup secret source authority is required")
 	}
 	purposes := []agentpb.BackupSecretSlotPurpose{
 		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
 		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY,
 	}
 	var encryption *agentpb.BackupEncryptionAuthority
-	if capture := step.GetBackupStep().GetCapture(); capture != nil {
+	if capture := step.GetCapture(); capture != nil {
 		encryption = capture.Encryption
 	}
-	if restore := step.GetBackupStep().GetRestore(); restore != nil {
+	if restore := step.GetRestore(); restore != nil {
 		encryption = restore.Encryption
 	}
 	if encryption == nil {
-		if step.GetBackupStep().GetPrune() != nil {
+		if step.GetPrune() != nil {
 			return purposes, nil
 		}
 		return nil, errs.New(errs.KindValidationFailed, "backup encryption authority is required")
@@ -44,7 +43,7 @@ func Purposes(step *agentpb.ExecutionStep) ([]agentpb.BackupSecretSlotPurpose, e
 		case CurrentAgeIdentitySlotID:
 			purposes = append(purposes, agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_CURRENT_AGE_IDENTITY)
 		case OperatorOldAgeIdentitySlotID:
-			if step.GetBackupStep().GetRestore() == nil {
+			if step.GetRestore() == nil {
 				return nil, errs.New(errs.KindValidationFailed, "old age identity is restricted to Restore")
 			}
 			purposes = append(

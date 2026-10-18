@@ -32,7 +32,7 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearRouteHeadPublication(desired)
+	defer clearDesiredMutationFragment(desired)
 	conditions := prepared.Conditions()
 	mutations := prepared.Mutations()
 	conditions, mutations, classify, err := desired.bindDirectDesired(
@@ -114,7 +114,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearRouteHeadPublication(desired)
+	defer clearDesiredMutationFragment(desired)
 	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

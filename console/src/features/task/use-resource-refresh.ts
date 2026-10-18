@@ -21,14 +21,14 @@ export function useResourceRefresh(
     }, setErrors);
     queueRef.current = queue;
     const unsubscribe = subscribeTerminalTasks((task) => {
+      const scope = task.task.scope;
       const key =
-        task.environment_id ??
-        task.project_id ??
-        task.tenant_id ??
-        task.resource_kind ??
-        task.target;
+        scope.environment_id ??
+        scope.project_id ??
+        scope.tenant_id ??
+        task.task.target_id;
       const group = tasks.get(key) ?? new Map<string, TaskResponse>();
-      group.set(`${task.resource_kind}/${task.type}`, task);
+      group.set(`${task.task.target_id}/${task.task.action}`, task);
       tasks.set(key, group);
       queue.invalidate(key);
     });

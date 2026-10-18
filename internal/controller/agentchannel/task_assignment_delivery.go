@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -48,8 +47,8 @@ func (s *Server) dispatchResolvedTaskAssignment(
 			stream,
 			assignment,
 			releasePayload,
-			func(queued agentpb.AgentChannel_ConnectServer, owned *agentpb.TaskAssignment, credits *configTransferExchange) error {
-				return s.sendAssignmentPayloads(queued, claim, owned, credits)
+			func(queued agentpb.AgentChannel_ConnectServer, owned *agentpb.TaskAssignment) error {
+				return s.sendAssignmentPayloads(queued, claim, owned)
 			},
 		)
 	})
@@ -63,53 +62,8 @@ func (s *Server) sendAssignmentPayloads(
 	stream agentpb.AgentChannel_ConnectServer,
 	claim etcd.TaskAssignment,
 	assignment *agentpb.TaskAssignment,
-	credits *configTransferExchange,
 ) error {
 	for _, step := range assignment.GetPlan().GetSteps() {
-		if step.GetBackupStep() != nil {
-			if backupPrunePayloadRetired(step, assignment.GetBackupResume()) {
-				continue
-			}
-			if err := s.sendBackupSecretSlots(
-				stream.Context(),
-				stream,
-				backupsecret.Request{
-					TaskID:          claim.Task.Record.ID,
-					AssignmentID:    claim.Assignment.Record.AssignmentID,
-					AgentID:         claim.Assignment.Record.AgentID,
-					AgentGeneration: claim.Assignment.Record.AgentGeneration,
-					Deadline:        claim.Assignment.Record.Deadline,
-					StepID:          step.GetStepId(),
-					Plan:            assignment.GetPlan(),
-					Step:            step,
-				},
-			); err != nil {
-				return err
-			}
-			if step.GetBackupStep().GetCapture().GetConfig() != nil {
-				if err := s.sendBackupConfigCapture(stream, claim, assignment, step.GetStepId(), credits); err != nil {
-					return err
-				}
-			}
-			if step.GetBackupStep().GetCapture().GetVolume() != nil {
-				if err := s.receiveBackupVolumeCapture(stream, claim, assignment, step.GetStepId(), credits); err != nil {
-					return err
-				}
-			}
-			if step.GetBackupStep().GetRestore().GetVolume() != nil {
-				if err := s.sendBackupVolumeRestoreNew(stream, claim, assignment, step.GetStepId(), credits); err != nil {
-					return err
-				}
-				if err := s.receiveBackupVolumeRestoreOld(stream, claim, assignment, step.GetStepId(), credits); err != nil {
-					return err
-				}
-			}
-			if step.GetBackupStep().GetRestore().GetConfig() != nil {
-				if err := s.receiveBackupConfigRestore(stream, claim, assignment, step.GetStepId(), credits); err != nil {
-					return err
-				}
-			}
-		}
 		if action := step.GetComponentApply(); action != nil && action.GetManagedConfigContent() &&
 			assignment.GetPlan().GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 			if err := s.sendManagedConfig(
@@ -128,26 +82,6 @@ func (s *Server) sendAssignmentPayloads(
 		}
 	}
 	return nil
-}
-
-func backupPrunePayloadRetired(step *agentpb.ExecutionStep, resume *agentpb.BackupTaskResume) bool {
-	sealed := step.GetBackupStep()
-	prune := sealed.GetPrune()
-	if prune == nil || len(prune.Objects) != 1 {
-		return false
-	}
-	object := prune.Objects[0]
-	for _, retained := range resume.GetSteps() {
-		if retained.GetStepId() != sealed.GetStepId() || retained.GetExecutionId() != sealed.GetExecutionId() {
-			continue
-		}
-		progress := retained.GetPrune()
-		deleted := progress.GetObjectDeleted()
-		return progress.GetNextObjectOrdinal() > object.GetOrdinal() &&
-			deleted.GetOrdinal() == object.GetOrdinal() && deleted.GetPointId() == object.GetPointId() &&
-			proto.Equal(deleted.GetObject(), object.GetObject())
-	}
-	return false
 }
 
 func (s *Server) taskAssignmentMessage(
@@ -238,38 +172,18 @@ func (s *Server) taskAssignmentMessage(
 		TaskId: task.ID, AssignmentId: record.AssignmentID,
 		OperationId: task.OperationID, RetryOf: task.RetryOf,
 		Plan: plan, ScriptArtifacts: scriptArtifacts, ScriptCheckpoints: scriptCheckpoints,
-		AutomaticReconcile:            etcd.IsAutomaticReconcileTask(task),
-		ForwardDeadline:               timestamppb.New(record.Deadline.UTC()),
-		ExecutionEpoch:                record.ExecutionEpoch,
-		ExecutionMode:                 executionAuthority.mode,
-		RecoveryDeadline:              timestamppb.New(record.RecoveryDeadline.UTC()),
-		RestorationAuthority:          executionAuthority.restoration,
-		ReleaseRecoveryRecordSha256:   append([]byte(nil), executionAuthority.recoveryDigest...),
-		ReleaseRecoveryDirective:      executionAuthority.recovery,
-		ComponentRecoveryRecordSha256: append([]byte(nil), executionAuthority.componentRecoveryDigest...),
-		ComponentRecoveryDirective:    executionAuthority.componentRecovery,
-		ExecutionDeadline:             timestamppb.New(executionDeadline.UTC()),
+		AutomaticReconcile:          etcd.IsAutomaticReconcileTask(task),
+		ForwardDeadline:             timestamppb.New(record.Deadline.UTC()),
+		ExecutionEpoch:              record.ExecutionEpoch,
+		ExecutionMode:               executionAuthority.mode,
+		RecoveryDeadline:            timestamppb.New(record.RecoveryDeadline.UTC()),
+		RestorationAuthority:        executionAuthority.restoration,
+		ReleaseRecoveryRecordSha256: append([]byte(nil), executionAuthority.recoveryDigest...),
+		ReleaseRecoveryDirective:    executionAuthority.recovery,
+		ExecutionDeadline:           timestamppb.New(executionDeadline.UTC()),
 	}
 	if plan.BackupScope != nil {
-		if record.BackupAuthorityFence == nil || s.checkpoints == nil {
-			return nil, errs.New(errs.KindInternal, "backup assignment delivery authority is unavailable")
-		}
-		authority, digest, err := executionplan.BindBackupTaskAuthority(plan, executionplan.BackupAssignmentIdentity{
-			TaskID: task.ID, OperationID: task.OperationID, AssignmentID: record.AssignmentID,
-			Generation: record.BackupAuthorityFence.AssignmentGeneration, DeadlineUnixNano: uint64(record.Deadline.UnixNano()),
-		})
-		if err != nil {
-			return nil, err
-		}
-		if hex.EncodeToString(digest) != record.BackupAuthorityFence.AuthoritySHA256 {
-			return nil, errs.New(errs.KindInternal, "backup assignment digest changed")
-		}
-		resume, err := s.checkpoints.ResolveBackupTaskResume(ctx, record.AgentID, record.AgentGeneration, authority)
-		if err != nil {
-			return nil, err
-		}
-		message.BackupAuthority, message.BackupAuthoritySha256, message.BackupResume = authority, digest, resume
-		message.AssignmentGeneration = authority.AssignmentGeneration
+		return nil, errs.New(errs.KindStateConflict, "Backup requires native work-item delivery")
 	}
 	return message, nil
 }

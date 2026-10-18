@@ -76,13 +76,17 @@ func (reader *Reader) planDynamicKeys(
 	ctx context.Context,
 	dynamic *backupSecretDynamicRead,
 	evidence Evidence,
-	plan *agentpb.ExecutionPlan,
+	scope *agentpb.BackupPlanScope,
+	steps []*agentpb.BackupStepAuthority,
 	stepIndex int,
 ) (string, map[string]int, map[string]int, error) {
 	environmentID := ""
 	connectorIDs := make(map[string]int)
 	sourceIDs := make(map[string]int)
-	dynamic.scope = plan.GetBackupScope()
+	if scope == nil || stepIndex < 0 || stepIndex >= len(steps) || steps[stepIndex] == nil {
+		return "", nil, nil, errs.New(errs.KindValidationFailed, "Backup credential input is incomplete")
+	}
+	dynamic.scope = scope
 	if evidence.Run != nil {
 		environmentID = evidence.Run.EnvironmentID
 		for _, source := range evidence.Run.Sources {
@@ -93,7 +97,7 @@ func (reader *Reader) planDynamicKeys(
 		position := dynamic.add(connectorrecord.RecordKey(evidence.Run.ConnectorID))
 		connectorIDs[evidence.Run.ConnectorID] = position
 		dynamic.connectors[evidence.Run.ConnectorID] = position
-		dynamic.connectorAuthorities[evidence.Run.ConnectorID] = plan.Steps[stepIndex].GetBackupStep().
+		dynamic.connectorAuthorities[evidence.Run.ConnectorID] = steps[stepIndex].
 			GetCapture().
 			GetTarget().
 			GetConnector()
@@ -103,16 +107,16 @@ func (reader *Reader) planDynamicKeys(
 		connectorID := restored.Point.ConnectorID
 		position := dynamic.add(connectorrecord.RecordKey(connectorID))
 		connectorIDs[connectorID], dynamic.connectors[connectorID] = position, position
-		dynamic.connectorAuthorities[connectorID] = plan.Steps[stepIndex].GetBackupStep().GetRestore().GetSourceObject().GetConnector()
+		dynamic.connectorAuthorities[connectorID] = steps[stepIndex].GetRestore().GetSourceObject().GetConnector()
 		position = dynamic.add(backuppolicy.BackupSourceKey(restored.Point.SourceID))
 		sourceIDs[restored.Point.SourceID], dynamic.sources[restored.Point.SourceID] = position, position
 		dynamic.points[restored.Point.ID] = dynamic.add(backupruntime.BackupRecoveryPointKey(restored.Point.ID))
 	} else if evidence.Dispatch != nil {
 		environmentID = evidence.Dispatch.EnvironmentID
-		if len(plan.Steps) != len(evidence.Dispatch.RecoveryPointIDs) {
+		if len(steps) != len(evidence.Dispatch.RecoveryPointIDs) {
 			return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune sealed step count changed")
 		}
-		if stepIndex < 0 || stepIndex >= len(plan.Steps) {
+		if stepIndex < 0 || stepIndex >= len(steps) {
 			return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune selected step is unavailable")
 		}
 		pointID := evidence.Dispatch.RecoveryPointIDs[stepIndex]
@@ -124,7 +128,7 @@ func (reader *Reader) planDynamicKeys(
 		defer etcdstore.ClearValues(points.Values)
 		dynamic.points[pointID] = dynamic.add(backupruntime.BackupRecoveryPointKey(pointID))
 		dynamic.prunes[pointID] = dynamic.add(backupruntime.BackupRecoveryPointPruneKey(pointID))
-		prune := plan.Steps[stepIndex].GetBackupStep().GetPrune()
+		prune := steps[stepIndex].GetPrune()
 		if prune == nil || len(prune.Objects) != 1 || prune.Objects[0].Ordinal != uint32(stepIndex+1) ||
 			prune.Objects[0].PointId != pointID || points.Values[0] == nil {
 			return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune sealed point authority changed")
@@ -148,10 +152,10 @@ func (reader *Reader) planDynamicKeys(
 		connectorIDs[point.ConnectorID] = connectorPosition
 		dynamic.connectors[point.ConnectorID] = connectorPosition
 	}
-	if environmentID == "" || stepIndex < 0 || stepIndex >= len(plan.Steps) {
+	if environmentID == "" || stepIndex < 0 || stepIndex >= len(steps) {
 		return "", nil, nil, errs.New(errs.KindInternal, "backup secret resolution scope is incomplete")
 	}
-	if err := planCurrentAgeIdentityKeys(dynamic, plan.Steps[stepIndex], environmentID); err != nil {
+	if err := planCurrentAgeIdentityKeys(dynamic, steps[stepIndex], environmentID); err != nil {
 		return "", nil, nil, err
 	}
 	dynamic.environment = dynamic.add(hierarchyrecord.EnvironmentKey(environmentID))

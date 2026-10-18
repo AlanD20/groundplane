@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 type HierarchyDeletionMembershipNode struct {
@@ -15,11 +14,9 @@ type HierarchyDeletionMembershipNode struct {
 	TargetRevision      int64
 	PrerequisiteNodeIDs []string
 	ProcedureInput      HierarchyDeletionProcedureInput
-	fixedInputDigest    string
 }
 
 type HierarchyDeletionAgentInput struct {
-	TaskType       taskjournal.TaskType
 	TypedProcedure string
 	InputDigest    string
 	TimeoutSeconds int64
@@ -37,7 +34,7 @@ type HierarchyDeletionControllerFinalizerInput struct {
 
 type HierarchyDeletionProcedureInput struct {
 	Kind                hierarchydeletion.HierarchyDeletionProcedureKind
-	AgentChild          *HierarchyDeletionAgentInput
+	AgentWork           *HierarchyDeletionAgentInput
 	ControllerFinalizer *HierarchyDeletionControllerFinalizerInput
 }
 
@@ -73,6 +70,9 @@ func (repository *Planner) FreezeCapturedMembership(
 	ctx context.Context,
 	current hierarchydeletion.HierarchyDeletionTombstone,
 ) (HierarchyDeletionFrozenMembership, error) {
+	if captured, found, err := repository.loadMembership(ctx, current); err != nil || found {
+		return captured, err
+	}
 	frozen := HierarchyDeletionFrozenMembership{
 		Revision: current.SnapshotRevision, CoordinationEpoch: current.DeletionEpoch,
 		RootRevision:   current.TargetRevision,
@@ -125,5 +125,8 @@ func (repository *Planner) FreezeCapturedMembership(
 		return HierarchyDeletionFrozenMembership{}, err
 	}
 	frozen.RootPrerequisiteNodeIDs = terminalHierarchyDeletionNodes(frozen.Nodes)
+	if err := repository.saveMembership(ctx, current, frozen); err != nil {
+		return HierarchyDeletionFrozenMembership{}, err
+	}
 	return frozen, nil
 }

@@ -6,19 +6,17 @@ import (
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 	"sort"
 	"strings"
 )
 
-func containerEvidenceForRequest(
-	request scriptexecution.Request,
-	containerID string,
-) scriptexecution.ContainerEvidence {
-	return containerEvidence(request, containerID)
+func containerEvidence(request scriptexecution.Request, containerID string) scriptexecution.ContainerEvidence {
+	return containerEvidenceForProjection(request.Projection, containerID)
 }
 
-func containerEvidence(request scriptexecution.Request, containerID string) scriptexecution.ContainerEvidence {
-	labels := environmentList(request.Projection.Labels)
+func containerEvidenceForProjection(projection *agentpb.ScriptRunnerProjection, containerID string) scriptexecution.ContainerEvidence {
+	labels := environmentList(projection.Labels)
 	sort.Strings(labels)
 	digest := sha256.Sum256([]byte(strings.Join(labels, "\x00")))
 	return scriptexecution.ContainerEvidence{ID: containerID, OwnershipLabelsSHA256: append([]byte(nil), digest[:]...)}

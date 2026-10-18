@@ -15,7 +15,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -169,50 +168,6 @@ func (service *FactService) SealFactSets(
 		return nil, nil, err
 	}
 	return metadata, &facts, nil
-}
-
-// ResolveTaskIdentity exposes only one task-owned encrypted identity during
-// synchronous plan construction. Public fact readiness rules remain unchanged.
-func (service *FactService) ResolveTaskIdentity(
-	ctx context.Context,
-	current etcdstore.Versioned[attachrecord.Record],
-	taskID string,
-	consume taskplanning.AttachPlanIdentityConsumer,
-) error {
-	if ctx == nil || consume == nil || ids.Validate(ids.KindTask, taskID) != nil ||
-		current.Record.TaskID != taskID || !current.Record.OwnsCredential() {
-		return errs.New(errs.KindValidationFailed, "Attach task identity request is invalid")
-	}
-	allowed := current.Record.Operation == attachrecord.AttachOperationProvision &&
-		(current.Record.Status == core.AttachPending || current.Record.Status == core.AttachProvisioning)
-	allowed = allowed || current.Record.Operation == attachrecord.AttachOperationDetach &&
-		current.Record.Status == core.AttachDetaching
-	if !allowed {
-		return errs.New(errs.KindStateConflict, "Attach task identity is unavailable in the current lifecycle")
-	}
-	return service.openBundle(ctx, current, func(bundle *attachFactBundle) error {
-		return consumeAttachTaskIdentity(bundle, consume)
-	})
-}
-
-// ResolveStoredTaskIdentity exposes only the exact encrypted identity captured
-// by an authored removal recipe. It never falls back to the mutable fact key.
-func (service *FactService) ResolveStoredTaskIdentity(
-	ctx context.Context,
-	current etcdstore.Versioned[attachrecord.Record],
-	stored attachrecord.EncryptedFacts,
-	taskID string,
-	consume taskplanning.AttachPlanIdentityConsumer,
-) error {
-	if ctx == nil || consume == nil || ids.Validate(ids.KindTask, taskID) != nil ||
-		current.Record.TaskID != taskID || !current.Record.OwnsCredential() ||
-		current.Record.Operation != attachrecord.AttachOperationDetach ||
-		current.Record.Status != core.AttachDetaching || stored.AttachID != current.Record.ID {
-		return errs.New(errs.KindValidationFailed, "stored Attach task identity request is invalid")
-	}
-	return service.openStoredBundle(ctx, current.Record, stored, func(bundle *attachFactBundle) error {
-		return consumeAttachTaskIdentity(bundle, consume)
-	})
 }
 
 // ResolveReadyDatabase exposes only the stable database identity needed to

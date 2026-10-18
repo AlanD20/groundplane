@@ -108,7 +108,11 @@ func (repository *Planner) freezeEnvironmentMembership(
 		hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup, environmentRevision,
 		terminalHierarchyDeletionNodes(backupNodes), operation.OperationID,
 	)
-	cleanup.fixedInputDigest = environmentDigest
+	cleanupDigest, err := repository.captureEnvironmentInput(ctx, operation, environmentID, environmentRevision, projection.Record.ComposeArtifact)
+	if err != nil {
+		return nil, err
+	}
+	cleanup.ProcedureInput.AgentWork.InputDigest = cleanupDigest
 	nodes := append(backupNodes, cleanup)
 	services, err := repository.freezeEnvironmentServiceRuntimeMembership(ctx, operation, projection)
 	if err != nil {

@@ -10,6 +10,12 @@ explains the reasons for the important boundaries below.
 
 ## Processes and data flow
 
+The [Task execution replacement](decisions/task-execution-redesign.md) is accepted
+design, not the current implementation. It gives scheduling, operation handlers,
+resource state and diagnostics distinct owners and makes assignments host-specific.
+The process paths below describe today's implementation until coordinated cutover;
+they do not qualify remote-Agent operation.
+
 Console or CLI → typed Controller API → capability-owned planning and publication
 → durable Task → assigned executor → checked result → committed state.
 

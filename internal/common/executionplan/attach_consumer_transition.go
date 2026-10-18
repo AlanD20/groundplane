@@ -26,6 +26,9 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 		ids.Validate(ids.KindService, input.ServiceId) != nil {
 		return invalidAttachConsumer()
 	}
+	if input.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT && input.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT {
+		return invalidAttachConsumer()
+	}
 	if _, err := networkname.New(input.NetworkId); err != nil {
 		return invalidAttachConsumer()
 	}
@@ -44,11 +47,11 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 	if !proto.Equal(baselineMetadata, candidateMetadata) {
 		return invalidAttachConsumer()
 	}
-	expected, err := detachedConsumerProject(ctx, input)
+	expected, err := transitionedConsumerProject(ctx, input)
 	if err != nil {
 		return err
 	}
-	actual, err := loadAttachConsumerProject(ctx, input.Candidate)
+	actual, err := loadCapturedComposeProject(ctx, input.Candidate)
 	if err != nil {
 		return err
 	}
@@ -63,7 +66,7 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 	}
 	defer clear(got)
 	if !bytes.Equal(want, got) {
-		return errs.New(errs.KindValidationFailed, "Detach consumer update changes more than the captured backing-network membership")
+		return errs.New(errs.KindValidationFailed, "Attach consumer update changes more than the captured backing-network membership")
 	}
 	return nil
 }
@@ -73,6 +76,20 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 func PrepareAttachConsumerTransition(ctx context.Context, baseline *agentpb.ComposeArtifact,
 	environmentID, backingEnvironmentID, serviceID, networkID, artifactID string,
 ) (*agentpb.AttachConsumerTransition, error) {
+	return prepareConsumerTransition(ctx, baseline, environmentID, backingEnvironmentID, serviceID, networkID, artifactID, agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT)
+}
+
+// PrepareAttachConsumerConnection adds one backing-network edge without
+// selecting any pending desired Service changes or restarting its workloads.
+func PrepareAttachConsumerConnection(ctx context.Context, baseline *agentpb.ComposeArtifact,
+	environmentID, backingEnvironmentID, serviceID, networkID, artifactID string,
+) (*agentpb.AttachConsumerTransition, error) {
+	return prepareConsumerTransition(ctx, baseline, environmentID, backingEnvironmentID, serviceID, networkID, artifactID, agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT)
+}
+
+func prepareConsumerTransition(ctx context.Context, baseline *agentpb.ComposeArtifact,
+	environmentID, backingEnvironmentID, serviceID, networkID, artifactID string, action agentpb.AttachNetworkAction,
+) (*agentpb.AttachConsumerTransition, error) {
 	if ctx == nil || baseline == nil || validateArtifactContent(baseline) != nil ||
 		baseline.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT || baseline.OwnerId != environmentID ||
 		ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindEnvironment, backingEnvironmentID) != nil ||
@@ -81,8 +98,8 @@ func PrepareAttachConsumerTransition(ctx context.Context, baseline *agentpb.Comp
 		return nil, invalidAttachConsumer()
 	}
 	input := &agentpb.AttachConsumerTransition{EnvironmentId: environmentID, BackingEnvironmentId: backingEnvironmentID,
-		ServiceId: serviceID, NetworkId: networkID, Baseline: proto.CloneOf(baseline)}
-	project, err := detachedConsumerProject(ctx, input)
+		ServiceId: serviceID, NetworkId: networkID, Baseline: proto.CloneOf(baseline), Action: action}
+	project, err := transitionedConsumerProject(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -101,12 +118,12 @@ func PrepareAttachConsumerTransition(ctx context.Context, baseline *agentpb.Comp
 	return input, nil
 }
 
-func detachedConsumerProject(ctx context.Context, input *agentpb.AttachConsumerTransition) (*composetypes.Project, error) {
+func transitionedConsumerProject(ctx context.Context, input *agentpb.AttachConsumerTransition) (*composetypes.Project, error) {
 	dockerName, err := networkname.New(input.NetworkId)
 	if err != nil {
 		return nil, invalidAttachConsumer()
 	}
-	expected, err := loadAttachConsumerProject(ctx, input.Baseline)
+	expected, err := loadCapturedComposeProject(ctx, input.Baseline)
 	if err != nil {
 		return nil, err
 	}
@@ -124,8 +141,25 @@ func detachedConsumerProject(ctx context.Context, input *agentpb.AttachConsumerT
 			return nil, invalidAttachConsumer()
 		}
 		service.Networks = maps.Clone(service.Networks)
-		delete(service.Networks, key)
+		if input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT {
+			if service.Networks == nil {
+				service.Networks = make(map[string]*composetypes.ServiceNetworkConfig)
+			}
+			if _, exists := service.Networks[key]; !exists {
+				service.Networks[key] = &composetypes.ServiceNetworkConfig{}
+			}
+		} else {
+			delete(service.Networks, key)
+		}
 		expected.Services[name] = service
+	}
+	if input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT {
+		if expected.Networks == nil {
+			expected.Networks = make(composetypes.Networks)
+		}
+		if _, exists := expected.Networks[key]; !exists {
+			expected.Networks[key] = composetypes.NetworkConfig{Name: dockerName, External: true}
+		}
 	}
 	used := false
 	for _, service := range expected.Services {
@@ -166,7 +200,7 @@ func AttachConsumerNames(input *agentpb.AttachConsumerTransition) ([]string, err
 	return names, nil
 }
 
-func loadAttachConsumerProject(ctx context.Context, artifact *agentpb.ComposeArtifact) (*composetypes.Project, error) {
+func loadCapturedComposeProject(ctx context.Context, artifact *agentpb.ComposeArtifact) (*composetypes.Project, error) {
 	project, err := loader.LoadWithContext(ctx, composetypes.ConfigDetails{WorkingDir: "/",
 		ConfigFiles: []composetypes.ConfigFile{{Filename: "compose.yaml", Content: artifact.CanonicalYaml}}},
 		func(options *loader.Options) {
@@ -185,5 +219,5 @@ func loadAttachConsumerProject(ctx context.Context, artifact *agentpb.ComposeArt
 }
 
 func invalidAttachConsumer() error {
-	return errs.New(errs.KindValidationFailed, "Detach consumer transition requires captured native runtime and one owned backing-network edge")
+	return errs.New(errs.KindValidationFailed, "Attach consumer transition requires captured native runtime and one explicit backing-network action")
 }

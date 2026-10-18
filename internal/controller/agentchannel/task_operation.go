@@ -38,21 +38,8 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 	case taskjournal.TaskDestroy:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_DESTROY
 	case taskjournal.TaskRemove:
-		if etcd.IsAuthoredBlueprintEntryRemovalTask(task) || etcd.IsAuthoredBlueprintServiceRemovalTask(task) {
+		if etcd.IsAuthoredBlueprintServiceRemovalTask(task) {
 			return operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
-		}
-		if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion {
-			switch task.Params[taskjournal.TaskHierarchyDeletionProcedureParam] {
-			case "attach.deprovision":
-				// The aggregate removal child executes the sealed adapter Detach procedure.
-				return ids.Validate(ids.KindAttach, task.Target) == nil &&
-					operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH
-			case "environment.cleanup":
-				return ids.Validate(ids.KindEnvironment, task.Target) == nil &&
-					operation == agentpb.PlanOperation_PLAN_OPERATION_REMOVE
-			default:
-				return false
-			}
 		}
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_REMOVE
 	case taskjournal.TaskCreate:
@@ -69,9 +56,6 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 		switch task.Params[taskjournal.TaskResourceKindParam] {
 		case taskjournal.TaskResourceVolume:
 			return ids.Validate(ids.KindVolume, task.Target) == nil &&
-				operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
-		case taskjournal.TaskResourceEntry:
-			return ids.Validate(ids.KindEnvironment, task.Target) == nil &&
 				operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
 		}
 		procedure, validProcedure := taskcontract.ParseBlueprintComposeProcedure(

@@ -66,13 +66,10 @@ type BlueprintFileValueReference struct {
 // ComponentFileValueReference names one deterministic generated file.
 // RevisionID pins the immutable Blueprint input while ComponentID prevents a
 // path collision from authorizing content rendered for another Component.
-// RouteTaskID selects that Task's immutable candidate projection;
-// empty selects the active projection used by ordinary reconciliation.
 type ComponentFileValueReference struct {
 	RevisionID  string `json:"revision_id"`
 	ComponentID string `json:"component_id"`
 	Path        string `json:"path"`
-	RouteTaskID string `json:"route_task_id,omitempty"`
 }
 
 // EntryValueReference names one immutable value generation. Storage is

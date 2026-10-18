@@ -3,7 +3,6 @@ import { useCallback } from "react";
 import {
   environmentDeletionTaskError,
   findEnvironment,
-  terminalTaskStatuses,
 } from "@/features/environment/environment-removal-model";
 import { requestTask, type TaskResponse } from "@/features/task/api";
 
@@ -103,8 +102,7 @@ export function useResourceRemovalObservation<
   const reconcileResourceRemoval = useCallback(
     (taskId: string, task: TaskResponse) => {
       const removal = pendingResourceRemovals.current.get(taskId);
-      if (!removal || !terminalTaskStatuses.has(task.status))
-        return Promise.resolve();
+      if (!removal || !task.task.finished_at) return Promise.resolve();
       const validationError = environmentDeletionTaskError(
         taskId,
         task,
@@ -114,9 +112,9 @@ export function useResourceRemovalObservation<
         recordResourceRemovalError(taskId, removal, validationError, "refresh");
         return Promise.reject(new Error(validationError));
       }
-      if (task.status !== "completed") {
+      if (task.task.status !== "succeeded") {
         const label = removal.kind[0].toUpperCase() + removal.kind.slice(1);
-        const message = `${label} deletion task ${taskId} ${task.status}`;
+        const message = `${label} deletion task ${taskId} ${task.task.status}`;
         recordResourceRemovalError(taskId, removal, message);
         return Promise.resolve();
       }

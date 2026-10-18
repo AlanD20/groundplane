@@ -121,7 +121,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetManagedVolumeDirectoryRemove() != nil) &&
 			p.environmentDirectories != nil {
 			var stepResult directoryruntime.StepResult
-			stepResult, err = p.environmentDirectories.ExecuteStep(stepCtx, reservation.assignment, step, p.CheckpointVolumeRemoval)
+			stepResult, err = p.environmentDirectories.ExecuteStep(stepCtx, reservation.assignment, step)
 			if stepResult.ExitCode != 0 {
 				exitCode = stepResult.ExitCode
 			}
@@ -134,44 +134,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 					Complete: stepResult.Complete, ResponseSha256: append([]byte(nil), stepResult.ResponseSHA256...),
 				}
 			}
-		} else if step.GetBackupStep().GetPrune() != nil {
-			err = p.executeBackupArtifactPrune(stepCtx, reservation.assignment, step)
-		} else if step.GetBackupStep().GetCapture().GetConfig() != nil {
-			err = p.executeBackupConfigCapture(stepCtx, reservation.assignment, step)
-		} else if step.GetBackupStep().GetCapture().GetVolume() != nil {
-			err = p.executeBackupVolumeCapture(stepCtx, reservation.assignment, step)
-		} else if step.GetBackupStep().GetCapture().GetPostgres() != nil {
-			err = p.executeBackupPostgresCapture(stepCtx, reservation.assignment, step)
-			if p.backupStaging != nil {
-				p.backupStaging.reinspect.Store(true)
-			}
-		} else if step.GetBackupStep().GetCapture().GetMysql() != nil {
-			err = p.executeBackupMySQLCapture(stepCtx, reservation.assignment, step)
-			if p.backupStaging != nil {
-				p.backupStaging.reinspect.Store(true)
-			}
-		} else if step.GetBackupStep().GetRestore().GetConfig() != nil {
-			var restoreMutation bool
-			restoreMutation, err = p.executeBackupConfigRestore(stepCtx, reservation.assignment, step)
-			mutationAttempted = mutationAttempted || restoreMutation
-		} else if step.GetBackupStep().GetRestore().GetVolume() != nil {
-			var restoreMutation bool
-			restoreMutation, err = p.executeBackupVolumeRestore(stepCtx, reservation.assignment, step)
-			mutationAttempted = mutationAttempted || restoreMutation
-		} else if step.GetBackupStep().GetRestore().GetPostgres() != nil {
-			var restoreMutation bool
-			restoreMutation, err = p.executeBackupPostgresRestore(stepCtx, reservation.assignment, step)
-			mutationAttempted = mutationAttempted || restoreMutation
-			if p.backupStaging != nil {
-				p.backupStaging.reinspect.Store(true)
-			}
-		} else if step.GetBackupStep().GetRestore().GetMysql() != nil {
-			var restoreMutation bool
-			restoreMutation, err = p.executeBackupMySQLRestore(stepCtx, reservation.assignment, step)
-			mutationAttempted = mutationAttempted || restoreMutation
-			if p.backupStaging != nil {
-				p.backupStaging.reinspect.Store(true)
-			}
+		} else if step.GetBackupStep() != nil {
+			err = errs.New(errs.KindStateConflict, "Backup requires native work-item execution")
 		} else if step.GetComponentApply() != nil {
 			var payload componentaction.ManagedConfigPayload
 			if reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY &&
@@ -303,8 +267,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		AssignmentID: reservation.assignment.AssignmentID,
 		TaskID:       reservation.assignment.TaskID, PlanHash: planHash, Terminal: terminal,
 		ExitCode: exitCode, ExecutionEpoch: reservation.assignment.ExecutionEpoch,
-		ReleaseRecoveryRecordSHA256:   append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
-		ComponentRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ComponentRecoveryRecordSHA256...),
+		ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
 	}
 	if reservation.assignment.BackupAuthority != nil {
 		result.Backup = &agentpb.BackupTaskResult{

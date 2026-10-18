@@ -12,8 +12,8 @@ func InitialCredit(binding Binding) (*agentpb.BackupConfigCredit, error) {
 		return nil, err
 	}
 	return SealCredit(binding, &agentpb.BackupConfigCredit{
-		TaskId: binding.TaskID, AssignmentId: binding.AssignmentID,
-		StepId: binding.StepID, ExecutionId: binding.ExecutionID, TransferId: binding.TransferID,
+		Attempt: binding.wireAttempt(), SourceOrdinal: binding.SourceOrdinal,
+		AuthorityDigest: append([]byte(nil), binding.AuthorityDigest[:]...), TransferId: binding.TransferID,
 		Direction: binding.Direction, CreditSequence: 1, NextOrdinal: 1, CumulativeChainSha256: chain,
 		Credit: &agentpb.BackupConfigCredit_MetadataCredit{MetadataCredit: &agentpb.BackupConfigMetadataCredit{
 			RecordCredit: MetadataCreditRecords, ByteCredit: MetadataCreditBytes,
@@ -35,9 +35,9 @@ func (receiver *Receiver) NextCredit() (*agentpb.BackupConfigCredit, error) {
 		return nil, nil
 	}
 	credit := &agentpb.BackupConfigCredit{
-		TaskId: receiver.binding.TaskID, AssignmentId: receiver.binding.AssignmentID,
-		StepId: receiver.binding.StepID, ExecutionId: receiver.binding.ExecutionID,
-		TransferId: receiver.binding.TransferID, Direction: receiver.binding.Direction,
+		Attempt: receiver.binding.wireAttempt(), SourceOrdinal: receiver.binding.SourceOrdinal,
+		AuthorityDigest: append([]byte(nil), receiver.binding.AuthorityDigest[:]...),
+		TransferId:      receiver.binding.TransferID, Direction: receiver.binding.Direction,
 		CreditSequence:          status.LastCreditSequence + 1,
 		CommittedRecordSequence: receiver.progress.Cursor.RecordSequence,
 		NextOrdinal:             receiver.progress.Cursor.NextOrdinal,

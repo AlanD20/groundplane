@@ -13,7 +13,6 @@ import (
 
 const (
 	MaximumServiceLifecycleRenderInputBytes = 640 * 1024
-	serviceLifecycleRenderInputPrefix       = "/v1/records/service-lifecycle-render-inputs/"
 )
 
 // ServiceLifecycleRenderInput is the immutable render snapshot owned by one
@@ -51,10 +50,6 @@ type ServiceLifecycleRelease struct {
 	Current                     ReleaseRenderInput  `json:"current"`
 	RetainedPrior               *ReleaseRenderInput `json:"retained_prior,omitempty"`
 	RetainedPriorRenderRevision int64               `json:"retained_prior_render_revision,omitempty"`
-}
-
-func ServiceLifecycleRenderInputKey(taskID string) string {
-	return serviceLifecycleRenderInputPrefix + taskID
 }
 
 func EncodeServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) ([]byte, error) {

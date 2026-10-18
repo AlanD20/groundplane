@@ -4,7 +4,6 @@ import (
 	"time"
 
 	contract "github.com/AlanD20/groundplane/internal/common/edgeconnectioncheck"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -116,10 +115,11 @@ func (record *Record) Stop(failure string, now time.Time) error {
 }
 
 func (record *Record) resumeCleanup() error {
-	if (record.Phase != PrivateChecking && record.Phase != Cleaning) || !record.CleanupPending {
+	if (record.Phase != PrivateChecking && record.Phase != Cleaning && record.Phase != CleanupRequired) || !record.CleanupPending {
 		return errs.New(errs.KindStateConflict, "edge diagnostic has no interrupted helper to clean up")
 	}
 	record.Phase = Cleaning
+	record.Outcome, record.Failure, record.FinishedAt = "", "", nil
 	return nil
 }
 
@@ -130,24 +130,4 @@ func (record *Record) finishCleanup(now time.Time) error {
 	now = record.settlementTime(now)
 	record.CleanupPending, record.Phase, record.Outcome, record.Failure, record.FinishedAt = false, Finished, "interrupted", "interrupted", &now
 	return nil
-}
-
-// Only cleanup can be retried. The immutable input and original helper Task
-// identity survive transfer, but neither private nor public probes run again.
-func PrepareCleanupRetry(source Record, taskID string) (Record, Record, error) {
-	if source.Validate() != nil || source.Phase != CleanupRequired || ids.Validate(ids.KindTask, taskID) != nil ||
-		taskID == source.Owner.TaskID {
-		return Record{}, Record{}, errs.New(
-			errs.KindTaskNotRetryable,
-			"only pending edge helper cleanup can be retried; start a new check for new probe results",
-		)
-	}
-	retry, previous := Clone(source), Clone(source)
-	retry.Owner.TaskID, retry.RetryOf = taskID, source.Owner.TaskID
-	retry.Phase, retry.Outcome, retry.Failure, retry.FinishedAt = Cleaning, "", "", nil
-	previous.Phase, previous.TransferredTo = Transferred, taskID
-	if retry.Validate() != nil || previous.Validate() != nil {
-		return Record{}, Record{}, invalidRecord()
-	}
-	return previous, retry, nil
 }

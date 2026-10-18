@@ -60,7 +60,7 @@ func (repository *TaskRepository) prepareReleaseNetworkPublication(
 		child.Params[taskjournal.TaskReleaseNetworkParentParam] != parent.ID || child.RenderGeneration != parent.RenderGeneration ||
 		child.Status != taskjournal.TaskStatusPending || child.TimeoutSeconds != parent.TimeoutSeconds ||
 		!child.CreatedAt.Equal(parent.CreatedAt) || child.OperationID == parent.OperationID ||
-		child.PlanID == parent.PlanID || len(child.Materializations) != 0 || child.Configuration != nil || child.EntryRuntime != nil {
+		child.PlanID == parent.PlanID || len(child.Materializations) != 0 || child.Configuration != nil {
 		return releaseHookPublicationFragment{}, "", errs.New(
 			errs.KindValidationFailed,
 			"release network prerequisite authority is invalid",

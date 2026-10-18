@@ -2,8 +2,11 @@ package agentregistration
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -47,13 +50,20 @@ func (repository *Repository) BeginDelete(
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
 	}
 	defer clear(primaryValue)
-	result, err := repository.store.Transact(ctx, []etcdstore.Condition{
+	unavailable, err := repository.prepareWorkUnavailable(ctx, agentID, evidence.readRevision)
+	if err != nil {
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
+	}
+	defer etcdstore.ClearMutationValues(unavailable.Mutations)
+	conditions := append(unavailable.Conditions, []etcdstore.Condition{
 		{Key: localagentrecord.LocalAgentPrimaryKey(agentID), ModRevision: evidence.primary.ModRevision},
 		{Key: evidence.digest.Key, ModRevision: evidence.digest.ModRevision},
-	}, []etcdstore.Mutation{
+	}...)
+	mutations := append(unavailable.Mutations, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: localagentrecord.LocalAgentPrimaryKey(agentID), Value: primaryValue},
 		{Type: etcdstore.MutationDelete, Key: evidence.digest.Key},
-	})
+	}...)
+	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
 	}
@@ -101,6 +111,21 @@ func (repository *Repository) Delete(
 	for index, condition := range conditions {
 		mutations[index] = etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: condition.Key}
 	}
+	binding, err := hostbindings.Read(ctx, repository.store, agentID, evidence.readRevision)
+	if err != nil {
+		return err
+	}
+	conditions = append(conditions, binding.Conditions...)
+	// Final removal follows settlement, not merely container termination. Host
+	// reservations survive process loss and cannot be silently reassigned.
+	conditions = append(conditions,
+		etcdstore.Condition{Key: workqueue.SlotsPrefix(workexecution.Identity{Executor: workexecution.Agent, HostID: binding.Binding.HostID}), Prefix: true},
+		etcdstore.Condition{Key: workqueue.HostClaimsPrefix(binding.Binding.HostID), Prefix: true},
+	)
+	mutations = append(mutations,
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hostbindings.AgentKey(agentID)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hostbindings.HostKey(binding.Binding.HostID)},
+	)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return err

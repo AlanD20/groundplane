@@ -5,15 +5,18 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core/blueprintreconcile"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func PrepareControllerAttachBinding(
-	snapshot Snapshot, unit Unit, operationID string, inputRevision int64,
+	snapshot Snapshot, unit Unit, operationID string, inputRevision int64, bindingSHA256 string, references []attachments.BindingReference,
 ) (MutationPlan, error) {
 	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
 		unit.Target.Kind != ids.KindAttach || unit.Removal || inputRevision <= 0 || inputRevision > snapshot.ReadRevision ||
+		!recordcodec.ValidSHA256(bindingSHA256) ||
 		ids.Validate(ids.KindOperation, operationID) != nil || len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
 		return MutationPlan{}, invalidRecord()
 	}
@@ -30,6 +33,8 @@ func PrepareControllerAttachBinding(
 	receipt := AppliedRecord{
 		EnvironmentID: snapshot.EnvironmentID, Target: unit.Target, State: Applied, Fingerprint: unit.Fingerprint,
 		ParentTaskID: snapshot.HeadTaskID, ControllerOperationID: operationID, ControllerAttachInputRevision: inputRevision,
+		ControllerAttachBindingSHA256: bindingSHA256,
+		ControllerAttachReferences:    append([]attachments.BindingReference(nil), references...),
 	}
 	plan, err := PrepareMutation(snapshot, []AppliedChange{{Target: unit.Target, Next: &receipt}}, nil)
 	if err != nil {

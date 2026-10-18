@@ -1,38 +1,44 @@
-import { useCallback, useRef } from "react";
-import { parseTaskEvent, type TaskEventResponse } from "./journal-model";
+import { useCallback, useEffect, useRef } from "react";
+import type { TaskEventResponse } from "./journal-model";
+import { followTaskEvents } from "./follow-events";
+
 export type TaskEventActions = {
   watchTaskEvents: (
     taskId: string,
     onEvent: (event: TaskEventResponse) => void,
-    onMalformed: (message: string) => void,
+    onNotice: (message: string) => void,
   ) => () => void;
 };
+
 export function useTaskEventStreams(): TaskEventActions & {
   closeTaskStreams: () => void;
 } {
-  const taskEventSources = useRef(new Set<EventSource>());
+  const streams = useRef(new Set<AbortController>());
   const closeTaskStreams = useCallback(() => {
-    for (const source of taskEventSources.current) source.close();
-    taskEventSources.current.clear();
+    for (const controller of streams.current) controller.abort();
+    streams.current.clear();
   }, []);
-  const watchTaskEvents = useCallback<TaskEventActions['watchTaskEvents']>((taskId, onEvent, onMalformed) => {
-      const source = new EventSource(
-        `/api/v1/tasks/${encodeURIComponent(taskId)}/events`,
-      );
-      taskEventSources.current.add(source);
-      const close = () => {
-        source.close();
-        taskEventSources.current.delete(source);
+  useEffect(() => closeTaskStreams, [closeTaskStreams]);
+  const watchTaskEvents = useCallback<TaskEventActions["watchTaskEvents"]>(
+    (taskId, onEvent, onNotice) => {
+      const controller = new AbortController();
+      streams.current.add(controller);
+      void followTaskEvents(taskId, controller.signal, onEvent, onNotice)
+        .catch((error: unknown) => {
+          if (!controller.signal.aborted)
+            onNotice(
+              error instanceof Error
+                ? error.message
+                : "Task event observation stopped",
+            );
+        })
+        .finally(() => streams.current.delete(controller));
+      return () => {
+        controller.abort();
+        streams.current.delete(controller);
       };
-      source.onmessage = (message) => {
-        try {
-          onEvent(parseTaskEvent(message.data));
-        } catch {
-          close();
-          onMalformed("Task event stream returned malformed data");
-        }
-      };
-      return close;
-    }, []);
+    },
+    [],
+  );
   return { closeTaskStreams, watchTaskEvents };
 }

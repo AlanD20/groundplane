@@ -39,37 +39,42 @@ func (reader *Reader) GetPostgresRuntimeAt(ctx context.Context, environmentID, s
 		ReadRevision: revision}, true, nil
 }
 
-// ValidatePostgresPatchPlan rejects changed storage before any candidate Task
-// can execute. Both direct Deploy and Blueprint publication use this guard.
-func (reader *Reader) ValidatePostgresPatchPlan(
+// PostgresPatchConditions protects the selected Service's database storage and
+// tool image without decoding an execution plan. The caller must join these
+// comparisons to the transaction that makes the captured Release executable.
+func (reader *Reader) PostgresPatchConditions(
 	ctx context.Context,
-	plan *agentpb.ExecutionPlan,
+	artifact *agentpb.ComposeArtifact,
+	serviceID string,
 	revision int64,
-) error {
-	artifacts := make(map[string]*agentpb.ComposeArtifact, len(plan.GetArtifacts()))
-	for _, artifact := range plan.GetArtifacts() {
-		artifacts[artifact.GetArtifactId()] = artifact
+) ([]etcdstore.Condition, error) {
+	if artifact == nil || artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+		ids.Validate(ids.KindService, serviceID) != nil {
+		return nil, errs.New(errs.KindValidationFailed, "PostgreSQL patch requires the selected Service artifact")
 	}
-	for _, member := range plan.GetCandidateReleaseProcedure().GetMembers() {
-		artifact := artifacts[member.GetCandidateArtifactId()]
-		if artifact == nil {
-			return releases.CorruptReleaseRecord()
-		}
-		for _, workload := range artifact.Services {
-			if workload.ServiceId != member.GetServiceId() || workload.PostgresToolsImage == "" {
-				continue
-			}
-			prior, found, err := reader.GetPostgresRuntimeAt(ctx, artifact.OwnerId, workload.ServiceId, revision)
-			if err != nil {
-				return err
-			}
-			if !found {
-				return errs.New(errs.KindStateConflict, "PostgreSQL must finish provisioning before an image update")
-			}
-			if _, err := backingpostgresruntime.ValidatePatchArtifact(prior.Record, artifact); err != nil {
-				return err
-			}
+	selected, hasTools := false, false
+	for _, workload := range artifact.GetServices() {
+		if workload.GetServiceId() == serviceID {
+			selected = true
+			hasTools = hasTools || workload.GetPostgresToolsImage() != ""
 		}
 	}
-	return nil
+	if !selected {
+		return nil, errs.New(errs.KindValidationFailed, "Release artifact has no selected Service")
+	}
+	prior, found, err := reader.GetPostgresRuntimeAt(ctx, artifact.OwnerId, serviceID, revision)
+	if err != nil {
+		return nil, err
+	}
+	if !found && hasTools {
+		return nil, errs.New(errs.KindStateConflict, "PostgreSQL must finish provisioning before an image update")
+	}
+	if found {
+		// An existing database cannot evade storage checks by dropping the tool
+		// marker from its candidate definition.
+		if _, err := backingpostgresruntime.ValidatePatchArtifact(prior.Record, artifact); err != nil {
+			return nil, err
+		}
+	}
+	return []etcdstore.Condition{{Key: backingpostgresruntime.Key(artifact.OwnerId, serviceID), ModRevision: prior.Revision}}, nil
 }

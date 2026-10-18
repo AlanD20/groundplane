@@ -2,8 +2,11 @@ package backingadapter
 
 import (
 	"context"
+	"encoding/json"
+	"math"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/adapterprocedure"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -48,6 +51,25 @@ func (runtime *Runtime) ExecuteStep(
 	if procedure == nil {
 		return StepResult{}, errs.New(errs.KindInternal, "agent: adapter procedure is required")
 	}
+	if err := adapterprocedure.Validate(procedure); err != nil {
+		return StepResult{}, err
+	}
+	containerID, err := runtime.BackingContainer(ctx, procedure.BackingServiceId)
+	if err != nil {
+		return StepResult{}, err
+	}
+	return runtime.ExecuteProcedure(ctx, procedure, containerID)
+}
+
+// ExecuteProcedure executes a typed operation against the already selected
+// backing container, without rediscovering it between credential operations.
+func (runtime *Runtime) ExecuteProcedure(ctx context.Context, procedure *agentpb.AdapterProcedure, containerID string) (StepResult, error) {
+	if ctx == nil || runtime == nil || runtime.runner == nil || runtime.compiler == nil || !ids.ValidContainerID(containerID) {
+		return StepResult{}, errs.New(errs.KindInternal, "adapter procedure runtime is not configured")
+	}
+	if err := adapterprocedure.Validate(procedure); err != nil {
+		return StepResult{}, err
+	}
 	compiled, err := runtime.compiler(procedure)
 	defer clearSteps(compiled)
 	if err != nil {
@@ -59,8 +81,7 @@ func (runtime *Runtime) ExecuteStep(
 			"agent: adapter procedure is empty or oversized",
 		)
 	}
-	containerID, err := runtime.BackingContainer(ctx, procedure.BackingServiceId)
-	if err != nil {
+	if err := runtime.VerifyBackingContainer(ctx, containerID, procedure.BackingServiceId); err != nil {
 		return StepResult{}, err
 	}
 	result := StepResult{}
@@ -71,9 +92,14 @@ func (runtime *Runtime) ExecuteStep(
 		}
 		options := runner.RunCmdOpts{
 			Name: "docker", Args: append([]string{"container", "exec", "-i", containerID, command}, args...),
-			Stdin: input,
+			Stdin: input, CaptureLimitBytes: 32 * 1024,
 		}
 		runResult, runErr := runtime.runner.Run(ctx, options)
+		clear(runResult.Stdout)
+		clear(runResult.Stderr)
+		if runResult.ExitCode < 0 || runResult.ExitCode > math.MaxInt32 {
+			return result, errs.New(errs.KindInternal, "adapter command returned an invalid exit status")
+		}
 		if runResult.ExitCode != 0 {
 			result.ExitCode = int32(runResult.ExitCode)
 		}
@@ -93,6 +119,7 @@ func (runtime *Runtime) BackingContainer(ctx context.Context, runtimeServiceID s
 		Name: "docker",
 		Args: []string{
 			"container", "ls",
+			"--no-trunc",
 			"--filter", "label=com.groundplane.managed=true",
 			"--filter", "label=com.groundplane.service-id=" + runtimeServiceID,
 			"--filter", "status=running",
@@ -107,6 +134,30 @@ func (runtime *Runtime) BackingContainer(ctx context.Context, runtimeServiceID s
 		return "", errs.New(errs.KindStateConflict, "agent: backing runtime service is not uniquely running")
 	}
 	return containers[0], nil
+}
+
+func (runtime *Runtime) VerifyBackingContainer(ctx context.Context, containerID, serviceID string) error {
+	result, err := runtime.runner.Run(ctx, runner.RunCmdOpts{Name: "docker",
+		Args: []string{"container", "inspect", "--format", "{{json .}}", containerID}, CaptureLimitBytes: 1 << 20})
+	defer clear(result.Stdout)
+	defer clear(result.Stderr)
+	if err != nil || result.ExitCode != 0 {
+		return errs.New(errs.KindStateConflict, "captured backing container is unavailable")
+	}
+	var observed struct {
+		ID     string `json:"Id"`
+		Config struct {
+			Labels map[string]string `json:"Labels"`
+		} `json:"Config"`
+		State struct {
+			Running bool `json:"Running"`
+		} `json:"State"`
+	}
+	if json.Unmarshal(result.Stdout, &observed) != nil || observed.ID != containerID || !observed.State.Running ||
+		observed.Config.Labels["com.groundplane.managed"] != "true" || observed.Config.Labels["com.groundplane.service-id"] != serviceID {
+		return errs.New(errs.KindStateConflict, "captured backing container ownership changed")
+	}
+	return nil
 }
 
 func adapterCommand(step Step) (string, []string, []byte, error) {

@@ -7,10 +7,10 @@ import (
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
-	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -28,7 +28,7 @@ func blueprintNativePredecessorReferences(
 			Serving: runtime.Serving,
 		}
 		if runtime.Serving != nil {
-			digest, err := domain.Digest(taskassignments.ReleaseNativePredecessorAuthority{ServiceID: runtime.ServiceID,
+			digest, err := domain.Digest(releaserender.ServingRuntimeCapture{ServiceID: runtime.ServiceID,
 				CurrentArtifact: runtime.CurrentArtifact, RetainedPriorArtifact: runtime.RetainedPriorArtifact})
 			if err != nil {
 				return nil, err
@@ -96,6 +96,9 @@ func resolveBlueprintNativePredecessors(
 	result := make([]BlueprintNativePredecessor, len(references))
 	matched := make(map[string]bool, len(references))
 	for index, reference := range references {
+		if err := reference.Validate(); err != nil {
+			return nil, err
+		}
 		memberIndex := slices.IndexFunc(members, func(member releaserender.ReleaseTaskRenderMember) bool {
 			return member.Intent.ServiceID == reference.ServiceID
 		})
@@ -115,14 +118,23 @@ func resolveBlueprintNativePredecessors(
 			digest, err := domain.Digest(witness)
 			if err != nil || digest != reference.PriorRuntimeSHA256 || witness.ServiceID != reference.ServiceID ||
 				member.Intent.PriorServingReleaseID != reference.Serving.ServingReleaseID ||
-				member.Render.PriorTarget != reference.Serving.Target ||
-				!recoveryRenderMatchesPredecessor(
-					member.Render,
-					member.Intent,
-					&taskassignments.ReleaseRestorationAuthority{
-						NativePredecessors: []taskassignments.ReleaseNativePredecessorAuthority{*witness},
-					},
-				) {
+				member.Render.PriorTarget != reference.Serving.Target || member.Render.PriorWorkload == nil {
+				return nil, releases.CorruptReleaseRecord()
+			}
+			serving, err := executionplan.OpenNativeServingRuntime(member.Render.EnvironmentID,
+				reference.ServiceID, witness.CurrentArtifact, witness.RetainedPriorArtifact)
+			if err != nil || serving.Artifact.GetArtifactId() != member.Render.PriorArtifactID ||
+				serving.ReleaseID != reference.Serving.ServingReleaseID || serving.Target != string(reference.Serving.Target) {
+				return nil, releases.CorruptReleaseRecord()
+			}
+			var replicas uint32
+			for _, workload := range serving.Workloads {
+				if workload.GetImageReference() != member.Render.PriorWorkload.LocalImageID {
+					return nil, releases.CorruptReleaseRecord()
+				}
+				replicas += workload.GetExpectedReplicas()
+			}
+			if replicas != member.Render.PriorWorkload.ReplicaCount {
 				return nil, releases.CorruptReleaseRecord()
 			}
 			runtime.CurrentArtifact = witness.CurrentArtifact

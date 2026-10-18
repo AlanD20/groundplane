@@ -168,17 +168,15 @@ export function ConnectorCheckResults({
         >
           {stale
             ? "Result stale"
-            : result.phase === "transferred"
-              ? "Cleanup transferred"
-              : passed
-                ? "Permissions verified"
-                : result.cleanup_required
-                  ? "Cleanup needed"
-                  : result.outcome === "interrupted"
-                    ? "Interrupted check"
-                    : result.outcome === "failed"
-                      ? "Check failed"
-                      : "In progress"}
+            : passed
+              ? "Permissions verified"
+              : result.cleanup_required
+                ? "Cleanup needed"
+                : result.outcome === "interrupted"
+                  ? "Interrupted check"
+                  : result.outcome === "failed"
+                    ? "Check failed"
+                    : "In progress"}
         </Badge>
         {result.draft && <Badge variant="outline">Unsaved settings</Badge>}
         <span className="text-xs text-muted-foreground">
@@ -244,10 +242,8 @@ export function ConnectorCheckResults({
             ))}
         </div>
       )}
-      {result.cleanup_task_id && (
-        <TaskLink taskId={result.cleanup_task_id}>
-          Open cleanup attempt
-        </TaskLink>
+      {result.cleanup_required && (
+        <TaskLink taskId={result.task_id}>Open Task to retry cleanup</TaskLink>
       )}
       <Disclosure
         summary="Tested configuration"

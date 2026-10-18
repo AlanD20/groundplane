@@ -49,8 +49,8 @@ func (repository *Repository) Read(
 
 // Open durably publishes the first grant. Reopen returns the actual latest
 // native credit so the sender can reconstruct and verify its immutable prefix.
-func (repository *Repository) Open(ctx context.Context, owner Owner) (*agentpb.BackupVolumeManifestAckCredit, error) {
-	if repository == nil || repository.guard == nil || owner.Validate() != nil {
+func (repository *Repository) Open(ctx context.Context, owner Owner, authorization []etcdstore.Condition) (*agentpb.BackupVolumeManifestAckCredit, error) {
+	if repository == nil || repository.guard == nil || owner.Validate() != nil || len(authorization) == 0 {
 		return nil, invalidLedger()
 	}
 	current, found, err := repository.Read(ctx, owner, 0)
@@ -79,6 +79,7 @@ func (repository *Repository) Open(ctx context.Context, owner Owner) (*agentpb.B
 	}
 	conditions = append(conditions, etcdstore.Condition{Key: CursorKey(owner.Binding)},
 		etcdstore.Condition{Key: CreditKey(owner.Binding, 1)})
+	conditions = append(conditions, authorization...)
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: CursorKey(owner.Binding), Value: cursor},
 		{Type: etcdstore.MutationPut, Key: CreditKey(owner.Binding, 1), Value: raw}}
 	defer etcdstore.ClearMutationValues(mutations)
@@ -97,9 +98,9 @@ func (repository *Repository) Open(ctx context.Context, owner Owner) (*agentpb.B
 // one bounded transaction. On ambiguous commit, exact replay returns the
 // immutable original credit; a conflicting replacement never advances.
 func (repository *Repository) Accept(ctx context.Context, owner Owner,
-	frame *agentpb.BackupVolumeManifestTransfer,
+	frame *agentpb.BackupVolumeManifestTransfer, authorization []etcdstore.Condition,
 ) (*agentpb.BackupVolumeManifestAckCredit, error) {
-	if repository == nil || repository.guard == nil || owner.Validate() != nil {
+	if repository == nil || repository.guard == nil || owner.Validate() != nil || len(authorization) == 0 {
 		return nil, invalidLedger()
 	}
 	validated, err := backupvolumetransfer.ValidateFrame(owner.Binding, frame)
@@ -206,6 +207,7 @@ func (repository *Repository) Accept(ctx context.Context, owner Owner,
 		{Type: etcdstore.MutationPut, Key: frameKey, Value: frameRaw},
 		{Type: etcdstore.MutationPut, Key: creditKey, Value: creditRaw}}
 	defer etcdstore.ClearMutationValues(mutations)
+	conditions = append(conditions, authorization...)
 	budget, err := repository.store.MeasureTransaction(ctx, conditions, mutations)
 	if err != nil || !budget.Fits() {
 		return nil, invalidLedger()

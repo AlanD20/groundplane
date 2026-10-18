@@ -2,303 +2,206 @@ package etcd
 
 import (
 	"context"
+	"slices"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
-	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// CreateRunnerWithTask atomically publishes the provisioning Runner, its one
-// owner index, combined Tenant quota, exact host/network allocations, Task,
-// queue membership, and idempotency marker before any host effect can start.
-func (repository *RunnerRepository) CreateRunnerWithTask(
-	ctx context.Context,
-	config runnerallocation.RunnerAllocationConfig,
-	desired runnerrecord.RunnerDesiredRecord,
-	task TaskRecord,
-	marker idempotencyrecord.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return IdempotencyTransactionResult{}, err
+// RunnerCreationSource holds an uncommitted allocation. Publication compares
+// every allocation and hierarchy source before making the Runner or work visible.
+type RunnerCreationSource struct {
+	record     runners.RunnerRecord
+	config     runnerallocation.RunnerAllocationConfig
+	parents    runners.RunnerParents
+	conditions []keyvalue.Condition
+	mutations  []keyvalue.Mutation
+}
+
+func (source RunnerCreationSource) Runner() runners.RunnerRecord {
+	return runners.CloneRunnerRecord(source.record)
+}
+func (source *RunnerCreationSource) Clear() { keyvalue.ClearMutationValues(source.mutations) }
+
+func (repository *RunnerRepository) PrepareRunnerCreation(
+	ctx context.Context, config runnerallocation.RunnerAllocationConfig,
+	desired runners.RunnerDesiredRecord, taskID string, at time.Time,
+) (RunnerCreationSource, error) {
+	if err := keyvalue.ValidateContext(ctx); err != nil {
+		return RunnerCreationSource{}, err
 	}
-	desired, err := runnerrecord.NormalizeRunnerDesired(desired)
+	desired, err := runners.NormalizeRunnerDesired(desired)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RunnerCreationSource{}, err
 	}
-	slotCount, err := config.Validate()
+	slots, err := config.Validate()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := validateRunnerCreateTask(desired, task); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := validateRunnerCreateMarker(desired, task, marker); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	task = bindRunnerTaskMarker(task, marker)
-	if err := ValidateTaskRecord(task); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	existing, err := idempotency.Read(ctx, marker.Locator)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if existing != nil {
-		return IdempotencyTransactionResult{
-			kind: idempotencyTransactionExisting, revision: existing.modRevision,
-			marker: idempotencyrecord.CloneIdempotencyMarker(existing.marker),
-		}, nil
+		return RunnerCreationSource{}, err
 	}
 	parents, err := repository.ResolveRunnerParents(ctx, desired)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RunnerCreationSource{}, err
 	}
-	allocationState, err := repository.getRunnerAllocationState(ctx, desired.TenantID, desired.ID, config, slotCount)
+	state, err := repository.getRunnerAllocationState(ctx, desired.TenantID, desired.ID, config, slots)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RunnerCreationSource{}, err
 	}
-	quota, err := allocationState.quota.Record.Claim(desired.ID)
+	quota, err := state.quota.Record.Claim(desired.ID)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RunnerCreationSource{}, err
 	}
-	systemPool, subnet, err := allocationState.system.Record.ReserveRunner(config.RunnerPool, desired.ID)
+	system, subnet, err := state.system.Record.ReserveRunner(config.RunnerPool, desired.ID)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RunnerCreationSource{}, err
 	}
-	allocation, err := config.HostPool.Allocation(allocationState.host.slot, subnet)
+	allocation, err := config.HostPool.Allocation(state.host.slot, subnet)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RunnerCreationSource{}, err
 	}
-	record, err := runnerrecord.NewProvisioningRunner(desired, allocation, task.ID, task.CreatedAt)
+	record, err := runners.NewProvisioningRunner(desired, allocation, taskID, at)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RunnerCreationSource{}, err
 	}
-	values, err := encodeRunnerCreateValues(record, quota, allocationState.host.record, systemPool, task)
+	source := RunnerCreationSource{record: record, config: config, parents: parents}
+	source.conditions = []keyvalue.Condition{
+		{Key: runners.RunnerKey(desired.ID)},
+		{Key: runners.RunnerLifecycleKey(desired.ID)},
+		{Key: runners.RunnerTenantSlugKey(desired.TenantID, desired.Slug)},
+		{Key: runners.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)},
+		{Key: runners.RunnerTenantQuotaKey(desired.TenantID), ModRevision: state.quota.Revision},
+		{Key: runners.SystemPoolRegistryKey, ModRevision: state.system.Revision},
+		{Key: deletions.TombstoneKey(string(deletions.DeletionTargetRunner), desired.ID)},
+		state.host.condition,
+	}
+	source.conditions = append(source.conditions, parents.AdmissionConditions()...)
+	desiredValue, err := runners.EncodeRunnerDesiredRecord(record.Desired)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RunnerCreationSource{}, err
 	}
-	defer values.clear()
-	layout := newRunnerCreateEvidence(desired, parents, allocationState, task)
-	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: values.task},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
-			Value: values.reference,
-		},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   taskjournal.TaskActiveOperationKey(task.OperationID),
-			Value: values.reference,
-		},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: values.reference},
-		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerKey(desired.ID), Value: values.runner},
-		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerLifecycleKey(desired.ID), Value: values.lifecycle},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   runnerrecord.RunnerTenantSlugKey(desired.TenantID, desired.Slug),
-			Value: []byte(desired.ID),
-		},
-		{
-			Type: etcdstore.MutationPut, Key: runnerrecord.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID),
-			Value: []byte(desired.ID),
-		},
-		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerTenantQuotaKey(desired.TenantID), Value: values.quota},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   runnerrecord.RunnerHostSlotKey(allocationState.host.slot),
-			Value: values.host,
-		},
-		{Type: etcdstore.MutationPut, Key: runnerrecord.SystemPoolRegistryKey, Value: values.system},
-	}
-	initiation, err := newRunnerTaskInitiation(desired, parents, taskjournal.TaskActorOperator)
+	lifecycleValue, err := runners.EncodeRunnerLifecycleRecord(record.RunnerLifecycleRecord)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RunnerCreationSource{}, err
 	}
-	plan, err := newTaskIdempotencyMutationPlan(task, initiation, layout.conditions, mutations, layout.classifier())
+	quotaValue, err := recordcodec.Encode("runner_tenant_quota", quota)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RunnerCreationSource{}, err
 	}
-	return idempotency.Apply(ctx, marker, plan)
+	hostValue, err := runners.EncodeRunnerHostSlotRecord(state.host.record)
+	if err != nil {
+		return RunnerCreationSource{}, err
+	}
+	systemValue, err := recordcodec.Encode("system_pool_registry", system)
+	if err != nil {
+		return RunnerCreationSource{}, err
+	}
+	source.mutations = []keyvalue.Mutation{
+		{Type: keyvalue.MutationPut, Key: runners.RunnerKey(desired.ID), Value: desiredValue},
+		{Type: keyvalue.MutationPut, Key: runners.RunnerLifecycleKey(desired.ID), Value: lifecycleValue},
+		{Type: keyvalue.MutationPut, Key: runners.RunnerTenantSlugKey(desired.TenantID, desired.Slug), Value: []byte(desired.ID)},
+		{Type: keyvalue.MutationPut, Key: runners.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID), Value: []byte(desired.ID)},
+		{Type: keyvalue.MutationPut, Key: runners.RunnerTenantQuotaKey(desired.TenantID), Value: quotaValue},
+		{Type: keyvalue.MutationPut, Key: runners.RunnerHostSlotKey(state.host.slot), Value: hostValue},
+		{Type: keyvalue.MutationPut, Key: runners.SystemPoolRegistryKey, Value: systemValue},
+	}
+	return source, nil
 }
 
-type runnerCreateValues struct {
-	runner, lifecycle, quota, host, system, task, reference []byte
-}
-
-func encodeRunnerCreateValues(
-	record runnerrecord.RunnerRecord,
-	quota runnerallocation.RunnerTenantQuota,
-	host runnerrecord.RunnerHostSlotRecord,
-	system runnerallocation.SystemPoolRegistry,
-	task TaskRecord,
-) (runnerCreateValues, error) {
-	var result runnerCreateValues
-	var err error
-	result.runner, err = runnerrecord.EncodeRunnerDesiredRecord(record.Desired)
+func (repository *RunnerRepository) PublishRunnerCreation(
+	ctx context.Context, source RunnerCreationSource, input runnerwork.Input,
+	task workexecution.Task, marker idempotency.IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	record := source.record
+	desired := record.Desired
+	ref, err := input.Reference()
 	if err != nil {
-		return result, err
+		return IdempotencyTransactionResult{}, err
 	}
-	result.lifecycle, err = runnerrecord.EncodeRunnerLifecycleRecord(record.RunnerLifecycleRecord)
+	if len(source.conditions) == 0 || len(source.mutations) == 0 ||
+		task.Validate() != nil || task.Actor != workexecution.OperatorActor || task.Action != workexecution.ActionCreate ||
+		task.TargetID != desired.ID || task.ExpectedItems != 1 || task.PublicationComplete || task.Progress.Total() != 0 ||
+		task.Scope != (workexecution.Scope{TenantID: desired.TenantID, ProjectID: desired.ProjectID(), EnvironmentID: desired.EnvironmentID()}) ||
+		task.ID != record.CreateTaskID || task.ID != input.TaskID || task.Intent != ref ||
+		input.Operation != runnerallocation.RuntimeOperationCreate || input.Plan.Allocation != record.Allocation ||
+		input.Plan.AllocationConfig != source.config || input.Plan.RuntimeEpoch != record.RuntimeEpoch+1 ||
+		!input.CreatedAt.Equal(record.CreatedAt) || !task.CreatedAt.Equal(record.CreatedAt) ||
+		!runnerCreationDesiredEqual(input.Desired, desired) {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Runner creation differs from its captured allocation or input")
+	}
+	if idempotency.ValidateIdempotencyMarker(marker) != nil || validateRunnerMarkerScope(desired, marker) != nil ||
+		marker.Kind != idempotency.IdempotencyMarkerTask || marker.State != idempotency.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.Method != "POST" || marker.Locator.Route != "/runners" ||
+		!idempotency.ValidTaskResponse(marker.Response, task.ID) ||
+		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(task.CreatedAt) {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Runner creation replay marker is invalid")
+	}
+	item := workexecution.Item{ID: input.WorkItemID, TaskID: task.ID, Operation: workexecution.Runner,
+		TargetID: desired.ID, Placement: workexecution.Placement{Executor: workexecution.Controller},
+		Claims: []workexecution.Claim{{ScopeID: desired.ID}}, Input: &task.Intent,
+		Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
+		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
+	work, err := workqueue.PrepareSingleTask(task, item, marker)
 	if err != nil {
-		result.clear()
-		return runnerCreateValues{}, err
+		return IdempotencyTransactionResult{}, err
 	}
-	result.quota, err = recordcodec.Encode("runner_tenant_quota", quota)
+	defer keyvalue.ClearMutationValues(work.Mutations)
+	inputConditions, inputMutations, err := runnerwork.PreparePublication(input)
 	if err != nil {
-		result.clear()
-		return runnerCreateValues{}, err
+		return IdempotencyTransactionResult{}, err
 	}
-	result.host, err = runnerrecord.EncodeRunnerHostSlotRecord(host)
+	defer keyvalue.ClearMutationValues(inputMutations)
+	conditions := append(work.Conditions, source.conditions...)
+	conditions = append(conditions, inputConditions...)
+	mutations := append(work.Mutations, source.mutations...)
+	mutations = append(mutations, inputMutations...)
+	allocationPlan, err := runnerwork.EncodeAllocationPlan(input.Plan)
 	if err != nil {
-		result.clear()
-		return runnerCreateValues{}, err
+		return IdempotencyTransactionResult{}, err
 	}
-	result.system, err = recordcodec.Encode("system_pool_registry", system)
-	if err != nil {
-		result.clear()
-		return runnerCreateValues{}, err
-	}
-	result.task, err = EncodeTaskRecord(task)
-	if err != nil {
-		result.clear()
-		return runnerCreateValues{}, err
-	}
-	result.reference, err = idempotencyrecord.EncodeTaskReference(task.ID)
-	if err != nil {
-		result.clear()
-		return runnerCreateValues{}, err
-	}
-	return result, nil
-}
-
-func (values *runnerCreateValues) clear() {
-	clear(values.runner)
-	clear(values.lifecycle)
-	clear(values.quota)
-	clear(values.host)
-	clear(values.system)
-	clear(values.task)
-	clear(values.reference)
-}
-
-type runnerCreateEvidence struct {
-	conditions     []etcdstore.Condition
-	task           int
-	operation      int
-	active         int
-	queue          int
-	runner         int
-	lifecycle      int
-	slug           int
-	owner          int
-	quota          int
-	system         int
-	runnerDeletion int
-	parentsStart   int
-	parentsEnd     int
-	host           int
-	desired        runnerrecord.RunnerDesiredRecord
-	parents        runnerrecord.RunnerParents
-	allocation     runnerAllocationState
-	operationID    string
-}
-
-func newRunnerCreateEvidence(
-	desired runnerrecord.RunnerDesiredRecord,
-	parents runnerrecord.RunnerParents,
-	allocation runnerAllocationState,
-	task TaskRecord,
-) runnerCreateEvidence {
-	evidence := runnerCreateEvidence{
-		desired: desired, parents: parents,
-		allocation: allocation, operationID: task.OperationID,
-	}
-	add := func(condition etcdstore.Condition) int {
-		index := len(evidence.conditions)
-		evidence.conditions = append(evidence.conditions, condition)
-		return index
-	}
-	evidence.task = add(etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID)})
-	evidence.operation = add(etcdstore.Condition{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)})
-	evidence.active = add(etcdstore.Condition{Key: taskjournal.TaskActiveOperationKey(task.OperationID)})
-	evidence.queue = add(etcdstore.Condition{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)})
-	evidence.runner = add(etcdstore.Condition{Key: runnerrecord.RunnerKey(desired.ID)})
-	evidence.lifecycle = add(etcdstore.Condition{Key: runnerrecord.RunnerLifecycleKey(desired.ID)})
-	evidence.slug = add(etcdstore.Condition{Key: runnerrecord.RunnerTenantSlugKey(desired.TenantID, desired.Slug)})
-	evidence.owner = add(
-		etcdstore.Condition{Key: runnerrecord.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)},
-	)
-	evidence.quota = add(
-		etcdstore.Condition{
-			Key:         runnerrecord.RunnerTenantQuotaKey(desired.TenantID),
-			ModRevision: allocation.quota.Revision,
-		},
-	)
-	evidence.system = add(
-		etcdstore.Condition{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.Revision},
-	)
-	evidence.runnerDeletion = add(
-		etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), desired.ID)},
-	)
-	evidence.parentsStart = len(evidence.conditions)
-	evidence.conditions = append(evidence.conditions, parents.AdmissionConditions()...)
-	evidence.parentsEnd = len(evidence.conditions)
-	evidence.host = add(allocation.host.condition)
-	return evidence
-}
-
-func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
-	return func(_ int64, values []*etcdstore.KeyValue) error {
-		if len(values) != len(evidence.conditions) {
-			return errs.New(errs.KindInternal, "runner creation compare evidence is incomplete")
+	conditions = append(conditions, keyvalue.Condition{Key: runnerwork.AllocationPlanKey(desired.ID)})
+	mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: runnerwork.AllocationPlanKey(desired.ID), Value: allocationPlan})
+	publicationConditions := conditions
+	classify := func(_ int64, values []*keyvalue.KeyValue) error {
+		if len(values) != len(publicationConditions) {
+			return errs.New(errs.KindInternal, "Runner creation publication evidence is incomplete")
 		}
-		if values[evidence.active] != nil {
-			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[evidence.active].Value)
-			if err != nil {
-				return err
-			}
-			return errs.Newf(
-				errs.KindStateConflict,
-				"operation %s already has active task %s",
-				evidence.operationID,
-				activeTaskID,
-			)
-		}
-		for _, index := range []int{evidence.task, evidence.operation, evidence.queue} {
-			if values[index] != nil {
-				return errs.New(errs.KindInternal, "runner creation collided with durable task state")
+		for index, condition := range publicationConditions {
+			if condition.Key == runners.RunnerTenantSlugKey(desired.TenantID, desired.Slug) && values[index] != nil {
+				return errs.New(errs.KindRunnerSlugConflict, "runner slug is already in use")
 			}
 		}
-		if values[evidence.runner] != nil || values[evidence.lifecycle] != nil || values[evidence.owner] != nil {
-			return errs.New(errs.KindStateConflict, "runner stable identity is already in use")
-		}
-		if values[evidence.slug] != nil {
-			return errs.New(errs.KindRunnerSlugConflict, "runner slug is already in use")
-		}
-		if etcdstore.RevisionChanged(values[evidence.quota], evidence.allocation.quota.Revision) {
-			return recordcodec.StateConflict("runner tenant quota", evidence.desired.TenantID)
-		}
-		if etcdstore.RevisionChanged(values[evidence.system], evidence.allocation.system.Revision) {
-			return recordcodec.StateConflict("system pool registry", "global")
-		}
-		if values[evidence.runnerDeletion] != nil {
-			return errs.New(errs.KindResourceInUse, "runner hierarchy deletion is in progress")
-		}
-		if err := evidence.parents.ClassifyAdmissionConflict(values[evidence.parentsStart:evidence.parentsEnd]); err != nil {
-			return err
-		}
-		if values[evidence.host] != nil {
-			return recordcodec.StateConflict("runner host slot", evidence.desired.ID)
-		}
-		return recordcodec.StateConflict("runner", evidence.desired.ID)
+		return errs.New(errs.KindStateConflict, "Runner hierarchy or allocation changed before creation; submit again")
 	}
+	initiation, err := newRunnerTaskInitiation(desired, source.parents, taskjournal.TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	publication, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	evidence, err := NewIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return evidence.Apply(ctx, marker, publication)
+}
+
+func runnerCreationDesiredEqual(left, right runners.RunnerDesiredRecord) bool {
+	return left.ID == right.ID && left.Slug == right.Slug && left.OwnerKind == right.OwnerKind &&
+		left.OwnerID == right.OwnerID && left.TenantID == right.TenantID && left.ParentProjectID == right.ParentProjectID &&
+		left.GitHubURL == right.GitHubURL && left.ImageRef == right.ImageRef && slices.Equal(left.Labels, right.Labels)
 }
