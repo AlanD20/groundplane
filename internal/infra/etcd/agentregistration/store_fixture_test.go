@@ -2,23 +2,18 @@ package agentregistration
 
 import (
 	context "context"
-	sha256 "crypto/sha256"
-	hex "encoding/hex"
-	ids "github.com/AlanD20/groundplane/internal/common/ids"
-	fixtureowner "github.com/AlanD20/groundplane/internal/infra/etcd"
-	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	errs "github.com/AlanD20/groundplane/pkg/errs"
-	http "net/http"
 	sort "sort"
 	strings "strings"
 	sync "sync"
 	testing "testing"
 	time "time"
+
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func newMemoryTaskStore() *memoryTaskStore {
-	return &memoryTaskStore{history: make(map[string][]memoryTaskVersion)}
+	return &memoryTaskStore{revision: 1, history: make(map[string][]memoryTaskVersion)}
 }
 
 type memoryTaskStore struct {
@@ -246,14 +241,6 @@ func (store *memoryTaskStore) Transact(
 	return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
 
-func (store *memoryTaskStore) MeasureTransaction(
-	ctx context.Context,
-	conditions []testkeyvalue.Condition,
-	mutations []testkeyvalue.Mutation,
-) (testkeyvalue.TransactionBudget, error) {
-	return fixtureowner.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
-}
-
 func (store *memoryTaskStore) conditionValueLocked(
 	condition testkeyvalue.Condition,
 	revision int64,
@@ -352,31 +339,4 @@ func assertTaskLifecycleValue(t *testing.T, store *memoryTaskStore, key string, 
 }
 func taskJournalTime() time.Time {
 	return time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
-}
-
-func testDirectMarker() testidempotency.IdempotencyMarker {
-	createdAt := testMarkerTime()
-	ciphertext := []byte("protected-intent")
-	digest := sha256.Sum256(ciphertext)
-	return testidempotency.IdempotencyMarker{
-		Kind: testidempotency.IdempotencyMarkerDirect, State: testidempotency.IdempotencyMarkerCompleted,
-		Locator: testidempotency.IdempotencyLocator{
-			ScopeKind: testidempotency.IdempotencyScopeTenant,
-			ScopeID:   ids.NewAt(ids.KindTenant, createdAt, 1),
-			Method:    http.MethodPatch, Route: "/projects/{id}", Key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		},
-		Intent: testidempotency.ProtectedIntentRecord{
-			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
-			CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: ciphertext,
-		},
-		Response: testidempotency.IdempotencyResponse{
-			Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"id":"prj"}`),
-		},
-		CreatedAt: createdAt, UpdatedAt: createdAt, TerminalAt: createdAt,
-		RetainUntil: createdAt.Add(testidempotency.MarkerRetention),
-	}
-}
-
-func testMarkerTime() time.Time {
-	return time.Date(2026, time.August, 20, 12, 0, 0, 123456789, time.UTC)
 }

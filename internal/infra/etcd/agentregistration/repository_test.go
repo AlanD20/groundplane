@@ -92,6 +92,18 @@ func TestLocalAgentRepositoryLifecycleAndAuthentication(t *testing.T) {
 	) {
 		t.Fatalf("ResolveAgentChannel(revoked) error = %v, want agent.not_found", err)
 	}
+	if err := repository.Delete(ctx, record.ID, record.Generation, deleting.Revision); !errors.Is(
+		err, errs.New(errs.KindStateConflict, ""),
+	) {
+		t.Fatalf("Delete(without durable work fence) = %v", err)
+	}
+	binding, err := repository.MaintenanceBinding(ctx, record.ID, record.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.PauseForward(ctx, binding); err != nil {
+		t.Fatal(err)
+	}
 	if err := repository.Delete(ctx, record.ID, record.Generation, deleting.Revision); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
