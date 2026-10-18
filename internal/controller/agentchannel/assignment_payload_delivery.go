@@ -45,53 +45,6 @@ type assignmentPayloadProducer struct {
 	cancel context.CancelFunc
 }
 
-func (delivery *assignmentPayloadDelivery) start(
-	stream agentpb.AgentChannel_ConnectServer,
-	assignment *agentpb.TaskAssignment,
-	release func(),
-	send func(agentpb.AgentChannel_ConnectServer, *agentpb.TaskAssignment) error,
-) error {
-	delivery.mu.Lock()
-	if delivery.ctx.Err() != nil {
-		delivery.mu.Unlock()
-		release()
-		return nil // The stream is closing; its durable claim remains for reconnect.
-	}
-	_, exists := delivery.active[assignment.AssignmentId]
-	if exists || len(delivery.active)+len(delivery.backupPayloads) >= delivery.limit {
-		delivery.mu.Unlock()
-		release()
-		return errs.New(errs.KindStateConflict, "assignment payload delivery is not available")
-	}
-	owned := proto.CloneOf(assignment)
-	ctx, cancel := context.WithDeadline(delivery.ctx, owned.ExecutionDeadline.AsTime())
-	delivery.active[owned.AssignmentId] = &assignmentPayloadProducer{cancel: cancel}
-	delivery.workers.Add(1)
-	delivery.mu.Unlock()
-	go func() {
-		defer delivery.workers.Done()
-		defer release()
-		defer clearScriptAssignmentArtifacts(owned.ScriptArtifacts)
-		defer clearBackingHookPlanSecrets(owned.Plan)
-		defer func() {
-			delivery.mu.Lock()
-			delete(delivery.active, owned.AssignmentId)
-			delivery.mu.Unlock()
-		}()
-		defer cancel()
-		queued := &assignmentPayloadStream{AgentChannel_ConnectServer: stream, delivery: delivery, ctx: ctx}
-		if err := send(queued, owned); err != nil && ctx.Err() == nil {
-			select {
-			case delivery.failures <- err:
-			default:
-				// The first failure ends this connection and preserves the durable
-				// assignment. Later failures cannot replace its cause.
-			}
-		}
-	}()
-	return nil
-}
-
 func (delivery *assignmentPayloadDelivery) stop(assignmentID string) {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
