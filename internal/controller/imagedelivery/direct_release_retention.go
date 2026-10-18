@@ -3,6 +3,7 @@ package imagedelivery
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -35,6 +36,11 @@ func (service *Service) retainDirectReleaseWorkImages(ctx context.Context, reten
 		return err
 	}
 	if view.Task.Task.Action != workexecution.ActionDeploy && view.Task.Task.Action != workexecution.ActionRollback {
+		return nil
+	}
+	if ids.Validate(ids.KindReleaseGroup, view.Task.Task.TargetID) == nil {
+		// The accepted Group root protects every member, including descriptors
+		// that have not been published yet. Do not demand a promoted rollout.
 		return nil
 	}
 	key := releaserender.ServiceRolloutKey(view.Task.Task.Scope.EnvironmentID, item.TaskID, item.ID)

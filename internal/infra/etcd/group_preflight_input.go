@@ -42,7 +42,7 @@ func (repository *ScriptRepository) PrepareGroupPreflightWork(ctx context.Contex
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Script is not captured in this Group's preflight")
 	}
 	hook := root.Record.Preflight[index]
-	key := groupReleaseDraftHookKey(task.ID, item.ID)
+	key := GroupReleasePreflightCaptureKey(task.ID, item.ID)
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
 	if err != nil {
 		return workqueue.Change{}, err

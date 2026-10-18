@@ -258,8 +258,7 @@ func (service *Service) DeployReleaseGroup(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return service.publish(ctx, scope, etcd.ReleaseDesiredGroup, groupID, group.Revision,
-		groupID, candidates, locator, durable, protected)
+	return service.publishGroupWork(ctx, scope, group, candidates, locator, durable, protected)
 }
 
 func (service *Service) RollbackReleaseGroup(ctx context.Context, groupID string,
@@ -291,8 +290,7 @@ func (service *Service) RollbackReleaseGroup(ctx context.Context, groupID string
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.publish(ctx, selection.scope, etcd.ReleaseDesiredGroup, groupID, selection.group.Revision,
-		groupID, selection.candidates, locator, durable, protected)
+	return service.publishGroupWork(ctx, selection.scope, selection.group, selection.candidates, locator, durable, protected)
 }
 
 func (service *Service) PreviewReleaseGroupRollback(

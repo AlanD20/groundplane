@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/controller/grouprestoration"
+	"github.com/AlanD20/groundplane/internal/controller/operationretention"
 	"github.com/AlanD20/groundplane/internal/controller/releaseoperation"
 	"github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -18,6 +19,7 @@ import (
 type directReleaseExecution struct {
 	restoration *grouprestoration.Service
 	admission   []workdispatch.Registration
+	retention   []operationretention.TaskRegistration
 	input       []workdispatch.InputRegistration
 	publication []workdispatch.PublicationRegistration
 	completion  []workdispatch.CompletionRegistration
@@ -52,6 +54,10 @@ func (platform *Platform) newDirectReleaseWork(queue *workqueue.Repository, netw
 	}
 	return directReleaseExecution{
 		restoration: restoration,
+		retention: []operationretention.TaskRegistration{
+			{Action: workexecution.ActionDeploy, Owner: publication, Drafts: publication},
+			{Action: workexecution.ActionRollback, Owner: publication},
+		},
 		admission: []workdispatch.Registration{
 			{Operation: workexecution.ReleaseRestoration, Executor: workexecution.Agent, Owner: restoration},
 		},

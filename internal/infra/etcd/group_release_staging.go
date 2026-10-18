@@ -23,7 +23,7 @@ func groupReleaseDraftSealKey(taskID string) string   { return groupReleaseDraft
 func groupReleaseDraftMemberKey(taskID, workID, part string) string {
 	return groupReleaseDraftKey(taskID) + "members/" + workID + "/" + part
 }
-func groupReleaseDraftHookKey(taskID, workID string) string {
+func GroupReleasePreflightCaptureKey(taskID, workID string) string {
 	return groupReleaseDraftKey(taskID) + "hooks/" + workID
 }
 
@@ -98,7 +98,7 @@ func (ledger *ReleaseLedger) stageGroupRelease(ctx context.Context, capture Grou
 		if err != nil {
 			return keyvalue.Condition{}, err
 		}
-		guard, err := ledger.stageGroupReleaseValue(ctx, groupReleaseDraftHookKey(task.ID, preflight.Execution.WorkItemID), value, guards)
+		guard, err := ledger.stageGroupReleaseValue(ctx, GroupReleasePreflightCaptureKey(task.ID, preflight.Execution.WorkItemID), value, guards)
 		clear(value)
 		if err != nil {
 			return keyvalue.Condition{}, err

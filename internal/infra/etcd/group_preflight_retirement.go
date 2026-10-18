@@ -40,7 +40,7 @@ func (repository *ScriptRepository) RetireUnpreparedGroupPreflight(ctx context.C
 	if index < 0 {
 		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Unprepared Script is not captured Group preflight")
 	}
-	key := groupReleaseDraftHookKey(task.ID, item.ID)
+	key := GroupReleasePreflightCaptureKey(task.ID, item.ID)
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
 	if err != nil {
 		return false, workqueue.Change{}, err

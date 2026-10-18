@@ -530,6 +530,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		authority.idempotency,
 		authority.intentCoordinator,
 		imageDiagnostics,
+		authority.releaseLedger,
 	)
 	if err != nil {
 		_ = platform.Close()

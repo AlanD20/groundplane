@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -18,15 +17,23 @@ func (collector *Collector) Run(ctx context.Context, interval time.Duration, rep
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	after := ""
+	drafts := make([]string, len(collector.draftOwners))
 	for {
+		for index, owner := range collector.draftOwners {
+			bounded, cancel := context.WithTimeout(ctx, 10*time.Second)
+			next, err := owner.CollectDrafts(bounded, drafts[index], time.Now().UTC())
+			cancel()
+			if err != nil {
+				report("", err)
+			} else {
+				drafts[index] = next
+			}
+		}
 		page, err := collector.queue.Expired(ctx, after, time.Now().UTC())
 		if err != nil {
 			return err
 		}
 		for _, candidate := range page.Candidates {
-			if action := candidate.Task.Task.Action; action != workexecution.ActionApply && action != workexecution.ActionCheck && action != workexecution.ActionFetch && action != workexecution.ActionRemove {
-				continue
-			}
 			bounded, cancel := context.WithTimeout(ctx, 10*time.Second)
 			_, err := collector.Collect(bounded, candidate.Task.Task.ID, time.Now().UTC())
 			cancel()

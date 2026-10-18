@@ -9,9 +9,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -97,6 +99,16 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 		}
 		result.retain(runner.ImageRef, "Retained Runner "+runner.ID)
 		return nil
+	}); err != nil {
+		return result, err
+	}
+	if err := read(scriptexecutions.ScriptExecutionKey(""), func(value keyvalue.KeyValue) error {
+		return retainScriptWorkImages(&result, value)
+	}); err != nil {
+		return result, err
+	}
+	if err := read(releasegroups.ExecutionCapturePrefix, func(value keyvalue.KeyValue) error {
+		return service.retainGroupReleaseImages(ctx, &result, value, revision)
 	}); err != nil {
 		return result, err
 	}

@@ -47,7 +47,7 @@ func (owner *GraphPublication) prepareGroupPublication(ctx context.Context, task
 	networks := make(map[string]etcd.DirectReleaseNetwork)
 	projectionID := ""
 	for index := range root.Record.Members {
-		member, err := owner.ledger.ReadGroupPublicationMember(ctx, task, root, index, revision)
+		member, err := owner.ledger.ReadCapturedGroupMember(ctx, task, root, index, revision)
 		if err != nil {
 			return workdispatch.PublicationBatch{}, err
 		}

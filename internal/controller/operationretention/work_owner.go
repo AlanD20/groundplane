@@ -49,6 +49,13 @@ func (collector *Collector) collectGraph(ctx context.Context, task workqueue.Tas
 		return false, err
 	}
 	if len(page.Items) == 0 {
+		var authority workqueue.Change
+		if owner := collector.taskOwners[task.Task.Action]; owner != nil {
+			authority, err = owner.PrepareTaskRetirement(ctx, task, revision, at)
+			if err != nil {
+				return false, err
+			}
+		}
 		var change workqueue.Change
 		var err error
 		if task.Task.Action == workexecution.ActionApply {
@@ -61,7 +68,7 @@ func (collector *Collector) collectGraph(ctx context.Context, task workqueue.Tas
 		}
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskEventsKey(task.Task.ID)})
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: scriptexecutions.SourceRetirementPrefix(task.Task.ID), Prefix: true})
-		result, err := collector.queue.Commit(ctx, change)
+		result, err := collector.queue.Commit(ctx, authority, change)
 		return result.Succeeded, err
 	}
 	item := page.Items[0]

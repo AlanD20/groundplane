@@ -24,16 +24,18 @@ import (
 )
 
 type Collector struct {
-	queue      *workqueue.Repository
-	connectors *connectorchecks.Repository
-	backings   *backingchecks.Repository
-	dns        *dnschecks.Repository
-	edge       *edgechecks.Repository
-	runners    *runnerchecks.Repository
-	images     *imageoperations.Repository
-	hierarchy  *etcd.HierarchyDeletionRepository
-	networks   *networkwork.InputRepository
-	workOwners map[workexecution.Operation]WorkOwner
+	queue       *workqueue.Repository
+	connectors  *connectorchecks.Repository
+	backings    *backingchecks.Repository
+	dns         *dnschecks.Repository
+	edge        *edgechecks.Repository
+	runners     *runnerchecks.Repository
+	images      *imageoperations.Repository
+	hierarchy   *etcd.HierarchyDeletionRepository
+	networks    *networkwork.InputRepository
+	workOwners  map[workexecution.Operation]WorkOwner
+	taskOwners  map[workexecution.Action]TaskOwner
+	draftOwners []DraftOwner
 }
 
 func New(queue *workqueue.Repository, connectors *connectorchecks.Repository,
@@ -42,6 +44,7 @@ func New(queue *workqueue.Repository, connectors *connectorchecks.Repository,
 	images *imageoperations.Repository,
 	hierarchy *etcd.HierarchyDeletionRepository,
 	networks *networkwork.InputRepository,
+	tasks []TaskRegistration,
 	registrations ...WorkRegistration,
 ) (*Collector, error) {
 	if queue == nil || connectors == nil || backings == nil || dns == nil || edge == nil || runners == nil || images == nil || hierarchy == nil || networks == nil {
@@ -54,7 +57,19 @@ func New(queue *workqueue.Repository, connectors *connectorchecks.Repository,
 		}
 		owners[registration.Operation] = registration.Owner
 	}
-	return &Collector{queue: queue, connectors: connectors, backings: backings, dns: dns, edge: edge, runners: runners, images: images, hierarchy: hierarchy, networks: networks, workOwners: owners}, nil
+	taskOwners := make(map[workexecution.Action]TaskOwner, len(tasks))
+	var drafts []DraftOwner
+	for _, registration := range tasks {
+		if registration.Owner == nil || taskOwners[registration.Action] != nil ||
+			registration.Action != workexecution.ActionDeploy && registration.Action != workexecution.ActionRollback {
+			return nil, errs.New(errs.KindInternal, "Task retention owner is invalid or duplicated")
+		}
+		taskOwners[registration.Action] = registration.Owner
+		if registration.Drafts != nil {
+			drafts = append(drafts, registration.Drafts)
+		}
+	}
+	return &Collector{queue: queue, connectors: connectors, backings: backings, dns: dns, edge: edge, runners: runners, images: images, hierarchy: hierarchy, networks: networks, workOwners: owners, taskOwners: taskOwners, draftOwners: drafts}, nil
 }
 
 // Collect performs at most one eight-attempt batch. False means another

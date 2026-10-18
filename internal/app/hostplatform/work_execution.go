@@ -421,12 +421,12 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		operationretention.WorkRegistration{Operation: workexecution.RemovalBackupObject, Owner: hierarchyRetention},
 		operationretention.WorkRegistration{Operation: workexecution.Hierarchy, Owner: hierarchyRetention},
 		operationretention.WorkRegistration{Operation: workexecution.Script, Owner: scripts},
-		operationretention.WorkRegistration{Operation: workexecution.Release, Owner: dependencies.Releases},
+		{Operation: workexecution.Release, Owner: dependencies.Releases}, {Operation: workexecution.ReleaseRestoration, Owner: directReleases.restoration},
 		operationretention.WorkRegistration{Operation: workexecution.EntrySettlement, Owner: entryWork},
 		operationretention.WorkRegistration{Operation: workexecution.EntryConfiguration, Owner: entryAgent},
 		operationretention.WorkRegistration{Operation: workexecution.Component, Owner: componentRetention},
 		operationretention.WorkRegistration{Operation: workexecution.ResourceDefinition, Owner: definitionWork}}...)
-	retention, err := operationretention.New(queue, connections.connectorRecords, connections.backingRecords, connections.dnsRecords, connections.edgeRecords, runnerRecords, imageRecords, hierarchyRecords, networkRecords, retentionOwners...)
+	retention, err := operationretention.New(queue, connections.connectorRecords, connections.backingRecords, connections.dnsRecords, connections.edgeRecords, runnerRecords, imageRecords, hierarchyRecords, networkRecords, directReleases.retention, retentionOwners...)
 	if err != nil {
 		return nil, err
 	}
