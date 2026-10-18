@@ -10,9 +10,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// renderSelectedArtifact materializes one captured Release without constructing
+// RenderServiceReleaseArtifact materializes one captured Release without constructing
 // a Task or generic execution plan. Unselected workload ownership remains intact.
-func renderSelectedArtifact(ctx context.Context, member releaserender.ReleaseTaskRenderMember) (*agentpb.ComposeArtifact, error) {
+func RenderServiceReleaseArtifact(ctx context.Context, member releaserender.ReleaseTaskRenderMember) (*agentpb.ComposeArtifact, error) {
 	render, intent := member.Render, member.Intent
 	if err := releaserender.ValidateReleaseRenderInput(render); err != nil {
 		return nil, err
@@ -24,7 +24,7 @@ func renderSelectedArtifact(ctx context.Context, member releaserender.ReleaseTas
 		render.EnvironmentID != intent.EnvironmentID || render.ArtifactID != intent.RenderInputID ||
 		render.CandidateWorkload != intent.CandidateWorkload || render.Strategy != intent.Strategy ||
 		render.Slot != intent.Slot {
-		return nil, errs.New(errs.KindValidationFailed, "Blueprint candidate differs from its captured Release")
+		return nil, errs.New(errs.KindValidationFailed, "Service candidate differs from its captured Release")
 	}
 	initialProxy, err := releaserender.InitialProxyConfiguration(member)
 	if err != nil {

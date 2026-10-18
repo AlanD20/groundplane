@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -23,6 +24,9 @@ func (service *Service) RetireWork(ctx context.Context, view workqueue.View, at 
 			return false, workqueue.Change{}, err
 		}
 		change, err := service.ledger.PrepareUnpublishedReleaseRetirement(ctx, view, at)
+		if err == nil {
+			change, err = service.retireDirectPreparation(ctx, view, change)
+		}
 		return err == nil, change, err
 	}
 	sources, ready, guards, err := service.retireCapturedSources(ctx, view, at)
@@ -32,6 +36,10 @@ func (service *Service) RetireWork(ctx context.Context, view workqueue.View, at 
 	defer clear(sources.Rollout.Record.CandidateArtifact)
 	if !final {
 		return true, guards, nil
+	}
+	guards, err = service.retireDirectPreparation(ctx, view, guards)
+	if err != nil {
+		return false, workqueue.Change{}, err
 	}
 	// Keep the immutable input until the last attempt is collected. These keys
 	// belong to execution, unlike the published Release and applied runtime.
@@ -50,6 +58,19 @@ func (service *Service) RetireWork(ctx context.Context, view workqueue.View, at 
 		)
 	}
 	return true, guards, nil
+}
+
+func (service *Service) retireDirectPreparation(ctx context.Context, view workqueue.View, change workqueue.Change) (workqueue.Change, error) {
+	if view.Task.Task.Action == workexecution.ActionApply {
+		return change, nil
+	}
+	prepared, err := service.ledger.PrepareDirectReleasePreparationRetirement(ctx, view)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, prepared.Conditions...)
+	change.Mutations = append(change.Mutations, prepared.Mutations...)
+	return change, nil
 }
 
 func (service *Service) PrepareAttemptRetirement(view workqueue.View, attempt workqueue.AttemptSnapshot) (workqueue.Change, error) {

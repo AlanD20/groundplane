@@ -17,6 +17,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -80,6 +81,7 @@ type prepareInput struct {
 	ServiceChanges    []blueprints.EnvironmentBlueprintServiceChange
 	Scripts           []scriptrecord.Record
 	Files             []taskmaterialization.Record
+	Configuration     *runtimeconfiguration.WorkCapture
 	Work              workqueue.View
 	OperationID       string
 	PlanID            string
@@ -129,6 +131,7 @@ func (service *Service) validatePrepareInput(ctx context.Context, input prepareI
 	if ctx == nil || service == nil || service.ledger == nil || service.plans == nil || input.AllocateNamed == nil ||
 		input.Work.Task.Task.Validate() != nil || input.Work.Item.Item.Validate() != nil ||
 		input.Work.Task.Task.Action != workexecution.ActionApply ||
+		input.Configuration != nil ||
 		input.Work.Item.Item.TaskID != input.Work.Task.Task.ID ||
 		input.Work.Item.Item.Operation != workexecution.Release ||
 		input.Work.Item.Item.Placement.Executor != workexecution.Agent ||

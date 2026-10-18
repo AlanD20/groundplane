@@ -92,7 +92,7 @@ func (service *Service) finishSelectedRuntime(
 			hookWork.Hooks[index].Execution.SnapshotID,
 		)
 	}
-	sourceMembers, err := service.ledger.BlueprintReleaseSourceMembers(ctx, manifest, hookWork.Hooks)
+	sourceMembers, err := service.ledger.ReleaseHookSourceMembers(ctx, manifest, hookWork.Hooks)
 	if err != nil {
 		return Prepared{}, err
 	}

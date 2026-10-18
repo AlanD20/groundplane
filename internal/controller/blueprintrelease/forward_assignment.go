@@ -23,7 +23,7 @@ func (service *Service) PrepareForwardAssignment(ctx context.Context,
 		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Blueprint Release cannot obtain this forward assignment")
 	}
 	view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
-	sources, err := service.ledger.LoadBlueprintReleaseForwardSources(ctx, view)
+	sources, err := service.ledger.LoadReleaseForwardSources(ctx, view)
 	if err != nil {
 		return workdispatch.Decision{}, err
 	}

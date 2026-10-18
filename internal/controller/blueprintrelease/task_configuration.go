@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type preparedWorkConfiguration struct {
@@ -24,11 +25,21 @@ func (service *Service) prepareWorkConfiguration(ctx context.Context, input prep
 	rollout releaserender.ServiceRolloutCapture,
 	files []taskmaterialization.Record,
 ) (result preparedWorkConfiguration, err error) {
-	capture, err := service.ledger.PrepareReleaseWorkConfiguration(ctx, input.Work,
-		input.AllocateNamed(ids.KindConfig, "release-configuration/"+input.Work.Item.Item.ID),
-		uint64(input.Projection.RenderGeneration), files)
-	if err != nil {
-		return preparedWorkConfiguration{}, err
+	var capture runtimeconfiguration.WorkCapture
+	if input.Configuration != nil {
+		capture = *input.Configuration
+		capture.Destinations = append([]string(nil), capture.Destinations...)
+		if len(files) != 0 || capture.Matches(input.Work.Task.Task, input.Work.Item.Item) != nil ||
+			capture.Generation != uint64(input.Projection.RenderGeneration) {
+			return preparedWorkConfiguration{}, errs.New(errs.KindStateConflict, "Release configuration differs from its accepted capture")
+		}
+	} else {
+		capture, err = service.ledger.PrepareReleaseWorkConfiguration(ctx, input.Work,
+			input.AllocateNamed(ids.KindConfig, "release-configuration/"+input.Work.Item.Item.ID),
+			uint64(input.Projection.RenderGeneration), files)
+		if err != nil {
+			return preparedWorkConfiguration{}, err
+		}
 	}
 	secrets, err := service.ledger.PrepareReleaseWorkSecretPins(ctx, input.Work, input.OperationID, capture)
 	if err != nil {

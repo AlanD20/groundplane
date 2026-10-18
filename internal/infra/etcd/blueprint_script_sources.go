@@ -19,11 +19,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// BlueprintReleaseSourceMembers derives the immutable ADR 0062 authority for
+// ReleaseHookSourceMembers derives the immutable ADR 0062 authority for
 // candidate-bound Script executions. Candidate intents already exist in the
 // sealed staging revision; runner snapshots are the only source bytes created
 // by the final owning transaction.
-func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
+func (ledger *ReleaseLedger) ReleaseHookSourceMembers(
 	ctx context.Context,
 	manifest releases.VersionedReleaseManifest,
 	hooks []ReleaseHookExecutionPublication,
@@ -84,26 +84,36 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			},
 		})
 
-		serviceValue, err := servicerecord.EncodeServiceRuntimeRecordStorage(sources.Service.Record)
-		if err != nil {
-			return nil, err
-		}
 		service := base
 		service.Source = sourceref.SourceIdentity{
 			Kind:      sourceref.SourceService,
 			ServiceID: execution.ServiceID,
 		}
-		serviceEvidence, err := blueprintStagedSourceEvidence(
-			snapshot.ServiceSource,
-			servicerecord.ServiceRuntimeKey(execution.ServiceID),
-			serviceValue,
-			execution.EnvironmentID,
-		)
-		clear(serviceValue)
-		if err != nil {
-			return nil, err
+		if snapshot.ServiceSource == nil || (snapshot.ServiceSource.Existing == nil) == (snapshot.ServiceSource.Staged == nil) {
+			return nil, errs.New(errs.KindValidationFailed, "Release hook Service source requires exactly one captured authority")
 		}
-		members = append(members, serviceEvidence.withReference(service))
+		if snapshot.ServiceSource.Existing != nil {
+			// Direct hooks retain the sealed runner snapshot, as manual Script
+			// execution does. Desired Service fields are not a standalone mutable
+			// record and their head revision is not the runtime sidecar revision.
+			service.SourceModRevision, service.SourceDigest = hook.SnapshotRevision, execution.SnapshotSHA256
+			members = append(members, scriptsourceevidence.ScriptSourcePreparationMember{Reference: service,
+				Evidence: scriptsourceevidence.ScriptSourceEvidence{Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{
+					SourceKey: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID),
+				}}})
+		} else {
+			serviceValue, err := servicerecord.EncodeServiceRuntimeRecordStorage(sources.Service.Record)
+			if err != nil {
+				return nil, err
+			}
+			serviceEvidence, err := releaseHookSourceEvidence(snapshot.ServiceSource,
+				servicerecord.ServiceRuntimeKey(execution.ServiceID), serviceValue, execution.EnvironmentID)
+			clear(serviceValue)
+			if err != nil {
+				return nil, err
+			}
+			members = append(members, serviceEvidence.withReference(service))
+		}
 
 		releaseKey := releases.ReleaseIntentStagingKey(
 			manifest.Record.PublicationID,

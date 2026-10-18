@@ -15,7 +15,7 @@ func (service *Service) PrepareForwardStart(ctx context.Context, view workqueue.
 	if service == nil || service.ledger == nil {
 		return workqueue.Change{}, errs.New(errs.KindInternal, "Blueprint Release start is not configured")
 	}
-	sources, err := service.ledger.LoadBlueprintReleaseStartSources(ctx, view)
+	sources, err := service.ledger.LoadReleaseStartSources(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

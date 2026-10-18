@@ -471,12 +471,11 @@ func (prepared PreparedReleaseWorkHooks) SnapshotRevision(id string) int64 {
 	return prepared.snapshotRevisions[id]
 }
 
-type blueprintStagedMember struct {
-	Evidence  scriptsourceevidence.ScriptSourceEvidence
-	Reference sourceref.Reference
+type releaseHookSourceMember struct {
+	Evidence scriptsourceevidence.ScriptSourceEvidence
 }
 
-func (member blueprintStagedMember) withReference(
+func (member releaseHookSourceMember) withReference(
 	reference sourceref.Reference,
 ) scriptsourceevidence.ScriptSourcePreparationMember {
 	reference.SourceModRevision = 0
@@ -486,19 +485,19 @@ func (member blueprintStagedMember) withReference(
 	}
 }
 
-func blueprintStagedSourceEvidence(
+func releaseHookSourceEvidence(
 	authority *agentpb.ScriptSourceAuthority,
 	key string,
 	value []byte,
 	ownerID string,
-) (blueprintStagedMember, error) {
+) (releaseHookSourceMember, error) {
 	if authority == nil || authority.Existing != nil || authority.Staged == nil {
-		return blueprintStagedMember{}, errs.New(
+		return releaseHookSourceMember{}, errs.New(
 			errs.KindValidationFailed,
-			"Blueprint Script source must use staged authority",
+			"Release hook staged source requires its captured candidate authority",
 		)
 	}
-	return blueprintStagedSourceEvidenceFromStage(
+	return releaseHookStagedSourceEvidence(
 		authority.Staged,
 		key,
 		value,
@@ -506,24 +505,24 @@ func blueprintStagedSourceEvidence(
 	)
 }
 
-func blueprintStagedSourceEvidenceFromStage(
+func releaseHookStagedSourceEvidence(
 	authority *agentpb.ScriptStagedSourceAuthority,
 	key string,
 	value []byte,
 	ownerID string,
-) (blueprintStagedMember, error) {
+) (releaseHookSourceMember, error) {
 	digest := sha256.Sum256(value)
 	if authority == nil || authority.EnvironmentId != ownerID ||
 		authority.FixedReadRevision > uint64(^uint64(0)>>1) ||
 		!bytes.Equal(authority.CanonicalValueSha256, digest[:]) {
-		return blueprintStagedMember{}, errs.New(
+		return releaseHookSourceMember{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Script staged source digest changed",
 		)
 	}
 	var canonical [sha256.Size]byte
 	copy(canonical[:], authority.CanonicalValueSha256)
-	return blueprintStagedMember{Evidence: scriptsourceevidence.ScriptSourceEvidence{
+	return releaseHookSourceMember{Evidence: scriptsourceevidence.ScriptSourceEvidence{
 		Staged: &scriptsourceevidence.ScriptStagedSourceEvidence{
 			SourceKey: key,
 			Stage: scriptsourceevidence.ScriptCandidateSourceStage{

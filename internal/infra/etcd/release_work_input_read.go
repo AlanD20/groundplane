@@ -103,6 +103,20 @@ func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(ctx context.Context, w
 	if err := input.ValidateRollout(rollout.Record); err != nil {
 		return empty, err
 	}
+	var directGuard *keyvalue.Condition
+	if task.Action == workexecution.ActionDeploy || task.Action == workexecution.ActionRollback {
+		request, guard, err := ledger.ReadDirectReleasePreparation(ctx, work)
+		if err != nil {
+			return empty, err
+		}
+		if err := request.Matches(task, item, rollout.Record); err != nil {
+			return empty, err
+		}
+		if err := request.MatchesInput(input); err != nil {
+			return empty, err
+		}
+		directGuard = &guard
+	}
 	publicationKey := releases.ReleasePublicationKey(rollout.Record.PublicationID)
 	manifestKey := releases.ReleaseManifestStagingKey(rollout.Record.PublicationID)
 	published, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{
@@ -141,6 +155,9 @@ func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(ctx context.Context, w
 		{Key: releaserender.ServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID), ModRevision: rollout.Revision},
 		{Key: publicationKey, ModRevision: published.Values[0].ModRevision},
 		{Key: manifestKey, ModRevision: published.Values[1].ModRevision},
+	}
+	if directGuard != nil {
+		conditions = append(conditions, *directGuard)
 	}
 	member, memberConditions, err := ledger.releaseWorkManifestMember(ctx, ReleaseWorkPublicationEvidence{
 		Work: work, ServiceRollout: &rollout,

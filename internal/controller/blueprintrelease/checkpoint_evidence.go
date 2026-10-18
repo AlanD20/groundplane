@@ -31,7 +31,7 @@ func (service *Service) PrepareCheckpointEvidence(ctx context.Context, view work
 	var sources etcd.ReleaseWorkSources
 	var err error
 	if report.Progress.InFlight {
-		sources, err = service.ledger.LoadBlueprintReleaseCheckpointSources(ctx, view)
+		sources, err = service.ledger.LoadReleaseCheckpointSources(ctx, view)
 	} else {
 		sources, err = service.ledger.LoadReleaseWorkInput(ctx, view.Work)
 	}

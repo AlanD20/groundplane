@@ -158,7 +158,7 @@ func (service *Service) stageSelectedRuntime(
 	if len(members) != 1 {
 		return preparedSelectedRuntime{}, errs.New(errs.KindValidationFailed, "Service work requires exactly one Release")
 	}
-	artifact, err := renderSelectedArtifact(ctx, members[0])
+	artifact, err := RenderServiceReleaseArtifact(ctx, members[0])
 	if err != nil {
 		return preparedSelectedRuntime{}, err
 	}
