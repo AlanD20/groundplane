@@ -17,6 +17,7 @@ func TestVerificationHelperUsesReadOnlyAuthorityAndDistinctDrift(t *testing.T) {
 	for _, status := range []int64{0, 1, 2} {
 		fake := &fakeEngine{attachConn: &recordingConn{}, waitStatus: status}
 		err := newTestRunner(fake).Run(t.Context(), Request{
+			Header:    materializerHeader(t),
 			VolumeDir: testVolumeDir, Stream: io.NopCloser(bytes.NewReader([]byte("frame"))), VerifyOnly: true,
 		})
 		switch status {

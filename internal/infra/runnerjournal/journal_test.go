@@ -11,9 +11,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// TASK-26: resume synced effects, not an older advisory HEAD; reject unsafe paths.
 func TestJournalRecoversLongestSyncedChainWhenHeadIsStale(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join(t.TempDir(), "runner-ownership")
@@ -94,7 +96,11 @@ func TestJournalRejectsPathIdentityBeforeFilesystemAccess(t *testing.T) {
 func testAttempt(entropy int64) runnerallocation.RunnerRuntimeAttempt {
 	at := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
 	return runnerallocation.RunnerRuntimeAttempt{
-		TaskID: ids.NewAt(ids.KindTask, at, entropy+100), Executor: controllerExecutor,
+		TaskID:         ids.NewAt(ids.KindTask, at, entropy+100),
+		WorkItemID:     ids.NewAt(ids.KindWorkItem, at, entropy+200),
+		AttemptID:      ids.NewAt(ids.KindAttempt, at, entropy+300),
+		AttemptNumber:  1,
+		Executor:       workexecution.Identity{Executor: workexecution.Controller, Generation: 1},
 		OwnershipNonce: strings.Repeat("a", 64),
 		Plan: runnerallocation.RuntimePlan{
 			RunnerID: ids.NewAt(ids.KindRunner, at, entropy), RuntimeEpoch: 1,

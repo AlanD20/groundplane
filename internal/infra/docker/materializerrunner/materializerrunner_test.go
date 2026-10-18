@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
+	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -28,6 +31,7 @@ const (
 		"env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
+// TASK-27: captured helper isolation and bounded cleanup, not live Docker proof.
 // Rationale: the helper is safe only when every Docker field matches the
 // accepted least-privilege policy and plaintext travels solely through stdin.
 func TestRunUsesExactHelperPolicyAndLifecycle(t *testing.T) {
@@ -38,7 +42,7 @@ func TestRunUsesExactHelperPolicyAndLifecycle(t *testing.T) {
 	fake := &fakeEngine{attachConn: connection, waitStatus: 0}
 	runner := newTestRunner(fake)
 
-	if err := runner.Run(context.Background(), Request{
+	if err := runner.Run(context.Background(), Request{Header: materializerHeader(t),
 		VolumeDir: testVolumeDir, Stream: stream,
 	}); err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -123,7 +127,7 @@ func TestRunRejectsInvalidRequestBeforeDocker(t *testing.T) {
 				stream = newTrackingStream(nil)
 			}
 			fake := &fakeEngine{}
-			err := newTestRunner(fake).Run(context.Background(), Request{
+			err := newTestRunner(fake).Run(context.Background(), Request{Header: materializerHeader(t),
 				VolumeDir: test.volumeDir, Stream: stream,
 			})
 			if !errors.Is(err, errs.New(errs.KindInternal, "")) {
@@ -148,7 +152,10 @@ func TestRunRejectsInvalidOwnedImageBeforeDocker(t *testing.T) {
 	fake := &fakeEngine{}
 	runner := newTestRunner(fake)
 	runner.image = "registry.example/groundplane-agent:latest"
-	err := runner.Run(context.Background(), Request{VolumeDir: testVolumeDir, Stream: stream})
+	err := runner.Run(
+		context.Background(),
+		Request{Header: materializerHeader(t), VolumeDir: testVolumeDir, Stream: stream},
+	)
 	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Run() error = %v, want internal", err)
 	}
@@ -237,7 +244,7 @@ func TestRunRemovesCreatedHelperOnEveryFailure(t *testing.T) {
 			fake := &fakeEngine{attachConn: connection}
 			test.configure(fake, stream, connection)
 
-			err := newTestRunner(fake).Run(context.Background(), Request{
+			err := newTestRunner(fake).Run(context.Background(), Request{Header: materializerHeader(t),
 				VolumeDir: testVolumeDir, Stream: stream,
 			})
 			if !errors.Is(err, errs.New(errs.KindInternal, "")) {
@@ -270,7 +277,7 @@ func TestRunCleanupFailureTakesPrecedence(t *testing.T) {
 		startErr:   errStart,
 		removeErr:  errRemove,
 	}
-	err := newTestRunner(fake).Run(context.Background(), Request{
+	err := newTestRunner(fake).Run(context.Background(), Request{Header: materializerHeader(t),
 		VolumeDir: testVolumeDir, Stream: stream,
 	})
 	if !errors.Is(err, errRemove) || errors.Is(err, errStart) {
@@ -287,7 +294,7 @@ func TestRunPreservesAttachmentAndRemovalCleanupFailures(t *testing.T) {
 		t.Parallel()
 		connection := &recordingConn{closeErr: errAttachClose}
 		fake := &fakeEngine{attachConn: connection}
-		err := newTestRunner(fake).Run(context.Background(), Request{
+		err := newTestRunner(fake).Run(context.Background(), Request{Header: materializerHeader(t),
 			VolumeDir: testVolumeDir, Stream: newTrackingStream([]byte("framed")),
 		})
 		if !errors.Is(err, errs.New(errs.KindInternal, "")) || !errors.Is(err, errAttachClose) {
@@ -302,7 +309,7 @@ func TestRunPreservesAttachmentAndRemovalCleanupFailures(t *testing.T) {
 		t.Parallel()
 		connection := &recordingConn{closeErr: errAttachClose}
 		fake := &fakeEngine{attachConn: connection, removeErr: errRemove}
-		err := newTestRunner(fake).Run(context.Background(), Request{
+		err := newTestRunner(fake).Run(context.Background(), Request{Header: materializerHeader(t),
 			VolumeDir: testVolumeDir, Stream: newTrackingStream([]byte("framed")),
 		})
 		if !errors.Is(err, errs.New(errs.KindInternal, "")) ||
@@ -323,7 +330,7 @@ func TestRunWrapsLiveContextDependencyCancellationSentinels(t *testing.T) {
 		t.Run(dependencyErr.Error(), func(t *testing.T) {
 			t.Parallel()
 			fake := &fakeEngine{attachConn: &recordingConn{}, startErr: dependencyErr}
-			err := newTestRunner(fake).Run(context.Background(), Request{
+			err := newTestRunner(fake).Run(context.Background(), Request{Header: materializerHeader(t),
 				VolumeDir: testVolumeDir, Stream: newTrackingStream([]byte("framed")),
 			})
 			if err == dependencyErr || !errors.Is(err, errs.New(errs.KindInternal, "")) {
@@ -346,7 +353,7 @@ func TestRunRequiresSuccessfulStreamCloseAndRemoval(t *testing.T) {
 		stream := newTrackingStream([]byte("framed"))
 		stream.closeErr = errStreamClose
 		fake := &fakeEngine{attachConn: &recordingConn{}}
-		err := newTestRunner(fake).Run(context.Background(), Request{
+		err := newTestRunner(fake).Run(context.Background(), Request{Header: materializerHeader(t),
 			VolumeDir: testVolumeDir, Stream: stream,
 		})
 		if !errors.Is(err, errStreamClose) || fake.removeID != "helper-id" {
@@ -357,7 +364,7 @@ func TestRunRequiresSuccessfulStreamCloseAndRemoval(t *testing.T) {
 	t.Run("remove", func(t *testing.T) {
 		t.Parallel()
 		fake := &fakeEngine{attachConn: &recordingConn{}, removeErr: errRemove}
-		err := newTestRunner(fake).Run(context.Background(), Request{
+		err := newTestRunner(fake).Run(context.Background(), Request{Header: materializerHeader(t),
 			VolumeDir: testVolumeDir, Stream: newTrackingStream([]byte("framed")),
 		})
 		if !errors.Is(err, errRemove) {
@@ -377,7 +384,7 @@ func TestRunCancellationUnblocksStreamAndForcesCleanup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan error, 1)
 	go func() {
-		result <- newTestRunner(fake).Run(ctx, Request{
+		result <- newTestRunner(fake).Run(ctx, Request{Header: materializerHeader(t),
 			VolumeDir: testVolumeDir, Stream: stream,
 		})
 	}()
@@ -423,7 +430,7 @@ func TestRunCancellationDrainsDockerWait(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan error, 1)
 	go func() {
-		result <- newTestRunner(fake).Run(ctx, Request{
+		result <- newTestRunner(fake).Run(ctx, Request{Header: materializerHeader(t),
 			VolumeDir: testVolumeDir,
 			Stream:    newTrackingStream([]byte("framed")),
 		})
@@ -459,7 +466,7 @@ func TestRunTreatsNotFoundRemovalAsSuccessful(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeEngine{attachConn: &recordingConn{}, removeErr: containerderrdefs.ErrNotFound}
-	if err := newTestRunner(fake).Run(context.Background(), Request{
+	if err := newTestRunner(fake).Run(context.Background(), Request{Header: materializerHeader(t),
 		VolumeDir: testVolumeDir,
 		Stream:    newTrackingStream([]byte("framed")),
 	}); err != nil {
@@ -479,7 +486,7 @@ func TestRunBoundsCleanupWithInjectedTimeout(t *testing.T) {
 	}
 	runner := newTestRunner(fake)
 	runner.cleanupTimeout = 10 * time.Millisecond
-	err := runner.Run(context.Background(), Request{
+	err := runner.Run(context.Background(), Request{Header: materializerHeader(t),
 		VolumeDir: testVolumeDir,
 		Stream:    newTrackingStream([]byte("framed")),
 	})
@@ -490,7 +497,9 @@ func TestRunBoundsCleanupWithInjectedTimeout(t *testing.T) {
 
 func assertCreatePolicy(t *testing.T, options client.ContainerCreateOptions) {
 	t.Helper()
-	if options.Name != "" || options.NetworkingConfig != nil || options.Platform != nil || options.Image != "" {
+	if !strings.HasPrefix(options.Name, "gp-materializer-") || options.NetworkingConfig != nil ||
+		options.Platform != nil ||
+		options.Image != "" {
 		t.Fatalf("create options contain an unexpected outer field: %#v", options)
 	}
 	config := options.Config
@@ -504,7 +513,14 @@ func assertCreatePolicy(t *testing.T, options client.ContainerCreateOptions) {
 		!equalStrings(config.Entrypoint, []string{helperEntrypoint}) {
 		t.Fatalf("helper command = cmd %#v entrypoint %#v", config.Cmd, config.Entrypoint)
 	}
-	if config.Env != nil || config.Labels != nil || !config.NetworkDisabled {
+	expectedLabels := map[string]string{
+		"io.groundplane.role":                     "configuration-materializer",
+		"io.groundplane.task":                     "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		"io.groundplane.stage":                    "step_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		"io.groundplane.environment":              "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		"io.groundplane.configuration-generation": "7",
+	}
+	if config.Env != nil || !maps.Equal(config.Labels, expectedLabels) || !config.NetworkDisabled {
 		t.Fatalf("request-bearing config surface is open: env=%#v labels=%#v network_disabled=%t",
 			config.Env, config.Labels, config.NetworkDisabled)
 	}
@@ -892,3 +908,33 @@ type fakeAddr string
 
 func (a fakeAddr) Network() string { return string(a) }
 func (a fakeAddr) String() string  { return string(a) }
+
+func materializerHeader(t *testing.T) entrymaterialization.Header {
+	t.Helper()
+	header, err := entrymaterialization.NewHeader(entrymaterialization.HeaderSpec{
+		TaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", StepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", Generation: 7,
+		Destination: "config/app/config.yaml", OutputKind: entrymaterialization.OutputPlainFile,
+		UID: 1000, GID: 1001, Mode: entrymaterialization.ModeReadOnly, Digest: entrymaterialization.DigestBytes(nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return header
+}
+
+func (*fakeEngine) ContainerInspect(
+	context.Context,
+	string,
+	client.ContainerInspectOptions,
+) (client.ContainerInspectResult, error) {
+	return client.ContainerInspectResult{}, errors.New("unexpected recovery inspection during forward materialization")
+}
+
+func (*fakeEngine) ContainerStop(
+	context.Context,
+	string,
+	client.ContainerStopOptions,
+) (client.ContainerStopResult, error) {
+	return client.ContainerStopResult{}, errors.New("unexpected recovery stop during forward materialization")
+}
