@@ -35,19 +35,26 @@ const (
 )
 
 func NewProgress(input Input, at time.Time) (Progress, error) {
-	if input.Attempt.Validate() != nil || input.Attempt.StartedAt == nil || input.Attempt.Direction != workexecution.Forward || input.Release == nil ||
-		at.IsZero() || at.Before(*input.Attempt.StartedAt) || !at.Before(input.Attempt.Deadline) {
+	if input.Attempt.Validate() != nil || input.Attempt.StartedAt == nil ||
+		input.Attempt.Direction != workexecution.Forward ||
+		input.Release == nil ||
+		at.IsZero() ||
+		at.Before(*input.Attempt.StartedAt) ||
+		!at.Before(input.Attempt.Deadline) {
 		return Progress{}, invalidProgress()
 	}
 	return Progress{AttemptID: input.Attempt.ID, Phase: Configuration, UpdatedAt: at.UTC()}, nil
 }
 
 func (progress Progress) Validate(input Input) error {
-	if input.Attempt.Validate() != nil || input.Attempt.StartedAt == nil || input.Release == nil || progress.AttemptID != input.Attempt.ID ||
-		progress.UpdatedAt.IsZero() || progress.UpdatedAt.Before(*input.Attempt.StartedAt) ||
+	if input.Attempt.Validate() != nil || input.Attempt.StartedAt == nil || input.Release == nil ||
+		progress.AttemptID != input.Attempt.ID ||
+		progress.UpdatedAt.IsZero() ||
+		progress.UpdatedAt.Before(*input.Attempt.StartedAt) ||
 		progress.InFlight != (progress.BeganAt != nil) ||
 		progress.InFlight != (progress.Sequence%2 == 1) ||
-		progress.BeganAt != nil && (progress.BeganAt.Before(*input.Attempt.StartedAt) || progress.BeganAt.After(progress.UpdatedAt)) ||
+		progress.BeganAt != nil &&
+			(progress.BeganAt.Before(*input.Attempt.StartedAt) || progress.BeganAt.After(progress.UpdatedAt)) ||
 		progress.Evidence != nil && progress.Evidence.Validate() != nil {
 		return invalidProgress()
 	}
@@ -68,7 +75,8 @@ func (progress Progress) Validate(input Input) error {
 			return invalidProgress()
 		}
 	case Rollout:
-		finalRollingCheck := input.Artifacts.Rolling != nil && progress.Rolling == nil && progress.Action == VerifyServing
+		finalRollingCheck := input.Artifacts.Rolling != nil && progress.Rolling == nil &&
+			progress.Action == VerifyServing
 		if progress.Hook != 0 || !finalRollingCheck && (input.Artifacts.Rolling != nil) != (progress.Rolling != nil) {
 			return invalidProgress()
 		}
@@ -101,11 +109,16 @@ func (progress Progress) Begin(input Input, at time.Time) (Progress, error) {
 	if err := progress.Validate(input); err != nil {
 		return Progress{}, err
 	}
-	if progress.InFlight || progress.Phase == Complete || at.Before(progress.UpdatedAt) || !at.Before(input.Attempt.Deadline) || progress.Sequence == ^uint64(0) {
+	if progress.InFlight || progress.Phase == Complete || at.Before(progress.UpdatedAt) ||
+		!at.Before(input.Attempt.Deadline) ||
+		progress.Sequence == ^uint64(0) {
 		return Progress{}, invalidProgress()
 	}
 	if progress.Rolling != nil {
-		return Progress{}, errs.New(errs.KindStateConflict, "rolling Release must use its captured per-replica phase cursor")
+		return Progress{}, errs.New(
+			errs.KindStateConflict,
+			"rolling Release must use its captured per-replica phase cursor",
+		)
 	}
 	started := at.UTC()
 	progress.Sequence++
@@ -119,7 +132,8 @@ func (progress Progress) Confirm(input Input, evidence workexecution.Input, at t
 	if err := progress.Validate(input); err != nil {
 		return Progress{}, err
 	}
-	if !progress.InFlight || progress.Rolling != nil || evidence.Validate() != nil || at.Before(progress.UpdatedAt) || progress.Sequence == ^uint64(0) {
+	if !progress.InFlight || progress.Rolling != nil || evidence.Validate() != nil || at.Before(progress.UpdatedAt) ||
+		progress.Sequence == ^uint64(0) {
 		return Progress{}, invalidProgress()
 	}
 	progress.Sequence++
@@ -136,6 +150,12 @@ func (progress Progress) advance(input Input) (Progress, error) {
 		progress.Hook++
 	case Rollout:
 		if progress.Rolling == nil {
+			// Post hooks may initialize the candidate before it can satisfy its
+			// healthcheck. They must finish before readiness or traffic changes.
+			if progress.Action == StartCandidate && len(releaseHooks(input, PostHooks)) > 0 {
+				progress.Phase, progress.Action = PostHooks, ""
+				return progress, progress.Validate(input)
+			}
 			next, err := nextRolloutAction(input, progress.Action)
 			if err != nil {
 				return Progress{}, err
@@ -145,7 +165,10 @@ func (progress Progress) advance(input Input) (Progress, error) {
 				return progress, progress.Validate(input)
 			}
 		}
-		progress.Phase, progress.Rolling = PostHooks, nil
+		progress.Phase, progress.Rolling = Complete, nil
+		if input.Artifacts.Rolling != nil {
+			progress.Phase = PostHooks
+		}
 	default:
 		return Progress{}, invalidProgress()
 	}
@@ -167,6 +190,9 @@ func (progress Progress) advance(input Input) (Progress, error) {
 	}
 	if progress.Phase == PostHooks && progress.Hook == uint32(len(releaseHooks(input, PostHooks))) {
 		progress.Phase, progress.Hook = Complete, 0
+		if input.Artifacts.Rolling == nil {
+			progress.Phase, progress.Action = Rollout, WaitCandidate
+		}
 	}
 	return progress, progress.Validate(input)
 }

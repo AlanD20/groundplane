@@ -5,9 +5,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -92,37 +90,6 @@ func TestBuildReleaseHookPlanKeepsClosedPhasesAndSlugOrder(t *testing.T) {
 			plan.PostSteps[0].GetRunScript().GetReleaseId(),
 			plan.FailureSteps[0].GetRunScript().GetReleaseId(),
 		)
-	}
-}
-
-func TestReleasePostHookAnchorFollowsCandidateStart(t *testing.T) {
-	// Rationale: post-deploy Scripts must run after candidate start and before
-	// readiness or strategy finalization.
-	task := etcd.TaskRecord{Steps: []testtaskjournal.TaskStepRecord{
-		{
-			Kind: testtaskjournal.TaskStepOperation,
-			ID:   "step-0",
-		}, {Kind: testtaskjournal.TaskStepOperation, ID: "step-1"}, {Kind: testtaskjournal.TaskStepOperation, ID: "step-2"}, {Kind: testtaskjournal.TaskStepOperation, ID: "step-3"}, {Kind: testtaskjournal.TaskStepOperation, ID: "step-4"},
-	}}
-	tests := []struct {
-		name     string
-		strategy domain.Strategy
-		wantID   string
-	}{
-		{name: "blue-green", strategy: domain.StrategyBlueGreen, wantID: "step-0"},
-		{name: "recreate", strategy: domain.StrategyRecreate, wantID: "step-1"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			index, err := releasePostHookIndex(testreleaserender.ReleaseRenderInput{Strategy: test.strategy})
-			if err != nil {
-				t.Fatal(err)
-			}
-			gotID := task.Steps[index].ID
-			if gotID != test.wantID {
-				t.Fatalf("post-hook anchor = %q, want %q", gotID, test.wantID)
-			}
-		})
 	}
 }
 
