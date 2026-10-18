@@ -10,7 +10,7 @@ import (
 )
 
 // ReleaseHookPhases is the Release owner's ordered hook selection. Before runs
-// before candidate activation, After follows successful workload health, and
+// before candidate activation, After follows candidate start, and
 // Failure is selected only by the captured failure/recovery policy. It contains
 // captured inputs, not generic steps, retries or implicit executable commands.
 type ReleaseHookPhases struct {
@@ -44,7 +44,10 @@ func OrderedReleaseHooks(operation domain.OperationKind, serviceID string,
 			result.Failure = append(result.Failure, hook)
 		default:
 			result.Clear()
-			return ReleaseHookPhases{}, errs.New(errs.KindValidationFailed, "captured hook trigger does not belong to this Release operation")
+			return ReleaseHookPhases{}, errs.New(
+				errs.KindValidationFailed,
+				"captured hook trigger does not belong to this Release operation",
+			)
 		}
 	}
 	compare := func(left, right ReleaseHookRenderInput) int {

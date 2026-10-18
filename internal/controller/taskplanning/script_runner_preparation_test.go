@@ -16,12 +16,14 @@ import (
 
 type scriptPreparationAgent struct{ calls int }
 
+const scriptPreparationAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
 func (agent *scriptPreparationAgent) GetSingleton(
 	context.Context,
 ) (testkeyvalue.Versioned[testlocalagents.LocalAgentRecord], error) {
 	agent.calls++
 	return testkeyvalue.Versioned[testlocalagents.LocalAgentRecord]{
-		Record: testlocalagents.LocalAgentRecord{ID: "setup-agent"},
+		Record: testlocalagents.LocalAgentRecord{ID: scriptPreparationAgentID},
 	}, nil
 }
 
@@ -36,7 +38,7 @@ func (images *scriptPreparationImages) ResolveWorkloadImages(
 	_ context.Context, agentID string, selectors []*agentpb.WorkloadImageSelector,
 ) (*agentpb.WorkloadImageResolutionResult, error) {
 	images.calls++
-	if agentID != "setup-agent" || len(selectors) != 1 {
+	if agentID != scriptPreparationAgentID || len(selectors) != 1 {
 		return nil, errs.New(errs.KindInternal, "unexpected setup image request")
 	}
 	images.reference = selectors[0].GetRequestedReference()
@@ -61,6 +63,7 @@ func scriptPreparationSources() testscriptsourcequeries.ScriptExecutionSources {
 	sources := explicitScriptEntrySources()
 	sources.Revision, sources.Script.Revision, sources.Script.ReadRevision = 23, 17, 23
 	sources.DesiredProjection.Revision, sources.DesiredProjection.ReadRevision = 19, 23
+	sources.Host.Binding.AgentID = scriptPreparationAgentID
 	return sources
 }
 

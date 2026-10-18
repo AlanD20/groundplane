@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
@@ -28,11 +29,13 @@ func TestScriptRunnerContextExplicitProjectsOnlyPreparedGrants(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		input := ManualScriptPlanInput{
+		input := ScriptRunnerInput{
+			TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
+			OperationID: ids.New(ids.KindOperation), PlanID: ids.New(ids.KindPlan),
 			Sources:     sources,
 			Preparation: prepared,
-			SnapshotID:  "snapshot",
-			ExecutionID: "execution",
+			SnapshotID:  ids.NewULID(),
+			ExecutionID: ids.NewULID(),
 		}
 		if staged {
 			input.Candidate = &BlueprintScriptCandidateSources{
@@ -53,7 +56,7 @@ func TestScriptRunnerContextExplicitProjectsOnlyPreparedGrants(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := &agentpb.ScriptRunnerProjection{
-			SnapshotId: "snapshot", Name: "gp-script-execution", Image: prepared.image.LocalImageID,
+			SnapshotId: input.SnapshotID, Name: "gp-script-" + strings.ToLower(input.ExecutionID), Image: prepared.image.LocalImageID,
 			Uid: 1001, Gid: 1002, WorkingDir: "/", Mounts: projection.Mounts,
 			EntryBindings: prepared.bindings, Labels: projection.Labels,
 			Entrypoint: []string{"/bin/sh"}, Command: []string{"/groundplane-script-body"}, StopGraceSeconds: 10,
