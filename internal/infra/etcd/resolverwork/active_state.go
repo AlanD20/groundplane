@@ -12,11 +12,7 @@ import (
 
 // Latest intent is not necessarily the execution holding this resource: a newer
 // action can queue while an older action still owns unproven effects.
-func readActiveState(ctx context.Context, store hostbindings.Reader, hostID, componentID string, raw []byte, revision int64) (workexecution.Item, *CapturedState, []keyvalue.Condition, error) {
-	owner, err := workqueue.DecodeClaimOwner(raw)
-	if err != nil {
-		return workexecution.Item{}, nil, nil, err
-	}
+func readActiveState(ctx context.Context, store hostbindings.Reader, hostID, componentID string, owner workqueue.ClaimOwner, revision int64) (workexecution.Item, *CapturedState, []keyvalue.Condition, error) {
 	key := workqueue.ItemKey(owner.WorkItemID)
 	read, err := readStateKeys(ctx, store, []string{key}, revision)
 	if err != nil {

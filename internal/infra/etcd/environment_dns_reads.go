@@ -108,7 +108,7 @@ func (repository *EnvironmentBlueprintRepository) GetEnvironmentDNS(
 func (repository *EnvironmentBlueprintRepository) environmentDNSAcknowledgement(ctx context.Context, revision int64) (resolverAcknowledgement, bool, bool, string, error) {
 	// Reads can display the last applied answers while a replacement is pending;
 	// execution still uses the strict serving/withdrawal purposes.
-	ack, ready, err := readResolverStateAcknowledgement(ctx, repository.store, revision, resolverWithdrawalFinalization)
+	ack, ready, err := readResolverStateAcknowledgement(ctx, repository.store, revision, resolverResourcePresentation)
 	if err != nil {
 		return ack, false, false, "", err
 	}

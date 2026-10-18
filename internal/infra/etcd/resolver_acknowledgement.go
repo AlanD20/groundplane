@@ -29,6 +29,7 @@ const (
 	resolverServingAcknowledgement resolverAcknowledgementPurpose = iota
 	resolverWithdrawalBeforeEffects
 	resolverWithdrawalFinalization
+	resolverResourcePresentation
 )
 
 func readResolverAcknowledgement(ctx context.Context, store hierarchyStore, revision int64) (resolverAcknowledgement, bool, error) {
@@ -81,7 +82,11 @@ func readResolverStateAcknowledgement(ctx context.Context, store hierarchyStore,
 	for i, key := range keys {
 		ack.conditions = append(ack.conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[i])})
 	}
-	ack.state, err = resolverwork.ReadLocalState(ctx, store, componentID, revision)
+	if purpose == resolverResourcePresentation {
+		ack.state, err = resolverwork.ReadLocalResourceState(ctx, store, componentID, revision)
+	} else {
+		ack.state, err = resolverwork.ReadLocalState(ctx, store, componentID, revision)
+	}
 	if err != nil {
 		return ack, false, err
 	}
@@ -90,11 +95,15 @@ func readResolverStateAcknowledgement(ctx context.Context, store hierarchyStore,
 		ack.pendingTaskID = active.TaskID
 	} else if ack.state.Pending != nil {
 		ack.pendingTaskID = ack.state.Pending.Input.TaskID
+	} else if purpose == resolverResourcePresentation {
+		if request := ack.state.Request; request != nil && request.Outcome == "" {
+			ack.pendingTaskID = request.TaskID
+		}
 	}
 	if purpose == resolverServingAcknowledgement && !component.Desired.Enabled {
 		return ack, false, errs.New(errs.KindValidationFailed, "Environment DNS requires an enabled platform CoreDNS resolver")
 	}
-	if ack.pendingTaskID != "" && purpose != resolverWithdrawalFinalization {
+	if ack.pendingTaskID != "" && purpose != resolverWithdrawalFinalization && purpose != resolverResourcePresentation {
 		return ack, false, nil
 	}
 	applied := ack.state.Applied
