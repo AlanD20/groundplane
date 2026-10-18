@@ -36,6 +36,7 @@ type Capture struct {
 	ComponentRevision  int64                                         `json:"component_revision"`
 	AppliedRevision    int64                                         `json:"applied_revision"`
 	IntentRevision     int64                                         `json:"intent_revision"`
+	RequestRevision    int64                                         `json:"request_revision"`
 	BaselineRevision   int64                                         `json:"baseline_revision"`
 	BaselineSHA256     string                                        `json:"baseline_sha256"`
 	ProjectionRevision int64                                         `json:"projection_revision"`
@@ -55,6 +56,7 @@ func (capture Capture) Validate(input resolverexecution.Input) error {
 		capture.ReadRevision <= 0 || capture.ComponentRevision <= 0 || capture.ComponentRevision > capture.ReadRevision ||
 		capture.AppliedRevision < 0 || capture.AppliedRevision > capture.ReadRevision ||
 		capture.IntentRevision < 0 || capture.IntentRevision > capture.ReadRevision ||
+		capture.RequestRevision < 0 || capture.RequestRevision > capture.ReadRevision ||
 		capture.BaselineRevision <= 0 || capture.BaselineRevision > capture.ReadRevision || !recordcodec.ValidSHA256(capture.BaselineSHA256) ||
 		capture.BaselineSHA256 != input.BaselineSHA256 ||
 		capture.ProjectionRevision < 0 || capture.ProjectionRevision > capture.ReadRevision ||

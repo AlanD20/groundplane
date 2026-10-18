@@ -3,14 +3,11 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"time"
 )
 
 // hostResolutionReconciliationChange is deliberately a persistence-only
@@ -21,39 +18,6 @@ type hostResolutionReconciliationChange struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
 	values     [][]byte
-}
-
-func newPlatformDNSResolverTask(componentID string, createdAt time.Time) TaskRecord {
-	return TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
-		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
-		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: taskjournal.TaskUpdate, Target: componentID,
-		Params: map[string]string{
-			taskjournal.TaskResourceKindParam: taskjournal.TaskResourceComponent,
-			TaskAutomaticReconcileParam:       "true",
-		},
-		Steps: []taskjournal.TaskStepRecord{
-			{
-				Kind: taskjournal.TaskStepOperation,
-				ID:   ids.New(ids.KindStep),
-			}, {Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
-		}, TimeoutSeconds: 480,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
-	}
-}
-
-func platformResolverTaskSteps(input platformcomponents.PlatformComponentTaskRenderInput) []taskjournal.TaskStepRecord {
-	count := 2
-	if input.EnsureService {
-		count = 4
-	} else if input.DisableService {
-		count = 2
-	}
-	steps := make([]taskjournal.TaskStepRecord, count)
-	for index := range steps {
-		steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
-	}
-	return steps
 }
 
 func isPlatformDNSResolverTask(task TaskRecord) bool {
@@ -216,139 +180,9 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		publication.clear()
 	}
 
-	resolverAttempt := isPlatformDNSResolverTaskAttempt(task)
-	if repository.platformResolverTaskPreparer == nil && !resolverAttempt {
-		return change, nil
-	}
-	resolver, err := repository.platformResolverAtRevision(ctx, revision)
-	if err != nil {
-		clearHostResolutionReconciliationChange(change)
-		return hostResolutionReconciliationChange{}, err
-	}
-	if resolverAttempt && resolver.Record.Desired.ID != task.Target {
-		clearHostResolutionReconciliationChange(change)
-		return hostResolutionReconciliationChange{}, errs.New(
-			errs.KindStateConflict,
-			"platform resolver Component changed",
-		)
-	}
-	if override, found := componentOverride[resolver.Record.Desired.ID]; found {
-		resolver.Record = override
-	}
-	active, err := repository.platformResolverActiveAtRevision(ctx, resolver.Record.Desired.ID, revision)
-	if err != nil {
-		clearHostResolutionReconciliationChange(change)
-		return hostResolutionReconciliationChange{}, err
-	}
-	if resolverAttempt && (active == nil || string(active.Value) != task.ID) {
-		clearHostResolutionReconciliationChange(change)
-		return hostResolutionReconciliationChange{}, errs.New(
-			errs.KindStateConflict, "platform resolver active Task ownership changed",
-		)
-	}
-	resolverTask := resolverAttempt
-	// A valid failure report is durable evidence, not a protocol violation.
-	// Retain exclusive resolver ownership until an explicit retry proves its
-	// effects settled; never auto-publish a successor over uncertain runtime.
-	if resolverTask && task.Result != nil && task.Result.ReconciliationRequired {
-		change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
-			Key: active.Key, ModRevision: active.ModRevision,
-		})
-		return change, nil
-	}
-	if active != nil && !resolverTask {
-		change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
-			Key: active.Key, ModRevision: active.ModRevision,
-		})
-		return change, nil
-	}
-	if !resolver.Record.Desired.Enabled {
-		if resolverTask {
-			change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
-				Key: active.Key, ModRevision: active.ModRevision,
-			})
-			change.mutations = append(
-				change.mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key},
-			)
-		}
-		return change, nil
-	}
-	if resolverTask {
-		if active == nil {
-			clearHostResolutionReconciliationChange(change)
-			return hostResolutionReconciliationChange{}, errs.New(
-				errs.KindStateConflict,
-				"platform resolver active Task is missing",
-			)
-		}
-		input, inputErr := repository.platformResolverTaskInputAtRevision(ctx, task, revision)
-		if inputErr != nil {
-			clearHostResolutionReconciliationChange(change)
-			return hostResolutionReconciliationChange{}, inputErr
-		}
-		stale := stored == nil || stored.InputRevision != input.HostResolutionInputRevision ||
-			stored.InputSHA256 != input.HostResolutionSHA256
-		selection, dnsConditions, dnsErr := dnsrecords.NewReader(repository.store).ResolveEnvironmentDNS(ctx, revision)
-		if dnsErr != nil {
-			clearHostResolutionReconciliationChange(change)
-			return hostResolutionReconciliationChange{}, dnsErr
-		}
-		for _, condition := range dnsConditions {
-			change.conditions = appendHostResolutionCondition(change.conditions, condition)
-		}
-		stale = stale || !platformcomponents.SameEnvironmentDNSBindings(input.EnvironmentDNS, selection.Captures)
-		if !stale {
-			change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
-				Key: active.Key, ModRevision: active.ModRevision,
-			})
-			change.mutations = append(
-				change.mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key},
-			)
-			return change, nil
-		}
-		successor := newPlatformDNSResolverTask(
-			resolver.Record.Desired.ID,
-			task.UpdatedAt.Add(time.Nanosecond),
-		)
-		contribution, contributionErr := repository.preparePlatformDNSResolverTaskContribution(
-			ctx, resolver, publication.record, successor, active, &task,
-			platformChange.observation, change.conditions,
-		)
-		if contributionErr != nil {
-			clearHostResolutionReconciliationChange(change)
-			return hostResolutionReconciliationChange{}, contributionErr
-		}
-		if !contribution.applies {
-			change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
-				Key: active.Key, ModRevision: active.ModRevision,
-			})
-			change.mutations = append(
-				change.mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key},
-			)
-			return change, nil
-		}
-		change.conditions = contribution.conditions
-		change.mutations = append(change.mutations, contribution.mutations...)
-		change.values = append(change.values, contribution.values...)
-		return change, nil
-	}
-	if repository.platformResolverTaskPreparer == nil {
-		return change, nil
-	}
-	successor := newPlatformDNSResolverTask(resolver.Record.Desired.ID, time.Now().UTC())
-	contribution, contributionErr := repository.preparePlatformDNSResolverTaskContribution(
-		ctx, resolver, publication.record, successor, nil, nil, nil, change.conditions,
-	)
-	if contributionErr != nil {
-		clearHostResolutionReconciliationChange(change)
-		return hostResolutionReconciliationChange{}, contributionErr
-	}
-	change.conditions = contribution.conditions
-	change.mutations = append(change.mutations, contribution.mutations...)
-	change.values = append(change.values, contribution.values...)
+	// DNS publication is owned by the native resource reconciler. Persisting
+	// this projection is the durable request; terminal settlement never creates
+	// another execution through the superseded event-journal engine.
 	return change, nil
 }
 

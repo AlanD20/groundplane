@@ -5,10 +5,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
-	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
@@ -28,17 +26,6 @@ type taskRepositoryStore interface {
 	) (etcdstore.TransactionBudget, error)
 	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
-
-// PlatformResolverTaskPreparer is the private composition-root seam for
-// rendering a generic dns-resolver Task. The repository owns publication and
-// fencing; the Controller owns the registered Component renderer.
-type PlatformResolverTaskPreparer func(
-	context.Context,
-	etcdstore.Versioned[componentrecord.Record],
-	resolutionrecord.HostResolutionProjectionRecord,
-	TaskRecord,
-	*platformcomponents.ComponentObservationRecord,
-) (platformcomponents.PlatformComponentTaskRenderInput, idempotencyrecord.IdempotencyMarker, error)
 
 // PlatformResolverComponentSelector selects the platform Component that
 // provides the registered dns-resolver capability. The repository supplies
@@ -96,26 +83,12 @@ const (
 // the journal codec; the daily Task pruning collector remains separate.
 type TaskRepository struct {
 	*groupstore.Preparer
-	store                        taskRepositoryStore
-	blueprintTerminalStore       blueprintTaskTerminalStore
-	blueprintChildStore          blueprintChildTransactionStore
-	retryPolicy                  taskCASRetryPolicy
-	platformResolverTaskPreparer PlatformResolverTaskPreparer
-	platformResolverSelector     PlatformResolverComponentSelector
-	dispatchClaims               chan struct{}
-}
-
-// SetPlatformResolverTaskPreparer installs the private renderer used only by
-// automatic host-resolution reconciliation. It must be configured before the
-// Controller starts accepting lifecycle acknowledgements.
-func (repository *TaskRepository) SetPlatformResolverTaskPreparer(
-	preparer PlatformResolverTaskPreparer,
-) error {
-	if repository == nil || preparer == nil {
-		return errs.New(errs.KindInternal, "platform resolver Task preparer is required")
-	}
-	repository.platformResolverTaskPreparer = preparer
-	return nil
+	store                    taskRepositoryStore
+	blueprintTerminalStore   blueprintTaskTerminalStore
+	blueprintChildStore      blueprintChildTransactionStore
+	retryPolicy              taskCASRetryPolicy
+	platformResolverSelector PlatformResolverComponentSelector
+	dispatchClaims           chan struct{}
 }
 
 // SetPlatformResolverComponentSelector installs the private capability

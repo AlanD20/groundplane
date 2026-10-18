@@ -40,16 +40,16 @@ func (applied Applied) Validate() error {
 		applied.Generation == 0 || applied.Desired.ID != applied.ComponentID || applied.Desired.Owner != core.ComponentOwnerPlatform ||
 		applied.Desired.OwnerID != "" || applied.Desired.Kind != core.ComponentKindCoreDNS ||
 		componentrecord.ValidateRecord(componentrecord.Record{Desired: applied.Desired}) != nil ||
-		applied.Configuration == nil || !resolverexecution.ValidFileOwner(applied.FileOwner) || !recordcodec.IsCanonicalUTC(applied.ObservedAt) ||
+		(applied.Configuration == nil) != (applied.FileOwner == "") || applied.Configuration != nil && !resolverexecution.ValidFileOwner(applied.FileOwner) || !recordcodec.IsCanonicalUTC(applied.ObservedAt) ||
 		!recordcodec.ValidSHA256(applied.BaselineSHA256) || !recordcodec.ValidSHA256(applied.ProjectionSHA256) {
 		return invalid("DNS resolver applied state has invalid resource identity or configuration")
 	}
 	configuration := applied.Configuration
-	if configuration.Validate(applied.ComponentID) != nil || configuration.Generation > applied.Generation {
+	if configuration != nil && (configuration.Validate(applied.ComponentID) != nil || configuration.Generation > applied.Generation) {
 		return invalid("DNS resolver applied state has invalid retained file configuration")
 	}
 	if applied.Desired.Enabled {
-		if configuration.Generation != applied.Generation ||
+		if configuration == nil || configuration.Generation != applied.Generation ||
 			resolverexecution.ValidateServingProof(*configuration, applied.ServingProof) != nil ||
 			applied.ServingProof.ObservedAt.AsTime().After(applied.ObservedAt) ||
 			platformcomponents.ValidateEnvironmentDNS(applied.EnvironmentDNS, applied.Hosts) != nil {

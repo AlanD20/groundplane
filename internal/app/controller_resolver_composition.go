@@ -52,7 +52,6 @@ func newControllerResolverComposition(
 		resolutionProjections,
 		componentRecords,
 		resolverBaselines,
-		componentRecords,
 		controllerdns.BaselineCapture(hostresolution.CaptureBaseline),
 		coreDNSRenderer,
 		actionCatalog,
@@ -64,18 +63,8 @@ func newControllerResolverComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize platform Component render planner: %w", err)
 	}
-	if err := tasks.SetPlatformResolverTaskPreparer(controllerdns.NewPlatformResolverTaskPreparer(
-		platformRenderPlanner, intentCoordinator,
-	)); err != nil {
-		return nil, fmt.Errorf("controller: configure platform resolver Task preparer: %w", err)
-	}
 	if err := tasks.SetPlatformResolverComponentSelector(platformRenderPlanner.SelectResolver); err != nil {
 		return nil, fmt.Errorf("controller: configure platform resolver Component selector: %w", err)
-	}
-	if err := controllerdns.EnsurePlatformResolverTask(
-		ctx, componentRecords, tasks, platformRenderPlanner, intentCoordinator,
-	); err != nil {
-		return nil, fmt.Errorf("controller: initialize platform resolver projection: %w", err)
 	}
 	platformComponentExecution, err := controllerdns.NewPlatformComponentExecutionPlanner(
 		cfg.Storage.VolumeRoot, componentRecords, resolverBaselines, actionCatalog,
@@ -88,9 +77,9 @@ func newControllerResolverComposition(
 	}
 	configuration, err := controllerdns.NewConfigurationReconciler(
 		tasks,
-		resolutionProjections,
-		zoneListeners,
-		imagefetch.RegistryAddress(cfg.Listen.HTTP),
+		componentRecords,
+		platformRenderPlanner,
+		intentCoordinator,
 		logger,
 	)
 	if err != nil {

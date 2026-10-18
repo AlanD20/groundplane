@@ -80,6 +80,13 @@ func PreparePublication(input resolverexecution.Input, capture Capture) (workque
 			{Type: keyvalue.MutationPut, Key: CaptureKey(input.WorkID), Value: authority},
 			{Type: keyvalue.MutationPut, Key: IntentKey(input.HostID, input.ComponentID), Value: []byte(input.WorkID)}}}
 	change.Conditions = append(change.Conditions, capture.References...)
+	request, err := prepareRequest(input, capture)
+	if err != nil {
+		keyvalue.ClearMutationValues(change.Mutations)
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, request.Conditions...)
+	change.Mutations = append(change.Mutations, request.Mutations...)
 	return change, nil
 }
 

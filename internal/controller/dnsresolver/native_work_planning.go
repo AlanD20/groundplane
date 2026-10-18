@@ -87,6 +87,10 @@ func (planner *PlatformRenderPlanner) PrepareWork(ctx context.Context, records *
 	if err != nil {
 		return PreparedWork{}, err
 	}
+	priorRequest, err := records.ReadRequest(ctx, request.HostID, desired.ID, readRevision)
+	if err != nil {
+		return PreparedWork{}, err
+	}
 	generation := uint64(1)
 	var previous *resolverexecution.Configuration
 	if hasApplied {
@@ -105,7 +109,8 @@ func (planner *PlatformRenderPlanner) PrepareWork(ctx context.Context, records *
 	capture := resolverwork.Capture{PlanID: request.PlanID, TaskID: request.TaskID, WorkID: request.WorkID, HostID: request.HostID,
 		TargetName: "CoreDNS", Actor: request.Actor, Action: request.Action, Desired: replacement.Desired, ReadRevision: readRevision,
 		ComponentRevision: current.Revision, AppliedRevision: applied.Revision, IntentRevision: intentRevision, BaselineRevision: baseline.Revision,
-		BaselineSHA256: baseline.Record.SHA256, ProjectionRevision: projection.Revision, Projection: projection.Record}
+		RequestRevision: priorRequest.Revision,
+		BaselineSHA256:  baseline.Record.SHA256, ProjectionRevision: projection.Revision, Projection: projection.Record}
 	if desired.Enabled {
 		resolvers, err := componentdns.ParseResolverBaseline(baseline.Record.Content)
 		if err != nil {
