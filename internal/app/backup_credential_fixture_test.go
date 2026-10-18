@@ -46,11 +46,14 @@ type nativeBackupCredentialFixture struct {
 	agentID       string
 	token         [32]byte
 	environmentID string
+	connectorKey  string
+	directKey     string
+	secretRecord  secrets.Record
 	secretKey     string
 	sourceKey     string
 }
 
-func newNativeBackupCredentialFixture(t *testing.T) *nativeBackupCredentialFixture {
+func newNativeBackupCredentialFixture(t *testing.T, secretScope core.SecretScope) *nativeBackupCredentialFixture {
 	t.Helper()
 	ctx := t.Context()
 	at := time.Now().UTC().Truncate(time.Millisecond).Add(-10 * time.Second)
@@ -136,9 +139,14 @@ func newNativeBackupCredentialFixture(t *testing.T) *nativeBackupCredentialFixtu
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.connectorKey, f.directKey = connectors.RecordKey(
+		connector.Connector.ID,
+	), connectors.CredentialValueKey(
+		connector.Connector.ID,
+	)
 	connectorPublication, err := f.store.Transact(ctx, nil, []keyvalue.Mutation{
-		{Type: keyvalue.MutationPut, Key: connectors.RecordKey(connector.Connector.ID), Value: connectorRaw},
-		{Type: keyvalue.MutationPut, Key: connectors.CredentialValueKey(connector.Connector.ID), Value: directRaw}})
+		{Type: keyvalue.MutationPut, Key: f.connectorKey, Value: connectorRaw},
+		{Type: keyvalue.MutationPut, Key: f.directKey, Value: directRaw}})
 	if err != nil || !connectorPublication.Succeeded {
 		t.Fatalf("Connector fixture publication: %v", err)
 	}
@@ -155,9 +163,19 @@ func newNativeBackupCredentialFixture(t *testing.T) *nativeBackupCredentialFixtu
 		"",
 		at.Add(-time.Hour),
 	)
+	if secretScope == core.SecretScopePlatform {
+		secret, err = secrets.NewPlatformRecord(
+			secret.Secret.ID,
+			"BACKUP_SECRET",
+			core.SecretKindEnvVar,
+			"",
+			at.Add(-time.Hour),
+		)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.secretRecord = secret
 	nativeBackupPut(t, f.store, secrets.RecordKey(secret.Secret.ID), secret, secrets.EncodeRecord)
 	if _, err := f.store.Put(ctx, secrets.SecretScopedKey(secret.Secret), []byte(secret.Secret.ID)); err != nil {
 		t.Fatal(err)

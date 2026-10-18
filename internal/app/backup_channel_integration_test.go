@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -26,7 +27,7 @@ import (
 // credential route must deliver the captured source on reconnect, not restore
 // generic assignment-driven delivery or retain plaintext in transport objects.
 func TestNativeBackupChannelDeliversCapturedCredentialsAcrossReconnect(t *testing.T) {
-	f := newNativeBackupCredentialFixture(t)
+	f := newNativeBackupCredentialFixture(t, core.SecretScopeProject)
 	server := newNativeBackupCredentialChannel(t, f)
 	for range 2 {
 		stream := newNativeBackupCredentialStream(t, f)
@@ -86,7 +87,7 @@ func TestNativeBackupChannelDeliversCapturedCredentialsAcrossReconnect(t *testin
 func TestNativeBackupChannelRejectsUnauthorizedDeliveryAndClearsFailedSend(t *testing.T) {
 	for _, failure := range []string{"token", "attempt", "send"} {
 		t.Run(failure, func(t *testing.T) {
-			f := newNativeBackupCredentialFixture(t)
+			f := newNativeBackupCredentialFixture(t, core.SecretScopeProject)
 			server := newNativeBackupCredentialChannel(t, f)
 			stream := newNativeBackupCredentialStream(t, f)
 			switch failure {

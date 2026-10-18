@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,7 +18,7 @@ import (
 func TestNativeBackupCredentialGrantFencesConcurrentChanges(t *testing.T) {
 	for _, mutation := range []string{"secret revision", "source removal", "Task revision", "Agent process", "unknown commit"} {
 		t.Run(mutation, func(t *testing.T) {
-			f := newNativeBackupCredentialFixture(t)
+			f := newNativeBackupCredentialFixture(t, core.SecretScopeProject)
 			switch mutation {
 			case "secret revision":
 				f.store.before = func() { f.rewrite(t, f.secretKey) }
@@ -66,7 +67,7 @@ func TestNativeBackupCredentialGrantFencesConcurrentChanges(t *testing.T) {
 // TASK-50: fixed-revision mixed Connector/Secret evidence must yield owned slots
 // only after native admission; reconnect revalidates without accumulating grants.
 func TestNativeBackupCredentialGrantDeliversOwnedSlotsAndRevalidates(t *testing.T) {
-	f := newNativeBackupCredentialFixture(t)
+	f := newNativeBackupCredentialFixture(t, core.SecretScopeProject)
 	f.resolveAndCheck(t)
 	f.resolveAndCheck(t)
 	grants, err := f.store.Range(t.Context(), keyvalue.RangeRequest{
@@ -153,6 +154,8 @@ func (crypt *nativeBackupCredentialCrypt) Open(_ context.Context, ciphertext []b
 		value = []byte(`{"access_key":"app-access"}`)
 	case "native-secret-envelope":
 		value = []byte("app-secret")
+	case "native-platform-envelope":
+		value = []byte("platform-secret")
 	default:
 		return nil, errs.New(errs.KindInternal, "unexpected fixture ciphertext")
 	}
