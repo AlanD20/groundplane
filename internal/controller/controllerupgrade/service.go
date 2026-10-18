@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"net/http"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -33,12 +34,11 @@ type AgentInventory interface {
 	ListHealth(context.Context) ([]localagent.Health, error)
 }
 type UpdateTaskStore interface {
-	CreateTask(
+	CreateControllerSoftwareWork(
 		context.Context,
-		etcd.TaskRecord,
+		controllersoftware.Capture,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	LatestControllerUpdate(context.Context) (etcdstore.Versioned[etcd.TaskRecord], bool, error)
 }
 
 type ServiceDependencies struct {
@@ -48,6 +48,7 @@ type ServiceDependencies struct {
 	Unit                BootstrapUnit
 	Agents              AgentInventory
 	Tasks               UpdateTaskStore
+	Records             *controllersoftware.Repository
 	Evidence            requestidempotency.EvidenceRepository
 	Intents             *requestidempotency.Coordinator
 	ProcessDigest       upgrade.Digest
@@ -61,6 +62,7 @@ type Service struct {
 	unit           BootstrapUnit
 	agents         AgentInventory
 	tasks          UpdateTaskStore
+	records        *controllersoftware.Repository
 	evidence       requestidempotency.EvidenceRepository
 	intents        *requestidempotency.Coordinator
 	process        upgrade.Digest
@@ -70,12 +72,12 @@ type Service struct {
 
 func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if dependencies.Unit == nil || dependencies.Agents == nil || dependencies.Tasks == nil ||
-		dependencies.Evidence == nil || dependencies.Intents == nil || !dependencies.ProcessDigest.Valid() ||
+		dependencies.Evidence == nil || dependencies.Intents == nil || dependencies.Records == nil || !dependencies.ProcessDigest.Valid() ||
 		(dependencies.BootstrapAgentImage != "" && !imageref.IsDigestPinned(dependencies.BootstrapAgentImage)) {
 		return nil, errs.New(errs.KindInternal, "controller update service dependencies are invalid")
 	}
 	return &Service{catalog: dependencies.Catalog, unit: dependencies.Unit, agents: dependencies.Agents,
-		tasks: dependencies.Tasks, evidence: dependencies.Evidence, intents: dependencies.Intents,
+		tasks: dependencies.Tasks, records: dependencies.Records, evidence: dependencies.Evidence, intents: dependencies.Intents,
 		process: dependencies.ProcessDigest, bootstrapImage: dependencies.BootstrapAgentImage, now: time.Now}, nil
 }
 
@@ -91,7 +93,7 @@ func (service *Service) UpdateController(
 func (service *Service) UpdateControllerFromPredecessor(ctx context.Context, release, key string,
 	predecessor *upgrade.AgentPredecessor,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.updateController(ctx, release, key, func(input Input) error {
+	return service.updateController(ctx, release, key, func(input upgrade.Input) error {
 		if predecessor == nil && input.Agent == nil ||
 			predecessor != nil && input.Agent != nil && *predecessor == *input.Agent {
 			return nil
@@ -103,7 +105,7 @@ func (service *Service) UpdateControllerFromPredecessor(ctx context.Context, rel
 func (service *Service) updateController(
 	ctx context.Context,
 	release, key string,
-	validate func(Input) error,
+	validate func(upgrade.Input) error,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
@@ -142,11 +144,8 @@ func (service *Service) updateController(
 		}
 	}
 	now := service.now().UTC()
-	task, err := NewTask(now, key, input)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	raw, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	capture := controllersoftware.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan), Input: input, CreatedAt: now}
+	raw, err := json.Marshal(apiTypes.TaskAccepted{TaskID: capture.TaskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -161,60 +160,60 @@ func (service *Service) updateController(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(intent.Ciphertext)
-	result, err := service.tasks.CreateTask(ctx, task, idempotencyrecord.IdempotencyMarker{
+	result, err := service.tasks.CreateControllerSoftwareWork(ctx, capture, idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending, Locator: locator,
-		Intent: intent, Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+		Intent: intent, Response: response, TaskID: capture.TaskID, CreatedAt: now, UpdatedAt: now,
 	})
 	return service.resolvePublication(ctx, locator, evidence, result, err, response)
 }
 
-func (service *Service) freeze(ctx context.Context, release upgrade.Digest) (Input, error) {
+func (service *Service) freeze(ctx context.Context, release upgrade.Digest) (upgrade.Input, error) {
 	if service.catalog == nil {
-		return Input{}, bootstrapUnavailable()
+		return upgrade.Input{}, bootstrapUnavailable()
 	}
 	journal, found, err := service.catalog.Current(ctx)
 	if err != nil {
-		return Input{}, err
+		return upgrade.Input{}, err
 	}
 	if found {
 		if err := journal.Validate(); err != nil {
-			return Input{}, err
+			return upgrade.Input{}, err
 		}
 		if !journal.Phase.Settled() {
-			return Input{}, errs.New(errs.KindResourceInUse, "controller update recovery is active")
+			return upgrade.Input{}, errs.New(errs.KindResourceInUse, "controller update recovery is active")
 		}
 	}
 	manifest, err := service.catalog.Inspect(ctx, release)
 	if err != nil {
-		return Input{}, err
+		return upgrade.Input{}, err
 	}
 	installed, err := service.catalog.Installed(ctx)
 	if err != nil {
-		return Input{}, err
+		return upgrade.Input{}, err
 	}
 	if installed != service.process {
-		return Input{}, errs.New(errs.KindStateConflict, "installed and running Controller differ")
+		return upgrade.Input{}, errs.New(errs.KindStateConflict, "installed and running Controller differ")
 	}
 	if err := service.unit.VerifyBootstrap(ctx); err != nil {
-		return Input{}, err
+		return upgrade.Input{}, err
 	}
 	agents, err := service.agents.ListHealth(ctx)
 	if err != nil {
-		return Input{}, err
+		return upgrade.Input{}, err
 	}
 	if len(agents) > 1 {
-		return Input{}, errs.New(errs.KindStateConflict, "native update requires one local Agent")
+		return upgrade.Input{}, errs.New(errs.KindStateConflict, "native update requires one local Agent")
 	}
-	input := Input{Release: release, Manifest: manifest, PreviousController: installed}
+	input := upgrade.Input{Release: release, Manifest: manifest, PreviousController: installed}
 	if len(agents) == 1 {
 		agent := agents[0].Agent
 		if agent.Phase != localagent.PhaseReady || !agents[0].Healthy || agent.Generation > math.MaxUint64-4 {
-			return Input{}, errs.New(errs.KindResourceInUse, "local Agent is not ready for coordinated update")
+			return upgrade.Input{}, errs.New(errs.KindResourceInUse, "local Agent is not ready for coordinated update")
 		}
 		input.Agent = &upgrade.AgentPredecessor{ID: agent.ID, Image: agent.Image, Generation: agent.Generation}
 	}
 	if err := input.Validate(); err != nil {
-		return Input{}, err
+		return upgrade.Input{}, err
 	}
 	return input, nil
 }

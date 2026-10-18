@@ -4,20 +4,19 @@ import (
 	"context"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/common/taskprogress"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
-	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (coordinator *Coordinator) prepare(
-	ctx context.Context, operation *nativeOperation, prepared bool,
-	progress *controllertask.Progress,
-) (taskjournal.TaskStatus, error) {
+	ctx context.Context, operation *nativeOperation,
+	progress Progress,
+) (workexecution.Outcome, error) {
 	expected := operation.expected
 	budget := min(expected.CandidateDeadline().Sub(coordinator.now()), upgrade.DrainTimeoutSeconds*time.Second)
 	preparation, cancel := context.WithTimeout(ctx, budget)
@@ -41,9 +40,6 @@ func (coordinator *Coordinator) prepare(
 			return coordinator.journal.Prepare(ctx, expected)
 		})
 	}
-	if err := progress.Err(); err != nil {
-		return "", err
-	}
 	if ctx.Err() != nil {
 		return "", ctx.Err()
 	}
@@ -56,24 +52,19 @@ func (coordinator *Coordinator) prepare(
 		}
 		if found {
 			if journal.Phase == upgrade.PhaseCancelled {
-				return coordinator.settle(operation, taskjournal.TaskStatusAborted), nil
+				return coordinator.settle(operation, workexecution.Cancelled), nil
 			}
 			// A copy/fsync response may be lost after journal publication.
 			// Retain its claim rather than treating the failure as no effect.
 			return "", preparationErr
 		}
-		if prepared {
-			return "", errs.New(errs.KindStateConflict, "native preparation journal disappeared")
-		}
 		coordinator.mu.Lock()
 		aborted := operation.aborted
 		operation.failure = taskprogress.CaptureControllerFailure(preparationErr)
 		coordinator.mu.Unlock()
-		status := taskjournal.TaskStatusFailed
+		status := workexecution.Failed
 		if aborted {
-			status = taskjournal.TaskStatusAborted
-		} else if !coordinator.now().Before(expected.Deadline) {
-			status = taskjournal.TaskStatusTimedOut
+			status = workexecution.Cancelled
 		}
 		return coordinator.settle(operation, status), nil
 	}
@@ -96,7 +87,7 @@ func (coordinator *Coordinator) prepare(
 		return "", err
 	}
 	if phase == upgrade.PhaseCancelled {
-		return coordinator.settle(operation, taskjournal.TaskStatusAborted), nil
+		return coordinator.settle(operation, workexecution.Cancelled), nil
 	}
 	return coordinator.handoff(ctx, operation, progress)
 }
@@ -160,7 +151,7 @@ func (coordinator *Coordinator) validateAndDrain(ctx context.Context, operation 
 	}
 }
 
-func (coordinator *Coordinator) Abort(ctx context.Context, taskID string) error {
+func (coordinator *Coordinator) RequestAbort(ctx context.Context, taskID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -168,7 +159,7 @@ func (coordinator *Coordinator) Abort(ctx context.Context, taskID string) error 
 	defer coordinator.mu.Unlock()
 	operation := coordinator.active
 	if operation == nil || operation.expected.TaskID != taskID || operation.settled != "" {
-		return errs.New(errs.KindStateConflict, "native controller update Task is not active")
+		return nil // Native start/settlement CAS resolves an unstarted or completed race.
 	}
 	journal, found, err := coordinator.current(ctx, operation)
 	if err != nil {
@@ -182,10 +173,7 @@ func (coordinator *Coordinator) Abort(ctx context.Context, taskID string) error 
 			}
 		case upgrade.PhaseCancelled:
 		default:
-			return errs.New(
-				errs.KindResourceInUse,
-				"native controller activation is committed; recovery cannot be aborted",
-			)
+			return nil // Cutover already committed; preserve qualification/recovery.
 		}
 	}
 	operation.aborted = true

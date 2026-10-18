@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/etcdconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
@@ -20,22 +21,23 @@ import (
 )
 
 type Service struct {
-	preparations *preparationrecord.Repository
-	etcd         *etcdconfiguration.Repository
-	runners      *runnerwork.Repository
-	components   *componentwork.InputRepository
-	queue        *workqueue.Repository
-	images       *imageoperations.Repository
-	diagnostics  *executiondiagnostics.Repository
-	retries      *workdispatch.Retries
-	hierarchy    *etcd.HierarchyDeletionRepository
+	controllerSoftware *controllersoftware.Repository
+	preparations       *preparationrecord.Repository
+	etcd               *etcdconfiguration.Repository
+	runners            *runnerwork.Repository
+	components         *componentwork.InputRepository
+	queue              *workqueue.Repository
+	images             *imageoperations.Repository
+	diagnostics        *executiondiagnostics.Repository
+	retries            *workdispatch.Retries
+	hierarchy          *etcd.HierarchyDeletionRepository
 }
 
-func New(queue *workqueue.Repository, images *imageoperations.Repository, diagnostics *executiondiagnostics.Repository, retries *workdispatch.Retries, hierarchy *etcd.HierarchyDeletionRepository, components *componentwork.InputRepository, runners *runnerwork.Repository, etcdConfig *etcdconfiguration.Repository, preparations *preparationrecord.Repository) (*Service, error) {
-	if queue == nil || images == nil || diagnostics == nil || retries == nil || hierarchy == nil || components == nil || runners == nil || etcdConfig == nil || preparations == nil {
+func New(queue *workqueue.Repository, images *imageoperations.Repository, diagnostics *executiondiagnostics.Repository, retries *workdispatch.Retries, hierarchy *etcd.HierarchyDeletionRepository, components *componentwork.InputRepository, runners *runnerwork.Repository, etcdConfig *etcdconfiguration.Repository, preparations *preparationrecord.Repository, controllerSoftware *controllersoftware.Repository) (*Service, error) {
+	if queue == nil || images == nil || diagnostics == nil || retries == nil || hierarchy == nil || components == nil || runners == nil || etcdConfig == nil || preparations == nil || controllerSoftware == nil {
 		return nil, errs.New(errs.KindInternal, "Task inspection requires execution storage")
 	}
-	return &Service{queue: queue, images: images, diagnostics: diagnostics, retries: retries, hierarchy: hierarchy, components: components, runners: runners, etcd: etcdConfig, preparations: preparations}, nil
+	return &Service{queue: queue, images: images, diagnostics: diagnostics, retries: retries, hierarchy: hierarchy, components: components, runners: runners, etcd: etcdConfig, preparations: preparations, controllerSoftware: controllerSoftware}, nil
 }
 
 type Summary struct {

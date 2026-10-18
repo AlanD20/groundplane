@@ -3,20 +3,21 @@ package controllerupgrade
 import (
 	"context"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type RecoveryClaims interface {
-	ListControllerTaskClaims(context.Context) ([]etcd.TaskAssignment, error)
+// RecoverySource resolves a local journal through its exact native work and
+// first assignment, including protection retained for explicit cleanup Retry.
+type RecoverySource interface {
+	ControllerRecovery(context.Context, string) (upgrade.Journal, error)
 }
 
-// RestoreJournal rejects orphaned native handoff state before any listener
-// opens. A journal is not independent execution authority: the durable Task
-// claim must still exist and match its frozen operation.
-func (coordinator *Coordinator) RestoreJournal(ctx context.Context, claims RecoveryClaims) error {
-	if ctx == nil || claims == nil {
-		return errs.New(errs.KindInternal, "native startup recovery claims are required")
+// RestoreJournal establishes admission before any Agent listener opens. A local
+// journal cannot invent execution authority or translate a retired Task format.
+func (coordinator *Coordinator) RestoreJournal(ctx context.Context, source RecoverySource) error {
+	if ctx == nil || source == nil {
+		return errs.New(errs.KindInternal, "native startup recovery source is required")
 	}
 	journal, found, err := coordinator.journal.Current(ctx)
 	if err != nil || !found {
@@ -28,12 +29,12 @@ func (coordinator *Coordinator) RestoreJournal(ctx context.Context, claims Recov
 	if journal.Phase.Settled() {
 		return nil
 	}
-	active, err := claims.ListControllerTaskClaims(ctx)
+	expected, err := source.ControllerRecovery(ctx, journal.TaskID)
 	if err != nil {
 		return err
 	}
-	if len(active) != 1 || active[0].Task.Record.ID != journal.TaskID {
-		return errs.New(errs.KindStateConflict, "native recovery journal has no matching durable Task claim")
+	if !expected.SameOperation(journal) {
+		return errs.New(errs.KindStateConflict, "native handoff journal has no matching captured work")
 	}
-	return coordinator.Restore(ctx, active[0])
+	return coordinator.Restore(ctx, expected)
 }

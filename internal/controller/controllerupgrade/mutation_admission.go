@@ -10,7 +10,7 @@ import (
 // HTTP listener is only a qualification prerequisite, not permission for trial
 // code to publish schema its predecessor cannot decode. Native acceptance
 // replay is guarded separately by UpdateController's protected publication path.
-func (service *Service) CheckMutation(ctx context.Context, nativeAbortTaskID string) error {
+func (service *Service) CheckMutation(ctx context.Context, recoveryTaskID string) error {
 	if ctx == nil || service == nil {
 		return errs.New(errs.KindInternal, "native mutation admission is not configured")
 	}
@@ -27,7 +27,7 @@ func (service *Service) CheckMutation(ctx context.Context, nativeAbortTaskID str
 	if err := journal.Validate(); err != nil {
 		return err
 	}
-	if journal.Phase.Settled() || nativeAbortTaskID == journal.TaskID {
+	if journal.Phase.Settled() || recoveryTaskID == journal.TaskID {
 		return nil
 	}
 	return errs.New(errs.KindResourceInUse, "Controller recovery is active; ordinary mutations are paused")

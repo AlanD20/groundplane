@@ -11,8 +11,8 @@ import (
 )
 
 // MutationAdmission keeps ordinary operator and scheduled writes outside an
-// unfinished native recovery. A nonempty id is only the exact Task Abort request;
-// it does not authorize any other mutation of that Task or its resources.
+// unfinished native recovery. A nonempty id permits only that Task's Abort or
+// operation-classified Retry; resource mutation remains paused.
 type MutationAdmission interface {
 	CheckMutation(context.Context, string) error
 }
@@ -30,7 +30,7 @@ func (server *Server) admitHTTPMutation(request *http.Request) *errs.Error {
 		const prefix = "/api/v1/tasks/"
 		if remainder, found := strings.CutPrefix(request.URL.Path, prefix); found {
 			taskID, action, found := strings.Cut(remainder, "/")
-			if found && action == "abort" && ids.Validate(ids.KindTask, taskID) == nil {
+			if found && (action == "abort" || action == "retry") && ids.Validate(ids.KindTask, taskID) == nil {
 				return mutationAdmissionProblem(server.mutationAdmission.CheckMutation(request.Context(), taskID))
 			}
 		}

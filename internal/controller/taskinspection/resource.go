@@ -3,6 +3,9 @@ package taskinspection
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/etcdconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 )
 
 var resourceKinds = map[ids.Kind]string{
@@ -20,6 +23,14 @@ var resourceKinds = map[ids.Kind]string{
 // Resource identity is immutable even when labels change or definitions are
 // deleted. Classification requires a validated ID, never a name or log match.
 func resourceKind(id string) string {
+	switch id {
+	case controllersoftware.TargetID():
+		return "controller"
+	case etcdconfiguration.TargetID():
+		return "etcd"
+	case softwarepreparation.TargetID():
+		return "software"
+	}
 	if workloadimage.LocalIDValid(id) {
 		return "image"
 	}
@@ -32,7 +43,7 @@ func resourceKind(id string) string {
 }
 
 func validResourceFilter(value string) bool {
-	if value == "" || value == "image" {
+	if value == "" || value == "image" || value == "controller" || value == "etcd" || value == "software" {
 		return true
 	}
 	for _, name := range resourceKinds {

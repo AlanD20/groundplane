@@ -39,7 +39,7 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	if err != nil || task.ID != current.Record.TaskID || !taskjournal.IsTerminalTaskStatus(task.Status) {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
 	}
-	ownerKeys, err := taskJournalIndexKeys(task)
+	ownerKeys, err := taskOwnerIndexKeys(task.Owner, task.ID)
 	if err != nil {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
 	}

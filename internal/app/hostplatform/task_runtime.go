@@ -46,14 +46,10 @@ func (platform *Platform) newTaskRuntime(
 	if err != nil {
 		return nil, err
 	}
-	platformUpdates, err := controllertask.NewUpdateDispatcher(updates, platform.native)
-	if err != nil {
-		return nil, err
-	}
 	runtime, err := controllertask.New(
 		platform.dependencies.Tasks,
 		handler,
-		platformUpdates,
+		updates,
 		platform.dependencies.Tick,
 		platform.dependencies.Logger,
 	)

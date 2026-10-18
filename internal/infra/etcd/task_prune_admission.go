@@ -102,7 +102,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		companionKeys = append(companionKeys, environmentDeletionFenceKeys...)
 	}
 	ownerIndexStart := len(companionKeys)
-	ownerIndexKeys, err := taskJournalIndexKeys(task)
+	ownerIndexKeys, err := taskOwnerIndexKeys(task.Owner, task.ID)
 	if err != nil {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}

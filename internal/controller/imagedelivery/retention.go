@@ -101,6 +101,9 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 		return result, err
 	}
 	if err := read(workqueue.ItemKey(""), func(value keyvalue.KeyValue) error {
+		if err := service.retainControllerWorkImages(ctx, &result, value, revision); err != nil {
+			return err
+		}
 		if err := service.retainRunnerWorkImages(ctx, &result, value, revision); err != nil {
 			return err
 		}

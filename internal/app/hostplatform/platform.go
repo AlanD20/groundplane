@@ -18,7 +18,6 @@ import (
 	commandrunner "github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/internal/common/version"
 
-	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/controller/etcdconfig"
 	"github.com/AlanD20/groundplane/internal/controller/host"
@@ -66,7 +65,7 @@ type Platform struct {
 	Upgrades       *controllerupgrade.Service
 	EtcdConfig     *etcdconfig.Service
 	preparations   *softwarepreparation.Service
-	native         controllertask.UpdateExecutor
+	controllerWork *controllerupgrade.Work
 	Readiness      *controllerupgrade.Readiness
 	container      *agentcontainer.Manager
 	releases       *controllerrelease.Store
@@ -152,9 +151,10 @@ func New(
 	}
 	platform.releases = releases
 	var catalog controllerupgrade.ReleaseCatalog
+	var native *controllerupgrade.Coordinator
 	if available {
 		catalog = releases
-		native, err := controllerupgrade.NewCoordinator(controllerupgrade.Dependencies{
+		native, err = controllerupgrade.NewCoordinator(controllerupgrade.Dependencies{
 			Journal: releases, Unit: unit, Agents: platform.agents, Work: work,
 			Sessions: dependencies.Channel.Registry, Readiness: platform.Readiness,
 			ProcessDigest: process, Logger: dependencies.Logger,
@@ -162,13 +162,14 @@ func New(
 		if err != nil {
 			return nil, err
 		}
-		if err := native.RestoreJournal(ctx, dependencies.Tasks); err != nil {
-			return nil, err
-		}
-		platform.native = native
 	}
+	controllerRecords, controllerWork, err := platform.newControllerSoftware(ctx, native)
+	if err != nil {
+		return nil, err
+	}
+	platform.controllerWork = controllerWork
 	platform.Upgrades, err = controllerupgrade.NewService(controllerupgrade.ServiceDependencies{
-		Catalog: catalog, Unit: unit, Agents: platform.agents, Tasks: dependencies.Tasks,
+		Catalog: catalog, Unit: unit, Agents: platform.agents, Tasks: dependencies.Tasks, Records: controllerRecords,
 		Evidence: dependencies.Idempotency, Intents: dependencies.Intents,
 		ProcessDigest: process, BootstrapAgentImage: cfg.Agent.Image,
 	})

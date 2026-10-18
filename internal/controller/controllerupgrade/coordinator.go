@@ -3,16 +3,14 @@ package controllerupgrade
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/taskprogress"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"log/slog"
 	"math"
 	"sync"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
-	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -82,7 +80,7 @@ type nativeOperation struct {
 	resume   func()
 	cancel   context.CancelFunc
 	aborted  bool
-	settled  taskjournal.TaskStatus
+	settled  workexecution.Outcome
 	failure  *taskprogress.Failure
 }
 
@@ -101,13 +99,8 @@ func NewCoordinator(dependencies Dependencies) (*Coordinator, error) {
 
 // Restore runs before any Agent listener opens. It never waits for Ready or
 // launches a process; storage and the immutable Task restore admission first.
-func (coordinator *Coordinator) Restore(ctx context.Context, claim etcd.TaskAssignment) error {
-	assignment := claim.Assignment.Record
-	if assignment.Executor != taskjournal.TaskExecutorController || assignment.TaskID != claim.Task.Record.ID {
-		return errs.New(errs.KindValidationFailed, "native controller update claim is invalid")
-	}
-	expected, err := DecodeTask(claim.Task.Record, assignment.AssignedAt, assignment.Deadline)
-	if err != nil {
+func (coordinator *Coordinator) Restore(ctx context.Context, expected upgrade.Journal) error {
+	if err := expected.Validate(); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, upgrade.DrainTimeoutSeconds*time.Second)
@@ -130,22 +123,23 @@ func (coordinator *Coordinator) Restore(ctx context.Context, claim etcd.TaskAssi
 		return err
 	}
 	if expected.Agent != nil {
-		operation.resume, err = coordinator.sessions.PauseAssignments(ctx, expected.Agent.ID, math.MaxUint64)
+		resume, err := coordinator.sessions.PauseAssignments(ctx, expected.Agent.ID, math.MaxUint64)
 		if err != nil {
 			return err
 		}
+		operation.resume = resume
 	}
 	coordinator.active = operation
 	return nil
 }
 
 func (coordinator *Coordinator) execute(
-	ctx context.Context, task etcd.TaskRecord, deadline time.Time,
-	progress *controllertask.Progress,
-) (taskjournal.TaskStatus, error) {
+	ctx context.Context, expected upgrade.Journal, forward bool,
+	progress Progress,
+) (workexecution.Outcome, error) {
 	coordinator.mu.Lock()
 	operation := coordinator.active
-	if operation == nil || operation.expected.TaskID != task.ID || !operation.expected.Deadline.Equal(deadline) {
+	if operation == nil || !operation.expected.SameOperation(expected) {
 		coordinator.mu.Unlock()
 		return "", errs.New(errs.KindStateConflict, "native controller update admission is not restored")
 	}
@@ -161,11 +155,22 @@ func (coordinator *Coordinator) execute(
 	if err != nil {
 		return "", err
 	}
-	if found && journal.Phase == upgrade.PhasePrepared && !coordinator.now().Before(journal.CandidateDeadline()) {
-		return coordinator.requestRollback(ctx, operation, context.DeadlineExceeded, progress)
+	if !forward && !found || found && journal.Phase == upgrade.PhasePrepared {
+		// A saved native start is not permission to prepare or activate again.
+		// Prepared means only the inactive bundle/journal was staged; no cutover
+		// was committed, so cancel that journal and preserve the predecessor.
+		if found {
+			if _, err := coordinator.journal.Advance(ctx, expected.TaskID, upgrade.PhasePrepared, upgrade.PhaseCancelled); err != nil {
+				return "", err
+			}
+		}
+		coordinator.mu.Lock()
+		operation.failure = taskprogress.CaptureControllerFailure(errs.New(errs.KindRequestFailed, "Controller activation was interrupted before cutover"))
+		coordinator.mu.Unlock()
+		return coordinator.settle(operation, workexecution.Failed), nil
 	}
-	if !found || journal.Phase == upgrade.PhasePrepared {
-		return coordinator.prepare(ctx, operation, found, progress)
+	if !found {
+		return coordinator.prepare(ctx, operation, progress)
 	}
 	switch journal.Phase {
 	case upgrade.PhaseActivating, upgrade.PhaseTrial, upgrade.PhaseRollingBack, upgrade.PhaseStopping:
@@ -177,7 +182,7 @@ func (coordinator *Coordinator) execute(
 	case upgrade.PhaseRolledBack, upgrade.PhaseRecovered:
 		return coordinator.recoverPredecessor(ctx, operation, journal.Phase, progress)
 	case upgrade.PhaseCancelled:
-		return coordinator.settle(operation, taskjournal.TaskStatusAborted), nil
+		return coordinator.settle(operation, workexecution.Cancelled), nil
 	default:
 		return "", errs.New(errs.KindInternal, "native controller update phase is invalid")
 	}
@@ -207,12 +212,12 @@ func (coordinator *Coordinator) current(
 
 func (coordinator *Coordinator) settle(
 	operation *nativeOperation,
-	status taskjournal.TaskStatus,
-) taskjournal.TaskStatus {
+	status workexecution.Outcome,
+) workexecution.Outcome {
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
-	if operation.aborted && status != taskjournal.TaskStatusCompleted {
-		status = taskjournal.TaskStatusAborted
+	if operation.aborted && status != workexecution.Succeeded {
+		status = workexecution.Cancelled
 	}
 	operation.settled = status
 	if operation.resume != nil {
@@ -224,8 +229,8 @@ func (coordinator *Coordinator) settle(
 func (coordinator *Coordinator) handoff(
 	ctx context.Context,
 	operation *nativeOperation,
-	progress *controllertask.Progress,
-) (taskjournal.TaskStatus, error) {
+	progress Progress,
+) (workexecution.Outcome, error) {
 	// The transient predecessor service must stop this process. Never ACK from
 	// the outgoing process, and never wait unboundedly if the manager is down.
 	duration := max(operation.expected.Deadline.Sub(coordinator.now()), upgrade.RecoveryReserveSeconds*time.Second)

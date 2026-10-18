@@ -3,11 +3,10 @@ package controllerupgrade
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/taskprogress"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
-	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,8 +15,8 @@ import (
 func (coordinator *Coordinator) qualify(
 	ctx context.Context,
 	operation *nativeOperation,
-	progress *controllertask.Progress,
-) (taskjournal.TaskStatus, error) {
+	progress Progress,
+) (workexecution.Outcome, error) {
 	expected := operation.expected
 	if coordinator.process != expected.Manifest.ControllerSHA256 {
 		return coordinator.requestRollback(
@@ -36,9 +35,6 @@ func (coordinator *Coordinator) qualify(
 	if err == nil {
 		err = progress.Run(qualification, "controller_final_check", coordinator.readiness.Ready)
 	}
-	if recordErr := progress.Err(); recordErr != nil {
-		return "", recordErr
-	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
@@ -53,13 +49,13 @@ func (coordinator *Coordinator) qualify(
 	); err != nil {
 		return "", err
 	}
-	return coordinator.settle(operation, taskjournal.TaskStatusCompleted), nil
+	return coordinator.settle(operation, workexecution.Succeeded), nil
 }
 
 func (coordinator *Coordinator) confirmHealthy(
 	ctx context.Context, operation *nativeOperation,
-	progress *controllertask.Progress,
-) (taskjournal.TaskStatus, error) {
+	progress Progress,
+) (workexecution.Outcome, error) {
 	if coordinator.process != operation.expected.Manifest.ControllerSHA256 {
 		return "", errs.New(errs.KindStateConflict, "qualified controller process identity differs")
 	}
@@ -71,13 +67,13 @@ func (coordinator *Coordinator) confirmHealthy(
 	if err := coordinator.recoverAgent(ctx, operation, localagent.UpdateFinish, progress); err != nil {
 		return "", err
 	}
-	return coordinator.settle(operation, taskjournal.TaskStatusCompleted), nil
+	return coordinator.settle(operation, workexecution.Succeeded), nil
 }
 
 func (coordinator *Coordinator) recoverPredecessor(
 	ctx context.Context, operation *nativeOperation, phase upgrade.Phase,
-	progress *controllertask.Progress,
-) (taskjournal.TaskStatus, error) {
+	progress Progress,
+) (workexecution.Outcome, error) {
 	if coordinator.process != operation.expected.PreviousController {
 		return "", errs.New(errs.KindStateConflict, "recovered controller process identity differs")
 	}
@@ -96,12 +92,12 @@ func (coordinator *Coordinator) recoverPredecessor(
 			return "", err
 		}
 	}
-	return coordinator.settle(operation, taskjournal.TaskStatusFailed), nil
+	return coordinator.settle(operation, workexecution.Failed), nil
 }
 
 func (coordinator *Coordinator) recoverAgent(
 	ctx context.Context, operation *nativeOperation, goal localagent.UpdateGoal,
-	progress *controllertask.Progress,
+	progress Progress,
 ) error {
 	stage := "agent_update"
 	if goal == localagent.UpdateRestore {
@@ -179,8 +175,8 @@ func (coordinator *Coordinator) reconcileAgent(
 
 func (coordinator *Coordinator) requestRollback(
 	ctx context.Context, operation *nativeOperation, cause error,
-	progress *controllertask.Progress,
-) (taskjournal.TaskStatus, error) {
+	progress Progress,
+) (workexecution.Outcome, error) {
 	coordinator.logger.Error("native controller candidate requires recovery", "task_id", operation.expected.TaskID,
 		"error", cause)
 	journal, found, err := coordinator.current(ctx, operation)

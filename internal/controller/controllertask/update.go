@@ -86,5 +86,5 @@ func (runner *Runner) executeUpdate(ctx context.Context, claim etcd.TaskAssignme
 func isPlatformUpdate(task etcd.TaskRecord) bool {
 	resource := task.Params[taskjournal.TaskResourceKindParam]
 	return task.Type == taskjournal.TaskUpdate &&
-		(resource == taskjournal.TaskResourceAgent || resource == taskjournal.TaskResourceController)
+		resource == taskjournal.TaskResourceAgent
 }

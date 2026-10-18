@@ -336,7 +336,7 @@ func prepareTaskOwnerIndexPlan(
 	if !matchedMutation {
 		return nil, nil, nil, errs.New(errs.KindInternal, "task publication mutation is missing")
 	}
-	indexKeys, err := taskJournalIndexKeys(record)
+	indexKeys, err := taskOwnerIndexKeys(record.Owner, record.ID)
 	if err != nil {
 		return nil, nil, nil, err
 	}

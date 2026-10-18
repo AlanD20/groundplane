@@ -9,8 +9,8 @@ import (
 )
 
 // ControllerUpdateSnapshot combines the running inode, verified staging and
-// the latest durable Task. The activation phase is supplementary, never an
-// invented Task result; pre-activation failures therefore remain visible.
+// an independent accepted-update projection. Diagnostic Task retention does not
+// erase installed software, captured release identity or its accepted outcome.
 func (service *Service) ControllerUpdateSnapshot(ctx context.Context) (apiTypes.ControllerUpdateState, error) {
 	if ctx == nil {
 		return apiTypes.ControllerUpdateState{}, errs.New(
@@ -19,21 +19,27 @@ func (service *Service) ControllerUpdateSnapshot(ctx context.Context) (apiTypes.
 		)
 	}
 	state, journal, hasJournal := service.releaseSnapshot(ctx)
-	latest, found, err := service.tasks.LatestControllerUpdate(ctx)
+	latest, found, err := service.records.Current(ctx, 0)
 	if err != nil {
 		return unavailableSnapshot(ctx, state, "Controller update history is unavailable.")
 	}
 	if !found {
 		return state, ctx.Err()
 	}
-	task := latest.Record
-	input, err := decodeTaskInput(task)
-	if err != nil {
-		return unavailableSnapshot(ctx, state, "Controller update history is invalid.")
+	current := latest.Record
+	status := "queued"
+	if current.Started {
+		status = "running"
 	}
-	state.LastUpdate = &apiTypes.ControllerUpdateSummary{TaskID: task.ID, Release: string(input.Release),
-		Status: string(task.Status), CreatedAt: task.CreatedAt}
-	if hasJournal && journal.TaskID == task.ID {
+	if current.Outcome != "" {
+		status = string(current.Outcome)
+	}
+	if current.Outcome != "" && !current.Settled {
+		status = "needs_attention"
+	}
+	state.LastUpdate = &apiTypes.ControllerUpdateSummary{TaskID: current.Capture.TaskID, Release: string(current.Capture.Input.Release),
+		Status: status, CreatedAt: current.Capture.CreatedAt}
+	if hasJournal && journal.TaskID == current.Capture.TaskID {
 		state.LastUpdate.Phase = string(journal.Phase)
 	}
 	return state, ctx.Err()

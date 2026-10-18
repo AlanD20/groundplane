@@ -24,6 +24,7 @@ import (
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/etcdconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
@@ -193,7 +194,14 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize software preparation inspection: %w", err)
 	}
-	taskInspection, err := taskinspection.New(executionQueue, imageRecords, executionDiagnostics, workRuntime.Retries, hierarchyInspection, componentInspection, runnerInspection, etcdInspection, preparationInspection)
+	controllerInspection, err := controllersoftware.New(dependencies.store)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Controller activation inspection: %w", err)
+	}
+	taskInspection, err := taskinspection.New(executionQueue, imageRecords, executionDiagnostics, workRuntime.Retries, hierarchyInspection, componentInspection, runnerInspection, etcdInspection, preparationInspection, controllerInspection)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
