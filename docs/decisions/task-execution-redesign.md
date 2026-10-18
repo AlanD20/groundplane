@@ -162,6 +162,13 @@ to the allowed host; the local channel is not permission to send tokens over
 plaintext public networks. Remote enrollment, certificate lifecycle and trust
 configuration require their own design before remote operation is enabled.
 
+Operation readiness is separate from general executor capacity. Missing Backup
+staging excludes only staging-dependent operations from assignment and new Start
+grants. It does not disable unrelated host work, discard occupied slots or prevent
+receipt settlement for effects already authorized. Availability changes are
+revision-fenced with assignment; the scheduler consumes generic operation
+eligibility rather than knowing Backup recovery policy.
+
 Host operations do not rely on Controller access to the remote filesystem,
 Docker socket or SSH. Local Volumes, networks, images and conflict claims are
 host-scoped. Artifact references must be usable by the selected executor;

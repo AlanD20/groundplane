@@ -22,6 +22,8 @@ const waiting: Record<string, string> = {
   reservation:
     "Waiting for the blocking Task to finish its reserved resource changes",
   executor: "Waiting for an eligible executor",
+  operation_unavailable:
+    "The host is connected, but this operation's prerequisites are unavailable. Backup work requires reconciled host staging.",
   capacity: "Waiting for an execution slot",
   retry: "Waiting for the scheduled retry",
 };

@@ -1082,12 +1082,12 @@ message AgentMessage {
 }
 
 message Ready {
-  int32 capacity = 1; // free worker-pool slots
+  int32 capacity = 1; // free native execution slots, independent of Backup staging readiness
   string version = 2; // exact Agent binary build version
   string operating_system = 3;
   string architecture = 4;
   string architecture_variant = 5;
-  optional bool staging_ready = 6; // native Backup staging has completed startup reconciliation
+  optional bool staging_ready = 6; // Backup staging readiness; independent of general execution capacity
   BuildProvenance source = 7; // exact immutable binary build provenance, when recorded
 }
 

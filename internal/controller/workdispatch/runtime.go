@@ -125,7 +125,7 @@ func (runtime *Runtime) disable(ctx context.Context, identity workexecution.Iden
 	if current.Revision == 0 || current.Record.Identity != identity || !current.Record.Ready {
 		return nil
 	}
-	change, err := workqueue.PrepareAvailability(current, identity, false, current.Record.Capacity)
+	change, err := workqueue.PrepareAvailability(current, identity, false, current.Record.Capacity, current.Record.UnavailableOperations)
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package workdispatch
 
 import (
 	"context"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
@@ -14,7 +15,7 @@ import (
 // reservations before enabling admission. Unresolved older attempts retain both
 // their slots and claims; readiness never asserts their effects have stopped.
 // Free slots can serve unrelated work without adopting any older assignment.
-func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentregistration.WorkAuthorization, capacity uint16) ([]Issue, error) {
+func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentregistration.WorkAuthorization, capacity uint16, stagingReady bool) ([]Issue, error) {
 	if delivery == nil || ctx == nil || capacity == 0 || capacity > 256 {
 		return nil, errs.New(errs.KindInternal, "Agent readiness requires configured capacity")
 	}
@@ -33,7 +34,16 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 	if current.Revision == 0 || current.Record.Identity != identity {
 		return nil, errs.New(errs.KindStateConflict, "Agent process changed before readiness")
 	}
-	if current.Record.Ready && current.Record.Capacity == capacity {
+	var unavailable []workexecution.Operation
+	if !stagingReady {
+		for _, operation := range current.Record.Operations {
+			switch operation {
+			case workexecution.Backup, workexecution.BackupPrune, workexecution.Restore:
+				unavailable = append(unavailable, operation)
+			}
+		}
+	}
+	if current.Record.Ready && current.Record.Capacity == capacity && slices.Equal(current.Record.UnavailableOperations, unavailable) {
 		return nil, nil
 	}
 	// Registration and reconnect disable admission. A capacity change on an
@@ -283,7 +293,7 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 			return issues, err
 		}
 	}
-	change, err := workqueue.PrepareAvailability(current, identity, true, capacity)
+	change, err := workqueue.PrepareAvailability(current, identity, true, capacity, unavailable)
 	if err != nil {
 		return issues, err
 	}

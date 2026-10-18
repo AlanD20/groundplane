@@ -1,7 +1,6 @@
 package workqueue
 
 import (
-	"slices"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -44,8 +43,7 @@ func PrepareAssignment(request Assignment) (Change, workexecution.Attempt, error
 	if err := executor.Validate(); err != nil {
 		return Change{}, workexecution.Attempt{}, err
 	}
-	if !executor.Ready || request.Slot >= executor.Capacity ||
-		!slices.Contains(executor.Operations, request.Item.Item.Operation) {
+	if !executor.Allows(request.Item.Item.Operation) || request.Slot >= executor.Capacity {
 		return Change{}, workexecution.Attempt{}, errs.New(errs.KindStateConflict, "executor is not eligible for this work")
 	}
 	next, attempt, err := workexecution.Assign(request.Item.Item, executor.Identity,

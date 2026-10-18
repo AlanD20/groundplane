@@ -3,6 +3,7 @@ package workqueue
 import (
 	"context"
 	"math"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -67,12 +68,13 @@ func PrepareRegistration(previous ExecutorSnapshot, requested ExecutorRecord) (C
 // PrepareAvailability requires the exact registered process identity, preventing
 // an old disconnect callback from disabling its replacement. Capacity changes
 // retain all occupied slots, including slots beyond a newly reduced limit.
-func PrepareAvailability(previous ExecutorSnapshot, identity workexecution.Identity, ready bool, capacity uint16) (Change, error) {
+func PrepareAvailability(previous ExecutorSnapshot, identity workexecution.Identity, ready bool, capacity uint16, unavailable []workexecution.Operation) (Change, error) {
 	if previous.Revision <= 0 || previous.Record.Identity != identity {
 		return Change{}, errs.New(errs.KindStateConflict, "executor registration has changed")
 	}
 	next := previous.Record
 	next.Ready, next.Capacity = ready, capacity
+	next.UnavailableOperations = slices.Clone(unavailable)
 	return executorChange(previous.Revision, next)
 }
 

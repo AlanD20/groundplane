@@ -161,7 +161,7 @@ func (item Item) Validate() error {
 
 func (wait Wait) Validate() error {
 	switch wait.Reason {
-	case WaitInput, WaitDependency, WaitConflict, WaitReservation, WaitExecutor, WaitCapacity, WaitRetry:
+	case WaitInput, WaitDependency, WaitConflict, WaitReservation, WaitExecutor, WaitOperation, WaitCapacity, WaitRetry:
 	default:
 		return invalid("work wait reason is invalid")
 	}

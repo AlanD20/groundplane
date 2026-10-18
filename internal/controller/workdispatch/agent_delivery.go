@@ -242,6 +242,9 @@ func (delivery *AgentDeliveries) Dispatch(ctx context.Context, authorization age
 		if capacity == 0 {
 			break
 		}
+		if !registration.Record.Allows(assignment.Item.Item.Operation) {
+			continue
+		}
 		attempt := assignment.Attempt.Attempt
 		if delivered[attempt.WorkItemID] == attempt.ID {
 			continue

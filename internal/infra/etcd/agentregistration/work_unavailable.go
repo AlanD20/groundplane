@@ -40,7 +40,7 @@ func (repository *Repository) prepareWorkUnavailable(ctx context.Context, agentI
 	if record.Identity.Executor != workexecution.Agent || record.Identity.HostID != binding.Binding.HostID || record.Identity.AgentID != agentID {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Agent does not own the registered host executor")
 	}
-	change, err := workqueue.PrepareAvailability(workqueue.ExecutorSnapshot{Record: record, Revision: value.ModRevision}, record.Identity, false, record.Capacity)
+	change, err := workqueue.PrepareAvailability(workqueue.ExecutorSnapshot{Record: record, Revision: value.ModRevision}, record.Identity, false, record.Capacity, record.UnavailableOperations)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

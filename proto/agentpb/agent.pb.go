@@ -13142,12 +13142,12 @@ func (*AgentMessage_WorkJournalReplayRequest) isAgentMessage_Payload() {}
 
 type Ready struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
-	Capacity            int32                  `protobuf:"varint,1,opt,name=capacity,proto3" json:"capacity,omitempty"` // free worker-pool slots
+	Capacity            int32                  `protobuf:"varint,1,opt,name=capacity,proto3" json:"capacity,omitempty"` // free native execution slots, independent of Backup staging readiness
 	Version             string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`    // exact Agent binary build version
 	OperatingSystem     string                 `protobuf:"bytes,3,opt,name=operating_system,json=operatingSystem,proto3" json:"operating_system,omitempty"`
 	Architecture        string                 `protobuf:"bytes,4,opt,name=architecture,proto3" json:"architecture,omitempty"`
 	ArchitectureVariant string                 `protobuf:"bytes,5,opt,name=architecture_variant,json=architectureVariant,proto3" json:"architecture_variant,omitempty"`
-	StagingReady        *bool                  `protobuf:"varint,6,opt,name=staging_ready,json=stagingReady,proto3,oneof" json:"staging_ready,omitempty"` // native Backup staging has completed startup reconciliation
+	StagingReady        *bool                  `protobuf:"varint,6,opt,name=staging_ready,json=stagingReady,proto3,oneof" json:"staging_ready,omitempty"` // Backup staging readiness; independent of general execution capacity
 	Source              *BuildProvenance       `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"`                                        // exact immutable binary build provenance, when recorded
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache

@@ -88,7 +88,13 @@ func (c *Client) runSession(
 	config = proto.Clone(config).(*agentpb.AgentConfig)
 	staging, err := c.openStaging(streamCtx, c.stagingJournal)
 	if err != nil {
-		return false, err
+		if streamCtx.Err() != nil {
+			return agentChannelTransportResult(ctx, streamCtx.Err(), "agent: open Backup staging", false)
+		}
+		// Preserve staging on disk for explicit recovery. Its failure must not
+		// disable unrelated typed host work or manufacture an empty inventory.
+		c.logger.Error("agent: Backup staging unavailable; staging-dependent work remains blocked until staging is reconciled", "error", err)
+		staging = nil
 	}
 	c.staging = staging
 	defer func() {
@@ -113,8 +119,10 @@ func (c *Client) runSession(
 	if err := c.sendReady(stream); err != nil {
 		return agentChannelTransportResult(ctx, err, "agent: send readiness", false)
 	}
-	if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupStagingInventory{BackupStagingInventory: proto.CloneOf(staging.inventory)}}); err != nil {
-		return agentChannelTransportResult(ctx, err, "agent: send startup staging inventory", false)
+	if staging != nil {
+		if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupStagingInventory{BackupStagingInventory: proto.CloneOf(staging.inventory)}}); err != nil {
+			return agentChannelTransportResult(ctx, err, "agent: send startup staging inventory", false)
+		}
 	}
 
 	ticker := time.NewTicker(pullInterval)
@@ -133,7 +141,7 @@ func (c *Client) runSession(
 	receiveNext(streamCtx, stream, received)
 	for {
 		// Reopen staging only after native workers have drained and joined.
-		if staging.reinspect.Load() && c.availableWorkCapacity() == int(config.MaxConcurrentTasks) {
+		if staging != nil && staging.reinspect.Load() && c.availableWorkCapacity() == int(config.MaxConcurrentTasks) {
 			return true, nil
 		}
 		event := nextSessionEvent(
@@ -313,6 +321,9 @@ func (c *Client) runSession(
 				continue
 			}
 			if assignment := result.message.GetBackupWorkAssignment(); assignment != nil {
+				if staging == nil || !staging.ready || staging.reinspect.Load() {
+					return false, errs.New(errs.KindStateConflict, "Backup assignment requires reconciled staging")
+				}
 				if err := releases.submitBackup(assignment, c.availableWorkCapacity(), staging.runtime); err != nil {
 					return false, err
 				}
@@ -320,6 +331,9 @@ func (c *Client) runSession(
 				continue
 			}
 			if assignment := result.message.GetBackupRecoveryAssignment(); assignment != nil {
+				if staging == nil || !staging.ready || staging.reinspect.Load() {
+					return false, errs.New(errs.KindStateConflict, "Backup recovery requires reconciled staging")
+				}
 				if err := releases.submitBackupRecovery(assignment, c.availableWorkCapacity(), staging.runtime); err != nil {
 					return false, err
 				}

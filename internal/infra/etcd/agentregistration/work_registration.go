@@ -81,7 +81,7 @@ func (repository *Repository) RegisterWorkProcess(ctx context.Context, agentID s
 		}
 		// A reconnect preserves the process generation, but admission waits for
 		// the new channel to reconcile its durable deliveries before dispatch.
-		change, err := workqueue.PrepareAvailability(previous, saved, false, capacity)
+		change, err := workqueue.PrepareAvailability(previous, saved, false, capacity, previous.Record.UnavailableOperations)
 		if err != nil {
 			return workexecution.Identity{}, err
 		}

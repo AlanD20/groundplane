@@ -51,7 +51,7 @@ func PrepareStart(task TaskSnapshot, item ItemSnapshot, attempt AttemptSnapshot,
 	if err := executor.Record.Validate(); err != nil {
 		return Change{}, err
 	}
-	if executor.Revision <= 0 || !executor.Record.Ready || executor.Record.Identity != attempt.Attempt.Executor {
+	if executor.Revision <= 0 || !executor.Record.Allows(item.Item.Operation) || executor.Record.Identity != attempt.Attempt.Executor {
 		return Change{}, errs.New(errs.KindStateConflict, "execution belongs to an unavailable or replaced executor")
 	}
 	if attempt.Attempt.StartedAt != nil {

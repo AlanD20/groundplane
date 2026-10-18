@@ -7,7 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (server *Server) dispatchWork(stream agentpb.AgentChannel_ConnectServer, session *Session, generation uint64, capacity, configuredCapacity int32, delivered map[string]string, payloads *assignmentPayloadDelivery) error {
+func (server *Server) dispatchWork(stream agentpb.AgentChannel_ConnectServer, session *Session, generation uint64, capacity, configuredCapacity int32, stagingReady bool, delivered map[string]string, payloads *assignmentPayloadDelivery) error {
 	if server.workDispatch == nil {
 		return errs.New(errs.KindInternal, "native Agent dispatch is not configured")
 	}
@@ -23,7 +23,7 @@ func (server *Server) dispatchWork(stream agentpb.AgentChannel_ConnectServer, se
 	if err != nil {
 		return err
 	}
-	readinessIssues, err := server.workDispatch.Ready(stream.Context(), authorization, uint16(configuredCapacity))
+	readinessIssues, err := server.workDispatch.Ready(stream.Context(), authorization, uint16(configuredCapacity), stagingReady)
 	for _, issue := range readinessIssues {
 		slog.ErrorContext(stream.Context(), "Agent work retains unresolved effects", "task_id", issue.TaskID, "work_id", issue.WorkID, "error", issue.Err)
 	}

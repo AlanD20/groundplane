@@ -99,6 +99,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	edgeChecks := &edgeCheckExchange{}
 	staging := &backupStagingSession{}
 	journalReplayComplete := false
+	reportedStagingReady := false
 	journalReplayReports := 0
 	controlBurst := 0
 	for {
@@ -178,7 +179,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			if !ready || capacity == 0 {
 				continue
 			}
-			if err := s.dispatchWork(stream, session, authorization.Generation, capacity, authorization.Config.MaxConcurrentTasks, workDelivered, payloads); err != nil {
+			if err := s.dispatchWork(stream, session, authorization.Generation, capacity, authorization.Config.MaxConcurrentTasks, staging.ready && reportedStagingReady, workDelivered, payloads); err != nil {
 				return taskStoreStatus(err)
 			}
 		case connectReceived:
@@ -325,8 +326,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if !journalReplayComplete {
 					return status.Error(codes.FailedPrecondition, "startup result replay must complete before Ready")
 				}
-				if executionplan.RejectUnknown(ready) != nil || ready.StagingReady == nil ||
-					(!ready.GetStagingReady() && ready.Capacity != 0) {
+				if executionplan.RejectUnknown(ready) != nil || ready.StagingReady == nil {
 					return status.Error(codes.InvalidArgument, "agent Ready staging state is invalid")
 				}
 				if err := validateReady(ready.Capacity, ready.Version); err != nil {
@@ -342,12 +342,10 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 						"agent Ready capacity exceeds configuration",
 					)
 				}
-				if !staging.ready {
-					if ready.Capacity != 0 || ready.GetStagingReady() {
-						return status.Error(codes.FailedPrecondition, "Agent startup staging is not reconciled")
-					}
-					continue
+				if !staging.ready && ready.GetStagingReady() {
+					return status.Error(codes.FailedPrecondition, "Agent startup staging is not reconciled")
 				}
+				reportedStagingReady = ready.GetStagingReady()
 				identity, err := s.authenticatedWorkIdentity(stream.Context(), session, authorization.Generation)
 				if err != nil {
 					return taskStoreStatus(err)
@@ -394,7 +392,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					authorization.Config = nextConfig
 					continue
 				}
-				if err := s.dispatchWork(stream, session, authorization.Generation, ready.Capacity, authorization.Config.MaxConcurrentTasks, workDelivered, payloads); err != nil {
+				if err := s.dispatchWork(stream, session, authorization.Generation, ready.Capacity, authorization.Config.MaxConcurrentTasks, staging.ready && reportedStagingReady, workDelivered, payloads); err != nil {
 					return taskStoreStatus(err)
 				}
 				continue

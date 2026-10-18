@@ -81,7 +81,7 @@ func (runtime *Runtime) ReconcileStartup(ctx context.Context, ownership *control
 	if current.Revision == 0 || current.Record.Identity != identity || current.Record.Ready {
 		return retained, errs.New(errs.KindStateConflict, "startup executor registration changed")
 	}
-	change, err := workqueue.PrepareAvailability(current, identity, true, current.Record.Capacity)
+	change, err := workqueue.PrepareAvailability(current, identity, true, current.Record.Capacity, nil)
 	if err != nil {
 		return retained, err
 	}

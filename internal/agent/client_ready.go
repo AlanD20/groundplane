@@ -18,9 +18,6 @@ func (c *Client) sendReady(stream agentStream) error {
 	}
 	stagingReady := c.staging != nil && c.staging.ready && !c.staging.reinspect.Load()
 	capacity := c.availableWorkCapacity()
-	if !stagingReady {
-		capacity = 0
-	}
 	variant := ""
 	if runtime.GOARCH == "arm64" {
 		variant = "v8"

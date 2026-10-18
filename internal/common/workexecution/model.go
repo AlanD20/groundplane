@@ -122,6 +122,7 @@ const (
 	WaitConflict    WaitReason = "conflict"
 	WaitReservation WaitReason = "reservation"
 	WaitExecutor    WaitReason = "executor"
+	WaitOperation   WaitReason = "operation_unavailable"
 	WaitCapacity    WaitReason = "capacity"
 	WaitRetry       WaitReason = "retry"
 )

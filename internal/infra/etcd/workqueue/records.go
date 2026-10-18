@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"slices"
 )
 
 const maximumRecordBytes = 64 * 1024
@@ -26,11 +27,12 @@ type AttemptSnapshot struct {
 // ExecutorRecord is dispatch eligibility, not a connection lease. Removing a
 // connection does not free its reserved execution slots or resource claims.
 type ExecutorRecord struct {
-	Identity          workexecution.Identity    `json:"identity"`
-	ProcessGeneration [16]byte                  `json:"process_generation"`
-	Ready             bool                      `json:"ready"`
-	Capacity          uint16                    `json:"capacity"`
-	Operations        []workexecution.Operation `json:"operations"`
+	Identity              workexecution.Identity    `json:"identity"`
+	ProcessGeneration     [16]byte                  `json:"process_generation"`
+	Ready                 bool                      `json:"ready"`
+	Capacity              uint16                    `json:"capacity"`
+	Operations            []workexecution.Operation `json:"operations"`
+	UnavailableOperations []workexecution.Operation `json:"unavailable_operations,omitempty"`
 }
 
 type ExecutorSnapshot struct {
@@ -150,7 +152,23 @@ func (record ExecutorRecord) Validate() error {
 		}
 		seen[operation] = struct{}{}
 	}
+	blocked := make(map[workexecution.Operation]struct{}, len(record.UnavailableOperations))
+	for _, operation := range record.UnavailableOperations {
+		if _, supported := seen[operation]; !supported {
+			return invalid("unavailable operation is outside the executor catalog")
+		}
+		if _, duplicate := blocked[operation]; duplicate {
+			return invalid("executor has a duplicate unavailable operation")
+		}
+		blocked[operation] = struct{}{}
+	}
 	return nil
+}
+
+// Allows gates fresh assignment and Start, not receipt settlement or checkpoint
+// persistence for effects that have already been authorized.
+func (record ExecutorRecord) Allows(operation workexecution.Operation) bool {
+	return record.Ready && slices.Contains(record.Operations, operation) && !slices.Contains(record.UnavailableOperations, operation)
 }
 
 func validateOwner(owner ClaimOwner) error {

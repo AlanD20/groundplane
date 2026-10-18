@@ -131,6 +131,9 @@ func (repository *Repository) ReadCandidate(ctx context.Context, entry QueueEntr
 	if executor.Identity != identity || !executor.Ready || !slices.Contains(executor.Operations, item.Operation) {
 		return waiting(workexecution.Wait{Reason: workexecution.WaitExecutor}), nil
 	}
+	if !executor.Allows(item.Operation) {
+		return waiting(workexecution.Wait{Reason: workexecution.WaitOperation}), nil
+	}
 	request := Assignment{Task: view.Task, Item: view.Item, QueueRevision: entry.Revision, Direction: direction,
 		ReadRevision: view.ReadRevision, DecisionOnly: decisionOnly,
 		Executor: ExecutorSnapshot{Record: executor, Revision: executorRead.Values[0].ModRevision}}
