@@ -115,6 +115,12 @@ func (manager *Manager) RecoverUpdate(
 			"agent recovery reported a different build from its accepted installation",
 		)
 	}
+	if manager.pending != nil {
+		// The revision barrier and exact authenticated Ready generation now
+		// account for an ambiguous publication created during this pass too.
+		manager.pending.resume()
+		manager.pending = nil
+	}
 	return result, nil
 }
 

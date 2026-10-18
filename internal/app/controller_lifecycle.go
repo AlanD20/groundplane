@@ -24,11 +24,6 @@ func (c *Controller) Run(ctx context.Context) error {
 		defer close(schedulerDone)
 		c.scheduler.Run(runCtx)
 	}()
-	controllerTasksDone := make(chan struct{})
-	go func() {
-		defer close(controllerTasksDone)
-		c.controllerTasks.Run(runCtx)
-	}()
 	localAgentDone := make(chan struct{})
 	softwareDone := make(chan struct{})
 	go func() {
@@ -99,7 +94,6 @@ func (c *Controller) Run(ctx context.Context) error {
 		}
 	}
 	<-schedulerDone
-	<-controllerTasksDone
 	<-softwareDone
 	<-localAgentDone
 	<-runnersDone

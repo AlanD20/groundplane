@@ -192,6 +192,7 @@ type Sessions interface {
 type Tasks interface {
 	RequireIdle(ctx context.Context, agentID string, generation uint64, maximum int32) error
 	AbortActive(ctx context.Context, agentID string, generation uint64, maximum int32, reason string) error
+	ResumeForward(context.Context, string, uint64) error
 }
 
 // Timer is the cancellable timer surface used by readiness deadlines.

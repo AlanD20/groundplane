@@ -112,9 +112,9 @@ func (manager *Manager) enter(ctx context.Context) error {
 	}
 	select {
 	case manager.gate <- struct{}{}:
-		if err := manager.recoverPending(ctx); err != nil {
+		if manager.pending != nil {
 			manager.leave()
-			return err
+			return errs.New(errs.KindResourceInUse, "Agent replacement effects require their captured operation's reconciliation")
 		}
 		return nil
 	case <-ctx.Done():

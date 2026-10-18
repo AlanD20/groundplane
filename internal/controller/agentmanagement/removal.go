@@ -2,12 +2,11 @@ package agentmanagement
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -20,8 +19,7 @@ import (
 )
 
 const (
-	agentRemovalRoute          = "/agents/{id}"
-	agentRemovalTimeoutSeconds = int64(120)
+	agentRemovalRoute = "/agents/{id}"
 )
 
 type agentRemovalTargets interface {
@@ -185,11 +183,11 @@ func (service *agentRemovalService) RemoveAgent(
 		)
 	}
 	now := service.now().UTC()
-	task, err := newAgentRemovalTask(now, agentID, idempotencyKey)
+	task, err := newAgentRemovalCapture(now, health.Agent)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.TaskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -198,10 +196,10 @@ func (service *agentRemovalService) RemoveAgent(
 		Status: http.StatusAccepted, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	result, createErr := service.tasks.CreateTask(ctx, task, idempotencyrecord.IdempotencyMarker{
+	result, createErr := service.tasks.CreateAgentWork(ctx, task, idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: evidence.durable,
-		Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+		Response: response, TaskID: task.TaskID, CreatedAt: now, UpdatedAt: now,
 	})
 	var resolution requestidempotency.Resolution
 	if createErr != nil {
@@ -227,40 +225,15 @@ func (service *agentRemovalService) RemoveAgent(
 	return requestidempotency.CloneResponse(response), nil
 }
 
-func newAgentRemovalTask(
+func newAgentRemovalCapture(
 	createdAt time.Time,
-	agentID string,
-	idempotencyKey string,
-) (etcd.TaskRecord, error) {
-	planHash, err := agentRemovalPlanHash(agentID)
-	if err != nil {
-		return etcd.TaskRecord{}, err
-	}
-	return etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
-		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorOperator,
-		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorController,
-		PlanID: ids.New(ids.KindPlan), PlanHash: planHash, RenderGeneration: 1,
-		Type: taskjournal.TaskRemove, Target: agentID,
-		Params:         map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceAgent},
-		TimeoutSeconds: agentRemovalTimeoutSeconds, Status: taskjournal.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
-	}, nil
-}
-
-func agentRemovalPlanHash(agentID string) (string, error) {
-	value, err := json.Marshal(struct {
-		Version int    `json:"version"`
-		Type    string `json:"type"`
-		AgentID string `json:"agent_id"`
-	}{Version: 1, Type: string(taskjournal.TaskRemove), AgentID: agentID})
-	if err != nil {
-		return "", errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(value)
-	digest := sha256.Sum256(value)
-	defer clear(digest[:])
-	return hex.EncodeToString(digest[:]), nil
+	agent localagent.Agent,
+) (agentoperations.Capture, error) {
+	capture := agentoperations.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
+		PlanID: ids.New(ids.KindPlan), AgentID: agent.ID, Action: workexecution.ActionRemove, CreatedAt: createdAt,
+		Image: agent.Image, StartingGeneration: agent.Generation}
+	_, err := capture.Reference()
+	return capture, err
 }
 
 func isUnknownAgentRemovalOutcome(err error) bool {

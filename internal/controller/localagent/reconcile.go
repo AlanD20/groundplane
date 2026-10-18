@@ -10,15 +10,14 @@ import (
 // release until unknown publication has been revision-fenced or recovered.
 // All access is under the Manager lifecycle gate, including reconciliation.
 type pendingReplacement struct {
-	request   UpdateRequest
-	revision  int64
-	digest    string
-	resume    func()
-	published bool
+	request  UpdateRequest
+	revision int64
+	digest   string
+	resume   func()
 }
 
-// Reconcile resumes durable runtime state and any current-process unresolved
-// publication before another lifecycle mutation is admitted.
+// Reconcile maintains only the installed Ready runtime. Transitional effects
+// belong to the captured native operation and cannot be advanced by this loop.
 func (manager *Manager) Reconcile(ctx context.Context) error {
 	if err := manager.enter(ctx); err != nil {
 		return err
@@ -35,15 +34,12 @@ func (manager *Manager) Reconcile(ctx context.Context) error {
 		return err
 	}
 	switch stored.Record.Phase {
-	case PhaseProvisioning:
-		_, err = manager.provision(ctx, stored)
-		return err
 	case PhaseReady:
 		return manager.convergeRuntime(ctx, stored.Record)
-	case PhaseUpdating:
-		return manager.resumeReplacement(ctx, stored)
-	case PhaseDeleting:
-		return manager.resumeDelete(ctx, stored)
+	case PhaseProvisioning, PhaseUpdating, PhaseDeleting:
+		// Only the captured native operation may decide completion versus
+		// cleanup. The background runtime loop cannot advance those effects.
+		return nil
 	default:
 		return errs.New(errs.KindInternal, "local agent record has an invalid lifecycle phase")
 	}
@@ -87,44 +83,5 @@ func (manager *Manager) resolvePending(ctx context.Context) (StoredRecord, bool,
 		return StoredRecord{}, false, err
 	}
 	pending.resume()
-	pending.published = true
 	return resolved, true, nil
-}
-
-func (manager *Manager) recoverPending(ctx context.Context) error {
-	pending := manager.pending
-	if pending == nil {
-		return nil
-	}
-	if !pending.published {
-		_, published, err := manager.resolvePending(ctx)
-		if err != nil {
-			return err
-		}
-		if !published {
-			return nil
-		}
-	}
-	err := manager.update(ctx, pending.request)
-	if err == nil || manager.pendingSettled(ctx) {
-		manager.pending = nil
-		return nil
-	}
-	return err
-}
-
-// A readiness failure may already have completed rollback. Preserve unresolved
-// recovery on read failure/cancellation, but do not block unrelated later work
-// after either authenticated generation is durably ready.
-func (manager *Manager) pendingSettled(ctx context.Context) bool {
-	pending := manager.pending
-	stored, err := manager.repository.GetSingleton(ctx)
-	if err != nil || validateStored(stored) != nil || stored.Record.ID != pending.request.AgentID ||
-		stored.Record.Phase != PhaseReady {
-		return false
-	}
-	return stored.Record.Generation == pending.request.StartingGeneration+1 &&
-		stored.Record.Image == pending.request.DesiredImage ||
-		stored.Record.Generation == pending.request.StartingGeneration+2 &&
-			stored.Record.Image == pending.request.PreviousImage
 }

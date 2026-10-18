@@ -9,23 +9,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Update rotates the idle singleton to one Task-pinned digest and generation.
-// A Task replay resumes the durable updating generation or accepts its already
-// ready result without rotating authority a second time.
-func (manager *Manager) Update(ctx context.Context, request UpdateRequest) error {
-	if err := manager.enter(ctx); err != nil {
-		return err
-	}
-	defer manager.leave()
-	err := manager.update(ctx, request)
-	if manager.pending != nil && manager.pending.published {
-		if err == nil || manager.pendingSettled(ctx) {
-			manager.pending = nil
-		}
-	}
-	return err
-}
-
 func (manager *Manager) update(ctx context.Context, request UpdateRequest) error {
 	if err := validateUpdateRequest(request); err != nil {
 		return err

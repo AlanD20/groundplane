@@ -12,7 +12,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
-	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/environmentdns"
 	"github.com/AlanD20/groundplane/internal/controller/handlers"
 	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
@@ -23,6 +22,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/etcdconfiguration"
@@ -66,7 +66,6 @@ type controllerHTTPDependencies struct {
 	environmentBlueprints   *blueprint.Service
 	hierarchyDeletions      *hierarchydeletion.Service
 	attachMutations         *attachments.MutationService
-	controllerTasks         *controllertask.Runner
 	staleTasks              controllerStaleTaskMaintenance
 }
 
@@ -201,7 +200,14 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller activation inspection: %w", err)
 	}
-	taskInspection, err := taskinspection.New(executionQueue, imageRecords, executionDiagnostics, workRuntime.Retries, hierarchyInspection, componentInspection, runnerInspection, etcdInspection, preparationInspection, controllerInspection)
+	agentInspection, err := agentoperations.New(dependencies.store)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent lifecycle inspection: %w", err)
+	}
+	taskInspection, err := taskinspection.New(executionQueue, imageRecords, executionDiagnostics, workRuntime.Retries, hierarchyInspection, componentInspection, runnerInspection, etcdInspection, preparationInspection, controllerInspection, agentInspection)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
@@ -292,7 +298,6 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		TaskMutations:           taskMutations,
 		TaskAborts:              taskAborts,
 		TaskInspection:          taskInspection,
-		ControllerTaskWake:      dependencies.controllerTasks.Wake,
 		AgentTaskWake:           dependencies.agentRuntime.Registry.WakeTaskDispatch,
 		TenantMutations:         dependencies.hierarchy.tenantMutations,
 		TenantChanges:           dependencies.hierarchy.tenantChanges,
@@ -313,7 +318,6 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		server:          server,
 		agent:           dependencies.agentRuntime,
 		scheduler:       maintenanceScheduler,
-		controllerTasks: dependencies.controllerTasks,
 		workExecution:   workRuntime,
 		software:        dependencies.software,
 		localAgent:      dependencies.platform,

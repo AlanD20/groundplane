@@ -2,14 +2,12 @@ package agentmanagement
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
-	"strconv"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
@@ -23,10 +21,7 @@ import (
 )
 
 const (
-	agentUpdateRoute               = "/agents/{id}/update"
-	agentUpdateTimeoutSeconds      = int64(300)
-	agentTaskPreviousImageKey      = "previous_image"
-	agentTaskStartingGenerationKey = "starting_generation"
+	agentUpdateRoute = "/agents/{id}/update"
 )
 
 type agentUpdateTargets interface {
@@ -233,18 +228,17 @@ func (service *agentUpdateService) updateAgent(ctx context.Context, agentID, ima
 	}
 
 	now := service.now().UTC()
-	task, err := newAgentUpdateTask(
+	task, err := newAgentUpdateCapture(
 		now,
 		agentID,
 		health.Agent.Image,
 		image,
 		health.Agent.Generation,
-		idempotencyKey,
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.TaskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -253,10 +247,10 @@ func (service *agentUpdateService) updateAgent(ctx context.Context, agentID, ima
 		Status: http.StatusAccepted, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	result, createErr := service.tasks.CreateTask(ctx, task, idempotencyrecord.IdempotencyMarker{
+	result, createErr := service.tasks.CreateAgentWork(ctx, task, idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: evidence.durable,
-		Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+		Response: response, TaskID: task.TaskID, CreatedAt: now, UpdatedAt: now,
 	})
 	var resolution requestidempotency.Resolution
 	if createErr != nil {
@@ -282,54 +276,24 @@ func (service *agentUpdateService) updateAgent(ctx context.Context, agentID, ima
 	return requestidempotency.CloneResponse(response), nil
 }
 
-func newAgentUpdateTask(
+func newAgentUpdateCapture(
 	createdAt time.Time,
 	agentID string,
 	previousImage string,
 	desiredImage string,
 	startingGeneration uint64,
-	idempotencyKey string,
-) (etcd.TaskRecord, error) {
+) (agentoperations.Capture, error) {
 	if startingGeneration == 0 || startingGeneration > ^uint64(0)-2 {
-		return etcd.TaskRecord{}, errs.New(
+		return agentoperations.Capture{}, errs.New(
 			errs.KindStateConflict,
 			"agent generation has no replacement and recovery capacity",
 		)
 	}
-	params := map[string]string{
-		taskjournal.TaskResourceKindParam: taskjournal.TaskResourceAgent,
-		agentTaskPreviousImageKey:         previousImage,
-		agentTaskImageKey:                 desiredImage,
-		agentTaskStartingGenerationKey:    strconv.FormatUint(startingGeneration, 10),
-	}
-	planHash, err := agentUpdatePlanHash(agentID, params)
-	if err != nil {
-		return etcd.TaskRecord{}, err
-	}
-	return etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
-		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorOperator,
-		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorController,
-		PlanID: ids.New(ids.KindPlan), PlanHash: planHash, RenderGeneration: 1,
-		Type: taskjournal.TaskUpdate, Target: agentID, Params: params,
-		TimeoutSeconds: agentUpdateTimeoutSeconds, Status: taskjournal.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
-	}, nil
-}
-
-func agentUpdatePlanHash(agentID string, params map[string]string) (string, error) {
-	value, err := json.Marshal(struct {
-		Version int               `json:"version"`
-		AgentID string            `json:"agent_id"`
-		Params  map[string]string `json:"params"`
-	}{Version: 1, AgentID: agentID, Params: params})
-	if err != nil {
-		return "", errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(value)
-	digest := sha256.Sum256(value)
-	defer clear(digest[:])
-	return hex.EncodeToString(digest[:]), nil
+	capture := agentoperations.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
+		PlanID: ids.New(ids.KindPlan), AgentID: agentID, Action: workexecution.ActionUpdate, CreatedAt: createdAt,
+		Image: desiredImage, PreviousImage: previousImage, StartingGeneration: startingGeneration}
+	_, err := capture.Reference()
+	return capture, err
 }
 
 func isUnknownAgentUpdateOutcome(err error) bool {

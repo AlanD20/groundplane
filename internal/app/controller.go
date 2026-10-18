@@ -42,7 +42,6 @@ type Controller struct {
 	server                controllerServer
 	agent                 controllerAgentChannel
 	scheduler             controllerScheduler
-	controllerTasks       controllerScheduler
 	workExecution         *hostplatform.WorkExecution
 	software              controllerScheduler
 	runners               controllerScheduler

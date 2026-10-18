@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/imagefence"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -43,6 +44,7 @@ func (repository *TaskRepository) CreateControllerSoftwareWork(ctx context.Conte
 	}
 	defer keyvalue.ClearMutationValues(work.Mutations)
 	work.Conditions = append(work.Conditions, keyvalue.Condition{Key: controllersoftware.InputKey(item.ID)},
+		keyvalue.Condition{Key: imagefence.Key},
 		keyvalue.Condition{Key: controllersoftware.LatestKey, ModRevision: latestRevision})
 	work.Mutations = append(work.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: controllersoftware.InputKey(item.ID), Value: input},
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: controllersoftware.LatestKey, Value: current})

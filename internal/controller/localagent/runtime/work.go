@@ -130,3 +130,7 @@ func (owner *localAgentWork) AbortActive(ctx context.Context, agentID string, ge
 }
 
 var _ localagent.Tasks = (*localAgentWork)(nil)
+
+func (owner *localAgentWork) ResumeForward(ctx context.Context, agentID string, generation uint64) error {
+	return owner.agents.ResumeForward(ctx, agentID, generation)
+}

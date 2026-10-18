@@ -2,12 +2,11 @@ package agentmanagement
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"maps"
 	"net/http"
 	"time"
@@ -22,14 +21,13 @@ import (
 )
 
 const (
-	agentEnrollmentRoute          = "/agents"
-	agentEnrollmentTimeoutSeconds = int64(120)
+	agentEnrollmentRoute = "/agents"
 )
 
 type agentEnrollmentTaskRepository interface {
-	CreateTask(
+	CreateAgentWork(
 		context.Context,
-		etcd.TaskRecord,
+		agentoperations.Capture,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -204,11 +202,11 @@ func (service *agentEnrollmentService) EnrollAgent(
 		)
 	}
 	now := service.now().UTC()
-	task, err := service.newTask(now, idempotencyKey, image)
+	task, err := service.newCapture(now, image)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.TaskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -217,10 +215,10 @@ func (service *agentEnrollmentService) EnrollAgent(
 		Status: http.StatusAccepted, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	result, createErr := service.tasks.CreateTask(ctx, task, idempotencyrecord.IdempotencyMarker{
+	result, createErr := service.tasks.CreateAgentWork(ctx, task, idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: evidence.durable,
-		Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+		Response: response, TaskID: task.TaskID, CreatedAt: now, UpdatedAt: now,
 	})
 	var resolution requestidempotency.Resolution
 	if createErr != nil {
@@ -246,42 +244,16 @@ func (service *agentEnrollmentService) EnrollAgent(
 	return requestidempotency.CloneResponse(response), nil
 }
 
-func (service *agentEnrollmentService) newTask(
+func (service *agentEnrollmentService) newCapture(
 	createdAt time.Time,
-	idempotencyKey string,
 	image string,
-) (etcd.TaskRecord, error) {
-	agentID := ids.New(ids.KindAgent)
-	taskID := ids.New(ids.KindTask)
-	params := agentEnrollmentTaskParams(taskID, image, service.config)
-	planHash, err := agentEnrollmentPlanHash(agentID, params)
-	if err != nil {
-		return etcd.TaskRecord{}, err
-	}
-	return etcd.TaskRecord{
-		ID: taskID, OperationID: ids.New(ids.KindOperation),
-		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorOperator,
-		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorController,
-		PlanID: ids.New(ids.KindPlan), PlanHash: planHash, RenderGeneration: 1,
-		Type: taskjournal.TaskCreate, Target: agentID, Params: params,
-		TimeoutSeconds: agentEnrollmentTimeoutSeconds, Status: taskjournal.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
-	}, nil
-}
-
-func agentEnrollmentPlanHash(agentID string, params map[string]string) (string, error) {
-	value, err := json.Marshal(struct {
-		Version int               `json:"version"`
-		AgentID string            `json:"agent_id"`
-		Params  map[string]string `json:"params"`
-	}{Version: 1, AgentID: agentID, Params: params})
-	if err != nil {
-		return "", errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(value)
-	digest := sha256.Sum256(value)
-	defer clear(digest[:])
-	return hex.EncodeToString(digest[:]), nil
+) (agentoperations.Capture, error) {
+	capture := agentoperations.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
+		PlanID: ids.New(ids.KindPlan), AgentID: ids.New(ids.KindAgent), Action: workexecution.ActionCreate,
+		Image: image, CreatedAt: createdAt, Enrollment: &agentoperations.Enrollment{
+			PullIntervalSeconds: service.config.PullIntervalSeconds, MaxConcurrentTasks: service.config.MaxConcurrentTasks, Labels: maps.Clone(service.config.Labels)}}
+	_, err := capture.Reference()
+	return capture, err
 }
 
 func isUnknownAgentEnrollmentOutcome(err error) bool {

@@ -3,34 +3,8 @@ package localagent
 import (
 	"context"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"time"
 )
-
-// Remove fences work and credentials before deleting runtime state. The durable
-// record is always deleted last, making every preceding failure resumable.
-func (manager *Manager) Remove(ctx context.Context, agentID string) error {
-	if err := manager.enter(ctx); err != nil {
-		return err
-	}
-	defer manager.leave()
-
-	if err := validateAgentID(agentID); err != nil {
-		return err
-	}
-	stored, err := manager.repository.GetSingleton(ctx)
-	if isAgentNotFound(err) {
-		return nil
-	}
-	if err != nil {
-		return safePortError(ctx, err, "local agent durable record lookup failed")
-	}
-	if err := validateStored(stored); err != nil {
-		return err
-	}
-	if stored.Record.ID != agentID {
-		return agentNotFound(agentID)
-	}
-	return manager.resumeDelete(ctx, stored)
-}
 
 func (manager *Manager) resumeDelete(ctx context.Context, stored StoredRecord) error {
 	record := stored.Record
@@ -45,12 +19,6 @@ func (manager *Manager) resumeDelete(ctx context.Context, stored StoredRecord) e
 		RemovedTaskReason,
 	); err != nil {
 		return safePortError(ctx, err, "local agent active task abortion failed")
-	}
-	// Forward work is already durably fenced by AbortActive. Keep recovery
-	// dispatch open until all host effects settle, then close all assignments
-	// before revoking credentials and removing the Agent container.
-	if err := manager.sessions.StopAssignments(ctx, record.ID, record.Generation); err != nil {
-		return safePortError(ctx, err, "local agent assignment fencing failed")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -69,6 +37,11 @@ func (manager *Manager) resumeDelete(ctx context.Context, stored StoredRecord) e
 		}
 		stored = deleting
 		record = deleting.Record
+	}
+	// Revocation is durable before the session fence. If publication was
+	// ambiguous, recovery can revision-fence it while forward work stays closed.
+	if err := manager.sessions.StopAssignments(ctx, record.ID, record.Generation); err != nil {
+		return safePortError(ctx, err, "local agent assignment fencing failed")
 	}
 
 	if err := manager.sessions.Revoke(ctx, record.ID, record.Generation); err != nil {
@@ -103,3 +76,67 @@ func (manager *Manager) resumeDelete(ctx context.Context, stored StoredRecord) e
 	}
 	return nil
 }
+
+// Remove never follows a reused label or a replacement generation.
+// It is also the cleanup owner for an interrupted removal of this exact Agent.
+func (manager *Manager) Remove(ctx context.Context, agentID, image string, generation uint64) error {
+	if err := manager.enter(ctx); err != nil {
+		return err
+	}
+	defer manager.leave()
+	stored, err := manager.repository.GetSingleton(ctx)
+	if isAgentNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := validateStored(stored); err != nil {
+		return err
+	}
+	if stored.Record.ID != agentID || stored.Record.Image != image || stored.Record.Generation != generation {
+		return errs.New(errs.KindStateConflict, "Agent removal no longer matches its captured image and generation")
+	}
+	return manager.resumeDelete(ctx, stored)
+}
+
+// RecoverRemoval either completes already-revoked removal or safely releases a
+// pre-revocation fence. It never begins a previously unstarted deletion.
+func (manager *Manager) RecoverRemoval(ctx context.Context, agentID, image string, generation uint64) (bool, error) {
+	if err := manager.enter(ctx); err != nil {
+		return false, err
+	}
+	defer manager.leave()
+	stored, err := manager.repository.GetSingleton(ctx)
+	if isAgentNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if err := validateStored(stored); err != nil {
+		return false, err
+	}
+	if stored.Record.ID != agentID || stored.Record.Image != image || stored.Record.Generation != generation {
+		return false, errs.New(errs.KindStateConflict, "Agent removal recovery identity changed")
+	}
+	if stored.Record.Phase == PhaseDeleting {
+		return true, manager.resumeDelete(ctx, stored)
+	}
+	if stored.Record.Phase != PhaseReady {
+		return false, errs.New(errs.KindStateConflict, "Agent pre-removal state has not reached Ready")
+	}
+	if err := manager.convergeRuntime(ctx, stored.Record); err != nil {
+		return false, err
+	}
+	if err := manager.waitReplacementReady(ctx, stored.Record); err != nil {
+		return false, err
+	}
+	if err := manager.tasks.ResumeForward(ctx, agentID, generation); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
+// Bound removal recovery independently from the caller's cancelled forward pass.
+const RemovalRecoveryTimeout = 130 * time.Second

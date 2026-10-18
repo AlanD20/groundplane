@@ -536,11 +536,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, err
 	}
-	software, controllerTaskRunner, err := platform.NewExecution(ctx, hostplatform.ExecutionDependencies{
-		Images:       imageDelivery,
-		RunnerChecks: runnerComposition.checkExecutor, RunnerLifecycle: runnerComposition.lifecycle,
-		Keys: backups.keys, Hierarchy: hierarchyDeletions,
-	})
+	software, err := platform.NewSoftware()
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()
@@ -576,7 +572,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		environmentBlueprints:   environmentBlueprints,
 		hierarchyDeletions:      hierarchyDeletions,
 		attachMutations:         attachMutations,
-		controllerTasks:         controllerTaskRunner,
 		staleTasks:              staleTasks,
 	})
 	if err != nil {

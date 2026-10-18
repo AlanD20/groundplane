@@ -6,14 +6,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/attachplan"
 	"github.com/AlanD20/groundplane/internal/controller/attachreports"
 	"github.com/AlanD20/groundplane/internal/controller/attachwork"
-	"github.com/AlanD20/groundplane/internal/controller/backingchecks"
 	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	componentexecution "github.com/AlanD20/groundplane/internal/controller/componentwork"
 	"github.com/AlanD20/groundplane/internal/controller/connectors"
 	"github.com/AlanD20/groundplane/internal/controller/detachwork"
-	"github.com/AlanD20/groundplane/internal/controller/dnsresolver"
-	"github.com/AlanD20/groundplane/internal/controller/edgechecks"
 	entryexecution "github.com/AlanD20/groundplane/internal/controller/entrywork"
 	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/controller/network"
@@ -29,13 +26,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachprovision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
-	backingrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentwork"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorchecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorremoval"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/dnschecks"
-	edgerecord "github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entrywork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -91,35 +84,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	checkRecords, err := connectorchecks.NewRepository(platform.dependencies.Store)
-	if err != nil {
-		return nil, err
-	}
-	checks, err := connectors.NewCheckExecutor(checkRecords, platform.dependencies.Protector)
-	if err != nil {
-		return nil, err
-	}
-	backingRecords, err := backingrecord.NewRepository(platform.dependencies.Store)
-	if err != nil {
-		return nil, err
-	}
-	backing, err := backingchecks.NewExecutor(backingRecords, platform.dependencies.Channel.Registry, platform.dependencies.Protector)
-	if err != nil {
-		return nil, err
-	}
-	dnsRecords, err := dnschecks.NewRepository(platform.dependencies.Store)
-	if err != nil {
-		return nil, err
-	}
-	dns, err := dnsresolver.NewConnectionCheckExecutor(dnsRecords, platform.dependencies.Channel.Registry)
-	if err != nil {
-		return nil, err
-	}
-	edgeRecords, err := edgerecord.NewRepository(platform.dependencies.Store)
-	if err != nil {
-		return nil, err
-	}
-	edge, err := edgechecks.NewExecutor(edgeRecords, platform.dependencies.Channel.Registry)
+	connections, err := platform.newConnectionWork()
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +117,10 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	diagnostics, err := executiondiagnostics.New(platform.dependencies.Store, queue)
+	if err != nil {
+		return nil, err
+	}
+	agentWork, err := platform.newAgentWork(queue, diagnostics)
 	if err != nil {
 		return nil, err
 	}
@@ -304,6 +273,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	scheduler, err := workdispatch.NewScheduler(queue, []workdispatch.Registration{
+		{Operation: workexecution.AgentLifecycle, Executor: workexecution.Controller, Owner: agentWork},
+		{Operation: workexecution.AgentSoftware, Executor: workexecution.Controller, Owner: agentWork},
 		{Operation: workexecution.ControllerSoftware, Executor: workexecution.Controller, Owner: platform.controllerWork},
 		{Operation: workexecution.SoftwarePreparation, Executor: workexecution.Controller, Owner: platform.preparations},
 		{Operation: workexecution.EtcdConfiguration, Executor: workexecution.Controller, Owner: platform.EtcdConfig},
@@ -336,32 +307,36 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		{Operation: workexecution.Component, Executor: workexecution.Controller, Owner: componentDefinitions, DecisionOnly: true},
 		{Operation: workexecution.EntrySettlement, Executor: workexecution.Controller, Owner: entryWork, DecisionOnly: true},
 		{Operation: workexecution.Image, Executor: workexecution.Controller, Owner: dependencies.Images},
-		{Operation: workexecution.ConnectorCheck, Executor: workexecution.Controller, Owner: checks},
-		{Operation: workexecution.BackingCheck, Executor: workexecution.Controller, Owner: backing},
-		{Operation: workexecution.DNSCheck, Executor: workexecution.Controller, Owner: dns},
-		{Operation: workexecution.EdgeCheck, Executor: workexecution.Controller, Owner: edge},
+		{Operation: workexecution.ConnectorCheck, Executor: workexecution.Controller, Owner: connections.connectors},
+		{Operation: workexecution.BackingCheck, Executor: workexecution.Controller, Owner: connections.backings},
+		{Operation: workexecution.DNSCheck, Executor: workexecution.Controller, Owner: connections.dns},
+		{Operation: workexecution.EdgeCheck, Executor: workexecution.Controller, Owner: connections.edges},
 		{Operation: workexecution.RunnerCheck, Executor: workexecution.Controller, Owner: dependencies.RunnerChecks},
 	})
 	if err != nil {
 		return nil, err
 	}
 	controller, err := workdispatch.NewControllerExecutor(queue, []workdispatch.ControllerRegistration{
+		{Operation: workexecution.AgentLifecycle, Owner: agentWork},
+		{Operation: workexecution.AgentSoftware, Owner: agentWork},
 		{Operation: workexecution.ControllerSoftware, Owner: platform.controllerWork},
 		{Operation: workexecution.SoftwarePreparation, Owner: platform.preparations},
 		{Operation: workexecution.EtcdConfiguration, Owner: platform.EtcdConfig},
 		{Operation: workexecution.Runner, Owner: dependencies.RunnerLifecycle},
 		{Operation: workexecution.RemovalBackupObject, Owner: backupRemoval},
 		{Operation: workexecution.Image, Owner: dependencies.Images},
-		{Operation: workexecution.ConnectorCheck, Owner: checks},
-		{Operation: workexecution.BackingCheck, Owner: backing},
-		{Operation: workexecution.DNSCheck, Owner: dns},
-		{Operation: workexecution.EdgeCheck, Owner: edge},
+		{Operation: workexecution.ConnectorCheck, Owner: connections.connectors},
+		{Operation: workexecution.BackingCheck, Owner: connections.backings},
+		{Operation: workexecution.DNSCheck, Owner: connections.dns},
+		{Operation: workexecution.EdgeCheck, Owner: connections.edges},
 		{Operation: workexecution.RunnerCheck, Owner: dependencies.RunnerChecks},
 	})
 	if err != nil {
 		return nil, err
 	}
 	retries, err := workdispatch.NewRetries(queue, []workdispatch.RetryRegistration{
+		{Operation: workexecution.AgentLifecycle, Owner: agentWork},
+		{Operation: workexecution.AgentSoftware, Owner: agentWork},
 		{Operation: workexecution.ControllerSoftware, Owner: platform.controllerWork},
 		{Operation: workexecution.SoftwarePreparation, Owner: platform.preparations},
 		{Operation: workexecution.EtcdConfiguration, Owner: platform.EtcdConfig},
@@ -381,9 +356,9 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		{Operation: workexecution.Hierarchy, Owner: hierarchyAgent},
 		{Operation: workexecution.Script, Owner: scripts},
 		{Operation: workexecution.Release, Owner: dependencies.Releases},
-		{Operation: workexecution.ConnectorCheck, Owner: checks},
-		{Operation: workexecution.BackingCheck, Owner: backing},
-		{Operation: workexecution.EdgeCheck, Owner: edge},
+		{Operation: workexecution.ConnectorCheck, Owner: connections.connectors},
+		{Operation: workexecution.BackingCheck, Owner: connections.backings},
+		{Operation: workexecution.EdgeCheck, Owner: connections.edges},
 	})
 	if err != nil {
 		return nil, err
@@ -404,7 +379,9 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	retention, err := operationretention.New(queue, checkRecords, backingRecords, dnsRecords, edgeRecords, runnerRecords, imageRecords, hierarchyRecords, networkRecords,
+	retention, err := operationretention.New(queue, connections.connectorRecords, connections.backingRecords, connections.dnsRecords, connections.edgeRecords, runnerRecords, imageRecords, hierarchyRecords, networkRecords,
+		operationretention.WorkRegistration{Operation: workexecution.AgentLifecycle, Owner: agentWork},
+		operationretention.WorkRegistration{Operation: workexecution.AgentSoftware, Owner: agentWork},
 		operationretention.WorkRegistration{Operation: workexecution.ControllerSoftware, Owner: platform.controllerWork},
 		operationretention.WorkRegistration{Operation: workexecution.SoftwarePreparation, Owner: platform.preparations},
 		operationretention.WorkRegistration{Operation: workexecution.EtcdConfiguration, Owner: platform.EtcdConfig},
@@ -442,6 +419,9 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	completions, err := workdispatch.NewCompletions(queue, []workdispatch.CompletionRegistration{
+		{Action: workexecution.ActionCreate, Operation: workexecution.AgentLifecycle, Owner: agentWork},
+		{Action: workexecution.ActionRemove, Operation: workexecution.AgentLifecycle, Owner: agentWork},
+		{Action: workexecution.ActionUpdate, Operation: workexecution.AgentSoftware, Owner: agentWork},
 		{Action: workexecution.ActionUpdate, Operation: workexecution.ControllerSoftware, Owner: platform.controllerWork},
 		{Action: workexecution.ActionPrepare, Operation: workexecution.SoftwarePreparation, Owner: platform.preparations},
 		{Action: workexecution.ActionApply, Operation: workexecution.EtcdConfiguration, Owner: platform.EtcdConfig},

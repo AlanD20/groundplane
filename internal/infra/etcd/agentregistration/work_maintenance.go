@@ -28,10 +28,14 @@ type forwardFence struct {
 // MaintenanceBinding resolves the credential generation separately from the
 // executor process generation. Restarting an Agent never changes host identity.
 func (repository *Repository) MaintenanceBinding(ctx context.Context, agentID string, generation uint64) (MaintenanceBinding, error) {
+	return repository.maintenanceBindingAt(ctx, agentID, generation, 0)
+}
+
+func (repository *Repository) maintenanceBindingAt(ctx context.Context, agentID string, generation uint64, revision int64) (MaintenanceBinding, error) {
 	if ids.Validate(ids.KindAgent, agentID) != nil || generation == 0 {
 		return MaintenanceBinding{}, errs.New(errs.KindValidationFailed, "Agent maintenance identity is invalid")
 	}
-	binding, err := hostbindings.Read(ctx, repository.store, agentID, 0)
+	binding, err := hostbindings.Read(ctx, repository.store, agentID, revision)
 	if err != nil {
 		return MaintenanceBinding{}, err
 	}
