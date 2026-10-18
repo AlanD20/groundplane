@@ -24,8 +24,8 @@ func TestLatestInputSkipsPendingWorkAndWaitsForConflictingExecution(t *testing.T
 	got := mustSelect(t, input)
 	assertKeys(t, "ready", got.Ready, route)
 	assertKeys(t, "waiting", got.Waiting, api)
-	assertIDs(t, "pending cancellation", got.CancelPending, pending.PlanID)
-	assertIDs(t, "running cancellation", got.CancelRunning, running.PlanID)
+	assertIDs(t, "pending cancellation", got.CancelPending, pending.WorkItemID)
+	assertIDs(t, "running cancellation", got.CancelRunning, running.WorkItemID)
 
 	input.Executions = nil // Durable cancellation/cleanup has now proved A stopped.
 	got = mustSelect(t, input)
@@ -53,14 +53,14 @@ func TestMatchingPendingUnitIsReusedAndReservesItsWrites(t *testing.T) {
 		Executions: []Execution{pending},
 	}
 	selected := mustSelect(t, input)
-	assertIDs(t, "reuse pending", selected.ContinuePending, pending.PlanID)
+	assertIDs(t, "reuse pending", selected.ContinuePending, pending.WorkItemID)
 	assertKeys(t, "wait for pending write", selected.Waiting, route.Target)
 	if len(selected.Ready) != 0 || len(selected.CancelPending) != 0 {
 		t.Fatal("matching pending unit was duplicated or cancelled")
 	}
 	input.Applied[0] = testApplied(service)
 	selected = mustSelect(t, input)
-	assertIDs(t, "drop redundant pending", selected.CancelPending, pending.PlanID)
+	assertIDs(t, "drop redundant pending", selected.CancelPending, pending.WorkItemID)
 	assertKeys(t, "unblock independent reader", selected.Ready, route.Target)
 }
 
@@ -74,8 +74,8 @@ func TestMatchingPendingUnitCannotOverlapRunningOwner(t *testing.T) {
 		Desired: []Unit{unit}, Applied: []AppliedUnit{{Target: unit.Target, State: Absent}},
 		Executions: []Execution{pending, running},
 	})
-	assertIDs(t, "cancel duplicate", selected.CancelPending, pending.PlanID)
-	assertIDs(t, "retain running owner", selected.ContinueRunning, running.PlanID)
+	assertIDs(t, "cancel duplicate", selected.CancelPending, pending.WorkItemID)
+	assertIDs(t, "retain running owner", selected.ContinueRunning, running.WorkItemID)
 	if len(selected.Ready)+len(selected.ContinuePending) != 0 {
 		t.Fatal("queued duplicate was admitted beside the running owner")
 	}
@@ -107,7 +107,7 @@ func TestMatchingRunningWorkContinuesButDrainingWorkCannotRestart(t *testing.T) 
 		Executions: []Execution{execution},
 	}
 	got := mustSelect(t, input)
-	assertIDs(t, "continuing", got.ContinueRunning, execution.PlanID)
+	assertIDs(t, "continuing", got.ContinueRunning, execution.WorkItemID)
 	if len(got.Ready)+len(got.CancelRunning)+len(got.Satisfied) != 0 {
 		t.Fatal("still-required execution was replaced or prematurely acknowledged")
 	}
@@ -151,7 +151,7 @@ func TestOmissionSelectsRemovalOnlyAfterConflictingWorkSettles(t *testing.T) {
 	running := testExecution(old, Running, 36)
 	input.Executions = []Execution{running}
 	selected := mustSelect(t, input)
-	assertIDs(t, "cancel old writer", selected.CancelRunning, running.PlanID)
+	assertIDs(t, "cancel old writer", selected.CancelRunning, running.WorkItemID)
 	assertKeys(t, "wait to remove", selected.Waiting, service)
 	input.Executions = nil
 	input.Applied[0] = AppliedUnit{Target: service, State: Absent}
@@ -276,13 +276,13 @@ func TestScopeComparisonIsOrderIndependentAndDoesNotMutateInputs(t *testing.T) {
 		Executions: []Execution{execution},
 	}
 	got := mustSelect(t, input)
-	assertIDs(t, "same access set", got.ContinueRunning, execution.PlanID)
+	assertIDs(t, "same access set", got.ContinueRunning, execution.WorkItemID)
 	if !slices.Equal(input.Executions[0].Unit.Reads, before) {
 		t.Fatal("selection mutated its caller's immutable source")
 	}
 	input.Desired[0].Reads = []ResourceKey{testKey(ids.KindEnvEntry, 84)}
 	got = mustSelect(t, input)
-	assertIDs(t, "changed access set", got.CancelRunning, execution.PlanID)
+	assertIDs(t, "changed access set", got.CancelRunning, execution.WorkItemID)
 }
 
 // Rationale: malformed ownership and cyclic dependencies must fail closed
@@ -290,7 +290,7 @@ func TestScopeComparisonIsOrderIndependentAndDoesNotMutateInputs(t *testing.T) {
 func TestRejectsAmbiguousOrIncompleteSnapshot(t *testing.T) {
 	api := testUnit(testKey(ids.KindService, 70), "api")
 	worker := testUnit(testKey(ids.KindService, 71), "worker")
-	for _, name := range []string{"cycle", "missing dependency", "duplicate target", "duplicate plan", "conflicting owners", "invalid state"} {
+	for _, name := range []string{"cycle", "missing dependency", "duplicate target", "duplicate work item", "conflicting owners", "invalid state"} {
 		t.Run(name, func(t *testing.T) {
 			input := Snapshot{
 				Desired: []Unit{api, worker},
@@ -303,7 +303,7 @@ func TestRejectsAmbiguousOrIncompleteSnapshot(t *testing.T) {
 				input.Desired[0].After = []ResourceKey{testKey(ids.KindEnvEntry, 72)}
 			case "duplicate target":
 				input.Desired = append(input.Desired, api)
-			case "duplicate plan":
+			case "duplicate work item":
 				execution := testExecution(api, Pending, 73)
 				input.Executions = []Execution{execution, execution}
 			case "conflicting owners":
@@ -331,17 +331,17 @@ func testApplied(unit Unit) AppliedUnit {
 }
 
 func testExecution(unit Unit, state ExecutionState, seed int64) Execution {
-	var epoch int64
+	result := Execution{
+		WorkItemID: testKey(ids.KindWorkItem, seed).ID,
+		TaskID:     testKey(ids.KindTask, seed).ID,
+		Unit:       unit,
+		State:      state,
+	}
 	if state != Pending {
-		epoch = 1
+		result.AttemptNumber = 1
+		result.AttemptID = testKey(ids.KindAttempt, seed).ID
 	}
-	return Execution{
-		PlanID: testKey(ids.KindPlan, seed).ID,
-		TaskID: testKey(ids.KindTask, seed).ID,
-		Epoch:  epoch,
-		Unit:   unit,
-		State:  state,
-	}
+	return result
 }
 
 func mustSelect(t *testing.T, snapshot Snapshot) Selection {

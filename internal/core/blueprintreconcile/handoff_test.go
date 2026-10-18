@@ -20,8 +20,14 @@ func TestSupersededHandoffRepairsForwardOnlyAfterStopAndAccounting(t *testing.T)
 	input := Snapshot{Desired: []Unit{latest, consumer, route}, Applied: []AppliedUnit{
 		testApplied(config), {Target: consumer.Target, State: Absent}, {Target: route.Target, State: Absent},
 	}, Executions: []Execution{execution}}
-	report := HandoffReport{PlanID: execution.PlanID, TaskID: execution.TaskID, Epoch: execution.Epoch,
-		Executor: ExecutorUnconfirmed, Writes: []WriteEffect{{Resource: config.Target, Outcome: WriteChanged}}}
+	report := HandoffReport{
+		WorkItemID:    execution.WorkItemID,
+		TaskID:        execution.TaskID,
+		AttemptID:     execution.AttemptID,
+		AttemptNumber: execution.AttemptNumber,
+		Executor:      ExecutorUnconfirmed,
+		Writes:        []WriteEffect{{Resource: config.Target, Outcome: WriteChanged}},
+	}
 	for _, step := range []struct {
 		executor ExecutorStopState
 		outcome  WriteOutcome
@@ -47,7 +53,7 @@ func TestSupersededHandoffRepairsForwardOnlyAfterStopAndAccounting(t *testing.T)
 	}
 	assertKeys(t, "changed effects", decision.ChangedWrites, config.Target)
 	// The persistence owner must publish this effect record and release the exact
-	// claim together under the snapshot/epoch fence. No predecessor restore occurs.
+	// claim together under the snapshot/attempt fence. No predecessor restore occurs.
 	input.Executions = nil
 	input.Applied[0].State, input.Applied[0].AffectedWrites = Diverged, decision.ChangedWrites
 	for _, desired := range []Unit{latest, config} {
@@ -73,7 +79,7 @@ func TestSupersededHandoffPreservesUntouchedInputs(t *testing.T) {
 	working := testUnit(testKey(ids.KindService, 110), "working")
 	execution := testExecution(testUnit(working.Target, "obsolete"), Draining, 111)
 	decision, err := ResolveHandoff(execution, HandoffReport{
-		PlanID: execution.PlanID, TaskID: execution.TaskID, Epoch: execution.Epoch, Executor: ExecutorStopped,
+		WorkItemID: execution.WorkItemID, TaskID: execution.TaskID, AttemptID: execution.AttemptID, AttemptNumber: execution.AttemptNumber, Executor: ExecutorStopped,
 		Writes: []WriteEffect{{Resource: working.Target, Outcome: WriteUntouched}},
 	})
 	if err != nil || !decision.Settled || len(decision.ChangedWrites) != 0 {
@@ -90,11 +96,11 @@ func TestHandoffRequiresExactDrainingExecutionAndCompleteWriteScope(t *testing.T
 	shared := testKey(ids.KindEnvEntry, 121)
 	unit.Writes = append(unit.Writes, shared)
 	execution := testExecution(unit, Draining, 122)
-	for _, name := range []string{"running", "epoch", "task", "plan", "missing", "duplicate", "foreign", "executor", "outcome"} {
+	for _, name := range []string{"running", "attempt number", "attempt", "task", "work item", "missing", "duplicate", "foreign", "executor", "outcome"} {
 		t.Run(name, func(t *testing.T) {
 			current := execution
 			report := HandoffReport{
-				PlanID: execution.PlanID, TaskID: execution.TaskID, Epoch: execution.Epoch, Executor: ExecutorStopped,
+				WorkItemID: execution.WorkItemID, TaskID: execution.TaskID, AttemptID: execution.AttemptID, AttemptNumber: execution.AttemptNumber, Executor: ExecutorStopped,
 				Writes: []WriteEffect{
 					{Resource: unit.Target, Outcome: WriteUntouched},
 					{Resource: shared, Outcome: WriteChanged},
@@ -103,12 +109,14 @@ func TestHandoffRequiresExactDrainingExecutionAndCompleteWriteScope(t *testing.T
 			switch name {
 			case "running":
 				current.State = Running
-			case "epoch":
-				report.Epoch++
+			case "attempt number":
+				report.AttemptNumber++
+			case "attempt":
+				report.AttemptID = testKey(ids.KindAttempt, 126).ID
 			case "task":
 				report.TaskID = testKey(ids.KindTask, 123).ID
-			case "plan":
-				report.PlanID = testKey(ids.KindPlan, 124).ID
+			case "work item":
+				report.WorkItemID = testKey(ids.KindWorkItem, 124).ID
 			case "missing":
 				report.Writes = report.Writes[:1]
 			case "duplicate":
@@ -127,7 +135,7 @@ func TestHandoffRequiresExactDrainingExecutionAndCompleteWriteScope(t *testing.T
 		})
 	}
 	report := HandoffReport{
-		PlanID: execution.PlanID, TaskID: execution.TaskID, Epoch: execution.Epoch, Executor: ExecutorStopped,
+		WorkItemID: execution.WorkItemID, TaskID: execution.TaskID, AttemptID: execution.AttemptID, AttemptNumber: execution.AttemptNumber, Executor: ExecutorStopped,
 		Writes: []WriteEffect{
 			{Resource: unit.Target, Outcome: WriteUntouched},
 			{Resource: shared, Outcome: WriteChanged},

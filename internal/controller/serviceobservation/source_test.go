@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/core/serviceports"
@@ -329,11 +330,19 @@ func sourceRuntimeFixture(
 		record.Runtime.ProxyConfigSHA256 = nil
 	}
 	record.Source = serviceruntimerecord.Acknowledgement{
-		TaskID: ids.NewAt(ids.KindTask, stamp, seed+8), PlanID: ids.NewAt(ids.KindPlan, stamp, seed+9),
-		PlanHash: strings.Repeat("a", 64), StepID: ids.NewAt(ids.KindStep, stamp, seed+10),
-		AgentID: ids.NewAt(ids.KindAgent, stamp, seed+11), AssignmentID: ids.NewAt(ids.KindAssignment, stamp, seed+12),
-		ExecutionEpoch: 1, RenderGeneration: input.Projection.RenderGeneration,
-		EffectDigest: strings.Repeat("b", 64), AcknowledgedAt: stamp,
+		TaskID: ids.NewAt(ids.KindTask, stamp, seed+8), WorkItemID: ids.NewAt(ids.KindWorkItem, stamp, seed+9),
+		AttemptID: ids.NewAt(ids.KindAttempt, stamp, seed+12),
+		Executor: workexecution.Identity{Executor: workexecution.Agent, HostID: ids.NewAt(ids.KindHost, stamp, seed+13),
+			AgentID: ids.NewAt(ids.KindAgent, stamp, seed+11), Generation: 1},
+		Input: workexecution.Input{ID: ids.NewAt(ids.KindPlan, stamp, seed+14), SHA256: strings.Repeat("a", 64)},
+		Checkpoint: workexecution.Checkpoint{AttemptID: ids.NewAt(ids.KindAttempt, stamp, seed+12),
+			Sequence: 1, StageID: ids.NewAt(ids.KindStep, stamp, seed+10),
+			Evidence: workexecution.Input{
+				ID:     ids.NewAt(ids.KindPlan, stamp, seed+15),
+				SHA256: strings.Repeat("b", 64),
+			},
+			RecordedAt: stamp},
+		RenderGeneration: input.Projection.RenderGeneration, AcknowledgedAt: stamp,
 	}
 	if err := serviceruntimerecord.Validate(record); err != nil {
 		t.Fatal(err)
