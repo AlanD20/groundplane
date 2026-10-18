@@ -2,6 +2,8 @@ package backupruntime
 
 import (
 	bytes "bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	errors "errors"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
@@ -202,11 +204,14 @@ func TestBackupRuntimeRecordCodecsRoundTrip(t *testing.T) {
 			)
 		}},
 		{"key rotation", func(t *testing.T) {
+			ciphertext := []byte{1, 2, 3}
+			digest := sha256.Sum256(ciphertext)
 			record := BackupKeyRotationRecord{
 				TaskID: testBackupTaskID, OperationID: testBackupOperationID,
+				WorkItemID: ids.NewAt(ids.KindWorkItem, createdAt, 40), InputID: ids.NewAt(ids.KindPlan, createdAt, 41),
 				EnvironmentID: testBackupEnvironmentID, ExpectedCurrentRecordRevision: 10,
 				ExpectedCurrentValueRevision: 11, CurrentKeyEra: 2, NextKeyEra: 3,
-				NextRecipient: recipient, NextEncryptedIdentity: []byte{1, 2, 3},
+				NextRecipient: recipient, NextEncryptedIdentity: ciphertext, NextIdentitySHA256: hex.EncodeToString(digest[:]),
 				State: BackupKeyRotationPrepared, CreatedAt: createdAt, UpdatedAt: updatedAt,
 			}
 			assertBackupCodecRoundTrip(
@@ -684,7 +689,9 @@ func TestBackupKeyRotationAppliedRecordRejectsRetainedIdentity(t *testing.T) {
 	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
 	record := BackupKeyRotationRecord{
 		TaskID: testBackupTaskID, OperationID: testBackupOperationID,
-		EnvironmentID: testBackupEnvironmentID, ExpectedCurrentRecordRevision: 10,
+		WorkItemID: ids.NewAt(ids.KindWorkItem, createdAt, 40), InputID: ids.NewAt(ids.KindPlan, createdAt, 41),
+		NextIdentitySHA256: testBackupDigest,
+		EnvironmentID:      testBackupEnvironmentID, ExpectedCurrentRecordRevision: 10,
 		ExpectedCurrentValueRevision: 11, CurrentKeyEra: 2, NextKeyEra: 3,
 		NextRecipient: newTestBackupRecipient(t), State: BackupKeyRotationApplied,
 		CreatedAt: createdAt, UpdatedAt: createdAt,

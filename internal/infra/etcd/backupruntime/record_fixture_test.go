@@ -2,11 +2,15 @@ package backupruntime
 
 import (
 	bytes "bytes"
+	"crypto/sha256"
 	age "filippo.io/age"
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/backupobject"
+	"github.com/AlanD20/groundplane/internal/common/backupvolumetransfer"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 	"strings"
 	testing "testing"
 	time "time"
@@ -144,10 +148,23 @@ func testBackupVolumePoint(createdAt time.Time, recipient string) BackupRecovery
 		EntryCount: 1, ContentManifestSHA256: testBackupDigest, FullTreeSHA256: testBackupDigest,
 		SourceSizeBytes: 4096,
 		Manifest: BackupVolumeManifestReference{
-			TaskID: testBackupTaskID, AssignmentID: ids.NewAt(ids.KindAssignment, createdAt, 302),
-			StepID: ids.NewAt(ids.KindStep, createdAt, 303), TransferID: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			AuthoritySHA256: testBackupDigest, AgentID: ids.NewAt(ids.KindAgent, createdAt, 304),
-			AgentGeneration: 1, AssignmentGeneration: 1, CursorRevision: 40,
+			Binding: backupvolumetransfer.Binding{
+				Attempt: workexecution.Attempt{ID: ids.NewAt(ids.KindAttempt, createdAt, 302),
+					TaskID: testBackupTaskID, WorkItemID: ids.NewAt(ids.KindWorkItem, createdAt, 303), Number: 1,
+					Executor: workexecution.Identity{
+						Executor:   workexecution.Agent,
+						HostID:     ids.NewAt(ids.KindHost, createdAt, 305),
+						AgentID:    ids.NewAt(ids.KindAgent, createdAt, 304),
+						Generation: 1,
+					},
+					Input: workexecution.Input{
+						ID:     ids.NewAt(ids.KindPlan, createdAt, 306),
+						SHA256: testBackupDigest,
+					},
+					Direction: workexecution.Forward, AssignedAt: createdAt, Deadline: createdAt.Add(time.Hour)},
+				TransferID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", AuthorityDigest: sha256.Sum256([]byte("captured-volume")),
+				Direction: agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_CAPTURE,
+			}, CursorRevision: 40,
 		}},
 	}
 	point.Object = testBackupObject(point.ObjectKey)
