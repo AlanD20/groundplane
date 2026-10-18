@@ -91,6 +91,7 @@ func (service *WorkReports) CheckpointBackingProvision(ctx context.Context, auth
 	if !result.Succeeded {
 		return nil, errs.New(errs.KindStateConflict, "backing creation checkpoint ownership changed; resend the saved report")
 	}
+	service.reportProgress(ctx, view, layout, progress)
 	evidence, err := encodeBackingReference(checkpoint.Evidence)
 	if err != nil {
 		return nil, err

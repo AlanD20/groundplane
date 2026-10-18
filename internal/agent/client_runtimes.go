@@ -3,6 +3,7 @@ package agent
 import (
 	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	"github.com/AlanD20/groundplane/internal/agent/backingruntime"
 	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
@@ -16,6 +17,19 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/agentownership"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func (c *Client) SetBackingExecutor(executor *backingruntime.Executor) error {
+	if c == nil || executor == nil {
+		return errs.New(errs.KindValidationFailed, "Agent Backing creation executor is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.backingExecutor != nil {
+		return errs.New(errs.KindStateConflict, "Agent Backing creation executor cannot change after configuration")
+	}
+	c.backingExecutor = executor
+	return nil
+}
 
 func (c *Client) SetAttachProvisionExecutor(executor *attachruntime.Executor) error {
 	if c == nil || executor == nil {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	"github.com/AlanD20/groundplane/internal/agent/backingruntime"
 	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
@@ -94,6 +95,7 @@ type Client struct {
 	hierarchyExecutor       *hierarchyruntime.Executor
 	networkExecutor         *networkruntime.Executor
 	componentExecutor       *componentruntime.Executor
+	backingExecutor         *backingruntime.Executor
 	entryExecutor           *entryruntime.Executor
 	volumeExecutor          *volumeruntime.Executor
 	attachRemovalExecutor   *hierarchyruntime.AttachExecutor

@@ -81,6 +81,7 @@ func (service *WorkReports) CompleteBackingProvision(ctx context.Context, author
 	if err != nil {
 		return nil, err
 	}
+	service.reportTerminal(ctx, view, false)
 	return &agentpb.BackingProvisionCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: encoded,
 		Outcome: string(attempt.Outcome), StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
 }

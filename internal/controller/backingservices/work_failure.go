@@ -67,5 +67,6 @@ func (service *WorkReports) FailBackingProvision(ctx context.Context, authorizat
 	if view.Attempt.Attempt.StartedAt != nil {
 		ack.StartedAt = timestamppb.New(*view.Attempt.Attempt.StartedAt)
 	}
+	service.reportTerminal(ctx, view, false)
 	return ack, nil
 }

@@ -92,6 +92,9 @@ func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
 	request, err := completion.ReadCompletionAt(ctx, view)
+	if !view.CurrentExecutor && reason == backingprovision.Interrupted {
+		request, err = completion.ReadInterruptedAt(ctx, view, workexecution.BackingProvision)
+	}
 	if err != nil {
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
@@ -117,7 +120,17 @@ func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue
 	}
 	key := FailureKey(evidence.ID)
 	change.Conditions = append(change.Conditions, guard, keyvalue.Condition{Key: key},
-		keyvalue.Condition{Key: workqueue.CheckpointKey(view.Attempt.Attempt.ID), ModRevision: view.Checkpoint.Revision})
+		keyvalue.Condition{Key: workqueue.CheckpointKey(view.Attempt.Attempt.ID), ModRevision: view.Checkpoint.Revision},
+		keyvalue.Condition{Key: workqueue.ExecutorKey(view.Attempt.Attempt.Executor), ModRevision: view.ExecutorRevision})
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), value...)})
+	if request.Result.EffectsSettled {
+		directories, err := repository.prepareDirectoryState(ctx, view.Work, input, false)
+		if err != nil {
+			keyvalue.ClearMutationValues(change.Mutations)
+			return workqueue.Change{}, workexecution.Input{}, err
+		}
+		change.Conditions = append(change.Conditions, directories.Conditions...)
+		change.Mutations = append(change.Mutations, directories.Mutations...)
+	}
 	return change, evidence, nil
 }

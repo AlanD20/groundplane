@@ -42,16 +42,17 @@ type RecoveryReport struct {
 func (report RecoveryReport) Validate(attempt workexecution.Attempt, source Recovery, layout Layout) error {
 	active := attempt
 	active.FinishedAt, active.Outcome, active.Result = nil, "", nil
-	if source.ValidateFor(active, layout) != nil || attempt.StartedAt == nil || report.AttemptID != attempt.ID ||
+	if source.ValidateFor(active, layout) != nil || report.AttemptID != attempt.ID ||
 		report.ForwardID != source.Forward.ID || report.Failure != source.Evidence || report.Input != attempt.Input ||
 		report.ServiceID != layout.ServiceID || report.ObservedAt.IsZero() || report.ObservedAt.Location() != time.UTC ||
-		report.ObservedAt.Before(*attempt.StartedAt) || report.ObservedAt.Before(source.Failure.RecordedAt) ||
+		report.ObservedAt.Before(attempt.AssignedAt) || attempt.StartedAt != nil && report.ObservedAt.Before(*attempt.StartedAt) ||
+		report.ObservedAt.Before(source.Failure.RecordedAt) ||
 		attempt.FinishedAt != nil && report.ObservedAt.After(*attempt.FinishedAt) {
 		return invalid("backing creation cleanup report differs from its actual captured failure and assignment")
 	}
 	switch report.Status {
 	case RecoveryComplete:
-		if !report.HelperStopped || !report.FilesStopped || !report.RuntimeAbsent {
+		if attempt.StartedAt == nil || !report.HelperStopped || !report.FilesStopped || !report.RuntimeAbsent {
 			return invalid("backing creation cleanup is missing helper, file or runtime termination proof")
 		}
 	case RecoveryFailed, RecoveryInterrupted, RecoveryTimedOut:

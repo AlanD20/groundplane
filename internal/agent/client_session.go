@@ -21,7 +21,7 @@ func (c *Client) runSession(
 	if err := ctx.Err(); err != nil {
 		return false, nil
 	}
-	if c.backupExecutor == nil || c.removalRecovery == nil || c.lifecycleExecutor == nil || c.releaseExecutor == nil || c.releaseRecoveryExecutor == nil || c.scriptExecutor == nil || c.hierarchyExecutor == nil || c.attachRemovalExecutor == nil || c.attachProvisionExecutor == nil || c.volumeExecutor == nil || c.networkExecutor == nil || c.componentExecutor == nil || c.entryExecutor == nil {
+	if c.backingExecutor == nil || c.backupExecutor == nil || c.removalRecovery == nil || c.lifecycleExecutor == nil || c.releaseExecutor == nil || c.releaseRecoveryExecutor == nil || c.scriptExecutor == nil || c.hierarchyExecutor == nil || c.attachRemovalExecutor == nil || c.attachProvisionExecutor == nil || c.volumeExecutor == nil || c.networkExecutor == nil || c.componentExecutor == nil || c.entryExecutor == nil {
 		return false, errs.New(errs.KindInternal, "native Release executor is not configured")
 	}
 	if err := c.processOwnership.Check(); err != nil {
@@ -98,7 +98,7 @@ func (c *Client) runSession(
 		poolCancel()
 		<-workersDone
 	}()
-	releases, err := newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, c.environmentExecutor, native, c.processOwnership)
+	releases, err := newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, c.environmentExecutor, c.backingExecutor, native, c.processOwnership)
 	if err != nil {
 		return false, err
 	}
@@ -303,6 +303,13 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
+			if assignment := result.message.GetBackingProvisionAssignment(); assignment != nil {
+				if err := releases.submitBacking(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			if assignment := result.message.GetNetworkWorkAssignment(); assignment != nil {
 				if err := releases.submitNetwork(assignment, c.availableWorkCapacity()); err != nil {
 					return false, err
@@ -464,7 +471,7 @@ func (c *Client) runSession(
 				releases.close()
 				config = proto.Clone(next).(*agentpb.AgentConfig)
 				poolCancel, workersDone = c.startWorkerPool(streamCtx, int(config.MaxConcurrentTasks))
-				releases, err = newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, c.environmentExecutor, native, c.processOwnership)
+				releases, err = newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, c.environmentExecutor, c.backingExecutor, native, c.processOwnership)
 				if err != nil {
 					return false, err
 				}

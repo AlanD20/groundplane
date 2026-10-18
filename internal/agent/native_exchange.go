@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"sync"
+
 	"github.com/AlanD20/groundplane/internal/agent/backupconfiguration"
 	"github.com/AlanD20/groundplane/internal/agent/backupsecrettransfer"
 	"github.com/AlanD20/groundplane/internal/agent/checkpointdelivery"
-	"sync"
-
+	"github.com/AlanD20/groundplane/internal/common/backingprovision"
 	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
 	"github.com/AlanD20/groundplane/internal/common/componentexecution"
 	"github.com/AlanD20/groundplane/internal/common/entryexecution"
@@ -89,6 +90,7 @@ func (exchange *nativeExchange) request(ctx context.Context, message *agentpb.Ag
 		waiter.abandoned = true
 		select {
 		case response := <-waiter.response:
+			backingprovision.ClearPrivateDelivery(response)
 			releaseexecution.ClearHookDelivery(response.GetReleaseHookDelivery())
 			releaseexecution.ClearConfigurationDelivery(response.GetReleaseConfigurationFileDelivery())
 			removalexecution.ClearConfigurationDelivery(response.GetServiceRemovalConfigurationFileDelivery())
@@ -124,6 +126,23 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 	var identity *agentpb.WorkAttemptIdentity
 	kind, executionID := "", ""
 	switch {
+	case message.GetBackingProvisionCheckpointAck() != nil:
+		identity, kind = message.GetBackingProvisionCheckpointAck().Attempt, "backing_checkpoint"
+	case message.GetBackingProvisionCompletionAck() != nil:
+		identity, kind = message.GetBackingProvisionCompletionAck().Attempt, "backing_completion"
+	case message.GetBackingProvisionFailureAck() != nil:
+		identity, kind = message.GetBackingProvisionFailureAck().Attempt, "backing_failure"
+	case message.GetBackingProvisionRecoveryAck() != nil:
+		identity, kind = message.GetBackingProvisionRecoveryAck().Attempt, "backing_recovery"
+	case message.GetBackingProvisionConfigurationManifest() != nil:
+		manifest := message.GetBackingProvisionConfigurationManifest()
+		identity, kind, executionID = manifest.Attempt, "backing_configuration", manifest.StageId
+	case message.GetBackingProvisionFileDelivery() != nil:
+		delivery := message.GetBackingProvisionFileDelivery()
+		identity, kind, executionID = delivery.Attempt, "backing_file", delivery.StageId+"/"+delivery.GetFile().GetDestination()
+	case message.GetBackingProvisionHookDelivery() != nil:
+		delivery := message.GetBackingProvisionHookDelivery()
+		identity, kind, executionID = delivery.Attempt, "backing_hook", delivery.StageId
 	case message.GetEnvironmentProvisionResultAck() != nil:
 		identity, kind = message.GetEnvironmentProvisionResultAck().Attempt, "environment_provision_result"
 	case message.GetBackupConfigRecoveryPrepareAck() != nil:
@@ -268,6 +287,7 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 	exchange.mu.Lock()
 	defer exchange.mu.Unlock()
 	fail := func() (bool, error) {
+		backingprovision.ClearPrivateDelivery(message)
 		entryexecution.ClearConfigurationDelivery(message.GetEntryConfigurationFileDelivery())
 		componentexecution.ClearConfigurationDelivery(message.GetComponentConfigurationFileDelivery())
 		releaseexecution.ClearHookDelivery(message.GetReleaseHookDelivery())
@@ -285,6 +305,7 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 	}
 	delete(exchange.pending, key)
 	if waiter.abandoned {
+		backingprovision.ClearPrivateDelivery(message)
 		entryexecution.ClearConfigurationDelivery(message.GetEntryConfigurationFileDelivery())
 		componentexecution.ClearConfigurationDelivery(message.GetComponentConfigurationFileDelivery())
 		releaseexecution.ClearHookDelivery(message.GetReleaseHookDelivery())

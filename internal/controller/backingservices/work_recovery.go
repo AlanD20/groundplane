@@ -65,6 +65,7 @@ func (service *WorkReports) RecoverBackingProvision(ctx context.Context, authori
 	if err != nil {
 		return nil, err
 	}
+	service.reportTerminal(ctx, view, true)
 	return &agentpb.BackingProvisionRecoveryAck{Attempt: proto.CloneOf(request.Attempt), Evidence: evidence,
 		Outcome: string(attempt.Outcome), StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
 }

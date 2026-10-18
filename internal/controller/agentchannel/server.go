@@ -27,6 +27,7 @@ type Server struct {
 	attachProvisionReports AttachProvisionReporter
 	networkReports         NetworkReporter
 	componentReports       ComponentReporter
+	backingReports         BackingReporter
 	entryReports           EntryReporter
 	volumeReports          VolumeReporter
 	lifecycleReports       LifecycleReporter

@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
+	"github.com/AlanD20/groundplane/internal/agent/backingruntime"
 	"github.com/AlanD20/groundplane/internal/agent/backupruntime"
-
 	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
@@ -29,6 +29,7 @@ import (
 )
 
 type executionOutput struct {
+	backing              *workexecution.Attempt
 	environmentProvision *workexecution.Attempt
 	backup               *workexecution.Attempt
 	removalRecovery      *workexecution.Attempt
@@ -54,6 +55,7 @@ type executionOutput struct {
 }
 
 type executionExchange interface {
+	backingruntime.Exchange
 	environmentruntime.Exchange
 	backupruntime.Exchange
 	removalruntime.RecoveryExchange
@@ -71,6 +73,7 @@ type executionExchange interface {
 }
 
 type activeExecution struct {
+	backing              *agentpb.BackingProvisionAssignment
 	environmentProvision *agentpb.EnvironmentProvisionAssignment
 	ctx                  context.Context
 	cancel               context.CancelFunc
@@ -100,6 +103,7 @@ type activeExecution struct {
 // a failed action. Closing a stream cancels and joins every local execution
 // before another stream can begin reconciling the same attempts.
 type executionWorkers struct {
+	backings        *backingruntime.Executor
 	environments    *environmentruntime.Executor
 	backups         *backupruntime.Executor
 	removalRecovery *removalruntime.Runtime
@@ -127,8 +131,8 @@ type executionWorkers struct {
 	outputs         chan executionOutput
 }
 
-func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.Identity, executor *releaseruntime.Executor, recovery *releaseruntime.RecoveryExecutor, scripts *scriptruntime.Executor, hierarchy *hierarchyruntime.Executor, attachRemoval *hierarchyruntime.AttachExecutor, volumes *volumeruntime.Executor, networks *networkruntime.Executor, components *componentruntime.Executor, entries *entryruntime.Executor, attachProvision *attachruntime.Executor, lifecycles *lifecycleruntime.Executor, removalRecovery *removalruntime.Runtime, backups *backupruntime.Executor, environments *environmentruntime.Executor, exchange executionExchange, ownership *agentownership.Lease) (*executionWorkers, error) {
-	if environments == nil {
+func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.Identity, executor *releaseruntime.Executor, recovery *releaseruntime.RecoveryExecutor, scripts *scriptruntime.Executor, hierarchy *hierarchyruntime.Executor, attachRemoval *hierarchyruntime.AttachExecutor, volumes *volumeruntime.Executor, networks *networkruntime.Executor, components *componentruntime.Executor, entries *entryruntime.Executor, attachProvision *attachruntime.Executor, lifecycles *lifecycleruntime.Executor, removalRecovery *removalruntime.Runtime, backups *backupruntime.Executor, environments *environmentruntime.Executor, backings *backingruntime.Executor, exchange executionExchange, ownership *agentownership.Lease) (*executionWorkers, error) {
+	if environments == nil || backings == nil {
 		return nil, errs.New(errs.KindInternal, "Agent Environment provisioning executor is required")
 	}
 	if backups == nil {
@@ -144,7 +148,7 @@ func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.
 		return nil, err
 	}
 	workerContext, cancel := context.WithCancel(ctx)
-	return &executionWorkers{environments: environments, backups: backups, removalRecovery: removalRecovery, lifecycles: lifecycles, ctx: workerContext, cancel: cancel, identity: identity, executor: executor, recovery: recovery, scripts: scripts, hierarchy: hierarchy, attachRemoval: attachRemoval, volumes: volumes, networks: networks, exchange: exchange,
+	return &executionWorkers{backings: backings, environments: environments, backups: backups, removalRecovery: removalRecovery, lifecycles: lifecycles, ctx: workerContext, cancel: cancel, identity: identity, executor: executor, recovery: recovery, scripts: scripts, hierarchy: hierarchy, attachRemoval: attachRemoval, volumes: volumes, networks: networks, exchange: exchange,
 		components: components, entries: entries, attachProvision: attachProvision, limit: limit, ownership: ownership, active: make(map[string]activeExecution), outputs: make(chan executionOutput, limit)}, nil
 }
 
@@ -267,6 +271,9 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	}
 	if output.environmentProvision != nil {
 		return errs.New(errs.KindStateConflict, "Environment provisioning result belongs to another operation")
+	}
+	if handled, err := workers.finishBacking(output, active); handled {
+		return err
 	}
 	if active.component != nil {
 		if output.err == nil {

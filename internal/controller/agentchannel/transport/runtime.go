@@ -32,6 +32,7 @@ type Runtime struct {
 	attachProvisionReports agentchannel.AttachProvisionReporter
 	networkReports         agentchannel.NetworkReporter
 	componentReports       agentchannel.ComponentReporter
+	backingReports         agentchannel.BackingReporter
 	entryReports           agentchannel.EntryReporter
 	volumeReports          agentchannel.VolumeReporter
 	backupWorkReports      agentchannel.BackupWorkReporter
@@ -91,6 +92,11 @@ func New(
 			return nil, errs.New(errs.KindInternal, "native Component reporting is not configured")
 		}
 		channel.ConfigureComponentWork(runtime.componentReports)
+		if runtime.backingReports == nil {
+			server.Stop()
+			return nil, errs.New(errs.KindInternal, "native Backing creation reporting is not configured")
+		}
+		channel.ConfigureBackingWork(runtime.backingReports)
 		if runtime.entryReports == nil {
 			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Entry reporting is not configured")
@@ -172,6 +178,14 @@ func (runtime *Runtime) ConfigureComponentWork(reports agentchannel.ComponentRep
 		return errs.New(errs.KindInternal, "Component reporting dependencies are missing or already configured")
 	}
 	runtime.componentReports = reports
+	return nil
+}
+
+func (runtime *Runtime) ConfigureBackingWork(reports agentchannel.BackingReporter) error {
+	if runtime == nil || reports == nil || runtime.backingReports != nil {
+		return errs.New(errs.KindInternal, "native Backing creation reporting configuration is invalid")
+	}
+	runtime.backingReports = reports
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	"github.com/AlanD20/groundplane/internal/agent/backingruntime"
 	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
@@ -380,6 +381,13 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	}
 	backingCommands, err := backingcommand.New(runtimeResources.dockerReads)
 	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	backingExecutor, err := backingruntime.NewExecutor(cfg.Storage.VolumeRoot, workJournal, materializer, resources.helper, backingCommands, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetBackingExecutor(backingExecutor); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	lifecycleHost, err := lifecycleruntime.NewHost(cfg.Storage.VolumeRoot, workJournal, resources.helper, ownership, backingCommands, processes)

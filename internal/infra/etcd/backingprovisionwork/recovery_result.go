@@ -18,8 +18,7 @@ func RecoveryResultKey(attemptID string) string {
 func (repository *Repository) PrepareRecoveryResult(ctx context.Context, view workqueue.ResumeView,
 	raw []byte, at time.Time,
 ) (workqueue.Change, workexecution.Input, error) {
-	if !view.ActiveAttempt || view.Attempt.Attempt.Direction != workexecution.Recovery || view.Attempt.Attempt.FinishedAt != nil ||
-		view.Attempt.Attempt.StartedAt == nil {
+	if !view.ActiveAttempt || view.Attempt.Attempt.Direction != workexecution.Recovery || view.Attempt.Attempt.FinishedAt != nil {
 		return workqueue.Change{}, workexecution.Input{}, invalid("backing creation cleanup requires its actual started assignment")
 	}
 	input, _, err := repository.Load(ctx, view.Work)
@@ -51,6 +50,9 @@ func (repository *Repository) PrepareRecoveryResult(ctx context.Context, view wo
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
 	completion, err := queue.ReadCompletionAt(ctx, view)
+	if !view.CurrentExecutor && report.Status == backingprovision.RecoveryInterrupted {
+		completion, err = queue.ReadInterruptedAt(ctx, view, workexecution.BackingProvision)
+	}
 	if err != nil {
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
@@ -66,6 +68,7 @@ func (repository *Repository) PrepareRecoveryResult(ctx context.Context, view wo
 	}
 	key := RecoveryResultKey(view.Attempt.Attempt.ID)
 	change.Conditions = append(change.Conditions, source.Conditions...)
+	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.ExecutorKey(view.Attempt.Attempt.Executor), ModRevision: view.ExecutorRevision})
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: bytes.Clone(raw)})
 	if settled {

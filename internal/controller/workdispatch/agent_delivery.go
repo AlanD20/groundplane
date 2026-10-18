@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
+	"github.com/AlanD20/groundplane/internal/common/backingprovision"
 	"github.com/AlanD20/groundplane/internal/common/environmentexecution"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/hierarchyexecution"
@@ -20,6 +21,11 @@ import (
 
 type EnvironmentDeliveryOwner interface {
 	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.EnvironmentProvisionAssignment, error)
+	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
+}
+
+type BackingDeliveryOwner interface {
+	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.BackingProvisionAssignment, error)
 	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
 }
 type ReleaseDeliveryOwner interface {
@@ -96,6 +102,7 @@ type BackupDeliveryOwner interface {
 // AgentDeliveries joins bounded scheduling and immutable assignment delivery.
 // Sending input grants no effects: the Agent must obtain Start and checkpoints.
 type AgentDeliveries struct {
+	backings     BackingDeliveryOwner
 	environments EnvironmentDeliveryOwner
 	queue        *workqueue.Repository
 	scheduler    *Scheduler
@@ -114,11 +121,11 @@ type AgentDeliveries struct {
 	backups      BackupDeliveryOwner
 }
 
-func NewAgentDeliveries(queue *workqueue.Repository, scheduler *Scheduler, releases ReleaseDeliveryOwner, scripts ScriptDeliveryOwner, hierarchy HierarchyDeliveryOwner, volumes VolumeDeliveryOwner, networks NetworkDeliveryOwner, detaches DetachDeliveryOwner, components ComponentDeliveryOwner, entries EntryDeliveryOwner, attaches AttachDeliveryOwner, lifecycles LifecycleDeliveryOwner, removals ServiceRemovalDeliveryOwner, backups BackupDeliveryOwner, environments EnvironmentDeliveryOwner, restorations ReleaseRestorationDeliveryOwner) (*AgentDeliveries, error) {
+func NewAgentDeliveries(queue *workqueue.Repository, scheduler *Scheduler, releases ReleaseDeliveryOwner, scripts ScriptDeliveryOwner, hierarchy HierarchyDeliveryOwner, volumes VolumeDeliveryOwner, networks NetworkDeliveryOwner, detaches DetachDeliveryOwner, components ComponentDeliveryOwner, entries EntryDeliveryOwner, attaches AttachDeliveryOwner, lifecycles LifecycleDeliveryOwner, removals ServiceRemovalDeliveryOwner, backups BackupDeliveryOwner, environments EnvironmentDeliveryOwner, restorations ReleaseRestorationDeliveryOwner, backings BackingDeliveryOwner) (*AgentDeliveries, error) {
 	if restorations == nil {
 		return nil, errs.New(errs.KindInternal, "Agent delivery requires a captured Release restoration owner")
 	}
-	if environments == nil {
+	if environments == nil || backings == nil {
 		return nil, errs.New(errs.KindInternal, "Agent delivery requires an Environment provisioning owner")
 	}
 	if backups == nil {
@@ -130,7 +137,7 @@ func NewAgentDeliveries(queue *workqueue.Repository, scheduler *Scheduler, relea
 	if queue == nil || scheduler == nil || scheduler.queue != queue || releases == nil || scripts == nil || hierarchy == nil || volumes == nil || networks == nil || detaches == nil || components == nil || entries == nil || attaches == nil {
 		return nil, errs.New(errs.KindInternal, "Agent delivery requires one queue, scheduler and Release owner")
 	}
-	return &AgentDeliveries{environments: environments, restorations: restorations, backups: backups, removals: removals, queue: queue, scheduler: scheduler, releases: releases, scripts: scripts, hierarchy: hierarchy, volumes: volumes, networks: networks, detaches: detaches, components: components, entries: entries, attaches: attaches, lifecycles: lifecycles}, nil
+	return &AgentDeliveries{backings: backings, environments: environments, restorations: restorations, backups: backups, removals: removals, queue: queue, scheduler: scheduler, releases: releases, scripts: scripts, hierarchy: hierarchy, volumes: volumes, networks: networks, detaches: detaches, components: components, entries: entries, attaches: attaches, lifecycles: lifecycles}, nil
 }
 
 // Dispatch keeps delivered identity only for currently reserved slots. A new
@@ -260,6 +267,16 @@ func (delivery *AgentDeliveries) Dispatch(ctx context.Context, authorization age
 
 func (delivery *AgentDeliveries) message(ctx context.Context, view workqueue.ResumeView) (*agentpb.ControllerMessage, error) {
 	switch view.Work.Item.Item.Operation {
+	case workexecution.BackingProvision:
+		assignment, err := delivery.backings.LoadWorkAssignment(ctx, view)
+		if err != nil {
+			return nil, err
+		}
+		input, err := backingprovision.DecodeAssignment(assignment, view.Attempt.Attempt.Executor)
+		if err != nil || !workexecution.SameAssignment(input.Attempt, view.Attempt.Attempt) {
+			return nil, errs.New(errs.KindStateConflict, "backing creation delivery differs from its captured assignment")
+		}
+		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackingProvisionAssignment{BackingProvisionAssignment: assignment}}, nil
 	case workexecution.Environment:
 		assignment, err := delivery.environments.LoadWorkAssignment(ctx, view)
 		if err != nil {
