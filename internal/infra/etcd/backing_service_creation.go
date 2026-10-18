@@ -2,7 +2,9 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	backingpostgresrelease "github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingprovisionwork"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -10,6 +12,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -17,8 +20,7 @@ import (
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -44,43 +46,20 @@ type BackingServiceCreation struct {
 	Claim           blueprints.EnvironmentBlueprintStageClaim
 	Revision        blueprints.EnvironmentDesiredRevisionIdentity
 	Projection      projectionrecord.EnvironmentComposeProjection
-	Task            TaskRecord
-	HookInputs      *taskconfiguration.BackingHookEncryptedInputs
+	Task            workexecution.Task
+	Work            backingprovisionwork.Publication
 	PostgresRelease *backingpostgresrelease.Record
 	Marker          idempotencyrecord.IdempotencyMarker
 }
 
-// PublishBackingServiceWithTask atomically creates one backing facade and
+// PublishBackingServiceWithWork atomically creates one backing facade and
 // queues the Agent reconciliation pinned to its immutable desired revision.
 // Blueprint audit and projection chunks must already be sealed by the normal
 // staging protocol.
-func (repository *HierarchyRepository) PublishBackingServiceWithTask(
+func (repository *HierarchyRepository) PublishBackingServiceWithWork(
 	ctx context.Context,
 	creation BackingServiceCreation,
-) (_ IdempotencyTransactionResult, returnErr error) {
-	creation.Task = cloneTaskRecord(creation.Task)
-	if creation.Task.IdempotencyKey == "" {
-		creation.Task.IdempotencyKey = creation.Marker.Locator.Key
-	}
-	creation.Task.idempotencyMarker = cloneIdempotencyLocator(&creation.Marker.Locator)
-	hookPublication, err := prepareBackingHookTaskPublication(
-		ctx, repository.store, creation.Task, creation.HookInputs,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer hookPublication.clear()
-	defer func() { returnErr = hookPublication.finish(ctx, repository.store, returnErr) }()
-	creation.Task = hookPublication.task
-	creation.Task, err = prepareRuntimeConfigurationTask(
-		ctx,
-		repository.store,
-		creation.Task,
-		creation.Stage.ReadRevision,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
+) (IdempotencyTransactionResult, error) {
 	if err := validateBackingServiceCreation(ctx, creation); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -88,18 +67,33 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		found {
 		return existing, err
 	}
-	publicationEnvironment, materializes, err := desiredRevisionTaskEnvironment(creation.Task)
-	if err != nil || !materializes {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Backing publication has no owning Environment")
+	task, item, err := creation.Work.Input.Work()
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	native, err := workqueue.PrepareSingleTask(task, item, creation.Marker)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer etcdstore.ClearMutationValues(native.Mutations)
+	host, err := hostbindings.ReadLocal(ctx, repository.store, 0)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if host.Binding.HostID != item.Placement.HostID {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backing creation target host changed")
+	}
+	configuration, err := creation.Work.ConfigurationConditions(ctx, host.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
 	}
 	publication, err := repository.prepareEnvironmentBlueprintPublication(
 		ctx,
 		creation.Claim,
 		creation.Revision,
 		creation.Projection,
-		desiredPublicationOwner{TaskID: creation.Task.ID, EnvironmentID: publicationEnvironment,
-			RevisionID:       creation.Task.Params[blueprints.EnvironmentDesiredRevisionParam],
-			RenderGeneration: uint64(creation.Task.RenderGeneration)},
+		desiredPublicationOwner{TaskID: task.ID, EnvironmentID: creation.Environment.ID,
+			RevisionID: task.ID, RenderGeneration: 1},
 		creation.Marker,
 		0,
 	)
@@ -187,11 +181,6 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(epochValue)
-	taskValue, err := EncodeTaskRecord(creation.Task)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(taskValue)
 	taskReference, err := idempotencyrecord.EncodeTaskReference(creation.Task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -244,24 +233,12 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	}
 	conditions := backingServiceCreationConditions(creation, publication, creationStageKey)
 	conditions = append(conditions, identityPublication.conditions...)
+	conditions = append(conditions, native.Conditions...)
+	conditions = append(conditions, creation.Work.Change.Conditions...)
+	conditions = append(conditions, host.Conditions...)
+	conditions = append(conditions, configuration...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: creationStageKey},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(creation.Task.ID), Value: taskValue},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   taskjournal.TaskOperationIndexKey(creation.Task.OperationID, creation.Task.ID),
-			Value: taskReference,
-		},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   taskjournal.TaskActiveOperationKey(creation.Task.OperationID),
-			Value: taskReference,
-		},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   taskjournal.TaskQueueKey(creation.Task.Executor, creation.Task.ID),
-			Value: taskReference,
-		},
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
 		{
@@ -407,21 +384,15 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		)
 	}
 	mutations = append(mutations, identityPublication.mutations...)
-	classifier := classifyBackingServiceCreation(creation, publication, len(conditions))
-	conditions, classifier, err = bindRuntimeConfigurationPublication(creation.Task, conditions, classifier)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	conditions, mutations, classifier, err = hookPublication.bind(conditions, mutations, classifier)
+	mutations = append(mutations, native.Mutations...)
+	mutations = append(mutations, creation.Work.Change.Mutations...)
+	conditions, err = resourcePublicationConditions(conditions)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer etcdstore.ClearMutationValues(mutations)
-	initiation, err := newTaskInitiation(creation.Task.Owner, taskjournal.TaskActorOperator)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	plan, err := newTaskIdempotencyMutationPlan(creation.Task, initiation, conditions, mutations, classifier)
+	plan, err := newIdempotencyMutationPlanForMarker(idempotencyrecord.IdempotencyMarkerTask, conditions, mutations,
+		classifyBackingServiceCreation(creation, conditions))
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

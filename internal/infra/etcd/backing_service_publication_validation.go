@@ -1,9 +1,10 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	backingpostgresrelease "github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
-	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -11,10 +12,9 @@ import (
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"google.golang.org/protobuf/proto"
 )
 
 func validateBackingServicePublicationBudget(
@@ -75,7 +75,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		return err
 	}
 	if creation.Environment.ProjectID != creation.Project.ID || creation.Environment.Name != "main" ||
-		creation.Environment.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
+		creation.Environment.ProvisioningState != hierarchyrecord.EnvironmentProvisioningProvisioning ||
 		creation.Environment.CreateTaskID != creation.Task.ID ||
 		!creation.Environment.CreatedAt.Equal(creation.Task.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Backing-service Environment lifecycle is invalid")
@@ -172,28 +172,29 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if err := validateBackingServiceProjection(creation); err != nil {
 		return err
 	}
-	wantOwner, err := taskjournal.EnvironmentTaskOwner(creation.Project, creation.Environment)
+	procedure, err := creation.Work.Input.Procedure()
 	if err != nil {
 		return err
 	}
-	healthServiceID, hasHealthStep := creation.Task.Params[taskjournal.TaskBackingServiceHealthParam]
-	desiredHealth := creation.Service.Desired.Healthcheck
-	hasDesiredHealth := desiredHealth.Enabled()
-	afterStartServiceID, hasAfterStartStep := creation.Task.Params[taskconfiguration.TaskBackingServiceAfterStartParam]
-	hasDesiredAfterStart := creation.Service.Desired.Hooks != nil &&
-		creation.Service.Desired.Hooks.AfterStart != nil
-	if creation.Task.Owner != wantOwner || creation.Task.Actor != taskjournal.TaskActorOperator ||
-		creation.Task.Executor != taskjournal.TaskExecutorAgent || creation.Task.Type != taskjournal.TaskUpdate ||
-		creation.Task.Target != creation.Environment.ID || creation.Task.Status != taskjournal.TaskStatusPending ||
-		creation.Task.RenderGeneration != 1 ||
-		creation.Task.Params[blueprints.EnvironmentDesiredRevisionParam] != creation.Task.ID ||
-		creation.Task.Params[taskjournal.TaskMaterializationEnvironmentParam] != creation.Environment.ID ||
-		creation.Task.Params[taskjournal.TaskBackingServiceCreationParam] != creation.Service.Desired.ID ||
-		hasHealthStep != hasDesiredHealth || hasHealthStep && healthServiceID != creation.Service.Desired.ID ||
-		hasAfterStartStep != hasDesiredAfterStart ||
-		hasAfterStartStep && afterStartServiceID != creation.Service.Desired.ID ||
-		creation.Task.Params[taskjournal.TaskBackingServiceVolumeDirectoryParam] != creation.Environment.VolumeDir {
-		return errs.New(errs.KindValidationFailed, "Backing-service creation Task is invalid")
+	task, item, err := creation.Work.Input.Work()
+	if err != nil {
+		return err
+	}
+	if creation.Task.Validate() != nil || creation.Work.Input.Environment != creation.Environment || procedure.VolumeRoot != creation.VolumeRoot ||
+		procedure.ServiceId != creation.Service.Desired.ID || procedure.Runtime.Networks[0].NetworkId != creation.Zone.Desired.ID ||
+		creation.Task.ID != task.ID || creation.Task.Intent != task.Intent || creation.Task.Scope != task.Scope ||
+		creation.Task.Action != workexecution.ActionCreate || creation.Task.Actor != workexecution.OperatorActor ||
+		creation.Task.TargetID != task.TargetID || creation.Task.TargetName != task.TargetName ||
+		!creation.Task.CreatedAt.Equal(task.CreatedAt) || !creation.Task.UpdatedAt.Equal(task.CreatedAt) ||
+		!creation.Task.Deadline.Equal(task.Deadline) || creation.Task.ExpectedItems != 1 || creation.Task.PublicationComplete ||
+		creation.Task.Stop != nil || creation.Task.FinishedAt != nil || creation.Task.Progress.Total() != 0 ||
+		item.Operation != workexecution.BackingProvision ||
+		(procedure.AfterStart != nil) != (creation.Service.Desired.Hooks != nil && creation.Service.Desired.Hooks.AfterStart != nil) {
+		return errs.New(errs.KindValidationFailed, "backing creation native work differs from its facade")
+	}
+	runtime, err := (proto.MarshalOptions{Deterministic: true}).Marshal(procedure.Runtime)
+	if err != nil || !bytes.Equal(runtime, creation.Projection.ComposeArtifact) {
+		return errs.New(errs.KindValidationFailed, "backing creation runtime differs from its desired projection")
 	}
 	if creation.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
 		creation.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
@@ -203,9 +204,6 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		!creation.Marker.CreatedAt.Equal(creation.Task.CreatedAt) ||
 		!creation.Marker.UpdatedAt.Equal(creation.Marker.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation marker is invalid")
-	}
-	if err := ValidateTaskRecord(creation.Task); err != nil {
-		return err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(creation.Marker); err != nil {
 		return err

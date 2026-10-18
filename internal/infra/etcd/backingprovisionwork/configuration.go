@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // LoadConfiguration follows the immutable file-source snapshot, never desired
@@ -34,23 +35,30 @@ func (repository *Repository) LoadConfiguration(ctx context.Context, view workqu
 	if err != nil {
 		return nil, err
 	}
-	if len(snapshot.Files) != len(procedure.Files) {
-		return nil, invalid("backing creation file sources differ from its captured manifest")
+	if err := validateConfigurationSources(procedure, snapshot.Files); err != nil {
+		return nil, err
+	}
+	return taskmaterialization.Clone(snapshot.Files), nil
+}
+
+func validateConfigurationSources(procedure *agentpb.BackingProvisionInput, files []taskmaterialization.Record) error {
+	if len(files) != len(procedure.Files) || len(files) > 1 {
+		return invalid("backing creation file sources differ from its captured manifest")
 	}
 	stageID, err := backingprovision.StageID(procedure.WorkItemId, backingprovision.WriteConfiguration)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	for index, file := range snapshot.Files {
+	for index, file := range files {
 		metadata := procedure.Files[index]
-		if taskmaterialization.ValidateRecord(file, procedure.RenderGeneration) != nil || file.StepID != stageID ||
+		if metadata == nil || taskmaterialization.ValidateRecord(file, procedure.RenderGeneration) != nil || file.StepID != stageID ||
 			file.MaterializationID != metadata.MaterializationId || file.EnvironmentID != metadata.EnvironmentId ||
 			file.ServiceID != metadata.ServiceId || file.ServiceName != metadata.ServiceName || file.Destination != metadata.Destination ||
 			file.UID != metadata.Uid || file.GID != metadata.Gid || file.Mode != metadata.Mode ||
 			file.Length != metadata.Length || file.SHA256 != hex.EncodeToString(metadata.Sha256) ||
 			file.OutputKind != taskmaterialization.OutputGeneratedEnvironment || file.Source.Kind != taskmaterialization.SourceGeneratedEnvironment {
-			return nil, invalid("backing creation file source does not match its acknowledged output metadata")
+			return invalid("backing creation file source does not match its acknowledged output metadata")
 		}
 	}
-	return taskmaterialization.Clone(snapshot.Files), nil
+	return nil
 }

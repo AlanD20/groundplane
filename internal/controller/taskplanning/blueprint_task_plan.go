@@ -83,18 +83,13 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if len(managedVolumeIDs) != 0 {
 		expectedParams += 2
 	}
-	backingCreation, err := resolveBackingServiceCreationPlan(task, procedure)
-	if err != nil {
-		return nil, err
-	}
-	expectedParams += backingCreation.parameterCount()
 	if resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
 		ids.Validate(ids.KindEnvironment, task.Target) != nil || len(task.Params) != expectedParams ||
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task shape is invalid")
 	}
 	if selected := task.Params[taskcontract.EnvironmentBlueprintSelectedServiceParam]; selected != "" {
-		if len(resourceStepIDs) != 0 || len(managedVolumeIDs) != 0 || backingCreation.enabled ||
+		if len(resourceStepIDs) != 0 || len(managedVolumeIDs) != 0 ||
 			len(task.ManagedComponentTeardownSources) != 0 ||
 			hasBlueprintReleases &&
 				(len(blueprintReleases.Members) != 1 || blueprintReleases.Members[0].Render.ServiceID != selected) {
@@ -168,7 +163,6 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if len(managedVolumeIDs) != 0 {
 		expectedSteps++
 	}
-	expectedSteps += backingCreation.stepCount()
 	if hasManagedConfigApply {
 		expectedSteps++
 	}
@@ -177,17 +171,6 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	}
 	steps := make([]*agentpb.ExecutionStep, 0, expectedSteps)
 	stepIndex := 0
-	if backingCreation.enabled {
-		steps = append(steps, &agentpb.ExecutionStep{
-			StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
-			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
-				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{
-					EnvironmentId: task.Target, ExpectedVolumeDir: backingCreation.volumeDirectory,
-				},
-			},
-		})
-		stepIndex++
-	}
 	appendVolumeStep := func() {
 		steps = append(steps, &agentpb.ExecutionStep{
 			StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
@@ -198,10 +181,6 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			},
 		})
 		stepIndex++
-	}
-	volumePrecedesMaterialization := backingCreation.enabled && len(managedVolumeIDs) != 0
-	if volumePrecedesMaterialization {
-		appendVolumeStep()
 	}
 	materializations := make(map[string]materializationrecord.Record, len(task.Materializations))
 	for _, reference := range task.Materializations {
@@ -227,7 +206,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if len(materializations) != 0 {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint materialization steps are incomplete")
 	}
-	if len(managedVolumeIDs) != 0 && !volumePrecedesMaterialization {
+	if len(managedVolumeIDs) != 0 {
 		appendVolumeStep()
 	}
 	if hasBlueprintReleases {
@@ -319,24 +298,12 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		steps = append(steps, managedConfigStep)
 		stepIndex++
 	}
-	steps, stepIndex, err = resolver.appendBackingServiceCreationFinalSteps(
-		ctx, task, backingCreation, pinned.projection, artifactID, steps, stepIndex,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if backingCreation.hasAfterStart {
-		defer taskplan.ClearBackingHookProcedure(steps[len(steps)-1].GetBackingHookProcedure())
-	}
 	if stepIndex != len(task.Steps) {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task step order is invalid")
 	}
 	operation := agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
 	if procedure == taskcontract.BlueprintComposeProcedureFullReconcile {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
-	}
-	if backingCreation.enabled {
-		operation = agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
 	}
 	return taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,

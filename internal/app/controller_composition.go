@@ -22,6 +22,7 @@ import (
 	releaseoperation "github.com/AlanD20/groundplane/internal/controller/releaseoperation"
 	"github.com/AlanD20/groundplane/internal/controller/secrets"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingprovisionwork"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	"github.com/AlanD20/groundplane/internal/infra/registryimages"
@@ -433,13 +434,18 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint service: %w", err)
 	}
+	backingCreationInputs, err := backingprovisionwork.NewRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Backing creation capture: %w", err)
+	}
 	backingServiceCreations, err := backingservices.NewCreationService(
 		cfg.Storage.VolumeRoot,
 		runnerComposition.pools.Environment,
 		environmentBlueprintRepository,
 		environmentBlueprintIdempotency,
 		authority.intentProtector,
-		execution.planResolver,
+		backingCreationInputs,
 		execution.attachFactValues,
 		bootstrap.componentCatalog,
 		authority.agents,

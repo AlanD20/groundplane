@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/backingprovision"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 
@@ -197,10 +198,11 @@ func sealBackingEntry(
 func backingEnvironmentMaterialization(
 	environmentID string,
 	artifactID string,
+	workID string,
 	entries []entryrecord.Record,
 	resolved map[string]string,
 	allocator *desiredrevision.BlueprintIdentityAllocator,
-) (materializationrecord.Record, *agentpb.ExecutionStep, error) {
+) (materializationrecord.Record, *agentpb.MaterializeFile, error) {
 	desired := make([]core.EnvEntry, len(entries))
 	references := make([]materializationrecord.GeneratedEnvironmentEntryReference, len(entries))
 	for index, entry := range entries {
@@ -229,8 +231,12 @@ func backingEnvironmentMaterialization(
 	if err != nil {
 		return materializationrecord.Record{}, nil, err
 	}
+	stageID, err := backingprovision.StageID(workID, backingprovision.WriteConfiguration)
+	if err != nil {
+		return materializationrecord.Record{}, nil, err
+	}
 	record := materializationrecord.Record{
-		StepID:            allocator.Named(ids.KindStep, "bootstrap-environment"),
+		StepID:            stageID,
 		MaterializationID: allocator.Named(ids.KindConfig, "bootstrap-environment-materialization"),
 		EnvironmentID:     environmentID, Destination: destination,
 		OutputKind: materializationrecord.OutputGeneratedEnvironment,
@@ -244,13 +250,9 @@ func backingEnvironmentMaterialization(
 			},
 		},
 	}
-	step, err := taskmaterialization.BuildTaskMaterializationStep(
-		record,
-		artifactID,
-		uint32(desiredrevision.TaskTimeoutSeconds),
-	)
+	file, err := taskmaterialization.BuildFileDescriptor(record, artifactID)
 	if err != nil {
 		return materializationrecord.Record{}, nil, err
 	}
-	return record, step, nil
+	return record, file, nil
 }

@@ -23,7 +23,6 @@ type TaskPlanResolver struct {
 	volumeRoot            string
 	blueprints            blueprintPlanStateReader
 	services              servicePlanSources
-	backingCreationHooks  backingCreationHookInputs
 	componentCatalog      []componentrender.EnvironmentComponentRegistration
 	serviceProxyImages    map[serviceproxy.Implementation]*releasedomain.ProxyImage
 	releases              *etcd.ReleaseLedger

@@ -61,7 +61,6 @@ func newControllerExecutionComposition(
 		cfg.Storage.VolumeRoot,
 		authority.hierarchyRecords,
 		dataServices.serviceRecords,
-		attachFactValues,
 		componentCatalog,
 	)
 	if err != nil {

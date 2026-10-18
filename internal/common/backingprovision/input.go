@@ -74,7 +74,7 @@ func ValidateInput(planID string, input *agentpb.BackingProvisionInput) error {
 		return err
 	}
 	for _, file := range input.Files {
-		if file.ServiceId != input.ServiceId || file.OutputKind != agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_GENERATED_ENV {
+		if file.ServiceId != "" || file.ServiceName != "" || file.OutputKind != agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_GENERATED_ENV {
 			return invalid("backing creation can materialize only its Service environment file")
 		}
 	}
