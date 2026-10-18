@@ -88,14 +88,17 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRelease(ctx context.Context, v
 	if err != nil {
 		return err
 	}
-	configurationValue, err := runtimeconfiguration.EncodeReference(completed.Configuration.Current)
-	if err != nil {
-		return err
+	files := workqueue.Change{Conditions: configuration}
+	if completed.Configuration.Prior == nil || completed.Configuration.Current != *completed.Configuration.Prior {
+		configurationValue, err := runtimeconfiguration.EncodeReference(completed.Configuration.Current)
+		if err != nil {
+			return err
+		}
+		defer clear(configurationValue)
+		files.Mutations = append(files.Mutations, keyvalue.Mutation{
+			Type: keyvalue.MutationPut, Key: runtimeconfiguration.HeadKey(input.Release.EnvironmentId), Value: configurationValue,
+		})
 	}
-	defer clear(configurationValue)
-	files := workqueue.Change{Conditions: configuration, Mutations: []keyvalue.Mutation{
-		{Type: keyvalue.MutationPut, Key: runtimeconfiguration.HeadKey(input.Release.EnvironmentId), Value: configurationValue},
-	}}
 	// Recording actual serving state does not turn superseded/cancelled work
 	// back into a successful Apply. Already-authorized effects remain visible.
 	outcome := workexecution.Succeeded
