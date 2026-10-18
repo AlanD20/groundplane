@@ -49,11 +49,6 @@ func (repository *TaskRepository) validateTaskAcknowledgementReplay(
 	); err != nil {
 		return err
 	}
-	if err := repository.validateReleaseGroupTaskAcknowledgementReplay(
-		ctx, task, terminalStatus, readRevision,
-	); err != nil {
-		return err
-	}
 	if task.Params[releaserender.TaskReleasePublicationParam] != "" && task.Type == taskjournal.TaskUpdate {
 		if err := repository.validateBlueprintCandidateTerminalReplay(
 			ctx, task, terminalStatus, readRevision,

@@ -279,20 +279,6 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, blueprintAttachChange.conditions...)
 			mutations = append(mutations, blueprintAttachChange.mutations...)
 		}
-		releaseGroupChange, err := repository.prepareReleaseGroupTaskAcknowledgement(
-			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
-		)
-		if err != nil {
-			journal.clearPrimary()
-			clear(environmentValue)
-			clearAttachTaskChange(attachChange)
-			return etcdstore.Versioned[TaskRecord]{}, err
-		}
-		defer clearReleaseGroupTaskChange(releaseGroupChange)
-		if releaseGroupChange.applies {
-			conditions = append(conditions, releaseGroupChange.conditions...)
-			mutations = append(mutations, releaseGroupChange.mutations...)
-		}
 		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
 			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision, assignment,
 		)

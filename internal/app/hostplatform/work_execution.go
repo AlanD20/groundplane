@@ -273,7 +273,12 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
+	groupRemoval, err := platform.newReleaseGroupWork(queue)
+	if err != nil {
+		return nil, err
+	}
 	scheduler, err := workdispatch.NewScheduler(queue, append(softwareWork.admission, []workdispatch.Registration{
+		{Operation: workexecution.ReleaseGroup, Executor: workexecution.Controller, Owner: groupRemoval, DecisionOnly: true},
 		{Operation: workexecution.AgentLifecycle, Executor: workexecution.Controller, Owner: agentWork},
 		{Operation: workexecution.AgentSoftware, Executor: workexecution.Controller, Owner: agentWork},
 		{Operation: workexecution.ControllerSoftware, Executor: workexecution.Controller, Owner: platform.controllerWork},
@@ -381,6 +386,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	retentionOwners := append(softwareWork.retention, []operationretention.WorkRegistration{
+		{Operation: workexecution.ReleaseGroup, Owner: groupRemoval},
 		operationretention.WorkRegistration{Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		operationretention.WorkRegistration{Operation: workexecution.AgentSoftware, Owner: agentWork},
 		operationretention.WorkRegistration{Operation: workexecution.ControllerSoftware, Owner: platform.controllerWork},
@@ -421,6 +427,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	completions, err := workdispatch.NewCompletions(queue, append(softwareWork.completion, []workdispatch.CompletionRegistration{
+		{Action: workexecution.ActionRemove, Operation: workexecution.ReleaseGroup, Owner: groupRemoval},
 		{Action: workexecution.ActionCreate, Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		{Action: workexecution.ActionRemove, Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		{Action: workexecution.ActionUpdate, Operation: workexecution.AgentSoftware, Owner: agentWork},

@@ -36,11 +36,12 @@ export function WorkInspection({
 }) {
   const [open, setOpen] = useState(false);
   const atomicKeyRotation = work.operation === "secret_rotation" && work.attempt_count === 0;
+  const groupRemoval = work.operation === "release_group" && work.attempt_count === 0;
   return (
     <section id={`task-work-${work.id}`} className="min-w-0 space-y-3 rounded-lg border border-border p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">
-          {atomicKeyRotation ? "Rotate Backup encryption key" : work.operation === "etcd_configuration" ? "Apply etcd configuration" : work.operation === "software_preparation" ? "Prepare Groundplane software" : work.operation === "controller_software" ? "Activate Controller release" : work.operation === "agent_software" ? "Update Agent image" : work.operation === "agent_lifecycle" ? "Manage Agent installation" : work.operation.replaceAll("_", " ")}
+          {atomicKeyRotation ? "Rotate Backup encryption key" : groupRemoval ? "Remove Release Group" : work.operation === "etcd_configuration" ? "Apply etcd configuration" : work.operation === "software_preparation" ? "Prepare Groundplane software" : work.operation === "controller_software" ? "Activate Controller release" : work.operation === "agent_software" ? "Update Agent image" : work.operation === "agent_lifecycle" ? "Manage Agent installation" : work.operation.replaceAll("_", " ")}
         </h3>
         <StatusBadge status={work.outcome || work.phase} />
       </div>
@@ -76,6 +77,15 @@ export function WorkInspection({
           )}
         </div>
       )}
+      {groupRemoval && (
+        <p className="text-sm">
+          {work.outcome === "succeeded"
+            ? "The Release Group and its membership indexes were removed together. Its Services and their running containers were not changed."
+            : work.phase === "settled"
+              ? "The Release Group was not removed. Its definition was preserved and this action’s deletion fence was released."
+              : "Waiting for the Controller to remove the captured Release Group definition and indexes atomically. No host command is needed."}
+        </p>
+      )}
       {work.wait && (
         <div className="space-y-1 rounded-md bg-muted/40 p-3 text-sm">
           <p>{waiting[work.wait.reason] ?? work.wait.reason}</p>
@@ -100,7 +110,7 @@ export function WorkInspection({
           outcome is shown separately.
         </p>
       )}
-      {!work.preparation && !atomicKeyRotation && (
+      {!work.preparation && !atomicKeyRotation && !groupRemoval && (
         <Disclosure
           open={open}
           onOpenChange={setOpen}

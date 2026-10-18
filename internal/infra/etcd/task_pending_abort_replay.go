@@ -47,11 +47,6 @@ func (repository *TaskRepository) validatePendingAbortReplay(
 	); err != nil {
 		return err
 	}
-	if err := repository.validateReleaseGroupTaskAcknowledgementReplay(
-		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
-	); err != nil {
-		return err
-	}
 	if err := repository.validateRemovalTaskAcknowledgementReplay(
 		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {

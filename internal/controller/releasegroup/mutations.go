@@ -2,18 +2,16 @@ package releasegroup
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"slices"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -26,7 +24,6 @@ const (
 	releaseGroupAddRoute      = "/release-groups"
 	releaseGroupEditRoute     = "/release-groups/{id}"
 	releaseGroupRemoveRoute   = "/release-groups/{id}"
-	releaseGroupTaskTimeout   = int64(30)
 	releaseGroupMutationTries = 3
 )
 
@@ -308,34 +305,17 @@ func (service *MutationService) apply(
 		}
 		return releaseGroupReplayResponse(resolution)
 	}
-	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	taskType := taskjournal.TaskCreate
-	if method == http.MethodPatch {
-		taskType = taskjournal.TaskUpdate
-	}
-	if method == http.MethodDelete {
-		taskType = taskjournal.TaskRemove
-	}
 	now := service.now().UTC()
-	task := etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: key,
-		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
-		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: taskType, Target: desired.ID,
-		Params: map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceReleaseGroup},
-		Steps: []taskjournal.TaskStepRecord{
-			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
-		}, TimeoutSeconds: releaseGroupTaskTimeout,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+	capture := groupstore.RemovalInput{
+		TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
+		Scope:   workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID},
+		GroupID: desired.ID, GroupName: desired.Name, GroupRevision: prepared.GroupRevision(), CreatedAt: now,
 	}
-	task.PlanHash, err = releaseGroupMutationPlanHash(taskType, desired)
-	if err != nil {
+	if err := capture.Validate(); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(
-		apiTypes.ReleaseGroupMutationAccepted{TaskID: task.ID, ReleaseGroupID: desired.ID},
+		apiTypes.ReleaseGroupMutationAccepted{TaskID: capture.TaskID, ReleaseGroupID: desired.ID},
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -351,9 +331,9 @@ func (service *MutationService) apply(
 	}
 	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending, Locator: locator,
-		ReplayTarget: &target, Intent: durable, Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+		ReplayTarget: &target, Intent: durable, Response: response, TaskID: capture.TaskID, CreatedAt: now, UpdatedAt: now,
 	}
-	result, mutationErr := service.tasks.PublishReleaseGroupMutation(ctx, environment, project, prepared, task, marker)
+	result, mutationErr := service.tasks.PublishReleaseGroupRemoval(ctx, environment, project, prepared, capture, marker)
 	if mutationErr != nil {
 		if !releaseGroupUnknownOutcome(mutationErr) {
 			return idempotencyrecord.IdempotencyResponse{}, mutationErr
@@ -419,19 +399,6 @@ func releaseGroupReplayResponse(
 		)
 	}
 	return requestidempotency.CloneResponse(resolution.Response), nil
-}
-
-func releaseGroupMutationPlanHash(kind taskjournal.TaskType, group domain.Group) (string, error) {
-	value, err := json.Marshal(struct {
-		Version int                  `json:"version"`
-		Type    taskjournal.TaskType `json:"type"`
-		Group   domain.Group         `json:"group"`
-	}{1, kind, group})
-	if err != nil {
-		return "", errs.Wrap(errs.KindInternal, err)
-	}
-	digest := sha256.Sum256(value)
-	return hex.EncodeToString(digest[:]), nil
 }
 
 func releaseGroupUnknownOutcome(err error) bool {

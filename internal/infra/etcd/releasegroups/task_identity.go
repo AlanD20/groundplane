@@ -7,14 +7,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type MutationTaskIdentity struct {
-	Type     taskjournal.TaskType
-	Executor taskjournal.TaskExecutor
-	Target   string
-	Status   taskjournal.TaskStatus
-	Params   map[string]string
-}
-
 func ValidatePreparedDirect(prepared ReleaseGroupPreparedMutation, marker idempotency.IdempotencyMarker) error {
 	if prepared.TaskType() != taskjournal.TaskCreate && prepared.TaskType() != taskjournal.TaskUpdate {
 		return errs.New(
@@ -44,13 +36,13 @@ func ValidatePreparedDirect(prepared ReleaseGroupPreparedMutation, marker idempo
 	return nil
 }
 
-func ValidatePreparedTask(prepared ReleaseGroupPreparedMutation, task MutationTaskIdentity) error {
+func ValidatePreparedRemoval(prepared ReleaseGroupPreparedMutation, input RemovalInput) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
 	if ids.Validate(ids.KindEnvironment, prepared.EnvironmentID()) != nil ||
-		ids.Validate(ids.KindReleaseGroup, prepared.GroupID()) != nil || prepared.TaskType() != task.Type ||
-		task.Executor != taskjournal.TaskExecutorController || task.Target != prepared.GroupID() ||
-		task.Status != taskjournal.TaskStatusPending || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceReleaseGroup ||
-		len(task.Params) != 1 ||
-		(prepared.TaskType() != taskjournal.TaskCreate && prepared.TaskType() != taskjournal.TaskUpdate && prepared.TaskType() != taskjournal.TaskRemove) {
+		prepared.TaskType() != taskjournal.TaskRemove || prepared.GroupID() != input.GroupID ||
+		prepared.EnvironmentID() != input.Scope.EnvironmentID || prepared.GroupRevision() != input.GroupRevision {
 		return errs.New(errs.KindValidationFailed, "release group prepared mutation is invalid")
 	}
 	if prepared.TaskType() == taskjournal.TaskRemove && prepared.GroupRevision() <= 0 {

@@ -259,24 +259,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			conditions = append(conditions, blueprintAttachChange.conditions...)
 			mutations = append(mutations, blueprintAttachChange.mutations...)
 		}
-		releaseGroupChange, err := repository.prepareReleaseGroupTaskAcknowledgement(
-			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			clear(taskRetentionValue)
-			clear(environmentValue)
-			etcdstore.ClearMutationValues(zoneMutations)
-			clearAttachTaskChange(attachChange)
-			return etcdstore.Versioned[TaskRecord]{}, err
-		}
-		defer clearReleaseGroupTaskChange(releaseGroupChange)
-		if releaseGroupChange.applies {
-			conditions = append(conditions, releaseGroupChange.conditions...)
-			mutations = append(mutations, releaseGroupChange.mutations...)
-		}
 		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
 			ctx, current.Record, taskjournal.TaskStatusAborted, terminalAt, current.ReadRevision, unassigned,
 		)
