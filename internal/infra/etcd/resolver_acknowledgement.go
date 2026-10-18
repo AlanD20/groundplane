@@ -108,8 +108,8 @@ func readResolverStateAcknowledgement(ctx context.Context, store hierarchyStore,
 	}
 	applied := ack.state.Applied
 	if applied == nil {
-		absent := purpose != resolverServingAcknowledgement && ack.state.IntentRevision == 0 &&
-			!component.Desired.Enabled && !component.Runtime.Healthy && len(component.Runtime.GeneratedServices) == 0 &&
+		absent := purpose != resolverServingAcknowledgement && ack.state.IntentRevision == 0 && ack.state.ClaimOwner == nil &&
+			ack.state.Request == nil && !component.Runtime.Healthy && len(component.Runtime.GeneratedServices) == 0 &&
 			read.Values[1] != nil && string(read.Values[1].Value) == componentID
 		return ack, absent, nil
 	}

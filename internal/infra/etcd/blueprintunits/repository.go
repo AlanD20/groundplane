@@ -201,8 +201,8 @@ func prepareMutation(
 		if versioned.Record.EnvironmentID != snapshot.EnvironmentID ||
 			validateApplied(versioned.Record) != nil || versioned.Revision < 0 ||
 			(versioned.Revision == 0 && (!seeded[versioned.Record.Target] ||
-				versioned.Record.State != Absent || hasAppliedEffectSource(versioned.Record))) ||
-			(versioned.Revision > 0 && !hasAppliedEffectSource(versioned.Record)) {
+				versioned.Record.State != Absent || versioned.Record.HasEffectSource())) ||
+			(versioned.Revision > 0 && !versioned.Record.HasEffectSource()) {
 			return MutationPlan{}, invalidRecord()
 		}
 		if _, duplicate := knownApplied[versioned.Record.Target]; duplicate {
@@ -299,6 +299,11 @@ func validAppliedAdvance(
 	snapshot Snapshot, exists bool, next AppliedRecord, executions map[string]etcdstore.Versioned[ExecutionRecord],
 	nativeOperationID string,
 ) bool {
+	if next.MetadataDNS != nil {
+		return exists && nativeOperationID == "" && validMetadataDNSReceipt(next) &&
+			next.MetadataDNS.AuthoredRevisionID == snapshot.HeadTaskID && next.MetadataDNS.AuthoredRevision == snapshot.HeadRevision &&
+			(snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID)
+	}
 	if next.NativeOperationID != "" {
 		return nativeOperationID != "" && next.NativeOperationID == nativeOperationID &&
 			validateApplied(next) == nil

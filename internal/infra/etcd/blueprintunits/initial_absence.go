@@ -164,7 +164,7 @@ func (repository *Repository) loadInitialAbsence(ctx context.Context, snapshot *
 func materializeInitialAbsence(snapshot *Snapshot) error {
 	applied := make(map[ResourceKey]bool, len(snapshot.Applied))
 	for _, versioned := range snapshot.Applied {
-		if applied[versioned.Record.Target] || !hasAppliedEffectSource(versioned.Record) {
+		if applied[versioned.Record.Target] || !versioned.Record.HasEffectSource() {
 			return corruptRecord()
 		}
 		applied[versioned.Record.Target] = true
@@ -223,8 +223,8 @@ func validateInitialAbsenceAuthority(snapshot Snapshot, desired DesiredPlan) err
 		if versioned.Record.EnvironmentID != snapshot.EnvironmentID ||
 			validateApplied(versioned.Record) != nil || versioned.Revision < 0 ||
 			(versioned.Revision == 0 && (!seeded[versioned.Record.Target] ||
-				versioned.Record.State != Absent || hasAppliedEffectSource(versioned.Record))) ||
-			(versioned.Revision > 0 && !hasAppliedEffectSource(versioned.Record)) ||
+				versioned.Record.State != Absent || versioned.Record.HasEffectSource())) ||
+			(versioned.Revision > 0 && !versioned.Record.HasEffectSource()) ||
 			knownApplied[versioned.Record.Target] {
 			return invalidRecord()
 		}

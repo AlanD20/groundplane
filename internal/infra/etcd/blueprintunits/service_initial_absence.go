@@ -24,7 +24,7 @@ func RequireInitialServiceAbsence(snapshot Snapshot, serviceID string) ([]keyval
 		if applied.Record.Target != target {
 			continue
 		}
-		if found || applied.Revision != 0 || applied.Record.State != Absent || hasAppliedEffectSource(applied.Record) {
+		if found || applied.Revision != 0 || applied.Record.State != Absent || applied.Record.HasEffectSource() {
 			return nil, errs.New(errs.KindStateConflict, "Service has applied effects; removal requires captured runtime proof")
 		}
 		found = true

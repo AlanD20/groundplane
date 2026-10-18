@@ -115,8 +115,7 @@ func omissionSourceRetired(
 	if err != nil || receipt.EnvironmentID != environmentID || receipt.Target != target {
 		return false, errs.New(errs.KindInternal, "Blueprint omission retention receipt is corrupt")
 	}
-	return receipt.State == blueprintunits.Absent &&
-		(receipt.SourceTaskID != "" || receipt.ControllerOperationID != ""), nil
+	return receipt.State == blueprintunits.Absent && receipt.HasEffectSource(), nil
 }
 
 func executionHeld(

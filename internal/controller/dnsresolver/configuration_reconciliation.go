@@ -45,6 +45,10 @@ func (reconciler *ConfigurationReconciler) Run(ctx context.Context) {
 	for {
 		operation, cancel := context.WithTimeout(ctx, 30*time.Second)
 		err := reconciler.reconcile(operation)
+		cleanupErr := reconciler.tasks.ReconcileResolverDNSMetadata(operation)
+		if cleanupErr != nil && ctx.Err() == nil {
+			reconciler.logger.Warn("resolver metadata cleanup pending", slog.Any("error", cleanupErr))
+		}
 		cancel()
 		if err != nil && ctx.Err() == nil {
 			reconciler.logger.Warn("resolver configuration reconciliation pending", slog.Any("error", err))

@@ -49,7 +49,7 @@ func TryPrepareControllerServiceDeclarationRemoval(
 	initial := false
 	for _, applied := range snapshot.Applied {
 		if applied.Record.Target == unit.Target {
-			initial = applied.Revision == 0 && applied.Record.State == Absent && !hasAppliedEffectSource(applied.Record)
+			initial = applied.Revision == 0 && applied.Record.State == Absent && !applied.Record.HasEffectSource()
 		}
 	}
 	if !initial {

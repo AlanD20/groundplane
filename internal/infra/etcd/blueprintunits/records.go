@@ -63,6 +63,7 @@ type AppliedRecord struct {
 	ControllerProxySelection            bool                           `json:"controller_proxy_selection,omitempty"`
 	ControllerScriptSetRevision         int64                          `json:"controller_script_set_revision,omitempty"`
 	ControllerDNS                       *DNSReceipt                    `json:"controller_dns,omitempty"`
+	MetadataDNS                         *MetadataDNSReceipt            `json:"metadata_dns,omitempty"`
 	ControllerServiceDeclarationAbsence *ServiceDeclarationAbsence     `json:"controller_service_declaration_absence,omitempty"`
 }
 
@@ -239,6 +240,12 @@ func validateApplied(record AppliedRecord) error {
 		!validKeys(record.AffectedWrites) {
 		return invalidRecord()
 	}
+	if record.MetadataDNS != nil {
+		if !validMetadataDNSReceipt(record) {
+			return invalidRecord()
+		}
+		return nil
+	}
 	if record.ControllerProxySelection &&
 		(record.Target.Kind != ids.KindComponent || record.ControllerOperationID == "" ||
 			record.NativeOperationID != "" || record.Execution != nil || record.State != Applied) {
@@ -364,8 +371,8 @@ func validateApplied(record AppliedRecord) error {
 	return nil
 }
 
-func hasAppliedEffectSource(record AppliedRecord) bool {
-	return record.Execution != nil || record.ControllerOperationID != ""
+func (record AppliedRecord) HasEffectSource() bool {
+	return record.Execution != nil || record.ControllerOperationID != "" || record.MetadataDNS != nil
 }
 
 func validateExecution(record ExecutionRecord) error {
