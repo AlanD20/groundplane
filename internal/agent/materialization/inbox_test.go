@@ -487,6 +487,10 @@ type decodingMaterializationHelper struct {
 	err       error
 }
 
+func (helper *decodingMaterializationHelper) StopCaptured(context.Context, materializerrunner.Ownership) error {
+	return nil
+}
+
 func (helper *decodingMaterializationHelper) Run(
 	ctx context.Context,
 	request materializerrunner.Request,

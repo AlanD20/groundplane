@@ -10,6 +10,7 @@ import (
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	registeredcaddy "github.com/AlanD20/groundplane-registered-components/caddy"
+	"github.com/AlanD20/groundplane/internal/app/agentplatform"
 	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
 )
@@ -22,7 +23,7 @@ func TestRegisteredComponentFilePreflightUsesPinnedNativeRecipe(t *testing.T) {
 		t.Fatal(err)
 	}
 	executor := &componentFileValidationExecutor{}
-	validator, err := newComponentFileValidator(catalog, executor)
+	validator, err := agentplatform.NewComponentFileValidator(catalog, executor)
 	if err != nil {
 		t.Fatal(err)
 	}

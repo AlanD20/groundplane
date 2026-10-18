@@ -12,14 +12,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const taskJournalTestResponse = `{"items":[{"id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV",` +
-	`"operation_id":"op_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"deploy",` +
-	`"target":"svc_01ARZ3NDEKTSV4RRFFQ69G5FAV","status":"running",` +
-	`"workspace_type":"tenant","tenant_id":"tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV",` +
-	`"project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV",` +
-	`"environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","actor":"operator",` +
-	`"created_at":"2026-08-24T10:00:00Z","updated_at":"2026-08-24T10:01:00Z",` +
-	`"started_at":"2026-08-24T10:00:30Z","finished_at":null}]}`
+const taskJournalTestResponse = `{"items":[{"id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+"resource_kind":"service","action":"deploy","target_id":"svc_01ARZ3NDEKTSV4RRFFQ69G5FAV","target_name":"web","status":"running",
+"scope":{"tenant_id":"tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV","project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV","environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+"actor":"operator","created_at":"2026-08-24T10:00:00Z","updated_at":"2026-08-24T10:01:00Z","deadline":"2026-08-24T11:00:00Z",
+"counts":{"running":1},"history_expired":false,"stop_requested":false,"cancel":{"allowed":true}}],
+"more":false,"revision":73}`
 
 func writeTaskJournalTestResponse(t *testing.T, writer io.Writer, response string) {
 	t.Helper()
@@ -65,10 +63,7 @@ func TestTaskAndActivityResolveEnvironmentJournalScope(t *testing.T) {
 						`"volume_dir":"/var/lib/groundplane/vol/env","provisioning_state":"ready"}]}`)
 				case test.endpoint:
 					query := request.URL.Query()
-					if query.Get("environment") != environmentID || query.Get("project") != "" ||
-						query.Get("workspace") != "" ||
-						query.Get("limit") != "50" ||
-						len(query) != 2 {
+					if query.Get("scope") != environmentID || query.Get("limit") != "25" {
 						t.Errorf("journal request = %s", request.URL.RequestURI())
 					}
 					writeTaskJournalTestResponse(t, writer, taskJournalTestResponse)
@@ -123,8 +118,7 @@ func TestTaskJournalResolvesWorkspaceLabelAndPlatformLiteral(t *testing.T) {
 						`"name":"Acme","description":""}]}`)
 					return
 				}
-				if request.URL.Path != "/api/v1/tasks" || request.URL.Query().Get("workspace") != test.want ||
-					request.URL.Query().Get("environment") != "" || request.URL.Query().Get("project") != "" {
+				if request.URL.Path != "/api/v1/tasks" || request.URL.Query().Get("scope") != test.want {
 					t.Errorf("journal request = %s", request.URL.RequestURI())
 				}
 				writeTaskJournalTestResponse(t, writer, taskJournalTestResponse)
@@ -141,7 +135,7 @@ func TestTaskJournalResolvesWorkspaceLabelAndPlatformLiteral(t *testing.T) {
 
 // QA: TASK-01; local query forwarding only, not fixed-revision page contents or concurrent pagination.
 // Rationale: Task and Activity are one pageable journal, so both CLI nouns
-// must forward the same page size and interchangeable opaque cursor.
+// must forward the same page size and fixed-revision continuation.
 func TestTaskAndActivityForwardPagination(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -158,7 +152,7 @@ func TestTaskAndActivityForwardPagination(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 				query := request.URL.Query()
 				if request.URL.Path != test.endpoint || query.Get("limit") != "17" ||
-					query.Get("cursor") != "shared-cursor" || len(query) != 2 {
+					query.Get("after") != "task_01ARZ3NDEKTSV4RRFFQ69G5FAV" || query.Get("revision") != "73" {
 					t.Errorf("journal request = %s", request.URL.RequestURI())
 				}
 				writer.Header().Set("Content-Type", "application/json")
@@ -167,7 +161,7 @@ func TestTaskAndActivityForwardPagination(t *testing.T) {
 			defer server.Close()
 
 			executeNoun(t, test.command(), server.URL, Scope{},
-				"list", "--limit", "17", "--cursor", "shared-cursor")
+				"list", "--limit", "17", "--after", "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", "--revision", "73")
 		})
 	}
 }
@@ -187,10 +181,10 @@ func TestTaskJournalIDBypassAndDualScopeRejection(t *testing.T) {
 		Scope: Scope{Environment: environmentID, AsID: true},
 	}))
 	options, err := resolveTaskJournalListOptions(command, "", 17, "shared-cursor")
-	if err != nil || options.Environment != environmentID {
+	if err != nil || options.Scope != environmentID {
 		t.Fatalf("id scope = %#v, %v", options, err)
 	}
-	if options.Limit != 17 || options.Cursor != "shared-cursor" {
+	if options.Limit != 17 || options.After != "shared-cursor" {
 		t.Fatalf("pagination = %#v", options)
 	}
 	projectCommand := newTaskCmd()
@@ -198,7 +192,7 @@ func TestTaskJournalIDBypassAndDualScopeRejection(t *testing.T) {
 		Scope: Scope{Project: projectID, AsID: true},
 	}))
 	projectOptions, err := resolveTaskJournalListOptions(projectCommand, "", 0, "")
-	if err != nil || projectOptions.Project != projectID {
+	if err != nil || projectOptions.Scope != projectID {
 		t.Fatalf("Project id scope = %#v, %v", projectOptions, err)
 	}
 	tenantCommand := newTaskCmd()
@@ -206,7 +200,7 @@ func TestTaskJournalIDBypassAndDualScopeRejection(t *testing.T) {
 		Scope: Scope{Tenant: tenantID, AsID: true},
 	}))
 	tenantOptions, err := resolveTaskJournalListOptions(tenantCommand, "", 0, "")
-	if err != nil || tenantOptions.Workspace != tenantID {
+	if err != nil || tenantOptions.Scope != tenantID {
 		t.Fatalf("Tenant id scope = %#v, %v", tenantOptions, err)
 	}
 

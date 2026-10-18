@@ -2,8 +2,10 @@ package apiclient
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -39,28 +42,18 @@ func TestStreamTaskEventsReconnectsWithGeneratedResumeHeader(t *testing.T) {
 			}
 			writer.Header().Set("Content-Type", "text/event-stream")
 			sequence := attempt
-			_, _ = fmt.Fprintf(
-				writer,
-				"id: %d\ndata: {\"sequence\":%d,\"step_id\":\"step_01ARZ3NDEKTSV4RRFFQ69G5FAV\","+
-					"\"state\":\"running\",\"attempt\":1,\"ordinal\":%d,"+
-					"\"received_at\":\"2026-08-23T04:30:00Z\"}\n\n",
-				sequence,
-				sequence,
-				sequence,
-			)
+			if _, err := io.WriteString(writer, taskEventFrame(t, uint64(sequence))); err != nil {
+				t.Error(err)
+			}
 		case "/api/v1/tasks/" + taskID:
-			status := "running"
+			finished := ""
 			if showRequests.Add(1) == 2 {
-				status = "completed"
+				finished = `,"finished_at":"2026-08-23T04:31:00Z"`
 			}
 			writer.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprintf(
-				writer,
-				`{"id":%q,"operation_id":"op_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"run",`+
-					`"target":"svc_01ARZ3NDEKTSV4RRFFQ69G5FAV","status":%q}`,
-				taskID,
-				status,
-			)
+			if _, err := fmt.Fprintf(writer, `{"task":{"id":%q%s},"work":{"items":[],"more":false,"revision":1}}`, taskID, finished); err != nil {
+				t.Error(err)
+			}
 		default:
 			http.NotFound(writer, request)
 		}
@@ -92,15 +85,7 @@ func TestStreamTaskEventsReconnectsWithGeneratedResumeHeader(t *testing.T) {
 // QA: TASK-06; local reconnect/parser behavior, not durable compaction or live drain.
 func TestConsumeTaskEventStreamDeduplicatesReplayAndRejectsGap(t *testing.T) {
 	t.Parallel()
-	event := func(sequence int) string {
-		return fmt.Sprintf(
-			"id: %d\ndata: {\"sequence\":%d,\"step_id\":\"step_1\",\"state\":\"running\","+
-				"\"attempt\":1,\"ordinal\":%d,\"received_at\":\"2026-08-23T04:30:00Z\"}\n\n",
-			sequence,
-			sequence,
-			sequence,
-		)
-	}
+	event := func(sequence int) string { return taskEventFrame(t, uint64(sequence)) }
 	var sequences []uint64
 	last, err := consumeTaskEventStream(
 		context.Background(),
@@ -154,4 +139,20 @@ func TestConsumeTaskEventStreamTreatsPartialFrameAsRetryable(t *testing.T) {
 	if !errs.IsRetryable(err) || last != 0 {
 		t.Fatalf("partial frame = last %d, error %v; want unchanged cursor and retryable", last, err)
 	}
+}
+
+func taskEventFrame(t *testing.T, sequence uint64) string {
+	t.Helper()
+	at := time.Date(2026, 8, 23, 4, 30, 0, 0, time.UTC)
+	event := apiTypes.TaskEvent{
+		Sequence: sequence, WorkItemID: "work_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		AttemptID: "try_01ARZ3NDEKTSV4RRFFQ69G5FAV", AttemptSequence: sequence, RecordedAt: at,
+		Stage: workexecution.Stage{Key: "start-candidate", Name: "Start candidate", State: workexecution.StageRunning,
+			Expected: "Candidate is running", StartedAt: &at},
+	}
+	raw, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fmt.Sprintf("id: %d\ndata: %s\n\n", sequence, raw)
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// QA: TASK-25. Real journal/delivery persistence is covered separately by TASK-22.
 // Rationale: lost control acknowledgements after setup effects must resume only
 // cleanup, or the durable result, never create or start another setup container.
 func TestExplicitScriptLostAcknowledgementResumesWithoutDuplicateStart(t *testing.T) {
@@ -33,9 +33,9 @@ func TestExplicitScriptLostAcknowledgementResumesWithoutDuplicateStart(t *testin
 				reason: agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE},
 		} {
 			t.Run(state.String()+"/"+outcome.name, func(t *testing.T) {
-				assignment, step, digest := capturedContainerFailureFixture()
-				setExplicitScriptFixture(t, &assignment)
-				durable := assignment.ScriptCheckpoints[0]
+				invocation, digest := capturedContainerFailureFixture()
+				setExplicitScriptFixture(t, &invocation)
+				durable := invocation.Checkpoint
 				lostAck := errs.New(errs.KindRequestFailed, "checkpoint acknowledgement lost")
 				checkpoint := func(_ context.Context, request *agentpb.ScriptCheckpointRequest) error {
 					persistScriptCheckpointForTest(t, durable, request)
@@ -45,18 +45,20 @@ func TestExplicitScriptLostAcknowledgementResumesWithoutDuplicateStart(t *testin
 					return nil
 				}
 				events := []string{}
-				runtime, err := New(&checkpointOrderScriptEngine{
+				engine := &capturedProjectionScriptEngine{checkpointOrderScriptEngine: &checkpointOrderScriptEngine{
 					events: &events, bodyDigest: digest, runErr: outcome.runErr,
-				})
+				}}
+				runtime, err := New(engine)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := runtime.ExecuteScript(context.Background(), assignment, step, checkpoint); !errors.Is(
+				if _, err := runtime.ExecuteScript(context.Background(), invocation, checkpoint); !errors.Is(
 					err,
 					lostAck,
 				) {
 					t.Fatalf("first execution error = %v, want lost acknowledgement", err)
 				}
+				assertExplicitScriptCapture(t, invocation, engine)
 				if durable.State != state || durable.GetOutcome().GetReason() != outcome.reason {
 					t.Fatalf("retained state/outcome = %s/%s", durable.State, durable.GetOutcome().GetReason())
 				}
@@ -76,7 +78,7 @@ func TestExplicitScriptLostAcknowledgementResumesWithoutDuplicateStart(t *testin
 					persistScriptCheckpointForTest(t, durable, request)
 					return nil
 				}
-				_, resumeErr := resumed.ExecuteScript(context.Background(), assignment, step, acknowledge)
+				_, resumeErr := resumed.ExecuteScript(context.Background(), invocation, acknowledge)
 				if (resumeErr != nil) != (outcome.runErr != nil) {
 					t.Fatalf("resumed result = %v, want original outcome %s", resumeErr, outcome.reason)
 				}
@@ -102,7 +104,9 @@ func persistScriptCheckpointForTest(
 	request *agentpb.ScriptCheckpointRequest,
 ) {
 	t.Helper()
-	if _, err := executionplan.ValidateScriptCheckpointRequest(request); err != nil {
+	// Runtime callbacks receive an unsequenced draft. The journal/delivery owner
+	// adds the attempt-wide sequence before validating the complete wire report.
+	if _, err := executionplan.ComputeScriptCheckpointPayloadDigest(request); err != nil {
 		t.Fatal(err)
 	}
 	if request.ExpectedState != durable.State {
@@ -127,11 +131,10 @@ func persistScriptCheckpointForTest(
 	}
 }
 
-// This is an L1 received-assignment fixture, not a substitute for the separate
-// full-plan sealing and actual-source publication tests.
-func setExplicitScriptFixture(t *testing.T, assignment *testtaskassignment.Assignment) {
+// This received native invocation exercises execution, not source publication.
+func setExplicitScriptFixture(t *testing.T, invocation *Invocation) {
 	t.Helper()
-	snapshot, projection := assignment.Plan.ScriptRunnerSnapshots[0], assignment.Plan.ScriptRunnerProjections[0]
+	snapshot, projection := invocation.Snapshot, invocation.Projection
 	context := &agentpb.ScriptExplicitExecutionContext{
 		ImageReference: "example.test/setup@sha256:" + strings.Repeat("c", 64), User: "1000:1000",
 		Volumes: []*agentpb.ScriptExplicitVolumeGrant{{
@@ -162,7 +165,7 @@ func setExplicitScriptFixture(t *testing.T, assignment *testtaskassignment.Assig
 		Kind: agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV, EnvironmentKey: "SETUP_VALUE",
 	}}
 	projection.EntryBindings = snapshot.EntryBindings
-	assignment.ScriptArtifacts.Entries = []*agentpb.ScriptEntryArtifact{
+	invocation.Entries = []*agentpb.ScriptEntryArtifact{
 		{Binding: snapshot.EntryBindings[0], Value: []byte("declared-fixture-value")},
 		{Binding: &agentpb.ScriptRunnerEntryBinding{
 			EntryId: "ev_01ARZ3NDEKTSV4RRFFQ69G5FAW", ValueGenerationId: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW",
@@ -189,24 +192,19 @@ func (engine *capturedProjectionScriptEngine) CreateContainer(
 
 func assertExplicitScriptCapture(
 	t *testing.T,
-	assignment testtaskassignment.Assignment,
+	invocation Invocation,
 	engine *capturedProjectionScriptEngine,
 ) {
 	t.Helper()
-	if !proto.Equal(engine.projection, assignment.Plan.ScriptRunnerProjections[0]) {
+	if !proto.Equal(engine.projection, invocation.Projection) {
 		t.Fatal("container creation did not receive the exact explicit runner projection")
 	}
-	if engine.createdImage == assignment.Plan.ScriptRunnerSnapshots[0].ExplicitExecution.ReleaseLocalImageId {
+	if engine.createdImage == invocation.Snapshot.ExplicitExecution.ReleaseLocalImageId {
 		t.Fatal("setup container used the consumer Release image")
 	}
 	if len(engine.entries) != 1 ||
-		!proto.Equal(engine.entries[0].Binding, assignment.Plan.ScriptRunnerSnapshots[0].EntryBindings[0]) ||
+		!proto.Equal(engine.entries[0].Binding, invocation.Snapshot.EntryBindings[0]) ||
 		string(engine.entries[0].Value) != "declared-fixture-value" {
 		t.Fatal("container creation did not receive only its declared Entry generation")
-	}
-	for _, entry := range assignment.ScriptArtifacts.Entries {
-		if len(entry.Value) != 0 {
-			t.Fatal("completed assignment retained an Entry value")
-		}
 	}
 }
