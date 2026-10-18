@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"slices"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -52,6 +53,7 @@ type DirectReleasePreparation struct {
 	Predecessor   BlueprintNativePredecessorCapture `json:"predecessor"`
 	Hooks         []DirectReleaseHookSources        `json:"hooks,omitempty"`
 	Networks      []DirectReleaseNetwork            `json:"networks,omitempty"`
+	GroupID       string                            `json:"group_id,omitempty"`
 }
 
 func (request DirectReleasePreparation) validate() error {
@@ -68,6 +70,11 @@ func (request DirectReleasePreparation) validate() error {
 		request.Predecessor.ServiceID != request.Intent.ServiceID ||
 		request.Predecessor.FixedReadRevision != request.Source.ReadRevision {
 		return errs.New(errs.KindValidationFailed, "Direct Release preparation identity or source is invalid")
+	}
+	if request.GroupID == "" && (request.Intent.GroupOperationID != "" || request.Intent.GroupMemberOrdinal != 0) ||
+		request.GroupID != "" && (ids.Validate(ids.KindReleaseGroup, request.GroupID) != nil ||
+			request.Intent.GroupOperationID == "" || request.Intent.GroupMemberOrdinal == 0) {
+		return errs.New(errs.KindValidationFailed, "Direct Release Group provenance is invalid")
 	}
 	for _, revision := range []int64{request.Source.EnvironmentRevision, request.Source.ProjectRevision,
 		request.Source.DesiredRevision, request.Source.EpochRevision} {
@@ -169,13 +176,20 @@ func (request DirectReleasePreparation) Matches(task workexecution.Task, item wo
 	if err != nil {
 		return err
 	}
-	if task.Intent != reference || request.Rollout != rollout || capture.SourceReadRevision != request.Source.ReadRevision ||
-		task.ExpectedItems != uint32(len(request.Networks)+1) || !slices.Equal(item.Dependencies, request.releaseDependencies()) ||
+	if request.GroupID == "" {
+		if task.Intent != reference || task.ExpectedItems != uint32(len(request.Networks)+1) || capture.Group != nil ||
+			!slices.Equal(item.Dependencies, request.releaseDependencies()) {
+			return errs.New(errs.KindStateConflict, "Standalone Release membership differs from its accepted preparation")
+		}
+	} else if capture.Group == nil || capture.Group.GroupID != request.GroupID || task.TargetID != request.GroupID ||
+		capture.Group.OperationID != request.Intent.GroupOperationID || capture.Group.Ordinal != request.Intent.GroupMemberOrdinal {
+		return errs.New(errs.KindStateConflict, "Group Release membership differs from its accepted preparation")
+	}
+	if request.Rollout != rollout || capture.SourceReadRevision != request.Source.ReadRevision ||
 		capture.OperationID != request.Intent.OperationID || capture.PublicationID != request.Manifest.Record.PublicationID ||
 		request.Intent.Workspace.TenantID != task.Scope.TenantID || request.Intent.Workspace.ProjectID != task.Scope.ProjectID ||
 		request.Intent.Workspace.EnvironmentID != task.Scope.EnvironmentID ||
 		request.Intent.Actor != string(task.Actor) || !request.Intent.CreatedAt.Equal(capture.CreatedAt) ||
-		request.Intent.GroupOperationID != "" || request.Intent.GroupMemberOrdinal != 0 ||
 		capture.Render.ReleaseID != request.Intent.ID || capture.Render.ServiceID != request.Intent.ServiceID ||
 		capture.Render.CandidateWorkload != request.Intent.CandidateWorkload || capture.Render.Strategy != request.Intent.Strategy ||
 		capture.Render.Slot != request.Intent.Slot || request.Configuration.Generation != capture.Render.Projection.RenderGeneration ||

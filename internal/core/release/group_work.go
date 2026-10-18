@@ -37,11 +37,13 @@ const (
 // The owner compares the observed work revisions with the input/settlement write.
 // A skipped item requires saved no-effect evidence; it is not a fake attempt.
 type GroupWorkDecision struct {
-	Action  GroupWorkAction
-	WorkID  string
-	Outcome workexecution.Outcome
-	Reason  string
-	Reads   []string
+	Action        GroupWorkAction
+	WorkID        string
+	Outcome       workexecution.Outcome
+	Reason        string
+	Reads         []string
+	SourceWorkID  string
+	FailureWorkID string
 }
 
 func (manifest GroupWorkManifest) Validate() error {
@@ -152,9 +154,13 @@ func DecideGroupWork(manifest GroupWorkManifest, items []workexecution.Item, at 
 		item := byID[member.RestoreID]
 		if item.Phase != workexecution.Settled {
 			if item.Input == nil && item.AttemptNumber == 0 && item.ActiveAttemptID == "" && !item.ForwardRevoked {
-				return decision(GroupWorkRestore, item.ID, "", "Restore the earlier serving member in reverse order"), nil
+				selected := decision(GroupWorkRestore, item.ID, "", "Restore the earlier serving member in reverse order")
+				selected.SourceWorkID, selected.FailureWorkID = member.ForwardID, manifest.Members[failed].ForwardID
+				return selected, nil
 			}
-			return decision(GroupWorkWait, item.ID, "", "Waiting for captured restoration and its effects to settle"), nil
+			selected := decision(GroupWorkWait, item.ID, "", "Waiting for captured restoration and its effects to settle")
+			selected.SourceWorkID, selected.FailureWorkID = member.ForwardID, manifest.Members[failed].ForwardID
+			return selected, nil
 		}
 		outcome := MemberCompensated
 		if item.Outcome != workexecution.Succeeded {

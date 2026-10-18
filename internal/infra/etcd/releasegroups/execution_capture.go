@@ -74,6 +74,14 @@ func (capture ExecutionCapture) Validate() error {
 			capture.Members[index].Forward.ID == capture.Members[index].Restore.ID {
 			return errs.New(errs.KindValidationFailed, "Release Group member preparation is incomplete")
 		}
+		preparation, err := capture.RestorationPreparation(index)
+		if err != nil {
+			return err
+		}
+		reference, err := preparation.Reference()
+		if err != nil || reference != capture.Members[index].Restore {
+			return errs.New(errs.KindValidationFailed, "Release Group restoration differs from its accepted source preparation")
+		}
 		for ordinal, id := range []string{member.ForwardID, member.RestoreID} {
 			item, found := byID[id]
 			operation := workexecution.Release

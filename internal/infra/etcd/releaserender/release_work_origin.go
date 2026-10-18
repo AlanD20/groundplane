@@ -43,7 +43,7 @@ func (capture ServiceRolloutCapture) MatchesWork(task workexecution.Task, item w
 	if err != nil {
 		return err
 	}
-	if task.Validate() != nil || item.Validate() != nil || capture.Action != task.Action ||
+	if task.Validate() != nil || item.Validate() != nil || !capture.matchesActionTarget(task, item) ||
 		item.TaskID != task.ID || item.Operation != workexecution.Release ||
 		capture.TaskID != task.ID || capture.WorkItemID != item.ID || capture.Scope != task.Scope ||
 		capture.Placement != item.Placement || render.ServiceID != item.TargetID ||

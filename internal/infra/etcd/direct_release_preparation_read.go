@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
@@ -24,6 +25,9 @@ func (ledger *ReleaseLedger) ReadDirectReleasePreparation(ctx context.Context, w
 		task.Validate() != nil || item.Validate() != nil || item.TaskID != task.ID || item.Operation != workexecution.Release ||
 		task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback {
 		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindValidationFailed, "Direct Release preparation requires its native work snapshot")
+	}
+	if ids.Validate(ids.KindReleaseGroup, task.TargetID) == nil {
+		return ledger.readGroupReleasePreparation(ctx, work)
 	}
 	request, guard, err := ledger.ReadDirectReleaseTaskPreparation(ctx, work.Task, work.ReadRevision)
 	if err != nil {
@@ -123,15 +127,26 @@ func (ledger *ReleaseLedger) directReleaseSourceConditions(ctx context.Context, 
 // trying to prepare an input whose accepted source is no longer current.
 func (ledger *ReleaseLedger) MatchDirectReleaseSource(ctx context.Context, work workqueue.View, request DirectReleasePreparation) (bool, []keyvalue.Condition, error) {
 	value, expected, err := EncodeDirectReleasePreparation(request)
-	clear(value)
 	if err != nil {
 		return false, nil, err
 	}
-	if work.Task.Task.Validate() != nil || work.Item.Item.Validate() != nil || work.Task.Task.Intent != expected ||
+	defer clear(value)
+	if work.Task.Task.Validate() != nil || work.Item.Item.Validate() != nil || request.GroupID == "" && work.Task.Task.Intent != expected ||
 		work.Task.Task.ID != request.Configuration.TaskID || work.Item.Item.ID != request.Configuration.WorkItemID ||
 		work.Item.Item.TaskID != work.Task.Task.ID || work.Item.Item.TargetID != request.Intent.ServiceID ||
 		work.Task.Task.Scope.EnvironmentID != request.Intent.EnvironmentID {
 		return false, nil, errs.New(errs.KindStateConflict, "Direct Release source does not own this native work")
+	}
+	if request.GroupID != "" {
+		stored, _, err := ledger.ReadDirectReleasePreparation(ctx, work)
+		if err != nil {
+			return false, nil, err
+		}
+		captured, _, err := EncodeDirectReleasePreparation(stored)
+		defer clear(captured)
+		if err != nil || !bytes.Equal(captured, value) {
+			return false, nil, errs.New(errs.KindStateConflict, "Group Release source differs from its captured member")
+		}
 	}
 	return ledger.readDirectReleaseSourceMatch(ctx, work.Task.Task.Scope, request.Source, work.Item.Item.TargetID, work.ReadRevision)
 }

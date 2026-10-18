@@ -65,6 +65,13 @@ func (ledger *ReleaseLedger) releaseWorkManifestMember(ctx context.Context,
 		render.ServiceID != intent.ServiceID || render.CandidateWorkload != intent.CandidateWorkload {
 		return empty, nil, releases.CorruptReleaseRecord()
 	}
+	if capture.Group == nil {
+		if intent.GroupOperationID != "" || intent.GroupMemberOrdinal != 0 {
+			return empty, nil, releases.CorruptReleaseRecord()
+		}
+	} else if intent.GroupOperationID != capture.Group.OperationID || intent.GroupMemberOrdinal != capture.Group.Ordinal {
+		return empty, nil, releases.CorruptReleaseRecord()
+	}
 	staged := releaserender.CloneReleaseRenderInput(render)
 	captured := releaserender.CloneReleaseRenderInput(capture.Render)
 	staged.Hooks, captured.Hooks = nil, nil

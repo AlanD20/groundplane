@@ -29,6 +29,7 @@ type ServiceRolloutCapture struct {
 	Deadline           time.Time               `json:"deadline"`
 	Render             ReleaseRenderInput      `json:"render"`
 	CandidateArtifact  []byte                  `json:"candidate_artifact"`
+	Group              *GroupMemberBinding     `json:"group,omitempty"`
 }
 
 // OpenServiceRolloutCapture returns owned typed input, not a decoded
@@ -52,6 +53,9 @@ func OpenServiceRolloutCapture(capture ServiceRolloutCapture) (ReleaseRenderInpu
 	}
 	if err := ValidateReleaseRenderInput(capture.Render); err != nil {
 		return ReleaseRenderInput{}, err
+	}
+	if capture.Group != nil && (capture.Group.Validate() != nil || capture.Action == workexecution.ActionApply) {
+		return ReleaseRenderInput{}, errs.New(errs.KindValidationFailed, "Service rollout Group binding is invalid for this action")
 	}
 	operation, err := ReleaseOperationKind(capture.Action)
 	if err != nil {
