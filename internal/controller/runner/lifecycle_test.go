@@ -17,7 +17,7 @@ func TestCreateResolvesIssuedEffectWithoutRedispatch(t *testing.T) {
 	t.Parallel()
 	journal := newMemoryJournal()
 	runtime := &recordingRuntime{}
-	lifecycle, err := NewLifecycle(journal, runtime)
+	lifecycle, err := NewLifecycle(journal, runtime, newRunnerTestDiagnostics(t))
 	if err != nil {
 		t.Fatalf("NewLifecycle() error = %v", err)
 	}
@@ -26,15 +26,16 @@ func TestCreateResolvesIssuedEffectWithoutRedispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRegistrationToken() error = %v", err)
 	}
-	attempt := Attempt{TaskID: "task_create", Executor: "controller", Plan: testPlan()}
+	attempt := runnerLifecycleAttempt(false)
 	issued := corerunner.StepStartDaemon
 	journal.progress = Progress{
 		Plan:     attempt.Plan.Clone(),
 		RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID, Executor: attempt.Executor,
+		WorkItemID: attempt.WorkItemID, AttemptID: attempt.AttemptID, AttemptNumber: attempt.AttemptNumber, OwnershipNonce: attempt.OwnershipNonce,
 		PlanDigest: attempt.Plan.Digest(), IdentityDigest: attempt.Plan.IdentityDigest(), RuntimeEpoch: 1,
 		Operation: OperationCreate, NextStep: 3, ActiveStep: &issued, Status: StatusRunning, Revision: 1,
 	}
-	if err := lifecycle.Create(context.Background(), attempt, token); err != nil {
+	if _, err := lifecycle.CreateWithEvidence(context.Background(), attempt, token, &runnerTestAuthority{journal: journal}); err != nil {
 		t.Fatalf("Create(recovery) error = %v", err)
 	}
 	if !allZero(tokenBytes) {
@@ -69,14 +70,15 @@ func TestCreateWithoutUsableTokenRequiresFreshRegistrationToken(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			journal := newMemoryJournal()
 			runtime := &recordingRuntime{}
-			lifecycle, err := NewLifecycle(journal, runtime)
+			lifecycle, err := NewLifecycle(journal, runtime, newRunnerTestDiagnostics(t))
 			if err != nil {
 				t.Fatalf("NewLifecycle() error = %v", err)
 			}
-			err = lifecycle.Create(
+			_, err = lifecycle.CreateWithEvidence(
 				context.Background(),
-				Attempt{TaskID: "task_create", Executor: "controller", Plan: testPlan()},
+				runnerLifecycleAttempt(false),
 				test.token,
+				&runnerTestAuthority{journal: journal},
 			)
 			var domainError *errs.Error
 			if !errors.As(err, &domainError) || domainError.Detail != "registration_token_required" {
@@ -98,16 +100,17 @@ func TestCreateReplaysRegistrationWithoutToken(t *testing.T) {
 	for _, ready := range []bool{false, true} {
 		journal := newMemoryJournal()
 		runtime := &recordingRuntime{}
-		lifecycle, err := NewLifecycle(journal, runtime)
+		lifecycle, err := NewLifecycle(journal, runtime, newRunnerTestDiagnostics(t))
 		if err != nil {
 			t.Fatal(err)
 		}
-		attempt := Attempt{TaskID: "task_create", Executor: "controller", Plan: testPlan()}
+		attempt := runnerLifecycleAttempt(false)
 		registration := corerunner.StepStartRunner
 		ownership := testRuntimeEvidence()
 		journal.progress = Progress{
 			Plan: attempt.Plan.Clone(), RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID,
-			Executor: attempt.Executor, PlanDigest: attempt.Plan.Digest(), IdentityDigest: attempt.Plan.IdentityDigest(),
+			Executor: attempt.Executor, WorkItemID: attempt.WorkItemID, AttemptID: attempt.AttemptID,
+			AttemptNumber: attempt.AttemptNumber, OwnershipNonce: attempt.OwnershipNonce, PlanDigest: attempt.Plan.Digest(), IdentityDigest: attempt.Plan.IdentityDigest(),
 			RuntimeEpoch: 1, Operation: OperationCreate, NextStep: len(corerunner.CreationSteps()) - 1,
 			ActiveStep: &registration, Status: StatusRunning, Revision: 1,
 		}
@@ -117,7 +120,12 @@ func TestCreateReplaysRegistrationWithoutToken(t *testing.T) {
 			journal.progress.ActiveStep = nil
 			journal.progress.Evidence = &ownership
 		}
-		got, err := lifecycle.CreateWithEvidence(context.Background(), attempt, nil)
+		got, err := lifecycle.CreateWithEvidence(
+			context.Background(),
+			attempt,
+			nil,
+			&runnerTestAuthority{journal: journal},
+		)
 		if err != nil || got != ownership || len(runtime.steps) != 0 || journal.progress.Status != StatusReady {
 			t.Fatalf("ready=%t: replay evidence=%#v, steps=%v, error=%v", ready, got, runtime.steps, err)
 		}
@@ -137,17 +145,17 @@ func TestRemoveRecordsOrderedAbsenceReceipts(t *testing.T) {
 	journal := newMemoryJournal()
 	journal.progress = Progress{
 		Plan:     testPlan(),
-		RunnerID: testPlan().RunnerID, TaskID: "task_create", Executor: "controller",
+		RunnerID: testPlan().RunnerID, TaskID: runnerLifecycleAttempt(false).TaskID, Executor: runnerLifecycleAttempt(false).Executor,
 		PlanDigest: testPlan().Digest(), IdentityDigest: testPlan().IdentityDigest(), RuntimeEpoch: 1,
 		Operation: OperationCreate, NextStep: len(corerunner.CreationSteps()), Status: StatusReady, Revision: 1,
 	}
 	runtime := &recordingRuntime{}
-	lifecycle, err := NewLifecycle(journal, runtime)
+	lifecycle, err := NewLifecycle(journal, runtime, newRunnerTestDiagnostics(t))
 	if err != nil {
 		t.Fatalf("NewLifecycle() error = %v", err)
 	}
-	attempt := Attempt{TaskID: "task_remove", Executor: "controller", Plan: testPlan()}
-	if err := lifecycle.Remove(context.Background(), attempt); err != nil {
+	attempt := runnerLifecycleAttempt(true)
+	if err := lifecycle.Remove(context.Background(), attempt, &runnerTestAuthority{journal: journal}); err != nil {
 		t.Fatalf("Remove() error = %v", err)
 	}
 	if !slices.Equal(runtime.steps, []corerunner.Step{
@@ -171,7 +179,7 @@ func TestLifecycleReturnsJournalFailure(t *testing.T) {
 	journal := newMemoryJournal()
 	journal.failErr = journalFailure
 	runtime := &recordingRuntime{applyErr: hostFailure, resolveErr: hostFailure}
-	lifecycle, err := NewLifecycle(journal, runtime)
+	lifecycle, err := NewLifecycle(journal, runtime, newRunnerTestDiagnostics(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,10 +187,11 @@ func TestLifecycleReturnsJournalFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = lifecycle.Create(
+	_, err = lifecycle.CreateWithEvidence(
 		context.Background(),
-		Attempt{TaskID: "task_create", Executor: "controller", Plan: testPlan()},
+		runnerLifecycleAttempt(false),
 		token,
+		&runnerTestAuthority{journal: journal},
 	)
 	if !errors.Is(err, hostFailure) || !errors.Is(err, journalFailure) {
 		t.Fatalf("Create() error = %v", err)
@@ -203,6 +212,7 @@ func (journal *memoryJournal) Begin(_ context.Context, attempt Attempt, operatio
 		journal.progress = Progress{
 			Plan:     attempt.Plan.Clone(),
 			RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID, Executor: attempt.Executor,
+			WorkItemID: attempt.WorkItemID, AttemptID: attempt.AttemptID, AttemptNumber: attempt.AttemptNumber, OwnershipNonce: attempt.OwnershipNonce,
 			PlanDigest: digest, IdentityDigest: attempt.Plan.IdentityDigest(), RuntimeEpoch: attempt.Plan.RuntimeEpoch,
 			Operation: operation, Status: StatusRunning, Revision: 1,
 		}
@@ -219,6 +229,7 @@ func (journal *memoryJournal) Begin(_ context.Context, attempt Attempt, operatio
 		journal.progress = Progress{
 			Plan:     attempt.Plan.Clone(),
 			RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID, Executor: attempt.Executor,
+			WorkItemID: attempt.WorkItemID, AttemptID: attempt.AttemptID, AttemptNumber: attempt.AttemptNumber, OwnershipNonce: attempt.OwnershipNonce,
 			PlanDigest: digest, IdentityDigest: attempt.Plan.IdentityDigest(), RuntimeEpoch: attempt.Plan.RuntimeEpoch,
 			Operation: operation, Status: StatusRunning, Revision: journal.progress.Revision + 1,
 		}
