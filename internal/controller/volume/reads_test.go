@@ -14,6 +14,7 @@ import (
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/volumework"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -122,6 +123,14 @@ func TestVolumeReadServiceUsesGlobalPaginationBounds(t *testing.T) {
 
 type volumeReadTestRepository struct {
 	projection testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]
+}
+
+func (*volumeReadTestRepository) ReadAppliedVolumes(
+	context.Context,
+	[]string,
+	int64,
+) (map[string]volumework.AppliedVolume, error) {
+	return nil, errs.New(errs.KindInternal, "metadata pagination unexpectedly read applied Volume state")
 }
 
 func (repository *volumeReadTestRepository) FindEnvironmentVolumeIdentity(

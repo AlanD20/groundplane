@@ -3,72 +3,110 @@ package volume
 import (
 	"crypto/sha256"
 	"slices"
+	"strings"
 	"testing"
-	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
+	"github.com/AlanD20/groundplane/internal/common/volumeexecution"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/composerender"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 )
 
-// Rationale: DELETE must seal its actual accepted consumer mounts, not fixture
-// digests, while leaving the read-only source projection unchanged.
-func TestVolumeRemovalEvidenceUsesDesiredMounts(t *testing.T) {
-	at := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
-	runtime := removal.Runtime{
-		OperationID: ids.NewAt(ids.KindOperation, at, 1), EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 2),
-		VolumeID: ids.NewAt(ids.KindVolume, at, 3), Key: "data", DesiredRevisionID: ids.NewAt(ids.KindTask, at, 4),
-		ImpactSHA256: sha256.Sum256([]byte("accepted impact")),
-	}
-	serviceID := ids.NewAt(ids.KindService, at, 5)
-	otherVolumeID := ids.NewAt(ids.KindVolume, at, 6)
-	source := testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
-		Revision:     10,
-		ReadRevision: 12,
-		Record: testenvironmentprojection.EnvironmentComposeProjection{
-			EnvironmentID: runtime.EnvironmentID,
-			RevisionID:    ids.NewAt(ids.KindTask, at, 7),
-			Volumes: []testenvironmentprojection.EnvironmentVolumeIdentity{
-				{ID: runtime.VolumeID, Key: runtime.Key, Slug: "data"},
-			},
-			VolumeMounts: []testenvironmentprojection.EnvironmentServiceVolumeMount{
-				{ServiceID: serviceID, VolumeID: runtime.VolumeID, Target: "/z", ReadOnly: true},
-				{ServiceID: serviceID, VolumeID: otherVolumeID, Target: "/unrelated"},
-				{ServiceID: serviceID, VolumeID: runtime.VolumeID, Target: "/a"},
-			},
-		},
-	}
-	original := append([]testenvironmentprojection.EnvironmentServiceVolumeMount(nil), source.Record.VolumeMounts...)
-	manifest, rows, err := volumeRemovalEvidence(runtime, source)
-	if err != nil {
+// Rationale: native removal retains the exact accepted mount configuration and
+// consumer set. Caller mutation cannot change that authority after capture.
+func TestNativeVolumeRemovalCapturesMountsAndRejectsUnapprovedConsumer(t *testing.T) {
+	tenantID, projectID, environment, projection := volumePolicyProjectionFixture(t)
+	selected := projection.Volumes[0]
+	baseline := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(projection.ComposeArtifact, baseline); err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 2 || rows[0].MountTarget != "/a" || rows[1].MountTarget != "/z" || !rows[1].ReadOnly ||
-		manifest.ReadRevision != 12 || manifest.SourceRevisionID != source.Record.RevisionID || manifest.TotalRows != 2 {
-		t.Fatal("evidence is not the exact sorted source mounts")
+	serviceID := ids.NewAt(ids.KindService, environment.CreatedAt, 50)
+	priorPlanID := ids.NewAt(ids.KindPlan, environment.CreatedAt, 56)
+	baseline.Services = []*agentpb.ComposeService{
+		{ServiceId: serviceID, ComposeName: "api", ExpectedLabels: []*agentpb.LabelPair{
+			{
+				Key:   "com.groundplane.plan-id",
+				Value: priorPlanID,
+			}, {Key: "com.groundplane.render-generation", Value: "2"},
+		}},
 	}
-	cursor, err := removal.InitialEvidenceCursor(manifest)
-	if err != nil {
+	var document, services yaml.Node
+	if err := yaml.Unmarshal(baseline.CanonicalYaml, &document); err != nil {
 		t.Fatal(err)
 	}
-	for _, row := range rows {
-		cursor, err = removal.AdvanceEvidenceCursor(cursor, manifest, row)
-		if err != nil {
-			t.Fatal(err)
+	if err := yaml.Unmarshal([]byte("api:\n  image: alpine:latest\n  volumes: [data:/a, data:/z:ro, scratch:/unrelated]\n  labels:\n    com.groundplane.plan-id: "+priorPlanID+"\n    com.groundplane.render-generation: '2'\n"), &services); err != nil {
+		t.Fatal(err)
+	}
+	root := document.Content[0]
+	for index := 0; index < len(root.Content); index += 2 {
+		if root.Content[index].Value == "services" {
+			root.Content[index+1] = services.Content[0]
 		}
 	}
-	if cursor.CompletedRows != 2 || cursor.RollingSHA256 != manifest.OrderedSHA256 ||
-		!slices.Equal(original, source.Record.VolumeMounts) {
-		t.Fatal("evidence digest or source immutability changed")
+	var err error
+	baseline.CanonicalYaml, err = yaml.Marshal(&document)
+	if err != nil {
+		t.Fatal(err)
 	}
-	source.Record.VolumeMounts = nil
-	empty, rows, err := volumeRemovalEvidence(runtime, source)
-	if err != nil || len(rows) != 0 || empty.OrderedSHA256 != removal.EmptyEvidenceDigest() {
-		t.Fatal("empty consumer set", err)
+	digest := sha256.Sum256(baseline.CanonicalYaml)
+	baseline.YamlSha256 = digest[:]
+	candidate, err := composerender.MutateEnvironmentVolumeArtifact(baseline, composerender.VolumeArtifactMutation{
+		Action: composerender.VolumeArtifactRemove, VolumeID: selected.ID, Key: selected.Key,
+		ArtifactID: ids.NewAt(
+			ids.KindConfig,
+			environment.CreatedAt,
+			51,
+		), PlanID: ids.NewAt(ids.KindPlan, environment.CreatedAt, 52),
+		TenantID: tenantID, ProjectID: projectID, RenderGeneration: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	source.Record.Volumes = nil
-	if _, _, err := volumeRemovalEvidence(runtime, source); err == nil {
-		t.Fatal("absent source Volume authorized evidence")
+	before := proto.CloneOf(baseline)
+	request := volumeMutationRequest{action: volumeMutationActionRemove, environmentID: environment.ID,
+		volumeID: selected.ID, key: selected.Key, slug: selected.Slug, impactToken: strings.Repeat("a", 64)}
+	scope := workexecution.Scope{TenantID: tenantID, ProjectID: projectID, EnvironmentID: environment.ID}
+	placement := workexecution.Placement{
+		Executor: workexecution.Agent,
+		HostID:   ids.NewAt(ids.KindHost, environment.CreatedAt, 53),
+	}
+	claim := volumeWorkTestClaim(ids.NewAt(ids.KindTask, environment.CreatedAt, 54), environment.CreatedAt)
+	if _, _, _, err := buildVolumeWork(scope, placement, claim, request, baseline, candidate, make([]byte, 32), nil); err == nil {
+		t.Fatal("mounted workload was removed without its captured consumer approval")
+	}
+	consumers := []string{serviceID}
+	_, _, input, err := buildVolumeWork(
+		scope,
+		placement,
+		claim,
+		request,
+		baseline,
+		candidate,
+		make([]byte, 32),
+		consumers,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(baseline, before) || !proto.Equal(input.Baseline, before) {
+		t.Fatal("capture changed the source mount configuration")
+	}
+	baseline.CanonicalYaml[0] ^= 0xff
+	baseline.Services[0].ComposeName = "changed"
+	consumers[0] = ids.NewAt(ids.KindService, environment.CreatedAt, 55)
+	if err := executionplan.ValidateVolumeWorkInput(input); err != nil {
+		t.Fatal(err)
+	}
+	names, err := (volumeexecution.Removal{
+		VolumeID: input.VolumeId, Key: input.ComposeKey, Baseline: input.Baseline,
+		Candidate: input.Candidate, ConsumerIDs: input.ConsumerIds,
+	}).Consumers()
+	if err != nil || !slices.Equal(names, []string{"api"}) || !proto.Equal(input.Baseline, before) {
+		t.Fatalf("captured removal changed after caller mutation: consumers=%v, %v", names, err)
 	}
 }

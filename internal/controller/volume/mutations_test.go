@@ -2,6 +2,10 @@ package volume
 
 import (
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestBuildVolumeMutationProjectionAndPlansRoundTripAddRemove(t *testing.T) {
+func TestVolumeMutationProjectionAndNativeWorkAddRemove(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 26, 15, 0, 0, 0, time.UTC)
 	tenantID := ids.NewAt(ids.KindTenant, at, 1)
@@ -36,17 +40,17 @@ func TestBuildVolumeMutationProjectionAndPlansRoundTripAddRemove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildVolumeMutationProjection(add) error = %v", err)
 	}
-	addPlan, addSteps, err := buildVolumeMutationPlan(
-		"/var/lib/groundplane/vol", stableIDFromTask(ids.KindPlan, addRevision), 1,
-		addRequest, nil, addArtifact, make([]byte, 32), nil,
-	)
+	scope := workexecution.Scope{TenantID: tenantID, ProjectID: projectID, EnvironmentID: environmentID}
+	placement := workexecution.Placement{Executor: workexecution.Agent, HostID: ids.NewAt(ids.KindHost, at, 8)}
+	addTask, addItem, addInput, err := buildVolumeWork(scope, placement, volumeWorkTestClaim(addRevision, at),
+		addRequest, nil, addArtifact, make([]byte, 32), nil)
 	if err != nil {
-		t.Fatalf("buildVolumeMutationPlan(add) error = %v", err)
+		t.Fatal(err)
 	}
 	if len(added.Volumes) != 1 || added.Volumes[0].ID != volumeID ||
-		len(addSteps) != 2 || addPlan.Steps[0].GetManagedVolumeDirectoriesEnsure() == nil ||
-		addPlan.Steps[1].GetManagedVolumeEnsure() == nil || addPlan.Steps[1].GetManagedVolumeEnsure().RequireExisting {
-		t.Fatalf("add projection/plan = %#v, %#v", added, addPlan)
+		addTask.Action != workexecution.ActionCreate || addItem.TaskID != addTask.ID ||
+		addInput.Action != agentpb.VolumeWorkAction_VOLUME_WORK_ACTION_CREATE {
+		t.Fatalf("add projection/work = %#v / %#v", added, addTask)
 	}
 	artifactBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(addArtifact)
 	if err != nil {
@@ -59,7 +63,7 @@ func TestBuildVolumeMutationProjectionAndPlansRoundTripAddRemove(t *testing.T) {
 	removeRevision := ids.NewAt(ids.KindTask, at, 6)
 	removeRequest := volumeMutationRequest{
 		action: volumeMutationActionRemove, environmentID: environmentID,
-		volumeID: volumeID, slug: "websocket-data", key: "websocket-data",
+		volumeID: volumeID, slug: "websocket-data", key: "websocket-data", impactToken: strings.Repeat("a", 64),
 	}
 	removed, oldArtifact, removeArtifact, err := buildVolumeMutationProjection(
 		tenantID, projectID, environment, added, true, removeRequest, removeRevision, 2,
@@ -67,12 +71,10 @@ func TestBuildVolumeMutationProjectionAndPlansRoundTripAddRemove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildVolumeMutationProjection(remove) error = %v", err)
 	}
-	removePlan, removeSteps, err := buildVolumeMutationPlan(
-		"/var/lib/groundplane/vol", stableIDFromTask(ids.KindPlan, removeRevision), 2,
-		removeRequest, oldArtifact, removeArtifact, make([]byte, 32), nil,
-	)
+	removeTask, _, removeInput, err := buildVolumeWork(scope, placement, volumeWorkTestClaim(removeRevision, at),
+		removeRequest, oldArtifact, removeArtifact, make([]byte, 32), nil)
 	if err != nil {
-		t.Fatalf("buildVolumeMutationPlan(remove) error = %v", err)
+		t.Fatal(err)
 	}
 	removedArtifactBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(removeArtifact)
 	if err != nil {
@@ -82,10 +84,10 @@ func TestBuildVolumeMutationProjectionAndPlansRoundTripAddRemove(t *testing.T) {
 	if _, err := testblueprints.EnvironmentBlueprintDependencyDigest(removed); err != nil {
 		t.Fatalf("EnvironmentBlueprintDependencyDigest(remove) error = %v", err)
 	}
-	if len(removed.Volumes) != 0 || len(removeSteps) != 2 ||
-		removePlan.Steps[0].GetManagedVolumeRemove() == nil ||
-		removePlan.Steps[1].GetManagedVolumeDirectoryRemove() == nil {
-		t.Fatalf("remove projection/plan = %#v, %#v", removed, removePlan)
+	if len(removed.Volumes) != 0 || removeTask.Action != workexecution.ActionRemove ||
+		removeInput.Action != agentpb.VolumeWorkAction_VOLUME_WORK_ACTION_REMOVE ||
+		len(removeInput.RemovalImpactSha256) != 32 {
+		t.Fatalf("remove projection/work = %#v, %#v", removed, removeTask)
 	}
 }
 
@@ -120,4 +122,9 @@ func TestVolumeMutationResponseUsesPublicLifecycleStates(t *testing.T) {
 		edited.Volume.CreateTaskID != nil || edited.Volume.OriginTaskID != nil || edited.Volume.CurrentTaskID == nil {
 		t.Fatalf("edit response = %#v, %v", edited, err)
 	}
+}
+
+func volumeWorkTestClaim(taskID string, at time.Time) testblueprints.EnvironmentBlueprintStageClaim {
+	return testblueprints.EnvironmentBlueprintStageClaim{TaskID: taskID, CreatedAt: at,
+		Intent: testidempotency.ProtectedIntentRecord{CiphertextDigest: strings.Repeat("a", 64)}}
 }
