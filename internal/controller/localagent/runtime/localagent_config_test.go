@@ -8,12 +8,20 @@ import (
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type fakeLocalAgentConfigIdempotency struct {
 	resolution idempotentintent.Resolution
 	found      bool
+}
+
+func (*fakeLocalAgentConfigIdempotency) Apply(context.Context, agentregistration.ConfigurationUpdate,
+	testidempotency.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return etcd.IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "unexpected configuration publication")
 }
 
 func (*fakeLocalAgentConfigIdempotency) Prepare(

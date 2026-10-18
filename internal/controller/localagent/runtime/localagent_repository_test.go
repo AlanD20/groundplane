@@ -3,13 +3,14 @@ package runtime
 import (
 	"context"
 	"errors"
-	"github.com/AlanD20/groundplane/internal/common/taskprogress"
-	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
+
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testlocalagents "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
@@ -195,14 +196,13 @@ func (repository *fakeLocalAgentRecords) GetSingleton(
 	return repository.get, nil
 }
 
-func (repository *fakeLocalAgentRecords) UpdateConfigIdempotent(
+func (repository *fakeLocalAgentRecords) PrepareConfigurationUpdate(
 	_ context.Context,
 	current testkeyvalue.Versioned[testlocalagents.LocalAgentRecord],
 	config testlocalagents.LocalAgentConfig,
 	_ testidempotency.IdempotencyMarker,
-) (testkeyvalue.Versioned[testlocalagents.LocalAgentRecord], etcd.IdempotencyTransactionResult, error) {
-	current.Record.Config = config
-	return current, etcd.IdempotencyTransactionResult{}, nil
+) (agentregistration.ConfigurationUpdate, error) {
+	return agentregistration.ConfigurationUpdate{}, errs.New(errs.KindInternal, "unexpected configuration preparation")
 }
 
 func (repository *fakeLocalAgentRecords) MarkReady(
