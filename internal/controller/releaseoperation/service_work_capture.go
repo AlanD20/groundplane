@@ -35,29 +35,58 @@ func (service *Service) captureServiceWork(ctx context.Context, scope releaseque
 	var task workexecution.Task
 	var item workexecution.Item
 	var request etcd.DirectReleasePreparation
-	var capture releaserender.ServiceRolloutCapture
 	placement, err := service.ledger.ResolveReleaseHost(ctx, scope.ReadRevision)
 	if err != nil {
-		return task, item, request, capture, err
+		return task, item, request, releaserender.ServiceRolloutCapture{}, err
 	}
 	at := service.now().UTC()
 	taskID, workID, planID := ids.New(ids.KindTask), ids.New(ids.KindWorkItem), ids.New(ids.KindPlan)
-	operationID, publicationID, releaseID := ids.New(ids.KindOperation), ids.NewULID(), ids.New(ids.KindDeployment)
-	action, operation := workexecution.ActionDeploy, domain.OperationDeploy
+	action := workexecution.ActionDeploy
 	if candidate.rollbackSource != "" {
-		action, operation = workexecution.ActionRollback, domain.OperationRollback
+		action = workexecution.ActionRollback
 	}
 	scopeID := workexecution.Scope{TenantID: scope.Project.Record.TenantID, ProjectID: scope.Project.Record.ID, EnvironmentID: scope.Environment.Record.ID}
 	task = workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor, Scope: scopeID, Action: action,
 		TargetID: candidate.planning.Service.Record.Desired.ID, TargetName: candidate.planning.Service.Record.Desired.Name,
 		Intent: workexecution.Input{ID: planID, SHA256: requestSHA}, CreatedAt: at, UpdatedAt: at,
 		Deadline: at.Add(service.timeout), ExpectedItems: 1}
-	item = workexecution.Item{ID: workID, TaskID: taskID, Operation: workexecution.Release,
-		TargetID: task.TargetID, Placement: placement, Phase: workexecution.Waiting,
-		Wait: &workexecution.Wait{Reason: workexecution.WaitInput}, Cleanup: workexecution.CleanupNone,
-		CreatedAt: at, UpdatedAt: at, Deadline: task.Deadline,
-		Claims: []workexecution.Claim{{ScopeID: scopeID.EnvironmentID}, {HostID: placement.HostID, ScopeID: scopeID.EnvironmentID},
-			{ScopeID: task.TargetID}, {HostID: placement.HostID, ScopeID: task.TargetID}}}
+	item = capturedReleaseItem(task, workID, task.TargetID, placement, workexecution.Release)
+	task, item, request, capture, err := service.captureReleaseMember(ctx, scope, projection, candidate, addresses,
+		task, item, planID, ids.New(ids.KindConfig), nil)
+	if err != nil {
+		return task, item, request, capture, err
+	}
+	task.ExpectedItems = uint32(len(request.Networks) + 1)
+	graph, err := request.WorkGraph(task, item)
+	if err != nil {
+		return task, item, request, capture, err
+	}
+	item = graph[len(graph)-1]
+	value, reference, err := etcd.EncodeDirectReleasePreparation(request)
+	clear(value)
+	if err != nil {
+		return task, item, request, capture, err
+	}
+	task.Intent = reference
+	return task, item, request, capture, request.Matches(task, item, capture)
+}
+
+// captureReleaseMember is shared by a standalone action and a declared Group
+// member. The caller owns the visible Task and network seed; every member keeps
+// its own Release, operation, hooks and configuration ownership.
+func (service *Service) captureReleaseMember(ctx context.Context, scope releasequeries.ReleasePlanningScope,
+	projection environmentprojection.EnvironmentComposeProjection, candidate releaseCandidateInput,
+	addresses networkreservations.ProxyAddresses, task workexecution.Task, item workexecution.Item,
+	planID, networkSeed string, group *releaserender.GroupMemberBinding,
+) (workexecution.Task, workexecution.Item, etcd.DirectReleasePreparation, releaserender.ServiceRolloutCapture, error) {
+	var request etcd.DirectReleasePreparation
+	var capture releaserender.ServiceRolloutCapture
+	operation, err := releaserender.ReleaseOperationKind(task.Action)
+	if err != nil {
+		return task, item, request, capture, err
+	}
+	at, taskID, workID, scopeID, placement := task.CreatedAt, task.ID, item.ID, task.Scope, item.Placement
+	operationID, publicationID, releaseID := ids.New(ids.KindOperation), ids.NewULID(), ids.New(ids.KindDeployment)
 	if task.Validate() != nil || item.Validate() != nil {
 		return task, item, request, capture, errs.New(errs.KindValidationFailed, "Direct Release native identity is invalid")
 	}
@@ -73,7 +102,7 @@ func (service *Service) captureServiceWork(ctx context.Context, scope releaseque
 	if err != nil {
 		return task, item, request, capture, err
 	}
-	intent := domain.Intent{ID: releaseID, EnvironmentID: scopeID.EnvironmentID, ServiceID: task.TargetID,
+	intent := domain.Intent{ID: releaseID, EnvironmentID: scopeID.EnvironmentID, ServiceID: item.TargetID,
 		OperationID: operationID, OperationKind: operation, CandidateWorkload: candidate.workload,
 		Tag: candidate.tag, Strategy: candidate.strategy, Slot: candidate.slot, OnFailure: candidate.onFailure,
 		RollbackSourceReleaseID: candidate.rollbackSource, PriorServingReleaseID: candidate.planning.Projection.ServingReleaseID,
@@ -83,6 +112,12 @@ func (service *Service) captureServiceWork(ctx context.Context, scope releaseque
 			TenantID: scopeID.TenantID, ProjectID: scopeID.ProjectID, EnvironmentID: scopeID.EnvironmentID}}
 	if scopeID.TenantID == "" {
 		intent.Workspace.Kind = domain.WorkspacePlatform
+	}
+	if group != nil {
+		if group.Validate() != nil || task.TargetID != group.GroupID {
+			return task, item, request, capture, errs.New(errs.KindValidationFailed, "Group Release member binding is invalid")
+		}
+		intent.GroupOperationID, intent.GroupMemberOrdinal = group.OperationID, group.Ordinal
 	}
 	manifest, err := service.ledger.Stage(ctx, releases.ReleaseStage{PublicationID: publicationID, OperationID: operationID,
 		CreatedAt: at, Members: []releases.ReleaseStageMember{{Intent: intent, RenderInput: raw,
@@ -108,10 +143,10 @@ func (service *Service) captureServiceWork(ctx context.Context, scope releaseque
 	if err != nil {
 		return task, item, request, capture, errs.Wrap(errs.KindInternal, err)
 	}
-	capture = releaserender.ServiceRolloutCapture{Action: action, TaskID: taskID, WorkItemID: workID,
+	capture = releaserender.ServiceRolloutCapture{Action: task.Action, TaskID: taskID, WorkItemID: workID,
 		OperationID: operationID, PublicationID: publicationID, SourceReadRevision: scope.ReadRevision,
 		Scope: scopeID, Placement: placement, CreatedAt: at, Deadline: item.Deadline,
-		Render: render, CandidateArtifact: artifactBytes}
+		Render: render, CandidateArtifact: artifactBytes, Group: group}
 	rollout, err := releaserender.ServiceRolloutInput(capture)
 	if err != nil {
 		return task, item, request, capture, err
@@ -126,11 +161,16 @@ func (service *Service) captureServiceWork(ctx context.Context, scope releaseque
 			EnvironmentRevision: scope.Environment.Revision, ProjectRevision: scope.Project.Revision,
 			TenantRevision: scope.Tenant.Revision, DesiredRevision: candidate.planning.Service.Revision,
 			EpochRevision: scope.EnvironmentEpochRevision}}
-	intentSHA, err := hex.DecodeString(requestSHA)
+	if group != nil {
+		request.GroupID = group.GroupID
+	}
+	// All Group members use this same immutable Task intent and network seed,
+	// so a shared bridge has one byte-identical native prerequisite.
+	intentSHA, err := hex.DecodeString(task.Intent.SHA256)
 	if err != nil {
 		return task, item, request, capture, errs.New(errs.KindValidationFailed, "Release request intent digest is invalid")
 	}
-	networks, err := executionplan.ReleaseNetworkWorkInputs(artifact, intentSHA)
+	networks, err := executionplan.ReleaseNetworkWorkInputs(artifact, intentSHA, networkSeed)
 	if err != nil {
 		return task, item, request, capture, err
 	}
@@ -152,19 +192,18 @@ func (service *Service) captureServiceWork(ctx context.Context, scope releaseque
 		}
 		request.Hooks = append(request.Hooks, etcd.DirectReleaseHookSources{ExecutionID: hook.ScriptExecutionID, Sources: sources})
 	}
-	task.ExpectedItems = uint32(len(request.Networks) + 1)
-	graph, err := request.WorkGraph(task, item)
-	if err != nil {
-		return task, item, request, capture, err
-	}
-	item = graph[len(graph)-1]
-	value, reference, err := etcd.EncodeDirectReleasePreparation(request)
-	clear(value)
-	if err != nil {
-		return task, item, request, capture, err
-	}
-	task.Intent = reference
-	return task, item, request, capture, request.Matches(task, item, capture)
+	return task, item, request, capture, nil
+}
+
+func capturedReleaseItem(task workexecution.Task, workID, serviceID string, placement workexecution.Placement,
+	operation workexecution.Operation,
+) workexecution.Item {
+	return workexecution.Item{ID: workID, TaskID: task.ID, Operation: operation,
+		TargetID: serviceID, Placement: placement, Phase: workexecution.Waiting,
+		Wait: &workexecution.Wait{Reason: workexecution.WaitInput}, Cleanup: workexecution.CleanupNone,
+		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline,
+		Claims: []workexecution.Claim{{ScopeID: task.Scope.EnvironmentID}, {HostID: placement.HostID, ScopeID: task.Scope.EnvironmentID},
+			{ScopeID: serviceID}, {HostID: placement.HostID, ScopeID: serviceID}}}
 }
 
 func (service *Service) validateServiceWorkBudget(candidate releaseCandidateInput, hooks preparedReleaseHooks, render releaserender.ReleaseRenderInput) error {

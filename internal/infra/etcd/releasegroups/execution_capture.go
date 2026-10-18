@@ -27,6 +27,16 @@ type MemberPreparations struct {
 	Restore workexecution.Input `json:"restore"`
 }
 
+// PreflightHook is a required Script before any member can change runtime. Its
+// own native work owns execution/cleanup; no member silently reruns the hook.
+type PreflightHook struct {
+	WorkItemID string              `json:"work_item_id"`
+	ScriptID   string              `json:"script_id"`
+	ServiceID  string              `json:"service_id"`
+	Ordinal    uint32              `json:"ordinal"`
+	Input      workexecution.Input `json:"input"`
+}
+
 // ExecutionCapture is the single accepted native Group plan. Actual Service
 // artifacts and secrets remain with their typed operation inputs, not duplicated
 // in the Group's policy or progress. Graph includes captured bridge prerequisites.
@@ -42,6 +52,7 @@ type ExecutionCapture struct {
 	CreatedAt          time.Time                 `json:"created_at"`
 	Deadline           time.Time                 `json:"deadline"`
 	Members            []MemberPreparations      `json:"members"`
+	Preflight          []PreflightHook           `json:"preflight,omitempty"`
 	Graph              []workexecution.Item      `json:"graph"`
 }
 
@@ -55,7 +66,7 @@ func (capture ExecutionCapture) Validate() error {
 		!recordcodec.IsCanonicalUTC(capture.CreatedAt) || !recordcodec.IsCanonicalUTC(capture.Deadline) ||
 		!capture.Deadline.After(capture.CreatedAt) || capture.Deadline.Sub(capture.CreatedAt) > 24*time.Hour ||
 		capture.Deadline.Sub(capture.CreatedAt) != time.Duration(capture.Policy.Manifest.ConfiguredTimeoutSeconds)*time.Second ||
-		len(capture.Members) != len(capture.Policy.Members) || len(capture.Graph) > int(workexecution.MaximumTaskItems) {
+		len(capture.Members) != len(capture.Policy.Members) || len(capture.Preflight) > 16 || len(capture.Graph) > int(workexecution.MaximumTaskItems) {
 		return errs.New(errs.KindValidationFailed, "Release Group execution capture is invalid")
 	}
 	byID := make(map[string]workexecution.Item, len(capture.Graph))
@@ -98,12 +109,45 @@ func (capture ExecutionCapture) Validate() error {
 			delete(byID, id)
 		}
 	}
+	previous := ""
+	for _, hook := range capture.Preflight {
+		item, found := byID[hook.WorkItemID]
+		if !found || ids.Validate(ids.KindScript, hook.ScriptID) != nil || hook.Input.Validate() != nil ||
+			hook.Ordinal == 0 || int(hook.Ordinal) > len(capture.Policy.Members) ||
+			capture.Policy.Members[hook.Ordinal-1].Member.ServiceID != hook.ServiceID ||
+			item.Operation != workexecution.Script || item.TargetID != hook.ScriptID ||
+			item.Input == nil || *item.Input != hook.Input || item.Phase != workexecution.Ready ||
+			!slices.Contains(item.Claims, workexecution.Claim{ScopeID: capture.Scope.EnvironmentID}) ||
+			!slices.Contains(item.Claims, workexecution.Claim{HostID: capture.Placement.HostID, ScopeID: hook.ServiceID}) ||
+			previous != "" && !slices.Contains(item.Dependencies, previous) {
+			return errs.New(errs.KindValidationFailed, "Release Group preflight differs from its captured Script work")
+		}
+		delete(byID, hook.WorkItemID)
+		previous = hook.WorkItemID
+	}
+	if previous != "" {
+		for _, member := range capture.Policy.Members {
+			item := capture.memberWork(member.ForwardID)
+			if !slices.Contains(item.Dependencies, previous) {
+				return errs.New(errs.KindValidationFailed, "Release Group member can start before required preflight cleanup")
+			}
+		}
+	}
 	for _, item := range byID {
 		if item.Operation != workexecution.Network || item.Input == nil || item.Phase != workexecution.Ready {
 			return errs.New(errs.KindValidationFailed, "Release Group graph contains an undeclared member or prerequisite")
 		}
 	}
 	return nil
+}
+
+func (capture ExecutionCapture) memberWork(id string) workexecution.Item {
+	for _, item := range capture.Graph {
+		if item.ID == id {
+			return item
+		}
+	}
+	return workexecution.Item{}
 }
 
 func (capture ExecutionCapture) encoded() ([]byte, workexecution.Input, error) {

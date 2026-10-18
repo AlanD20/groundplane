@@ -3,9 +3,11 @@ package etcd
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,10 +30,27 @@ func (repository *ScriptRepository) LoadScriptWork(ctx context.Context, view wor
 	if repository == nil || repository.store == nil || task.Validate() != nil || item.Validate() != nil ||
 		view.ReadRevision <= 0 || view.Task.Revision <= 0 || view.Item.Revision <= 0 ||
 		view.Task.Revision > view.ReadRevision || view.Item.Revision > view.ReadRevision ||
-		task.Action != workexecution.ActionScript || item.Operation != workexecution.Script ||
-		item.TaskID != task.ID || task.TargetID != item.TargetID ||
-		item.Placement.Executor != workexecution.Agent || item.Input == nil || *item.Input != task.Intent {
+		item.Operation != workexecution.Script || item.TaskID != task.ID ||
+		item.Placement.Executor != workexecution.Agent || item.Input == nil {
 		return ScriptWorkInput{}, errs.New(errs.KindValidationFailed, "Script work read identity is invalid")
+	}
+	var authority []keyvalue.Condition
+	if task.Action == workexecution.ActionScript {
+		if task.TargetID != item.TargetID || *item.Input != task.Intent {
+			return ScriptWorkInput{}, errs.New(errs.KindStateConflict, "Standalone Script differs from its accepted Task input")
+		}
+	} else if (task.Action == workexecution.ActionDeploy || task.Action == workexecution.ActionRollback) &&
+		ids.Validate(ids.KindReleaseGroup, task.TargetID) == nil {
+		groups, err := releasegroups.NewExecutionRepository(repository.store)
+		if err != nil {
+			return ScriptWorkInput{}, err
+		}
+		authority, err = groups.PreflightAuthority(ctx, view)
+		if err != nil {
+			return ScriptWorkInput{}, err
+		}
+	} else {
+		return ScriptWorkInput{}, errs.New(errs.KindStateConflict, "Task action does not authorize this Script work")
 	}
 	key := scriptexecutions.WorkKey(item.ID)
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
@@ -59,6 +78,7 @@ func (repository *ScriptRepository) LoadScriptWork(ctx context.Context, view wor
 		return ScriptWorkInput{}, errs.New(errs.KindInternal, "Script work target differs from captured execution")
 	}
 	input.Conditions = append(input.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
+	input.Conditions = append(input.Conditions, authority...)
 	return input, nil
 }
 

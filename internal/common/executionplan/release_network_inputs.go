@@ -14,16 +14,16 @@ import (
 // ReleaseNetworkWorkInputs selects only internal-DNS bridges from the frozen
 // release artifact. Each returned input owns one bridge and can use the native
 // Network executor; no hidden Task or generic plan is manufactured.
-func ReleaseNetworkWorkInputs(source *agentpb.ComposeArtifact, intentSHA []byte) ([]*agentpb.NetworkWorkInput, error) {
-	if source == nil || len(intentSHA) != sha256.Size {
+func ReleaseNetworkWorkInputs(source *agentpb.ComposeArtifact, intentSHA []byte, seed string) ([]*agentpb.NetworkWorkInput, error) {
+	if source == nil || len(intentSHA) != sha256.Size || ids.Validate(ids.KindConfig, seed) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Release network preparation requires its captured artifact and intent")
 	}
-	at, err := ids.Timestamp(ids.KindConfig, source.ArtifactId)
+	at, err := ids.Timestamp(ids.KindConfig, seed)
 	if err != nil {
 		return nil, err
 	}
 	preparation, err := CaptureReleaseNetworkPreparation(source,
-		ids.DeriveAt(ids.KindConfig, at, source.ArtifactId, "dns-networks"))
+		ids.DeriveAt(ids.KindConfig, at, seed, "dns-networks"))
 	if err != nil || preparation.Artifact == nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func ReleaseNetworkWorkInputs(source *agentpb.ComposeArtifact, intentSHA []byte)
 		}
 		digest := sha256.Sum256(content)
 		artifact := &agentpb.ComposeArtifact{
-			ArtifactId: ids.DeriveAt(ids.KindConfig, at, source.ArtifactId, "dns-network/"+identity.NetworkId),
+			ArtifactId: ids.DeriveAt(ids.KindConfig, at, seed, "dns-network/"+identity.NetworkId),
 			OwnerKind:  source.OwnerKind, OwnerId: source.OwnerId, ProjectName: source.ProjectName,
 			AuthorizedVolumeDir: source.AuthorizedVolumeDir, CanonicalYaml: content,
 			YamlSha256: digest[:], Networks: []*agentpb.ComposeNetwork{proto.CloneOf(identity)},
