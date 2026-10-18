@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	hostResolverBaselineKey          = "/v1/records/platform/host-resolution/baseline"
+	StorageKey                       = "/v1/records/platform/host-resolution/baseline"
 	maximumHostResolverBaselineBytes = 64 * 1024
 )
 
@@ -46,7 +46,7 @@ func (repository *Repository) GetHostResolverBaseline(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[Record]{}, false, err
 	}
-	result, err := repository.store.Get(ctx, hostResolverBaselineKey)
+	result, err := repository.store.Get(ctx, StorageKey)
 	if err != nil {
 		return etcdstore.Versioned[Record]{}, false, err
 	}
@@ -57,7 +57,7 @@ func (repository *Repository) GetHostResolverBaseline(
 		}
 		return etcdstore.Versioned[Record]{ReadRevision: readRevision}, false, nil
 	}
-	record, err := decodeHostResolverBaseline(result.Entry.Value)
+	record, err := Decode(result.Entry.Value)
 	if err != nil {
 		return etcdstore.Versioned[Record]{}, false, err
 	}
@@ -93,8 +93,8 @@ func (repository *Repository) EnsureHostResolverBaseline(
 	defer clear(encoded)
 	result, err := repository.store.Transact(
 		ctx,
-		[]etcdstore.Condition{{Key: hostResolverBaselineKey}},
-		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hostResolverBaselineKey, Value: encoded}},
+		[]etcdstore.Condition{{Key: StorageKey}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: StorageKey, Value: encoded}},
 	)
 	if err != nil {
 		return etcdstore.Versioned[Record]{}, err
@@ -131,7 +131,7 @@ func validateHostResolverBaseline(record Record) error {
 	return nil
 }
 
-func decodeHostResolverBaseline(value []byte) (Record, error) {
+func Decode(value []byte) (Record, error) {
 	record, err := recordcodec.Decode[Record](value, "host_resolver_baseline")
 	if err != nil || validateHostResolverBaseline(record) != nil {
 		return Record{}, errs.New(errs.KindInternal, "host resolver baseline is corrupt")

@@ -1058,6 +1058,10 @@ message AgentMessage {
     BackingProvisionFileRequest backing_provision_file_request = 106;
     BackingProvisionHookRequest backing_provision_hook_request = 107;
     BackingProvisionRecoveryRequest backing_provision_recovery_request = 108;
+    ResolverWorkCheckpointRequest resolver_work_checkpoint_request = 109;
+    ResolverWorkCompletionRequest resolver_work_completion_request = 110;
+    ResolverWorkFailureRequest resolver_work_failure_request = 111;
+    ResolverWorkRecoveryRequest resolver_work_recovery_request = 112;
   }
 }
 
@@ -1626,6 +1630,9 @@ message ControllerMessage {
     BackingProvisionFileDelivery backing_provision_file_delivery = 128;
     BackingProvisionHookDelivery backing_provision_hook_delivery = 129;
     BackingProvisionRecoveryAck backing_provision_recovery_ack = 130;
+    ResolverWorkAssignment resolver_work_assignment = 131;
+    ResolverWorkCheckpointAck resolver_work_checkpoint_ack = 132;
+    ResolverWorkResultAck resolver_work_result_ack = 133;
   }
 }
 
@@ -2261,6 +2268,51 @@ message EntryConfigurationWorkInput {
   WorkConfigurationReference prior_configuration = 8;
   repeated MaterializeFile files = 9;
   repeated string running_consumer_ids = 10;
+}
+
+// Platform DNS work has a fixed compiled procedure, not an ExecutionPlan. The
+// canonical operation input includes its exact current and previous Corefiles.
+message ResolverWorkAssignment {
+  WorkAttemptIdentity attempt = 1;
+  bytes input = 2;
+  bytes recovery = 3;
+}
+
+message ResolverWorkCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes progress = 2;
+}
+
+message ResolverWorkCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  bytes progress = 2;
+  WorkInputReference evidence = 3;
+}
+
+message ResolverWorkCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  DNSResolverObservationEvidence serving_proof = 3;
+}
+
+message ResolverWorkFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message ResolverWorkRecoveryRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message ResolverWorkResultAck {
+  WorkAttemptIdentity attempt = 1;
+  string kind = 2; // completion, failure or recovery; no generic action dispatch
+  WorkInputReference evidence = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp finished_at = 6;
+  bytes failure = 7; // canonical retained failure, absent for other result kinds
 }
 
 // One Environment Component operation. The compiled handler owns sequencing;

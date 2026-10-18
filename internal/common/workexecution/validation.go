@@ -16,7 +16,7 @@ const MaximumClaims = 32
 func ValidOperation(operation Operation) bool {
 	switch operation {
 	case Release, ReleaseRestoration, ServiceLifecycle, ServiceRemoval, BackingProvision, Attach, Detach, Script, Network, Volume,
-		Component, Environment, Hierarchy, RemovalBackupObject, Backup, BackupPrune, Restore, Image,
+		Component, Resolver, Environment, Hierarchy, RemovalBackupObject, Backup, BackupPrune, Restore, Image,
 		Runner, ControllerSoftware, AgentSoftware, SoftwarePreparation, SoftwareStaging,
 		ConnectorCheck, ConnectorRemoval, SecretRemoval, ScriptRemoval, BackingCheck, DNSCheck, EdgeCheck, RunnerCheck,
 		SecretRotation, EntrySettlement, EntryConfiguration, ResourceDefinition,

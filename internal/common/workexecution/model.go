@@ -19,6 +19,7 @@ const (
 	Network             Operation = "network"
 	Volume              Operation = "volume"
 	Component           Operation = "component"
+	Resolver            Operation = "dns_resolver"
 	Environment         Operation = "environment"
 	Hierarchy           Operation = "hierarchy"
 	RemovalBackupObject Operation = "removal_backup_object"
