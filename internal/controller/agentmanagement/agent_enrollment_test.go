@@ -8,11 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
@@ -45,26 +47,22 @@ func TestAgentEnrollmentServiceCreatesControllerTaskFromBootstrapInput(t *testin
 		t.Fatalf("EnrollAgent() response = %#v", response)
 	}
 	var accepted apiTypes.TaskAccepted
-	if err := json.Unmarshal(response.Body, &accepted); err != nil || accepted.TaskID != tasks.task.ID {
+	if err := json.Unmarshal(response.Body, &accepted); err != nil || accepted.TaskID != tasks.capture.TaskID {
 		t.Fatalf("EnrollAgent() body = %s, %v", response.Body, err)
 	}
-	if tasks.task.Executor != testtaskjournal.TaskExecutorController || tasks.task.Type != testtaskjournal.TaskCreate ||
-		tasks.task.TimeoutSeconds != 120 || tasks.task.Status != testtaskjournal.TaskStatusPending ||
-		tasks.task.Target == "" || tasks.task.PlanHash == "" ||
-		tasks.task.Params[agentTaskImageKey] != testAppAgentImage ||
-		tasks.task.Params[agentTaskEnrollmentKey] != tasks.task.ID ||
-		tasks.task.Params[agentTaskLabelPrefix+"arch"] != "arm64" {
-		t.Fatalf("created Agent enrollment Task = %#v", tasks.task)
+	if tasks.capture.Image != testAppAgentImage || tasks.capture.Enrollment == nil ||
+		tasks.capture.Enrollment.Labels["arch"] != "arm64" {
+		t.Fatalf("captured enrollment = %#v", tasks.capture)
 	}
-	if tasks.marker.TaskID != tasks.task.ID ||
+	if tasks.marker.TaskID != tasks.capture.TaskID ||
 		tasks.marker.Locator.ScopeKind != testidempotency.IdempotencyScopePlatform ||
 		tasks.marker.Locator.ScopeID != "-" ||
 		tasks.marker.Locator.Route != agentEnrollmentRoute {
 		t.Fatalf("created Agent enrollment marker = %#v", tasks.marker)
 	}
-	decoded, err := DecodeEnrollmentTask(tasks.task)
-	if err != nil || decoded.EnrollmentTaskID != tasks.task.ID || decoded.AgentID != tasks.task.Target {
-		t.Fatalf("DecodeEnrollmentTask() = %#v, %v", decoded, err)
+	request := enrollment(tasks.capture)
+	if request.EnrollmentTaskID != tasks.capture.TaskID || request.AgentID != tasks.capture.AgentID {
+		t.Fatalf("captured enrollment request = %#v", request)
 	}
 }
 
@@ -92,34 +90,42 @@ func TestAgentEnrollmentServiceReturnsExactReplay(t *testing.T) {
 	}
 }
 
-func TestAgentEnrollmentPlanHashIsStableForLabelOrder(t *testing.T) {
-	t.Parallel()
-
-	one, err := agentEnrollmentPlanHash("agt_01ARZ3NDEKTSV4RRFFQ69G5FAV", map[string]string{
-		"label:b": "2", "label:a": "1",
-	})
+// Rationale: equivalent label order must not alter captured replay identity,
+// while an actual changed label must invalidate that identity.
+func TestAgentEnrollmentReferenceBindsLabelsNotMapOrder(t *testing.T) {
+	at := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	capture := agentoperations.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
+		PlanID: ids.New(ids.KindPlan), AgentID: ids.New(ids.KindAgent), Action: workexecution.ActionCreate,
+		Image: testAppAgentImage, CreatedAt: at, Enrollment: &agentoperations.Enrollment{
+			PullIntervalSeconds: 2, MaxConcurrentTasks: 3, Labels: map[string]string{"b": "2", "a": "1"},
+		}}
+	first, err := capture.Reference()
 	if err != nil {
-		t.Fatalf("agentEnrollmentPlanHash(one) error = %v", err)
+		t.Fatal(err)
 	}
-	two, err := agentEnrollmentPlanHash("agt_01ARZ3NDEKTSV4RRFFQ69G5FAV", map[string]string{
-		"label:a": "1", "label:b": "2",
-	})
-	if err != nil || one != two {
-		t.Fatalf("agentEnrollmentPlanHash order = %q/%q, %v", one, two, err)
+	capture.Enrollment.Labels = map[string]string{"a": "1", "b": "2"}
+	reordered, err := capture.Reference()
+	if err != nil || reordered != first {
+		t.Fatalf("reordered labels changed reference: %v", err)
+	}
+	capture.Enrollment.Labels["a"] = "changed"
+	changed, err := capture.Reference()
+	if err != nil || changed == first {
+		t.Fatalf("changed label did not alter reference: %v", err)
 	}
 }
 
 type fakeAgentEnrollmentTasks struct {
-	task   etcd.TaskRecord
-	marker testidempotency.IdempotencyMarker
+	capture agentoperations.Capture
+	marker  testidempotency.IdempotencyMarker
 }
 
-func (tasks *fakeAgentEnrollmentTasks) CreateTask(
+func (tasks *fakeAgentEnrollmentTasks) CreateAgentWork(
 	_ context.Context,
-	task etcd.TaskRecord,
+	capture agentoperations.Capture,
 	marker testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	tasks.task = task
+	tasks.capture = capture
 	tasks.marker = marker
 	return etcd.IdempotencyTransactionResult{}, nil
 }

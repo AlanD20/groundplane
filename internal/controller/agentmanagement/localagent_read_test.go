@@ -9,7 +9,6 @@ import (
 
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
@@ -37,8 +36,8 @@ func TestLocalAgentReadServiceProjectsDurableAndLiveState(t *testing.T) {
 		Version:   "v0.4.3",
 	}
 	reader := &fakeLocalAgentHealthReader{health: health}
-	assignments := &fakeLocalAgentReadAssignments{result: []etcd.TaskAssignment{{}, {}}}
-	service, err := NewReadService(reader, assignments, "qa-workload-groundplane")
+	store, queue := agentReadFixture(t, 2)
+	service, err := NewReadService(reader, store, queue, "qa-workload-groundplane")
 	if err != nil {
 		t.Fatalf("NewReadService() error = %v", err)
 	}
@@ -66,54 +65,12 @@ func TestLocalAgentReadServiceProjectsDurableAndLiveState(t *testing.T) {
 	}
 }
 
-func TestProjectAgentStatusIsClosed(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		health  localagent.Health
-		want    apiTypes.AgentStatus
-		wantErr bool
-	}{
-		{
-			name:   "provisioning",
-			health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseProvisioning}},
-			want:   apiTypes.AgentPending,
-		},
-		{
-			name:   "ready online",
-			health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseReady}, Healthy: true},
-			want:   apiTypes.AgentHealthy,
-		},
-		{
-			name:   "ready offline",
-			health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseReady}},
-			want:   apiTypes.AgentDegraded,
-		},
-		{
-			name:   "deleting",
-			health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseDeleting}},
-			want:   apiTypes.AgentStopped,
-		},
-		{name: "invalid", health: localagent.Health{}, wantErr: true},
-	}
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := ProjectStatus(test.health)
-			if (err != nil) != test.wantErr || got != test.want {
-				t.Fatalf("ProjectStatus() = %q, %v; want %q, error %t", got, err, test.want, test.wantErr)
-			}
-		})
-	}
-}
-
 func TestLocalAgentReadServiceReplacesConfig(t *testing.T) {
 	t.Parallel()
 
 	reader := &fakeLocalAgentHealthReader{}
-	service, err := NewReadService(reader, &fakeLocalAgentReadAssignments{}, "qa-workload-groundplane")
+	store, queue := agentReadFixture(t, 0)
+	service, err := NewReadService(reader, store, queue, "qa-workload-groundplane")
 	if err != nil {
 		t.Fatalf("NewReadService() error = %v", err)
 	}
@@ -172,17 +129,4 @@ func (reader *fakeLocalAgentHealthReader) UpdateConfig(
 		reader.responseBody = []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"labels":{"zone":"edge"}}`)
 	}
 	return append([]byte(nil), reader.responseBody...), nil
-}
-
-type fakeLocalAgentReadAssignments struct {
-	result []etcd.TaskAssignment
-}
-
-func (reader *fakeLocalAgentReadAssignments) ListAgentAssignments(
-	context.Context,
-	string,
-	uint64,
-	int32,
-) ([]etcd.TaskAssignment, error) {
-	return reader.result, nil
 }

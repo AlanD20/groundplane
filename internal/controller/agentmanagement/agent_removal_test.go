@@ -12,7 +12,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
@@ -22,7 +21,7 @@ func TestAgentRemovalServiceCreatesBoundedControllerTask(t *testing.T) {
 	t.Parallel()
 
 	targets := &fakeAgentRemovalTargets{health: localagent.Health{
-		Agent: localagent.Agent{ID: testAgentRemovalID},
+		Agent: localagent.Agent{ID: testAgentRemovalID, Image: testAgentUpdatePreviousImage, Generation: 7},
 	}}
 	tasks := &fakeAgentEnrollmentTasks{}
 	idempotency := &fakeAgentRemovalIdempotency{resolution: idempotentintent.Resolution{
@@ -39,14 +38,12 @@ func TestAgentRemovalServiceCreatesBoundedControllerTask(t *testing.T) {
 		t.Fatalf("RemoveAgent() error = %v", err)
 	}
 	var accepted apiTypes.TaskAccepted
-	if err := json.Unmarshal(response.Body, &accepted); err != nil || accepted.TaskID != tasks.task.ID {
+	if err := json.Unmarshal(response.Body, &accepted); err != nil || accepted.TaskID != tasks.capture.TaskID {
 		t.Fatalf("RemoveAgent() body = %s, %v", response.Body, err)
 	}
-	if response.Status != http.StatusAccepted || tasks.task.Executor != testtaskjournal.TaskExecutorController ||
-		tasks.task.Type != testtaskjournal.TaskRemove || tasks.task.Target != testAgentRemovalID ||
-		tasks.task.TimeoutSeconds != agentRemovalTimeoutSeconds || tasks.task.PlanHash == "" ||
-		tasks.task.Params[testtaskjournal.TaskResourceKindParam] != testtaskjournal.TaskResourceAgent {
-		t.Fatalf("created Agent removal Task = %#v, response = %#v", tasks.task, response)
+	if response.Status != http.StatusAccepted || tasks.capture.AgentID != testAgentRemovalID ||
+		tasks.capture.Image != testAgentUpdatePreviousImage || tasks.capture.StartingGeneration != 7 {
+		t.Fatalf("captured removal = %#v, response=%#v", tasks.capture, response)
 	}
 	if targets.healthCalls != 1 || tasks.marker.Locator.Route != agentRemovalRoute ||
 		tasks.marker.Locator.Method != http.MethodDelete {

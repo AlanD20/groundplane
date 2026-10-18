@@ -43,8 +43,8 @@ func TestAgentActionsSelectCurrentReleaseImage(t *testing.T) {
 	if _, err := update.UpdateAgent(context.Background(), testAgentUpdateID, testAgentUpdateDesiredImage, "release-agent-update-0001"); err != nil {
 		t.Fatal(err)
 	}
-	if enrollTasks.task.Params[agentTaskImageKey] != images.image ||
-		updateTasks.task.Params[agentTaskImageKey] != images.image {
+	if enrollTasks.capture.Image != images.image ||
+		updateTasks.capture.Image != images.image {
 		t.Fatal("Agent action used startup-captured image")
 	}
 	images.err = errs.New(errs.KindResourceInUse, "native release recovery owns selection")

@@ -10,8 +10,8 @@ import (
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 const (
@@ -50,13 +50,10 @@ func TestAgentUpdateServiceCreatesPinnedControllerTask(t *testing.T) {
 	if response.Status != http.StatusAccepted || response.ContentKind != "application/json" {
 		t.Fatalf("UpdateAgent() response = %#v", response)
 	}
-	if tasks.task.Executor != testtaskjournal.TaskExecutorController || tasks.task.Type != testtaskjournal.TaskUpdate ||
-		tasks.task.Target != testAgentUpdateID || tasks.task.TimeoutSeconds != 300 ||
-		tasks.task.Params[testtaskjournal.TaskResourceKindParam] != testtaskjournal.TaskResourceAgent ||
-		tasks.task.Params[agentTaskPreviousImageKey] != testAgentUpdatePreviousImage ||
-		tasks.task.Params[agentTaskImageKey] != testAgentUpdateDesiredImage ||
-		tasks.task.Params[agentTaskStartingGenerationKey] != "7" {
-		t.Fatalf("Agent update Task = %#v", tasks.task)
+	request := replacement(tasks.capture)
+	if request.AgentID != testAgentUpdateID || request.PreviousImage != testAgentUpdatePreviousImage ||
+		request.DesiredImage != testAgentUpdateDesiredImage || request.StartingGeneration != 7 {
+		t.Fatalf("captured update request = %#v", request)
 	}
 	if tasks.marker.Locator.Method != http.MethodPost ||
 		tasks.marker.Locator.Route != agentUpdateRoute ||
@@ -112,16 +109,16 @@ func (targets *fakeAgentUpdateTargets) Health(context.Context, string) (localage
 }
 
 type fakeAgentUpdateTasks struct {
-	task   etcd.TaskRecord
-	marker testidempotency.IdempotencyMarker
+	capture agentoperations.Capture
+	marker  testidempotency.IdempotencyMarker
 }
 
-func (tasks *fakeAgentUpdateTasks) CreateTask(
+func (tasks *fakeAgentUpdateTasks) CreateAgentWork(
 	_ context.Context,
-	task etcd.TaskRecord,
+	capture agentoperations.Capture,
 	marker testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	tasks.task = task
+	tasks.capture = capture
 	tasks.marker = marker
 	return etcd.IdempotencyTransactionResult{}, nil
 }
