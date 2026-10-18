@@ -46,7 +46,7 @@ func validateTaskAcknowledgement(
 	ctx context.Context, executor taskjournal.TaskExecutor,
 	agentID string, agentGeneration uint64, taskID, assignmentID string,
 	terminalStatus taskjournal.TaskStatus, result *taskjournal.TaskResultRecord,
-	terminalAt time.Time, environmentID string,
+	terminalAt time.Time,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
@@ -62,12 +62,6 @@ func validateTaskAcknowledgement(
 	}
 	if err := recordcodec.ValidateTimestamp("task terminal_at", terminalAt); err != nil {
 		return err
-	}
-	if environmentID != "" && recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
-		return errs.New(
-			errs.KindValidationFailed,
-			"environment creation acknowledgement is invalid",
-		)
 	}
 
 	return nil

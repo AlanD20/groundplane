@@ -25,6 +25,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprovision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/etcdconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
@@ -215,7 +216,15 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize software staging inspection: %w", err)
 	}
-	taskInspection, err := taskinspection.New(executionQueue, imageRecords, executionDiagnostics, workRuntime.Retries, hierarchyInspection, componentInspection, runnerInspection, etcdInspection, preparationInspection, controllerInspection, agentInspection, activationInspection)
+
+	environmentInspection, err := environmentprovision.NewRepository(dependencies.store)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment provisioning inspection: %w", err)
+	}
+	taskInspection, err := taskinspection.New(executionQueue, imageRecords, executionDiagnostics, workRuntime.Retries, hierarchyInspection, componentInspection, runnerInspection, etcdInspection, preparationInspection, controllerInspection, agentInspection, activationInspection, environmentInspection)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()

@@ -98,7 +98,7 @@ func (c *Client) runSession(
 		poolCancel()
 		<-workersDone
 	}()
-	releases, err := newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, native, c.processOwnership)
+	releases, err := newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, c.environmentExecutor, native, c.processOwnership)
 	if err != nil {
 		return false, err
 	}
@@ -345,6 +345,14 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
+
+			if assignment := result.message.GetEnvironmentProvisionAssignment(); assignment != nil {
+				if err := releases.submitEnvironmentProvision(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			if assignment := result.message.GetEnvironmentRemovalAssignment(); assignment != nil {
 				if err := releases.submitEnvironmentRemoval(assignment, c.availableWorkCapacity()); err != nil {
 					return false, err
@@ -456,7 +464,7 @@ func (c *Client) runSession(
 				releases.close()
 				config = proto.Clone(next).(*agentpb.AgentConfig)
 				poolCancel, workersDone = c.startWorkerPool(streamCtx, int(config.MaxConcurrentTasks))
-				releases, err = newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, native, c.processOwnership)
+				releases, err = newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, c.environmentExecutor, native, c.processOwnership)
 				if err != nil {
 					return false, err
 				}

@@ -15,7 +15,7 @@ func (repository *TaskRepository) acknowledgeTerminalTaskReplay(
 	executor taskjournal.TaskExecutor,
 	agentID string, agentGeneration uint64, assignmentID string,
 	terminalStatus taskjournal.TaskStatus, result *taskjournal.TaskResultRecord,
-	environmentID string, environmentRemoval, zoneRemoval bool,
+	environmentRemoval, zoneRemoval bool,
 ) (etcdstore.Versioned[TaskRecord], error) {
 	if assignmentIndexValue != nil {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task assignment index is orphaned")
@@ -56,7 +56,7 @@ func (repository *TaskRepository) acknowledgeTerminalTaskReplay(
 		}
 		if err := repository.validateTaskAcknowledgementReplay(
 			ctx, task, terminalStatus, readRevision,
-			environmentID, environmentRemoval, zoneRemoval,
+			environmentRemoval, zoneRemoval,
 		); err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}

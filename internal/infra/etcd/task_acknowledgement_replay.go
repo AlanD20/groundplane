@@ -15,16 +15,8 @@ func (repository *TaskRepository) validateTaskAcknowledgementReplay(
 	task TaskRecord,
 	terminalStatus taskjournal.TaskStatus,
 	readRevision int64,
-	environmentID string,
 	environmentRemoval, zoneRemoval bool,
 ) error {
-	if environmentID != "" {
-		if err := repository.validateEnvironmentCreationReplay(
-			ctx, task, terminalStatus, readRevision,
-		); err != nil {
-			return err
-		}
-	}
 	if environmentRemoval {
 		if err := repository.validateEnvironmentRemovalReplay(
 			ctx, task, terminalStatus, readRevision,

@@ -39,9 +39,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			current.Record.Type == taskjournal.TaskRestore {
 			return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Backup and Restore require native work-item cancellation")
 		}
-		environmentCreation := current.Record.Executor == taskjournal.TaskExecutorAgent &&
-			current.Record.Type == taskjournal.TaskCreate &&
-			recordcodec.ValidateID(ids.KindEnvironment, current.Record.Target) == nil
 		environmentRemoval := current.Record.Executor == taskjournal.TaskExecutorAgent &&
 			current.Record.Type == taskjournal.TaskRemove &&
 			recordcodec.ValidateID(ids.KindEnvironment, current.Record.Target) == nil
@@ -51,7 +48,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			current.Record.Params[taskjournal.TaskZoneRemovalOperationParam] != ""
 		if current.Record.Status == taskjournal.TaskStatusAborted {
 			if err := repository.validatePendingAbortReplay(
-				ctx, current, environmentCreation, environmentRemoval, zoneRemoval,
+				ctx, current, environmentRemoval, zoneRemoval,
 			); err != nil {
 				return etcdstore.Versioned[TaskRecord]{}, err
 			}
@@ -172,26 +169,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
 			{Type: etcdstore.MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
 		}
-		var environmentValue []byte
-		if environmentCreation {
-			environmentConditions, environmentMutations, value, prepareErr :=
-				repository.prepareEnvironmentCreationAcknowledgement(
-					ctx,
-					current.Record,
-					taskjournal.TaskStatusAborted,
-					current.ReadRevision,
-				)
-			if prepareErr != nil {
-				clear(terminalValue)
-				clear(markerValue)
-				clear(retentionValue)
-				clear(taskRetentionValue)
-				return etcdstore.Versioned[TaskRecord]{}, prepareErr
-			}
-			environmentValue = value
-			conditions = append(conditions, environmentConditions...)
-			mutations = append(mutations, environmentMutations...)
-		}
 		if environmentRemoval {
 			environmentConditions, environmentMutations, prepareErr :=
 				repository.prepareEnvironmentRemovalAcknowledgement(
@@ -202,7 +179,6 @@ func (repository *TaskRepository) AbortPendingTask(
 				clear(markerValue)
 				clear(retentionValue)
 				clear(taskRetentionValue)
-				clear(environmentValue)
 				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			conditions = append(conditions, environmentConditions...)
@@ -218,7 +194,6 @@ func (repository *TaskRepository) AbortPendingTask(
 				clear(markerValue)
 				clear(retentionValue)
 				clear(taskRetentionValue)
-				clear(environmentValue)
 				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			zoneMutations = preparedZoneMutations
@@ -233,7 +208,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
@@ -249,7 +223,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -267,7 +240,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -280,7 +252,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
@@ -294,7 +265,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
@@ -321,7 +291,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
@@ -343,7 +312,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
@@ -376,7 +344,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
@@ -397,7 +364,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			etcdstore.ClearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
@@ -417,7 +383,6 @@ func (repository *TaskRepository) AbortPendingTask(
 		clear(markerValue)
 		clear(retentionValue)
 		clear(taskRetentionValue)
-		clear(environmentValue)
 		etcdstore.ClearMutationValues(zoneMutations)
 		clearAttachTaskChange(attachChange)
 		clearRemovalTaskChange(routeChange)

@@ -3,7 +3,6 @@
 package taskcontract
 
 const (
-	EnvironmentCreateVolumeDirectoryParam    = "expected_volume_dir"
 	EnvironmentBlueprintArtifactParam        = "compose_artifact_id"
 	EnvironmentBlueprintManagedVolumesParam  = "managed_volume_ids"
 	EnvironmentBlueprintProcedureParam       = "blueprint_compose_procedure"

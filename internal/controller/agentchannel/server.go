@@ -21,6 +21,7 @@ type Server struct {
 	workStarts             WorkStarter
 	workDispatch           WorkDispatcher
 	releaseCheckpoints     ReleaseWorkCheckpointer
+	environmentProvision   EnvironmentProvisionReporter
 	hierarchyReports       HierarchyReporter
 	attachReports          AttachReporter
 	attachProvisionReports AttachProvisionReporter

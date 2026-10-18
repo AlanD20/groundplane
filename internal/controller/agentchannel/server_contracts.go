@@ -49,19 +49,6 @@ type TaskStore interface {
 		time.Time,
 	) (etcdstore.Versioned[etcd.TaskRecord], error)
 }
-type environmentCreationTaskStore interface {
-	AcknowledgeEnvironmentCreation(
-		context.Context,
-		string,
-		uint64,
-		string,
-		string,
-		string,
-		taskjournal.TaskStatus,
-		taskjournal.TaskResultRecord,
-		time.Time,
-	) (etcdstore.Versioned[etcd.TaskRecord], error)
-}
 
 // PlanResolver deterministically rebuilds one Task's ephemeral execution plan
 // from retained etcd inputs. Rendered artifacts are never persisted.

@@ -122,8 +122,9 @@ func CompleteEnvironmentProvisioning(
 	return record, nil
 }
 
-// RetryEnvironmentProvisioning transfers a failed create operation to the
-// new retry Task without changing Environment identity or volume_dir.
+// RetryEnvironmentProvisioning prepares another captured provisioning attempt
+// without changing Environment identity or volume_dir. The native Retry owner
+// retains its Task identity and checks the preceding result in the same write.
 func RetryEnvironmentProvisioning(record EnvironmentRecord, createTaskID string) (EnvironmentRecord, error) {
 	if record.ProvisioningState != EnvironmentProvisioningFailed {
 		return EnvironmentRecord{}, errs.New(

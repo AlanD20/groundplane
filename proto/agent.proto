@@ -89,6 +89,67 @@ message EnvironmentRemovalInput {
   ComposeArtifact compose = 4; // absent when no Compose runtime was captured
 }
 
+// One native Environment directory provisioning item. Delivery grants no
+// filesystem access; the durable WorkStart receipt precedes the single effect.
+message EnvironmentProvisionInput {
+  string task_id = 1;
+  string work_item_id = 2;
+  string tenant_id = 3;
+  string project_id = 4;
+  string environment_id = 5;
+  string environment_name = 6;
+  string network_pool = 7;
+  string host_id = 8;
+  string volume_root = 9;
+  string volume_directory = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+message EnvironmentProvisionAssignment {
+  WorkAttemptIdentity attempt = 1;
+  EnvironmentProvisionInput input = 2;
+  // Cleanup inspects only the original failed execution; it never creates a
+  // missing directory. The original failure remains the action outcome.
+  EnvironmentProvisionRecoverySource recovery_source = 3;
+}
+
+message EnvironmentProvisionRecoverySource {
+  WorkAttemptIdentity attempt = 1;
+  google.protobuf.Timestamp started_at = 2;
+  google.protobuf.Timestamp finished_at = 3;
+  string outcome = 4;
+  WorkInputReference evidence = 5;
+}
+
+message EnvironmentProvisionResultRequest {
+  WorkAttemptIdentity attempt = 1;
+  bool directory_ready = 2;
+  bool helpers_absent = 3;
+  string failure = 4;
+  string cleanup_failure = 5;
+  google.protobuf.Timestamp observed_at = 6;
+}
+message EnvironmentProvisionResultAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  string outcome = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}
+
+message EnvironmentProvisionHelperRequest {
+  EnvironmentProvisionAssignment assignment = 1;
+  WorkStartAck start = 2;
+  bool inspect_only = 3;
+}
+message EnvironmentProvisionHelperResponse {
+  string environment_id = 1;
+  WorkInputReference input = 2;
+  bool directory_ready = 3;
+  bool inspection = 4;
+  google.protobuf.Timestamp observed_at = 5;
+}
+
 // Native Attach credential cleanup. Values are transient authenticated delivery;
 // operation storage retains encrypted facts and captured source references.
 message AttachRemovalAssignment {
@@ -843,6 +904,7 @@ message AgentMessage {
     BackupWorkFailureRequest backup_work_failure_request = 98;
     BackupRecoveryRequest backup_recovery_request = 99;
     BackupConfigRecoveryPrepareRequest backup_config_recovery_prepare_request = 100;
+    EnvironmentProvisionResultRequest environment_provision_result_request = 101;
   }
 }
 
@@ -1401,6 +1463,8 @@ message ControllerMessage {
     BackupRecoveryAck backup_recovery_ack = 118;
     BackupConfigRecoveryPrepareAck backup_config_recovery_prepare_ack = 119;
     WorkCancel work_cancel = 120;
+    EnvironmentProvisionAssignment environment_provision_assignment = 121;
+    EnvironmentProvisionResultAck environment_provision_result_ack = 122;
   }
 }
 

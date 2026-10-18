@@ -15,21 +15,16 @@ type taskAcknowledgementSource struct {
 	task  TaskRecord
 }
 
-// taskAcknowledgementRemovalScope classifies the terminal effect only after
-// checking that environment creation uses its atomic provisioning path.
+// taskAcknowledgementRemovalScope classifies the remaining generic removals.
+// Environment provisioning has only its native work-item report path.
 func taskAcknowledgementRemovalScope(
 	task TaskRecord,
 	executor taskjournal.TaskExecutor,
-	environmentID string,
 ) (bool, bool, error) {
 	environmentTask := executor == taskjournal.TaskExecutorAgent &&
 		recordcodec.ValidateID(ids.KindEnvironment, task.Target) == nil
-	environmentCreation := environmentTask && task.Type == taskjournal.TaskCreate
-	if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
-		return false, false, errs.New(
-			errs.KindStateConflict,
-			"environment creation Task requires its atomic provisioning acknowledgement",
-		)
+	if environmentTask && task.Type == taskjournal.TaskCreate {
+		return false, false, errs.New(errs.KindStateConflict, "Environment provisioning requires native execution reports")
 	}
 	environmentRemoval := environmentTask && task.Type == taskjournal.TaskRemove
 	zoneRemoval := executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskRemove &&

@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
+	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
 	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
@@ -28,30 +29,32 @@ import (
 )
 
 type executionOutput struct {
-	backup             *workexecution.Attempt
-	removalRecovery    *workexecution.Attempt
-	lifecycle          *workexecution.Attempt
-	provisionRecovery  *workexecution.Attempt
-	provision          *attachruntime.Execution
-	entry              *workexecution.Attempt
-	component          *workexecution.Attempt
-	network            *workexecution.Attempt
-	volume             *workexecution.Attempt
-	attachRecovery     *workexecution.Attempt
-	attach             *attachexecution.RemovalProgress
-	attachFailure      *workexecution.Attempt
-	environmentFailure *workexecution.Attempt
-	environment        *hierarchyexecution.EnvironmentProgress
-	scriptFailure      *agentpb.ScriptWorkFailureAck
-	scriptRecovery     *agentpb.ScriptRecoveryCompletionAck
-	attempt            workexecution.Attempt
-	result             releaseruntime.ExecutionResult
-	recovery           *releaseexecution.RecoveryReport
-	err                error
-	script             *agentpb.ScriptWorkCompletionAck
+	environmentProvision *workexecution.Attempt
+	backup               *workexecution.Attempt
+	removalRecovery      *workexecution.Attempt
+	lifecycle            *workexecution.Attempt
+	provisionRecovery    *workexecution.Attempt
+	provision            *attachruntime.Execution
+	entry                *workexecution.Attempt
+	component            *workexecution.Attempt
+	network              *workexecution.Attempt
+	volume               *workexecution.Attempt
+	attachRecovery       *workexecution.Attempt
+	attach               *attachexecution.RemovalProgress
+	attachFailure        *workexecution.Attempt
+	environmentFailure   *workexecution.Attempt
+	environment          *hierarchyexecution.EnvironmentProgress
+	scriptFailure        *agentpb.ScriptWorkFailureAck
+	scriptRecovery       *agentpb.ScriptRecoveryCompletionAck
+	attempt              workexecution.Attempt
+	result               releaseruntime.ExecutionResult
+	recovery             *releaseexecution.RecoveryReport
+	err                  error
+	script               *agentpb.ScriptWorkCompletionAck
 }
 
 type executionExchange interface {
+	environmentruntime.Exchange
 	backupruntime.Exchange
 	removalruntime.RecoveryExchange
 	lifecycleruntime.Exchange
@@ -68,27 +71,28 @@ type executionExchange interface {
 }
 
 type activeExecution struct {
-	ctx               context.Context
-	cancel            context.CancelFunc
-	cancelRequested   bool
-	backup            *agentpb.BackupWorkAssignment
-	backupRecovery    *agentpb.BackupRecoveryAssignment
-	removalRecovery   *agentpb.ServiceRemovalRecoveryAssignment
-	lifecycle         *agentpb.ServiceLifecycleAssignment
-	provisionRecovery *agentpb.AttachProvisionRecoveryAssignment
-	provision         *agentpb.AttachProvisionAssignment
-	entry             *agentpb.EntryConfigurationWorkAssignment
-	component         *agentpb.ComponentWorkAssignment
-	network           *agentpb.NetworkWorkAssignment
-	volume            *agentpb.VolumeWorkAssignment
-	attachRecovery    *agentpb.AttachRecoveryAssignment
-	attach            *agentpb.AttachRemovalAssignment
-	environment       *agentpb.EnvironmentRemovalAssignment
-	scriptRecovery    *agentpb.ScriptRecoveryAssignment
-	attempt           workexecution.Attempt
-	forward           *agentpb.ReleaseWorkAssignment
-	recovery          *agentpb.ReleaseRecoveryAssignment
-	script            bool
+	environmentProvision *agentpb.EnvironmentProvisionAssignment
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	cancelRequested      bool
+	backup               *agentpb.BackupWorkAssignment
+	backupRecovery       *agentpb.BackupRecoveryAssignment
+	removalRecovery      *agentpb.ServiceRemovalRecoveryAssignment
+	lifecycle            *agentpb.ServiceLifecycleAssignment
+	provisionRecovery    *agentpb.AttachProvisionRecoveryAssignment
+	provision            *agentpb.AttachProvisionAssignment
+	entry                *agentpb.EntryConfigurationWorkAssignment
+	component            *agentpb.ComponentWorkAssignment
+	network              *agentpb.NetworkWorkAssignment
+	volume               *agentpb.VolumeWorkAssignment
+	attachRecovery       *agentpb.AttachRecoveryAssignment
+	attach               *agentpb.AttachRemovalAssignment
+	environment          *agentpb.EnvironmentRemovalAssignment
+	scriptRecovery       *agentpb.ScriptRecoveryAssignment
+	attempt              workexecution.Attempt
+	forward              *agentpb.ReleaseWorkAssignment
+	recovery             *agentpb.ReleaseRecoveryAssignment
+	script               bool
 }
 
 // executionWorkers owns shared in-process exclusivity and capacity. The Controller
@@ -96,6 +100,7 @@ type activeExecution struct {
 // a failed action. Closing a stream cancels and joins every local execution
 // before another stream can begin reconciling the same attempts.
 type executionWorkers struct {
+	environments    *environmentruntime.Executor
 	backups         *backupruntime.Executor
 	removalRecovery *removalruntime.Runtime
 	lifecycles      *lifecycleruntime.Executor
@@ -122,7 +127,10 @@ type executionWorkers struct {
 	outputs         chan executionOutput
 }
 
-func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.Identity, executor *releaseruntime.Executor, recovery *releaseruntime.RecoveryExecutor, scripts *scriptruntime.Executor, hierarchy *hierarchyruntime.Executor, attachRemoval *hierarchyruntime.AttachExecutor, volumes *volumeruntime.Executor, networks *networkruntime.Executor, components *componentruntime.Executor, entries *entryruntime.Executor, attachProvision *attachruntime.Executor, lifecycles *lifecycleruntime.Executor, removalRecovery *removalruntime.Runtime, backups *backupruntime.Executor, exchange executionExchange, ownership *agentownership.Lease) (*executionWorkers, error) {
+func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.Identity, executor *releaseruntime.Executor, recovery *releaseruntime.RecoveryExecutor, scripts *scriptruntime.Executor, hierarchy *hierarchyruntime.Executor, attachRemoval *hierarchyruntime.AttachExecutor, volumes *volumeruntime.Executor, networks *networkruntime.Executor, components *componentruntime.Executor, entries *entryruntime.Executor, attachProvision *attachruntime.Executor, lifecycles *lifecycleruntime.Executor, removalRecovery *removalruntime.Runtime, backups *backupruntime.Executor, environments *environmentruntime.Executor, exchange executionExchange, ownership *agentownership.Lease) (*executionWorkers, error) {
+	if environments == nil {
+		return nil, errs.New(errs.KindInternal, "Agent Environment provisioning executor is required")
+	}
 	if backups == nil {
 		return nil, errs.New(errs.KindInternal, "Agent Backup executor is required")
 	}
@@ -136,7 +144,7 @@ func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.
 		return nil, err
 	}
 	workerContext, cancel := context.WithCancel(ctx)
-	return &executionWorkers{backups: backups, removalRecovery: removalRecovery, lifecycles: lifecycles, ctx: workerContext, cancel: cancel, identity: identity, executor: executor, recovery: recovery, scripts: scripts, hierarchy: hierarchy, attachRemoval: attachRemoval, volumes: volumes, networks: networks, exchange: exchange,
+	return &executionWorkers{environments: environments, backups: backups, removalRecovery: removalRecovery, lifecycles: lifecycles, ctx: workerContext, cancel: cancel, identity: identity, executor: executor, recovery: recovery, scripts: scripts, hierarchy: hierarchy, attachRemoval: attachRemoval, volumes: volumes, networks: networks, exchange: exchange,
 		components: components, entries: entries, attachProvision: attachProvision, limit: limit, ownership: ownership, active: make(map[string]activeExecution), outputs: make(chan executionOutput, limit)}, nil
 }
 
@@ -242,6 +250,23 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	}
 	if output.entry != nil {
 		return errs.New(errs.KindStateConflict, "Entry result belongs to another active operation")
+	}
+
+	if active.environmentProvision != nil {
+		if output.err == nil {
+			if output.environmentProvision == nil || output.environmentProvision.Validate() != nil || output.environmentProvision.FinishedAt == nil ||
+				output.environmentProvision.Result == nil || !workexecution.SameAssignment(*output.environmentProvision, output.attempt) {
+				return errs.New(errs.KindStateConflict, "Environment provisioning result requires its accepted terminal receipt")
+			}
+			if err := workers.environments.Retire(workers.ctx, *output.environmentProvision); err != nil {
+				return err
+			}
+		}
+		workers.retireLocalExecution(output.attempt.WorkItemID)
+		return nil
+	}
+	if output.environmentProvision != nil {
+		return errs.New(errs.KindStateConflict, "Environment provisioning result belongs to another operation")
 	}
 	if active.component != nil {
 		if output.err == nil {

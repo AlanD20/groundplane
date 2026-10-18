@@ -21,11 +21,10 @@ func (repository *TaskRepository) acknowledgeTask(
 	terminalStatus taskjournal.TaskStatus,
 	result *taskjournal.TaskResultRecord,
 	terminalAt time.Time,
-	environmentID string,
 ) (etcdstore.Versioned[TaskRecord], error) {
 	if err := validateTaskAcknowledgement(
 		ctx, executor, agentID, agentGeneration, taskID, assignmentID,
-		terminalStatus, result, terminalAt, environmentID,
+		terminalStatus, result, terminalAt,
 	); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
@@ -46,7 +45,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		assignmentValue := primaryAndAssignment.Values[1]
 		assignmentIndexValue := primaryAndAssignment.Values[2]
-		environmentRemoval, zoneRemoval, scopeErr := taskAcknowledgementRemovalScope(task, executor, environmentID)
+		environmentRemoval, zoneRemoval, scopeErr := taskAcknowledgementRemovalScope(task, executor)
 		if scopeErr != nil {
 			return etcdstore.Versioned[TaskRecord]{}, scopeErr
 		}
@@ -59,7 +58,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			return repository.acknowledgeTerminalTaskReplay(
 				ctx, task, taskValue, assignmentIndexValue, primaryAndAssignment.ReadRevision,
 				executor, agentID, agentGeneration, assignmentID, terminalStatus, result,
-				environmentID, environmentRemoval, zoneRemoval,
+				environmentRemoval, zoneRemoval,
 			)
 		}
 		assignment, err := decodeAcknowledgementAssignment(
@@ -225,29 +224,12 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, materializationProjectionChange.conditions...)
 			mutations = append(mutations, materializationProjectionChange.mutations...)
 		}
-		var environmentValue []byte
-		if environmentID != "" {
-			environmentConditions, environmentMutations, value, err := repository.prepareEnvironmentCreationAcknowledgement(
-				ctx,
-				task,
-				terminalStatus,
-				primaryAndAssignment.ReadRevision,
-			)
-			if err != nil {
-				journal.clearPrimary()
-				return etcdstore.Versioned[TaskRecord]{}, err
-			}
-			environmentValue = value
-			conditions = append(conditions, environmentConditions...)
-			mutations = append(mutations, environmentMutations...)
-		}
 		if environmentRemoval {
 			environmentConditions, environmentMutations, err := repository.prepareEnvironmentRemovalAcknowledgement(
 				ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 			)
 			if err != nil {
 				journal.clearPrimary()
-				clear(environmentValue)
 				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			conditions = append(conditions, environmentConditions...)
@@ -258,7 +240,6 @@ func (repository *TaskRepository) acknowledgeTask(
 		)
 		if err != nil {
 			journal.clearPrimary()
-			clear(environmentValue)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if attachChange.applies {
@@ -270,7 +251,6 @@ func (repository *TaskRepository) acknowledgeTask(
 		)
 		if err != nil {
 			journal.clearPrimary()
-			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
@@ -284,7 +264,6 @@ func (repository *TaskRepository) acknowledgeTask(
 		)
 		if err != nil {
 			journal.clearPrimary()
-			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
@@ -301,7 +280,6 @@ func (repository *TaskRepository) acknowledgeTask(
 		)
 		if err != nil {
 			journal.clearPrimary()
-			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -319,7 +297,6 @@ func (repository *TaskRepository) acknowledgeTask(
 		)
 		if err != nil {
 			journal.clearPrimary()
-			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
 			clearBackingZoneTaskChange(backingZoneChange)
@@ -338,7 +315,6 @@ func (repository *TaskRepository) acknowledgeTask(
 		)
 		if err != nil {
 			journal.clearPrimary()
-			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
 			clearBackingZoneTaskChange(backingZoneChange)
@@ -357,7 +333,6 @@ func (repository *TaskRepository) acknowledgeTask(
 		if err != nil {
 			journal.clearPrimary()
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
 			clearBackingZoneTaskChange(backingZoneChange)
@@ -373,7 +348,6 @@ func (repository *TaskRepository) acknowledgeTask(
 		clearPrepared := func() {
 			journal.clearPrimary()
 			clear(taskRetentionValue)
-			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			clearRemovalTaskChange(routeChange)
 			clearBackingZoneTaskChange(backingZoneChange)

@@ -11,17 +11,10 @@ import (
 func (repository *TaskRepository) validatePendingAbortReplay(
 	ctx context.Context,
 	current etcdstore.Versioned[TaskRecord],
-	environmentCreation, environmentRemoval, zoneRemoval bool,
+	environmentRemoval, zoneRemoval bool,
 ) error {
 	if err := repository.validatePendingScriptAbortReplay(ctx, current); err != nil {
 		return err
-	}
-	if environmentCreation {
-		if err := repository.validateEnvironmentCreationReplay(
-			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
-		); err != nil {
-			return err
-		}
 	}
 	if environmentRemoval {
 		if err := repository.validateEnvironmentRemovalReplay(

@@ -14,6 +14,7 @@ import (
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
 	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
@@ -61,6 +62,7 @@ type Agent struct {
 }
 
 type ownedComposeHelper interface {
+	environmentruntime.Host
 	hierarchyruntime.EnvironmentHelper
 	composeruntime.Helper
 	releaseruntime.MutationHelper
@@ -315,6 +317,14 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	if err := client.SetReleaseExecutor(releaseExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+
+	environmentExecutor, err := environmentruntime.NewExecutor(cfg.Storage.VolumeRoot, workJournal, resources.helper)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetEnvironmentExecutor(environmentExecutor); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	hierarchyHost, err := hierarchyruntime.NewHost(cfg.Storage.VolumeRoot, workJournal, resources.helper, ownership)

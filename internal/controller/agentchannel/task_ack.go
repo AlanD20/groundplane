@@ -111,8 +111,6 @@ func (s *Server) acknowledge(
 			}
 		}
 	}
-	environmentTarget := ids.Validate(ids.KindEnvironment, task.Record.Target) == nil
-	environmentCreation := task.Record.Type == taskjournal.TaskCreate && environmentTarget
 	environmentDirectory := executionplan.UsesEnvironmentDirectoryResult(plan)
 	if backupTask {
 		if err := validateBackupTaskResult(acknowledgement); err != nil {
@@ -151,46 +149,25 @@ func (s *Server) acknowledge(
 			"Agent Task acknowledgement terminal state is invalid",
 		)
 	}
-	if environmentCreation {
-		store, ok := s.tasks.(environmentCreationTaskStore)
-		if !ok {
-			return taskReportRejected, errs.New(
-				errs.KindInternal,
-				"Environment creation Task store is not configured",
-			)
-		}
-		_, err = store.AcknowledgeEnvironmentCreation(
-			ctx,
-			agentID,
-			agentGeneration,
-			acknowledgement.TaskId,
-			acknowledgement.AssignmentId,
-			task.Record.Target,
-			terminal,
-			durableEnvironmentDirectoryTaskResult(acknowledgement),
-			s.now().UTC(),
-		)
-	} else {
-		result := durableComposeTaskResult(acknowledgement)
-		if backupTask {
-			result = durableBackupTaskResult(acknowledgement)
-		}
-		result.ExecutionEpoch = acknowledgement.GetExecutionEpoch()
-		result.ReleaseRecoveryRecordSHA256 = hex.EncodeToString(recoveryDigest)
-		if environmentDirectory {
-			result = durableEnvironmentDirectoryTaskResult(acknowledgement)
-		}
-		_, err = s.tasks.AcknowledgeTask(
-			ctx,
-			agentID,
-			agentGeneration,
-			acknowledgement.TaskId,
-			acknowledgement.AssignmentId,
-			terminal,
-			result,
-			s.now().UTC(),
-		)
+	result := durableComposeTaskResult(acknowledgement)
+	if backupTask {
+		result = durableBackupTaskResult(acknowledgement)
 	}
+	result.ExecutionEpoch = acknowledgement.GetExecutionEpoch()
+	result.ReleaseRecoveryRecordSHA256 = hex.EncodeToString(recoveryDigest)
+	if environmentDirectory {
+		result = durableEnvironmentDirectoryTaskResult(acknowledgement)
+	}
+	_, err = s.tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		agentGeneration,
+		acknowledgement.TaskId,
+		acknowledgement.AssignmentId,
+		terminal,
+		result,
+		s.now().UTC(),
+	)
 	return taskReportApplicationAttempted, err
 }
 

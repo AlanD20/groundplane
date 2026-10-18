@@ -22,6 +22,7 @@ import (
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
 	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	logstream "github.com/AlanD20/groundplane/internal/agent/logstream"
@@ -70,20 +71,21 @@ type reconnectWaiter func(context.Context, uint) error
 // Client owns one authenticated, single-use Controller stream. Identity and
 // credential material are deliberately private and are never logged.
 type Client struct {
-	lifecycleExecutor  *lifecycleruntime.Executor
-	backupExecutor     *backupruntime.Executor
-	removalRecovery    *removalruntime.Runtime
-	socketPath         string
-	agentID            string
-	token              [agentprotocol.RawTokenBytes]byte
-	processGeneration  [16]byte
-	volumeRoot         string
-	statePath          string
-	openStaging        func(context.Context, *agentstagingjournal.Journal) (*backupStagingState, error)
-	openStagingJournal func(string) (*agentstagingjournal.Journal, error)
-	logger             *slog.Logger
-	connect            streamConnector
-	reconnect          reconnectWaiter
+	environmentExecutor *environmentruntime.Executor
+	lifecycleExecutor   *lifecycleruntime.Executor
+	backupExecutor      *backupruntime.Executor
+	removalRecovery     *removalruntime.Runtime
+	socketPath          string
+	agentID             string
+	token               [agentprotocol.RawTokenBytes]byte
+	processGeneration   [16]byte
+	volumeRoot          string
+	statePath           string
+	openStaging         func(context.Context, *agentstagingjournal.Journal) (*backupStagingState, error)
+	openStagingJournal  func(string) (*agentstagingjournal.Journal, error)
+	logger              *slog.Logger
+	connect             streamConnector
+	reconnect           reconnectWaiter
 
 	mu                      sync.Mutex
 	started                 bool

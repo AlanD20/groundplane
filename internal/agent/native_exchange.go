@@ -124,6 +124,8 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 	var identity *agentpb.WorkAttemptIdentity
 	kind, executionID := "", ""
 	switch {
+	case message.GetEnvironmentProvisionResultAck() != nil:
+		identity, kind = message.GetEnvironmentProvisionResultAck().Attempt, "environment_provision_result"
 	case message.GetBackupConfigRecoveryPrepareAck() != nil:
 		ack := message.GetBackupConfigRecoveryPrepareAck()
 		identity, kind, executionID = ack.GetAssignment().GetAttempt(), "backup_config_recovery_prepare", fmt.Sprint(ack.SourceOrdinal)

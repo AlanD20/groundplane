@@ -60,6 +60,10 @@ func (service *Service) Stages(ctx context.Context, taskID, workID, attemptID st
 	if err := service.stagingOutcome(ctx, snapshot.Attempt, &result); err != nil {
 		return Stages{}, err
 	}
+
+	if err := service.environmentOutcome(ctx, snapshot.Attempt, &result); err != nil {
+		return Stages{}, err
+	}
 	return result, nil
 }
 

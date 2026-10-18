@@ -3,16 +3,17 @@
 package environmentprovision
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/environmentexecution"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Input struct {
@@ -75,12 +76,18 @@ func Decode(raw []byte) (Input, error) {
 }
 
 func (input Input) Reference() (workexecution.Input, error) {
-	raw, err := Encode(input)
-	if err != nil {
+	if err := input.Validate(); err != nil {
 		return workexecution.Input{}, err
 	}
-	digest := sha256.Sum256(raw)
-	return workexecution.Input{ID: input.PlanID, SHA256: hex.EncodeToString(digest[:])}, nil
+	return environmentexecution.Reference(input.PlanID, input.Procedure())
+}
+
+func (input Input) Procedure() *agentpb.EnvironmentProvisionInput {
+	return &agentpb.EnvironmentProvisionInput{TaskId: input.TaskID, WorkItemId: input.WorkItemID,
+		TenantId: input.Scope.TenantID, ProjectId: input.Scope.ProjectID, EnvironmentId: input.Environment.ID,
+		EnvironmentName: input.Environment.Name, NetworkPool: input.Environment.NetworkPool,
+		HostId: input.HostID, VolumeRoot: input.VolumeRoot, VolumeDirectory: input.Environment.VolumeDir,
+		CreatedAt: timestamppb.New(input.CreatedAt)}
 }
 
 func (input Input) Work() (workexecution.Task, workexecution.Item, error) {

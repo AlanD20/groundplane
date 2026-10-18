@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const environmentBlueprintDeletionBatchSize int64 = 32
+
 func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 	ctx context.Context,
 	task TaskRecord,

@@ -138,6 +138,12 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 				return conflict()
 			}
 		}
+		if provision := record.EnvironmentProvision; provision != nil {
+			if provision.Receipt == nil || provision.Receipt.Outcome != terminal.Outcome ||
+				!provision.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *provision.Receipt.Result != *terminal.Result {
+				return conflict()
+			}
+		}
 		if backup := record.Backup; backup != nil {
 			saved := backup.Completion
 			if saved == nil || saved.Outcome != terminal.Outcome || !saved.FinishedAt.Equal(*terminal.FinishedAt) ||

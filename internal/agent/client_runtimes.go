@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
+	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
 	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
@@ -239,5 +240,18 @@ func (c *Client) SetAdapterCompiler(compiler backingadapter.Compiler) error {
 		return errs.New(errs.KindStateConflict, "agent: adapter compiler cannot change after start")
 	}
 	c.adapterCompiler = compiler
+	return nil
+}
+
+func (c *Client) SetEnvironmentExecutor(executor *environmentruntime.Executor) error {
+	if c == nil || executor == nil {
+		return errs.New(errs.KindValidationFailed, "Agent Environment provisioning executor is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.environmentExecutor != nil {
+		return errs.New(errs.KindStateConflict, "Agent Environment provisioning executor cannot change after configuration")
+	}
+	c.environmentExecutor = executor
 	return nil
 }

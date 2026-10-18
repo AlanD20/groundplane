@@ -24,34 +24,7 @@ func (repository *TaskRepository) AcknowledgeTask(
 ) (etcdstore.Versioned[TaskRecord], error) {
 	return repository.acknowledgeTask(
 		ctx, taskjournal.TaskExecutorAgent, agentID, agentGeneration, taskID, assignmentID,
-		terminalStatus, &result, terminalAt, "",
-	)
-}
-
-// AcknowledgeEnvironmentCreation atomically terminalizes one Agent Task and
-// moves its owned Environment from provisioning to ready or failed.
-func (repository *TaskRepository) AcknowledgeEnvironmentCreation(
-	ctx context.Context,
-	agentID string,
-	agentGeneration uint64,
-	taskID string,
-	assignmentID string,
-	environmentID string,
-	terminalStatus taskjournal.TaskStatus,
-	result taskjournal.TaskResultRecord,
-	terminalAt time.Time,
-) (etcdstore.Versioned[TaskRecord], error) {
-	return repository.acknowledgeTask(
-		ctx,
-		taskjournal.TaskExecutorAgent,
-		agentID,
-		agentGeneration,
-		taskID,
-		assignmentID,
-		terminalStatus,
-		&result,
-		terminalAt,
-		environmentID,
+		terminalStatus, &result, terminalAt,
 	)
 }
 
@@ -69,6 +42,6 @@ func (repository *TaskRepository) AcknowledgeControllerTask(
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	return repository.acknowledgeTask(
-		ctx, taskjournal.TaskExecutorController, "", 0, taskID, "", terminalStatus, &result, terminalAt, "",
+		ctx, taskjournal.TaskExecutorController, "", 0, taskID, "", terminalStatus, &result, terminalAt,
 	)
 }

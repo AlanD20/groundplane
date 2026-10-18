@@ -57,32 +57,24 @@ func (repository *Repository) PrepareResourceResult(ctx context.Context, view wo
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	key := hierarchy.EnvironmentKey(input.Environment.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+
+	current, change, err := repository.resourceSnapshot(ctx, input, view.ReadRevision)
 	if err != nil {
 		return workqueue.Change{}, err
-	}
-	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Environment provisioning resource is unavailable")
-	}
-	defer keyvalue.ClearValues(read.Values)
-	current, err := hierarchy.DecodeEnvironment(read.Values[0].Value)
-	if err != nil {
-		return workqueue.Change{}, err
-	}
-	if current.ID != input.Environment.ID || current.ProjectID != input.Scope.ProjectID || current.VolumeDir != input.Environment.VolumeDir || current.CreateTaskID != input.TaskID {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Environment provisioning resource ownership changed")
 	}
 	next, err := hierarchy.CompleteEnvironmentProvisioning(current, input.TaskID, succeeded)
 	if err != nil {
+		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err
 	}
 	raw, err := hierarchy.EncodeEnvironment(next)
 	if err != nil {
+		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err
 	}
-	return workqueue.Change{Conditions: []keyvalue.Condition{capture, {Key: key, ModRevision: read.Values[0].ModRevision}},
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}}}, nil
+	change.Conditions = append([]keyvalue.Condition{capture}, change.Conditions...)
+	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: hierarchy.EnvironmentKey(current.ID), Value: raw})
+	return change, nil
 }
 
 // ReadyForHost refuses publication or hierarchy changes after assignment. Host

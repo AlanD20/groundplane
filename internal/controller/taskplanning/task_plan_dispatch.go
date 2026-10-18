@@ -6,8 +6,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
-	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	releasedomain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -17,7 +15,6 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"math"
 )
 
 // TaskPlanResolver resolves exact procedures from their capability-owned sealed
@@ -106,27 +103,5 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		}
 		return nil, errs.New(errs.KindInternal, "durable removal Task target is invalid")
 	}
-	if task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskCreate ||
-		ids.Validate(ids.KindEnvironment, task.Target) != nil || len(task.Params) != 1 ||
-		len(task.Steps) != 1 || task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 {
-		return nil, errs.New(errs.KindInternal, "durable Environment creation Task shape is invalid")
-	}
-	volumeDirectory, exists := task.Params[taskcontract.EnvironmentCreateVolumeDirectoryParam]
-	if !exists || ids.Validate(ids.KindStep, task.Steps[0].ID) != nil {
-		return nil, errs.New(errs.KindInternal, "durable Environment creation Task procedure is invalid")
-	}
-	return taskplan.Build(taskplan.BuildInput{
-		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
-		RenderGeneration: uint64(task.RenderGeneration),
-		Operation:        agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE,
-		TargetID:         task.Target,
-		Steps: []*agentpb.ExecutionStep{{
-			StepId: task.Steps[0].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
-			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
-				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{
-					EnvironmentId: task.Target, ExpectedVolumeDir: volumeDirectory,
-				},
-			},
-		}},
-	})
+	return nil, errs.New(errs.KindStateConflict, "operation requires native captured work; no generic Task plan is available")
 }
