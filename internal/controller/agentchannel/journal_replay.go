@@ -16,9 +16,17 @@ import (
 )
 
 func (server *Server) replayWorkJournal(ctx context.Context, session *Session, generation uint64, request *agentpb.WorkJournalReplayRequest) (*agentpb.WorkJournalReplayAck, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil ||
-		request.Complete == (len(request.Report) != 0) || len(request.Report) > workreceipt.MaximumBytes {
+	if request == nil || executionplan.RejectUnknown(request) != nil || proto.Size(request) > workreceipt.MaximumBytes {
 		return nil, errs.New(errs.KindValidationFailed, "startup result replay is malformed or oversized")
+	}
+	forms := 0
+	for _, present := range []bool{request.Complete, len(request.Report) != 0, request.UnreportedAttempt != nil, request.UncommittedAttemptId != ""} {
+		if present {
+			forms++
+		}
+	}
+	if forms != 1 {
+		return nil, errs.New(errs.KindValidationFailed, "startup journal request requires exactly one replay, inventory or completion form")
 	}
 	authorization, err := server.authenticatedWorkIdentity(ctx, session, generation)
 	if err != nil {
@@ -26,6 +34,18 @@ func (server *Server) replayWorkJournal(ctx context.Context, session *Session, g
 	}
 	if request.Complete {
 		return &agentpb.WorkJournalReplayAck{Complete: true}, nil
+	}
+	if request.UnreportedAttempt != nil || request.UncommittedAttemptId != "" {
+		attemptID := request.UncommittedAttemptId
+		if request.UnreportedAttempt != nil {
+			attemptID = request.UnreportedAttempt.AttemptId
+		}
+		bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		if err := server.workDispatch.AccountJournal(bounded, authorization, attemptID, request.UnreportedAttempt); err != nil {
+			return nil, err
+		}
+		return &agentpb.WorkJournalReplayAck{AccountedAttemptId: attemptID}, nil
 	}
 	message := new(agentpb.AgentMessage)
 	if err := proto.Unmarshal(request.Report, message); err != nil {

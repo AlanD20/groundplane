@@ -27,6 +27,7 @@ func PrepareAttemptCollection(task TaskSnapshot, item ItemSnapshot, attempt Atte
 			{Type: keyvalue.MutationDelete, Key: AttemptKey(attempt.Attempt.ID)},
 			{Type: keyvalue.MutationDelete, Key: AttemptIndexKey(item.Item.ID, attempt.Attempt.Number)},
 			{Type: keyvalue.MutationDelete, Key: CheckpointKey(attempt.Attempt.ID)},
+			{Type: keyvalue.MutationDelete, Key: journalInventoryKey(attempt.Attempt.ID)},
 		},
 	}, nil
 }

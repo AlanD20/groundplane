@@ -402,8 +402,13 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 		}
 		if recovery := record.Recovery; recovery != nil {
 			if recovery.Report.Progress.Phase != releaseexecution.RecoveryComplete || recovery.Report.Ack == nil ||
-				terminal.Outcome != workexecution.Succeeded || *terminal.Result != recovery.Report.Ack.Evidence {
+				terminal.Outcome != workexecution.Succeeded || *terminal.Result != recovery.Report.Ack.Evidence ||
+				recovery.Completion == nil || recovery.Completion.Outcome != terminal.Outcome ||
+				!recovery.Completion.FinishedAt.Equal(*terminal.FinishedAt) {
 				return conflict()
+			}
+			if err := journal.retireRecoveredRelease(ctx, record.Attempt, *recovery); err != nil {
+				return err
 			}
 		}
 	}

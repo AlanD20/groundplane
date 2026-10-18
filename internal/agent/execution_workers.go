@@ -439,6 +439,16 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 			return err
 		}
 	}
+	if output.err == nil && active.forward != nil {
+		if err := workers.executor.Retire(workers.ctx, output.attempt.ID); err != nil {
+			return err
+		}
+	}
+	if output.err == nil && active.recovery != nil {
+		if err := workers.recovery.Retire(workers.ctx, output.attempt.ID); err != nil {
+			return err
+		}
+	}
 	workers.retireLocalExecution(output.attempt.WorkItemID)
 	return nil
 }

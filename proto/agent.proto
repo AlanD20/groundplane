@@ -38,7 +38,11 @@ message WorkExecutorRegistration {
 // this replay phase before normal Ready/dispatch and replacement reconciliation.
 message WorkJournalReplayRequest {
   bytes report = 1; // one closed AgentMessage terminal report; at most 36 KiB
-  bool complete = 2; // mutually exclusive with report
+  bool complete = 2;
+  // Exactly one request form is present. Inventory only checks existing durable
+  // ownership; it neither promotes a partial file nor grants another execution.
+  WorkAttemptIdentity unreported_attempt = 3;
+  string uncommitted_attempt_id = 4;
 }
 
 message WorkJournalReplayAck {
@@ -47,6 +51,7 @@ message WorkJournalReplayAck {
   string failure_code = 3; // rejected report retains its local evidence
   string failure_detail = 4;
   bool complete = 5;
+  string accounted_attempt_id = 6;
 }
 
 enum WorkDirection {

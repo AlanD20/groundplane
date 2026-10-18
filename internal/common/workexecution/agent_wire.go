@@ -10,11 +10,20 @@ import (
 // EncodeAgentAttempt carries immutable assignment identity only. Start and
 // terminal receipts are separate acknowledgements, not inferred from delivery.
 func EncodeAgentAttempt(attempt Attempt) (*agentpb.WorkAttemptIdentity, error) {
+	if attempt.FinishedAt != nil {
+		return nil, invalid("Agent delivery requires a live Agent assignment")
+	}
+	return EncodeAgentAttemptIdentity(attempt)
+}
+
+// EncodeAgentAttemptIdentity describes retained ownership for startup accounting.
+// It grants no execution and also accepts an already finished local record.
+func EncodeAgentAttemptIdentity(attempt Attempt) (*agentpb.WorkAttemptIdentity, error) {
 	if err := attempt.Validate(); err != nil {
 		return nil, err
 	}
-	if attempt.Executor.Executor != Agent || attempt.FinishedAt != nil {
-		return nil, invalid("Agent delivery requires a live Agent assignment")
+	if attempt.Executor.Executor != Agent {
+		return nil, invalid("Agent identity requires an Agent assignment")
 	}
 	digest, err := hex.DecodeString(attempt.Input.SHA256)
 	if err != nil {

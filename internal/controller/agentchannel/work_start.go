@@ -38,6 +38,7 @@ type HierarchyReporter interface {
 }
 
 type WorkDispatcher interface {
+	AccountJournal(context.Context, agentregistration.WorkAuthorization, string, *agentpb.WorkAttemptIdentity) error
 	Ready(context.Context, agentregistration.WorkAuthorization, uint16) ([]workdispatch.Issue, error)
 	Dispatch(context.Context, agentregistration.WorkAuthorization, int32, map[string]string, func(*agentpb.ControllerMessage) (bool, error)) ([]workdispatch.Issue, error)
 }
