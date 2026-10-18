@@ -11,7 +11,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -21,7 +20,6 @@ import (
 // the terminal transaction coordinator, before publishing applied state.
 type Input struct {
 	Source    projectionrecord.BackingRuntimeReceipt
-	Result    taskjournal.TaskResultRecord
 	CreatedAt time.Time
 }
 
@@ -45,8 +43,7 @@ func Preserve(
 	projection.BackingRuntime = nil
 	if previous != nil && previous.BackingRuntime != nil &&
 		bytes.Equal(previous.ComposeArtifact, projection.ComposeArtifact) {
-		receipt := *previous.BackingRuntime
-		projection.BackingRuntime = &receipt
+		projection.BackingRuntime = projectionrecord.CloneBackingRuntimeReceipt(previous.BackingRuntime)
 	}
 	return projectionrecord.ValidateBackingRuntimeReceipt(*projection)
 }
@@ -60,10 +57,8 @@ func Prepare(ctx context.Context, storage CatalogReader, input Input,
 ) ([]etcdstore.Condition, error) {
 	projection.BackingRuntime = nil
 	serviceID := input.Source.ServiceID
-	if input.Result.Kind != taskjournal.TaskResultCompose || input.Result.ExitCode != 0 ||
-		input.Result.FailedStepID != "" || input.Result.ReconciliationRequired ||
-		input.Result.ExecutionEpoch == 0 || input.Result.ExecutionEpoch != input.Source.ExecutionEpoch ||
-		input.Source.RenderGeneration != projection.RenderGeneration {
+	if projectionrecord.ValidateBackingProvisioningReceipt(input.Source) != nil || input.CreatedAt.IsZero() ||
+		input.Source.Observation.ObservedAt.Before(input.CreatedAt) || input.Source.RenderGeneration != projection.RenderGeneration {
 		return nil, invalidBackingAcknowledgement()
 	}
 	artifact := &agentpb.ComposeArtifact{}
@@ -73,37 +68,14 @@ func Prepare(ctx context.Context, storage CatalogReader, input Input,
 	workload, err := backingruntimefact.Workload(
 		artifact,
 		serviceID,
-		input.Source.PlanID,
+		input.Source.Attempt.Input.ID,
 		input.Source.RenderGeneration,
 	)
 	if err != nil {
 		return nil, err
 	}
-	projectFound := false
-	for _, project := range input.Result.Projects {
-		if project.ProjectName == artifact.ProjectName {
-			if projectFound || project.CollisionCount != 0 {
-				return nil, invalidBackingAcknowledgement()
-			}
-			projectFound = true
-		}
-	}
-	if !projectFound {
-		return nil, invalidBackingAcknowledgement()
-	}
-	var observed *backingruntimefact.Observation
-	for index := range input.Result.BackingObservations {
-		candidate := &input.Result.BackingObservations[index]
-		if candidate.ServiceID != serviceID {
-			continue
-		}
-		if observed != nil || !backingruntimefact.MatchesObservation(*candidate, artifact, workload) ||
-			candidate.ObservedAt.Before(input.CreatedAt) || candidate.ObservedAt.After(input.Source.AcknowledgedAt) {
-			return nil, invalidBackingAcknowledgement()
-		}
-		observed = candidate
-	}
-	if observed == nil {
+	observed := input.Source.Observation
+	if !backingruntimefact.MatchesObservation(observed, artifact, workload) {
 		return nil, invalidBackingAcknowledgement()
 	}
 	adapter := ""

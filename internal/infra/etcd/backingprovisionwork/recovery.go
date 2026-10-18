@@ -15,8 +15,9 @@ type RecoverySource struct {
 	Conditions []keyvalue.Condition
 }
 
-// LoadRecovery follows FirstFailure to its actual saved attempt and checkpoint.
-// Later cleanup failures do not change the original cause or select new input.
+// LoadRecovery follows the current forward Result to its saved attempt and
+// checkpoint. Cleanup never overwrites Result. FirstFailure is historical and
+// may belong to an older, already-settled forward retry; it is not an effect grant.
 func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.View) (RecoverySource, error) {
 	input, guard, err := repository.Load(ctx, view)
 	if err != nil {
@@ -27,7 +28,7 @@ func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.V
 	if err != nil {
 		return RecoverySource{}, err
 	}
-	evidence := view.Item.Item.FirstFailure
+	evidence := view.Item.Item.Result
 	if evidence == nil || evidence.Validate() != nil {
 		return RecoverySource{}, invalid("backing creation cleanup has no retained forward failure")
 	}

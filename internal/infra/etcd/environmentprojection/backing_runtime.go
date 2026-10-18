@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backingprovision"
 	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,19 +19,64 @@ import (
 // BackingRuntimeReceipt seals the actual native image and exact artifact from
 // successful assigned provisioning. It exists only in acknowledged applied state.
 type BackingRuntimeReceipt struct {
-	ServiceID            string    `json:"service_id"`
-	ArtifactSHA256       string    `json:"artifact_sha256"`
-	LocalImageID         string    `json:"local_image_id"`
-	ManagedReleaseSHA256 string    `json:"managed_release_sha256"`
-	Adapter              string    `json:"adapter"`
-	TaskID               string    `json:"task_id"`
-	PlanID               string    `json:"plan_id"`
-	PlanHash             string    `json:"plan_hash"`
-	AgentID              string    `json:"agent_id"`
-	AssignmentID         string    `json:"assignment_id"`
-	ExecutionEpoch       uint32    `json:"execution_epoch"`
-	RenderGeneration     uint64    `json:"render_generation"`
-	AcknowledgedAt       time.Time `json:"acknowledged_at"`
+	ServiceID            string                         `json:"service_id"`
+	ArtifactSHA256       string                         `json:"artifact_sha256"`
+	LocalImageID         string                         `json:"local_image_id"`
+	ManagedReleaseSHA256 string                         `json:"managed_release_sha256"`
+	Adapter              string                         `json:"adapter"`
+	Attempt              workexecution.Attempt          `json:"attempt"`
+	Checkpoint           workexecution.Checkpoint       `json:"checkpoint"`
+	Observation          backingruntimefact.Observation `json:"observation"`
+	RenderGeneration     uint64                         `json:"render_generation"`
+	AcknowledgedAt       time.Time                      `json:"acknowledged_at"`
+}
+
+// ValidateBackingProvisioningReceipt validates self-contained native execution
+// proof. No Task journal or live executor slot is needed after publication.
+func ValidateBackingProvisioningReceipt(source BackingRuntimeReceipt) error {
+	attempt, checkpoint := source.Attempt, source.Checkpoint
+	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward || attempt.Executor.Executor != workexecution.Agent ||
+		attempt.StartedAt == nil || attempt.FinishedAt == nil || attempt.Result == nil ||
+		attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled && attempt.Outcome != workexecution.Superseded ||
+		checkpoint.AttemptID != attempt.ID || checkpoint.Sequence == 0 || checkpoint.Evidence.Validate() != nil ||
+		checkpoint.Evidence.ID != attempt.Input.ID || !source.AcknowledgedAt.Equal(*attempt.FinishedAt) ||
+		checkpoint.RecordedAt.IsZero() || checkpoint.RecordedAt.Location() != time.UTC ||
+		checkpoint.RecordedAt.Before(*attempt.StartedAt) || checkpoint.RecordedAt.After(source.AcknowledgedAt) ||
+		backingruntimefact.ValidateObservation(source.Observation) != nil || source.Observation.ServiceID != source.ServiceID ||
+		source.Observation.ObservedAt.Before(*attempt.StartedAt) || source.Observation.ObservedAt.After(source.AcknowledgedAt) ||
+		source.Observation.LocalImageID != source.LocalImageID {
+		return invalidBackingRuntime()
+	}
+	stageID, err := backingprovision.StageID(attempt.WorkItemID, backingprovision.VerifyRuntime)
+	if err != nil || stageID != checkpoint.StageID {
+		return invalidBackingRuntime()
+	}
+	evidence, err := backingprovision.CompletionEvidence(attempt, checkpoint, source.Observation)
+	if err != nil || evidence != *attempt.Result {
+		return invalidBackingRuntime()
+	}
+	return nil
+}
+
+func CloneBackingRuntimeReceipt(source *BackingRuntimeReceipt) *BackingRuntimeReceipt {
+	if source == nil {
+		return nil
+	}
+	copy := *source
+	if source.Attempt.StartedAt != nil {
+		at := *source.Attempt.StartedAt
+		copy.Attempt.StartedAt = &at
+	}
+	if source.Attempt.FinishedAt != nil {
+		at := *source.Attempt.FinishedAt
+		copy.Attempt.FinishedAt = &at
+	}
+	if source.Attempt.Result != nil {
+		result := *source.Attempt.Result
+		copy.Attempt.Result = &result
+	}
+	copy.Observation = backingruntimefact.CloneObservations([]backingruntimefact.Observation{source.Observation})[0]
+	return &copy
 }
 
 func ValidateBackingRuntimeReceipt(projection EnvironmentComposeProjection) error {
@@ -48,9 +95,7 @@ func SelectBackingRuntime(
 ) (*agentpb.ComposeArtifact, *agentpb.ComposeService, error) {
 	source := projection.BackingRuntime
 	if source == nil || source.ServiceID != serviceID ||
-		ids.Validate(ids.KindTask, source.TaskID) != nil || ids.Validate(ids.KindAgent, source.AgentID) != nil ||
-		ids.Validate(ids.KindAssignment, source.AssignmentID) != nil || source.ExecutionEpoch == 0 ||
-		!recordcodec.ValidSHA256(source.PlanHash) || !recordcodec.ValidSHA256(source.ArtifactSHA256) ||
+		ValidateBackingProvisioningReceipt(*source) != nil || !recordcodec.ValidSHA256(source.ArtifactSHA256) ||
 		(source.Adapter != "postgres" && source.Adapter != "mysql") ||
 		(source.Adapter == "postgres" && !recordcodec.ValidSHA256(source.ManagedReleaseSHA256)) ||
 		(source.Adapter == "mysql" && source.ManagedReleaseSHA256 != "") ||
@@ -73,9 +118,12 @@ func SelectBackingRuntime(
 	if proto.Unmarshal(projection.ComposeArtifact, artifact) != nil || artifact.OwnerId != projection.EnvironmentID {
 		return nil, nil, invalidBackingRuntime()
 	}
-	workload, err := backingruntimefact.Workload(artifact, serviceID, source.PlanID, source.RenderGeneration)
+	workload, err := backingruntimefact.Workload(artifact, serviceID, source.Attempt.Input.ID, source.RenderGeneration)
 	if err != nil {
 		return nil, nil, err
+	}
+	if !backingruntimefact.MatchesObservation(source.Observation, artifact, workload) {
+		return nil, nil, invalidBackingRuntime()
 	}
 	return artifact, workload, nil
 }

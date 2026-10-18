@@ -23,9 +23,6 @@ func (repository *Repository) LoadConfiguration(ctx context.Context, view workqu
 	if err != nil {
 		return nil, err
 	}
-	if procedure.Configuration == nil {
-		return nil, nil
-	}
 	configuration := procedure.Configuration
 	reference := runtimeconfiguration.Reference{ID: configuration.ConfigurationId, EnvironmentID: configuration.EnvironmentId,
 		Generation: configuration.Generation, SHA256: hex.EncodeToString(configuration.Sha256)}

@@ -45,7 +45,7 @@ func FromProvisioning(projection environmentprojection.EnvironmentComposeProject
 	if projection.BackingRuntime == nil {
 		return Record{}, invalid()
 	}
-	source := *projection.BackingRuntime
+	source := environmentprojection.CloneBackingRuntimeReceipt(projection.BackingRuntime)
 	artifact, workload, err := environmentprojection.SelectBackingRuntime(projection, source.ServiceID)
 	if err != nil {
 		return Record{}, err
@@ -56,7 +56,7 @@ func FromProvisioning(projection environmentprojection.EnvironmentComposeProject
 	}
 	record := Record{EnvironmentID: projection.EnvironmentID, ServiceID: source.ServiceID,
 		Artifact: encoded, LocalImageID: source.LocalImageID, ToolsImage: workload.PostgresToolsImage,
-		CatalogSHA256: source.ManagedReleaseSHA256, Provisioning: &source}
+		CatalogSHA256: source.ManagedReleaseSHA256, Provisioning: source}
 	return record, Validate(record)
 }
 
@@ -159,13 +159,15 @@ func Validate(record Record) error {
 		if proof.ServiceID != record.ServiceID || proof.LocalImageID != record.LocalImageID ||
 			proof.ManagedReleaseSHA256 != record.CatalogSHA256 || proof.AcknowledgedAt.IsZero() ||
 			proof.AcknowledgedAt.Location() != time.UTC || record.DeploymentReleaseID != "" ||
-			ids.Validate(ids.KindTask, proof.TaskID) != nil || ids.Validate(ids.KindAgent, proof.AgentID) != nil ||
-			ids.Validate(ids.KindAssignment, proof.AssignmentID) != nil || proof.ExecutionEpoch == 0 ||
-			!recordcodec.ValidSHA256(proof.PlanHash) || hex.EncodeToString(digest[:]) != proof.ArtifactSHA256 {
+			environmentprojection.ValidateBackingProvisioningReceipt(*proof) != nil || hex.EncodeToString(digest[:]) != proof.ArtifactSHA256 {
 			return invalid()
 		}
-		if _, err := backingruntimefact.Workload(artifact, record.ServiceID, proof.PlanID, proof.RenderGeneration); err != nil {
+		workload, err := backingruntimefact.Workload(artifact, record.ServiceID, proof.Attempt.Input.ID, proof.RenderGeneration)
+		if err != nil {
 			return err
+		}
+		if !backingruntimefact.MatchesObservation(proof.Observation, artifact, workload) {
+			return invalid()
 		}
 	} else {
 		if selected.ImageReference != record.LocalImageID || selected.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {

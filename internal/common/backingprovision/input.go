@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
+	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -48,8 +50,11 @@ func ValidateInput(planID string, input *agentpb.BackingProvisionInput) error {
 	}
 	service := runtime.Services[0]
 	if service.ServiceId != input.ServiceId || service.OwnerComponentId != "" || service.ExpectedReplicas != 1 ||
-		service.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED {
+		service.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED || !workloadimage.LocalIDValid(service.ImageReference) {
 		return invalid("backing creation runtime differs from its captured singleton Service")
+	}
+	if _, err := backingruntimefact.Workload(runtime, input.ServiceId, planID, input.RenderGeneration); err != nil {
+		return err
 	}
 	for index, id := range input.ManagedVolumeIds {
 		if ids.Validate(ids.KindVolume, id) != nil || runtime.Volumes[index].VolumeId != id ||
@@ -57,8 +62,8 @@ func ValidateInput(planID string, input *agentpb.BackingProvisionInput) error {
 			return invalid("backing creation Volume ownership is invalid")
 		}
 	}
-	if (len(input.Files) != 0) != (input.Configuration != nil) {
-		return invalid("backing creation files require their captured configuration")
+	if input.Configuration == nil {
+		return invalid("backing creation requires its captured configuration, including an empty file set")
 	}
 	if configuration := input.Configuration; configuration != nil &&
 		(ids.Validate(ids.KindConfig, configuration.ConfigurationId) != nil || configuration.EnvironmentId != input.EnvironmentId ||

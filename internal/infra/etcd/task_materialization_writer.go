@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingruntimepublication"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -360,67 +359,19 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		projection.ComposeArtifact = artifact
 		conditions = append(conditions, authority)
 	}
-	backingConditions, err := repository.prepareBackingRuntimeProjection(
-		ctx,
-		record,
-		&projection,
-		previous,
-		readRevision,
-	)
-	if err != nil {
+	if err := backingruntimepublication.Preserve(&projection, previous); err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
 	projectionValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
-	conditions = append(conditions, backingConditions...)
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: projectionKey, Value: projectionValue}}
-	if projection.BackingRuntime != nil && projection.BackingRuntime.Adapter == "postgres" &&
-		projection.BackingRuntime.TaskID == record.ID {
-		backing, err := backingpostgresruntime.FromProvisioning(projection)
-		if err != nil {
-			return taskMaterializationProjectionChange{}, err
-		}
-		value, err := backingpostgresruntime.Encode(backing)
-		if err != nil {
-			return taskMaterializationProjectionChange{}, err
-		}
-		conditions = append(
-			conditions,
-			etcdstore.Condition{Key: backingpostgresruntime.Key(backing.EnvironmentID, backing.ServiceID)},
-		)
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut,
-			Key: backingpostgresruntime.Key(backing.EnvironmentID, backing.ServiceID), Value: value})
-	}
 	return taskMaterializationProjectionChange{
 		applies:    true,
 		conditions: conditions,
 		mutations:  mutations,
 	}, nil
-}
-
-func (repository *TaskRepository) prepareBackingRuntimeProjection(
-	ctx context.Context, task TaskRecord, projection *projectionrecord.EnvironmentComposeProjection,
-	previous *projectionrecord.EnvironmentComposeProjection, revision int64,
-) ([]etcdstore.Condition, error) {
-	serviceID := task.Params[taskjournal.TaskBackingServiceCreationParam]
-	if !backingruntimepublication.IsManagedDatabase(*projection, serviceID) {
-		return nil, backingruntimepublication.Preserve(projection, previous)
-	}
-	if task.Status != taskjournal.TaskStatusCompleted || task.Executor != taskjournal.TaskExecutorAgent ||
-		task.Result == nil || task.TerminalAssignment == nil || task.FinishedAt == nil || task.RenderGeneration <= 0 {
-		return nil, errs.New(errs.KindStateConflict, "Backing provisioning lacks assigned terminal evidence")
-	}
-	return backingruntimepublication.Prepare(ctx, repository.store, backingruntimepublication.Input{
-		Result: *task.Result, CreatedAt: task.CreatedAt,
-		Source: projectionrecord.BackingRuntimeReceipt{
-			ServiceID: serviceID, TaskID: task.ID,
-			PlanID: task.PlanID, PlanHash: task.PlanHash, AgentID: task.TerminalAssignment.AgentID,
-			AssignmentID: task.TerminalAssignment.AssignmentID, ExecutionEpoch: task.Result.ExecutionEpoch,
-			RenderGeneration: uint64(task.RenderGeneration), AcknowledgedAt: task.FinishedAt.UTC(),
-		},
-	}, projection, revision)
 }
 
 func taskHasSpecializedProjectionAcknowledgement(record TaskRecord) bool {

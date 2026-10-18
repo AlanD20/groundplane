@@ -98,6 +98,12 @@ func (repository *Repository) PrepareProgress(ctx context.Context, view workqueu
 	if err := backingprovision.ValidateTransition(view.Attempt.Attempt, layout, previous, progress); err != nil {
 		return workqueue.Change{}, workexecution.Checkpoint{}, err
 	}
+	if !progress.InFlight && progress.Last != nil && progress.Last.Stage == backingprovision.AfterStart {
+		expected, err := backingprovision.HookSuccessEvidence(view.Attempt.Attempt, layout, progress.Last.ContainerID)
+		if err != nil || expected != progress.Last.HookResult {
+			return workqueue.Change{}, workexecution.Checkpoint{}, invalid("backing creation hook receipt differs from its captured execution")
+		}
+	}
 	change, err := workqueue.PrepareCheckpoint(view.Work.Item, view.Attempt, view.Checkpoint, next)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Checkpoint{}, err
