@@ -12,6 +12,9 @@ import (
 )
 
 func (service *Service) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+	if view.Item.Item.Input == nil {
+		return service.RetireUnpreparedWork(ctx, view, at)
+	}
 	ready, guards, err := service.repository.RetireStandaloneScriptSources(ctx, view, at)
 	if err != nil || !ready || !final {
 		return ready, guards, err
@@ -33,6 +36,10 @@ func (service *Service) RetireWork(ctx context.Context, view workqueue.View, at 
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: scriptexecutions.ScriptRunnerSnapshotKey(input.Execution.SnapshotID)},
 	)
 	return true, guards, nil
+}
+
+func (service *Service) RetireUnpreparedWork(ctx context.Context, view workqueue.View, at time.Time) (bool, workqueue.Change, error) {
+	return service.repository.RetireUnpreparedGroupPreflight(ctx, view, at)
 }
 
 // Script checkpoint evidence stays with its input until the last attempt is

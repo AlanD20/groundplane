@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -20,6 +21,9 @@ func (owner *GraphPublication) PrepareFinish(ctx context.Context, finished workq
 		!task.PublicationComplete || task.Progress.Unsettled() != 0 || task.FinishedAt != nil ||
 		task.CollectionStartedAt != nil || at.Before(task.UpdatedAt) || len(finished.Items) != int(task.ExpectedItems) {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release completion requires its fully settled captured graph")
+	}
+	if ids.Validate(ids.KindReleaseGroup, task.TargetID) == nil {
+		return owner.groups.PrepareFinish(ctx, finished, at)
 	}
 	request, guard, err := owner.ledger.ReadDirectReleaseTaskPreparation(ctx, finished.Task, finished.ReadRevision)
 	if err != nil {

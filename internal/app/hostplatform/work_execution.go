@@ -205,7 +205,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	directReleases, err := platform.newDirectReleaseWork(queue, networkRecords, dependencies.Releases)
+	directReleases, err := platform.newDirectReleaseWork(queue, networkRecords, dependencies.Releases, scriptRecords)
 	if err != nil {
 		return nil, err
 	}

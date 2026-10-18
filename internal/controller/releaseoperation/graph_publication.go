@@ -4,11 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -17,13 +19,14 @@ type GraphPublication struct {
 	ledger   *etcd.ReleaseLedger
 	queue    *workqueue.Repository
 	networks *networkwork.InputRepository
+	groups   *releasegroups.ExecutionRepository
 }
 
-func NewGraphPublication(ledger *etcd.ReleaseLedger, queue *workqueue.Repository, networks *networkwork.InputRepository) (*GraphPublication, error) {
-	if ledger == nil || queue == nil || networks == nil {
+func NewGraphPublication(ledger *etcd.ReleaseLedger, queue *workqueue.Repository, networks *networkwork.InputRepository, groups *releasegroups.ExecutionRepository) (*GraphPublication, error) {
+	if ledger == nil || queue == nil || networks == nil || groups == nil {
 		return nil, errs.New(errs.KindInternal, "Direct Release graph publication dependencies are not configured")
 	}
-	return &GraphPublication{ledger: ledger, queue: queue, networks: networks}, nil
+	return &GraphPublication{ledger: ledger, queue: queue, networks: networks, groups: groups}, nil
 }
 
 func (owner *GraphPublication) PreparePublication(ctx context.Context, task workqueue.TaskSnapshot,
@@ -32,6 +35,9 @@ func (owner *GraphPublication) PreparePublication(ctx context.Context, task work
 	if ctx == nil || task.Revision <= 0 || revision < task.Revision || task.Task.PublicationComplete ||
 		task.Task.FinishedAt != nil || at.Before(task.Task.UpdatedAt) {
 		return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "Direct Release graph publication is no longer open")
+	}
+	if ids.Validate(ids.KindReleaseGroup, task.Task.TargetID) == nil {
+		return owner.prepareGroupPublication(ctx, task, revision, at)
 	}
 	request, guard, err := owner.ledger.ReadDirectReleaseTaskPreparation(ctx, task, revision)
 	if err != nil {

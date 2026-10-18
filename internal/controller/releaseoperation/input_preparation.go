@@ -9,8 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasework"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -24,13 +26,14 @@ type InputPreparation struct {
 	ledger *etcd.ReleaseLedger
 	queue  *workqueue.Repository
 	work   *blueprintrelease.Service
+	groups *releasegroups.ExecutionRepository
 }
 
-func NewInputPreparation(ledger *etcd.ReleaseLedger, queue *workqueue.Repository, work *blueprintrelease.Service) (*InputPreparation, error) {
-	if ledger == nil || queue == nil || work == nil {
+func NewInputPreparation(ledger *etcd.ReleaseLedger, queue *workqueue.Repository, work *blueprintrelease.Service, groups *releasegroups.ExecutionRepository) (*InputPreparation, error) {
+	if ledger == nil || queue == nil || work == nil || groups == nil {
 		return nil, errs.New(errs.KindInternal, "Direct Release preparation dependencies are not configured")
 	}
-	return &InputPreparation{ledger: ledger, queue: queue, work: work}, nil
+	return &InputPreparation{ledger: ledger, queue: queue, work: work, groups: groups}, nil
 }
 
 func (owner *InputPreparation) Prepare(ctx context.Context, taskID, workID string) error {
@@ -40,6 +43,28 @@ func (owner *InputPreparation) Prepare(ctx context.Context, taskID, workID strin
 	}
 	if view.Task.Task.Action != workexecution.ActionDeploy && view.Task.Task.Action != workexecution.ActionRollback {
 		return errs.New(errs.KindStateConflict, "Direct Release preparation received another Task action")
+	}
+	if ids.Validate(ids.KindReleaseGroup, view.Task.Task.TargetID) == nil {
+		decision, err := owner.groups.Decide(ctx, view.Task, view.ReadRevision, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		if decision.Decision.WorkID != workID {
+			return nil
+		}
+		if decision.Decision.Action == domain.GroupWorkSkip {
+			change, err := owner.groups.PrepareSkip(view.Task, decision, time.Now().UTC())
+			if err != nil {
+				return err
+			}
+			defer keyvalue.ZeroMutationBytes(change.Mutations)
+			result, err := owner.queue.Commit(ctx, change)
+			keyvalue.ClearValues(result.FailureReads)
+			return err
+		}
+		if decision.Decision.Action != domain.GroupWorkForward {
+			return nil
+		}
 	}
 	request, _, err := owner.ledger.ReadDirectReleasePreparation(ctx, view)
 	if err != nil {
