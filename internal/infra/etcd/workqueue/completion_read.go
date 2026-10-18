@@ -199,6 +199,9 @@ func (repository *Repository) readCompletionOwnership(ctx context.Context, view 
 	for _, claim := range item.Claims {
 		keys = append(keys, ClaimKey(claim))
 	}
+	if item.Placement.Executor == workexecution.Agent {
+		keys = append(keys, HostEffectKey(item.Placement.HostID, item.ID))
+	}
 	read, err := repository.read(ctx, keys, view.Work.ReadRevision)
 	if err != nil {
 		return Completion{}, err
@@ -232,6 +235,12 @@ func (repository *Repository) readCompletionOwnership(ctx context.Context, view 
 			return Completion{}, corrupt()
 		}
 		request.Claims = append(request.Claims, ClaimSnapshot{Claim: claim, Owner: &owner, Revision: value.ModRevision})
+	}
+	if item.Placement.Executor == workexecution.Agent {
+		request.HostEffect, err = readHostEffect(read.Values[maximumExecutorCapacity+len(item.Claims)], item, true)
+		if err != nil {
+			return Completion{}, err
+		}
 	}
 	return request, nil
 }

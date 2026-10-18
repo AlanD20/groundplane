@@ -42,6 +42,15 @@ func SlotsPrefix(identity workexecution.Identity) string {
 
 func HostClaimsPrefix(hostID string) string { return root + "claims/" + hostID + "/" }
 
+// Host effects are non-exclusive membership, not a host-wide execution lock.
+// They outlive a worker slot while a resource still needs reconciliation.
+func HostEffectsPrefix(hostID string) string     { return root + "host-effects/" + hostID + "/" }
+func HostEffectKey(hostID, workID string) string { return HostEffectsPrefix(hostID) + workID }
+
+// HostForwardFenceKey pauses new forward work for Agent maintenance without
+// blocking the recovery needed to drain that same host.
+func HostForwardFenceKey(hostID string) string { return root + "host-forward-fences/" + hostID }
+
 func ClaimKey(claim workexecution.Claim) string {
 	scope := claim.HostID
 	if scope == "" {

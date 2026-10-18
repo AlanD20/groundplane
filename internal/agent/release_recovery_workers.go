@@ -39,7 +39,7 @@ func (workers *executionWorkers) submitRecovery(delivery *agentpb.ReleaseRecover
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()
-		result, err := workers.recovery.Execute(workers.ctx, owned, workers.identity, workers.exchange)
+		result, err := workers.recovery.Execute(workers.executionContext(attempt), owned, workers.identity, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: attempt, recovery: result.Report, result: releaseruntime.ExecutionResult{Failure: result.Failure}, err: err}:

@@ -17,6 +17,7 @@ type Assignment struct {
 	Executor      ExecutorSnapshot
 	Dependencies  []ItemSnapshot
 	Claims        []ClaimSnapshot
+	HostEffect    HostEffectSnapshot
 	QueueRevision int64
 	Slot          uint16
 	AttemptID     string
@@ -84,6 +85,9 @@ func PrepareAssignment(request Assignment) (Change, workexecution.Attempt, error
 		return Change{}, workexecution.Attempt{}, err
 	}
 	if err := addClaims(&change, next, request.Claims); err != nil {
+		return Change{}, workexecution.Attempt{}, err
+	}
+	if err := assignHostEffect(&change, next, request.HostEffect, request.Direction); err != nil {
 		return Change{}, workexecution.Attempt{}, err
 	}
 	if err := countTransition(&change, request.Task, request.Item.Item, next, request.At); err != nil {

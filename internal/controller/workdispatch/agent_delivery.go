@@ -179,6 +179,30 @@ func (delivery *AgentDeliveries) Dispatch(ctx context.Context, authorization age
 			delete(delivered, workID)
 		}
 	}
+	// Cancel hints use no worker capacity and must be sent even when every slot
+	// is occupied. Durable Stop/revocation remains the authority; a hint cannot
+	// release claims or cancel a captured recovery attempt.
+	for _, assignment := range assignments {
+		attempt := assignment.Attempt.Attempt
+		if attempt.Direction != workexecution.Forward {
+			continue
+		}
+		view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, identity)
+		if err != nil {
+			return issues, err
+		}
+		if !view.ActiveAttempt || view.Work.Task.Task.Stop == nil && !view.Work.Item.Item.ForwardRevoked {
+			continue
+		}
+		wire, err := workexecution.EncodeAgentAttempt(attempt)
+		if err != nil {
+			return issues, err
+		}
+		_, err = send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_WorkCancel{WorkCancel: &agentpb.WorkCancel{Attempt: wire}}})
+		if err != nil {
+			return issues, err
+		}
+	}
 	for _, assignment := range assignments {
 		if capacity == 0 {
 			break

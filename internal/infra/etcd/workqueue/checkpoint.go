@@ -80,6 +80,9 @@ func PrepareStart(task TaskSnapshot, item ItemSnapshot, attempt AttemptSnapshot,
 			{Type: keyvalue.MutationPut, Key: AttemptKey(started.ID), Value: attemptBytes},
 		},
 	}
+	if item.Item.Placement.Executor == workexecution.Agent && started.Direction == workexecution.Forward {
+		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: HostForwardFenceKey(item.Item.Placement.HostID)})
+	}
 	if err := countTransition(&change, task, item.Item, next, at); err != nil {
 		return Change{}, err
 	}

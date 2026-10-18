@@ -57,6 +57,12 @@ message WorkStartRequest {
   WorkAttemptIdentity attempt = 1;
 }
 
+// Cancellation is a hint for this exact forward attempt. It neither retires a
+// reservation nor proves cleanup; the typed operation must still report proof.
+message WorkCancel {
+  WorkAttemptIdentity attempt = 1;
+}
+
 message WorkStartAck {
   WorkAttemptIdentity attempt = 1;
   google.protobuf.Timestamp started_at = 2;
@@ -1394,6 +1400,7 @@ message ControllerMessage {
     BackupRecoveryAssignment backup_recovery_assignment = 117;
     BackupRecoveryAck backup_recovery_ack = 118;
     BackupConfigRecoveryPrepareAck backup_config_recovery_prepare_ack = 119;
+    WorkCancel work_cancel = 120;
   }
 }
 

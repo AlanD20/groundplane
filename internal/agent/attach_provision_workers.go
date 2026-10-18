@@ -45,7 +45,7 @@ func (workers *executionWorkers) submitAttachProvision(delivery *agentpb.AttachP
 	go func() {
 		defer workers.wait.Done()
 		defer attachexecution.ClearProvision(input.Provision)
-		result, err := workers.attachProvision.Run(workers.ctx, input, workers.exchange)
+		result, err := workers.attachProvision.Run(workers.executionContext(attempt), input, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: input.Attempt, provision: &result, err: err}:

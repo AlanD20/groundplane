@@ -51,7 +51,7 @@ func (server *Server) dispatchWork(stream agentpb.AgentChannel_ConnectServer, se
 		if !sent || err != nil {
 			cancel()
 		}
-		if sent {
+		if sent && message.GetWorkCancel() == nil {
 			remaining--
 			session.recordDispatchCapacity(remaining)
 		}

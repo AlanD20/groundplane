@@ -116,15 +116,26 @@ func (repository *Repository) Delete(
 		return err
 	}
 	conditions = append(conditions, binding.Conditions...)
+	forwardGuard, found, err := repository.readForwardFence(ctx, MaintenanceBinding{HostID: binding.Binding.HostID,
+		AgentID: agentID, Generation: generation, ReadRevision: evidence.readRevision})
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errs.New(errs.KindStateConflict, "Agent removal requires its durable forward-work fence")
+	}
+	conditions = append(conditions, forwardGuard)
 	// Final removal follows settlement, not merely container termination. Host
 	// reservations survive process loss and cannot be silently reassigned.
 	conditions = append(conditions,
 		etcdstore.Condition{Key: workqueue.SlotsPrefix(workexecution.Identity{Executor: workexecution.Agent, HostID: binding.Binding.HostID}), Prefix: true},
 		etcdstore.Condition{Key: workqueue.HostClaimsPrefix(binding.Binding.HostID), Prefix: true},
+		etcdstore.Condition{Key: workqueue.HostEffectsPrefix(binding.Binding.HostID), Prefix: true},
 	)
 	mutations = append(mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hostbindings.AgentKey(agentID)},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hostbindings.HostKey(binding.Binding.HostID)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: workqueue.HostForwardFenceKey(binding.Binding.HostID)},
 	)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {

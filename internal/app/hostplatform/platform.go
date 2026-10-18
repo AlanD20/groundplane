@@ -96,7 +96,11 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	work, err := agentruntime.NewTasks(dependencies.Tasks, dependencies.Channel.Registry)
+	maintenanceQueue, err := workqueue.NewRepository(dependencies.Store)
+	if err != nil {
+		return nil, err
+	}
+	work, err := agentruntime.NewWork(maintenanceQueue, dependencies.Agents)
 	if err != nil {
 		return nil, err
 	}

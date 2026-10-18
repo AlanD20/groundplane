@@ -150,6 +150,9 @@ func (repository *Repository) ReadCandidate(ctx context.Context, entry QueueEntr
 			keys = append(keys, SlotKey(identity, index))
 		}
 	}
+	if item.Placement.Executor == workexecution.Agent {
+		keys = append(keys, HostEffectKey(item.Placement.HostID, item.ID), HostForwardFenceKey(item.Placement.HostID))
+	}
 	read, err := repository.read(ctx, keys, view.ReadRevision)
 	if err != nil {
 		return Candidate{}, err
@@ -187,8 +190,17 @@ func (repository *Repository) ReadCandidate(ctx context.Context, entry QueueEntr
 		return Candidate{Assignment: request}, nil
 	}
 	offset := len(dependencies) + len(item.Claims)
+	if item.Placement.Executor == workexecution.Agent {
+		if direction == workexecution.Forward && read.Values[offset+maximumExecutorCapacity+1] != nil {
+			return waiting(workexecution.Wait{Reason: workexecution.WaitExecutor}), nil
+		}
+		request.HostEffect, err = readHostEffect(read.Values[offset+maximumExecutorCapacity], item, direction == workexecution.Recovery)
+		if err != nil {
+			return Candidate{}, err
+		}
+	}
 	occupied := 0
-	for _, value := range read.Values[offset:] {
+	for _, value := range read.Values[offset : offset+maximumExecutorCapacity] {
 		if value == nil {
 			continue
 		}

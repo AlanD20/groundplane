@@ -68,6 +68,9 @@ type executionExchange interface {
 }
 
 type activeExecution struct {
+	ctx               context.Context
+	cancel            context.CancelFunc
+	cancelRequested   bool
 	backup            *agentpb.BackupWorkAssignment
 	backupRecovery    *agentpb.BackupRecoveryAssignment
 	removalRecovery   *agentpb.ServiceRemovalRecoveryAssignment
@@ -172,7 +175,7 @@ func (workers *executionWorkers) submit(delivery *agentpb.ReleaseWorkAssignment,
 
 func (workers *executionWorkers) execute(attempt workexecution.Attempt, delivery *agentpb.ReleaseWorkAssignment, execution *agentownership.Execution) {
 	defer workers.wait.Done()
-	result, err := workers.executor.Execute(workers.ctx, delivery, workers.identity, workers.exchange)
+	result, err := workers.executor.Execute(workers.executionContext(attempt), delivery, workers.identity, workers.exchange)
 	err = errors.Join(err, execution.Close())
 	// Keep the local slot until the session consumes this result. Otherwise a
 	// slow consumer can accumulate arbitrarily many undelivered completions.
@@ -208,7 +211,7 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 				return err
 			}
 		}
-		delete(workers.active, output.attempt.WorkItemID)
+		workers.retireLocalExecution(output.attempt.WorkItemID)
 		return nil
 	}
 	if output.provisionRecovery != nil {
@@ -218,7 +221,7 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 		if err := workers.consumeAttachProvision(active, output); err != nil {
 			return err
 		}
-		delete(workers.active, output.attempt.WorkItemID)
+		workers.retireLocalExecution(output.attempt.WorkItemID)
 		return nil
 	}
 	if output.provision != nil {
@@ -234,7 +237,7 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 				return err
 			}
 		}
-		delete(workers.active, output.attempt.WorkItemID)
+		workers.retireLocalExecution(output.attempt.WorkItemID)
 		return nil
 	}
 	if output.entry != nil {
@@ -249,7 +252,7 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 				return err
 			}
 		}
-		delete(workers.active, output.attempt.WorkItemID)
+		workers.retireLocalExecution(output.attempt.WorkItemID)
 		return nil
 	}
 	if output.component != nil {
@@ -265,7 +268,7 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 				return err
 			}
 		}
-		delete(workers.active, output.attempt.WorkItemID)
+		workers.retireLocalExecution(output.attempt.WorkItemID)
 		return nil
 	}
 	if output.network != nil {
@@ -280,7 +283,7 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 				return err
 			}
 		}
-		delete(workers.active, output.attempt.WorkItemID)
+		workers.retireLocalExecution(output.attempt.WorkItemID)
 		return nil
 	}
 	if output.removalRecovery != nil {
@@ -296,7 +299,7 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 				return err
 			}
 		}
-		delete(workers.active, output.attempt.WorkItemID)
+		workers.retireLocalExecution(output.attempt.WorkItemID)
 		return nil
 	}
 	if output.lifecycle != nil {
@@ -312,7 +315,7 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 				return err
 			}
 		}
-		delete(workers.active, output.attempt.WorkItemID)
+		workers.retireLocalExecution(output.attempt.WorkItemID)
 		return nil
 	}
 	if output.volume != nil {
@@ -393,7 +396,7 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 			return err
 		}
 	}
-	delete(workers.active, output.attempt.WorkItemID)
+	workers.retireLocalExecution(output.attempt.WorkItemID)
 	return nil
 }
 

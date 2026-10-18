@@ -49,13 +49,14 @@ type SlotSnapshot struct {
 }
 
 type Completion struct {
-	Task    TaskSnapshot
-	Item    ItemSnapshot
-	Attempt AttemptSnapshot
-	Slot    SlotSnapshot
-	Claims  []ClaimSnapshot
-	Result  workexecution.Completion
-	At      time.Time
+	Task       TaskSnapshot
+	Item       ItemSnapshot
+	Attempt    AttemptSnapshot
+	Slot       SlotSnapshot
+	Claims     []ClaimSnapshot
+	HostEffect HostEffectSnapshot
+	Result     workexecution.Completion
+	At         time.Time
 }
 
 // PrepareCompletion records the attempt and work result together, releasing
@@ -137,6 +138,9 @@ func prepareCompletion(request Completion, recovery *workexecution.RetryDecision
 		if item.Phase == workexecution.Settled {
 			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: ClaimKey(claim)})
 		}
+	}
+	if err := completeHostEffect(&change, item, request.HostEffect); err != nil {
+		return Change{}, err
 	}
 	if err := countTransition(&change, request.Task, request.Item.Item, item, request.At); err != nil {
 		return Change{}, err

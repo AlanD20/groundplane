@@ -41,7 +41,7 @@ func (workers *executionWorkers) submitLifecycle(delivery *agentpb.ServiceLifecy
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()
-		terminal, err := workers.lifecycles.Run(workers.ctx, input, workers.exchange)
+		terminal, err := workers.lifecycles.Run(workers.executionContext(attempt), input, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: attempt, lifecycle: &terminal, err: err}:

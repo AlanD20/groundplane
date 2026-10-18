@@ -37,7 +37,7 @@ func (workers *executionWorkers) submitAttachRecovery(delivery *agentpb.AttachRe
 	go func() {
 		defer workers.wait.Done()
 		defer attachexecution.ClearRecoveryInput(&input)
-		result, err := workers.attachRemoval.Recover(workers.ctx, input, workers.exchange)
+		result, err := workers.attachRemoval.Recover(workers.executionContext(attempt), input, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: input.Attempt, attachRecovery: result, err: err}:

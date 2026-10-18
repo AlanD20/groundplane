@@ -46,7 +46,7 @@ func (workers *executionWorkers) submitScript(delivery *agentpb.ScriptWorkAssign
 	transferred = true
 	go func() {
 		defer workers.wait.Done()
-		result, err := workers.scripts.Run(workers.ctx, invocation, workers.exchange)
+		result, err := workers.scripts.Run(workers.executionContext(attempt), invocation, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: attempt, script: result.Completion, scriptFailure: result.Failure, err: err}:

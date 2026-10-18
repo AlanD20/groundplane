@@ -186,9 +186,9 @@ type Sessions interface {
 	WaitOffline(ctx context.Context, agentID string, generation uint64) error
 }
 
-// Tasks aborts all active work assigned to one exact Agent generation. The
-// maximum is the durable configured concurrency bound; success means every
-// observed assignment has committed a terminal acknowledgement.
+// Tasks observes native host reservations and unresolved effects for one exact
+// credential generation. AbortActive fences forward work but permits recovery;
+// success requires settlement, not just cancellation delivery or a free slot.
 type Tasks interface {
 	RequireIdle(ctx context.Context, agentID string, generation uint64, maximum int32) error
 	AbortActive(ctx context.Context, agentID string, generation uint64, maximum int32, reason string) error

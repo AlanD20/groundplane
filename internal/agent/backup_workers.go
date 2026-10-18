@@ -50,7 +50,7 @@ func (workers *executionWorkers) submitBackup(delivery *agentpb.BackupWorkAssign
 		defer workers.wait.Done()
 		defer workers.exchange.ReleaseBackupVolumes(attempt.ID)
 		defer workers.exchange.ReleaseBackupConfigs(attempt.ID)
-		terminal, err := workers.backups.Run(workers.ctx, owned, workers.identity, workers.exchange, staging)
+		terminal, err := workers.backups.Run(workers.executionContext(attempt), owned, workers.identity, workers.exchange, staging)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: attempt, backup: &terminal, err: err}:
@@ -70,7 +70,7 @@ func (workers *executionWorkers) consumeBackup(output executionOutput) error {
 			return err
 		}
 	}
-	delete(workers.active, output.attempt.WorkItemID)
+	workers.retireLocalExecution(output.attempt.WorkItemID)
 	return nil
 }
 
@@ -105,7 +105,7 @@ func (workers *executionWorkers) submitBackupRecovery(delivery *agentpb.BackupRe
 	go func() {
 		defer workers.wait.Done()
 		defer workers.exchange.ReleaseBackupVolumes(attempt.ID)
-		terminal, err := workers.backups.RunRecovery(workers.ctx, owned, workers.identity, workers.exchange, workers.ownership, staging)
+		terminal, err := workers.backups.RunRecovery(workers.executionContext(attempt), owned, workers.identity, workers.exchange, workers.ownership, staging)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: attempt, backup: &terminal, err: err}:

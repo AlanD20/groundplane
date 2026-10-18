@@ -366,6 +366,13 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
+			if cancellation := result.message.GetWorkCancel(); cancellation != nil {
+				if err := releases.cancelAttempt(cancellation); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			if assignment := result.message.GetReleaseWorkAssignment(); assignment != nil {
 				if err := releases.submit(assignment, c.availableWorkCapacity()); err != nil {
 					return false, err

@@ -49,6 +49,11 @@ type ClaimSnapshot struct {
 	Revision int64
 }
 
+type HostEffectSnapshot struct {
+	Owner    *ClaimOwner
+	Revision int64
+}
+
 type Slot struct {
 	TaskID     string `json:"task_id"`
 	WorkItemID string `json:"work_item_id"`

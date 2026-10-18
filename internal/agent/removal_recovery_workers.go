@@ -41,7 +41,7 @@ func (workers *executionWorkers) submitRemovalRecovery(delivery *agentpb.Service
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()
-		terminal, err := workers.removalRecovery.Run(workers.ctx, input, workers.exchange)
+		terminal, err := workers.removalRecovery.Run(workers.executionContext(attempt), input, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: attempt, removalRecovery: &terminal, err: err}:

@@ -39,7 +39,7 @@ func (workers *executionWorkers) submitEnvironmentRemoval(delivery *agentpb.Envi
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()
-		result, err := workers.hierarchy.RunEnvironment(workers.ctx, input, workers.exchange)
+		result, err := workers.hierarchy.RunEnvironment(workers.executionContext(attempt), input, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: input.Attempt, environment: result.Progress, environmentFailure: result.Failure, err: err}:

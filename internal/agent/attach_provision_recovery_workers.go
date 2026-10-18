@@ -36,7 +36,7 @@ func (workers *executionWorkers) submitProvisionRecovery(delivery *agentpb.Attac
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()
-		result, err := workers.attachProvision.Recover(workers.ctx, input, workers.exchange)
+		result, err := workers.attachProvision.Recover(workers.executionContext(attempt), input, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: input.Attempt, provisionRecovery: result, err: err}:

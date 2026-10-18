@@ -34,9 +34,6 @@ func (manager *Manager) Remove(ctx context.Context, agentID string) error {
 
 func (manager *Manager) resumeDelete(ctx context.Context, stored StoredRecord) error {
 	record := stored.Record
-	if err := manager.sessions.StopAssignments(ctx, record.ID, record.Generation); err != nil {
-		return safePortError(ctx, err, "local agent assignment fencing failed")
-	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -48,6 +45,12 @@ func (manager *Manager) resumeDelete(ctx context.Context, stored StoredRecord) e
 		RemovedTaskReason,
 	); err != nil {
 		return safePortError(ctx, err, "local agent active task abortion failed")
+	}
+	// Forward work is already durably fenced by AbortActive. Keep recovery
+	// dispatch open until all host effects settle, then close all assignments
+	// before revoking credentials and removing the Agent container.
+	if err := manager.sessions.StopAssignments(ctx, record.ID, record.Generation); err != nil {
+		return safePortError(ctx, err, "local agent assignment fencing failed")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
