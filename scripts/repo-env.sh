@@ -39,13 +39,14 @@ repo_env_init() {
 	TMPDIR=$(repo_temp_dir "${TMPDIR:-$GROUNDPLANE_REPO_ROOT/.tmp/tmp}") || return
 	GOTMPDIR=$(repo_temp_dir "${GOTMPDIR:-$GROUNDPLANE_REPO_ROOT/.tmp/go-tmp}") || return
 	GOCACHE=$(repo_temp_dir "${GOCACHE:-$GROUNDPLANE_REPO_ROOT/.tmp/go-cache}") || return
+	STATICCHECK_CACHE=$(repo_temp_dir "${STATICCHECK_CACHE:-$GROUNDPLANE_REPO_ROOT/.tmp/staticcheck-cache}") || return
 	repo_temp_dir "$GROUNDPLANE_REPO_ROOT/.tmp" >/dev/null || return
 	GROUNDPLANE_COVERAGE_FILE="$GROUNDPLANE_REPO_ROOT/.tmp/coverage.out"
 	if [[ -L "$GROUNDPLANE_COVERAGE_FILE" || ( -e "$GROUNDPLANE_COVERAGE_FILE" && ! -f "$GROUNDPLANE_COVERAGE_FILE" ) ]]; then
 		printf 'coverage output must be a non-symlink regular file: %s\n' "$GROUNDPLANE_COVERAGE_FILE" >&2
 		return 2
 	fi
-	export TMPDIR GOTMPDIR GOCACHE GROUNDPLANE_COVERAGE_FILE
+	export TMPDIR GOTMPDIR GOCACHE STATICCHECK_CACHE GROUNDPLANE_COVERAGE_FILE
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
