@@ -89,7 +89,8 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRelease(ctx context.Context, v
 		return err
 	}
 	files := workqueue.Change{Conditions: configuration}
-	if completed.Configuration.Prior == nil || completed.Configuration.Current != *completed.Configuration.Prior {
+	if len(completed.Configuration.Destinations) != 0 &&
+		(completed.Configuration.Prior == nil || completed.Configuration.Current != *completed.Configuration.Prior) {
 		configurationValue, err := runtimeconfiguration.EncodeReference(completed.Configuration.Current)
 		if err != nil {
 			return err

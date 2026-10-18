@@ -154,9 +154,9 @@ func prepareGroupRestoredResources(view workqueue.ResumeView, input releaseexecu
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: serviceruntimerecord.Key(projection.ServiceID), Value: value})
 	}
 	configuration := sources.Release.Input.Configuration
-	if configuration.Prior == nil {
+	if configuration.Prior == nil && len(configuration.Destinations) != 0 {
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: runtimeconfiguration.HeadKey(projection.EnvironmentID)})
-	} else if *configuration.Prior != configuration.Current {
+	} else if configuration.Prior != nil && *configuration.Prior != configuration.Current {
 		value, err := runtimeconfiguration.EncodeReference(*configuration.Prior)
 		if err != nil {
 			return workqueue.Change{}, err

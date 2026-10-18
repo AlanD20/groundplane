@@ -34,7 +34,12 @@ func (ledger *ReleaseLedger) groupRestorationState(ctx context.Context, sources 
 		return groupRestorationState{}, errs.New(errs.KindStateConflict, "Group restoration applied-state read is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
+	files := sources.Release.Input.Configuration
+	absentConfiguration := files.Prior == nil && len(files.Destinations) == 0
 	for index, value := range read.Values {
+		if index == 2 && value == nil && absentConfiguration {
+			continue
+		}
 		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > revision {
 			return groupRestorationState{}, errs.New(errs.KindStateConflict, "Group restoration lost its acknowledged source runtime or configuration")
 		}
@@ -47,9 +52,11 @@ func (ledger *ReleaseLedger) groupRestorationState(ctx context.Context, sources 
 	if err != nil {
 		return groupRestorationState{}, err
 	}
-	configuration, err := runtimeconfiguration.DecodeReference(read.Values[2].Value)
-	if err != nil {
-		return groupRestorationState{}, err
+	if value := read.Values[2]; value != nil {
+		configuration, err := runtimeconfiguration.DecodeReference(value.Value)
+		if err != nil || absentConfiguration || configuration != files.Current {
+			return groupRestorationState{}, errs.New(errs.KindStateConflict, "Group restoration configuration no longer matches its acknowledged source")
+		}
 	}
 	source, candidate := selected.Source, sources.Release.Rollout.Record.Render.ReleaseID
 	ack := runtime.Source
@@ -58,13 +65,16 @@ func (ledger *ReleaseLedger) groupRestorationState(ctx context.Context, sources 
 		ack.Input != source.Input || source.Result == nil || ack.Checkpoint.Evidence != *source.Result ||
 		ack.RenderGeneration != sources.Release.Rollout.Record.Render.Projection.RenderGeneration ||
 		runtime.Configuration == nil || *runtime.Configuration != sources.Release.Input.Configuration.Current ||
-		configuration != sources.Release.Input.Configuration.Current || projection.ServingReleaseID != candidate ||
+		projection.ServingReleaseID != candidate ||
 		projection.CurrentSuccessfulReleaseID != candidate || projection.ActiveOperationID != "" {
 		return groupRestorationState{}, errs.New(errs.KindStateConflict, "Group restoration source is no longer the exact acknowledged member")
 	}
 	conditions := make([]keyvalue.Condition, len(keys))
 	for index, key := range keys {
-		conditions[index] = keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision}
+		conditions[index] = keyvalue.Condition{Key: key}
+		if read.Values[index] != nil {
+			conditions[index].ModRevision = read.Values[index].ModRevision
+		}
 	}
 	return groupRestorationState{runtime: runtime, projection: projection, conditions: conditions}, nil
 }
