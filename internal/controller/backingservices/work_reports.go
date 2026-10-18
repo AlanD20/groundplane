@@ -21,14 +21,18 @@ import (
 type WorkReports struct {
 	queue       *workqueue.Repository
 	records     *backingprovisionwork.Repository
+	files       CapturedFileReader
+	hooks       CreationHookResolver
 	diagnostics *executiondiagnostics.Repository
 }
 
-func NewWorkReports(queue *workqueue.Repository, records *backingprovisionwork.Repository, diagnostics *executiondiagnostics.Repository) (*WorkReports, error) {
-	if queue == nil || records == nil || diagnostics == nil {
+func NewWorkReports(queue *workqueue.Repository, records *backingprovisionwork.Repository, files CapturedFileReader, hooks CreationHookResolver,
+	diagnostics *executiondiagnostics.Repository,
+) (*WorkReports, error) {
+	if queue == nil || records == nil || files == nil || hooks == nil || diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "backing creation reporting requires native execution and diagnostic storage")
 	}
-	return &WorkReports{queue: queue, records: records, diagnostics: diagnostics}, nil
+	return &WorkReports{queue: queue, records: records, files: files, hooks: hooks, diagnostics: diagnostics}, nil
 }
 
 func (service *WorkReports) CheckpointBackingProvision(ctx context.Context, authorization agentregistration.WorkAuthorization,
