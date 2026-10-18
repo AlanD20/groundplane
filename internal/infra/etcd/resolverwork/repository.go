@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/resolverexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -26,6 +27,25 @@ func InputKey(workID string) string   { return "/v1/execution/resolver/inputs/" 
 func CaptureKey(workID string) string { return "/v1/execution/resolver/captures/" + workID }
 func AppliedKey(hostID, componentID string) string {
 	return "/v1/applied/resolver/" + hostID + "/" + componentID
+}
+
+func IntentKey(hostID, componentID string) string {
+	return "/v1/desired/resolver/" + hostID + "/" + componentID
+}
+
+func (repository *Repository) ReadIntent(ctx context.Context, hostID, componentID string, revision int64) (int64, error) {
+	if ids.Validate(ids.KindHost, hostID) != nil || ids.Validate(ids.KindComponent, componentID) != nil {
+		return 0, invalid("DNS resolver intent requires its selected host and Component")
+	}
+	read, err := repository.read(ctx, []string{IntentKey(hostID, componentID)}, revision)
+	if err != nil {
+		return 0, err
+	}
+	defer keyvalue.ClearValues(read.Values)
+	if value := read.Values[0]; value != nil && ids.Validate(ids.KindWorkItem, string(value.Value)) != nil {
+		return 0, invalid("DNS resolver desired execution identity is corrupt")
+	}
+	return keyvalue.RevisionOf(read.Values[0]), nil
 }
 
 type StoredInput struct {
@@ -53,10 +73,12 @@ func PreparePublication(input resolverexecution.Input, capture Capture) (workque
 	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: InputKey(input.WorkID)}, {Key: CaptureKey(input.WorkID)},
 		{Key: componentrecord.RecordKey(input.ComponentID), ModRevision: capture.ComponentRevision},
 		{Key: AppliedKey(input.HostID, input.ComponentID), ModRevision: capture.AppliedRevision},
+		{Key: IntentKey(input.HostID, input.ComponentID), ModRevision: capture.IntentRevision},
 		{Key: resolverbaseline.StorageKey, ModRevision: capture.BaselineRevision},
 		{Key: hostresolution.StorageKey, ModRevision: capture.ProjectionRevision}},
 		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: InputKey(input.WorkID), Value: raw},
-			{Type: keyvalue.MutationPut, Key: CaptureKey(input.WorkID), Value: authority}}}
+			{Type: keyvalue.MutationPut, Key: CaptureKey(input.WorkID), Value: authority},
+			{Type: keyvalue.MutationPut, Key: IntentKey(input.HostID, input.ComponentID), Value: []byte(input.WorkID)}}}
 	change.Conditions = append(change.Conditions, capture.References...)
 	return change, nil
 }

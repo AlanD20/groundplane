@@ -20,7 +20,7 @@ func (repository *Repository) ReadAdmission(ctx context.Context, view workqueue.
 	}
 	input, capture := stored.Input, stored.Capture
 	keys := []string{componentrecord.RecordKey(input.ComponentID), AppliedKey(input.HostID, input.ComponentID),
-		resolverbaseline.StorageKey, hostresolution.StorageKey}
+		resolverbaseline.StorageKey, hostresolution.StorageKey, IntentKey(input.HostID, input.ComponentID)}
 	read, err := repository.read(ctx, keys, view.ReadRevision)
 	if err != nil {
 		return StoredInput{}, workqueue.Change{}, false, err
@@ -31,6 +31,7 @@ func (repository *Repository) ReadAdmission(ctx context.Context, view workqueue.
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])})
 	}
 	if read.Values[0] == nil || read.Values[2] == nil || read.Values[3] == nil ||
+		read.Values[4] == nil || string(read.Values[4].Value) != input.WorkID ||
 		keyvalue.RevisionOf(read.Values[1]) != capture.AppliedRevision {
 		return stored, change, false, nil
 	}

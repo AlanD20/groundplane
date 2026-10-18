@@ -35,6 +35,7 @@ type Capture struct {
 	ReadRevision       int64                                         `json:"read_revision"`
 	ComponentRevision  int64                                         `json:"component_revision"`
 	AppliedRevision    int64                                         `json:"applied_revision"`
+	IntentRevision     int64                                         `json:"intent_revision"`
 	BaselineRevision   int64                                         `json:"baseline_revision"`
 	BaselineSHA256     string                                        `json:"baseline_sha256"`
 	ProjectionRevision int64                                         `json:"projection_revision"`
@@ -53,6 +54,7 @@ func (capture Capture) Validate(input resolverexecution.Input) error {
 		componentrecord.ValidateRecord(componentrecord.Record{Desired: capture.Desired}) != nil ||
 		capture.ReadRevision <= 0 || capture.ComponentRevision <= 0 || capture.ComponentRevision > capture.ReadRevision ||
 		capture.AppliedRevision < 0 || capture.AppliedRevision > capture.ReadRevision ||
+		capture.IntentRevision < 0 || capture.IntentRevision > capture.ReadRevision ||
 		capture.BaselineRevision <= 0 || capture.BaselineRevision > capture.ReadRevision || !recordcodec.ValidSHA256(capture.BaselineSHA256) ||
 		capture.ProjectionRevision < 0 || capture.ProjectionRevision > capture.ReadRevision ||
 		capture.TargetName == "" || len(capture.TargetName) > 256 || !utf8.ValidString(capture.TargetName) || len(capture.References) > 256 {
