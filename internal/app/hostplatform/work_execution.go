@@ -529,7 +529,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := workdispatch.NewRuntime(queue, scheduler, controller, completions, publications, inputs, retention, platform.dependencies.Logger)
+	runtime, err := workdispatch.NewRuntime(queue, scheduler, controller, completions, publications, inputs, retention, diagnostics, platform.dependencies.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -589,5 +589,6 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	return &WorkExecution{Runtime: runtime, Queue: queue, scheduler: scheduler, controller: controller,
 		Retries: retries, retention: retention,
 		config: workdispatch.RuntimeConfig{Interval: platform.dependencies.Tick, CollectionInterval: maintenance.CleanupInterval,
-			HistoryRetention: maintenance.DiagnosticRetention}}, nil
+			HistoryRetention: workexecution.TaskHistoryRetention, DiagnosticRetention: maintenance.DiagnosticRetention,
+			CollectionBudget: maintenance.CleanupTimeBudget}}, nil
 }

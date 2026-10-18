@@ -109,6 +109,7 @@ func (collector *Collector) Collect(ctx context.Context, taskID string, at time.
 			return false, err
 		}
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskEventsKey(taskID)})
+		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskExpiryKey(taskID)})
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: scriptexecutions.SourceRetirementPrefix(taskID), Prefix: true})
 		result, err := collector.queue.Commit(ctx, change)
 		return result.Succeeded, err

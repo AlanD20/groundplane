@@ -212,6 +212,12 @@ active reader or a newly captured reference. Admission under storage pressure
 must reserve room for existing work to settle rather than continue unbounded
 publication; exact thresholds belong to the storage implementation.
 
+[Diagnostic expiry](../../internal/infra/etcd/executiondiagnostics/retention.go)
+uses a revision-bound cursor, independent of operation-owned Task collection.
+Retry invalidates the previous expiry cursor. Expiring the event tail retains its
+sequence high-water mark, so reconnect cannot mistake new observations for old
+ones; the viewer distinguishes expired details from failed diagnostic writes.
+
 ## Operator presentation
 
 Console, CLI and API expose the same Task, work-item and attempt meaning under

@@ -16,12 +16,16 @@ func newTaskStagesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if stages.Incomplete {
+			if stages.Expired {
+				if _, err := fmt.Fprintln(cmd.ErrOrStderr(), "Stage details expired under diagnostic retention. The recorded attempt outcome and recovery state are unchanged."); err != nil {
+					return err
+				}
+			} else if stages.Incomplete {
 				if _, err := fmt.Fprintln(cmd.ErrOrStderr(), "Some execution details could not be saved. Stages may be incomplete; consult the attempt outcome."); err != nil {
 					return err
 				}
 			}
-			if !stages.Available {
+			if !stages.Available && !stages.Expired {
 				if _, err := fmt.Fprintln(cmd.ErrOrStderr(), "Stage diagnostics are unavailable; this does not mean no effects occurred."); err != nil {
 					return err
 				}

@@ -23,10 +23,17 @@ type RetentionPage struct {
 // collection is in progress so restart needs neither an unbounded history scan
 // nor an in-memory record of partially removed inputs.
 func (repository *Repository) Expired(ctx context.Context, after string, at time.Time) (RetentionPage, error) {
+	return repository.RetentionPageAt(ctx, after, at, 0)
+}
+
+// RetentionPageAt keeps maintenance/status readers on their selected snapshot.
+// Candidate membership never grants collection; each operation checks its own
+// actual deadline, protected inputs and recovery ownership before removal.
+func (repository *Repository) RetentionPageAt(ctx context.Context, after string, at time.Time, revision int64) (RetentionPage, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return RetentionPage{}, err
 	}
-	if at.IsZero() {
+	if at.IsZero() || revision < 0 {
 		return RetentionPage{}, invalid("Task retention requires a collection time")
 	}
 	if after != "" {
@@ -34,11 +41,11 @@ func (repository *Repository) Expired(ctx context.Context, after string, at time
 			return RetentionPage{}, invalid("Task retention cursor is invalid")
 		}
 	}
-	index, err := repository.store.Range(ctx, keyvalue.RangeRequest{Prefix: retentionPrefix, StartExclusive: after, Limit: 16})
+	index, err := repository.store.Range(ctx, keyvalue.RangeRequest{Prefix: retentionPrefix, StartExclusive: after, Limit: 16, Revision: revision})
 	if err != nil {
 		return RetentionPage{}, err
 	}
-	if index == nil || index.ReadRevision <= 0 || len(index.Values) > 16 || index.More && len(index.Values) == 0 {
+	if index == nil || index.ReadRevision <= 0 || revision > 0 && index.ReadRevision != revision || len(index.Values) > 16 || index.More && len(index.Values) == 0 {
 		return RetentionPage{}, corrupt()
 	}
 	var page RetentionPage

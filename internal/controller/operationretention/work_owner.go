@@ -67,6 +67,7 @@ func (collector *Collector) collectGraph(ctx context.Context, task workqueue.Tas
 			return false, err
 		}
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskEventsKey(task.Task.ID)})
+		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskExpiryKey(task.Task.ID)})
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: scriptexecutions.SourceRetirementPrefix(task.Task.ID), Prefix: true})
 		result, err := collector.queue.Commit(ctx, authority, change)
 		return result.Succeeded, err

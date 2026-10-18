@@ -79,8 +79,6 @@ func hostFields(host apiTypes.Host) map[string]any {
 		if maintenance.Cleanup != nil {
 			fields["etcd_cleanup_state"] = maintenance.Cleanup.State
 			fields["etcd_cleanup_failure"] = maintenance.Cleanup.FailureCode
-			fields["etcd_cleanup_tasks"] = maintenance.Cleanup.Tasks
-			fields["etcd_cleanup_diagnostics"] = maintenance.Cleanup.Diagnostics
 		}
 		if maintenance.Blocker != nil {
 			fields["etcd_compaction_blocker"] = maintenance.Blocker.OwnerID

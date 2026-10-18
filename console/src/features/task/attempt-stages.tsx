@@ -75,7 +75,7 @@ function StageEvidence({
   }, [taskId, workId, attemptId, revision, reload]);
   return (
     <div className="space-y-3 pt-3">
-      {value?.incomplete && (
+      {value?.incomplete && !value.expired && (
         <p role="status" className="text-sm text-muted-foreground">
           Some execution details could not be saved. Stages below may be
           incomplete; use the attempt outcome to determine whether the operation
@@ -96,6 +96,11 @@ function StageEvidence({
       ) : !value ? (
         <p role="status" className="text-sm text-muted-foreground">
           Loading stages…
+        </p>
+      ) : value.expired ? (
+        <p className="text-sm text-muted-foreground">
+          Stage details expired under diagnostic retention. The recorded attempt
+          outcome and recovery state are unchanged.
         </p>
       ) : !value.available ? (
         <p className="text-sm text-muted-foreground">

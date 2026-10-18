@@ -9,6 +9,7 @@ import (
 
 type Stages struct {
 	Incomplete bool
+	Expired    bool
 	Items      []workexecution.Stage
 	Available  bool
 	Sequence   uint64
@@ -21,7 +22,10 @@ func (service *Service) Stages(ctx context.Context, taskID, workID, attemptID st
 	if err != nil {
 		return Stages{}, err
 	}
-	result := Stages{Items: []workexecution.Stage{}, Revision: snapshot.ReadRevision, Incomplete: snapshot.Incomplete}
+	result := Stages{Items: []workexecution.Stage{}, Revision: snapshot.ReadRevision, Incomplete: snapshot.Incomplete, Expired: snapshot.Expired}
+	if snapshot.Expired {
+		return result, nil
+	}
 	if record := snapshot.Record; record != nil {
 		result.Items, result.Available, result.Sequence = append([]workexecution.Stage(nil), record.Stages...), true, record.Sequence
 		result.UpdatedAt = &record.UpdatedAt

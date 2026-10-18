@@ -24,8 +24,10 @@ type TaskEvent struct {
 }
 
 type taskEventsRecord struct {
-	TaskID string      `json:"task_id"`
-	Items  []TaskEvent `json:"items"`
+	TaskID       string      `json:"task_id"`
+	Items        []TaskEvent `json:"items"`
+	LastSequence uint64      `json:"last_sequence"`
+	Expired      bool        `json:"expired"`
 }
 
 type TaskEvents struct {
@@ -52,11 +54,14 @@ func (repository *Repository) TaskEvents(ctx context.Context, taskID string, aft
 		result.Expired = after != 0
 		return result, nil
 	}
-	result.First, result.Last = record.Items[0].Sequence, record.Items[len(record.Items)-1].Sequence
+	result.Last = record.LastSequence
+	if len(record.Items) != 0 {
+		result.First = record.Items[0].Sequence
+	}
 	if after > result.Last {
 		return TaskEvents{}, errs.New(errs.KindValidationFailed, "event cursor is ahead of this Task")
 	}
-	result.Expired = after != 0 && after < result.First-1
+	result.Expired = after != 0 && (len(record.Items) == 0 && after < result.Last || result.First != 0 && after < result.First-1)
 	for _, event := range record.Items {
 		if event.Sequence > after {
 			result.Items = append(result.Items, event)
@@ -87,7 +92,8 @@ func (repository *Repository) readTaskEvents(ctx context.Context, taskID string,
 	if err != nil {
 		return nil, 0, err
 	}
-	if record.TaskID != taskID || len(record.Items) < 1 || len(record.Items) > maximumEvents {
+	if record.TaskID != taskID || record.LastSequence == 0 || len(record.Items) > maximumEvents ||
+		len(record.Items) == 0 && !record.Expired || len(record.Items) != 0 && record.Items[len(record.Items)-1].Sequence != record.LastSequence {
 		return nil, 0, invalid()
 	}
 	for index, event := range record.Items {
@@ -112,16 +118,19 @@ func (repository *Repository) prepareTaskEvent(ctx context.Context, next Record,
 	sequence := uint64(1)
 	if previous != nil {
 		record.Items = previous.Items
-		last := record.Items[len(record.Items)-1].Sequence
+		record.Expired = previous.Expired
+		last := previous.LastSequence
 		if last == math.MaxUint64 {
 			return keyvalue.Condition{}, keyvalue.Mutation{}, invalid()
 		}
 		sequence = last + 1
 	}
+	record.LastSequence = sequence
 	record.Items = append(record.Items, TaskEvent{Sequence: sequence, WorkItemID: next.WorkItemID,
 		AttemptID: next.AttemptID, AttemptSequence: next.Sequence, RecordedAt: next.UpdatedAt, Stage: stage})
 	if len(record.Items) > maximumEvents {
 		record.Items = record.Items[len(record.Items)-maximumEvents:]
+		record.Expired = true
 	}
 	for {
 		value, err := recordcodec.Encode("task_execution_events", record)
@@ -136,5 +145,6 @@ func (repository *Repository) prepareTaskEvent(ctx context.Context, next Record,
 			return keyvalue.Condition{}, keyvalue.Mutation{}, invalid()
 		}
 		record.Items = record.Items[1:]
+		record.Expired = true
 	}
 }

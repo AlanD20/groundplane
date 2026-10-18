@@ -30,12 +30,12 @@ export function StorageMaintenanceStatus({
             {status.cleanup && (
               <>
                 <DetailRow
-                  label="Last cleanup pass"
+                  label="Last replay cleanup"
                   value={`${status.cleanup.state} · ${time(status.cleanup.observed_at)}`}
                 />
                 <DetailRow
                   label="Removed in that pass"
-                  value={`${status.cleanup.idempotency_records} replay markers, ${status.cleanup.tasks} Tasks, ${status.cleanup.diagnostics} diagnostics`}
+                  value={`${status.cleanup.idempotency_records} replay markers`}
                 />
                 {status.cleanup.failure_code && (
                   <DetailRow

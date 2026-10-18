@@ -37,7 +37,5 @@ type CleanupStatus struct {
 	ObservedAt         time.Time `json:"observed_at"`
 	State              string    `json:"state"`
 	IdempotencyRecords int       `json:"idempotency_records"`
-	Tasks              int       `json:"tasks"`
-	Diagnostics        int       `json:"diagnostics"`
 	FailureCode        string    `json:"failure_code,omitempty"`
 }

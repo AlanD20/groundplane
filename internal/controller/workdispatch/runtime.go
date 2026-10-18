@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/operationretention"
 	"github.com/AlanD20/groundplane/internal/infra/controllerownership"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -24,23 +25,26 @@ type Runtime struct {
 	publications *Publications
 	inputs       *Inputs
 	retention    *operationretention.Collector
+	diagnostics  *executiondiagnostics.Repository
 	logger       *slog.Logger
 }
 
 type RuntimeConfig struct {
-	Interval           time.Duration
-	CollectionInterval time.Duration
-	HistoryRetention   time.Duration
+	Interval            time.Duration
+	CollectionInterval  time.Duration
+	HistoryRetention    time.Duration
+	DiagnosticRetention time.Duration
+	CollectionBudget    time.Duration
 }
 
 func NewRuntime(queue *workqueue.Repository, scheduler *Scheduler, controller *ControllerExecutor, completions *Completions, publications *Publications, inputs *Inputs,
-	retention *operationretention.Collector, logger *slog.Logger,
+	retention *operationretention.Collector, diagnostics *executiondiagnostics.Repository, logger *slog.Logger,
 ) (*Runtime, error) {
-	if queue == nil || scheduler == nil || controller == nil || completions == nil || publications == nil || inputs == nil || retention == nil || logger == nil ||
+	if queue == nil || scheduler == nil || controller == nil || completions == nil || publications == nil || inputs == nil || retention == nil || diagnostics == nil || logger == nil ||
 		scheduler.queue != queue || controller.queue != queue || completions.queue != queue || publications.queue != queue || inputs.queue != queue {
 		return nil, errs.New(errs.KindInternal, "execution runtime requires one queue and complete loop owners")
 	}
-	return &Runtime{queue: queue, scheduler: scheduler, controller: controller, completions: completions, publications: publications, inputs: inputs, retention: retention, logger: logger}, nil
+	return &Runtime{queue: queue, scheduler: scheduler, controller: controller, completions: completions, publications: publications, inputs: inputs, retention: retention, diagnostics: diagnostics, logger: logger}, nil
 }
 
 // Run refuses a stale or unreconciled identity. Any loop failure stops and joins
@@ -51,7 +55,8 @@ func (runtime *Runtime) Run(ctx context.Context, ownership *controllerownership.
 		return err
 	}
 	if ctx == nil || identity.Validate() != nil || identity.Executor != workexecution.Controller ||
-		config.Interval < 100*time.Millisecond || config.CollectionInterval < time.Second || config.HistoryRetention <= 0 {
+		config.Interval < 100*time.Millisecond || config.CollectionInterval < time.Second || config.HistoryRetention != workexecution.TaskHistoryRetention ||
+		config.DiagnosticRetention < time.Hour || config.DiagnosticRetention > config.HistoryRetention || config.CollectionBudget <= 0 {
 		return errs.New(errs.KindInternal, "execution runtime identity or intervals are invalid")
 	}
 	registration, err := runtime.queue.ReadExecutor(ctx, workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID})
@@ -84,6 +89,7 @@ func (runtime *Runtime) Run(ctx context.Context, ownership *controllerownership.
 		func(ctx context.Context) error {
 			return runtime.retention.Run(ctx, config.CollectionInterval, func(taskID string, err error) { report(Issue{TaskID: taskID, Err: err}) })
 		},
+		func(ctx context.Context) error { return runtime.expireDiagnostics(ctx, config, report) },
 	}
 	results := make(chan error, len(loops))
 	var workers sync.WaitGroup

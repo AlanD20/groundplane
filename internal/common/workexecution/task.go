@@ -36,6 +36,10 @@ const (
 
 type Actor string
 
+// TaskHistoryRetention is independent of configurable disposable diagnostics.
+// Operation-owned resource and recovery state may outlive this history window.
+const TaskHistoryRetention = 90 * 24 * time.Hour
+
 const (
 	OperatorActor Actor = "operator"
 	SystemActor   Actor = "system"

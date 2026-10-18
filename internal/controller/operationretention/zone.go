@@ -38,6 +38,7 @@ func (collector *Collector) collectZone(ctx context.Context, task workqueue.Task
 	defer keyvalue.ClearMutationValues(change.Mutations)
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete,
 		Key: executiondiagnostics.TaskEventsKey(task.Task.ID)})
+	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskExpiryKey(task.Task.ID)})
 	result, err := collector.queue.Commit(ctx, change)
 	return result.Succeeded, err
 }

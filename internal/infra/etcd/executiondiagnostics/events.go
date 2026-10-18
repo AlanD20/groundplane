@@ -52,9 +52,9 @@ func (repository *Repository) Events(ctx context.Context, taskID, workID, attemp
 	if err != nil {
 		return Events{}, err
 	}
-	result := Events{Items: []Event{}, Incomplete: snapshot.Incomplete, Revision: snapshot.ReadRevision, FinishedAt: snapshot.FinishedAt, Outcome: snapshot.Outcome}
+	result := Events{Items: []Event{}, Incomplete: snapshot.Incomplete, Expired: snapshot.Expired, Revision: snapshot.ReadRevision, FinishedAt: snapshot.FinishedAt, Outcome: snapshot.Outcome}
 	if record == nil {
-		result.Expired = after != 0
+		result.Expired = result.Expired || after != 0
 		result.Incomplete = result.Incomplete || snapshot.Record != nil
 		return result, nil
 	}
@@ -66,7 +66,7 @@ func (repository *Repository) Events(ctx context.Context, taskID, workID, attemp
 	if after > result.Last {
 		return Events{}, errs.New(errs.KindValidationFailed, "event cursor is ahead of this attempt")
 	}
-	result.Expired = after != 0 && after < result.First-1
+	result.Expired = result.Expired || after != 0 && after < result.First-1
 	for _, event := range record.Items {
 		if event.Sequence > after {
 			result.Items = append(result.Items, event)

@@ -105,6 +105,7 @@ type TaskAttemptPage struct {
 
 type TaskStages struct {
 	Incomplete bool                  `json:"incomplete"`
+	Expired    bool                  `json:"expired" doc:"Disposable stage diagnostics expired under retention; execution outcome and recovery ownership are unchanged"`
 	Items      []workexecution.Stage `json:"items" nullable:"false"`
 	Available  bool                  `json:"available" doc:"False means no stage diagnostics are retained; it does not prove no effects occurred"`
 	Sequence   uint64                `json:"sequence"`

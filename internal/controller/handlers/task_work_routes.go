@@ -57,7 +57,7 @@ func (s *Server) taskStages(ctx context.Context, request *taskStagesInput) (*tas
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
-	return &taskStagesOutput{Body: apiTypes.TaskStages{Items: value.Items, Available: value.Available, Sequence: value.Sequence, UpdatedAt: value.UpdatedAt, Revision: value.Revision, Incomplete: value.Incomplete}}, nil
+	return &taskStagesOutput{Body: apiTypes.TaskStages{Items: value.Items, Available: value.Available, Sequence: value.Sequence, UpdatedAt: value.UpdatedAt, Revision: value.Revision, Incomplete: value.Incomplete, Expired: value.Expired}}, nil
 }
 
 func (s *Server) taskImage(ctx context.Context, request *taskImageInput) (*taskImageOutput, error) {

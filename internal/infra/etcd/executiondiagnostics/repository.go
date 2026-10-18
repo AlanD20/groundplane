@@ -37,6 +37,8 @@ type Snapshot struct {
 	FinishedAt   *time.Time
 	Outcome      workexecution.Outcome
 	Incomplete   bool
+	Expired      bool
+	LossRevision int64
 	Record       *Record
 	Revision     int64
 	ReadRevision int64
@@ -76,10 +78,12 @@ func (repository *Repository) read(ctx context.Context, view workqueue.View, att
 	}
 	result := Snapshot{Attempt: attempt, ReadRevision: read.ReadRevision, FinishedAt: attempt.FinishedAt, Outcome: attempt.Outcome}
 	if read.Values[2] != nil {
-		if string(read.Values[2].Value) != "incomplete" {
+		if string(read.Values[2].Value) != "incomplete" && string(read.Values[2].Value) != "expired" {
 			return Snapshot{}, invalid()
 		}
 		result.Incomplete = true
+		result.Expired = string(read.Values[2].Value) == "expired"
+		result.LossRevision = read.Values[2].ModRevision
 	}
 	if read.Values[1] == nil {
 		return result, nil
@@ -139,6 +143,9 @@ func (repository *Repository) report(ctx context.Context, taskID, workID, attemp
 	previous, err := repository.read(ctx, view.Work, attemptID)
 	if err != nil {
 		return err
+	}
+	if previous.Expired {
+		return nil // Retention already owns these disposable diagnostics.
 	}
 	next := Record{TaskID: taskID, WorkItemID: workID, AttemptID: attemptID, Sequence: sequence, UpdatedAt: at, Stages: []workexecution.Stage{stage}}
 	if previous.Record == nil {
@@ -231,6 +238,7 @@ func (repository *Repository) report(ctx context.Context, taskID, workID, attemp
 		{Key: workqueue.ItemKey(workID), ModRevision: view.Work.Item.Revision},
 		{Key: workqueue.AttemptKey(attemptID), ModRevision: view.Attempt.Revision},
 		{Key: Key(attemptID), ModRevision: previous.Revision},
+		{Key: LossKey(attemptID), ModRevision: previous.LossRevision},
 	}, mutations)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {

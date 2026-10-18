@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/controllerownership"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -13,7 +14,8 @@ import (
 // called only after the coordinated storage/protocol cutover has been admitted.
 func (runtime *Runtime) Start(ctx context.Context, capacity uint16, config RuntimeConfig) (result error) {
 	if ctx == nil || capacity == 0 || capacity > 256 || config.Interval < 100*time.Millisecond ||
-		config.CollectionInterval < time.Second || config.HistoryRetention <= 0 {
+		config.CollectionInterval < time.Second || config.HistoryRetention != workexecution.TaskHistoryRetention ||
+		config.DiagnosticRetention < time.Hour || config.DiagnosticRetention > config.HistoryRetention || config.CollectionBudget <= 0 {
 		return errs.New(errs.KindInternal, "execution lifetime configuration is invalid")
 	}
 	ownership, err := controllerownership.Acquire(ctx)
