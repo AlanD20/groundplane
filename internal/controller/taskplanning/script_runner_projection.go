@@ -5,15 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
-	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
 
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/imageref"
 	release "github.com/AlanD20/groundplane/internal/core/release"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -93,7 +92,10 @@ func prepareScriptRunner(
 			candidate.RenderGeneration != sources.DesiredProjection.Record.RenderGeneration ||
 			candidate.RenderGeneration == 0 || candidate.FixedReadRevision <= 0 ||
 			candidate.ServiceSHA256 == ([sha256.Size]byte{}) || candidate.ProjectionSHA256 == ([sha256.Size]byte{}) {
-			return nil, errs.New(errs.KindValidationFailed, "Script candidate sources differ from captured Blueprint work")
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Script candidate sources differ from captured Blueprint work",
+			)
 		}
 	}
 	if err := validateScriptRunnerReleaseSource(sources); err != nil {
@@ -489,18 +491,6 @@ func scriptDeployResources(
 	return limits, reservations, nil
 }
 
-func digestPinnedImageBytes(value string) ([]byte, error) {
-	separator := strings.LastIndex(value, "@sha256:")
-	if separator < 0 || !imageref.IsDigestPinned(value) {
-		return nil, errs.New(errs.KindValidationFailed, "Script runner image is not digest pinned")
-	}
-	digest, err := hex.DecodeString(value[separator+8:])
-	if err != nil || len(digest) != sha256.Size {
-		return nil, errs.New(errs.KindValidationFailed, "Script runner image digest is invalid")
-	}
-	return digest, nil
-}
-
 func deterministicScriptProtoDigest(value proto.Message) ([]byte, error) {
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(value)
 	if err != nil {
@@ -532,8 +522,4 @@ func cloneScriptEntryBindings(values []*agentpb.ScriptRunnerEntryBinding) []*age
 		result[index] = proto.Clone(value).(*agentpb.ScriptRunnerEntryBinding)
 	}
 	return result
-}
-
-func finiteScriptFloat(value float32) bool {
-	return !math.IsNaN(float64(value)) && !math.IsInf(float64(value), 0)
 }

@@ -10,17 +10,13 @@ import (
 	registeredenvoy "github.com/AlanD20/groundplane-registered-components/envoy"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const ManagedConfigActivateAction = componentsdk.ActionID("activate-config")
 
-func ConfigureReleasePlans(resolver *taskplanning.TaskPlanResolver, ledger *etcd.ReleaseLedger) error {
-	if err := resolver.EnableServiceProxyImages(registeredcaddy.Image, registeredenvoy.Image); err != nil {
-		return err
-	}
-	return resolver.EnableReleasePlans(ledger)
+func ConfigureServiceProxyImages(resolver *taskplanning.TaskPlanResolver) error {
+	return resolver.EnableServiceProxyImages(registeredcaddy.Image, registeredenvoy.Image)
 }
 
 type Catalog struct {

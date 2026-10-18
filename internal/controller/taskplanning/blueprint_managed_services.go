@@ -1,7 +1,6 @@
 package taskplanning
 
 import (
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -90,16 +89,4 @@ func BlueprintManagedServiceSteps(
 		prerequisite = healthID
 	}
 	return steps, nil
-}
-
-func blueprintManagedStepsMatch(task etcd.TaskRecord, start int, steps []*agentpb.ExecutionStep) error {
-	if start < 0 || start > len(task.Steps) || len(steps) > len(task.Steps)-start {
-		return errs.New(errs.KindInternal, "durable Blueprint managed Service steps are incomplete")
-	}
-	for index, step := range steps {
-		if task.Steps[start+index].ID != step.StepId || task.Steps[start+index].Kind != taskjournal.TaskStepOperation {
-			return errs.New(errs.KindInternal, "durable Blueprint managed Service steps changed")
-		}
-	}
-	return nil
 }

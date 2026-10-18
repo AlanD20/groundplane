@@ -8,7 +8,7 @@
   "package_totals": [
     {
       "path": "internal/app",
-      "lines": 3720
+      "lines": 3713
     }
   ],
   "legacy_findings": []

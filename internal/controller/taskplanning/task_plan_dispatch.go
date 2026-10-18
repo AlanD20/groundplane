@@ -5,9 +5,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
-	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
 	releasedomain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -17,14 +15,10 @@ import (
 // TaskPlanResolver resolves exact procedures from their capability-owned sealed
 // inputs. Rendered procedures use pinned inputs.
 type TaskPlanResolver struct {
-	volumeRoot            string
-	blueprints            blueprintPlanStateReader
-	services              servicePlanSources
-	componentCatalog      []componentrender.EnvironmentComponentRegistration
-	serviceProxyImages    map[serviceproxy.Implementation]*releasedomain.ProxyImage
-	releases              *etcd.ReleaseLedger
-	materializations      componentMaterializationContentRepository
-	configurationRecovery *configurationrecovery.Sources
+	volumeRoot         string
+	blueprints         blueprintPlanStateReader
+	componentCatalog   []componentrender.EnvironmentComponentRegistration
+	serviceProxyImages map[serviceproxy.Implementation]*releasedomain.ProxyImage
 }
 
 type blueprintPlanStateReader interface {

@@ -25,9 +25,6 @@ func initializeTaskMaterializationResolver(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Component materialization content repository: %w", err)
 	}
-	if err := plans.EnableComponentMaterializationContent(contents); err != nil {
-		return nil, fmt.Errorf("controller: initialize Component materialization plan content: %w", err)
-	}
 	resolver, err := taskmaterialization.NewTaskMaterializationResolver(blueprints, values, secrets, plans, protector)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize materialization value resolver: %w", err)
@@ -37,9 +34,6 @@ func initializeTaskMaterializationResolver(
 	}
 	snapshots, err := runtimeconfiguration.New(store)
 	if err != nil {
-		return nil, err
-	}
-	if err := plans.EnableConfigurationRecovery(snapshots); err != nil {
 		return nil, err
 	}
 	if err := resolver.EnableConfigurationRecovery(snapshots); err != nil {

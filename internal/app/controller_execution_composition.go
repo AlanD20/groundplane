@@ -55,17 +55,16 @@ func newControllerExecutionComposition(
 		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Attach fact reads: %w", err)
 	}
-	planResolver, err := taskplanning.NewTaskPlanResolverWithServiceSources(
+	planResolver, err := taskplanning.NewTaskPlanResolverWithBlueprints(
 		cfg.Storage.VolumeRoot,
 		authority.hierarchyRecords,
-		dataServices.serviceRecords,
 		componentCatalog,
 	)
 	if err != nil {
 		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize execution plan resolver: %w", err)
 	}
-	if err := componentregistration.ConfigureReleasePlans(planResolver, authority.releaseLedger); err != nil {
+	if err := componentregistration.ConfigureServiceProxyImages(planResolver); err != nil {
 		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize release plan resolver: %w", err)
 	}

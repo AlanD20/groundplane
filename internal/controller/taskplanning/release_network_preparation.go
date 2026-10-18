@@ -38,38 +38,6 @@ func (resolver *TaskPlanResolver) PrepareReleaseNetworkTask(ctx context.Context,
 	return prepared, plan, upstreams, nil
 }
 
-func (resolver *TaskPlanResolver) resolveReleaseNetworkPlan(
-	ctx context.Context,
-	task etcd.TaskRecord,
-) (*agentpb.ExecutionPlan, error) {
-	if resolver.releases == nil {
-		return nil, errs.New(errs.KindInternal, "release network Task source is not configured")
-	}
-	source, err := resolver.releases.GetReleaseNetworkPreparationSource(
-		ctx,
-		task.Params[taskjournal.TaskReleaseNetworkParentParam],
-	)
-	if err != nil {
-		return nil, err
-	}
-	if source.ChildID != task.ID {
-		return nil, errs.New(errs.KindStateConflict, "release does not own this network prerequisite Task")
-	}
-	plan, _, err := resolver.buildReleaseNetworkPlan(task, source.Parent, source.Artifact)
-	if err != nil {
-		return nil, err
-	}
-	if task.PlanHash != hex.EncodeToString(plan.GetPlanHash()) || len(task.Steps) != len(plan.GetSteps()) {
-		return nil, errs.New(errs.KindStateConflict, "release network Task differs from its captured procedure")
-	}
-	for index, step := range plan.GetSteps() {
-		if task.Steps[index].ID != step.GetStepId() {
-			return nil, errs.New(errs.KindStateConflict, "release network Task step identity changed")
-		}
-	}
-	return plan, nil
-}
-
 func (resolver *TaskPlanResolver) buildReleaseNetworkPlan(child, parent etcd.TaskRecord,
 	artifact *agentpb.ComposeArtifact,
 ) (*agentpb.ExecutionPlan, []string, error) {
