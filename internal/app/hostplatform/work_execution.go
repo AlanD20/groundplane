@@ -285,7 +285,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	scheduler, err := workdispatch.NewScheduler(queue, append(softwareWork.admission, []workdispatch.Registration{
+	scheduler, err := workdispatch.NewScheduler(queue, append(append(softwareWork.admission, directReleases.admission...), []workdispatch.Registration{
 		{Operation: workexecution.ReleaseGroup, Executor: workexecution.Controller, Owner: groupRemoval, DecisionOnly: true},
 		{Operation: workexecution.Environment, Executor: workexecution.Agent, Owner: environmentWork},
 		{Operation: workexecution.AgentLifecycle, Executor: workexecution.Controller, Owner: agentWork},
@@ -318,7 +318,6 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		{Operation: workexecution.Hierarchy, Executor: workexecution.Agent, Owner: hierarchyAgent},
 		{Operation: workexecution.Script, Executor: workexecution.Agent, Owner: scripts},
 		{Operation: workexecution.Release, Executor: workexecution.Agent, Owner: dependencies.Releases},
-		{Operation: workexecution.ReleaseRestoration, Executor: workexecution.Agent, Owner: directReleases.restoration},
 		{Operation: workexecution.ResourceDefinition, Executor: workexecution.Controller, Owner: definitionWork, DecisionOnly: true},
 		{Operation: workexecution.Component, Executor: workexecution.Controller, Owner: componentDefinitions, DecisionOnly: true},
 		{Operation: workexecution.EntrySettlement, Executor: workexecution.Controller, Owner: entryWork, DecisionOnly: true},
@@ -351,6 +350,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	retries, err := workdispatch.NewRetries(queue, append(softwareWork.retry, []workdispatch.RetryRegistration{
+		{Operation: workexecution.ReleaseRestoration, Owner: directReleases.restoration},
 		{Operation: workexecution.Environment, Owner: environmentWork},
 		{Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		{Operation: workexecution.AgentSoftware, Owner: agentWork},

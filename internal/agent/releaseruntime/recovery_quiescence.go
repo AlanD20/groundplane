@@ -14,7 +14,7 @@ import (
 )
 
 type InterruptedReleaseHelper interface {
-	StopReleaseHelper(context.Context, workexecution.Attempt) error
+	StopRestorationHelpers(context.Context, releaseexecution.RecoveryInput) error
 }
 
 type RecoveryQuiescence struct {
@@ -51,14 +51,20 @@ func (quiescence *RecoveryQuiescence) Observe(ctx context.Context, input release
 	if err := quiescence.ownership.CheckRestoration(input); err != nil {
 		return releaseexecution.QuiescenceProof{}, err
 	}
-	if err := quiescence.helper.StopReleaseHelper(bounded, input.Forward); err != nil {
+	if err := quiescence.helper.StopRestorationHelpers(bounded, input); err != nil {
 		return releaseexecution.QuiescenceProof{}, err
 	}
 	if err := quiescence.files.StopForwardFiles(bounded, input, report); err != nil {
 		return releaseexecution.QuiescenceProof{}, err
 	}
+	if err := quiescence.files.StopInterruptedRestorationFiles(bounded, input, report); err != nil {
+		return releaseexecution.QuiescenceProof{}, err
+	}
 	proof := releaseexecution.QuiescenceProof{ForwardAttemptID: input.Forward.ID, RecoveryAttemptID: input.Input.Attempt.ID,
 		Executor: input.Input.Attempt.Executor, HelperAbsentAt: time.Now().UTC()}
+	if input.Interruption != nil {
+		proof.InterruptedAttemptID = input.Interruption.Attempt.ID
+	}
 	for _, hook := range input.Input.Release.Hooks {
 		captured, err := quiescence.hooks.LoadRecoveryHook(bounded, input, hook)
 		if err != nil {

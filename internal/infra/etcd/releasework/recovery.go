@@ -17,6 +17,7 @@ type RecoveryRecord struct {
 	ForwardAttemptID string                                      `json:"forward_attempt_id"`
 	SourceResult     workexecution.Input                         `json:"source_result"`
 	Group            *releaseexecution.GroupRestorationAuthority `json:"group,omitempty"`
+	Interruption     *releaseexecution.RestorationInterruption   `json:"interruption,omitempty"`
 	Report           releaseexecution.RecoveryReport             `json:"report"`
 	Proofs           [6]*workexecution.Input                     `json:"proofs"`
 	Boundaries       [6]*releaseexecution.RecoveryReport         `json:"boundaries"`
@@ -32,6 +33,7 @@ func RecoveryKey(attemptID string) string { return "/v1/execution/release-recove
 func (record RecoveryRecord) validate(input releaseexecution.RecoveryInput) error {
 	if input.Validate() != nil || record.ForwardAttemptID != input.Forward.ID || record.SourceResult != *input.Forward.Result ||
 		!releaseexecution.EqualGroupRestoration(record.Group, input.Group) ||
+		!releaseexecution.EqualRestorationInterruption(record.Interruption, input.Interruption) ||
 		record.Report.Ack != nil || record.Report.Validate(input) != nil {
 		return invalid()
 	}
@@ -101,7 +103,7 @@ func PrepareRecovery(view workqueue.ResumeView, input releaseexecution.RecoveryI
 		return workqueue.Change{}, invalid()
 	}
 	record := RecoveryRecord{ForwardAttemptID: input.Forward.ID, SourceResult: *input.Forward.Result,
-		Group: releaseexecution.CloneGroupRestoration(input.Group), Report: report}
+		Group: releaseexecution.CloneGroupRestoration(input.Group), Interruption: releaseexecution.CloneRestorationInterruption(input.Interruption), Report: report}
 	var prior *releaseexecution.RecoveryProgress
 	if previous.Record != nil {
 		if err := previous.Record.validate(input); err != nil {

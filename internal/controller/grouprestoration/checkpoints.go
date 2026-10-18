@@ -29,7 +29,7 @@ func (service *Service) PrepareRecoveryEvidence(ctx context.Context, view workqu
 	if err := releaseexecution.ValidateRecoveryTransition(input, progress, report.Progress); err != nil {
 		return workqueue.Change{}, err
 	}
-	conditions, err := service.ledger.GroupRestorationConditions(ctx, view.Work)
+	conditions, err := service.activeConditions(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

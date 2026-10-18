@@ -29,7 +29,7 @@ type RecoveryExchange interface {
 type RecoveryHostHelper interface {
 	RecoveryHelper
 	InterruptedReleaseHelper
-	StopRecoveryHelper(context.Context, workexecution.Attempt) error
+	StopActiveRestorationHelper(context.Context, releaseexecution.RecoveryInput) error
 }
 
 // RecoveryExecutor binds the captured cleanup to its own start receipt and
@@ -94,7 +94,7 @@ func (executor *RecoveryExecutor) execute(ctx context.Context, input releaseexec
 	if err := executor.ownership.CheckRestoration(input); err != nil {
 		return nil, err
 	}
-	if err := executor.helper.StopRecoveryHelper(bounded, input.Input.Attempt); err != nil {
+	if err := executor.helper.StopActiveRestorationHelper(bounded, input); err != nil {
 		return nil, err
 	}
 	checkpoints, err := checkpointdelivery.NewRecovery(input, executor.journal, exchange.RecoveryCheckpoint)

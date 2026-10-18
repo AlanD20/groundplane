@@ -17,6 +17,7 @@ import (
 
 type directReleaseExecution struct {
 	restoration *grouprestoration.Service
+	admission   []workdispatch.Registration
 	input       []workdispatch.InputRegistration
 	publication []workdispatch.PublicationRegistration
 	completion  []workdispatch.CompletionRegistration
@@ -51,6 +52,9 @@ func (platform *Platform) newDirectReleaseWork(queue *workqueue.Repository, netw
 	}
 	return directReleaseExecution{
 		restoration: restoration,
+		admission: []workdispatch.Registration{
+			{Operation: workexecution.ReleaseRestoration, Executor: workexecution.Agent, Owner: restoration},
+		},
 		input: []workdispatch.InputRegistration{
 			{Action: workexecution.ActionDeploy, Operation: workexecution.Release, Owner: inputs},
 			{Action: workexecution.ActionRollback, Operation: workexecution.Release, Owner: inputs},

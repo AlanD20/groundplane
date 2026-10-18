@@ -12,12 +12,13 @@ import (
 // absence observation. It does not attest workload state or restoration; those
 // belong to the later recovery phases.
 type QuiescenceProof struct {
-	Hooks             []HookQuiescenceProof  `json:"hooks"`
-	ForwardAttemptID  string                 `json:"forward_attempt_id"`
-	RecoveryAttemptID string                 `json:"recovery_attempt_id"`
-	Executor          workexecution.Identity `json:"executor"`
-	HelperAbsentAt    time.Time              `json:"helper_absent_at"`
-	OwnerCheckedAt    time.Time              `json:"owner_checked_at"`
+	Hooks                []HookQuiescenceProof  `json:"hooks"`
+	ForwardAttemptID     string                 `json:"forward_attempt_id"`
+	RecoveryAttemptID    string                 `json:"recovery_attempt_id"`
+	InterruptedAttemptID string                 `json:"interrupted_attempt_id,omitempty"`
+	Executor             workexecution.Identity `json:"executor"`
+	HelperAbsentAt       time.Time              `json:"helper_absent_at"`
+	OwnerCheckedAt       time.Time              `json:"owner_checked_at"`
 }
 
 type HookQuiescenceProof struct {
@@ -36,6 +37,13 @@ func (proof QuiescenceProof) Validate(input RecoveryInput, report RecoveryReport
 		proof.HelperAbsentAt.Location() != time.UTC || proof.OwnerCheckedAt.Location() != time.UTC ||
 		proof.HelperAbsentAt.Before(report.Progress.UpdatedAt) || proof.OwnerCheckedAt.Before(proof.HelperAbsentAt) ||
 		!proof.OwnerCheckedAt.Before(input.Input.Attempt.Deadline) {
+		return invalidProgress()
+	}
+	expectedInterrupted := ""
+	if input.Interruption != nil {
+		expectedInterrupted = input.Interruption.Attempt.ID
+	}
+	if proof.InterruptedAttemptID != expectedInterrupted {
 		return invalidProgress()
 	}
 	if len(proof.Hooks) != len(input.Input.Release.Hooks) {

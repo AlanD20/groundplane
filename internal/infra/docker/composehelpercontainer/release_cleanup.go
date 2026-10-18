@@ -7,6 +7,7 @@ import (
 	containerderrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/client"
 
+	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -40,29 +41,31 @@ func releaseHelperLabels(attempt workexecution.Attempt) map[string]string {
 	return labels
 }
 
-// StopReleaseHelper removes only the helper belonging to the captured failed
-// attempt. The recovery owner must first establish that its Agent cannot launch
-// another helper. This operation is NOT executor-quiescence proof: Docker may
-// still be completing an already accepted mutation, which recovery must inspect.
-// A fixed per-attempt name also prevents overlapping helper launches on replay.
-func (executor *Executor) StopReleaseHelper(ctx context.Context, forward workexecution.Attempt) error {
-	if executor == nil || executor.engine == nil || ctx == nil || forward.Validate() != nil ||
-		forward.Executor.Executor != workexecution.Agent || forward.Direction != workexecution.Forward ||
-		forward.FinishedAt == nil || forward.Outcome == workexecution.Succeeded {
-		return errs.New(errs.KindValidationFailed, "Release helper cleanup requires its failed forward attempt")
+// StopRestorationHelpers stops only the source and interrupted-restoration
+// helpers named by validated captured authority. Group sources remain successful;
+// failed-forward cleanup retains its actual failure. Docker effects still require
+// inspection after process exclusion; stopping a helper is not runtime proof.
+func (executor *Executor) StopRestorationHelpers(ctx context.Context, input releaseexecution.RecoveryInput) error {
+	if executor == nil || executor.engine == nil || ctx == nil || input.ValidateIdentity() != nil {
+		return errs.New(errs.KindValidationFailed, "Release helper cleanup requires its captured restoration authority")
 	}
-	return executor.stopAttemptHelper(ctx, forward)
+	if err := executor.stopAttemptHelper(ctx, input.Forward); err != nil {
+		return err
+	}
+	if input.Interruption != nil {
+		return executor.stopAttemptHelper(ctx, input.Interruption.Attempt)
+	}
+	return nil
 }
 
-// StopRecoveryHelper is used only while the caller exclusively owns this
-// recovery work item, before inspecting an interrupted helper's effects. The
-// stable work/input owner includes helpers left by previous cleanup attempts.
-func (executor *Executor) StopRecoveryHelper(ctx context.Context, recovery workexecution.Attempt) error {
-	if executor == nil || executor.engine == nil || ctx == nil || recovery.Validate() != nil ||
-		recovery.Executor.Executor != workexecution.Agent || recovery.Direction != workexecution.Recovery || recovery.FinishedAt != nil {
-		return errs.New(errs.KindValidationFailed, "recovery helper cleanup requires its active recovery attempt")
+// StopActiveRestorationHelper precedes resumed work under exclusive local
+// ownership. Typed authority admits an initial Group restoration as well as
+// ordinary failed-attempt cleanup, without pretending both are the same action.
+func (executor *Executor) StopActiveRestorationHelper(ctx context.Context, input releaseexecution.RecoveryInput) error {
+	if executor == nil || executor.engine == nil || ctx == nil || input.ValidateIdentity() != nil {
+		return errs.New(errs.KindValidationFailed, "restoration helper cleanup requires its active captured attempt")
 	}
-	return executor.stopAttemptHelper(ctx, recovery)
+	return executor.stopAttemptHelper(ctx, input.Input.Attempt)
 }
 
 func (executor *Executor) stopAttemptHelper(ctx context.Context, attempt workexecution.Attempt) error {

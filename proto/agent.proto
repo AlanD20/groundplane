@@ -466,6 +466,9 @@ message ReleaseRecoveryAssignment {
   // one of failure or group_restoration is present; successful source attempts
   // retain their actual outcome. No generic command or execution plan is sent.
   bytes group_restoration = 4;
+  // Group Retry also carries the actual failed restoration attempt and its
+  // failure receipt. It never replaces the successful source attempt above.
+  bytes restoration_interruption = 5;
 }
 
 // Canonical bounded Release cursor; its closed schema is owned by the Release

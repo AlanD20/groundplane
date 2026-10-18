@@ -12,10 +12,11 @@ import (
 // retains the original failure; Group restoration retains the source member's
 // actual success and names the later failure that requires its restoration.
 type RecoveryInput struct {
-	Input   Input
-	Forward workexecution.Attempt
-	Failure Failure
-	Group   *GroupRestorationAuthority
+	Input        Input
+	Forward      workexecution.Attempt
+	Failure      Failure
+	Group        *GroupRestorationAuthority
+	Interruption *RestorationInterruption
 }
 
 func (input RecoveryInput) Validate() error {
@@ -34,9 +35,18 @@ func (input RecoveryInput) ValidateIdentity() error {
 		if input.Failure != (Failure{}) {
 			return invalidProgress()
 		}
+		if recovery.Direction == workexecution.Recovery {
+			if input.Interruption == nil {
+				return invalidProgress()
+			}
+			return input.Interruption.ValidateFor(recovery, forward, *input.Group)
+		}
+		if input.Interruption != nil {
+			return invalidProgress()
+		}
 		return input.Group.ValidateFor(recovery, forward)
 	}
-	if recovery.Validate() != nil || forward.Validate() != nil || recovery.Direction != workexecution.Recovery ||
+	if input.Interruption != nil || recovery.Validate() != nil || forward.Validate() != nil || recovery.Direction != workexecution.Recovery ||
 		forward.Direction != workexecution.Forward || recovery.FinishedAt != nil || forward.FinishedAt == nil || forward.Result == nil ||
 		forward.Outcome == workexecution.Succeeded || recovery.TaskID != forward.TaskID || recovery.WorkItemID != forward.WorkItemID ||
 		recovery.Number <= forward.Number || recovery.Input != forward.Input || recovery.Executor.Executor != workexecution.Agent ||

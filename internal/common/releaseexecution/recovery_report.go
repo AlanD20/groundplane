@@ -73,8 +73,9 @@ func (report RecoveryReport) Checkpoint(input RecoveryInput) (workexecution.Chec
 		ForwardAttemptID string                     `json:"forward_attempt_id"`
 		SourceResult     workexecution.Input        `json:"source_result"`
 		Group            *GroupRestorationAuthority `json:"group,omitempty"`
+		Interruption     *RestorationInterruption   `json:"interruption,omitempty"`
 		Report           RecoveryReport             `json:"report"`
-	}{input.Input.Attempt, input.Forward.ID, *input.Forward.Result, input.Group, report})
+	}{input.Input.Attempt, input.Forward.ID, *input.Forward.Result, input.Group, input.Interruption, report})
 	if err != nil {
 		return workexecution.Checkpoint{}, invalidProgress()
 	}

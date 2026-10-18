@@ -22,7 +22,7 @@ func EncodeRecoveryAssignment(input RecoveryInput) (*agentpb.ReleaseRecoveryAssi
 	if err != nil {
 		return nil, err
 	}
-	var failure, group []byte
+	var failure, group, interruption []byte
 	if input.Group == nil {
 		failure, _, err = EncodeFailure(input.Forward, input.Failure)
 	} else {
@@ -31,15 +31,22 @@ func EncodeRecoveryAssignment(input RecoveryInput) (*agentpb.ReleaseRecoveryAssi
 	if err != nil {
 		return nil, err
 	}
+	if input.Interruption != nil {
+		interruption, err = canonicalCheckpoint(*input.Interruption)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &agentpb.ReleaseRecoveryAssignment{Work: &agentpb.ReleaseWorkAssignment{Attempt: attempt, Release: proto.CloneOf(input.Input.Release)},
-		ForwardAttempt: forward, Failure: failure, GroupRestoration: group}, nil
+		ForwardAttempt: forward, Failure: failure, GroupRestoration: group, RestorationInterruption: interruption}, nil
 }
 
 func DecodeRecoveryAssignment(message *agentpb.ReleaseRecoveryAssignment, identity workexecution.Identity) (RecoveryInput, error) {
 	if message == nil || executionplan.RejectUnknown(message) != nil || message.Work == nil ||
 		len(message.ForwardAttempt) == 0 || len(message.ForwardAttempt) > MaximumCheckpointBytes ||
 		(len(message.Failure) == 0) == (len(message.GroupRestoration) == 0) ||
-		len(message.Failure) > MaximumCheckpointBytes || len(message.GroupRestoration) > MaximumCheckpointBytes {
+		len(message.Failure) > MaximumCheckpointBytes || len(message.GroupRestoration) > MaximumCheckpointBytes ||
+		len(message.RestorationInterruption) > MaximumCheckpointBytes || len(message.Failure) != 0 && len(message.RestorationInterruption) != 0 {
 		return RecoveryInput{}, invalidProgress()
 	}
 	attempt, release, err := workexecution.DecodeReleaseDelivery(message.Work, identity)
@@ -76,7 +83,19 @@ func DecodeRecoveryAssignment(message *agentpb.ReleaseRecoveryAssignment, identi
 	if err != nil {
 		return RecoveryInput{}, err
 	}
-	input := RecoveryInput{Input: Input{Attempt: attempt, Release: release, Artifacts: artifacts}, Forward: forward, Failure: failure, Group: group}
+	var interruption *RestorationInterruption
+	if len(message.RestorationInterruption) != 0 {
+		decoded, err := jcs.Decode[RestorationInterruption](message.RestorationInterruption)
+		if err != nil {
+			return RecoveryInput{}, err
+		}
+		canonical, err := canonicalCheckpoint(decoded)
+		if err != nil || !bytes.Equal(canonical, message.RestorationInterruption) {
+			return RecoveryInput{}, invalidProgress()
+		}
+		interruption = &decoded
+	}
+	input := RecoveryInput{Input: Input{Attempt: attempt, Release: release, Artifacts: artifacts}, Forward: forward, Failure: failure, Group: group, Interruption: interruption}
 	if err := input.Validate(); err != nil {
 		return RecoveryInput{}, err
 	}

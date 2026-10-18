@@ -89,5 +89,15 @@ func (service *Service) LoadRecoveryInput(ctx context.Context, view workqueue.Re
 	stored := sources.Restoration.Input
 	input := releaseexecution.RecoveryInput{Input: releaseexecution.Input{Attempt: view.Attempt.Attempt, Release: payload, Artifacts: artifacts},
 		Forward: stored.Source, Group: releaseexecution.CloneGroupRestoration(&stored.Authority)}
+	if view.Attempt.Attempt.Direction == workexecution.Recovery {
+		if view.Attempt.Attempt.Number < 2 {
+			return releaseexecution.RecoveryInput{}, errs.New(errs.KindStateConflict, "Group restoration Retry has no previous attempt")
+		}
+		previous, err := service.groups.LoadRestorationFailure(ctx, view.Work, view.Attempt.Attempt.Number-1)
+		if err != nil {
+			return releaseexecution.RecoveryInput{}, err
+		}
+		input.Interruption = releaseexecution.CloneRestorationInterruption(&previous.Interruption)
+	}
 	return input, input.Validate()
 }
