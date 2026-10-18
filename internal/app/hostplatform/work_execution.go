@@ -31,7 +31,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entrywork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerchecks"
@@ -46,14 +45,13 @@ import (
 // WorkExecution is composed separately from the superseded Task runner during
 // source migration. The final daemon cutover starts only the replacement runtime.
 type WorkExecution struct {
-	Runtime         *workdispatch.Runtime
-	Queue           *workqueue.Repository
-	scheduler       *workdispatch.Scheduler
-	controller      *workdispatch.ControllerExecutor
-	Retries         *workdispatch.Retries
-	replayRetention *idempotency.RetentionRepository
-	retention       *operationretention.Collector
-	config          workdispatch.RuntimeConfig
+	Runtime    *workdispatch.Runtime
+	Queue      *workqueue.Repository
+	scheduler  *workdispatch.Scheduler
+	controller *workdispatch.ControllerExecutor
+	Retries    *workdispatch.Retries
+	retention  *operationretention.Collector
+	config     workdispatch.RuntimeConfig
 }
 
 // Run keeps Controller-local execution serial, as before, while Agent capacity
@@ -382,10 +380,6 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	replayRetention, err := idempotency.NewRetentionRepository(platform.dependencies.Store, queue.GuardReplayRetention)
-	if err != nil {
-		return nil, err
-	}
 	imageRecords, err := imageoperations.NewRepository(platform.dependencies.Store)
 	if err != nil {
 		return nil, err
@@ -535,7 +529,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := workdispatch.NewRuntime(queue, scheduler, controller, completions, publications, inputs, retention, replayRetention, platform.dependencies.Logger)
+	runtime, err := workdispatch.NewRuntime(queue, scheduler, controller, completions, publications, inputs, retention, platform.dependencies.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +587,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	return &WorkExecution{Runtime: runtime, Queue: queue, scheduler: scheduler, controller: controller,
-		Retries: retries, replayRetention: replayRetention, retention: retention,
+		Retries: retries, retention: retention,
 		config: workdispatch.RuntimeConfig{Interval: platform.dependencies.Tick, CollectionInterval: maintenance.CleanupInterval,
 			HistoryRetention: maintenance.DiagnosticRetention}}, nil
 }

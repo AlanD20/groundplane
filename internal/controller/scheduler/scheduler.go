@@ -8,13 +8,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type taskExpiration interface {
-	PruneExpiredTasks(context.Context, time.Time) (int, error)
-	ExpireTaskDiagnostics(context.Context, time.Time, time.Duration, int) (int, error)
+type sourceReleases interface {
 	ResumeTaskSourceReleases(context.Context) (bool, error)
 }
 
@@ -59,7 +56,7 @@ type Scheduler struct {
 	logger                 *slog.Logger
 	admission              mutationAdmission
 	Interval               time.Duration
-	tasks                  taskExpiration
+	sources                sourceReleases
 	idempotency            idempotencyPruning
 	blueprintRevisions     blueprintRevisionCleanup
 	backupSchedules        BackupScheduleRunner
@@ -78,7 +75,7 @@ func New(
 	logger *slog.Logger,
 	admission mutationAdmission,
 	interval time.Duration,
-	tasks *etcd.TaskRepository,
+	sources sourceReleases,
 	idempotency idempotencyPruning,
 	blueprintRevisions blueprintRevisionCleanup,
 	backupSchedules BackupScheduleRunner,
@@ -86,7 +83,7 @@ func New(
 	backupOrphans backupOrphanReconciler,
 ) *Scheduler {
 	return &Scheduler{
-		logger: logger, admission: admission, Interval: interval, tasks: tasks, idempotency: idempotency,
+		logger: logger, admission: admission, Interval: interval, sources: sources, idempotency: idempotency,
 		blueprintRevisions: blueprintRevisions,
 		backupSchedules:    backupSchedules, backupRetention: backupRetention, backupOrphans: backupOrphans, now: time.Now,
 		maintenancePolicy: config.DefaultMaintenancePolicy(),
@@ -122,7 +119,7 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if sch == nil || sch.tasks == nil || sch.idempotency == nil || sch.blueprintRevisions == nil ||
+	if sch == nil || sch.sources == nil || sch.idempotency == nil || sch.blueprintRevisions == nil ||
 		sch.now == nil {
 		return errs.New(errs.KindInternal, "scheduler task maintenance is not configured")
 	}
@@ -142,7 +139,7 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 			maintenanceErr = errors.Join(maintenanceErr, err)
 		}
 	}
-	if _, err := sch.tasks.ResumeTaskSourceReleases(ctx); err != nil {
+	if _, err := sch.sources.ResumeTaskSourceReleases(ctx); err != nil {
 		return err
 	}
 	if _, err := sch.blueprintRevisions.CleanupEnvironmentBlueprintStaging(ctx, now, 16); err != nil {

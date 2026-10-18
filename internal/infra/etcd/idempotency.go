@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strings"
 	"sync"
@@ -264,7 +265,7 @@ type idempotencyRepositoryStore interface {
 
 type IdempotencyRepository struct {
 	store idempotencyRepositoryStore
-	// Retention is the capability-owned collector composed with Volume fences.
+	// Retention follows native Task collection, including operation-owned holds.
 	Retention *idempotencyrecord.RetentionRepository
 }
 
@@ -272,7 +273,11 @@ func NewIdempotencyRepository(store idempotencyRepositoryStore) (*IdempotencyRep
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "idempotency store is required")
 	}
-	retention, err := NewVolumeRemovalAwareIdempotencyRetention(store)
+	queue, err := workqueue.NewRepository(store)
+	if err != nil {
+		return nil, err
+	}
+	retention, err := idempotencyrecord.NewRetentionRepository(store, queue.GuardReplayRetention)
 	if err != nil {
 		return nil, err
 	}
