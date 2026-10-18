@@ -13,6 +13,11 @@ func validateReleaseWorkTraffic(input *agentpb.ReleaseWorkInput, artifacts Relea
 	if artifacts.Prior != nil && (artifacts.Proxy == nil) != (artifacts.Prior.Proxy == nil) {
 		return invalidReleaseWorkArtifacts()
 	}
+	if artifacts.Prior != nil && input.Strategy != agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE {
+		if err := ValidateLiveProxyTopology(artifacts.Candidate, artifacts.Prior.Artifact, input.ServiceId); err != nil {
+			return err
+		}
+	}
 	if artifacts.Proxy == nil {
 		if len(input.TrafficConfigurations) != 0 {
 			return invalidReleaseWorkArtifacts()

@@ -1,38 +1,31 @@
-package taskplanning
+package executionplan
 
 import (
 	"bytes"
 	"encoding/json"
 
-	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"gopkg.in/yaml.v3"
 )
 
-// A blue-green switch updates the proxy's destination, not its Docker network
-// attachments or published sockets. Reject changes that require recreating that
-// shared proxy before constructing any host-executable rollout.
-func validateReleaseProxyTopology(
-	strategy domain.Strategy,
+// ValidateLiveProxyTopology rejects changes that require recreating a shared
+// serving proxy. Blue-green and rolling callers retain its process and update
+// only its destinations; recreate and first deployment do not use this guard.
+func ValidateLiveProxyTopology(
 	candidate, prior *agentpb.ComposeArtifact,
 	serviceID string,
 ) error {
-	if (strategy != domain.StrategyBlueGreen && strategy != domain.StrategyRolling) || prior == nil {
-		return nil
+	hasProxy := false
+	for _, artifact := range []*agentpb.ComposeArtifact{candidate, prior} {
+		for _, service := range artifact.GetServices() {
+			hasProxy = hasProxy || service.GetServiceId() == serviceID &&
+				service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY
+		}
 	}
-	if strategy == domain.StrategyRolling {
-		hasProxy := false
-		for _, artifact := range []*agentpb.ComposeArtifact{candidate, prior} {
-			for _, service := range artifact.GetServices() {
-				hasProxy = hasProxy || service.GetServiceId() == serviceID &&
-					service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY
-			}
-		}
-		if !hasProxy {
-			return nil
-		}
+	if !hasProxy {
+		return nil
 	}
 	shape := func(artifact *agentpb.ComposeArtifact) ([]byte, error) {
 		var name string

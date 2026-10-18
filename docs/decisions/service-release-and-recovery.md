@@ -93,8 +93,11 @@ Those claims do not acknowledge Service runtime or grant workload mutation autho
 uses the same rules for direct Deploy and Blueprint Apply. Blue-green and rolling
 retain the proxy process, image and listener set; changing those requires an
 explicit recreate selection. Blueprint preparation passes its captured historical
-selection rather than assuming a first deployment. Stored inputs and the machine
-plan independently bind the candidate to the actual retained proxy artifact.
+selection rather than assuming a first deployment. Candidate rendering and native
+delivery share the [proxy topology guard](../../internal/common/executionplan/release_proxy_topology.go):
+network attachments, aliases, sockets and restart policy cannot change while
+retaining the serving proxy. Stored inputs bind the candidate to its actual
+retained proxy artifact.
 Recreate may select the captured new engine's compiled image while recovery keeps
 the exact old artifact and image. None of this enables the unfinished Environment
 switch coordinator or proves uninterrupted TCP/UDP operation.

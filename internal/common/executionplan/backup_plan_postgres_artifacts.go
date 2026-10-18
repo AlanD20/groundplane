@@ -133,10 +133,6 @@ func backupPostgresArtifactImage(service *agentpb.ComposeService, fact *agentpb.
 		(postgres16protocol.ValidDatabaseImage(service.ImageReference) || service.ImageReference == imageID)
 }
 
-func invalidBackupPostgresArtifact() error {
-	return invalidBackupDatabaseArtifact()
-}
-
 func invalidBackupDatabaseArtifact() error {
 	return errs.New(
 		errs.KindValidationFailed,
