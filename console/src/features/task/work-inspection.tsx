@@ -18,6 +18,7 @@ const waiting: Record<string, string> = {
   input: "Waiting for captured input to be prepared",
   dependency: "Waiting for prerequisite work to finish",
   conflict: "Waiting for conflicting work to release this resource",
+  reservation: "Waiting for the blocking Task to finish its reserved resource changes",
   executor: "Waiting for an eligible executor",
   capacity: "Waiting for an execution slot",
   retry: "Waiting for the scheduled retry",

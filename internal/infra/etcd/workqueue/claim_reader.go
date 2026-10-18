@@ -28,7 +28,7 @@ func (repository *Repository) ReadServiceClaim(ctx context.Context, resourceID s
 	if value == nil {
 		return result, workexecution.Placement{}, nil
 	}
-	owner, err := recordcodec.Decode[ClaimOwner](value.Value, "execution_owner")
+	owner, err := recordcodec.Decode[ClaimOwner](value.Value, "execution_claim")
 	if err != nil || validateOwner(owner) != nil {
 		return ClaimSnapshot{}, workexecution.Placement{}, corrupt()
 	}

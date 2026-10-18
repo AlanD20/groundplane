@@ -44,6 +44,7 @@ func PrepareTaskCollection(task TaskSnapshot) (Change, error) {
 			{Key: TaskItemsPrefix(task.Task.ID), Prefix: true},
 			{Key: taskPublishingKey(task.Task.ID)},
 			{Key: taskFinishKey(task.Task.ID)},
+			{Key: taskReservationIndexKey(task.Task.ID)},
 		},
 		Mutations: []keyvalue.Mutation{
 			{Type: keyvalue.MutationDelete, Key: TaskKey(task.Task.ID)},

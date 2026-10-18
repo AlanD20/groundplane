@@ -115,12 +115,13 @@ const (
 type WaitReason string
 
 const (
-	WaitInput      WaitReason = "input"
-	WaitDependency WaitReason = "dependency"
-	WaitConflict   WaitReason = "conflict"
-	WaitExecutor   WaitReason = "executor"
-	WaitCapacity   WaitReason = "capacity"
-	WaitRetry      WaitReason = "retry"
+	WaitInput       WaitReason = "input"
+	WaitDependency  WaitReason = "dependency"
+	WaitConflict    WaitReason = "conflict"
+	WaitReservation WaitReason = "reservation"
+	WaitExecutor    WaitReason = "executor"
+	WaitCapacity    WaitReason = "capacity"
+	WaitRetry       WaitReason = "retry"
 )
 
 type Wait struct {

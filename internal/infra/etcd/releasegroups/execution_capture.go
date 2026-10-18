@@ -143,7 +143,13 @@ func PrepareExecutionCapture(task workexecution.Task, capture ExecutionCapture) 
 		return workqueue.Change{}, err
 	}
 	key := ExecutionCaptureKey(task.ID)
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key},
-		{Key: ReleaseGroupRecordKey(task.TargetID), ModRevision: capture.GroupRevision}},
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}}}, nil
+	reservation, err := workqueue.PrepareTaskReservation(task, workexecution.Claim{ScopeID: task.Scope.EnvironmentID})
+	if err != nil {
+		clear(value)
+		return workqueue.Change{}, err
+	}
+	reservation.Conditions = append(reservation.Conditions, keyvalue.Condition{Key: key},
+		keyvalue.Condition{Key: ReleaseGroupRecordKey(task.TargetID), ModRevision: capture.GroupRevision})
+	reservation.Mutations = append(reservation.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
+	return reservation, nil
 }

@@ -134,6 +134,15 @@ func (repository *Repository) ReadCandidate(ctx context.Context, entry QueueEntr
 	request := Assignment{Task: view.Task, Item: view.Item, QueueRevision: entry.Revision, Direction: direction,
 		ReadRevision: view.ReadRevision, DecisionOnly: decisionOnly,
 		Executor: ExecutorSnapshot{Record: executor, Revision: executorRead.Values[0].ModRevision}}
+	request.Reservations, err = repository.readTaskReservations(ctx, view.Task.Task, view.ReadRevision)
+	if err != nil {
+		return Candidate{}, err
+	}
+	for _, reservation := range request.Reservations {
+		if owner := reservation.Owner; owner != nil && (owner.TaskID != item.TaskID || owner.Intent != view.Task.Task.Intent) {
+			return waiting(workexecution.Wait{Reason: workexecution.WaitReservation, TaskID: owner.TaskID}), nil
+		}
+	}
 	dependencies := item.Dependencies
 	if direction == workexecution.Recovery {
 		dependencies = nil

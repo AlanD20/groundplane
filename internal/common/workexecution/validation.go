@@ -151,7 +151,7 @@ func (item Item) Validate() error {
 
 func (wait Wait) Validate() error {
 	switch wait.Reason {
-	case WaitInput, WaitDependency, WaitConflict, WaitExecutor, WaitCapacity, WaitRetry:
+	case WaitInput, WaitDependency, WaitConflict, WaitReservation, WaitExecutor, WaitCapacity, WaitRetry:
 	default:
 		return invalid("work wait reason is invalid")
 	}
@@ -162,6 +162,7 @@ func (wait Wait) Validate() error {
 	}
 	if wait.Reason == WaitDependency && wait.WorkItemID == "" ||
 		wait.Reason == WaitConflict && (wait.WorkItemID == "" || wait.TaskID == "") ||
+		wait.Reason == WaitReservation && (wait.TaskID == "" || wait.WorkItemID != "") ||
 		wait.Reason == WaitRetry && wait.Until == nil {
 		return invalid("work wait reason requires its blocking identity or retry time")
 	}

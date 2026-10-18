@@ -42,7 +42,18 @@ func (repository *Repository) PrepareTaskFinish(ctx context.Context, task TaskSn
 	if err != nil {
 		return Change{}, err
 	}
-	return repository.prepareFinishedReplay(ctx, task, next, at)
+	change, err := repository.prepareFinishedReplay(ctx, task, next, at)
+	if err != nil {
+		return Change{}, err
+	}
+	reservation, err := repository.prepareTaskReservationRelease(ctx, task)
+	if err != nil {
+		keyvalue.ClearMutationValues(change.Mutations)
+		return Change{}, err
+	}
+	change.Conditions = append(change.Conditions, reservation.Conditions...)
+	change.Mutations = append(change.Mutations, reservation.Mutations...)
+	return change, nil
 }
 
 // PreparePlanningRejection joins a no-work failure with request replay and Task

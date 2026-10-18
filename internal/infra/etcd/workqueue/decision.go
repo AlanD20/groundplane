@@ -60,5 +60,10 @@ func PrepareDecisionFence(request Assignment) (Change, error) {
 		}
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ClaimKey(claim.Claim)})
 	}
+	reservations, err := taskReservationConditions(task, item, request.Reservations)
+	if err != nil {
+		return Change{}, err
+	}
+	change.Conditions = append(change.Conditions, reservations...)
 	return change, nil
 }

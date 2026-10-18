@@ -51,6 +51,9 @@ func PrepareSettledDecision(task workexecution.Task, item workexecution.Item, ev
 	for _, claim := range item.Claims {
 		result.Conditions = append(result.Conditions, keyvalue.Condition{Key: ClaimKey(claim)})
 	}
+	if task.Scope.EnvironmentID != "" {
+		result.Conditions = append(result.Conditions, keyvalue.Condition{Key: TaskReservationKey(workexecution.Claim{ScopeID: task.Scope.EnvironmentID})})
+	}
 	for _, mutation := range change.Mutations {
 		switch mutation.Key {
 		case TaskKey(task.ID), ItemKey(item.ID), inputQueueKey(item.ID):
