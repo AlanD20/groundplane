@@ -6,11 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -118,6 +120,9 @@ func TestNativeRouteMutationAndRemovalCaptureOnlyRouterWork(t *testing.T) {
 				input.ConfigurationAction.ActionId != "activate-config" || input.Files[0].Destination != pin.Destination {
 				t.Fatal("Route removal selected Component teardown or lost managed-config activation")
 			}
+			if action == workexecution.ActionRemove {
+				assertNativeComponentRemovalCapture(t, task, item, input)
+			}
 			changed := request
 			changed.Provider = environmentchanges.CloneRouteProviderPin(*pin)
 			changed.Provider.CatalogDigest = strings.Repeat("f", 64)
@@ -129,6 +134,43 @@ func TestNativeRouteMutationAndRemovalCaptureOnlyRouterWork(t *testing.T) {
 				t.Fatal("older runtime snapshot replaced the captured provider")
 			}
 		})
+	}
+}
+
+// The replacement for generic historical-teardown steps binds removal to exact
+// captured bytes. A newer generated Service cannot inherit the old grant.
+func assertNativeComponentRemovalCapture(
+	t *testing.T,
+	task workexecution.Task,
+	item workexecution.Item,
+	applied *agentpb.ComponentWorkInput,
+) {
+	t.Helper()
+	input := &agentpb.ComponentWorkInput{OperationId: ids.New(ids.KindOperation), EnvironmentId: applied.EnvironmentId,
+		ComponentId: applied.ComponentId, RenderGeneration: applied.RenderGeneration + 1, Remove: true,
+		Predecessor: &agentpb.ComponentWorkPredecessor{Runtime: proto.CloneOf(applied.Candidate)}}
+	_, raw, reference, err := executionplan.CaptureComponentWorkInput(ids.New(ids.KindPlan), input)
+	clear(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt := workexecution.Attempt{ID: ids.New(ids.KindAttempt), TaskID: task.ID, WorkItemID: item.ID,
+		Number: 1, Direction: workexecution.Forward, Input: reference, AssignedAt: task.CreatedAt, Deadline: task.Deadline,
+		Executor: workexecution.Identity{Executor: workexecution.Agent, HostID: item.Placement.HostID,
+			AgentID: ids.New(ids.KindAgent), Generation: 1}}
+	opened, err := executionplan.OpenComponentWorkInput(attempt, input)
+	if err != nil || opened.Candidate != nil || !proto.Equal(opened.Predecessor.Runtime, applied.Candidate) {
+		t.Fatal("native removal did not retain its exact captured predecessor", err)
+	}
+	foreign := proto.CloneOf(input)
+	foreign.Predecessor.Runtime.Services[0].ServiceId = ids.New(ids.KindService)
+	if _, err := executionplan.OpenComponentWorkInput(attempt, foreign); err == nil {
+		t.Fatal("new generated Service inherited the captured removal grant")
+	}
+	foreign = proto.CloneOf(input)
+	foreign.ComponentId = ids.New(ids.KindComponent)
+	if _, err := executionplan.OpenComponentWorkInput(attempt, foreign); err == nil {
+		t.Fatal("another Component inherited the captured removal grant")
 	}
 }
 
