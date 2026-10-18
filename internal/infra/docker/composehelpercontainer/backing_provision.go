@@ -17,7 +17,19 @@ import (
 func backingProvisionHelperLabels(attempt workexecution.Attempt) map[string]string {
 	labels := releaseHelperLabels(attempt)
 	labels["io.groundplane.role"] = "backing-provision-executor"
+	if attempt.Direction == workexecution.Recovery {
+		labels["io.groundplane.role"] = "backing-provision-cleanup"
+	}
 	return labels
+}
+
+func backingProvisionHelperName(attempt workexecution.Attempt) string {
+	if attempt.Direction == workexecution.Recovery {
+		// Cleanup retries share exact work/input/host helper ownership, not
+		// attempt execution identity. A new retry can join any older orphan.
+		return "gp-backing-provision-cleanup-" + attempt.WorkItemID
+	}
+	return "gp-backing-provision-" + attempt.ID
 }
 
 func (executor *Executor) ExecuteBackingProvision(ctx context.Context, volumeRoot string,
@@ -40,7 +52,12 @@ func (executor *Executor) ExecuteBackingProvision(ctx context.Context, volumeRoo
 		bounded, cancel = context.WithTimeout(ctx, 30*time.Second)
 	}
 	defer cancel()
-	name, labels := "gp-backing-provision-"+attempt.ID, backingProvisionHelperLabels(attempt)
+	if input.Assignment.Recovery != nil {
+		if err := executor.StopBackingProvision(bounded, request); err != nil {
+			return nil, err
+		}
+	}
+	name, labels := backingProvisionHelperName(attempt), backingProvisionHelperLabels(attempt)
 	if input.InspectOnly {
 		if err := executor.stopNamedHelper(bounded, name, labels); err != nil {
 			return nil, err
@@ -52,6 +69,11 @@ func (executor *Executor) ExecuteBackingProvision(ctx context.Context, volumeRoo
 	}
 	defer clear(framed)
 	options := createOptions(executor.image, input.Assignment.Procedure.Runtime)
+	if input.Assignment.Recovery != nil {
+		// Cleanup needs only Docker inspection/termination. The directory
+		// may never have been created; never mount or create it for cleanup.
+		options = createOptions(executor.image, nil)
+	}
 	options.Name, options.Config.Labels = name, labels
 	options.Config.Cmd = []string{"backing-provision-helper"}
 	options.Config.Env = []string{environmentdirectoryhelper.VolumeRootEnv + "=" + volumeRoot}
@@ -81,7 +103,7 @@ func (executor *Executor) StopBackingProvision(ctx context.Context, request *age
 		attempts = append(attempts, source.Forward)
 	}
 	for _, attempt := range attempts {
-		if err := executor.stopNamedHelper(ctx, "gp-backing-provision-"+attempt.ID, backingProvisionHelperLabels(attempt)); err != nil {
+		if err := executor.stopNamedHelper(ctx, backingProvisionHelperName(attempt), backingProvisionHelperLabels(attempt)); err != nil {
 			return err
 		}
 	}

@@ -22,7 +22,7 @@ func ExecuteBackingProvision(ctx context.Context, taskRunner runner.Runner, volu
 	if err != nil {
 		return nil, err
 	}
-	if ctx == nil || taskRunner == nil || input.Assignment.Procedure.VolumeRoot != volumeRoot || input.Progress == nil {
+	if ctx == nil || taskRunner == nil || input.Assignment.Procedure.VolumeRoot != volumeRoot {
 		return nil, errs.New(errs.KindValidationFailed, "backing creation helper has no matching host root and forward stage")
 	}
 	bounded, cancel := context.WithDeadline(ctx, input.Assignment.Attempt.Deadline)
@@ -31,6 +31,12 @@ func ExecuteBackingProvision(ctx context.Context, taskRunner runner.Runner, volu
 		bounded, cancel = context.WithTimeout(ctx, 15*time.Second)
 	}
 	defer cancel()
+	if input.Assignment.Recovery != nil {
+		return cleanupBackingProvision(bounded, taskRunner, input)
+	}
+	if input.Progress == nil {
+		return nil, errs.New(errs.KindValidationFailed, "backing creation helper has no active stage")
+	}
 	var observation backingprovision.Observation
 	var runtime *backingruntimefact.Observation
 	if input.Progress.Stage == backingprovision.PrepareDirectories {
@@ -42,6 +48,35 @@ func ExecuteBackingProvision(ctx context.Context, taskRunner runner.Runner, volu
 		return nil, err
 	}
 	return backingprovision.HelperObservation(input, observation, runtime)
+}
+
+func cleanupBackingProvision(ctx context.Context, taskRunner runner.Runner, input backingprovision.HelperInput) (*agentpb.BackingProvisionHelperResponse, error) {
+	procedure := input.Assignment.Procedure
+	containers, err := inspectCapturedContainers(ctx, taskRunner, procedure.Runtime, procedure.Runtime.Services[0])
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range containers {
+		// No compose down, force removal, Volume deletion or database command.
+		// Container absence also terminates every captured in-container hook.
+		for _, args := range [][]string{{"container", "stop", "--time", "30", "--", id}, {"container", "rm", "--", id}} {
+			result, err := taskRunner.Run(ctx, runner.RunCmdOpts{Name: DockerExecutable, Args: args, Dir: WorkDirectory,
+				Env: append([]string(nil), fixedEnvironment...), ReplaceEnv: true, CaptureLimitBytes: 32 * 1024})
+			clear(result.Stdout)
+			clear(result.Stderr)
+			if err != nil || result.ExitCode != 0 {
+				return nil, errs.New(errs.KindRequestFailed, "backing creation cleanup could not stop and remove its captured container")
+			}
+		}
+	}
+	remaining, err := inspectCapturedContainers(ctx, taskRunner, procedure.Runtime, procedure.Runtime.Services[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(remaining) != 0 {
+		return nil, errs.New(errs.KindStateConflict, "backing creation runtime remains after captured cleanup")
+	}
+	return backingprovision.HelperRecovery(input, time.Now().UTC())
 }
 
 func provisionBackingDirectories(ctx context.Context, input backingprovision.HelperInput) (backingprovision.Observation, error) {

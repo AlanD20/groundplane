@@ -19,6 +19,25 @@ type RecoverySource struct {
 // checkpoint. Cleanup never overwrites Result. FirstFailure is historical and
 // may belong to an older, already-settled forward retry; it is not an effect grant.
 func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.View) (RecoverySource, error) {
+	number := view.Item.Item.AttemptNumber
+	if view.Item.Item.ActiveAttemptID == "" {
+		if number == ^uint64(0) {
+			return RecoverySource{}, invalid("backing creation cleanup attempt sequence is exhausted")
+		}
+		number++
+	}
+	return repository.loadRecovery(ctx, view, number)
+}
+
+func (repository *Repository) LoadRecoveryForAttempt(ctx context.Context, view workqueue.View, attempt workexecution.Attempt) (RecoverySource, error) {
+	if attempt.Validate() != nil || attempt.Direction != workexecution.Recovery || attempt.TaskID != view.Task.Task.ID ||
+		attempt.WorkItemID != view.Item.Item.ID || attempt.Number > view.Item.Item.AttemptNumber {
+		return RecoverySource{}, invalid("backing creation cleanup source requires its actual retained attempt")
+	}
+	return repository.loadRecovery(ctx, view, attempt.Number)
+}
+
+func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.View, number uint64) (RecoverySource, error) {
 	input, guard, err := repository.Load(ctx, view)
 	if err != nil {
 		return RecoverySource{}, err
@@ -91,13 +110,25 @@ func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.V
 		return RecoverySource{}, err
 	}
 	recovery := backingprovision.Recovery{Forward: forward, Failure: failure, Evidence: *evidence, Boundary: boundary}
-	if err := recovery.Validate(layout); err != nil {
-		return RecoverySource{}, err
-	}
-	return RecoverySource{Recovery: recovery, Conditions: []keyvalue.Condition{guard,
+	conditions := []keyvalue.Condition{guard,
 		{Key: key, ModRevision: value.ModRevision},
 		{Key: attemptValue.Key, ModRevision: attemptValue.ModRevision},
 		{Key: workqueue.CheckpointKey(forward.ID), ModRevision: sourceView.Checkpoint.Revision},
 		{Key: workqueue.TaskKey(view.Task.Task.ID), ModRevision: view.Task.Revision},
-		{Key: workqueue.ItemKey(view.Item.Item.ID), ModRevision: view.Item.Revision}}}, nil
+		{Key: workqueue.ItemKey(view.Item.Item.ID), ModRevision: view.Item.Revision}}
+	if number <= forward.Number {
+		return RecoverySource{}, invalid("backing creation cleanup cannot precede its original failed attempt")
+	}
+	if number > forward.Number+1 {
+		_, previous, err := queue.ReadAttempt(ctx, forward.TaskID, forward.WorkItemID, number-1, view.ReadRevision)
+		if err != nil {
+			return RecoverySource{}, err
+		}
+		recovery.Previous = &previous.Attempt
+		conditions = append(conditions, keyvalue.Condition{Key: workqueue.AttemptKey(previous.Attempt.ID), ModRevision: previous.Revision})
+	}
+	if err := recovery.Validate(layout); err != nil {
+		return RecoverySource{}, err
+	}
+	return RecoverySource{Recovery: recovery, Conditions: conditions}, nil
 }

@@ -146,6 +146,17 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 				return nil
 			}
 		}
+		if recovery := record.BackingRecovery; recovery != nil {
+			if !sameBackingReceipt(recovery.Receipt, terminal) {
+				return conflict()
+			}
+			if terminal.Outcome != workexecution.Succeeded {
+				return nil
+			}
+			if err := journal.retireRecoveredBacking(ctx, *recovery); err != nil {
+				return err
+			}
+		}
 		if recovery := record.AttachProvisionRecovery; recovery != nil {
 			if recovery.Receipt == nil || recovery.Receipt.Outcome != terminal.Outcome ||
 				!recovery.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *recovery.Receipt.Result != *terminal.Result {

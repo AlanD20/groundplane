@@ -103,7 +103,15 @@ func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue
 	}
 	request.At = at
 	request.Result = workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: view.Attempt.Attempt.StartedAt == nil}
-	change, err := workqueue.PrepareCompletion(request)
+	var change workqueue.Change
+	if request.Result.EffectsSettled {
+		change, err = workqueue.PrepareCompletion(request)
+	} else {
+		// This first bounded cleanup only restores the captured absent
+		// runtime. It does not replay the hook or retry failed cleanup.
+		budget := procedure.Deadline.AsTime().Sub(procedure.CreatedAt.AsTime())
+		change, err = workqueue.PrepareCompletionWithRecovery(request, at.Add(budget))
+	}
 	if err != nil {
 		return workqueue.Change{}, workexecution.Input{}, err
 	}

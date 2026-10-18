@@ -51,7 +51,7 @@ func ReadBackingProvisionResponse(ctx context.Context, input io.Reader, captured
 	if proto.Unmarshal(raw, response) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "backing creation helper response is malformed")
 	}
-	if _, _, err := backingprovision.ReadHelperObservation(captured, response); err != nil {
+	if err := validateBackingHelperResponse(captured, response); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -60,7 +60,7 @@ func ReadBackingProvisionResponse(ctx context.Context, input io.Reader, captured
 func WriteBackingProvisionResponse(ctx context.Context, output io.Writer, captured backingprovision.HelperInput,
 	response *agentpb.BackingProvisionHelperResponse,
 ) error {
-	if _, _, err := backingprovision.ReadHelperObservation(captured, response); err != nil {
+	if err := validateBackingHelperResponse(captured, response); err != nil {
 		return err
 	}
 	raw, err := (proto.MarshalOptions{Deterministic: true}).Marshal(response)
@@ -87,4 +87,13 @@ func WriteBackingProvisionResponse(ctx context.Context, output io.Writer, captur
 		framed = framed[n:]
 	}
 	return nil
+}
+
+func validateBackingHelperResponse(captured backingprovision.HelperInput, response *agentpb.BackingProvisionHelperResponse) error {
+	if captured.Assignment.Recovery != nil {
+		_, err := backingprovision.ReadHelperRecovery(captured, response)
+		return err
+	}
+	_, _, err := backingprovision.ReadHelperObservation(captured, response)
+	return err
 }

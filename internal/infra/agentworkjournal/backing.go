@@ -26,7 +26,7 @@ type BackingFailureDelivery struct {
 
 func (record attemptRecord) validateBacking() error {
 	backing := record.Backing
-	if backing == nil || record.Attempt.Validate() != nil || record.Attempt.Direction != workexecution.Forward ||
+	if backing == nil || record.BackingRecovery != nil || record.Attempt.Validate() != nil || record.Attempt.Direction != workexecution.Forward ||
 		record.Attempt.Executor.Executor != workexecution.Agent || record.Attempt.FinishedAt != nil ||
 		backing.Layout.Validate(record.Attempt) != nil || record.UpdatedAt.IsZero() || record.UpdatedAt.Before(record.Attempt.AssignedAt) {
 		return invalid()
