@@ -8,21 +8,21 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorremoval"
 	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
-	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 // Rationale: first dispatch must derive immutable Environment ownership from
-// durable Connector ancestry and publish the exact protected finalizer tuple.
-func TestConnectorDeletionDispatchesClosedControllerFinalizer(t *testing.T) {
+// durable Connector ancestry and publish one exact protected native input.
+func TestConnectorDeletionPublishesCapturedNativeRemoval(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
 	tenantID := ids.NewAt(ids.KindTenant, now, 1)
@@ -65,26 +65,25 @@ func TestConnectorDeletionDispatchesClosedControllerFinalizer(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatalf("decode TaskAccepted: %v", err)
 	}
+	reference, err := repository.input.Reference()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if response.Status != http.StatusAccepted || accepted.TaskID != repository.task.ID ||
-		repository.task.Owner.EnvironmentID != environmentID || repository.task.Actor != testtaskjournal.TaskActorOperator ||
-		repository.task.Executor != testtaskjournal.TaskExecutorController || repository.task.Type != testtaskjournal.TaskRemove ||
-		repository.task.Target != connectorID || repository.task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||
-		len(repository.task.Params) != 3 ||
-		repository.task.Params[testtaskjournal.TaskResourceKindParam] != testtaskjournal.TaskResourceConnector ||
-		repository.task.Params[etcd.TaskConnectorEnvironmentParam] != environmentID ||
-		repository.task.Params[etcd.TaskConnectorNameParam] != "primary-backups" ||
+		repository.task.Validate() != nil || repository.task.Scope.EnvironmentID != environmentID ||
+		repository.task.Scope.ProjectID != projectID || repository.task.Scope.TenantID != tenantID ||
+		repository.task.Actor != workexecution.OperatorActor || repository.task.Action != workexecution.ActionRemove ||
+		repository.task.TargetID != connectorID || repository.task.TargetName != "primary-backups" ||
+		!repository.task.Deadline.Equal(now.Add(time.Duration(connectorDeletionTimeoutSeconds)*time.Second)) ||
+		repository.task.Intent != reference || repository.marker.TaskID != repository.task.ID ||
 		repository.marker.ReplayTarget == nil ||
 		*repository.marker.ReplayTarget != (testidempotency.IdempotencyReplayTarget{
 			Kind: testidempotency.IdempotencyReplayTargetConnector, ID: connectorID,
 		}) || repository.marker.Locator.ScopeKind != testidempotency.IdempotencyScopeEnvironment ||
 		repository.marker.Locator.ScopeID != environmentID ||
-		repository.intent.ConnectorRevision != repository.connector.Revision ||
-		repository.tombstone.TargetKind != testdeletions.DeletionTargetConnector ||
-		repository.tombstone.Phase != testdeletions.DeletionPhaseFinalizing {
-		t.Fatalf(
-			"deletion response/task/marker/intent/tombstone = %#v/%#v/%#v/%#v/%#v",
-			response, repository.task, repository.marker, repository.intent, repository.tombstone,
-		)
+		repository.input.ConnectorRevision != repository.connector.Revision {
+		t.Fatalf("deletion response/task/marker/input = %#v/%#v/%#v/%#v",
+			response, repository.task, repository.marker, repository.input)
 	}
 }
 
@@ -130,9 +129,8 @@ type fakeConnectorDeletionRepository struct {
 	project     testkeyvalue.Versioned[testhierarchy.ProjectRecord]
 	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
 	connector   testkeyvalue.Versioned[testconnectors.Record]
-	tombstone   testdeletions.DeletionTombstoneRecord
-	intent      testconnectors.RemovalIntent
-	task        etcd.TaskRecord
+	input       connectorremoval.Input
+	task        workexecution.Task
 	marker      testidempotency.IdempotencyMarker
 	readCalls   int
 	beginCalls  int
@@ -162,21 +160,32 @@ func (repository *fakeConnectorDeletionRepository) GetProject(
 	return repository.project, nil
 }
 
-func (repository *fakeConnectorDeletionRepository) BeginConnectorDeletionWithTask(
+func (repository *fakeConnectorDeletionRepository) CaptureConnectorRemoval(
+	_ context.Context,
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
+	current testkeyvalue.Versioned[testconnectors.Record],
+	taskID, workID, planID string, at time.Time,
+) (connectorremoval.Input, error) {
+	return connectorremoval.Input{
+		TaskID: taskID, WorkItemID: workID, PlanID: planID,
+		TenantID: project.Record.TenantID, ProjectID: project.Record.ID,
+		EnvironmentID: environment.Record.ID, ConnectorID: current.Record.Connector.ID,
+		ConnectorRevision: current.Revision, CredentialRevision: 8, CreatedAt: at,
+	}, nil
+}
+
+func (repository *fakeConnectorDeletionRepository) PublishConnectorRemoval(
 	_ context.Context,
 	_ testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
 	_ testkeyvalue.Versioned[testhierarchy.ProjectRecord],
 	_ testkeyvalue.Versioned[testconnectors.Record],
-	tombstone testdeletions.DeletionTombstoneRecord,
-	intent testconnectors.RemovalIntent,
-	task etcd.TaskRecord,
+	input connectorremoval.Input,
+	task workexecution.Task,
 	marker testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	repository.beginCalls++
-	repository.tombstone = tombstone
-	repository.intent = intent
-	repository.task = task
-	repository.marker = marker
+	repository.input, repository.task, repository.marker = input, task, marker
 	return etcd.IdempotencyTransactionResult{}, nil
 }
 

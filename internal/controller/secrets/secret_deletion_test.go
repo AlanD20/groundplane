@@ -9,21 +9,21 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/secretremoval"
 	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 // Rationale: first dispatch must derive ownership from the durable Secret and
-// emit the exact closed Controller Task, replay target, and tombstone contract.
-func TestSecretDeletionDispatchesTheClosedControllerFinalizer(t *testing.T) {
+// publish the exact native input and protected replay target.
+func TestSecretDeletionPublishesCapturedNativeRemoval(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 22, 23, 0, 0, 0, time.UTC)
 	projectID := ids.NewAt(ids.KindProject, now, 1)
@@ -60,26 +60,25 @@ func TestSecretDeletionDispatchesTheClosedControllerFinalizer(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatalf("decode TaskAccepted: %v", err)
 	}
+	reference, err := repository.input.Reference()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if response.Status != http.StatusAccepted || accepted.TaskID != repository.task.ID ||
-		repository.task.Executor != testtaskjournal.TaskExecutorController || repository.task.Type != testtaskjournal.TaskRemove ||
-		repository.task.Target != secretID || repository.task.TimeoutSeconds != secretDeletionTimeoutSeconds ||
-		len(repository.task.Params) != 1 ||
-		repository.task.Params[testtaskjournal.TaskResourceKindParam] != testtaskjournal.TaskResourceSecret ||
+		repository.task.Validate() != nil || repository.task.Action != workexecution.ActionRemove ||
+		repository.task.Actor != workexecution.OperatorActor || repository.task.Scope.ProjectID != projectID ||
+		repository.task.Scope.TenantID != tenantID || repository.task.TargetID != secretID ||
+		repository.task.TargetName != "TOKEN" || repository.task.Intent != reference ||
+		!repository.task.Deadline.Equal(now.Add(time.Duration(secretDeletionTimeoutSeconds)*time.Second)) ||
+		repository.marker.TaskID != repository.task.ID ||
 		repository.marker.ReplayTarget == nil ||
 		*repository.marker.ReplayTarget != (testidempotency.IdempotencyReplayTarget{
 			Kind: testidempotency.IdempotencyReplayTargetSecret, ID: secretID,
 		}) || repository.marker.Locator.ScopeKind != testidempotency.IdempotencyScopeProject ||
 		repository.marker.Locator.ScopeID != projectID ||
-		repository.tombstone.TargetKind != testdeletions.DeletionTargetSecret ||
-		repository.tombstone.TargetRevision != repository.secret.Revision ||
-		repository.tombstone.Phase != testdeletions.DeletionPhaseFinalizing {
-		t.Fatalf(
-			"deletion response/task/marker/tombstone = %#v/%#v/%#v/%#v",
-			response,
-			repository.task,
-			repository.marker,
-			repository.tombstone,
-		)
+		repository.input.SecretRevision != repository.secret.Revision {
+		t.Fatalf("deletion response/task/marker/input = %#v/%#v/%#v/%#v",
+			response, repository.task, repository.marker, repository.input)
 	}
 }
 
@@ -123,8 +122,8 @@ func TestSecretDeletionReplaysBeforeTargetLookup(t *testing.T) {
 type fakeSecretDeletionRepository struct {
 	project    testkeyvalue.Versioned[testhierarchy.ProjectRecord]
 	secret     testkeyvalue.Versioned[testsecrets.Record]
-	tombstone  testdeletions.DeletionTombstoneRecord
-	task       etcd.TaskRecord
+	input      secretremoval.Input
+	task       workexecution.Task
 	marker     testidempotency.IdempotencyMarker
 	readCalls  int
 	beginCalls int
@@ -146,18 +145,31 @@ func (repository *fakeSecretDeletionRepository) GetSecret(
 	return repository.secret, nil
 }
 
-func (repository *fakeSecretDeletionRepository) BeginSecretDeletionWithTask(
+func (repository *fakeSecretDeletionRepository) CaptureSecretRemoval(
+	_ context.Context,
+	owner testsecrets.Owner,
+	current testkeyvalue.Versioned[testsecrets.Record],
+	taskID, workID, planID string, at time.Time,
+) (secretremoval.Input, error) {
+	input := secretremoval.Input{TaskID: taskID, WorkItemID: workID, PlanID: planID,
+		SecretID: current.Record.Secret.ID, SecretRevision: current.Revision,
+		ValueRevision: 8, CreatedAt: at}
+	if owner.Project != nil {
+		input.ProjectID, input.TenantID = owner.Project.Record.ID, owner.Project.Record.TenantID
+	}
+	return input, nil
+}
+
+func (repository *fakeSecretDeletionRepository) PublishSecretRemoval(
 	_ context.Context,
 	_ testsecrets.Owner,
 	_ testkeyvalue.Versioned[testsecrets.Record],
-	tombstone testdeletions.DeletionTombstoneRecord,
-	task etcd.TaskRecord,
+	input secretremoval.Input,
+	task workexecution.Task,
 	marker testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	repository.beginCalls++
-	repository.tombstone = tombstone
-	repository.task = task
-	repository.marker = marker
+	repository.input, repository.task, repository.marker = input, task, marker
 	return etcd.IdempotencyTransactionResult{}, nil
 }
 

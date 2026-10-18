@@ -30,7 +30,15 @@ const (
 type secretDeletionRepository interface {
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetSecret(context.Context, string) (etcdstore.Versioned[secretrecord.Record], error)
-	CaptureSecretRemoval(context.Context, secretrecord.Owner, etcdstore.Versioned[secretrecord.Record], string, string, string, time.Time) (secretremoval.Input, error)
+	CaptureSecretRemoval(
+		context.Context,
+		secretrecord.Owner,
+		etcdstore.Versioned[secretrecord.Record],
+		string,
+		string,
+		string,
+		time.Time,
+	) (secretremoval.Input, error)
 	PublishSecretRemoval(
 		context.Context,
 		secretrecord.Owner,
@@ -284,7 +292,7 @@ func (service *secretDeletionService) deleteSecretOnce(
 	task := workexecution.Task{ID: input.TaskID, Action: workexecution.ActionRemove, Actor: workexecution.OperatorActor,
 		Scope:    workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID},
 		TargetID: secretID, TargetName: current.Record.Secret.Key, Intent: ref, ExpectedItems: 1,
-		CreatedAt: now, Deadline: now.Add(time.Duration(secretDeletionTimeoutSeconds) * time.Second)}
+		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(secretDeletionTimeoutSeconds) * time.Second)}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)

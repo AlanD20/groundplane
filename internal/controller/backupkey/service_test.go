@@ -7,14 +7,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	testbackuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const (
@@ -24,7 +26,6 @@ const (
 
 type recordingRotationRepository struct {
 	input    etcd.BackupKeyRotationInput
-	task     etcd.TaskRecord
 	marker   testidempotency.IdempotencyMarker
 	material testbackuppolicymutations.BackupPolicyInitialKeyMaterial
 }
@@ -39,20 +40,14 @@ func (repository *recordingRotationRepository) PrepareBackupKeyRotation(
 		Recipient:  material.Recipient,
 		Ciphertext: append([]byte(nil), material.Ciphertext...),
 	}
-	return etcd.PreparedBackupKeyRotation{Owner: testtaskjournal.TaskOwner{
-		WorkspaceType: testtaskjournal.TaskWorkspacePlatform,
-		ProjectID:     testProjectID,
-		EnvironmentID: input.EnvironmentID,
-	}}, nil
+	return etcd.PreparedBackupKeyRotation{}, nil
 }
 
 func (repository *recordingRotationRepository) PublishBackupKeyRotation(
 	_ context.Context,
 	_ etcd.PreparedBackupKeyRotation,
-	task etcd.TaskRecord,
 	marker testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	repository.task = task
 	repository.marker = marker
 	repository.marker.Intent.Ciphertext = append([]byte(nil), marker.Intent.Ciphertext...)
 	repository.marker.Response.Body = append([]byte(nil), marker.Response.Body...)
@@ -66,8 +61,29 @@ func (*recordingRotationRepository) GetBackupKey(
 	return testbackuppolicy.VersionedBackupKey{}, false, nil
 }
 
-func (*recordingRotationRepository) ApplyBackupKeyRotation(context.Context, string) error {
-	return nil
+func (*recordingRotationRepository) PrepareBackupKeyRotationSettlement(
+	context.Context,
+	workqueue.View,
+	workexecution.Outcome,
+	time.Time,
+) (workqueue.Change, error) {
+	return workqueue.Change{}, errs.New(errs.KindInternal, "rotation acceptance unexpectedly settled work")
+}
+
+func (*recordingRotationRepository) PrepareBackupKeyRotationFinish(
+	context.Context,
+	workqueue.FinishedWork,
+) (workqueue.Change, error) {
+	return workqueue.Change{}, errs.New(errs.KindInternal, "rotation acceptance unexpectedly finished work")
+}
+
+func (*recordingRotationRepository) PrepareBackupKeyRotationRetention(
+	context.Context,
+	workqueue.View,
+	time.Time,
+	bool,
+) (bool, workqueue.Change, error) {
+	return false, workqueue.Change{}, errs.New(errs.KindInternal, "rotation acceptance unexpectedly collected work")
 }
 
 type fixedRotationKeyFactory struct {
@@ -170,19 +186,14 @@ func TestServiceRotationPublishesPendingTaskMarkerAndReturnsOwnedBody(t *testing
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatalf("TaskAccepted body = %q: %v", response.Body, err)
 	}
-	if accepted.TaskID == "" || accepted.TaskID != repository.task.ID {
-		t.Fatalf("TaskAccepted task id = %q, published %q", accepted.TaskID, repository.task.ID)
+	if accepted.TaskID == "" || accepted.TaskID != repository.input.TaskID {
+		t.Fatalf("TaskAccepted task id = %q, captured %q", accepted.TaskID, repository.input.TaskID)
 	}
 	if repository.marker.Kind != testidempotency.IdempotencyMarkerTask ||
 		repository.marker.State != testidempotency.IdempotencyMarkerPending ||
-		repository.marker.TaskID != repository.task.ID ||
+		repository.marker.TaskID != repository.input.TaskID ||
 		!bytes.Equal(repository.marker.Response.Body, response.Body) {
 		t.Fatalf("published marker = %#v", repository.marker)
-	}
-	if repository.input.TaskID != repository.task.ID ||
-		repository.input.OperationID != repository.task.OperationID ||
-		repository.input.PlanID != repository.task.PlanID {
-		t.Fatalf("preparation/task identity = %#v / %#v", repository.input, repository.task)
 	}
 	if !bytes.Equal(keys.ciphertext, make([]byte, len(keys.ciphertext))) {
 		t.Fatalf("key factory ciphertext retained %q", keys.ciphertext)
