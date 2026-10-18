@@ -194,6 +194,7 @@ type removalSourceResolver struct {
 	expectedEnvironment, expectedGeneration string
 	calls                                   int
 	fail                                    bool
+	empty                                   bool
 	returned                                []byte
 }
 
@@ -204,6 +205,9 @@ func (resolver *removalSourceResolver) ResolveTaskMaterializationSource(
 ) ([]byte, error) {
 	resolver.calls++
 	values := source.GeneratedEnvironment.Values
+	if resolver.empty && environmentID == resolver.expectedEnvironment && len(values) == 0 {
+		return nil, nil
+	}
 	if environmentID != resolver.expectedEnvironment || len(values) != 1 || values[0].Name != "KEEP" ||
 		values[0].Value.ValueGenerationID != resolver.expectedGeneration {
 		return nil, errs.New(errs.KindInternal, "cleanup selected a different applied value")
@@ -213,6 +217,28 @@ func (resolver *removalSourceResolver) ResolveTaskMaterializationSource(
 		return resolver.returned, errs.New(errs.KindStorageUnavailable, "partial applied-value read")
 	}
 	return resolver.returned, nil
+}
+
+// ENTRY-05: the shared environment file is rewritten, not removed, when its
+// last Entry disappears; running workloads still reference that stable path.
+func TestRemovalSourcesKeepsEmptySharedEnvironmentFile(t *testing.T) {
+	entry, environment := ids.New(ids.KindEnvEntry), ids.New(ids.KindEnvironment)
+	resolver := &removalSourceResolver{expectedEnvironment: environment, empty: true}
+	service := &entryDesiredMutationService{materials: resolver}
+	snapshot := runtimeconfiguration.Snapshot{EnvironmentID: environment,
+		Files: []taskmaterialization.Record{{Destination: "shared.env", Mode: 0o600,
+			OutputKind: taskmaterialization.OutputGeneratedEnvironment,
+			Source: taskmaterialization.Source{Kind: taskmaterialization.SourceGeneratedEnvironment,
+				GeneratedEnvironment: &taskmaterialization.GeneratedEnvironmentValueReference{FormatVersion: 1,
+					Values: []taskmaterialization.GeneratedEnvironmentEntryReference{{Name: "LAST",
+						Value: taskmaterialization.EntryValueReference{EntryID: entry}}}}}}}}
+	changes, err := service.removalSources(t.Context(), entry, snapshot, removalSourceAllocator(t))
+	digest := sha256.Sum256(nil)
+	if err != nil || len(changes) != 1 || resolver.calls != 1 || changes[0].Length != 0 ||
+		changes[0].OutputKind != taskmaterialization.OutputGeneratedEnvironment ||
+		changes[0].Source.Kind != taskmaterialization.SourceGeneratedEnvironment || changes[0].SHA256 != hex.EncodeToString(digest[:]) {
+		t.Fatalf("last shared Entry did not produce an empty retained file: %v", err)
+	}
 }
 
 func (*removalSourceResolver) PinSecretValue(
