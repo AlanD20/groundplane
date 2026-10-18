@@ -25,7 +25,7 @@ func reconcileComponentRuntime(ctx context.Context, taskRunner runner.Runner, in
 			return err
 		}
 	}
-	return applyComponentArtifact(ctx, taskRunner, input.Procedure.Candidate)
+	return applySingletonArtifact(ctx, taskRunner, input.Procedure.Candidate)
 }
 
 func removeComponentRuntime(ctx context.Context, taskRunner runner.Runner, input componentexecution.HelperInput) error {
@@ -48,9 +48,9 @@ func removeComponentRuntime(ctx context.Context, taskRunner runner.Runner, input
 	return nil
 }
 
-func applyComponentArtifact(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact) error {
+func applySingletonArtifact(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact) error {
 	if artifact == nil || len(artifact.Services) != 1 || artifact.Services[0] == nil {
-		return errs.New(errs.KindValidationFailed, "Component requires one captured Compose service")
+		return errs.New(errs.KindValidationFailed, "runtime operation requires one captured Compose service")
 	}
 	input, err := composeCLIInput(artifact.CanonicalYaml)
 	if err != nil {
@@ -69,7 +69,7 @@ func applyComponentArtifact(ctx context.Context, taskRunner runner.Runner, artif
 			return errs.Wrap(errs.KindInternal, err)
 		}
 		if result.ExitCode != 0 {
-			return errs.New(errs.KindRequestFailed, "Component Compose configuration or startup failed")
+			return errs.New(errs.KindRequestFailed, "captured Compose configuration or startup failed")
 		}
 	}
 	return nil

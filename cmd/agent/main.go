@@ -15,6 +15,13 @@ import (
 func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
+	if len(os.Args) == 2 && os.Args[1] == app.BackingProvisionHelperArgument {
+		if err := app.RunBackingProvisionHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Backing creation helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == app.EnvironmentProvisionHelperArgument {
 		if err := app.RunEnvironmentProvisionHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Environment provisioning helper:", err)

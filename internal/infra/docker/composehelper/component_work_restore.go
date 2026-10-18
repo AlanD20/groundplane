@@ -31,7 +31,7 @@ func restoreComponentRuntime(ctx context.Context, taskRunner runner.Runner, inpu
 		}
 	}
 	if !ready {
-		if err := applyComponentArtifact(ctx, taskRunner, prior); err != nil {
+		if err := applySingletonArtifact(ctx, taskRunner, prior); err != nil {
 			return err
 		}
 	}
