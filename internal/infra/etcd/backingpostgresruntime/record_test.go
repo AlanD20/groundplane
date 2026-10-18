@@ -8,8 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backingprovision"
+	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -67,10 +70,10 @@ func TestPatchAdvancesOnlyDatabaseAuthority(t *testing.T) {
 		CatalogSHA256: strings.Repeat("d", 64), Provisioning: &environmentprojection.BackingRuntimeReceipt{
 			ServiceID: artifact.Services[0].ServiceId, ArtifactSHA256: hex.EncodeToString(digest[:]),
 			LocalImageID: "sha256:" + strings.Repeat("c", 64), ManagedReleaseSHA256: strings.Repeat("d", 64),
-			TaskID: "task_" + suffix, PlanID: "plan_" + suffix, PlanHash: strings.Repeat("e", 64),
-			AgentID: "agt_" + suffix, AssignmentID: "asgn_" + suffix, ExecutionEpoch: 1, RenderGeneration: 1,
+			Adapter: "postgres", RenderGeneration: 1,
 			AcknowledgedAt: now,
 		}}
+	fillNativeBackingReceipt(t, prior.Provisioning, artifact, now)
 	if err := Validate(prior); err != nil {
 		t.Fatal(err)
 	}
@@ -94,9 +97,13 @@ func TestPatchAdvancesOnlyDatabaseAuthority(t *testing.T) {
 				Runtime: executionplan.CandidateRuntime{ServiceID: prior.ServiceID, ReleaseID: "dep_" + suffix,
 					Target: "singleton", CurrentArtifact: encode(next, body)},
 				Source: serviceruntimerecord.Acknowledgement{TaskID: "task_" + suffix,
-					PlanID: "plan_" + suffix, PlanHash: strings.Repeat("e", 64), StepID: "step_" + suffix,
-					AgentID: "agt_" + suffix, AssignmentID: "asgn_" + suffix, ExecutionEpoch: 1,
-					RenderGeneration: 1, EffectDigest: strings.Repeat("e", 64), AcknowledgedAt: now}}
+					WorkItemID: "work_" + suffix, AttemptID: "try_" + suffix,
+					Executor: workexecution.Identity{Executor: workexecution.Agent, HostID: "host_" + suffix,
+						AgentID: "agt_" + suffix, Generation: 1},
+					Input: workexecution.Input{ID: "plan_" + suffix, SHA256: strings.Repeat("e", 64)},
+					Checkpoint: workexecution.Checkpoint{AttemptID: "try_" + suffix, StageID: "step_" + suffix,
+						Sequence: 1, Evidence: workexecution.Input{ID: "plan_" + suffix, SHA256: strings.Repeat("f", 64)},
+						RecordedAt: now}, RenderGeneration: 1, AcknowledgedAt: now}}
 			_, admissionErr := ValidatePatchArtifact(prior, next)
 			result, err := FromDeployment(prior, runtime)
 			if changed != "none" {
@@ -119,4 +126,42 @@ func TestPatchAdvancesOnlyDatabaseAuthority(t *testing.T) {
 			}
 		})
 	}
+}
+
+func fillNativeBackingReceipt(
+	t *testing.T,
+	receipt *environmentprojection.BackingRuntimeReceipt,
+	artifact *agentpb.ComposeArtifact,
+	at time.Time,
+) {
+	t.Helper()
+	const suffix = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	started := at.Add(-time.Second)
+	attempt := workexecution.Attempt{
+		ID: "try_" + suffix, WorkItemID: "work_" + suffix, TaskID: "task_" + suffix, Number: 1,
+		Executor: workexecution.Identity{Executor: workexecution.Agent, HostID: "host_" + suffix,
+			AgentID: "agt_" + suffix, Generation: 1},
+		Direction: workexecution.Forward, Input: workexecution.Input{ID: "plan_" + suffix, SHA256: strings.Repeat("e", 64)},
+		AssignedAt: started, StartedAt: &started, Deadline: at.Add(time.Minute),
+	}
+	stageID, err := backingprovision.StageID(attempt.WorkItemID, backingprovision.VerifyRuntime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := workexecution.Checkpoint{AttemptID: attempt.ID, Sequence: 2, StageID: stageID,
+		Evidence: attempt.Input, RecordedAt: at}
+	workload := artifact.Services[0]
+	observation := backingruntimefact.Observation{
+		ProjectName: artifact.ProjectName, ContainerID: strings.Repeat("a", 64), ObservedAt: at,
+		ServiceID: workload.ServiceId, ImageReference: workload.ImageReference, LocalImageID: receipt.LocalImageID,
+		State:  agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING,
+		Health: agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE,
+		Labels: proto.CloneOf(workload).ExpectedLabels,
+	}
+	result, err := backingprovision.CompletionEvidence(attempt, checkpoint, observation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt.FinishedAt, attempt.Outcome, attempt.Result = &at, workexecution.Succeeded, &result
+	receipt.Attempt, receipt.Checkpoint, receipt.Observation = attempt, checkpoint, observation
 }
