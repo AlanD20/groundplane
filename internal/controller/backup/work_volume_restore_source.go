@@ -23,7 +23,7 @@ func (owner *AgentWork) ReadRestoreNewVolumeManifest(ctx context.Context, author
 	if err != nil {
 		return backupvolumemanifest.Complete{}, err
 	}
-	view, err := owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return backupvolumemanifest.Complete{}, err
 	}

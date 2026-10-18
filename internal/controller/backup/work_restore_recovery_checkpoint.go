@@ -29,7 +29,7 @@ func (owner *AgentWork) restoreRecoveryCheckpoint(ctx context.Context,
 		if candidate != nil {
 			defer candidate.Clear()
 			attempt := view.Attempt.Attempt
-			view, err = owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+			view, err = authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 			if err != nil {
 				return nil, err
 			}

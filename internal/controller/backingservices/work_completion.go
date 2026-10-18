@@ -67,7 +67,7 @@ func (service *WorkReports) CompleteBackingProvision(ctx context.Context, author
 		if !committed.Succeeded {
 			return nil, errs.New(errs.KindStateConflict, "backing creation completion ownership changed; resend the saved result")
 		}
-		view, err = service.queue.ReadResume(ctx, view.Attempt.Attempt.TaskID, view.Attempt.Attempt.WorkItemID, view.Attempt.Attempt.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, service.queue, view.Attempt.Attempt.TaskID, view.Attempt.Attempt.WorkItemID, view.Attempt.Attempt.ID)
 		if err != nil {
 			return nil, err
 		}

@@ -31,7 +31,7 @@ func (owner *AgentWork) Recover(ctx context.Context, authorization agentregistra
 	if err != nil {
 		return nil, err
 	}
-	view, err := owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (owner *AgentWork) Recover(ctx context.Context, authorization agentregistra
 		if !committed.Succeeded {
 			return nil, errs.New(errs.KindStateConflict, "Backup recovery ownership changed; resend the saved report")
 		}
-		view, err = owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 		if err != nil {
 			return nil, err
 		}

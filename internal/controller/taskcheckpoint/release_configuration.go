@@ -114,7 +114,7 @@ func (service *ReleaseCheckpointService) activeConfiguration(ctx context.Context
 	if err != nil {
 		return empty, noReport, nil, err
 	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return empty, noReport, nil, err
 	}

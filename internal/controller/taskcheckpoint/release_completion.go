@@ -31,7 +31,7 @@ func (service *ReleaseCheckpointService) CompleteRelease(ctx context.Context, au
 	if evidence.Validate() != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Release completion requires its exact checkpoint")
 	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func (service *ReleaseCheckpointService) CompleteRelease(ctx context.Context, au
 		return nil, errs.New(errs.KindStateConflict, "Release completion differs from the saved attempt checkpoint")
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
-		if !view.ActiveAttempt || !view.CurrentExecutor {
+		if !view.ActiveAttempt || !view.CanSettleResult() {
 			return nil, errs.New(errs.KindStateConflict, "Release completion no longer owns the active attempt")
 		}
 		owner := service.outcomes[view.Work.Item.Item.Operation]
@@ -51,7 +51,7 @@ func (service *ReleaseCheckpointService) CompleteRelease(ctx context.Context, au
 		if err != nil {
 			return nil, err
 		}
-		view, err = service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 		if err != nil {
 			return nil, err
 		}

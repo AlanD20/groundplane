@@ -30,7 +30,7 @@ func (repository *HierarchyDeletionRepository) PrepareInterruptedHierarchyEnviro
 func (repository *HierarchyDeletionRepository) prepareHierarchyEnvironmentFailure(ctx context.Context, view workqueue.ResumeView,
 	input hierarchyexecution.EnvironmentInput, reason hierarchyexecution.FailureReason, at time.Time, interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
-	if !view.ActiveAttempt || view.CurrentExecutor == interrupted || view.ExecutorRevision <= 0 || view.Attempt.Attempt.FinishedAt != nil ||
+	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 || view.Attempt.Attempt.FinishedAt != nil ||
 		view.Work.Item.Item.Operation != workexecution.Hierarchy || !workexecution.SameAssignment(view.Attempt.Attempt, input.Attempt) {
 		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "Environment removal failure no longer owns its active attempt")
 	}

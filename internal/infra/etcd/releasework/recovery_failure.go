@@ -15,7 +15,7 @@ import (
 func PrepareRecoveryFailure(ctx context.Context, store Reader, view workqueue.ResumeView, input releaseexecution.RecoveryInput,
 	reason releaseexecution.FailureReason, at time.Time,
 ) (workqueue.Change, workexecution.Completion, error) {
-	if !view.CurrentExecutor {
+	if !view.CanSettleResult() {
 		return workqueue.Change{}, workexecution.Completion{}, invalid()
 	}
 	return prepareRecoveryFailure(ctx, store, view, input, reason, at)
@@ -24,7 +24,7 @@ func PrepareRecoveryFailure(ctx context.Context, store Reader, view workqueue.Re
 // PrepareInterruptedRecoveryFailure freezes a replaced attempt, retaining all
 // resource claims. It grants no cleanup and asserts no helper termination.
 func PrepareInterruptedRecoveryFailure(ctx context.Context, store Reader, view workqueue.ResumeView, input releaseexecution.RecoveryInput, at time.Time) (workqueue.Change, workexecution.Completion, error) {
-	if view.CurrentExecutor || view.ExecutorRevision <= 0 {
+	if view.CanSettleResult() || view.ExecutorRevision <= 0 {
 		return workqueue.Change{}, workexecution.Completion{}, invalid()
 	}
 	return prepareRecoveryFailure(ctx, store, view, input, releaseexecution.ExecutionInterrupted, at)

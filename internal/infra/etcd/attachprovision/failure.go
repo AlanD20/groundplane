@@ -21,7 +21,7 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 	input attachexecution.ProvisionInput, reason attachexecution.FailureReason, at time.Time, interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
 	attempt := view.Attempt.Attempt
-	if !view.ActiveAttempt || view.CurrentExecutor == interrupted || view.ExecutorRevision <= 0 ||
+	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 ||
 		attempt.FinishedAt != nil || view.Work.Item.Item.Operation != workexecution.Attach ||
 		!workexecution.SameAssignment(attempt, input.Attempt) {
 		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict("Attach failure no longer owns its active attempt")

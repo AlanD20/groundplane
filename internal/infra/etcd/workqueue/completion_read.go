@@ -28,7 +28,7 @@ func (repository *Repository) ReadCompletion(ctx context.Context, taskID, workID
 // ReadCompletionAt keeps operation proof, worker ownership and resource claims
 // on the caller's fixed snapshot. It grants no execution or independent commit.
 func (repository *Repository) ReadCompletionAt(ctx context.Context, view ResumeView) (Completion, error) {
-	if !view.ActiveAttempt || !view.CurrentExecutor || view.Work.ReadRevision <= 0 ||
+	if !view.ActiveAttempt || !view.CanSettleResult() || view.Work.ReadRevision <= 0 ||
 		view.Work.Task.Revision <= 0 || view.Work.Item.Revision <= 0 || view.Attempt.Revision <= 0 ||
 		view.Attempt.Attempt.FinishedAt != nil || workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
 		return Completion{}, errs.New(errs.KindStateConflict, "execution attempt no longer owns this work")

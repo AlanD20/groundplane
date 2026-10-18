@@ -30,7 +30,7 @@ func (repository *HierarchyDeletionRepository) PrepareInterruptedHierarchyEnviro
 func (repository *HierarchyDeletionRepository) prepareHierarchyEnvironmentCompletion(ctx context.Context, view workqueue.ResumeView,
 	input hierarchyexecution.EnvironmentInput, at time.Time, interrupted bool,
 ) (workqueue.Change, error) {
-	if !view.ActiveAttempt || view.CurrentExecutor == interrupted || view.ExecutorRevision <= 0 || view.Attempt.Attempt.FinishedAt != nil || view.Checkpoint.Record == nil ||
+	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 || view.Attempt.Attempt.FinishedAt != nil || view.Checkpoint.Record == nil ||
 		view.Checkpoint.Record.Sequence != 4 || at.Before(view.Checkpoint.Record.RecordedAt) {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Environment removal has no completed active checkpoint")
 	}

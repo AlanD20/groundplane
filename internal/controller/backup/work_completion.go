@@ -34,7 +34,7 @@ func (owner *AgentWork) Complete(ctx context.Context, authorization agentregistr
 	if err := evidence.Validate(); err != nil {
 		return nil, err
 	}
-	view, err := owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (owner *AgentWork) Complete(ctx context.Context, authorization agentregistr
 		if !result.Succeeded {
 			return nil, errs.New(errs.KindStateConflict, "Backup completion ownership changed; resend the saved result")
 		}
-		view, err = owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 		if err != nil {
 			return nil, err
 		}

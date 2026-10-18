@@ -221,7 +221,7 @@ func (journal *Journal) readRecord(ctx context.Context, attemptID string) (*atte
 	if err != nil {
 		return nil, err
 	}
-	raw, readErr := io.ReadAll(io.LimitReader(file, MaximumRecordBytes+1))
+	raw, readErr := io.ReadAll(io.LimitReader(file, MaximumAttemptRecordBytes+1))
 	closeErr := file.Close()
 	if readErr != nil || closeErr != nil {
 		return nil, fileError(errors.Join(readErr, closeErr))
@@ -296,7 +296,7 @@ func (journal *Journal) openLeaf(ctx context.Context, name string, flags int, mo
 	if err == nil {
 		stat, ok := info.Sys().(*syscall.Stat_t)
 		if !ok || !info.Mode().IsRegular() || stat.Mode&0o7777 != 0o600 || stat.Uid != journal.uid || stat.Nlink != 1 ||
-			info.Size() > MaximumRecordBytes {
+			info.Size() > MaximumAttemptRecordBytes {
 			err = invalid()
 		}
 	}

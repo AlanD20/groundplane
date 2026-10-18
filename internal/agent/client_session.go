@@ -30,7 +30,10 @@ func (c *Client) runSession(
 
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	native := newNativeExchange()
+	if c.workJournal == nil {
+		return false, errs.New(errs.KindInternal, "native work journal is not configured")
+	}
+	native := newNativeExchange(streamCtx, c.workJournal)
 	defer native.close()
 	stream, connection, err := c.connect(streamCtx, c.socketPath)
 	if err != nil {
@@ -76,6 +79,9 @@ func (c *Client) runSession(
 	}
 	if err := native.bindExecutor(registered.GetWorkExecutorRegistration(), c.agentID, c.processGeneration); err != nil {
 		return false, err
+	}
+	if err := c.replayWorkJournal(streamCtx, stream); err != nil {
+		return agentChannelTransportResult(ctx, err, "agent: replay retained native results", false)
 	}
 
 	pullInterval := time.Duration(config.PullIntervalSeconds) * time.Second

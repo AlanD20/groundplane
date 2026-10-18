@@ -30,7 +30,7 @@ func (service *ReleaseCheckpointService) activeFileSelection(ctx context.Context
 	if err != nil {
 		return fileSelection{}, err
 	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return fileSelection{}, err
 	}

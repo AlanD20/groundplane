@@ -24,7 +24,7 @@ func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, vi
 
 func (repository *InputRepository) prepareRecoveryResult(ctx context.Context, view workqueue.ResumeView, raw []byte, at time.Time, interrupted bool) (workqueue.Change, workexecution.Completion, error) {
 	attempt := view.Attempt.Attempt
-	if view.CurrentExecutor == interrupted || !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
+	if view.CanSettleResult() == interrupted || !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
 		attempt.FinishedAt != nil || !interrupted && attempt.StartedAt == nil || attempt.Direction != workexecution.Recovery ||
 		view.Work.Task.Task.CollectionStartedAt != nil || at.IsZero() || at.Location() != time.UTC ||
 		at.Before(view.Work.Item.Item.UpdatedAt) {

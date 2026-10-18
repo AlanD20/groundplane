@@ -28,7 +28,7 @@ func (owner *Work) ReportEnvironmentProvision(ctx context.Context, authorization
 	if err != nil {
 		return nil, err
 	}
-	view, err := owner.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, owner.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (owner *Work) ReportEnvironmentProvision(ctx context.Context, authorization
 		if !committed.Succeeded {
 			return nil, errs.New(errs.KindStateConflict, "environment result ownership changed; resend the saved report")
 		}
-		view, err = owner.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, owner.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 		if err != nil {
 			return nil, err
 		}

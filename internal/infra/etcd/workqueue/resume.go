@@ -12,12 +12,33 @@ import (
 // Reports from a replaced process may still account for already-authorized
 // effects, but cannot authorize another stage or move the assignment to a host.
 type ResumeView struct {
+	receiptReplay    bool
 	Work             View
 	Attempt          AttemptSnapshot
 	Checkpoint       CheckpointSnapshot
 	CurrentExecutor  bool
 	ExecutorRevision int64
 	ActiveAttempt    bool
+}
+
+// CanSettleResult permits accounting for an already-completed effect, never
+// granting another stage. All execution/input/command gates use CurrentExecutor.
+func (view ResumeView) CanSettleResult() bool {
+	return view.CurrentExecutor || view.receiptReplay && view.ExecutorRevision > 0
+}
+
+func (repository *Repository) ReadResult(ctx context.Context, taskID, workID, attemptID string, identity workexecution.Identity, receiptOnly bool) (ResumeView, error) {
+	view, err := repository.ReadResume(ctx, taskID, workID, attemptID, identity)
+	if err != nil {
+		return ResumeView{}, err
+	}
+	if receiptOnly {
+		if identity.Executor != workexecution.Agent || view.ExecutorRevision <= 0 {
+			return ResumeView{}, errs.New(errs.KindStateConflict, "retained result has no current host owner")
+		}
+		view.receiptReplay = true
+	}
+	return view, nil
 }
 
 func (repository *Repository) ReadResume(ctx context.Context, taskID, workID, attemptID string,

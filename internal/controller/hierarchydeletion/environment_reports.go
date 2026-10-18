@@ -39,7 +39,7 @@ func (service *Reports) CheckpointEnvironmentRemoval(ctx context.Context, author
 	if err != nil {
 		return nil, err
 	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,7 @@ import (
 func (repository *InputRepository) PrepareRestoreFailure(ctx context.Context,
 	view workqueue.ResumeView, at time.Time,
 ) (workqueue.Change, error) {
-	if view.Work.Item.Item.Operation != workexecution.Restore || !view.CurrentExecutor || !view.ActiveAttempt ||
+	if view.Work.Item.Item.Operation != workexecution.Restore || !view.CanSettleResult() || !view.ActiveAttempt ||
 		view.Attempt.Attempt.StartedAt == nil || view.Attempt.Attempt.FinishedAt != nil {
 		return workqueue.Change{}, conflict("Restore failure no longer owns its started execution")
 	}

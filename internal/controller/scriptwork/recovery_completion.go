@@ -34,7 +34,7 @@ func (service *Service) CompleteRecovery(ctx context.Context, authorization agen
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -45,7 +45,7 @@ func (service *Service) CompleteRecovery(ctx context.Context, authorization agen
 		if err := service.repository.SettleRecoveredScript(ctx, view, raw, reference, guards, time.Now().UTC()); err != nil {
 			return workexecution.Attempt{}, err
 		}
-		view, err = service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 		if err != nil {
 			return workexecution.Attempt{}, err
 		}

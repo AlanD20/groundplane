@@ -106,7 +106,7 @@ func (service *WorkReports) reportView(ctx context.Context, authorization agentr
 	if err != nil {
 		return workqueue.ResumeView{}, err
 	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return workqueue.ResumeView{}, err
 	}

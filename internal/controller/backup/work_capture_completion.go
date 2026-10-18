@@ -29,7 +29,7 @@ func (owner *AgentWork) finishCaptureSource(ctx context.Context, authorization a
 	}
 	ctx, cancel := context.WithDeadline(ctx, attempt.Deadline)
 	defer cancel()
-	view, err := owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func (owner *AgentWork) finishCaptureSource(ctx context.Context, authorization a
 			return errs.New(errs.KindInternal, "Backup retention selection did not advance")
 		}
 	}
-	view, err = owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err = authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return err
 	}

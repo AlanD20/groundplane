@@ -20,7 +20,7 @@ func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, vi
 	raw []byte, evidence workexecution.Input, at time.Time, interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
 	attempt := view.Attempt.Attempt
-	if !view.ActiveAttempt || view.CurrentExecutor == interrupted || attempt.FinishedAt != nil ||
+	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || attempt.FinishedAt != nil ||
 		attempt.Direction != workexecution.Recovery || view.Work.Task.Task.CollectionStartedAt != nil ||
 		at.IsZero() || at.Location() != time.UTC || at.Before(view.Work.Item.Item.UpdatedAt) {
 		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict("Attach inspection no longer owns active execution")

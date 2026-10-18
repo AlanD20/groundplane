@@ -27,7 +27,7 @@ func (owner *AgentWork) Checkpoint(ctx context.Context, authorization agentregis
 	if err != nil {
 		return nil, err
 	}
-	view, err := owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (owner *AgentWork) Checkpoint(ctx context.Context, authorization agentregis
 			defer candidate.Clear()
 			// Immutable staging may advance the store. Join all settlement
 			// guards at a fresh snapshot rather than mixing read revisions.
-			view, err = owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+			view, err = authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 			if err != nil {
 				return nil, err
 			}

@@ -18,6 +18,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/internal/common/removalexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/common/workreceipt"
+	"github.com/AlanD20/groundplane/internal/infra/agentworkjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -25,15 +27,18 @@ import (
 
 type nativeExchangeKey struct{ attempt, kind string }
 type nativeWaiter struct {
-	identity    *agentpb.WorkAttemptIdentity
-	executionID string
-	response    chan *agentpb.ControllerMessage
-	abandoned   bool
+	terminalReport *agentpb.AgentMessage
+	identity       *agentpb.WorkAttemptIdentity
+	executionID    string
+	response       chan *agentpb.ControllerMessage
+	abandoned      bool
 }
 
 // nativeExchange is scoped to one authenticated stream. Only the session writer
 // consumes outgoing; workers never call stream.Send concurrently.
 type nativeExchange struct {
+	ctx           context.Context
+	journal       *agentworkjournal.Journal
 	backupConfigs *backupconfiguration.Inbox
 	backupVolumes map[string]*nativeVolumeSlot
 	backupSecrets *backupsecrettransfer.WorkInbox
@@ -45,8 +50,8 @@ type nativeExchange struct {
 	identity      workexecution.Identity
 }
 
-func newNativeExchange() *nativeExchange {
-	return &nativeExchange{backupConfigs: backupconfiguration.NewInbox(), backupVolumes: make(map[string]*nativeVolumeSlot), backupSecrets: backupsecrettransfer.NewWorkInbox(), pending: make(map[nativeExchangeKey]*nativeWaiter), outgoing: make(chan *agentpb.AgentMessage, 256), done: make(chan struct{})}
+func newNativeExchange(ctx context.Context, journal *agentworkjournal.Journal) *nativeExchange {
+	return &nativeExchange{ctx: ctx, journal: journal, backupConfigs: backupconfiguration.NewInbox(), backupVolumes: make(map[string]*nativeVolumeSlot), backupSecrets: backupsecrettransfer.NewWorkInbox(), pending: make(map[nativeExchangeKey]*nativeWaiter), outgoing: make(chan *agentpb.AgentMessage, 256), done: make(chan struct{})}
 }
 
 func (exchange *nativeExchange) bindExecutor(registration *agentpb.WorkExecutorRegistration, agentID string, process [16]byte) error {
@@ -73,6 +78,16 @@ func (exchange *nativeExchange) request(ctx context.Context, message *agentpb.Ag
 	}
 	key := nativeExchangeKey{identity.AttemptId, kind}
 	waiter := &nativeWaiter{identity: proto.CloneOf(identity), executionID: executionID, response: make(chan *agentpb.ControllerMessage, 1)}
+	_, expectedKind, terminal, reportErr := workreceipt.Describe(message)
+	if reportErr != nil {
+		return nil, reportErr
+	}
+	if terminal {
+		if expectedKind != kind || executionID != "" || exchange.journal == nil {
+			return nil, errs.New(errs.KindStateConflict, "terminal report lacks its durable delivery owner")
+		}
+		waiter.terminalReport = proto.CloneOf(message)
+	}
 	exchange.mu.Lock()
 	if _, err := workexecution.DecodeAgentAttempt(identity, exchange.identity); err != nil {
 		exchange.mu.Unlock()
@@ -97,6 +112,18 @@ func (exchange *nativeExchange) request(ctx context.Context, message *agentpb.Ag
 		default:
 		}
 	}()
+	if terminal {
+		reply, err := exchange.journal.PrepareTerminalDelivery(ctx, message)
+		if err != nil {
+			return nil, err
+		}
+		if reply != nil {
+			exchange.mu.Lock()
+			delete(exchange.pending, key)
+			exchange.mu.Unlock()
+			return reply, nil
+		}
+	}
 	select {
 	case exchange.outgoing <- proto.CloneOf(message):
 	case <-ctx.Done():
@@ -312,6 +339,14 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 	waiter := exchange.pending[key]
 	if exchange.closed || waiter == nil || !proto.Equal(identity, waiter.identity) || executionID != waiter.executionID {
 		return fail()
+	}
+	if waiter.terminalReport != nil {
+		if exchange.journal == nil {
+			return fail()
+		}
+		if err := exchange.journal.AcknowledgeTerminalDelivery(exchange.ctx, waiter.terminalReport, message); err != nil {
+			return true, err
+		}
 	}
 	delete(exchange.pending, key)
 	if waiter.abandoned {

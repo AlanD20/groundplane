@@ -16,7 +16,7 @@ func FailureKey(evidenceID string) string { return "/v1/execution/release-failur
 // were undone. Any granted effect retains conflict claims for operation recovery;
 // the shared completion transaction can still release the worker slot.
 func PrepareFailure(ctx context.Context, store Reader, view workqueue.ResumeView, input releaseexecution.Input, reason releaseexecution.FailureReason, at time.Time) (workqueue.Change, workexecution.Completion, error) {
-	if ctx == nil || store == nil || !view.ActiveAttempt || !view.CurrentExecutor ||
+	if ctx == nil || store == nil || !view.ActiveAttempt || !view.CanSettleResult() ||
 		!workexecution.SameAssignment(view.Attempt.Attempt, input.Attempt) || input.Attempt.Direction != workexecution.Forward ||
 		input.Attempt.FinishedAt != nil || view.Work.Item.Item.Operation != workexecution.Release {
 		return workqueue.Change{}, workexecution.Completion{}, invalid()

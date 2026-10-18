@@ -48,7 +48,7 @@ func (router *LifecycleReportRouter) owner(ctx context.Context, authorization ag
 	if err != nil {
 		return nil, err
 	}
-	view, err := router.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, router.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return nil, err
 	}

@@ -30,7 +30,7 @@ func (service *AgentWork) StreamConfigRestore(
 		return configSnapshotGuardConflict()
 	}
 	attempt := binding.Attempt
-	view, err := service.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return err
 	}

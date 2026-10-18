@@ -16,8 +16,22 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
 	"github.com/AlanD20/groundplane/internal/infra/agentownership"
+	"github.com/AlanD20/groundplane/internal/infra/agentworkjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func (c *Client) SetWorkJournal(journal *agentworkjournal.Journal) error {
+	if c == nil || journal == nil {
+		return errs.New(errs.KindValidationFailed, "Agent work journal is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.workJournal != nil {
+		return errs.New(errs.KindStateConflict, "Agent work journal is already configured")
+	}
+	c.workJournal = journal
+	return nil
+}
 
 func (c *Client) SetResolverExecutor(executor *resolverruntime.Executor) error {
 	if c == nil || executor == nil {

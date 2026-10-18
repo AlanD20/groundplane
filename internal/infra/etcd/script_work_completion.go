@@ -19,7 +19,7 @@ import (
 func (repository *ScriptRepository) SettleCompletedScriptWork(ctx context.Context, view workqueue.ResumeView,
 	authorization []keyvalue.Condition, at time.Time,
 ) error {
-	if !view.CurrentExecutor {
+	if !view.CanSettleResult() {
 		return errs.New(errs.KindStateConflict, "Script completion requires its current executor")
 	}
 	return repository.settleProvenScriptWork(ctx, view, authorization, at)
@@ -76,7 +76,7 @@ func (repository *ScriptRepository) settleProvenScriptWork(ctx context.Context, 
 		return err
 	}
 	var request workqueue.Completion
-	if view.CurrentExecutor {
+	if view.CanSettleResult() {
 		request, err = queue.ReadCompletionAt(ctx, view)
 	} else {
 		request, err = queue.ReadInterruptedScriptAt(ctx, view)

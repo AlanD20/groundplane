@@ -17,7 +17,7 @@ import (
 func (repository *ScriptRepository) FailScriptWork(ctx context.Context, view workqueue.ResumeView,
 	authorization agentregistration.WorkAuthorization, at time.Time,
 ) error {
-	if !view.CurrentExecutor || !view.ActiveAttempt || view.ExecutorRevision <= 0 || view.Attempt.Attempt.Executor != authorization.Identity() {
+	if !view.CanSettleResult() || !view.ActiveAttempt || view.ExecutorRevision <= 0 || view.Attempt.Attempt.Executor != authorization.Identity() {
 		return errs.New(errs.KindStateConflict, "Script failure no longer owns its executor")
 	}
 	guards, err := authorization.Conditions()

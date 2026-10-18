@@ -33,7 +33,7 @@ func (service *ReleaseCheckpointService) FailRelease(ctx context.Context, author
 	if err != nil {
 		return nil, err
 	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func (service *ReleaseCheckpointService) FailRelease(ctx context.Context, author
 		return nil, errs.New(errs.KindStateConflict, "Release failure does not match its saved attempt")
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
-		if !view.ActiveAttempt || !view.CurrentExecutor {
+		if !view.ActiveAttempt || !view.CanSettleResult() {
 			return nil, errs.New(errs.KindStateConflict, "Release failure no longer owns its attempt")
 		}
 		owner := service.outcomes[view.Work.Item.Item.Operation]
@@ -51,7 +51,7 @@ func (service *ReleaseCheckpointService) FailRelease(ctx context.Context, author
 		if err := owner.SettleFailed(ctx, view, reason, guards, time.Now().UTC()); err != nil {
 			return nil, err
 		}
-		view, err = service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 		if err != nil {
 			return nil, err
 		}

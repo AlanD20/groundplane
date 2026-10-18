@@ -43,7 +43,7 @@ func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
 	completion, err := queue.ReadCompletionAt(ctx, view)
-	if !view.CurrentExecutor && reason == resolverexecution.Interrupted {
+	if !view.CanSettleResult() && reason == resolverexecution.Interrupted {
 		completion, err = queue.ReadInterruptedAt(ctx, view, workexecution.Resolver)
 	}
 	if err != nil {

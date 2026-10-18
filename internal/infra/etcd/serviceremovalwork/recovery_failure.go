@@ -22,7 +22,7 @@ func (repository *Repository) PrepareRecoveryFailure(ctx context.Context, view w
 	delivery *agentpb.ServiceLifecycleWorkInput, reason lifecycleexecution.FailureReason, at time.Time, interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
 	task, item, attempt := view.Work.Task.Task, view.Work.Item.Item, view.Attempt.Attempt
-	if !view.ActiveAttempt || view.CurrentExecutor == interrupted || view.ExecutorRevision <= 0 ||
+	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 ||
 		attempt.FinishedAt != nil || attempt.Direction != workexecution.Recovery ||
 		item.Operation != workexecution.ServiceRemoval || item.Cleanup != workexecution.CleanupRunning ||
 		!task.PublicationComplete || task.CollectionStartedAt != nil ||

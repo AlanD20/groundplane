@@ -30,7 +30,7 @@ func (owner *AgentWork) Fail(ctx context.Context, authorization agentregistratio
 	if err != nil {
 		return nil, err
 	}
-	view, err := owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (owner *AgentWork) Fail(ctx context.Context, authorization agentregistratio
 		if !committed.Succeeded {
 			return nil, errs.New(errs.KindStateConflict, "Backup failure ownership changed; resend the saved report")
 		}
-		view, err = owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 		if err != nil {
 			return nil, err
 		}

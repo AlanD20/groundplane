@@ -14,12 +14,37 @@ import (
 // WorkAuthorization keeps authenticated identity and its publication fences
 // together. Only the fixed-revision credential/binding read constructs it.
 type WorkAuthorization struct {
-	identity   workexecution.Identity
-	conditions []keyvalue.Condition
+	receiptOnly bool
+	identity    workexecution.Identity
+	conditions  []keyvalue.Condition
 }
 
 func (authorization WorkAuthorization) Identity() workexecution.Identity {
 	return authorization.identity
+}
+
+// ForReceipt binds a retained older assignment to the currently authenticated
+// host owner. Only the closed startup terminal-report route uses this authority;
+// it cannot authorize Start, input delivery or another physical effect.
+func (authorization WorkAuthorization) ForReceipt(previous workexecution.Identity) (WorkAuthorization, error) {
+	guards, err := authorization.Conditions()
+	if err != nil {
+		return WorkAuthorization{}, err
+	}
+	if previous.Validate() != nil || previous.Executor != workexecution.Agent ||
+		previous.HostID != authorization.identity.HostID || previous.Generation > authorization.identity.Generation {
+		return WorkAuthorization{}, errs.New(errs.KindStateConflict, "retained result belongs to a different host or future executor")
+	}
+	return WorkAuthorization{identity: previous, conditions: guards, receiptOnly: true}, nil
+}
+
+// ReadResult preserves the distinction between settlement of a retained report
+// and permission for the current process to perform another execution stage.
+func (authorization WorkAuthorization) ReadResult(ctx context.Context, queue *workqueue.Repository, taskID, workID, attemptID string) (workqueue.ResumeView, error) {
+	if _, err := authorization.Conditions(); err != nil {
+		return workqueue.ResumeView{}, err
+	}
+	return queue.ReadResult(ctx, taskID, workID, attemptID, authorization.identity, authorization.receiptOnly)
 }
 
 func (authorization WorkAuthorization) Conditions() ([]keyvalue.Condition, error) {

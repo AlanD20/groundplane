@@ -18,7 +18,7 @@ func RecoveryResultKey(attemptID string) string {
 
 func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, view workqueue.ResumeView, raw []byte, at time.Time) (workqueue.Change, workexecution.Completion, error) {
 	attempt := view.Attempt.Attempt
-	if !view.CurrentExecutor || !view.ActiveAttempt || attempt.FinishedAt != nil || attempt.StartedAt == nil ||
+	if !view.CanSettleResult() || !view.ActiveAttempt || attempt.FinishedAt != nil || attempt.StartedAt == nil ||
 		view.Work.Task.Task.CollectionStartedAt != nil || at.Before(view.Work.Item.Item.UpdatedAt) {
 		return workqueue.Change{}, workexecution.Completion{}, conflict("Network recovery no longer owns active inspection")
 	}

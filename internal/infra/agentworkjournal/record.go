@@ -13,6 +13,7 @@ import (
 // attemptRecord owns the single transport sequence shared by an operation and
 // its hooks. Each typed report is retained for replay without retaining history.
 type attemptRecord struct {
+	TerminalDelivery        *TerminalDelivery                   `json:"terminal_delivery,omitempty"`
 	Resolver                *ResolverRecord                     `json:"resolver,omitempty"`
 	BackingRecovery         *BackingRecoveryRecord              `json:"backing_recovery,omitempty"`
 	Backing                 *BackingRecord                      `json:"backing,omitempty"`
@@ -176,6 +177,18 @@ func (record attemptRecord) pending() (bool, error) {
 }
 
 func (record attemptRecord) validate() error {
+	if record.TerminalDelivery != nil {
+		if err := record.TerminalDelivery.validate(record.Attempt); err != nil {
+			return err
+		}
+		record.TerminalDelivery = nil
+		operation, err := json.Marshal(record)
+		oversized := len(operation) > MaximumRecordBytes
+		clear(operation)
+		if err != nil || oversized {
+			return invalid()
+		}
+	}
 	if record.Resolver != nil {
 		return record.validateResolver()
 	}
@@ -384,18 +397,21 @@ func encodeRecord(record attemptRecord) ([]byte, error) {
 	if err != nil {
 		return nil, invalid()
 	}
-	if len(raw) > MaximumRecordBytes {
+	if len(raw) > MaximumAttemptRecordBytes || record.TerminalDelivery == nil && len(raw) > MaximumRecordBytes {
 		return nil, invalid()
 	}
 	return jcs.Canonicalize(raw)
 }
 
 func decodeRecord(raw []byte) (attemptRecord, error) {
-	if len(raw) == 0 || len(raw) > MaximumRecordBytes {
+	if len(raw) == 0 || len(raw) > MaximumAttemptRecordBytes {
 		return attemptRecord{}, invalid()
 	}
 	record, err := jcs.Decode[attemptRecord](raw)
 	if err != nil {
+		return attemptRecord{}, invalid()
+	}
+	if record.TerminalDelivery == nil && len(raw) > MaximumRecordBytes {
 		return attemptRecord{}, invalid()
 	}
 	encoded, err := encodeRecord(record)

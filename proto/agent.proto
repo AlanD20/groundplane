@@ -33,6 +33,22 @@ message WorkExecutorRegistration {
   bytes process_generation = 4;
 }
 
+// Startup may replay only the exact captured terminal report, never Start,
+// checkpoints, command/input delivery or effect authorization. Completion closes
+// this replay phase before normal Ready/dispatch and replacement reconciliation.
+message WorkJournalReplayRequest {
+  bytes report = 1; // one closed AgentMessage terminal report; at most 36 KiB
+  bool complete = 2; // mutually exclusive with report
+}
+
+message WorkJournalReplayAck {
+  bytes report_sha256 = 1;
+  bytes acknowledgement = 2; // exact typed ControllerMessage result
+  string failure_code = 3; // rejected report retains its local evidence
+  string failure_detail = 4;
+  bool complete = 5;
+}
+
 enum WorkDirection {
   WORK_DIRECTION_UNSPECIFIED = 0;
   WORK_DIRECTION_FORWARD = 1;
@@ -1062,6 +1078,7 @@ message AgentMessage {
     ResolverWorkCompletionRequest resolver_work_completion_request = 110;
     ResolverWorkFailureRequest resolver_work_failure_request = 111;
     ResolverWorkRecoveryRequest resolver_work_recovery_request = 112;
+    WorkJournalReplayRequest work_journal_replay_request = 113;
   }
 }
 
@@ -1633,6 +1650,7 @@ message ControllerMessage {
     ResolverWorkAssignment resolver_work_assignment = 131;
     ResolverWorkCheckpointAck resolver_work_checkpoint_ack = 132;
     ResolverWorkResultAck resolver_work_result_ack = 133;
+    WorkJournalReplayAck work_journal_replay_ack = 134;
   }
 }
 

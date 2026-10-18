@@ -92,7 +92,7 @@ func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
 	request, err := completion.ReadCompletionAt(ctx, view)
-	if !view.CurrentExecutor && reason == backingprovision.Interrupted {
+	if !view.CanSettleResult() && reason == backingprovision.Interrupted {
 		request, err = completion.ReadInterruptedAt(ctx, view, workexecution.BackingProvision)
 	}
 	if err != nil {

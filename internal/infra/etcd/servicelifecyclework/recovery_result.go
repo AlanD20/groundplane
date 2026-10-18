@@ -17,7 +17,7 @@ func RecoveryResultKey(attemptID string) string {
 
 func (repository *Repository) PrepareRecoveryResult(ctx context.Context, view workqueue.ResumeView, input *agentpb.ServiceLifecycleWorkInput, raw []byte, at time.Time) (workqueue.Change, workexecution.Completion, error) {
 	attempt := view.Attempt.Attempt
-	if !view.CurrentExecutor || !view.ActiveAttempt || attempt.FinishedAt != nil || attempt.StartedAt == nil ||
+	if !view.CanSettleResult() || !view.ActiveAttempt || attempt.FinishedAt != nil || attempt.StartedAt == nil ||
 		view.Work.Task.Task.CollectionStartedAt != nil || at.Before(view.Work.Item.Item.UpdatedAt) {
 		return workqueue.Change{}, workexecution.Completion{}, conflict("Service lifecycle recovery no longer owns active inspection")
 	}

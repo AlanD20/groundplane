@@ -26,7 +26,7 @@ func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.V
 		}
 		number++
 	}
-	return repository.loadRecovery(ctx, view, number)
+	return repository.loadRecovery(ctx, view, number, nil)
 }
 
 func (repository *Repository) LoadRecoveryForAttempt(ctx context.Context, view workqueue.View, attempt workexecution.Attempt) (RecoverySource, error) {
@@ -34,10 +34,29 @@ func (repository *Repository) LoadRecoveryForAttempt(ctx context.Context, view w
 		attempt.WorkItemID != view.Item.Item.ID || attempt.Number > view.Item.Item.AttemptNumber {
 		return RecoverySource{}, invalid("backing creation cleanup source requires its actual retained attempt")
 	}
-	return repository.loadRecovery(ctx, view, attempt.Number)
+	var evidence *workexecution.Input
+	if attempt.FinishedAt != nil {
+		read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{RecoveryResultKey(attempt.ID)}, Revision: view.ReadRevision})
+		if err != nil {
+			return RecoverySource{}, err
+		}
+		if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 {
+			return RecoverySource{}, invalid("backing creation terminal cleanup source read is incomplete")
+		}
+		defer keyvalue.ClearValues(read.Values)
+		if read.Values[0] == nil || len(read.Values[0].Value) > backingprovision.MaximumProgressBytes {
+			return RecoverySource{}, invalid("backing creation terminal cleanup lost its captured failure source")
+		}
+		report, err := jcs.Decode[backingprovision.RecoveryReport](read.Values[0].Value)
+		if err != nil {
+			return RecoverySource{}, err
+		}
+		evidence = &report.Failure
+	}
+	return repository.loadRecovery(ctx, view, attempt.Number, evidence)
 }
 
-func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.View, number uint64) (RecoverySource, error) {
+func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.View, number uint64, evidence *workexecution.Input) (RecoverySource, error) {
 	input, guard, err := repository.Load(ctx, view)
 	if err != nil {
 		return RecoverySource{}, err
@@ -47,7 +66,9 @@ func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.V
 	if err != nil {
 		return RecoverySource{}, err
 	}
-	evidence := view.Item.Item.Result
+	if evidence == nil {
+		evidence = view.Item.Item.Result
+	}
 	if evidence == nil || evidence.Validate() != nil {
 		return RecoverySource{}, invalid("backing creation cleanup has no retained forward failure")
 	}

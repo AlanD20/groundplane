@@ -22,7 +22,7 @@ import (
 func (ledger *ReleaseLedger) SettleCompletedGroupRestoration(ctx context.Context, view workqueue.ResumeView,
 	input releaseexecution.RecoveryInput, authorization []keyvalue.Condition, at time.Time,
 ) error {
-	if ledger == nil || ledger.store == nil || len(authorization) == 0 || !view.CurrentExecutor ||
+	if ledger == nil || ledger.store == nil || len(authorization) == 0 || !view.CanSettleResult() ||
 		input.Group == nil || input.Validate() != nil || !workexecution.SameAssignment(input.Input.Attempt, view.Attempt.Attempt) {
 		return errs.New(errs.KindStateConflict, "Group restoration completion requires its authenticated captured attempt")
 	}
@@ -74,7 +74,7 @@ func (ledger *ReleaseLedger) settleProvenGroupRestoration(ctx context.Context, v
 		return err
 	}
 	var request workqueue.Completion
-	if view.CurrentExecutor {
+	if view.CanSettleResult() {
 		request, err = queue.ReadCompletionAt(ctx, view)
 	} else {
 		request, err = queue.ReadInterruptedGroupRestorationAt(ctx, view)

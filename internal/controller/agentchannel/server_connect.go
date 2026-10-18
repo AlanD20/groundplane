@@ -101,6 +101,8 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	dnsChecks := &dnsCheckExchange{}
 	edgeChecks := &edgeCheckExchange{}
 	staging := &backupStagingSession{}
+	journalReplayComplete := false
+	journalReplayReports := 0
 	controlBurst := 0
 	for {
 		event := nextConnectEvent(
@@ -216,6 +218,21 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			}
 			if result.message.GetAuthenticate() != nil {
 				return unauthenticated()
+			}
+			if request := result.message.GetWorkJournalReplayRequest(); request != nil {
+				if journalReplayComplete || journalReplayReports >= 1024 && !request.Complete || executionplan.RejectUnknown(result.message) != nil {
+					return status.Error(codes.InvalidArgument, "startup result replay is complete, oversized or malformed")
+				}
+				ack, err := s.replayWorkJournal(session.ctx, session, authorization.Generation, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_WorkJournalReplayAck{WorkJournalReplayAck: ack}}); err != nil {
+					return err
+				}
+				journalReplayReports++
+				journalReplayComplete = ack.Complete
+				continue
 			}
 			if frame := result.message.GetBackupConfigTransfer(); frame != nil {
 				if executionplan.RejectUnknown(result.message) != nil {
@@ -335,6 +352,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			}
 
 			if ready := result.message.GetReady(); ready != nil {
+				if !journalReplayComplete {
+					return status.Error(codes.FailedPrecondition, "startup result replay must complete before Ready")
+				}
 				if executionplan.RejectUnknown(ready) != nil || ready.TerminalDeliveryClean == nil ||
 					(!ready.GetTerminalDeliveryClean() && ready.Capacity != 0) {
 					return status.Error(codes.InvalidArgument, "agent Ready terminal delivery state is invalid")

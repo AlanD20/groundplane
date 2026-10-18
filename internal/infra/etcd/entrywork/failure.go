@@ -20,7 +20,7 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 	reason entryexecution.FailureReason, at time.Time, interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
-	if !view.ActiveAttempt || view.CurrentExecutor == interrupted || view.ExecutorRevision <= 0 ||
+	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 ||
 		attempt.FinishedAt != nil || attempt.Direction != workexecution.Forward ||
 		item.Operation != workexecution.EntryConfiguration || !task.PublicationComplete || task.CollectionStartedAt != nil ||
 		interrupted && reason != entryexecution.ExecutionInterrupted {

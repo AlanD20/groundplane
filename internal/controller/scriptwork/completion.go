@@ -28,7 +28,7 @@ func (service *Service) Complete(ctx context.Context, authorization agentregistr
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -40,7 +40,7 @@ func (service *Service) Complete(ctx context.Context, authorization agentregistr
 		if err := service.SettleCompleted(ctx, view, guards, time.Now().UTC()); err != nil {
 			return workexecution.Attempt{}, err
 		}
-		view, err = service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 		if err != nil {
 			return workexecution.Attempt{}, err
 		}

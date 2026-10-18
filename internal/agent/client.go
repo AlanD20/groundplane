@@ -44,6 +44,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/agentownership"
 	"github.com/AlanD20/groundplane/internal/infra/agentstagingjournal"
 	"github.com/AlanD20/groundplane/internal/infra/agentterminaljournal"
+	"github.com/AlanD20/groundplane/internal/infra/agentworkjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc"
@@ -73,6 +74,7 @@ type reconnectWaiter func(context.Context, uint) error
 // Client owns one authenticated, single-use Controller stream. Identity and
 // credential material are deliberately private and are never logged.
 type Client struct {
+	workJournal         *agentworkjournal.Journal
 	environmentExecutor *environmentruntime.Executor
 	lifecycleExecutor   *lifecycleruntime.Executor
 	backupExecutor      *backupruntime.Executor

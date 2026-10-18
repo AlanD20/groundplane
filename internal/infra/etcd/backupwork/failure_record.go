@@ -19,7 +19,7 @@ func (repository *InputRepository) PrepareStoppedFailure(ctx context.Context, vi
 	reason executionplan.BackupFailureReason, at time.Time,
 ) (workqueue.Change, workexecution.Completion, error) {
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
-	if !view.CurrentExecutor || !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
+	if !view.CanSettleResult() || !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
 		attempt.Direction != workexecution.Forward || attempt.StartedAt == nil || attempt.FinishedAt != nil || !reason.Valid() {
 		return workqueue.Change{}, workexecution.Completion{}, conflict("Backup failure no longer owns the active forward execution")
 	}

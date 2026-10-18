@@ -18,7 +18,7 @@ import (
 func PrepareRemovalFailure(ctx context.Context, reader Reader, view workqueue.ResumeView,
 	input attachexecution.RemovalInput, reason attachexecution.FailureReason, at time.Time, interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
-	if !view.ActiveAttempt || view.CurrentExecutor == interrupted || view.ExecutorRevision <= 0 ||
+	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 ||
 		view.Attempt.Attempt.FinishedAt != nil || !removalOperation(view.Work.Item.Item.Operation) ||
 		!workexecution.SameAssignment(view.Attempt.Attempt, input.Attempt) {
 		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "Attach failure no longer owns its active attempt")

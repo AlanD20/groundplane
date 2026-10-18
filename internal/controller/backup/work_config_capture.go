@@ -31,7 +31,7 @@ func (owner *AgentWork) StreamConfigCapture(ctx context.Context, authorization a
 		return err
 	}
 	attempt := binding.Attempt
-	view, err := owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return err
 	}

@@ -42,7 +42,7 @@ func (record CompletionRecord) Validate(input resolverexecution.Input) error {
 func (repository *Repository) PrepareCompleted(ctx context.Context, view workqueue.ResumeView,
 	proof *agentpb.DNSResolverObservationEvidence, at time.Time,
 ) (workqueue.Change, workexecution.Input, error) {
-	if !view.ActiveAttempt || !view.CurrentExecutor || view.Attempt.Attempt.FinishedAt != nil || view.Checkpoint.Record == nil ||
+	if !view.ActiveAttempt || !view.CanSettleResult() || view.Attempt.Attempt.FinishedAt != nil || view.Checkpoint.Record == nil ||
 		view.Attempt.Attempt.Direction != workexecution.Forward {
 		return workqueue.Change{}, workexecution.Input{}, invalid("DNS resolver completion requires its active final forward checkpoint")
 	}

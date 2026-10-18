@@ -27,7 +27,7 @@ import (
 func (repository *Repository) PrepareCompleted(ctx context.Context, view workqueue.ResumeView,
 	observation backingruntimefact.Observation, at time.Time,
 ) (prepared workqueue.Change, result workexecution.Input, returnErr error) {
-	if !view.ActiveAttempt || !view.CurrentExecutor || view.Attempt.Attempt.Direction != workexecution.Forward ||
+	if !view.ActiveAttempt || !view.CanSettleResult() || view.Attempt.Attempt.Direction != workexecution.Forward ||
 		view.Checkpoint.Record == nil || observation.ObservedAt.After(at) {
 		return prepared, result, invalid("backing creation completion requires its current captured Agent execution")
 	}

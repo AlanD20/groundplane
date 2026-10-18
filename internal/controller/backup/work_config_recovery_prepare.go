@@ -26,7 +26,7 @@ func (owner *AgentWork) PrepareConfigRecovery(ctx context.Context, authorization
 	if err != nil {
 		return nil, err
 	}
-	view, err := owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return nil, err
 	}

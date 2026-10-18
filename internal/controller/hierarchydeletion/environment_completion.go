@@ -35,7 +35,7 @@ func (service *Reports) CompleteEnvironmentRemoval(ctx context.Context, authoriz
 	if evidence.Validate() != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Environment removal completion evidence is invalid")
 	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (service *Reports) CompleteEnvironmentRemoval(ctx context.Context, authoriz
 		if !result.Succeeded {
 			return nil, errs.New(errs.KindStateConflict, "Environment removal completion ownership changed; resend the saved result")
 		}
-		view, err = service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 		if err != nil {
 			return nil, err
 		}

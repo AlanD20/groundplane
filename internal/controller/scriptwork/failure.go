@@ -25,7 +25,7 @@ func (service *Service) FailScript(ctx context.Context, authorization agentregis
 	if _, err := authorization.Conditions(); err != nil {
 		return nil, err
 	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (service *Service) FailScript(ctx context.Context, authorization agentregis
 		if err := service.repository.FailScriptWork(ctx, view, authorization, time.Now().UTC()); err != nil {
 			return nil, err
 		}
-		view, err = service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+		view, err = authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 		if err != nil {
 			return nil, err
 		}

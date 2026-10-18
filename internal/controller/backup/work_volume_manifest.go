@@ -73,7 +73,7 @@ func (owner *AgentWork) volumeManifestOwner(ctx context.Context, authorization a
 	if err != nil {
 		return backupvolumemanifest.Owner{}, nil, err
 	}
-	view, err := owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err := authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 	if err != nil {
 		return backupvolumemanifest.Owner{}, nil, err
 	}

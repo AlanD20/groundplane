@@ -17,7 +17,7 @@ func (repository *InputRepository) PrepareRecoveryFailure(ctx context.Context, v
 	reason executionplan.BackupFailureReason, at time.Time, interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
-	if !view.ActiveAttempt || view.CurrentExecutor == interrupted || view.ExecutorRevision <= 0 ||
+	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 ||
 		(item.Operation != workexecution.BackupPrune && item.Operation != workexecution.Backup && item.Operation != workexecution.Restore) ||
 		attempt.Direction != workexecution.Recovery || attempt.FinishedAt != nil ||
 		!reason.Valid() || interrupted && reason != executionplan.BackupExecutionInterrupted ||

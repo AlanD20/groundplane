@@ -307,6 +307,9 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	runtimeResources.workJournal = workJournal
+	if err := client.SetWorkJournal(workJournal); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
 	scriptExecutor, err := scriptruntime.NewExecutor(scripts, workJournal)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
