@@ -48,7 +48,7 @@ func (quiescence *RecoveryQuiescence) Observe(ctx context.Context, input release
 	if err := bounded.Err(); err != nil {
 		return releaseexecution.QuiescenceProof{}, err
 	}
-	if err := quiescence.ownership.CheckRecovery(input.Forward, input.Input.Attempt); err != nil {
+	if err := quiescence.ownership.CheckRestoration(input); err != nil {
 		return releaseexecution.QuiescenceProof{}, err
 	}
 	if err := quiescence.helper.StopReleaseHelper(bounded, input.Forward); err != nil {
@@ -68,7 +68,7 @@ func (quiescence *RecoveryQuiescence) Observe(ctx context.Context, input release
 		if err != nil {
 			return releaseexecution.QuiescenceProof{}, err
 		}
-		if err := quiescence.ownership.CheckRecovery(input.Forward, input.Input.Attempt); err != nil {
+		if err := quiescence.ownership.CheckRestoration(input); err != nil {
 			return releaseexecution.QuiescenceProof{}, err
 		}
 		cleanup, err := quiescence.scripts.CleanupHook(bounded, input, report, hook, captured.Projection, captured.Artifacts)
@@ -81,7 +81,7 @@ func (quiescence *RecoveryQuiescence) Observe(ctx context.Context, input release
 			ContainerID: stopped.ContainerID, Absent: true, ObservedAt: time.Now().UTC(),
 		})
 	}
-	if err := quiescence.ownership.CheckRecovery(input.Forward, input.Input.Attempt); err != nil {
+	if err := quiescence.ownership.CheckRestoration(input); err != nil {
 		return releaseexecution.QuiescenceProof{}, err
 	}
 	proof.OwnerCheckedAt = time.Now().UTC()

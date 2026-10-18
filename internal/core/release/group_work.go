@@ -87,6 +87,7 @@ func DecideGroupWork(manifest GroupWorkManifest, items []workexecution.Item, at 
 		forward, forwardFound := byID[member.ForwardID]
 		restore, restoreFound := byID[member.RestoreID]
 		if !forwardFound || !restoreFound || forward.TargetID != member.Member.ServiceID || restore.TargetID != member.Member.ServiceID ||
+			forward.Operation != workexecution.Release || restore.Operation != workexecution.ReleaseRestoration ||
 			forward.Placement != restore.Placement || forward.Placement.Executor != workexecution.Agent {
 			return GroupWorkDecision{}, invalid("native Release Group work belongs to different members or hosts")
 		}

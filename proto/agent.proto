@@ -462,6 +462,10 @@ message ReleaseRecoveryAssignment {
   ReleaseWorkAssignment work = 1;
   bytes forward_attempt = 2;
   bytes failure = 3;
+  // Separate Group restoration authority after a later member failed. Exactly
+  // one of failure or group_restoration is present; successful source attempts
+  // retain their actual outcome. No generic command or execution plan is sent.
+  bytes group_restoration = 4;
 }
 
 // Canonical bounded Release cursor; its closed schema is owned by the Release

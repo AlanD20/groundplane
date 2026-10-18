@@ -69,11 +69,12 @@ func (report RecoveryReport) Checkpoint(input RecoveryInput) (workexecution.Chec
 		return workexecution.Checkpoint{}, err
 	}
 	raw, err := json.Marshal(struct {
-		Attempt          workexecution.Attempt `json:"attempt"`
-		ForwardAttemptID string                `json:"forward_attempt_id"`
-		Failure          workexecution.Input   `json:"failure"`
-		Report           RecoveryReport        `json:"report"`
-	}{input.Input.Attempt, input.Forward.ID, *input.Forward.Result, report})
+		Attempt          workexecution.Attempt      `json:"attempt"`
+		ForwardAttemptID string                     `json:"forward_attempt_id"`
+		SourceResult     workexecution.Input        `json:"source_result"`
+		Group            *GroupRestorationAuthority `json:"group,omitempty"`
+		Report           RecoveryReport             `json:"report"`
+	}{input.Input.Attempt, input.Forward.ID, *input.Forward.Result, input.Group, report})
 	if err != nil {
 		return workexecution.Checkpoint{}, invalidProgress()
 	}

@@ -8,15 +8,16 @@ import (
 )
 
 type RecoveryRecord struct {
-	Forward    workexecution.Attempt               `json:"forward"`
-	Failure    releaseexecution.Failure            `json:"failure"`
-	Report     releaseexecution.RecoveryReport     `json:"report"`
-	Effect     *RecoveryEffectRecord               `json:"effect,omitempty"`
-	Completion *releaseexecution.CompletionReceipt `json:"completion,omitempty"`
+	Forward    workexecution.Attempt                       `json:"forward"`
+	Failure    releaseexecution.Failure                    `json:"failure"`
+	Group      *releaseexecution.GroupRestorationAuthority `json:"group,omitempty"`
+	Report     releaseexecution.RecoveryReport             `json:"report"`
+	Effect     *RecoveryEffectRecord                       `json:"effect,omitempty"`
+	Completion *releaseexecution.CompletionReceipt         `json:"completion,omitempty"`
 }
 
 func (record RecoveryRecord) input(attempt workexecution.Attempt) releaseexecution.RecoveryInput {
-	return releaseexecution.RecoveryInput{Input: releaseexecution.Input{Attempt: attempt}, Forward: record.Forward, Failure: record.Failure}
+	return releaseexecution.RecoveryInput{Input: releaseexecution.Input{Attempt: attempt}, Forward: record.Forward, Failure: record.Failure, Group: releaseexecution.CloneGroupRestoration(record.Group)}
 }
 
 func (journal *Journal) PrepareRecovery(ctx context.Context, input releaseexecution.RecoveryInput, next releaseexecution.RecoveryProgress) (*releaseexecution.RecoveryReport, error) {
@@ -47,7 +48,8 @@ func (journal *Journal) PrepareRecovery(ctx context.Context, input releaseexecut
 	}
 	var prior *releaseexecution.RecoveryProgress
 	if state.Recovery != nil {
-		if state.Recovery.Forward.ID != input.Forward.ID || *state.Recovery.Forward.Result != *input.Forward.Result {
+		if state.Recovery.Forward.ID != input.Forward.ID || *state.Recovery.Forward.Result != *input.Forward.Result ||
+			!releaseexecution.EqualGroupRestoration(state.Recovery.Group, input.Group) {
 			return nil, conflict()
 		}
 		prior = &state.Recovery.Report.Progress
@@ -84,7 +86,7 @@ func (journal *Journal) PrepareRecovery(ctx context.Context, input releaseexecut
 	if state.Recovery != nil {
 		effect = state.Recovery.Effect
 	}
-	state.Recovery = &RecoveryRecord{Forward: input.Forward, Failure: input.Failure, Report: releaseexecution.RecoveryReport{StageID: stageID, Progress: next}, Effect: effect}
+	state.Recovery = &RecoveryRecord{Forward: input.Forward, Failure: input.Failure, Group: releaseexecution.CloneGroupRestoration(input.Group), Report: releaseexecution.RecoveryReport{StageID: stageID, Progress: next}, Effect: effect}
 	if err := journal.writeRecord(ctx, *state); err != nil {
 		return nil, err
 	}
@@ -133,7 +135,8 @@ func (journal *Journal) LoadRecovery(ctx context.Context, input releaseexecution
 		return input, nil, err
 	}
 	if !workexecution.SameAssignment(state.Attempt, input.Input.Attempt) || state.Recovery == nil ||
-		state.Recovery.Forward.ID != input.Forward.ID || *state.Recovery.Forward.Result != *input.Forward.Result {
+		state.Recovery.Forward.ID != input.Forward.ID || *state.Recovery.Forward.Result != *input.Forward.Result ||
+		!releaseexecution.EqualGroupRestoration(state.Recovery.Group, input.Group) {
 		return input, nil, conflict()
 	}
 	input.Input.Attempt = state.Attempt

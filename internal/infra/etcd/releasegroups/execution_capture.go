@@ -74,9 +74,13 @@ func (capture ExecutionCapture) Validate() error {
 			capture.Members[index].Forward.ID == capture.Members[index].Restore.ID {
 			return errs.New(errs.KindValidationFailed, "Release Group member preparation is incomplete")
 		}
-		for _, id := range []string{member.ForwardID, member.RestoreID} {
+		for ordinal, id := range []string{member.ForwardID, member.RestoreID} {
 			item, found := byID[id]
-			if !found || item.TargetID != member.Member.ServiceID || item.Operation != workexecution.Release ||
+			operation := workexecution.Release
+			if ordinal == 1 {
+				operation = workexecution.ReleaseRestoration
+			}
+			if !found || item.TargetID != member.Member.ServiceID || item.Operation != operation ||
 				item.Input != nil || item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput ||
 				!slices.Contains(item.Claims, workexecution.Claim{ScopeID: member.Member.ServiceID}) ||
 				!slices.Contains(item.Claims, workexecution.Claim{ScopeID: capture.Scope.EnvironmentID}) ||

@@ -7,13 +7,15 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 )
 
-// RecoveryInput binds cleanup to the failed forward attempt and its captured
-// Release. The recovery attempt has its own deadline, executor and checkpoints;
-// none of those can replace the original input or original failure.
+// RecoveryInput binds the shared restoration procedure to a captured cause:
+// failed-attempt cleanup or a separate Group switch-back operation. Cleanup
+// retains the original failure; Group restoration retains the source member's
+// actual success and names the later failure that requires its restoration.
 type RecoveryInput struct {
 	Input   Input
 	Forward workexecution.Attempt
 	Failure Failure
+	Group   *GroupRestorationAuthority
 }
 
 func (input RecoveryInput) Validate() error {
@@ -28,6 +30,12 @@ func (input RecoveryInput) Validate() error {
 // of configuration/artifact bytes. Effect execution also requires Validate.
 func (input RecoveryInput) ValidateIdentity() error {
 	recovery, forward := input.Input.Attempt, input.Forward
+	if input.Group != nil {
+		if input.Failure != (Failure{}) {
+			return invalidProgress()
+		}
+		return input.Group.ValidateFor(recovery, forward)
+	}
 	if recovery.Validate() != nil || forward.Validate() != nil || recovery.Direction != workexecution.Recovery ||
 		forward.Direction != workexecution.Forward || recovery.FinishedAt != nil || forward.FinishedAt == nil || forward.Result == nil ||
 		forward.Outcome == workexecution.Succeeded || recovery.TaskID != forward.TaskID || recovery.WorkItemID != forward.WorkItemID ||

@@ -57,7 +57,7 @@ func (configuration *RecoveryConfiguration) Run(ctx context.Context, input relea
 	if err != nil {
 		return releaseexecution.RecoveryConfigurationProof{}, err
 	}
-	if err := configuration.ownership.CheckRecovery(input.Forward, input.Input.Attempt); err != nil {
+	if err := configuration.ownership.CheckRestoration(input); err != nil {
 		return releaseexecution.RecoveryConfigurationProof{}, err
 	}
 	if err := configuration.runtime.StopRecoveryFiles(bounded, input, report, files); err != nil {
@@ -75,7 +75,7 @@ func (configuration *RecoveryConfiguration) Run(ctx context.Context, input relea
 			return releaseexecution.RecoveryConfigurationProof{}, err
 		}
 	}
-	if err := configuration.ownership.CheckRecovery(input.Forward, input.Input.Attempt); err != nil {
+	if err := configuration.ownership.CheckRestoration(input); err != nil {
 		return releaseexecution.RecoveryConfigurationProof{}, err
 	}
 	return proof, nil

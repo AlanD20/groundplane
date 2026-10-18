@@ -22,26 +22,29 @@ func EncodeRecoveryAssignment(input RecoveryInput) (*agentpb.ReleaseRecoveryAssi
 	if err != nil {
 		return nil, err
 	}
-	failure, _, err := EncodeFailure(input.Forward, input.Failure)
+	var failure, group []byte
+	if input.Group == nil {
+		failure, _, err = EncodeFailure(input.Forward, input.Failure)
+	} else {
+		group, err = canonicalCheckpoint(*input.Group)
+	}
 	if err != nil {
 		return nil, err
 	}
 	return &agentpb.ReleaseRecoveryAssignment{Work: &agentpb.ReleaseWorkAssignment{Attempt: attempt, Release: proto.CloneOf(input.Input.Release)},
-		ForwardAttempt: forward, Failure: failure}, nil
+		ForwardAttempt: forward, Failure: failure, GroupRestoration: group}, nil
 }
 
 func DecodeRecoveryAssignment(message *agentpb.ReleaseRecoveryAssignment, identity workexecution.Identity) (RecoveryInput, error) {
 	if message == nil || executionplan.RejectUnknown(message) != nil || message.Work == nil ||
 		len(message.ForwardAttempt) == 0 || len(message.ForwardAttempt) > MaximumCheckpointBytes ||
-		len(message.Failure) == 0 || len(message.Failure) > MaximumCheckpointBytes {
+		(len(message.Failure) == 0) == (len(message.GroupRestoration) == 0) ||
+		len(message.Failure) > MaximumCheckpointBytes || len(message.GroupRestoration) > MaximumCheckpointBytes {
 		return RecoveryInput{}, invalidProgress()
 	}
 	attempt, release, err := workexecution.DecodeReleaseDelivery(message.Work, identity)
 	if err != nil {
 		return RecoveryInput{}, err
-	}
-	if attempt.Direction != workexecution.Recovery {
-		return RecoveryInput{}, invalidProgress()
 	}
 	forward, err := jcs.Decode[workexecution.Attempt](message.ForwardAttempt)
 	if err != nil || forward.Validate() != nil || forward.Result == nil {
@@ -51,7 +54,21 @@ func DecodeRecoveryAssignment(message *agentpb.ReleaseRecoveryAssignment, identi
 	if err != nil || !bytes.Equal(canonical, message.ForwardAttempt) {
 		return RecoveryInput{}, invalidProgress()
 	}
-	failure, err := DecodeFailure(forward, message.Failure, *forward.Result)
+	var failure Failure
+	var group *GroupRestorationAuthority
+	if len(message.Failure) != 0 {
+		failure, err = DecodeFailure(forward, message.Failure, *forward.Result)
+	} else {
+		var decoded GroupRestorationAuthority
+		decoded, err = jcs.Decode[GroupRestorationAuthority](message.GroupRestoration)
+		if err == nil {
+			canonical, encodeErr := canonicalCheckpoint(decoded)
+			if encodeErr != nil || !bytes.Equal(canonical, message.GroupRestoration) {
+				return RecoveryInput{}, invalidProgress()
+			}
+			group = &decoded
+		}
+	}
 	if err != nil {
 		return RecoveryInput{}, err
 	}
@@ -59,7 +76,7 @@ func DecodeRecoveryAssignment(message *agentpb.ReleaseRecoveryAssignment, identi
 	if err != nil {
 		return RecoveryInput{}, err
 	}
-	input := RecoveryInput{Input: Input{Attempt: attempt, Release: release, Artifacts: artifacts}, Forward: forward, Failure: failure}
+	input := RecoveryInput{Input: Input{Attempt: attempt, Release: release, Artifacts: artifacts}, Forward: forward, Failure: failure, Group: group}
 	if err := input.Validate(); err != nil {
 		return RecoveryInput{}, err
 	}

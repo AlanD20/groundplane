@@ -91,7 +91,7 @@ func (executor *RecoveryExecutor) execute(ctx context.Context, input releaseexec
 	if sequence < start.CheckpointSequence {
 		return nil, errs.New(errs.KindStateConflict, "Controller has recovery checkpoints missing from the Agent journal; reconcile the saved attempt before further effects")
 	}
-	if err := executor.ownership.CheckRecovery(input.Forward, input.Input.Attempt); err != nil {
+	if err := executor.ownership.CheckRestoration(input); err != nil {
 		return nil, err
 	}
 	if err := executor.helper.StopRecoveryHelper(bounded, input.Input.Attempt); err != nil {

@@ -9,6 +9,7 @@ type Operation string
 
 const (
 	Release             Operation = "release"
+	ReleaseRestoration  Operation = "release_restoration"
 	ServiceLifecycle    Operation = "service_lifecycle"
 	ServiceRemoval      Operation = "service_removal"
 	BackingProvision    Operation = "backing_provision"

@@ -6958,8 +6958,12 @@ type ReleaseRecoveryAssignment struct {
 	Work           *ReleaseWorkAssignment `protobuf:"bytes,1,opt,name=work,proto3" json:"work,omitempty"`
 	ForwardAttempt []byte                 `protobuf:"bytes,2,opt,name=forward_attempt,json=forwardAttempt,proto3" json:"forward_attempt,omitempty"`
 	Failure        []byte                 `protobuf:"bytes,3,opt,name=failure,proto3" json:"failure,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Separate Group restoration authority after a later member failed. Exactly
+	// one of failure or group_restoration is present; successful source attempts
+	// retain their actual outcome. No generic command or execution plan is sent.
+	GroupRestoration []byte `protobuf:"bytes,4,opt,name=group_restoration,json=groupRestoration,proto3" json:"group_restoration,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ReleaseRecoveryAssignment) Reset() {
@@ -7009,6 +7013,13 @@ func (x *ReleaseRecoveryAssignment) GetForwardAttempt() []byte {
 func (x *ReleaseRecoveryAssignment) GetFailure() []byte {
 	if x != nil {
 		return x.Failure
+	}
+	return nil
+}
+
+func (x *ReleaseRecoveryAssignment) GetGroupRestoration() []byte {
+	if x != nil {
+		return x.GroupRestoration
 	}
 	return nil
 }
@@ -49965,11 +49976,12 @@ const file_proto_agent_proto_rawDesc = "" +
 	"inspection\"\x9e\x01\n" +
 	"\x15ReleaseWorkAssignment\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12@\n" +
-	"\arelease\x18\x02 \x01(\v2&.groundplane.agent.v1.ReleaseWorkInputR\arelease\"\x9f\x01\n" +
+	"\arelease\x18\x02 \x01(\v2&.groundplane.agent.v1.ReleaseWorkInputR\arelease\"\xcc\x01\n" +
 	"\x19ReleaseRecoveryAssignment\x12?\n" +
 	"\x04work\x18\x01 \x01(\v2+.groundplane.agent.v1.ReleaseWorkAssignmentR\x04work\x12'\n" +
 	"\x0fforward_attempt\x18\x02 \x01(\fR\x0eforwardAttempt\x12\x18\n" +
-	"\afailure\x18\x03 \x01(\fR\afailure\"\x7f\n" +
+	"\afailure\x18\x03 \x01(\fR\afailure\x12+\n" +
+	"\x11group_restoration\x18\x04 \x01(\fR\x10groupRestoration\"\x7f\n" +
 	" ReleaseRecoveryCheckpointRequest\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12\x16\n" +
 	"\x06report\x18\x02 \x01(\fR\x06report\"\x83\x01\n" +
