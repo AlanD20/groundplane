@@ -25,21 +25,32 @@ type GroupRestorationAuthority struct {
 }
 
 func (authority GroupRestorationAuthority) ValidateFor(attempt, source workexecution.Attempt) error {
-	if attempt.Validate() != nil || source.Validate() != nil ||
-		ids.Validate(ids.KindReleaseGroup, authority.GroupID) != nil ||
+	if authority.ValidateSource(source) != nil || attempt.Validate() != nil ||
+		attempt.Input.ID != authority.SourceInput.ID || attempt.Input == authority.SourceInput ||
+		attempt.Direction != workexecution.Forward ||
+		attempt.FinishedAt != nil || attempt.TaskID != source.TaskID || attempt.WorkItemID == source.WorkItemID ||
+		authority.FailedWorkID == attempt.WorkItemID ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		attempt.Executor.HostID != source.Executor.HostID || attempt.AssignedAt.Before(authority.FailedAt) {
+		return invalidProgress()
+	}
+	return nil
+}
+
+// ValidateSource validates a real completed source before a restoration attempt
+// exists. Input preparation must not invent an attempt to prove this authority.
+// ValidateFor additionally binds the eventual live restoration assignment.
+func (authority GroupRestorationAuthority) ValidateSource(source workexecution.Attempt) error {
+	if source.Validate() != nil || ids.Validate(ids.KindReleaseGroup, authority.GroupID) != nil ||
 		ids.Validate(ids.KindOperation, authority.GroupOperationID) != nil ||
 		authority.GroupInput.Validate() != nil || authority.Failure.Validate() != nil ||
 		ids.Validate(ids.KindWorkItem, authority.FailedWorkID) != nil ||
 		authority.MemberOrdinal == 0 || authority.MemberOrdinal >= authority.FailedOrdinal || authority.FailedOrdinal > 32 ||
 		authority.SourceInput != source.Input || authority.SourceInput.Validate() != nil ||
-		attempt.Input.ID != authority.SourceInput.ID || attempt.Input == authority.SourceInput ||
-		attempt.Direction != workexecution.Forward || source.Direction != workexecution.Forward ||
+		source.Direction != workexecution.Forward ||
 		source.Outcome != workexecution.Succeeded || source.FinishedAt == nil || source.Result == nil ||
-		attempt.FinishedAt != nil || attempt.TaskID != source.TaskID || attempt.WorkItemID == source.WorkItemID ||
-		authority.FailedWorkID == attempt.WorkItemID || authority.FailedWorkID == source.WorkItemID ||
-		attempt.Executor.Executor != workexecution.Agent || source.Executor.Executor != workexecution.Agent ||
-		attempt.Executor.HostID != source.Executor.HostID || authority.FailedAt.IsZero() || authority.FailedAt.Location() != time.UTC ||
-		authority.FailedAt.Before(*source.FinishedAt) || attempt.AssignedAt.Before(authority.FailedAt) {
+		source.StartedAt == nil || authority.FailedWorkID == source.WorkItemID || source.Executor.Executor != workexecution.Agent ||
+		authority.FailedAt.IsZero() || authority.FailedAt.Location() != time.UTC || authority.FailedAt.Before(*source.FinishedAt) {
 		return invalidProgress()
 	}
 	return nil
