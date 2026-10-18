@@ -16,6 +16,7 @@ import (
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -48,10 +49,15 @@ func newControllerAuthorityComposition(
 		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize Task repository: %w", err)
 	}
-	if err := tasks.EnsureTaskJournalSchema(ctx); err != nil {
+	execution, err := workqueue.NewRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize execution schema owner: %w", err)
+	}
+	if err := execution.EnsureSchema(ctx); err != nil {
 		closeErr := store.Close()
 		return controllerAuthorityComposition{}, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("validate Task journal schema", err),
+			wrapControllerRunError("admit native execution storage", err),
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}

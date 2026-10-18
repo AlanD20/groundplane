@@ -171,59 +171,6 @@ func (repository *TaskRepository) GetTask(
 	}, nil
 }
 
-// EnsureTaskJournalSchema is the clean-start gate for the ownership journal.
-// A missing marker can be initialized only when the Task primary collection is
-// empty. Any incompatible state or lost initialization CAS fails closed.
-func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) error {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return err
-	}
-	primary, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskjournal.TaskPrefix, Limit: 1})
-	if err != nil {
-		return err
-	}
-	if primary == nil {
-		return errs.New(errs.KindInternal, "task journal schema primary read is missing")
-	}
-	marker, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskjournal.TaskJournalSchemaKey}, Revision: primary.ReadRevision,
-	})
-	if err != nil {
-		return err
-	}
-	if marker == nil || marker.ReadRevision != primary.ReadRevision || len(marker.Values) != 1 {
-		return errs.New(errs.KindInternal, "task journal schema marker read is incomplete")
-	}
-	if marker.Values[0] != nil {
-		if marker.Values[0].Key != taskjournal.TaskJournalSchemaKey ||
-			string(marker.Values[0].Value) != taskjournal.TaskJournalSchemaValue {
-			return errs.New(errs.KindInternal, "task journal schema marker is incompatible")
-		}
-		return nil
-	}
-	if len(primary.Values) != 0 {
-		return errs.New(errs.KindInternal, "task journal schema marker is missing for existing tasks")
-	}
-	initialized, err := repository.store.Transact(
-		ctx,
-		[]etcdstore.Condition{{Key: taskjournal.TaskJournalSchemaKey}, {Key: taskjournal.TaskPrefix, Prefix: true}},
-		[]etcdstore.Mutation{
-			{
-				Type:  etcdstore.MutationPut,
-				Key:   taskjournal.TaskJournalSchemaKey,
-				Value: []byte(taskjournal.TaskJournalSchemaValue),
-			},
-		},
-	)
-	if err != nil {
-		return err
-	}
-	if !initialized.Succeeded {
-		return errs.New(errs.KindInternal, "task journal schema initialization compare failed")
-	}
-	return nil
-}
-
 // TaskRetryScope is the immutable durable owner used to domain-separate a
 // human retry intent from the same idempotency key under another owner.
 type TaskRetryScope struct {

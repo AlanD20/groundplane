@@ -247,6 +247,18 @@ deleting applications, databases or Volumes. A disposable reset is an alternativ
 only with explicit scope and approval. No reset, deployment or migration is
 authorized by accepting this document.
 
+The startup gate is owned by [execution storage](../../internal/infra/etcd/workqueue/schema.go).
+It initializes a fresh native store atomically and rejects superseded Task
+records rather than translating them. A rejection marker also makes the previous
+Controller refuse the store after cutover; the release storage epoch and Agent
+protocol reject incompatible artifacts through the normal installer and channel.
+These guards do not migrate an existing installation. Stop admission, reconcile
+outstanding effects with its matching software, and export retained history before
+an explicitly designed offline resource conversion. Until that conversion exists,
+keep existing installations on their matching build or use an explicitly approved
+disposable reset. Startup never deletes workload definitions or data to pass this
+gate. Native operation publication begins only after it succeeds.
+
 ## Delivery boundary
 
 Write the complete agreed replacement, generated artifacts and removal of old
