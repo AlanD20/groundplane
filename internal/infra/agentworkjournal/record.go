@@ -13,6 +13,7 @@ import (
 // attemptRecord owns the single transport sequence shared by an operation and
 // its hooks. Each typed report is retained for replay without retaining history.
 type attemptRecord struct {
+	Backing                 *BackingRecord                      `json:"backing,omitempty"`
 	EnvironmentProvision    *EnvironmentProvisionRecord         `json:"environment_provision,omitempty"`
 	Backup                  *BackupRecord                       `json:"backup,omitempty"`
 	RemovalRecovery         *RemovalRecoveryRecord              `json:"removal_recovery,omitempty"`
@@ -57,6 +58,12 @@ func (record attemptRecord) script() (*ScriptRecord, error) {
 }
 
 func (record attemptRecord) pending() (bool, error) {
+	if record.Backing != nil {
+		if record.Backing.Failure != nil {
+			return record.Backing.Failure.Receipt == nil, nil
+		}
+		return record.Backing.Completion == nil, nil
+	}
 	if record.EnvironmentProvision != nil {
 		return record.EnvironmentProvision.Receipt == nil, nil
 	}
@@ -161,6 +168,9 @@ func (record attemptRecord) pending() (bool, error) {
 }
 
 func (record attemptRecord) validate() error {
+	if record.Backing != nil {
+		return record.validateBacking()
+	}
 	if record.EnvironmentProvision != nil {
 		return record.validateEnvironmentProvision()
 	}

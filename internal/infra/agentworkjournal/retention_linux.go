@@ -132,6 +132,20 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 			terminal.FinishedAt.Before(record.UpdatedAt) {
 			return conflict()
 		}
+		if backing := record.Backing; backing != nil {
+			receipt := backing.Completion
+			if backing.Failure != nil {
+				receipt = backing.Failure.Receipt
+			}
+			if !sameBackingReceipt(receipt, terminal) {
+				return conflict()
+			}
+			if backing.Failure != nil && terminal.StartedAt != nil {
+				// A failure ACK settles delivery, not helper, file or hook
+				// execution. Retain the boundary for explicit cleanup proof.
+				return nil
+			}
+		}
 		if recovery := record.AttachProvisionRecovery; recovery != nil {
 			if recovery.Receipt == nil || recovery.Receipt.Outcome != terminal.Outcome ||
 				!recovery.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *recovery.Receipt.Result != *terminal.Result {
