@@ -26,35 +26,50 @@ func (ledger *ReleaseLedger) LoadReleaseRecoveryProgress(ctx context.Context, vi
 // assignment's read revision. Missing destinations become explicit removals;
 // missing snapshot bytes are an error, never interpreted as captured absence.
 func (ledger *ReleaseLedger) LoadBlueprintReleaseRecoveryConfiguration(ctx context.Context, view workqueue.ResumeView) (*runtimeconfiguration.Reference, []taskmaterialization.Record, error) {
-	if view.Attempt.Attempt.Direction != workexecution.Recovery {
-		return nil, nil, errs.New(errs.KindStateConflict, "prior file delivery requires a recovery attempt")
-	}
-	current, changed, err := ledger.LoadBlueprintReleaseConfiguration(ctx, view)
-	if err != nil {
-		return nil, nil, err
+	if view.Attempt.Attempt.Direction != workexecution.Recovery || !view.ActiveAttempt || !view.CurrentExecutor ||
+		view.Attempt.Attempt.StartedAt == nil || workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
+		return nil, nil, errs.New(errs.KindStateConflict, "prior file delivery requires an active started recovery attempt")
 	}
 	sources, err := ledger.LoadReleaseWorkInput(ctx, view.Work)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer clear(sources.Rollout.Record.CandidateArtifact)
-	captured := sources.Input.Configuration
-	if captured.Current != current {
-		return nil, nil, errs.New(errs.KindStateConflict, "Release recovery configuration capture changed")
+	return ledger.LoadCapturedRestorationConfiguration(ctx, sources.Input.Configuration, view.Work.ReadRevision)
+}
+
+// LoadCapturedRestorationConfiguration resolves exact immutable current/prior
+// file references. The caller supplies authenticated captured ownership; this
+// read neither substitutes a current head nor grants filesystem access.
+func (ledger *ReleaseLedger) LoadCapturedRestorationConfiguration(ctx context.Context, captured runtimeconfiguration.WorkCapture,
+	revision int64,
+) (*runtimeconfiguration.Reference, []taskmaterialization.Record, error) {
+	if ledger == nil || ledger.store == nil || captured.Validate() != nil || revision < captured.ReadRevision {
+		return nil, nil, errs.New(errs.KindStateConflict, "restoration files require their exact captured configuration")
+	}
+	repository, err := runtimeconfiguration.New(ledger.store)
+	if err != nil {
+		return nil, nil, err
+	}
+	current, err := repository.Load(ctx, captured.Current, revision)
+	if err != nil {
+		return nil, nil, err
+	}
+	changed := make([]taskmaterialization.Record, 0, len(captured.Destinations))
+	for _, file := range current.Files {
+		if slices.Contains(captured.Destinations, file.Destination) {
+			changed = append(changed, file)
+		}
 	}
 	var previous *runtimeconfiguration.Snapshot
 	if captured.Prior != nil {
-		repository, err := runtimeconfiguration.New(ledger.store)
-		if err != nil {
-			return nil, nil, err
-		}
-		snapshot, err := repository.Load(ctx, *captured.Prior, view.Work.ReadRevision)
+		snapshot, err := repository.Load(ctx, *captured.Prior, revision)
 		if err != nil {
 			return nil, nil, err
 		}
 		previous = &snapshot
 	}
-	restored, err := runtimeconfiguration.SelectRestorations(current.EnvironmentID, current.Generation, previous, changed)
+	restored, err := runtimeconfiguration.SelectRestorations(captured.Current.EnvironmentID, captured.Current.Generation, previous, changed)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -39,7 +39,7 @@ func (service *Service) SettleFailed(ctx context.Context, view workqueue.ResumeV
 		if err != nil {
 			return err
 		}
-		return service.ledger.SettleFailedBlueprintRecovery(ctx, view, input, reason, authorization, at)
+		return service.ledger.SettleFailedReleaseRestoration(ctx, view, input, reason, authorization, at)
 	}
 	delivery, err := service.LoadWorkAssignment(ctx, view)
 	if err != nil {

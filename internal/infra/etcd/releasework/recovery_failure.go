@@ -35,7 +35,8 @@ func prepareRecoveryFailure(ctx context.Context, store Reader, view workqueue.Re
 ) (workqueue.Change, workexecution.Completion, error) {
 	if ctx == nil || store == nil || input.Validate() != nil || !view.ActiveAttempt ||
 		!workexecution.SameAssignment(view.Attempt.Attempt, input.Input.Attempt) ||
-		view.Work.Item.Item.Operation != workexecution.Release {
+		(input.Group == nil && view.Work.Item.Item.Operation != workexecution.Release ||
+			input.Group != nil && view.Work.Item.Item.Operation != workexecution.ReleaseRestoration) {
 		return workqueue.Change{}, workexecution.Completion{}, invalid()
 	}
 	progress, err := LoadRecovery(ctx, store, input, view.Work.ReadRevision)

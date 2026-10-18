@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -13,6 +14,7 @@ import (
 )
 
 type ReleaseWorkSources struct {
+	Intent       domain.Intent
 	Input        releaserender.ReleaseWorkInput
 	Rollout      keyvalue.Versioned[releaserender.ServiceRolloutCapture]
 	Conditions   []keyvalue.Condition
@@ -176,5 +178,5 @@ func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(ctx context.Context, w
 		}
 	}
 	conditions = append(conditions, memberConditions...)
-	return ReleaseWorkSources{Input: input, Rollout: rollout, Conditions: conditions, Predecessors: predecessors}, nil
+	return ReleaseWorkSources{Intent: member.Intent, Input: input, Rollout: rollout, Conditions: conditions, Predecessors: predecessors}, nil
 }

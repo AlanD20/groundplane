@@ -64,7 +64,7 @@ func (ledger *ReleaseLedger) SettleFailedBlueprintRelease(ctx context.Context, v
 	return nil
 }
 
-func (ledger *ReleaseLedger) SettleFailedBlueprintRecovery(ctx context.Context, view workqueue.ResumeView, input releaseexecution.RecoveryInput,
+func (ledger *ReleaseLedger) SettleFailedReleaseRestoration(ctx context.Context, view workqueue.ResumeView, input releaseexecution.RecoveryInput,
 	reason releaseexecution.FailureReason, authorization []keyvalue.Condition, at time.Time,
 ) error {
 	if ledger == nil || ledger.store == nil || len(authorization) == 0 {

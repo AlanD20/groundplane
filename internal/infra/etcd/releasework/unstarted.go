@@ -18,7 +18,7 @@ func UnstartedKey(workID string) string { return "/v1/execution/release-unstarte
 // PrepareQueuedStop closes a stopped or expired Release before its next
 // assignment. Captured sources and previous attempts remain retained.
 func PrepareQueuedStop(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
-	if item.Item.Operation != workexecution.Release || item.Item.Placement.Executor != workexecution.Agent ||
+	if item.Item.Operation != workexecution.Release && item.Item.Operation != workexecution.ReleaseRestoration || item.Item.Placement.Executor != workexecution.Agent ||
 		item.Item.TaskID != task.Task.ID || at.IsZero() || at.Location() != time.UTC {
 		return workqueue.Change{}, invalid()
 	}
@@ -28,6 +28,11 @@ func PrepareQueuedStop(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot,
 	outcome := workexecution.Failed
 	if task.Task.Stop != nil {
 		outcome = task.Task.Stop.Outcome
+		if item.Item.ActiveAttemptID != "" || item.Item.Cleanup != workexecution.CleanupNone {
+			// Abort revokes forward permission, not the active slot or unknown
+			// effects. Captured cleanup remains accountable to its own owner.
+			return workqueue.PrepareRevocation(task, item, outcome, at)
+		}
 	} else if item.Item.ForwardRevoked {
 		outcome = workexecution.Superseded
 	} else if at.Before(item.Item.Deadline) && at.Before(task.Task.Deadline) {

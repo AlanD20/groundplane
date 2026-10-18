@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -41,12 +42,28 @@ func (service *Service) loadCapturedAssignment(ctx context.Context, view workque
 	if len(sources.Predecessors) != 1 || sources.Predecessors[0].ServiceID != view.Work.Item.Item.TargetID {
 		return nil, errs.New(errs.KindStateConflict, "Release delivery has no exact Service predecessor")
 	}
-	capture, render := sources.Rollout.Record, sources.Rollout.Record.Render
-	candidate, err := releaserender.OpenReleaseCandidateArtifact(capture)
+	input, err := BuildCapturedReleaseInput(sources, view.Attempt.Attempt)
 	if err != nil {
 		return nil, err
 	}
 	attempt, err := workexecution.EncodeAgentAttempt(view.Attempt.Attempt)
+	if err != nil {
+		return nil, err
+	}
+	return &agentpb.ReleaseWorkAssignment{Attempt: attempt, Release: input}, nil
+}
+
+// BuildCapturedReleaseInput projects retained Controller sources into the typed
+// machine payload. It performs no lookup, assignment or effect authorization.
+// Group restoration can use its real new attempt without fabricating an active
+// assignment for the already completed source member.
+func BuildCapturedReleaseInput(sources etcd.ReleaseWorkSources, attempt workexecution.Attempt) (*agentpb.ReleaseWorkInput, error) {
+	capture, render := sources.Rollout.Record, sources.Rollout.Record.Render
+	if attempt.Validate() != nil || attempt.TaskID != capture.TaskID || len(sources.Predecessors) != 1 ||
+		sources.Predecessors[0].ServiceID != render.ServiceID {
+		return nil, errs.New(errs.KindStateConflict, "Captured Release payload has no matching Task or Service predecessor")
+	}
+	candidate, err := releaserender.OpenReleaseCandidateArtifact(capture)
 	if err != nil {
 		return nil, err
 	}
@@ -136,10 +153,10 @@ func (service *Service) loadCapturedAssignment(ctx context.Context, view workque
 			input.TrafficConfigurations = [][]byte{configuration.JSON}
 		}
 	}
-	if _, err := executionplan.OpenReleaseWorkArtifacts(view.Attempt.Attempt, input); err != nil {
+	if _, err := executionplan.OpenReleaseWorkArtifacts(attempt, input); err != nil {
 		return nil, err
 	}
-	return &agentpb.ReleaseWorkAssignment{Attempt: attempt, Release: input}, nil
+	return input, nil
 }
 
 func releaseConfigurationWire(reference runtimeconfiguration.Reference) (*agentpb.WorkConfigurationReference, error) {

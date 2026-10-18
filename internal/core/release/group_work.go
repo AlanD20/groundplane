@@ -163,7 +163,7 @@ func DecideGroupWork(manifest GroupWorkManifest, items []workexecution.Item, at 
 			return selected, nil
 		}
 		outcome := MemberCompensated
-		if item.Outcome != workexecution.Succeeded {
+		if item.Outcome != workexecution.Succeeded && (item.Cleanup != workexecution.CleanupComplete || item.CleanupResult == nil) {
 			outcome = MemberRecoveryRequired
 		}
 		progress, err = executor.RecordCompensation(progress, MemberResult{
