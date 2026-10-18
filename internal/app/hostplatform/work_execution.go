@@ -205,7 +205,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	directReleases, err := platform.newDirectReleaseWork(queue, networkRecords, dependencies.Releases, scriptRecords)
+	directReleases, err := platform.newDirectReleaseWork(queue, networkRecords, dependencies.Releases, scriptRecords, dependencies.ScriptArtifacts)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +277,6 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-
 	environmentWork, err := platform.newEnvironmentWork(queue)
 	if err != nil {
 		return nil, err
@@ -319,6 +318,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		{Operation: workexecution.Hierarchy, Executor: workexecution.Agent, Owner: hierarchyAgent},
 		{Operation: workexecution.Script, Executor: workexecution.Agent, Owner: scripts},
 		{Operation: workexecution.Release, Executor: workexecution.Agent, Owner: dependencies.Releases},
+		{Operation: workexecution.ReleaseRestoration, Executor: workexecution.Agent, Owner: directReleases.restoration},
 		{Operation: workexecution.ResourceDefinition, Executor: workexecution.Controller, Owner: definitionWork, DecisionOnly: true},
 		{Operation: workexecution.Component, Executor: workexecution.Controller, Owner: componentDefinitions, DecisionOnly: true},
 		{Operation: workexecution.EntrySettlement, Executor: workexecution.Controller, Owner: entryWork, DecisionOnly: true},
@@ -540,6 +540,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	starts, err := workdispatch.NewAgentStarts(queue, []workdispatch.AgentStartRegistration{
+		{Operation: workexecution.ReleaseRestoration, Owner: directReleases.restoration},
 		{Operation: workexecution.Environment, Owner: environmentWork},
 		{Operation: workexecution.Backup, Owner: backupReports},
 		{Operation: workexecution.Restore, Owner: backupReports},
@@ -559,12 +560,11 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	checkpoints, err := taskcheckpoint.NewReleaseCheckpointService(queue, platform.dependencies.Store, dependencies.CapturedFiles, diagnostics, platform.dependencies.Logger,
-		[]taskcheckpoint.ReleaseCheckpointRegistration{{Operation: workexecution.Release, Forward: dependencies.Releases, Restoration: dependencies.Releases, Outcome: dependencies.Releases}})
+	checkpoints, err := platform.newReleaseCheckpoints(queue, dependencies, directReleases, diagnostics)
 	if err != nil {
 		return nil, err
 	}
-	deliveries, err := workdispatch.NewAgentDeliveries(queue, scheduler, dependencies.Releases, scripts, hierarchyAgent, volumeAgent, networkAgent, detaches, componentAgent, entryAgent, provisionReports, lifecycleAgent, serviceRemovalAgent, backupReports, environmentWork)
+	deliveries, err := workdispatch.NewAgentDeliveries(queue, scheduler, dependencies.Releases, scripts, hierarchyAgent, volumeAgent, networkAgent, detaches, componentAgent, entryAgent, provisionReports, lifecycleAgent, serviceRemovalAgent, backupReports, environmentWork, directReleases.restoration)
 	if err != nil {
 		return nil, err
 	}

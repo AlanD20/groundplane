@@ -30,6 +30,11 @@ type ReleaseDeliveryOwner interface {
 	SettleInterruptedRecovery(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
 }
 
+type ReleaseRestorationDeliveryOwner interface {
+	LoadRecoveryInput(context.Context, workqueue.ResumeView) (releaseexecution.RecoveryInput, error)
+	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
+}
+
 type ScriptDeliveryOwner interface {
 	LoadRecoveryInput(context.Context, workqueue.ResumeView) (scriptexecution.RecoveryInput, error)
 	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.ScriptWorkAssignment, error)
@@ -95,6 +100,7 @@ type AgentDeliveries struct {
 	queue        *workqueue.Repository
 	scheduler    *Scheduler
 	releases     ReleaseDeliveryOwner
+	restorations ReleaseRestorationDeliveryOwner
 	scripts      ScriptDeliveryOwner
 	hierarchy    HierarchyDeliveryOwner
 	detaches     DetachDeliveryOwner
@@ -108,7 +114,10 @@ type AgentDeliveries struct {
 	backups      BackupDeliveryOwner
 }
 
-func NewAgentDeliveries(queue *workqueue.Repository, scheduler *Scheduler, releases ReleaseDeliveryOwner, scripts ScriptDeliveryOwner, hierarchy HierarchyDeliveryOwner, volumes VolumeDeliveryOwner, networks NetworkDeliveryOwner, detaches DetachDeliveryOwner, components ComponentDeliveryOwner, entries EntryDeliveryOwner, attaches AttachDeliveryOwner, lifecycles LifecycleDeliveryOwner, removals ServiceRemovalDeliveryOwner, backups BackupDeliveryOwner, environments EnvironmentDeliveryOwner) (*AgentDeliveries, error) {
+func NewAgentDeliveries(queue *workqueue.Repository, scheduler *Scheduler, releases ReleaseDeliveryOwner, scripts ScriptDeliveryOwner, hierarchy HierarchyDeliveryOwner, volumes VolumeDeliveryOwner, networks NetworkDeliveryOwner, detaches DetachDeliveryOwner, components ComponentDeliveryOwner, entries EntryDeliveryOwner, attaches AttachDeliveryOwner, lifecycles LifecycleDeliveryOwner, removals ServiceRemovalDeliveryOwner, backups BackupDeliveryOwner, environments EnvironmentDeliveryOwner, restorations ReleaseRestorationDeliveryOwner) (*AgentDeliveries, error) {
+	if restorations == nil {
+		return nil, errs.New(errs.KindInternal, "Agent delivery requires a captured Release restoration owner")
+	}
 	if environments == nil {
 		return nil, errs.New(errs.KindInternal, "Agent delivery requires an Environment provisioning owner")
 	}
@@ -121,7 +130,7 @@ func NewAgentDeliveries(queue *workqueue.Repository, scheduler *Scheduler, relea
 	if queue == nil || scheduler == nil || scheduler.queue != queue || releases == nil || scripts == nil || hierarchy == nil || volumes == nil || networks == nil || detaches == nil || components == nil || entries == nil || attaches == nil {
 		return nil, errs.New(errs.KindInternal, "Agent delivery requires one queue, scheduler and Release owner")
 	}
-	return &AgentDeliveries{environments: environments, backups: backups, removals: removals, queue: queue, scheduler: scheduler, releases: releases, scripts: scripts, hierarchy: hierarchy, volumes: volumes, networks: networks, detaches: detaches, components: components, entries: entries, attaches: attaches, lifecycles: lifecycles}, nil
+	return &AgentDeliveries{environments: environments, restorations: restorations, backups: backups, removals: removals, queue: queue, scheduler: scheduler, releases: releases, scripts: scripts, hierarchy: hierarchy, volumes: volumes, networks: networks, detaches: detaches, components: components, entries: entries, attaches: attaches, lifecycles: lifecycles}, nil
 }
 
 // Dispatch keeps delivered identity only for currently reserved slots. A new
@@ -421,6 +430,19 @@ func (delivery *AgentDeliveries) message(ctx context.Context, view workqueue.Res
 			return nil, errs.New(errs.KindStateConflict, "Script delivery differs from its durable assignment")
 		}
 		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ScriptWorkAssignment{ScriptWorkAssignment: assignment}}, nil
+	case workexecution.ReleaseRestoration:
+		input, err := delivery.restorations.LoadRecoveryInput(ctx, view)
+		if err != nil {
+			return nil, err
+		}
+		if input.Group == nil || !workexecution.SameAssignment(input.Input.Attempt, view.Attempt.Attempt) {
+			return nil, errs.New(errs.KindStateConflict, "Group restoration delivery differs from its durable assignment")
+		}
+		assignment, err := releaseexecution.EncodeRecoveryAssignment(input)
+		if err != nil {
+			return nil, err
+		}
+		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseRecoveryAssignment{ReleaseRecoveryAssignment: assignment}}, nil
 	case workexecution.Release:
 		if view.Attempt.Attempt.Direction == workexecution.Recovery {
 			input, err := delivery.releases.LoadRecoveryInput(ctx, view)

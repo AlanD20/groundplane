@@ -205,6 +205,19 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				}
 				continue
 			}
+			if prior.Item.Item.Operation == workexecution.ReleaseRestoration {
+				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				if err != nil {
+					return issues, err
+				}
+				if view.Attempt.Attempt.FinishedAt != nil {
+					continue
+				}
+				if err := delivery.restorations.ReconcileInterrupted(ctx, view, authorization); err != nil {
+					issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
+				}
+				continue
+			}
 			if prior.Item.Item.Operation == workexecution.Release && attempt.Direction == workexecution.Recovery {
 				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 				if err != nil {

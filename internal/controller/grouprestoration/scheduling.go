@@ -14,6 +14,7 @@ import (
 func (service *Service) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
 	item, task := request.Item.Item, request.Task.Task
 	if request.DecisionOnly || item.Operation != workexecution.ReleaseRestoration || item.Input == nil ||
+		request.Direction != workexecution.Forward && request.Direction != workexecution.Recovery ||
 		item.Placement.Executor != workexecution.Agent || request.Executor.Record.Identity.HostID != item.Placement.HostID {
 		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Group restoration cannot obtain this assignment")
 	}
