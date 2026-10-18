@@ -16,10 +16,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (service *Reports) StoreAttachProvisionFacts(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *Reports) StoreAttachProvisionFacts(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.AttachProvisionFactsRequest,
 ) (*agentpb.AttachProvisionFactsAck, error) {
-	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || proto.Size(request) > attachexecution.MaximumPlanBytes {
+	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil ||
+		proto.Size(request) > executionplan.MaximumPlanBytes {
 		return nil, errs.New(errs.KindValidationFailed, "Attach fact publication is malformed or oversized")
 	}
 	defer attachexecution.ClearProvisionFacts(request)
@@ -63,7 +66,10 @@ func (service *Reports) StoreAttachProvisionFacts(ctx context.Context, authoriza
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Attach fact publication ownership changed; resend the saved output")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Attach fact publication ownership changed; resend the saved output",
+		)
 	}
 	return &agentpb.AttachProvisionFactsAck{Attempt: proto.CloneOf(request.Attempt), ResultSha256: digest}, nil
 }

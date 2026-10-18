@@ -137,11 +137,11 @@ func executionHeld(
 		for _, value := range page.Values {
 			execution, err := blueprintunits.DecodeExecution(value.Value)
 			if err != nil || execution.EnvironmentID != environmentID ||
-				value.Key != blueprintunits.ExecutionKey(environmentID, execution.PlanID) {
+				value.Key != blueprintunits.ExecutionKey(environmentID, execution.WorkItemID) {
 				keyvalue.ClearRangeValues(page.Values)
 				return false, errs.New(errs.KindInternal, "Blueprint revision execution retention is corrupt")
 			}
-			if execution.ParentTaskID == parentID {
+			if execution.TaskID == parentID {
 				keyvalue.ClearRangeValues(page.Values)
 				return true, nil
 			}

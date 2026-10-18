@@ -57,6 +57,7 @@ type executionOutput struct {
 }
 
 type executionExchange interface {
+	RegisterBackupRecoveryVolumes(*agentpb.BackupRecoveryAssignment) error
 	resolverruntime.Exchange
 	backingruntime.Exchange
 	environmentruntime.Exchange
@@ -136,7 +137,29 @@ type executionWorkers struct {
 	outputs         chan executionOutput
 }
 
-func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.Identity, executor *releaseruntime.Executor, recovery *releaseruntime.RecoveryExecutor, scripts *scriptruntime.Executor, hierarchy *hierarchyruntime.Executor, attachRemoval *hierarchyruntime.AttachExecutor, volumes *volumeruntime.Executor, networks *networkruntime.Executor, components *componentruntime.Executor, entries *entryruntime.Executor, attachProvision *attachruntime.Executor, lifecycles *lifecycleruntime.Executor, removalRecovery *removalruntime.Runtime, backups *backupruntime.Executor, environments *environmentruntime.Executor, backings *backingruntime.Executor, resolvers *resolverruntime.Executor, exchange executionExchange, ownership *agentownership.Lease) (*executionWorkers, error) {
+func newExecutionWorkers(
+	ctx context.Context,
+	limit int,
+	identity workexecution.Identity,
+	executor *releaseruntime.Executor,
+	recovery *releaseruntime.RecoveryExecutor,
+	scripts *scriptruntime.Executor,
+	hierarchy *hierarchyruntime.Executor,
+	attachRemoval *hierarchyruntime.AttachExecutor,
+	volumes *volumeruntime.Executor,
+	networks *networkruntime.Executor,
+	components *componentruntime.Executor,
+	entries *entryruntime.Executor,
+	attachProvision *attachruntime.Executor,
+	lifecycles *lifecycleruntime.Executor,
+	removalRecovery *removalruntime.Runtime,
+	backups *backupruntime.Executor,
+	environments *environmentruntime.Executor,
+	backings *backingruntime.Executor,
+	resolvers *resolverruntime.Executor,
+	exchange executionExchange,
+	ownership *agentownership.Lease,
+) (*executionWorkers, error) {
 	if resolvers == nil {
 		return nil, errs.New(errs.KindInternal, "Agent DNS resolver executor is required")
 	}
@@ -149,15 +172,51 @@ func newExecutionWorkers(ctx context.Context, limit int, identity workexecution.
 	if removalRecovery == nil || lifecycles == nil || components == nil || entries == nil || attachProvision == nil {
 		return nil, errs.New(errs.KindInternal, "Agent Component executor is required")
 	}
-	if ctx == nil || limit < 1 || limit > 256 || identity.Validate() != nil || identity.Executor != workexecution.Agent || executor == nil || recovery == nil || scripts == nil || hierarchy == nil || attachRemoval == nil || volumes == nil || networks == nil || exchange == nil {
-		return nil, errs.New(errs.KindInternal, "Agent execution workers require authenticated operation handlers and bounded capacity")
+	if ctx == nil || limit < 1 || limit > 256 || identity.Validate() != nil ||
+		identity.Executor != workexecution.Agent ||
+		executor == nil ||
+		recovery == nil ||
+		scripts == nil ||
+		hierarchy == nil ||
+		attachRemoval == nil ||
+		volumes == nil ||
+		networks == nil ||
+		exchange == nil {
+		return nil, errs.New(
+			errs.KindInternal,
+			"Agent execution workers require authenticated operation handlers and bounded capacity",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
 	}
 	workerContext, cancel := context.WithCancel(ctx)
-	return &executionWorkers{resolvers: resolvers, backings: backings, environments: environments, backups: backups, removalRecovery: removalRecovery, lifecycles: lifecycles, ctx: workerContext, cancel: cancel, identity: identity, executor: executor, recovery: recovery, scripts: scripts, hierarchy: hierarchy, attachRemoval: attachRemoval, volumes: volumes, networks: networks, exchange: exchange,
-		components: components, entries: entries, attachProvision: attachProvision, limit: limit, ownership: ownership, active: make(map[string]activeExecution), outputs: make(chan executionOutput, limit)}, nil
+	return &executionWorkers{
+		resolvers:       resolvers,
+		backings:        backings,
+		environments:    environments,
+		backups:         backups,
+		removalRecovery: removalRecovery,
+		lifecycles:      lifecycles,
+		ctx:             workerContext,
+		cancel:          cancel,
+		identity:        identity,
+		executor:        executor,
+		recovery:        recovery,
+		scripts:         scripts,
+		hierarchy:       hierarchy,
+		attachRemoval:   attachRemoval,
+		volumes:         volumes,
+		networks:        networks,
+		exchange:        exchange,
+		components:      components,
+		entries:         entries,
+		attachProvision: attachProvision,
+		limit:           limit,
+		ownership:       ownership,
+		active:          make(map[string]activeExecution),
+		outputs:         make(chan executionOutput, limit),
+	}, nil
 }
 
 func (workers *executionWorkers) submit(delivery *agentpb.ReleaseWorkAssignment, available int) error {
@@ -193,9 +252,18 @@ func (workers *executionWorkers) submit(delivery *agentpb.ReleaseWorkAssignment,
 	return nil
 }
 
-func (workers *executionWorkers) execute(attempt workexecution.Attempt, delivery *agentpb.ReleaseWorkAssignment, execution *agentownership.Execution) {
+func (workers *executionWorkers) execute(
+	attempt workexecution.Attempt,
+	delivery *agentpb.ReleaseWorkAssignment,
+	execution *agentownership.Execution,
+) {
 	defer workers.wait.Done()
-	result, err := workers.executor.Execute(workers.executionContext(attempt), delivery, workers.identity, workers.exchange)
+	result, err := workers.executor.Execute(
+		workers.executionContext(attempt),
+		delivery,
+		workers.identity,
+		workers.exchange,
+	)
 	err = errors.Join(err, execution.Close())
 	// Keep the local slot until the session consumes this result. Otherwise a
 	// slow consumer can accumulate arbitrarily many undelivered completions.
@@ -223,9 +291,14 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	}
 	if active.provisionRecovery != nil {
 		if output.err == nil {
-			if output.provisionRecovery == nil || output.provisionRecovery.Validate() != nil || output.provisionRecovery.FinishedAt == nil ||
-				output.provisionRecovery.Result == nil || !workexecution.SameAssignment(*output.provisionRecovery, output.attempt) {
-				return errs.New(errs.KindStateConflict, "Attach inspection result requires a saved terminal acknowledgement")
+			if output.provisionRecovery == nil || output.provisionRecovery.Validate() != nil ||
+				output.provisionRecovery.FinishedAt == nil ||
+				output.provisionRecovery.Result == nil ||
+				!workexecution.SameAssignment(*output.provisionRecovery, output.attempt) {
+				return errs.New(
+					errs.KindStateConflict,
+					"Attach inspection result requires a saved terminal acknowledgement",
+				)
 			}
 			if err := workers.attachProvision.RetireRecovery(workers.ctx, *output.provisionRecovery); err != nil {
 				return err
@@ -266,9 +339,14 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 
 	if active.environmentProvision != nil {
 		if output.err == nil {
-			if output.environmentProvision == nil || output.environmentProvision.Validate() != nil || output.environmentProvision.FinishedAt == nil ||
-				output.environmentProvision.Result == nil || !workexecution.SameAssignment(*output.environmentProvision, output.attempt) {
-				return errs.New(errs.KindStateConflict, "Environment provisioning result requires its accepted terminal receipt")
+			if output.environmentProvision == nil || output.environmentProvision.Validate() != nil ||
+				output.environmentProvision.FinishedAt == nil ||
+				output.environmentProvision.Result == nil ||
+				!workexecution.SameAssignment(*output.environmentProvision, output.attempt) {
+				return errs.New(
+					errs.KindStateConflict,
+					"Environment provisioning result requires its accepted terminal receipt",
+				)
 			}
 			if err := workers.environments.Retire(workers.ctx, *output.environmentProvision); err != nil {
 				return err
@@ -288,7 +366,9 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	}
 	if active.component != nil {
 		if output.err == nil {
-			if output.component == nil || output.component.Validate() != nil || output.component.FinishedAt == nil || output.component.Result == nil || !workexecution.SameAssignment(*output.component, output.attempt) {
+			if output.component == nil || output.component.Validate() != nil || output.component.FinishedAt == nil ||
+				output.component.Result == nil ||
+				!workexecution.SameAssignment(*output.component, output.attempt) {
 				return errs.New(errs.KindStateConflict, "Component result requires a saved terminal acknowledgement")
 			}
 			if err := workers.components.Retire(workers.ctx, *output.component); err != nil {
@@ -303,7 +383,8 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	}
 	if active.network != nil {
 		if output.err == nil {
-			if output.network == nil || output.network.Validate() != nil || output.network.FinishedAt == nil || output.network.Result == nil ||
+			if output.network == nil || output.network.Validate() != nil || output.network.FinishedAt == nil ||
+				output.network.Result == nil ||
 				!workexecution.SameAssignment(*output.network, output.attempt) {
 				return errs.New(errs.KindStateConflict, "Network result requires a saved terminal acknowledgement")
 			}
@@ -319,8 +400,14 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	}
 	if active.removalRecovery != nil {
 		if output.err == nil {
-			if output.removalRecovery == nil || output.removalRecovery.Validate() != nil || output.removalRecovery.FinishedAt == nil || output.removalRecovery.Result == nil || !workexecution.SameAssignment(*output.removalRecovery, output.attempt) {
-				return errs.New(errs.KindStateConflict, "service removal recovery requires a saved terminal acknowledgement")
+			if output.removalRecovery == nil || output.removalRecovery.Validate() != nil ||
+				output.removalRecovery.FinishedAt == nil ||
+				output.removalRecovery.Result == nil ||
+				!workexecution.SameAssignment(*output.removalRecovery, output.attempt) {
+				return errs.New(
+					errs.KindStateConflict,
+					"service removal recovery requires a saved terminal acknowledgement",
+				)
 			}
 			if err := workers.removalRecovery.Retire(workers.ctx, *output.removalRecovery); err != nil {
 				return err
@@ -334,9 +421,13 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	}
 	if active.lifecycle != nil {
 		if output.err == nil {
-			if output.lifecycle == nil || output.lifecycle.Validate() != nil || output.lifecycle.FinishedAt == nil || output.lifecycle.Result == nil ||
+			if output.lifecycle == nil || output.lifecycle.Validate() != nil || output.lifecycle.FinishedAt == nil ||
+				output.lifecycle.Result == nil ||
 				!workexecution.SameAssignment(*output.lifecycle, output.attempt) {
-				return errs.New(errs.KindStateConflict, "Service lifecycle result requires a saved terminal acknowledgement")
+				return errs.New(
+					errs.KindStateConflict,
+					"Service lifecycle result requires a saved terminal acknowledgement",
+				)
 			}
 			if err := workers.lifecycles.Retire(workers.ctx, *output.lifecycle); err != nil {
 				return err
@@ -350,7 +441,8 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	}
 	if active.volume != nil {
 		if output.err == nil {
-			if output.volume == nil || output.volume.Validate() != nil || output.volume.FinishedAt == nil || output.volume.Result == nil ||
+			if output.volume == nil || output.volume.Validate() != nil || output.volume.FinishedAt == nil ||
+				output.volume.Result == nil ||
 				!workexecution.SameAssignment(*output.volume, output.attempt) {
 				return errs.New(errs.KindStateConflict, "Volume result requires a saved terminal acknowledgement")
 			}
@@ -371,10 +463,19 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 		defer attachexecution.ClearRecoveryAssignment(active.attachRecovery)
 	}
 	if active.attachRecovery != nil && output.err == nil {
-		if output.attachRecovery == nil || output.attachRecovery.FinishedAt == nil || output.attachRecovery.Result == nil ||
-			!workexecution.SameAssignment(*output.attachRecovery, output.attempt) || output.attach != nil || output.attachFailure != nil ||
-			output.environment != nil || output.environmentFailure != nil || output.script != nil || output.scriptFailure != nil ||
-			output.scriptRecovery != nil || output.recovery != nil || output.result.Report != nil || output.result.Failure != nil {
+		if output.attachRecovery == nil || output.attachRecovery.FinishedAt == nil ||
+			output.attachRecovery.Result == nil ||
+			!workexecution.SameAssignment(*output.attachRecovery, output.attempt) ||
+			output.attach != nil ||
+			output.attachFailure != nil ||
+			output.environment != nil ||
+			output.environmentFailure != nil ||
+			output.script != nil ||
+			output.scriptFailure != nil ||
+			output.scriptRecovery != nil ||
+			output.recovery != nil ||
+			output.result.Report != nil ||
+			output.result.Failure != nil {
 			return errs.New(errs.KindStateConflict, "Attach recovery requires its acknowledged inspection result")
 		}
 	}
@@ -384,10 +485,20 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	if active.attach != nil {
 		defer attachexecution.ClearRemoval(active.attach.Removal)
 		if output.err == nil {
-			if (output.attach == nil) == (output.attachFailure == nil) || output.attach != nil && output.attach.InFlight ||
-				output.environment != nil || output.environmentFailure != nil || output.script != nil || output.scriptFailure != nil ||
-				output.scriptRecovery != nil || output.recovery != nil || output.result.Report != nil || output.result.Failure != nil {
-				return errs.New(errs.KindStateConflict, "Attach removal result requires exactly one acknowledged completion or failure")
+			if (output.attach == nil) == (output.attachFailure == nil) ||
+				output.attach != nil && output.attach.InFlight ||
+				output.environment != nil ||
+				output.environmentFailure != nil ||
+				output.script != nil ||
+				output.scriptFailure != nil ||
+				output.scriptRecovery != nil ||
+				output.recovery != nil ||
+				output.result.Report != nil ||
+				output.result.Failure != nil {
+				return errs.New(
+					errs.KindStateConflict,
+					"Attach removal result requires exactly one acknowledged completion or failure",
+				)
 			}
 			input, err := attachexecution.DecodeRemovalAssignment(active.attach, workers.identity)
 			if err != nil {
@@ -397,7 +508,8 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 			if output.attach != nil && output.attach.Completed != input.CommandCount() {
 				return errs.New(errs.KindStateConflict, "Attach removal result is missing captured commands")
 			}
-			if output.attachFailure != nil && (output.attachFailure.FinishedAt == nil || output.attachFailure.Outcome == workexecution.Succeeded || !workexecution.SameAssignment(*output.attachFailure, output.attempt)) {
+			if output.attachFailure != nil &&
+				(output.attachFailure.FinishedAt == nil || output.attachFailure.Outcome == workexecution.Succeeded || !workexecution.SameAssignment(*output.attachFailure, output.attempt)) {
 				return errs.New(errs.KindStateConflict, "Attach removal failure lacks a saved terminal acknowledgement")
 			}
 			if err := workers.attachRemoval.Retire(workers.ctx, input); err != nil {
@@ -408,11 +520,15 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	if output.err == nil && active.environment != nil {
 		if (output.environment == nil) == (output.environmentFailure == nil) ||
 			output.environment != nil && output.environment.Phase != hierarchyexecution.EnvironmentRemoved ||
-			output.environmentFailure != nil && (output.environmentFailure.FinishedAt == nil || output.environmentFailure.Outcome == workexecution.Succeeded ||
-				!workexecution.SameAssignment(*output.environmentFailure, output.attempt)) ||
+			output.environmentFailure != nil &&
+				(output.environmentFailure.FinishedAt == nil || output.environmentFailure.Outcome == workexecution.Succeeded ||
+					!workexecution.SameAssignment(*output.environmentFailure, output.attempt)) ||
 			output.script != nil || output.scriptFailure != nil || output.scriptRecovery != nil || output.recovery != nil ||
 			output.result.Report != nil || output.result.Failure != nil {
-			return errs.New(errs.KindStateConflict, "Environment removal result requires its acknowledged absence proof")
+			return errs.New(
+				errs.KindStateConflict,
+				"Environment removal result requires its acknowledged absence proof",
+			)
 		}
 		input, err := hierarchyexecution.DecodeEnvironmentAssignment(active.environment, workers.identity)
 		if err != nil {
@@ -422,16 +538,20 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 			return err
 		}
 	}
-	if output.err == nil && active.scriptRecovery != nil && ((output.scriptRecovery == nil) == (output.scriptFailure == nil) || output.script != nil || output.result.Report != nil || output.result.Failure != nil || output.recovery != nil) {
+	if output.err == nil && active.scriptRecovery != nil &&
+		((output.scriptRecovery == nil) == (output.scriptFailure == nil) || output.script != nil || output.result.Report != nil || output.result.Failure != nil || output.recovery != nil) {
 		return errs.New(errs.KindStateConflict, "Script recovery result requires its acknowledged cleanup proof")
 	}
-	if output.err == nil && active.script && ((output.script == nil) == (output.scriptFailure == nil) || output.scriptRecovery != nil || output.result.Report != nil || output.result.Failure != nil || output.recovery != nil) {
+	if output.err == nil && active.script &&
+		((output.script == nil) == (output.scriptFailure == nil) || output.scriptRecovery != nil || output.result.Report != nil || output.result.Failure != nil || output.recovery != nil) {
 		return errs.New(errs.KindStateConflict, "Script result requires its acknowledged completion")
 	}
-	if output.err == nil && active.recovery != nil && ((output.recovery == nil) == (output.result.Failure == nil) || output.result.Report != nil) {
+	if output.err == nil && active.recovery != nil &&
+		((output.recovery == nil) == (output.result.Failure == nil) || output.result.Report != nil) {
 		return errs.New(errs.KindStateConflict, "recovery result requires acknowledged restoration")
 	}
-	if output.err == nil && active.forward != nil && ((output.result.Report == nil) == (output.result.Failure == nil) || output.recovery != nil) {
+	if output.err == nil && active.forward != nil &&
+		((output.result.Report == nil) == (output.result.Failure == nil) || output.recovery != nil) {
 		return errs.New(errs.KindStateConflict, "Release result requires exactly one completion or recorded failure")
 	}
 	if output.err == nil && (active.script || active.scriptRecovery != nil) {

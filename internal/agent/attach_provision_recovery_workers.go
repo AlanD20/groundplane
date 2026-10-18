@@ -9,7 +9,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (workers *executionWorkers) submitProvisionRecovery(delivery *agentpb.AttachProvisionRecoveryAssignment, available int) error {
+func (workers *executionWorkers) submitProvisionRecovery(
+	delivery *agentpb.AttachProvisionRecoveryAssignment,
+	available int,
+) error {
 	input, err := attachexecution.DecodeProvisionRecoveryAssignment(delivery, workers.identity)
 	if err != nil {
 		return err
@@ -32,11 +35,14 @@ func (workers *executionWorkers) submitProvisionRecovery(delivery *agentpb.Attac
 	if err != nil {
 		return err
 	}
-	workers.active[input.Attempt.WorkItemID] = activeExecution{attempt: input.Attempt, provisionRecovery: proto.CloneOf(delivery)}
+	workers.active[input.Attempt.WorkItemID] = activeExecution{
+		attempt:           input.Attempt,
+		provisionRecovery: proto.CloneOf(delivery),
+	}
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()
-		result, err := workers.attachProvision.Recover(workers.executionContext(attempt), input, workers.exchange)
+		result, err := workers.attachProvision.Recover(workers.executionContext(input.Attempt), input, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: input.Attempt, provisionRecovery: result, err: err}:

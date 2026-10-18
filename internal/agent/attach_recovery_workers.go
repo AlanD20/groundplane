@@ -32,12 +32,15 @@ func (workers *executionWorkers) submitAttachRecovery(delivery *agentpb.AttachRe
 	if err != nil {
 		return err
 	}
-	workers.active[input.Attempt.WorkItemID] = activeExecution{attempt: input.Attempt, attachRecovery: proto.CloneOf(delivery)}
+	workers.active[input.Attempt.WorkItemID] = activeExecution{
+		attempt:        input.Attempt,
+		attachRecovery: proto.CloneOf(delivery),
+	}
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()
 		defer attachexecution.ClearRecoveryInput(&input)
-		result, err := workers.attachRemoval.Recover(workers.executionContext(attempt), input, workers.exchange)
+		result, err := workers.attachRemoval.Recover(workers.executionContext(input.Attempt), input, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: input.Attempt, attachRecovery: result, err: err}:

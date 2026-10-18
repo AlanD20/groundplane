@@ -6,6 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/netip"
+	"time"
+
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
@@ -18,9 +22,6 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
-	"net/http"
-	"net/netip"
-	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -42,7 +43,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingprovisionwork"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const backingServiceCreateRoute = "/backing-services"
@@ -100,7 +100,8 @@ func NewCreationService(
 	images workloadseal.Resolver,
 	imageRegistry creationImageRegistry,
 ) (*CreationService, error) {
-	if volumeRoot == "" || !environmentPool.IsValid() || repository == nil || idempotency == nil || protector == nil || workInputs == nil {
+	if volumeRoot == "" || !environmentPool.IsValid() || repository == nil || idempotency == nil || protector == nil ||
+		workInputs == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service creation dependencies are incomplete")
 	}
 	if err := componentrender.ValidateEnvironmentComponentCatalog(componentCatalog); err != nil {

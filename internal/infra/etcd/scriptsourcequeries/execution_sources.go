@@ -3,12 +3,14 @@ package scriptsourcequeries
 import (
 	"context"
 	"encoding/json"
+
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -30,6 +32,7 @@ import (
 // Secret/plain Entry generation bytes are deliberately resolved through the
 // private assignment-artifact path instead of entering this aggregate.
 type ScriptExecutionSources struct {
+	Host              hostbindings.Snapshot
 	Revision          int64
 	Tenant            etcdstore.Versioned[hierarchyrecord.TenantRecord]
 	Project           etcdstore.Versioned[hierarchyrecord.ProjectRecord]
@@ -149,7 +152,12 @@ func (repository *SourceReader) LoadBlueprintReleaseHookExecutionSources(
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
+	host, err := hostbindings.ReadLocal(ctx, repository.store, revision)
+	if err != nil {
+		return ScriptExecutionSources{}, err
+	}
 	return ScriptExecutionSources{
+		Host:          host,
 		AttachSources: attachNetworks,
 		Revision:      revision,
 		Tenant:        tenant,
@@ -397,7 +405,12 @@ func (repository *SourceReader) loadExecutionSources(
 		return ScriptExecutionSources{}, err
 	}
 
+	host, err := hostbindings.ReadLocal(ctx, repository.store, revision)
+	if err != nil {
+		return ScriptExecutionSources{}, err
+	}
 	return ScriptExecutionSources{
+		Host:     host,
 		Revision: revision,
 		Tenant: etcdstore.Versioned[hierarchyrecord.TenantRecord]{
 			Record:       tenant,

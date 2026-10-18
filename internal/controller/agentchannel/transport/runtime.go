@@ -36,6 +36,9 @@ type Runtime struct {
 	resolverReports        agentchannel.ResolverReporter
 	entryReports           agentchannel.EntryReporter
 	volumeReports          agentchannel.VolumeReporter
+	environmentProvision   agentchannel.EnvironmentProvisionReporter
+	lifecycleReports       agentchannel.LifecycleReporter
+	removalRecoveryReports agentchannel.RemovalRecoveryReporter
 	backupWorkReports      agentchannel.BackupWorkReporter
 	backupWorkSecrets      agentchannel.BackupWorkSecretResolver
 	workDispatch           agentchannel.WorkDispatcher
@@ -94,6 +97,19 @@ func New(
 			return nil, errs.New(errs.KindInternal, "native Entry reporting is not configured")
 		}
 		channel.ConfigureEntryConfigurationWork(runtime.entryReports)
+		if err := channel.ConfigureEnvironmentProvision(runtime.environmentProvision); err != nil {
+			server.Stop()
+			return nil, err
+		}
+		if runtime.lifecycleReports == nil || runtime.removalRecoveryReports == nil {
+			server.Stop()
+			return nil, errs.New(
+				errs.KindInternal,
+				"native Service lifecycle and removal recovery reporting are not configured",
+			)
+		}
+		channel.ConfigureServiceLifecycle(runtime.lifecycleReports)
+		channel.ConfigureServiceRemovalRecovery(runtime.removalRecoveryReports)
 		if runtime.attachReports == nil {
 			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Attach reporting is not configured")
@@ -136,10 +152,18 @@ func (runtime *Runtime) ConfigureBackupWorkSecrets(resolver agentchannel.BackupW
 
 // ConfigureWorkExecution is composition-only and must precede Run. Native work
 // is mandatory; there is no fallback to the superseded assignment engine.
-func (runtime *Runtime) ConfigureWorkExecution(identities agentchannel.WorkIdentityResolver, starts agentchannel.WorkStarter,
-	checkpoints agentchannel.ReleaseWorkCheckpointer, scripts agentchannel.ScriptWorkCompleter, removals agentchannel.HierarchyReporter, dispatch agentchannel.WorkDispatcher,
+func (runtime *Runtime) ConfigureWorkExecution(
+	identities agentchannel.WorkIdentityResolver,
+	starts agentchannel.WorkStarter,
+	checkpoints agentchannel.ReleaseWorkCheckpointer,
+	scripts agentchannel.ScriptWorkCompleter,
+	removals agentchannel.HierarchyReporter,
+	dispatch agentchannel.WorkDispatcher,
 ) error {
-	if runtime == nil || identities == nil || starts == nil || checkpoints == nil || scripts == nil || removals == nil || dispatch == nil || runtime.workIdentities != nil {
+	if runtime == nil || identities == nil || starts == nil || checkpoints == nil || scripts == nil ||
+		removals == nil ||
+		dispatch == nil ||
+		runtime.workIdentities != nil {
 		return errs.New(errs.KindInternal, "Agent work transport dependencies are missing or already configured")
 	}
 	runtime.workIdentities, runtime.workStarts = identities, starts
@@ -191,7 +215,10 @@ func (runtime *Runtime) ConfigureBackingWork(reports agentchannel.BackingReporte
 
 func (runtime *Runtime) ConfigureAttachProvision(reports agentchannel.AttachProvisionReporter) error {
 	if runtime == nil || reports == nil || runtime.attachProvisionReports != nil {
-		return errs.New(errs.KindInternal, "Attach provisioning reporting dependencies are missing or already configured")
+		return errs.New(
+			errs.KindInternal,
+			"Attach provisioning reporting dependencies are missing or already configured",
+		)
 	}
 	runtime.attachProvisionReports = reports
 	return nil

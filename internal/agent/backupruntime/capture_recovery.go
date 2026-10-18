@@ -53,7 +53,12 @@ func recoverCapture(ctx context.Context, assignment *agentpb.BackupRecoveryAssig
 
 // Restore apply evidence may be retired only after acknowledged completion.
 // Capture and pre-mutation Restore cleanup must reject any apply in the namespace.
-func retireSettledSourceHelpers(ctx context.Context, input *agentpb.BackupWorkInput, step *agentpb.BackupStepAuthority, completedRestore bool) error {
+func retireSettledSourceHelpers(
+	ctx context.Context,
+	input *agentpb.BackupWorkInput,
+	step *agentpb.BackupStepAuthority,
+	completedRestore bool,
+) error {
 	capture := step.GetCapture()
 	restore := step.GetRestore()
 	if capture == nil && restore == nil {
@@ -85,7 +90,11 @@ func retireSettledSourceHelpers(ctx context.Context, input *agentpb.BackupWorkIn
 		return invalidDatabaseStaging()
 	}
 	for _, artifact := range input.Artifacts {
-		if artifact.ServiceId == serviceID && artifact.ComposeName == guard.DatabaseService.CurrentName {
+		for _, candidate := range artifact.GetServices() {
+			if candidate.GetServiceId() != serviceID ||
+				candidate.GetComposeName() != guard.DatabaseService.CurrentName {
+				continue
+			}
 			if guard.DatabaseArtifact != nil {
 				return invalidDatabaseStaging()
 			}

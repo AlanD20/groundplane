@@ -10,11 +10,11 @@ import (
 )
 
 type taskAttemptEventsInput struct {
-	ID        string `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
-	WorkID    string `path:"work_id"`
-	AttemptID string `path:"attempt_id"`
-	After     uint64 `query:"after"`
-	Revision  int64  `query:"revision" minimum:"0"`
+	ID        string       `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
+	WorkID    string       `path:"work_id"`
+	AttemptID string       `path:"attempt_id"`
+	After     taskSequence `query:"after"`
+	Revision  int64        `query:"revision" minimum:"0"`
 }
 
 type taskAttemptEventsOutput struct{ Body apiTypes.TaskAttemptEvents }
@@ -25,18 +25,31 @@ func (s *Server) registerTaskAttemptEvents() {
 		Tags: []string{"Task"}}, s.taskAttemptEvents)
 }
 
-func (s *Server) taskAttemptEvents(ctx context.Context, request *taskAttemptEventsInput) (*taskAttemptEventsOutput, error) {
+func (s *Server) taskAttemptEvents(
+	ctx context.Context,
+	request *taskAttemptEventsInput,
+) (*taskAttemptEventsOutput, error) {
 	if s.taskInspection == nil {
 		return nil, errs.New(errs.KindInternal, "task inspection is not configured")
 	}
-	value, err := s.taskInspection.Events(ctx, request.ID, request.WorkID, request.AttemptID, request.After, request.Revision)
+	value, err := s.taskInspection.Events(
+		ctx,
+		request.ID,
+		request.WorkID,
+		request.AttemptID,
+		uint64(request.After),
+		request.Revision,
+	)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
 	body := apiTypes.TaskAttemptEvents{Items: []apiTypes.TaskAttemptEvent{}, First: value.First, Last: value.Last,
 		Expired: value.Expired, Incomplete: value.Incomplete, Revision: value.Revision, FinishedAt: value.FinishedAt, Outcome: value.Outcome}
 	for _, event := range value.Items {
-		body.Items = append(body.Items, apiTypes.TaskAttemptEvent{Sequence: event.Sequence, RecordedAt: event.RecordedAt, Stage: event.Stage})
+		body.Items = append(
+			body.Items,
+			apiTypes.TaskAttemptEvent{Sequence: event.Sequence, RecordedAt: event.RecordedAt, Stage: event.Stage},
+		)
 	}
 	return &taskAttemptEventsOutput{Body: body}, nil
 }

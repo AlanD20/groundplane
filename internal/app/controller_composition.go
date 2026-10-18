@@ -510,7 +510,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize platform runtime: %w", err)
 	}
-	imageDiagnostics, err := newExecutionDiagnostics(store)
+	imageDiagnostics, err := hostplatform.NewExecutionDiagnostics(store)
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()

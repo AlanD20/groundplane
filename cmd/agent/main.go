@@ -1,6 +1,6 @@
 // cmd/agent is the Agent entry point — thin: everything it does is call
 // into internal/app. Per docs/standards.md's import matrix, this
-// file imports internal/app and NOTHING else internal. The native Controller
+// file imports only the application layer. The native Controller
 // owns this executable's OCI container lifecycle through Docker; there is no
 // Agent systemd unit or bootstrap Compose path. See ADR 0016.
 package main
@@ -10,165 +10,166 @@ import (
 	"os"
 
 	"github.com/AlanD20/groundplane/internal/app"
+	"github.com/AlanD20/groundplane/internal/app/hostcommands"
 )
 
 func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
-	if len(os.Args) == 2 && os.Args[1] == app.ResolverWorkHelperArgument {
-		if err := app.RunResolverWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.ResolverWorkHelperArgument {
+		if err := hostcommands.RunResolverWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent DNS resolver helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.BackingProvisionHelperArgument {
-		if err := app.RunBackingProvisionHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.BackingProvisionHelperArgument {
+		if err := hostcommands.RunBackingProvisionHelper(ctx, os.Stdin, os.Stdout, os.Getenv(hostcommands.EnvironmentVolumeRootEnv)); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Backing creation helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.EnvironmentProvisionHelperArgument {
-		if err := app.RunEnvironmentProvisionHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.EnvironmentProvisionHelperArgument {
+		if err := hostcommands.RunEnvironmentProvisionHelper(ctx, os.Stdin, os.Stdout, os.Getenv(hostcommands.EnvironmentVolumeRootEnv)); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Environment provisioning helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.EntryWorkHelperArgument {
-		if err := app.RunEntryWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.EntryWorkHelperArgument {
+		if err := hostcommands.RunEntryWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Entry helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.ComponentWorkHelperArgument {
-		if err := app.RunComponentWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.ComponentWorkHelperArgument {
+		if err := hostcommands.RunComponentWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Component helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.AttachConsumerHelperArgument {
-		if err := app.RunAttachConsumerHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.AttachConsumerHelperArgument {
+		if err := hostcommands.RunAttachConsumerHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Detach consumer helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.BackupConsumerHelperArgument {
-		if err := app.RunBackupConsumerHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.BackupConsumerHelperArgument {
+		if err := hostcommands.RunBackupConsumerHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Backup Volume consumer helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.NetworkWorkHelperArgument {
-		if err := app.RunNetworkWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.NetworkWorkHelperArgument {
+		if err := hostcommands.RunNetworkWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Network helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.VolumeWorkHelperArgument {
-		if err := app.RunVolumeWorkHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.VolumeWorkHelperArgument {
+		if err := hostcommands.RunVolumeWorkHelper(ctx, os.Stdin, os.Stdout, os.Getenv(hostcommands.EnvironmentVolumeRootEnv)); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Volume helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.LifecycleWorkHelperArgument {
-		if err := app.RunLifecycleWorkHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.LifecycleWorkHelperArgument {
+		if err := hostcommands.RunLifecycleWorkHelper(ctx, os.Stdin, os.Stdout, os.Getenv(hostcommands.EnvironmentVolumeRootEnv)); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Service lifecycle helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.RemovalRecoveryHelperArgument {
-		if err := app.RunRemovalRecoveryHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.RemovalRecoveryHelperArgument {
+		if err := hostcommands.RunRemovalRecoveryHelper(ctx, os.Stdin, os.Stdout, os.Getenv(hostcommands.EnvironmentVolumeRootEnv)); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Service removal recovery helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.EdgeConnectionCheckHelperArgument {
-		if err := app.RunEdgeConnectionCheckHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.EdgeConnectionCheckHelperArgument {
+		if err := hostcommands.RunEdgeConnectionCheckHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent edge connection helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.BackingAccessHelperArgument {
-		if err := app.RunBackingAccessHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.BackingAccessHelperArgument {
+		if err := hostcommands.RunBackingAccessHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Backing access helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.EnvironmentRemovalHelperArgument {
-		if err := app.RunEnvironmentRemovalHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.EnvironmentRemovalHelperArgument {
+		if err := hostcommands.RunEnvironmentRemovalHelper(ctx, os.Stdin, os.Stdout, os.Getenv(hostcommands.EnvironmentVolumeRootEnv)); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Environment removal helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.ReleaseHelperArgument {
-		if err := app.RunReleaseHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.ReleaseHelperArgument {
+		if err := hostcommands.RunReleaseHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Release helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.RecoveryHelperArgument {
-		if err := app.RunRecoveryHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.RecoveryHelperArgument {
+		if err := hostcommands.RunRecoveryHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Release recovery helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.ComposeHelperArgument {
-		if err := app.RunComposeHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.ComposeHelperArgument {
+		if err := hostcommands.RunComposeHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent compose helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.EnvironmentDirectoryHelperArgument {
-		if err := app.RunEnvironmentDirectoryHelper(
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.EnvironmentDirectoryHelperArgument {
+		if err := hostcommands.RunEnvironmentDirectoryHelper(
 			ctx,
 			os.Stdin,
 			os.Stdout,
-			os.Getenv(app.EnvironmentVolumeRootEnv),
+			os.Getenv(hostcommands.EnvironmentVolumeRootEnv),
 		); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Environment directory helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.ManagedConfigHelperArgument {
-		if err := app.RunManagedConfigHelper(ctx, os.Stdin, os.Stdout); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.ManagedConfigHelperArgument {
+		if err := hostcommands.RunManagedConfigHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent managed-config helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 3 && os.Args[1] == app.HostResolutionHelperArgument {
-		if err := app.RunHostResolutionHelper(ctx, os.Args[2]); err != nil {
+	if len(os.Args) == 3 && os.Args[1] == hostcommands.HostResolutionHelperArgument {
+		if err := hostcommands.RunHostResolutionHelper(ctx, os.Args[2]); err != nil {
 			fmt.Fprintln(os.Stderr, "agent host-resolution helper:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.EntryMaterializerArgument {
-		if err := app.RunEntryMaterializer(ctx, os.Stdin); err != nil {
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.EntryMaterializerArgument {
+		if err := hostcommands.RunEntryMaterializer(ctx, os.Stdin); err != nil {
 			fmt.Fprintln(os.Stderr, "agent entry materializer:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == app.EntryMaterializationVerificationArgument {
-		proven, err := app.VerifyEntryMaterialization(ctx, os.Stdin)
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.EntryMaterializationVerificationArgument {
+		proven, err := hostcommands.VerifyEntryMaterialization(ctx, os.Stdin)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "agent materialization verification:", err)
 			os.Exit(1)

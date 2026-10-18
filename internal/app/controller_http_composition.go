@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/AlanD20/groundplane/internal/app/hostplatform"
@@ -218,7 +217,21 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment provisioning inspection: %w", err)
 	}
-	taskInspection, err := taskinspection.New(executionQueue, imageRecords, executionDiagnostics, workRuntime.Retries, hierarchyInspection, componentInspection, runnerInspection, etcdInspection, preparationInspection, controllerInspection, agentInspection, activationInspection, environmentInspection)
+	taskInspection, err := taskinspection.New(
+		executionQueue,
+		imageRecords,
+		executionDiagnostics,
+		workRuntime.Retries,
+		hierarchyInspection,
+		componentInspection,
+		runnerInspection,
+		etcdInspection,
+		preparationInspection,
+		controllerInspection,
+		agentInspection,
+		activationInspection,
+		environmentInspection,
+	)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()

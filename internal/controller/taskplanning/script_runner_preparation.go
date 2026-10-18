@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"sort"
+
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
-	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
@@ -70,6 +71,12 @@ func (service *ScriptRunnerPreparationService) Prepare(
 		agent, err := service.agents.GetSingleton(ctx)
 		if err != nil {
 			return ScriptRunnerPreparation{}, err
+		}
+		if sources.Host.Binding.AgentID != agent.Record.ID {
+			return ScriptRunnerPreparation{}, errs.New(
+				errs.KindStateConflict,
+				"Script image resolver differs from its captured host binding",
+			)
 		}
 		seals, err := workloadseal.Resolve(ctx, service.images, agent.Record.ID, []workloadseal.Selection{{
 			Requested: &workloadseal.Requested{Reference: explicit.Context.ImageReference, Replicas: 1},

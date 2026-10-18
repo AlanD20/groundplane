@@ -65,7 +65,7 @@ Start at [application composition](../internal/app),
 
 | Boundary | Responsibility and entry point |
 | --- | --- |
-| Composition | [app](../internal/app) constructs concrete modules and connects their lifetimes; no feature policy or persistence transactions |
+| Composition | [app](../internal/app) constructs concrete modules and connects their lifetimes; [host commands](../internal/app/hostcommands) bind short-lived execution protocols separately from daemon startup. No feature policy or persistence transactions. |
 | Controller capabilities | [controller](../internal/controller) owns use cases, typed API adapters, scheduling and immutable plan preparation |
 | Domain | [core](../internal/core) owns pure domain values and decisions without infrastructure |
 | Agent capabilities | [agent](../internal/agent) owns assigned execution, cancellation and reports; no desired-state selection |

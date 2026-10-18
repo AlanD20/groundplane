@@ -10,11 +10,11 @@ import (
 )
 
 type taskAttemptsInput struct {
-	ID       string `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
-	WorkID   string `path:"work_id"`
-	After    uint64 `query:"after"`
-	Limit    int64  `query:"limit" default:"25" minimum:"1" maximum:"100"`
-	Revision int64  `query:"revision" minimum:"0"`
+	ID       string       `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
+	WorkID   string       `path:"work_id"`
+	After    taskSequence `query:"after"`
+	Limit    int64        `query:"limit" default:"25" minimum:"1" maximum:"100"`
+	Revision int64        `query:"revision" minimum:"0"`
 }
 
 type taskAttemptsOutput struct{ Body apiTypes.TaskAttemptPage }
@@ -57,7 +57,17 @@ func (s *Server) taskStages(ctx context.Context, request *taskStagesInput) (*tas
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
-	return &taskStagesOutput{Body: apiTypes.TaskStages{Items: value.Items, Available: value.Available, Sequence: value.Sequence, UpdatedAt: value.UpdatedAt, Revision: value.Revision, Incomplete: value.Incomplete, Expired: value.Expired}}, nil
+	return &taskStagesOutput{
+		Body: apiTypes.TaskStages{
+			Items:      value.Items,
+			Available:  value.Available,
+			Sequence:   value.Sequence,
+			UpdatedAt:  value.UpdatedAt,
+			Revision:   value.Revision,
+			Incomplete: value.Incomplete,
+			Expired:    value.Expired,
+		},
+	}, nil
 }
 
 func (s *Server) taskImage(ctx context.Context, request *taskImageInput) (*taskImageOutput, error) {
@@ -80,11 +90,23 @@ func (s *Server) taskAttempts(ctx context.Context, request *taskAttemptsInput) (
 	if s.taskInspection == nil {
 		return nil, errs.New(errs.KindInternal, "task inspection is not configured")
 	}
-	page, err := s.taskInspection.Attempts(ctx, request.ID, request.WorkID, request.After, request.Limit, request.Revision)
+	page, err := s.taskInspection.Attempts(
+		ctx,
+		request.ID,
+		request.WorkID,
+		uint64(request.After),
+		request.Limit,
+		request.Revision,
+	)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
-	response := apiTypes.TaskAttemptPage{Items: []apiTypes.TaskAttempt{}, More: page.More, After: page.After, Revision: page.Revision}
+	response := apiTypes.TaskAttemptPage{
+		Items:    []apiTypes.TaskAttempt{},
+		More:     page.More,
+		After:    page.After,
+		Revision: page.Revision,
+	}
 	for _, attempt := range page.Attempts {
 		response.Items = append(response.Items, executionAttempt(attempt))
 	}

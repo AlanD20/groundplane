@@ -334,10 +334,19 @@ func (service *Service) prepareBlueprintAttachCandidates(
 			)
 		}
 		record, err := attachrecord.NewPendingAttachRecord(
-			attachIDs[name], environmentID, name,
-			item.backingProject.Record.ID, item.backingEnvironment.Record.ID,
-			item.backingService.Record.Desired.ID, item.backingService.Record.BackingNetworkID,
-			item.consumer.Desired.ID, owner.ID, nil, cloneBlueprintAttachFactSets(owner.FactSets), taskID, createdAt,
+			attachIDs[name],
+			environmentID,
+			name,
+			item.backingProject.Record.ID,
+			item.backingEnvironment.Record.ID,
+			item.backingService.Record.Desired.ID,
+			item.backingService.Record.BackingNetworkID,
+			item.consumer.Desired.ID,
+			owner.ID,
+			nil,
+			attachrecord.CloneAttachFactSets(owner.FactSets),
+			taskID,
+			createdAt,
 		)
 		if err != nil {
 			return preparedBlueprintAttaches{}, err

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -45,6 +46,14 @@ func (repository *ScriptRepository) PublishScriptWork(
 		task.Scope.ProjectID != sources.Project.Record.ID || task.Scope.TenantID != sources.Project.Record.TenantID ||
 		item.Input == nil || *item.Input != execution.Input || *item.Input != task.Intent {
 		return result, errs.New(errs.KindValidationFailed, "manual Script publication is invalid")
+	}
+	host, err := hostbindings.ReadLocal(ctx, repository.store, sources.Revision)
+	if err != nil {
+		return result, err
+	}
+	if sources.Host.ReadRevision != sources.Revision || host.Binding != sources.Host.Binding ||
+		item.Placement.HostID != host.Binding.HostID {
+		return result, errs.New(errs.KindStateConflict, "Script work host differs from its captured source binding")
 	}
 	if execution.ScriptSetGeneration != sources.Script.Record.ScriptSetGeneration {
 		return result, errs.New(errs.KindStateConflict, "Script source generation differs from captured input")
@@ -108,7 +117,8 @@ func (repository *ScriptRepository) PublishScriptWork(
 		defer cancel()
 		// Abandon fences the descriptor and refuses an active root. This also
 		// protects a publication whose commit succeeded but response was lost.
-		if cleanupErr := authority.Abandon(cleanupCtx, execution.OperationID, members); cleanupErr != nil && err == nil {
+		if cleanupErr := authority.Abandon(cleanupCtx, execution.OperationID, members); cleanupErr != nil &&
+			err == nil {
 			err = cleanupErr
 		}
 	}()
@@ -148,6 +158,7 @@ func (repository *ScriptRepository) PublishScriptWork(
 		return result, err
 	}
 	conditions = append(conditions, sourceConditions...)
+	conditions = append(conditions, host.Conditions...)
 	conditions = append(conditions, fragment.Conditions()...)
 	executionValue, err := recordcodec.Encode("script-execution", execution)
 	if err != nil {

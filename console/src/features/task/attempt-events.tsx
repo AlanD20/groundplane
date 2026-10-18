@@ -122,7 +122,8 @@ export function AttemptEvents({
               </div>
               {value.finished_at && (
                 <p className="text-sm">
-                  Attempt finished: <StatusBadge status={value.outcome} />
+                  Attempt finished:{" "}
+                  <StatusBadge status={value.outcome ?? "unknown"} />
                 </p>
               )}
               {(value.expired || value.first > 1) && (

@@ -3,11 +3,12 @@ package scripts
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
-	"net/http"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -92,10 +93,13 @@ func (service *scriptMutationService) RunScript(
 	}
 	item := workexecution.Item{
 		ID: workID, TaskID: taskID, Operation: workexecution.Script, TargetID: scriptID,
-		Placement: service.placement, Input: &execution.Input,
+		Placement: workexecution.Placement{
+			Executor: workexecution.Agent,
+			HostID:   sources.Host.Binding.HostID,
+		}, Input: &execution.Input,
 		Claims: []workexecution.Claim{
 			{ScopeID: sources.Service.Record.Desired.ID},
-			{HostID: service.placement.HostID, ScopeID: sources.Service.Record.Desired.ID},
+			{HostID: sources.Host.Binding.HostID, ScopeID: sources.Service.Record.Desired.ID},
 		},
 		Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
 		CreatedAt: now, UpdatedAt: now, Deadline: task.Deadline,

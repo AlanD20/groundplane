@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+
 	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
@@ -16,7 +17,6 @@ import (
 
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -32,7 +32,7 @@ type controllerExecutionComposition struct {
 }
 
 func newControllerExecutionComposition(
-	ctx context.Context, cfg config.ControllerConfig, store etcdstore.Store,
+	ctx context.Context, cfg config.ControllerConfig, store etcd.EnvironmentBlueprintStore,
 	authority controllerAuthorityComposition, dataServices controllerDataComposition,
 	componentCatalog []componentrender.EnvironmentComponentRegistration,
 ) (controllerExecutionComposition, error) {
@@ -68,10 +68,6 @@ func newControllerExecutionComposition(
 	if err := componentregistration.ConfigureReleasePlans(planResolver, authority.releaseLedger); err != nil {
 		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize release plan resolver: %w", err)
-	}
-	if err := planResolver.EnableScriptPlans(dataServices.scriptRecords); err != nil {
-		_ = store.Close()
-		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Script plan resolver: %w", err)
 	}
 	materializationResolver, err := initializeTaskMaterializationResolver(
 		store,

@@ -44,7 +44,7 @@ func (workers *executionWorkers) submitAttachRemoval(delivery *agentpb.AttachRem
 	go func() {
 		defer workers.wait.Done()
 		defer attachexecution.ClearRemoval(input.Removal)
-		result, err := workers.attachRemoval.Run(workers.executionContext(attempt), input, workers.exchange)
+		result, err := workers.attachRemoval.Run(workers.executionContext(input.Attempt), input, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: input.Attempt, attach: result.Progress, attachFailure: result.Failure, err: err}:

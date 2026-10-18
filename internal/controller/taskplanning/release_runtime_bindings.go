@@ -93,7 +93,7 @@ func sealedReleaseAttachJoins(
 			return nil, err
 		}
 		for name := range references["networks"] {
-			networkID, managed := managedAttachNetworkID(name)
+			networkID, managed := composerender.ManagedAttachNetworkID(name)
 			if !managed {
 				continue
 			}

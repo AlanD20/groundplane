@@ -2,12 +2,12 @@ package services
 
 import (
 	"context"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -172,6 +172,9 @@ func (repository *MutationRepository) ValidateServiceRemovalReferences(
 	return repository.services.ValidateServiceRemovalReferences(ctx, current, projection)
 }
 
-func (repository *MutationRepository) PublishServiceRemoval(ctx context.Context, request etcd.ServiceRemovalPublication) (etcd.IdempotencyTransactionResult, error) {
+func (repository *MutationRepository) PublishServiceRemoval(
+	ctx context.Context,
+	request etcd.ServiceRemovalPublication,
+) (etcd.IdempotencyTransactionResult, error) {
 	return repository.services.PublishServiceRemoval(ctx, request)
 }

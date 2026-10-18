@@ -37,7 +37,6 @@ type controllerBootstrapComposition struct {
 
 type controllerStore interface {
 	etcd.EnvironmentBlueprintStore
-	volumeEvidenceStore
 }
 
 // newControllerBootstrapComposition owns the native resources needed before

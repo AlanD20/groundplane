@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -12,9 +13,9 @@ import (
 func volumeInventoryCleanupSubset(actual, retained *agentpb.BackupRecoveredVolumeRestore) bool {
 	if actual == nil || retained == nil ||
 		!bytes.Equal(actual.RecoveryKeySha256, retained.RecoveryKeySha256) ||
-		actual.AssignmentId != retained.AssignmentId ||
+		actual.Attempt == nil || retained.Attempt == nil || !proto.Equal(actual.Attempt, retained.Attempt) ||
 		actual.RestoreGenerationId != retained.RestoreGenerationId ||
-		!bytes.Equal(actual.StepSha256, retained.StepSha256) ||
+		!bytes.Equal(actual.AuthoritySha256, retained.AuthoritySha256) ||
 		actual.JournalPresent && !retained.JournalPresent ||
 		actual.ReceiverPresent && !retained.ReceiverPresent {
 		return false

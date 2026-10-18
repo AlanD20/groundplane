@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"time"
+
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -11,8 +14,6 @@ import (
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"net/http"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -252,7 +253,6 @@ type scriptMutationService struct {
 	deletions   *scriptDeletionService
 	now         func() time.Time
 	preparation *taskplanning.ScriptRunnerPreparationService
-	placement   workexecution.Placement
 }
 
 func NewMutationService(
@@ -260,14 +260,12 @@ func NewMutationService(
 	idempotency scriptMutationIdempotency,
 	preparation *taskplanning.ScriptRunnerPreparationService,
 	deletions *scriptDeletionService,
-	placement workexecution.Placement,
 ) (*scriptMutationService, error) {
-	if repository == nil || idempotency == nil || preparation == nil ||
-		placement.Validate() != nil || placement.Executor != workexecution.Agent {
+	if repository == nil || idempotency == nil || preparation == nil {
 		return nil, errs.New(errs.KindInternal, "Script mutation service is not configured")
 	}
 	return &scriptMutationService{
-		repository: repository, idempotency: idempotency, preparation: preparation, deletions: deletions, placement: placement, now: time.Now,
+		repository: repository, idempotency: idempotency, preparation: preparation, deletions: deletions, now: time.Now,
 	}, nil
 }
 

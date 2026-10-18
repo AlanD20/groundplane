@@ -19011,9 +19011,10 @@
             "in": "query",
             "name": "after",
             "schema": {
-              "format": "int64",
+              "format": "uint64",
               "minimum": 0,
-              "type": "integer"
+              "type": "integer",
+              "x-go-type": "uint64"
             }
           },
           {
@@ -19101,9 +19102,10 @@
             "in": "query",
             "name": "after",
             "schema": {
-              "format": "int64",
+              "format": "uint64",
               "minimum": 0,
-              "type": "integer"
+              "type": "integer",
+              "x-go-type": "uint64"
             }
           },
           {

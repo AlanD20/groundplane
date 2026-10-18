@@ -10,7 +10,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (workers *executionWorkers) submitAttachProvision(delivery *agentpb.AttachProvisionAssignment, available int) error {
+func (workers *executionWorkers) submitAttachProvision(
+	delivery *agentpb.AttachProvisionAssignment,
+	available int,
+) error {
 	input, err := attachexecution.DecodeProvisionAssignment(delivery, workers.identity)
 	if err != nil {
 		return err
@@ -39,13 +42,16 @@ func (workers *executionWorkers) submitAttachProvision(delivery *agentpb.AttachP
 	if err != nil {
 		return err
 	}
-	workers.active[input.Attempt.WorkItemID] = activeExecution{attempt: input.Attempt, provision: proto.CloneOf(delivery)}
+	workers.active[input.Attempt.WorkItemID] = activeExecution{
+		attempt:   input.Attempt,
+		provision: proto.CloneOf(delivery),
+	}
 	workers.wait.Add(1)
 	transferred = true
 	go func() {
 		defer workers.wait.Done()
 		defer attachexecution.ClearProvision(input.Provision)
-		result, err := workers.attachProvision.Run(workers.executionContext(attempt), input, workers.exchange)
+		result, err := workers.attachProvision.Run(workers.executionContext(input.Attempt), input, workers.exchange)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: input.Attempt, provision: &result, err: err}:
@@ -62,7 +68,10 @@ func (workers *executionWorkers) consumeAttachProvision(active activeExecution, 
 	}
 	result := output.provision
 	if result == nil || (result.Progress == nil) == (result.Failure == nil) {
-		return errs.New(errs.KindStateConflict, "Attach provisioning requires exactly one acknowledged completion or failure")
+		return errs.New(
+			errs.KindStateConflict,
+			"Attach provisioning requires exactly one acknowledged completion or failure",
+		)
 	}
 	input, err := attachexecution.DecodeProvisionAssignment(active.provision, workers.identity)
 	if err != nil {
@@ -74,7 +83,8 @@ func (workers *executionWorkers) consumeAttachProvision(active activeExecution, 
 		if err != nil {
 			return err
 		}
-		if result.Progress.InFlight || result.Progress.Completed != authority.Commands || result.Progress.AttemptID != input.Attempt.ID {
+		if result.Progress.InFlight || result.Progress.Completed != authority.Commands ||
+			result.Progress.AttemptID != input.Attempt.ID {
 			return errs.New(errs.KindStateConflict, "Attach provisioning result is missing captured commands")
 		}
 	}

@@ -2,13 +2,13 @@ package blueprint
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
@@ -31,11 +31,34 @@ import (
 )
 
 type environmentBlueprintRepository interface {
-	ValidateAgentProxyPublication(context.Context, workqueue.View, componentplanning.ProxyServicePreflight, workqueue.Change) error
-	LoadComponentWorkConfiguration(context.Context, runtimeconfiguration.Reference) (runtimeconfiguration.Snapshot, error)
-	PrepareComponentWorkSecretPins(context.Context, workqueue.View, string, runtimeconfiguration.WorkCapture) (tasksecretpins.Prepared, error)
-	PrepareComponentWorkConfiguration(context.Context, workqueue.View, string, uint64, []taskmaterialization.Record) (runtimeconfiguration.WorkCapture, error)
-	ComponentWorkConfigurationConditions(context.Context, workqueue.View, runtimeconfiguration.WorkCapture) ([]etcdstore.Condition, error)
+	ValidateAgentProxyPublication(
+		context.Context,
+		workqueue.View,
+		componentplanning.ProxyServicePreflight,
+		workqueue.Change,
+	) error
+	LoadComponentWorkConfiguration(
+		context.Context,
+		runtimeconfiguration.Reference,
+	) (runtimeconfiguration.Snapshot, error)
+	PrepareComponentWorkSecretPins(
+		context.Context,
+		workqueue.View,
+		string,
+		runtimeconfiguration.WorkCapture,
+	) (tasksecretpins.Prepared, error)
+	PrepareComponentWorkConfiguration(
+		context.Context,
+		workqueue.View,
+		string,
+		uint64,
+		[]taskmaterialization.Record,
+	) (runtimeconfiguration.WorkCapture, error)
+	ComponentWorkConfigurationConditions(
+		context.Context,
+		workqueue.View,
+		runtimeconfiguration.WorkCapture,
+	) ([]etcdstore.Condition, error)
 	PrepareBlueprintDisabledComponent(context.Context, workqueue.View, blueprintunits.Unit,
 		etcd.BlueprintDisabledComponentSelection, *componentplanning.ProxyServicePreflight, workqueue.Change, time.Time,
 	) (workqueue.Change, error)

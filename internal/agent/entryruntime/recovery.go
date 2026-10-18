@@ -10,7 +10,7 @@ import (
 )
 
 func (executor *Executor) recover(ctx context.Context, input Input, exchange Exchange) (workexecution.Attempt, error) {
-	ack, err := exchange.Start(ctx, input.attempt)
+	ack, err := exchange.StartAttempt(ctx, input.attempt)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -18,7 +18,13 @@ func (executor *Executor) recover(ctx context.Context, input Input, exchange Exc
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	saved, err := executor.journal.PrepareEntryRecovery(ctx, input.attempt, input.procedure, *input.recovery, input.boundary)
+	saved, err := executor.journal.PrepareEntryRecovery(
+		ctx,
+		input.attempt,
+		input.procedure,
+		*input.recovery,
+		input.boundary,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -44,15 +50,30 @@ func (executor *Executor) recover(ctx context.Context, input Input, exchange Exc
 	return executor.deliverRecovery(ctx, input, exchange, report)
 }
 
-func (host *RuntimeHost) Restore(ctx context.Context, input Input, inspectOnly bool) (entryexecution.RecoveryReport, error) {
+func (host *RuntimeHost) Restore(
+	ctx context.Context,
+	input Input,
+	inspectOnly bool,
+) (entryexecution.RecoveryReport, error) {
 	if input.recovery == nil || input.attempt.StartedAt == nil {
 		return entryexecution.RecoveryReport{}, invalidInput()
 	}
 	if err := host.ownership.CheckRecovery(input.recovery.Forward, input.attempt); err != nil {
 		return entryexecution.RecoveryReport{}, err
 	}
-	report := entryexecution.RecoveryReport{AttemptID: input.attempt.ID, ForwardID: input.recovery.Forward.ID, Failure: input.recovery.Evidence, EnvironmentID: input.procedure.EnvironmentId, Input: input.attempt.Input}
-	captured := entryexecution.FileInput{Attempt: input.attempt, Procedure: input.procedure, Recovery: input.recovery, Progress: input.boundary}
+	report := entryexecution.RecoveryReport{
+		AttemptID:     input.attempt.ID,
+		ForwardID:     input.recovery.Forward.ID,
+		Failure:       input.recovery.Evidence,
+		EnvironmentID: input.procedure.EnvironmentId,
+		Input:         input.attempt.Input,
+	}
+	captured := entryexecution.FileInput{
+		Attempt:   input.attempt,
+		Procedure: input.procedure,
+		Recovery:  input.recovery,
+		Progress:  input.boundary,
+	}
 	// A failed stop cannot authorize file restoration. Return a partial result
 	// so the Controller retains unresolved effects instead of replaying forward.
 	if err := host.consumers.Stop(ctx, captured); err == nil {

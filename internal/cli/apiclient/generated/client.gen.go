@@ -6094,15 +6094,15 @@ type TaskRetryParams struct {
 
 // TaskAttemptsParams defines parameters for TaskAttempts.
 type TaskAttemptsParams struct {
-	After    *int64 `form:"after,omitempty" json:"after,omitempty"`
-	Limit    *int64 `form:"limit,omitempty" json:"limit,omitempty"`
-	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty"`
+	After    *uint64 `form:"after,omitempty" json:"after,omitempty"`
+	Limit    *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Revision *int64  `form:"revision,omitempty" json:"revision,omitempty"`
 }
 
 // TaskAttemptEventsParams defines parameters for TaskAttemptEvents.
 type TaskAttemptEventsParams struct {
-	After    *int64 `form:"after,omitempty" json:"after,omitempty"`
-	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty"`
+	After    *uint64 `form:"after,omitempty" json:"after,omitempty"`
+	Revision *int64  `form:"revision,omitempty" json:"revision,omitempty"`
 }
 
 // TaskStagesParams defines parameters for TaskStages.
@@ -20655,7 +20655,7 @@ func NewTaskAttemptsRequest(server string, id string, workId string, params *Tas
 
 		if params.After != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "uint64"}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -20754,7 +20754,7 @@ func NewTaskAttemptEventsRequest(server string, id string, workId string, attemp
 
 		if params.After != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "uint64"}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {

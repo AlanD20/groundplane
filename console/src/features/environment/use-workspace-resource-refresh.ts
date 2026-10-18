@@ -37,9 +37,10 @@ export function useWorkspaceResourceRefresh({
 }: Options) {
   return useResourceRefresh(async (tasks, isCurrent) => {
     const mutationVersion = controllerMutationVersion();
-    const task = tasks[tasks.length - 1];
-    if (task.environment_id) {
-      const id = task.environment_id;
+    const completed = tasks.map((response) => response.task);
+    const task = completed[completed.length - 1];
+    if (task.scope.environment_id) {
+      const id = task.scope.environment_id;
       const generation = environmentGenerations.current.get(id) ?? 0;
       const refreshed = await readEnvironment(id);
       if (!isCurrent()) return;
@@ -66,9 +67,9 @@ export function useWorkspaceResourceRefresh({
           }
         }
       });
-    } else if (task.project_id) {
+    } else if (task.scope.project_id) {
       const generations = new Map(environmentGenerations.current);
-      const refreshed = await readProject(task.project_id);
+      const refreshed = await readProject(task.scope.project_id);
       if (mutationVersion !== controllerMutationVersion())
         throw new RefreshSuperseded();
       if (isCurrent())
@@ -78,7 +79,7 @@ export function useWorkspaceResourceRefresh({
             draft.backingProjects,
           ]) {
             const index = projects.findIndex(
-              (project) => project.id === task.project_id,
+              (project) => project.id === task.scope.project_id,
             );
             if (!refreshed) {
               if (index >= 0) projects.splice(index, 1);
@@ -96,31 +97,36 @@ export function useWorkspaceResourceRefresh({
           }
         });
     }
-    if (tasks.some((entry) => entry.resource_kind === "agent"))
+    if (completed.some((entry) => entry.resource_kind === "agent"))
       await refreshAgents();
     if (
-      tasks.some((entry) => entry.resource_kind === "component") &&
-      !task.environment_id
+      completed.some((entry) => entry.resource_kind === "component") &&
+      !task.scope.environment_id
     )
       await refreshPlatformComponents();
     if (
-      tasks.some((entry) =>
-        ["controller", "agent", "etcd"].includes(entry.resource_kind ?? ""),
+      completed.some((entry) =>
+        ["controller", "agent", "etcd", "software"].includes(
+          entry.resource_kind ?? "",
+        ),
       )
     )
       await controllerPlatform.refreshHost();
     if (
-      tasks.some((entry) => entry.resource_kind === "runner") &&
-      task.tenant_id
+      completed.some((entry) => entry.resource_kind === "runner") &&
+      task.scope.tenant_id
     )
-      await refreshRunners(task.tenant_id);
-    if (tasks.some((entry) => entry.resource_kind === "secret"))
+      await refreshRunners(task.scope.tenant_id);
+    if (completed.some((entry) => entry.resource_kind === "secret"))
       await refreshReusableSecrets();
     if (
-      task.tenant_id &&
-      !task.project_id &&
-      !task.environment_id &&
-      tasks.some((entry) => entry.resource_kind === "hierarchy_deletion")
+      task.scope.tenant_id &&
+      !task.scope.project_id &&
+      !task.scope.environment_id &&
+      completed.some(
+        (entry) =>
+          entry.resource_kind === "tenant" && entry.action === "remove",
+      )
     ) {
       const tenants = await listAllTenants(new AbortController().signal);
       if (isCurrent())
@@ -133,14 +139,14 @@ export function useWorkspaceResourceRefresh({
         });
     }
     if (
-      task.environment_id &&
-      tasks.some((entry) =>
-        ["backup", "backup_prune", "restore", "rotate"].includes(entry.type),
+      task.scope.environment_id &&
+      completed.some((entry) =>
+        ["backup", "backup_prune", "restore", "rotate"].includes(entry.action),
       )
     ) {
       await Promise.all([
-        backupStore.loadBackupPolicy(task.environment_id),
-        backupStore.loadRecoveryPoints(task.environment_id),
+        backupStore.loadBackupPolicy(task.scope.environment_id),
+        backupStore.loadRecoveryPoints(task.scope.environment_id),
       ]);
     }
   });

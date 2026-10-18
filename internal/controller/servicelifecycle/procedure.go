@@ -56,7 +56,10 @@ func BuildProcedure(input servicelifecyclework.Input) (Procedure, error) {
 		if artifact.GetOwnerId() != input.Scope.EnvironmentID ||
 			artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 			artifact.GetAuthorizedVolumeDir() != runtime.AuthorizedVolumeDir {
-			return Procedure{}, errs.New(errs.KindStateConflict, "Service lifecycle member belongs to a different Environment")
+			return Procedure{}, errs.New(
+				errs.KindStateConflict,
+				"Service lifecycle member belongs to a different Environment",
+			)
 		}
 		stageID := ids.DeriveAt(ids.KindStep, input.CreatedAt, input.WorkItemID, artifact.Services[0].ComposeName)
 		source, err := RuntimeSource(artifact, stageID)
@@ -74,7 +77,11 @@ func BuildProcedure(input servicelifecyclework.Input) (Procedure, error) {
 		if definition == nil {
 			return Procedure{}, errs.New(errs.KindStateConflict, "Service lifecycle hook is missing from its capture")
 		}
-		procedure.Hook = &LifecycleHook{StageID: ids.DeriveAt(ids.KindStep, input.CreatedAt, input.WorkItemID, "hook", string(event)), Event: event, Definition: *definition}
+		procedure.Hook = &LifecycleHook{
+			StageID:    ids.DeriveAt(ids.KindStep, input.CreatedAt, input.WorkItemID, "hook/"+string(event)),
+			Event:      event,
+			Definition: *definition,
+		}
 	}
 	return procedure, nil
 }
