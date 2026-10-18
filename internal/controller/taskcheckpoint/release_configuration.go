@@ -122,7 +122,7 @@ func (service *ReleaseCheckpointService) activeConfiguration(ctx context.Context
 		view.Work.Task.Task.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil {
 		return empty, noReport, nil, invalidConfigurationRequest()
 	}
-	owner := service.owners[view.Work.Item.Item.Operation]
+	owner := service.forwards[view.Work.Item.Item.Operation]
 	if owner == nil {
 		return empty, noReport, nil, invalidConfigurationRequest()
 	}

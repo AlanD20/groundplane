@@ -26,9 +26,6 @@ func (service *ReleaseCheckpointService) CheckpointRecovery(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	if claimed.Direction != workexecution.Recovery {
-		return nil, errs.New(errs.KindStateConflict, "Recovery checkpoint requires a cleanup attempt")
-	}
 	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
 	if err != nil {
 		return nil, err
@@ -37,9 +34,12 @@ func (service *ReleaseCheckpointService) CheckpointRecovery(ctx context.Context,
 		view.Work.Task.Task.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil || !view.Work.Task.Task.PublicationComplete {
 		return nil, errs.New(errs.KindStateConflict, "Recovery checkpoint no longer owns an active cleanup attempt")
 	}
-	owner := service.owners[view.Work.Item.Item.Operation]
+	owner := service.restorations[view.Work.Item.Item.Operation]
 	if owner == nil {
 		return nil, errs.New(errs.KindStateConflict, "Recovery operation owner is unavailable")
+	}
+	if !service.restoring(view) {
+		return nil, errs.New(errs.KindStateConflict, "Forward deployment must use its deployment checkpoint procedure")
 	}
 	input, err := owner.LoadRecoveryInput(ctx, view)
 	if err != nil {

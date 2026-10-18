@@ -560,7 +560,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	checkpoints, err := taskcheckpoint.NewReleaseCheckpointService(queue, platform.dependencies.Store, dependencies.CapturedFiles, diagnostics, platform.dependencies.Logger,
-		[]taskcheckpoint.ReleaseCheckpointRegistration{{Operation: workexecution.Release, Owner: dependencies.Releases}})
+		[]taskcheckpoint.ReleaseCheckpointRegistration{{Operation: workexecution.Release, Forward: dependencies.Releases, Restoration: dependencies.Releases, Outcome: dependencies.Releases}})
 	if err != nil {
 		return nil, err
 	}

@@ -31,11 +31,11 @@ func (service *ReleaseCheckpointService) LoadReleaseHook(ctx context.Context, au
 		view.Attempt.Attempt.StartedAt == nil || view.Work.Task.Task.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil {
 		return nil, errs.New(errs.KindStateConflict, "Release hook request does not own an active started attempt")
 	}
-	owner := service.owners[view.Work.Item.Item.Operation]
-	if owner == nil {
-		return nil, errs.New(errs.KindStateConflict, "Release hook owner is unavailable")
-	}
-	if claimed.Direction == workexecution.Recovery {
+	if service.restoring(view) {
+		owner := service.restorations[view.Work.Item.Item.Operation]
+		if owner == nil {
+			return nil, errs.New(errs.KindStateConflict, "Restoration hook owner is unavailable")
+		}
 		captured, err := owner.LoadRecoveryHookOwnership(ctx, view, request.ExecutionId)
 		if err != nil {
 			return nil, err
@@ -53,6 +53,10 @@ func (service *ReleaseCheckpointService) LoadReleaseHook(ctx context.Context, au
 		}
 		return proto.CloneOf(&agentpb.ReleaseHookDelivery{Attempt: attempt, OperationId: captured.OperationID,
 			Input: &agentpb.WorkInputReference{InputId: captured.Input.ID, Sha256: digest}, Run: captured.Run, Projection: captured.Projection, Cleanup: captured.Cleanup}), nil
+	}
+	owner := service.forwards[view.Work.Item.Item.Operation]
+	if owner == nil {
+		return nil, errs.New(errs.KindStateConflict, "Release hook owner is unavailable")
 	}
 	delivery, err := owner.LoadActiveHook(ctx, view)
 	if delivery != nil {

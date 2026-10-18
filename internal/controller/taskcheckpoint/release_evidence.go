@@ -50,18 +50,22 @@ func (service *ReleaseCheckpointService) RecordReleaseEffect(ctx context.Context
 	if !view.ActiveAttempt || !view.CurrentExecutor || !workexecution.SameAssignment(view.Attempt.Attempt, claimed) {
 		return errs.New(errs.KindStateConflict, "Release evidence does not belong to the active executor")
 	}
-	owner := service.owners[view.Work.Item.Item.Operation]
-	if owner == nil {
-		return errs.New(errs.KindStateConflict, "Release evidence owner is unavailable")
-	}
 	var change workqueue.Change
-	if claimed.Direction == workexecution.Recovery {
+	if service.restoring(view) {
+		owner := service.restorations[view.Work.Item.Item.Operation]
+		if owner == nil {
+			return errs.New(errs.KindStateConflict, "Restoration evidence owner is unavailable")
+		}
 		input, loadErr := owner.LoadRecoveryInput(ctx, view)
 		if loadErr != nil {
 			return loadErr
 		}
 		change, err = releasework.PrepareRecoveryEffect(ctx, service.store, view, input, raw, reference)
 	} else {
+		owner := service.forwards[view.Work.Item.Item.Operation]
+		if owner == nil {
+			return errs.New(errs.KindStateConflict, "Release evidence owner is unavailable")
+		}
 		input, loadErr := owner.LoadCheckpointInput(ctx, view)
 		if loadErr != nil {
 			return loadErr

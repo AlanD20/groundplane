@@ -35,7 +35,7 @@ func (service *ReleaseCheckpointService) CompleteRelease(ctx context.Context, au
 	if err != nil {
 		return nil, err
 	}
-	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Work.Item.Item.Operation != workexecution.Release ||
+	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || service.outcomes[view.Work.Item.Item.Operation] == nil ||
 		view.Checkpoint.Record == nil || view.Checkpoint.Record.Sequence != request.CheckpointSequence || view.Checkpoint.Record.Evidence != evidence {
 		return nil, errs.New(errs.KindStateConflict, "Release completion differs from the saved attempt checkpoint")
 	}
@@ -43,15 +43,11 @@ func (service *ReleaseCheckpointService) CompleteRelease(ctx context.Context, au
 		if !view.ActiveAttempt || !view.CurrentExecutor {
 			return nil, errs.New(errs.KindStateConflict, "Release completion no longer owns the active attempt")
 		}
-		owner := service.owners[view.Work.Item.Item.Operation]
+		owner := service.outcomes[view.Work.Item.Item.Operation]
 		if owner == nil {
 			return nil, errs.New(errs.KindStateConflict, "Release completion owner is unavailable")
 		}
-		if claimed.Direction == workexecution.Recovery {
-			err = owner.SettleRecovered(ctx, view, guards, time.Now().UTC())
-		} else {
-			err = owner.SettleCompleted(ctx, view, guards, time.Now().UTC())
-		}
+		err = owner.SettleCompleted(ctx, view, guards, time.Now().UTC())
 		if err != nil {
 			return nil, err
 		}
@@ -61,7 +57,7 @@ func (service *ReleaseCheckpointService) CompleteRelease(ctx context.Context, au
 		}
 	}
 	attempt := view.Attempt.Attempt
-	if attempt.Direction == workexecution.Recovery && attempt.Outcome != workexecution.Succeeded {
+	if service.restoring(view) && attempt.Outcome != workexecution.Succeeded {
 		return nil, errs.New(errs.KindStateConflict, "saved recovery result does not prove completed restoration")
 	}
 	if !workexecution.SameAssignment(attempt, claimed) || attempt.FinishedAt == nil || attempt.Result == nil || *attempt.Result != evidence ||

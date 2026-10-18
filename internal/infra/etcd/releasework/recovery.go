@@ -14,11 +14,12 @@ import (
 // In particular, final completion cannot erase the quiescence proof required
 // before restoration. It contains no logs or copies of runtime configuration.
 type RecoveryRecord struct {
-	ForwardAttemptID string                              `json:"forward_attempt_id"`
-	Failure          workexecution.Input                 `json:"failure"`
-	Report           releaseexecution.RecoveryReport     `json:"report"`
-	Proofs           [6]*workexecution.Input             `json:"proofs"`
-	Boundaries       [6]*releaseexecution.RecoveryReport `json:"boundaries"`
+	ForwardAttemptID string                                      `json:"forward_attempt_id"`
+	SourceResult     workexecution.Input                         `json:"source_result"`
+	Group            *releaseexecution.GroupRestorationAuthority `json:"group,omitempty"`
+	Report           releaseexecution.RecoveryReport             `json:"report"`
+	Proofs           [6]*workexecution.Input                     `json:"proofs"`
+	Boundaries       [6]*releaseexecution.RecoveryReport         `json:"boundaries"`
 }
 
 type RecoverySnapshot struct {
@@ -29,7 +30,8 @@ type RecoverySnapshot struct {
 func RecoveryKey(attemptID string) string { return "/v1/execution/release-recovery/" + attemptID }
 
 func (record RecoveryRecord) validate(input releaseexecution.RecoveryInput) error {
-	if input.Validate() != nil || record.ForwardAttemptID != input.Forward.ID || record.Failure != *input.Forward.Result ||
+	if input.Validate() != nil || record.ForwardAttemptID != input.Forward.ID || record.SourceResult != *input.Forward.Result ||
+		!releaseexecution.EqualGroupRestoration(record.Group, input.Group) ||
 		record.Report.Ack != nil || record.Report.Validate(input) != nil {
 		return invalid()
 	}
@@ -92,12 +94,14 @@ func LoadRecovery(ctx context.Context, store Reader, input releaseexecution.Reco
 func PrepareRecovery(view workqueue.ResumeView, input releaseexecution.RecoveryInput, previous RecoverySnapshot, report releaseexecution.RecoveryReport) (workqueue.Change, error) {
 	attempt := input.Input.Attempt
 	if report.Ack != nil || report.Validate(input) != nil || !view.ActiveAttempt || !view.CurrentExecutor ||
-		view.Work.Item.Item.Operation != workexecution.Release || !workexecution.SameAssignment(view.Attempt.Attempt, attempt) ||
+		(input.Group == nil && view.Work.Item.Item.Operation != workexecution.Release || input.Group != nil && view.Work.Item.Item.Operation != workexecution.ReleaseRestoration) ||
+		!workexecution.SameAssignment(view.Attempt.Attempt, attempt) ||
 		view.Attempt.Attempt.StartedAt == nil || attempt.StartedAt == nil || !view.Attempt.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
 		previous.Revision < 0 || (previous.Record == nil) != (previous.Revision == 0) || (previous.Record == nil) != (view.Checkpoint.Record == nil) {
 		return workqueue.Change{}, invalid()
 	}
-	record := RecoveryRecord{ForwardAttemptID: input.Forward.ID, Failure: *input.Forward.Result, Report: report}
+	record := RecoveryRecord{ForwardAttemptID: input.Forward.ID, SourceResult: *input.Forward.Result,
+		Group: releaseexecution.CloneGroupRestoration(input.Group), Report: report}
 	var prior *releaseexecution.RecoveryProgress
 	if previous.Record != nil {
 		if err := previous.Record.validate(input); err != nil {

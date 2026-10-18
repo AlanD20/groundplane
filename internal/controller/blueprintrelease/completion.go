@@ -15,6 +15,9 @@ import (
 // claimed status. Runtime input is reconstructed from Controller-owned sources.
 // Interruption/failure settlement has its own recovery path.
 func (service *Service) SettleCompleted(ctx context.Context, view workqueue.ResumeView, authorization []keyvalue.Condition, at time.Time) error {
+	if view.Attempt.Attempt.Direction == workexecution.Recovery {
+		return service.settleRecovered(ctx, view, authorization, at)
+	}
 	input, err := service.LoadCheckpointInput(ctx, view)
 	if err != nil {
 		return err
@@ -22,7 +25,7 @@ func (service *Service) SettleCompleted(ctx context.Context, view workqueue.Resu
 	return service.ledger.SettleCompletedBlueprintRelease(ctx, view, input, authorization, at)
 }
 
-func (service *Service) SettleRecovered(ctx context.Context, view workqueue.ResumeView, authorization []keyvalue.Condition, at time.Time) error {
+func (service *Service) settleRecovered(ctx context.Context, view workqueue.ResumeView, authorization []keyvalue.Condition, at time.Time) error {
 	input, err := service.LoadRecoveryInput(ctx, view)
 	if err != nil {
 		return err

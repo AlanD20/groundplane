@@ -6,10 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
-	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -19,49 +16,39 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// ReleaseCheckpointOwner owns effect admission and evidence, not the transport.
-// Begin compares current permission; Confirm verifies the exact captured effect.
-// Both return comparisons that commit atomically with the shared checkpoint.
-type ReleaseCheckpointOwner interface {
-	LoadRecoveryHookOwnership(context.Context, workqueue.ResumeView, string) (*etcd.ScriptWorkOwnership, error)
-	LoadRecoveryInput(context.Context, workqueue.ResumeView) (releaseexecution.RecoveryInput, error)
-	PrepareRecoveryEvidence(context.Context, workqueue.ResumeView, releaseexecution.RecoveryInput, releasework.RecoverySnapshot, releaseexecution.RecoveryReport) (workqueue.Change, error)
-	SettleCompleted(context.Context, workqueue.ResumeView, []keyvalue.Condition, time.Time) error
-	SettleRecovered(context.Context, workqueue.ResumeView, []keyvalue.Condition, time.Time) error
-	SettleFailed(context.Context, workqueue.ResumeView, releaseexecution.FailureReason, []keyvalue.Condition, time.Time) error
-	LoadActiveConfiguration(context.Context, workqueue.ResumeView) (releaseexecution.Input, releaseexecution.CheckpointReport, []taskmaterialization.Record, error)
-	LoadActiveRecoveryConfiguration(context.Context, workqueue.ResumeView) (releaseexecution.RecoveryInput, releaseexecution.RecoveryReport, []taskmaterialization.Record, error)
-	LoadActiveHook(context.Context, workqueue.ResumeView) (*taskplanning.ScriptWorkDelivery, error)
-	LoadCheckpointInput(context.Context, workqueue.ResumeView) (releaseexecution.Input, error)
-	PrepareCheckpointEvidence(context.Context, workqueue.ResumeView, releaseexecution.Input, releasework.Snapshot, releaseexecution.CheckpointReport) (workqueue.Change, error)
-}
-
-type ReleaseCheckpointRegistration struct {
-	Operation workexecution.Operation
-	Owner     ReleaseCheckpointOwner
-}
-
 type ReleaseCheckpointService struct {
-	diagnostics *executiondiagnostics.Repository
-	logger      *slog.Logger
-	files       CapturedFileReader
-	queue       *workqueue.Repository
-	store       releasework.Reader
-	owners      map[workexecution.Operation]ReleaseCheckpointOwner
+	diagnostics  *executiondiagnostics.Repository
+	logger       *slog.Logger
+	files        CapturedFileReader
+	queue        *workqueue.Repository
+	store        releasework.Reader
+	forwards     map[workexecution.Operation]ReleaseForwardOwner
+	restorations map[workexecution.Operation]ReleaseRestorationOwner
+	outcomes     map[workexecution.Operation]ReleaseOutcomeOwner
 }
 
 func NewReleaseCheckpointService(queue *workqueue.Repository, store releasework.Reader, files CapturedFileReader, diagnostics *executiondiagnostics.Repository, logger *slog.Logger, registrations []ReleaseCheckpointRegistration) (*ReleaseCheckpointService, error) {
 	if queue == nil || store == nil || files == nil || diagnostics == nil || logger == nil || len(registrations) == 0 {
 		return nil, errs.New(errs.KindInternal, "Release checkpoints require storage and operation owners")
 	}
-	owners := make(map[workexecution.Operation]ReleaseCheckpointOwner, len(registrations))
+	forwards := make(map[workexecution.Operation]ReleaseForwardOwner, len(registrations))
+	restorations := make(map[workexecution.Operation]ReleaseRestorationOwner, len(registrations))
+	outcomes := make(map[workexecution.Operation]ReleaseOutcomeOwner, len(registrations))
 	for _, registration := range registrations {
-		if !workexecution.ValidOperation(registration.Operation) || registration.Owner == nil || owners[registration.Operation] != nil {
+		if !workexecution.ValidOperation(registration.Operation) || registration.Outcome == nil || outcomes[registration.Operation] != nil ||
+			registration.Forward == nil && registration.Restoration == nil {
 			return nil, errs.New(errs.KindInternal, "Release checkpoint operation is invalid or duplicated")
 		}
-		owners[registration.Operation] = registration.Owner
+		outcomes[registration.Operation] = registration.Outcome
+		if registration.Forward != nil {
+			forwards[registration.Operation] = registration.Forward
+		}
+		if registration.Restoration != nil {
+			restorations[registration.Operation] = registration.Restoration
+		}
 	}
-	return &ReleaseCheckpointService{queue: queue, store: store, files: files, owners: owners, diagnostics: diagnostics, logger: logger}, nil
+	return &ReleaseCheckpointService{queue: queue, store: store, files: files, forwards: forwards, restorations: restorations,
+		outcomes: outcomes, diagnostics: diagnostics, logger: logger}, nil
 }
 
 func (service *ReleaseCheckpointService) CheckpointRelease(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.ReleaseWorkCheckpointRequest) (*agentpb.ReleaseWorkCheckpointAck, error) {
@@ -85,8 +72,8 @@ func (service *ReleaseCheckpointService) CheckpointRelease(ctx context.Context, 
 		view.Attempt.Attempt.StartedAt == nil || view.Work.Task.Task.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil || !view.Work.Task.Task.PublicationComplete {
 		return nil, errs.New(errs.KindStateConflict, "Release checkpoint no longer owns an active started attempt")
 	}
-	owner := service.owners[view.Work.Item.Item.Operation]
-	if owner == nil {
+	owner := service.forwards[view.Work.Item.Item.Operation]
+	if owner == nil || service.restoring(view) {
 		return nil, errs.New(errs.KindStateConflict, "Release operation has no checkpoint owner")
 	}
 	input, err := owner.LoadCheckpointInput(ctx, view)

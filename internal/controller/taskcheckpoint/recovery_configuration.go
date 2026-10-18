@@ -30,7 +30,11 @@ func (service *ReleaseCheckpointService) activeFileSelection(ctx context.Context
 	if err != nil {
 		return fileSelection{}, err
 	}
-	if claimed.Direction == workexecution.Forward {
+	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
+	if err != nil {
+		return fileSelection{}, err
+	}
+	if !service.restoring(view) {
 		input, report, files, err := service.activeConfiguration(ctx, authorization, identity, stage)
 		if err != nil {
 			return fileSelection{}, err
@@ -38,18 +42,11 @@ func (service *ReleaseCheckpointService) activeFileSelection(ctx context.Context
 		return fileSelection{attempt: input.Attempt, stage: report.StageID, reference: input.Release.Configuration,
 			generation: input.Release.Configuration.Generation, files: files}, nil
 	}
-	if claimed.Direction != workexecution.Recovery {
-		return fileSelection{}, invalidConfigurationRequest()
-	}
-	view, err := service.queue.ReadResume(ctx, claimed.TaskID, claimed.WorkItemID, claimed.ID, authorization.Identity())
-	if err != nil {
-		return fileSelection{}, err
-	}
 	if !view.ActiveAttempt || !view.CurrentExecutor || !workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
 		view.Attempt.Attempt.StartedAt == nil || view.Work.Task.Task.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil {
 		return fileSelection{}, invalidConfigurationRequest()
 	}
-	owner := service.owners[view.Work.Item.Item.Operation]
+	owner := service.restorations[view.Work.Item.Item.Operation]
 	if owner == nil {
 		return fileSelection{}, invalidConfigurationRequest()
 	}

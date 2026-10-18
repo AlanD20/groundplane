@@ -37,14 +37,14 @@ func (service *ReleaseCheckpointService) FailRelease(ctx context.Context, author
 	if err != nil {
 		return nil, err
 	}
-	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Work.Item.Item.Operation != workexecution.Release {
+	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || service.outcomes[view.Work.Item.Item.Operation] == nil {
 		return nil, errs.New(errs.KindStateConflict, "Release failure does not match its saved attempt")
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
 		if !view.ActiveAttempt || !view.CurrentExecutor {
 			return nil, errs.New(errs.KindStateConflict, "Release failure no longer owns its attempt")
 		}
-		owner := service.owners[view.Work.Item.Item.Operation]
+		owner := service.outcomes[view.Work.Item.Item.Operation]
 		if owner == nil {
 			return nil, errs.New(errs.KindStateConflict, "Release failure owner is unavailable")
 		}
