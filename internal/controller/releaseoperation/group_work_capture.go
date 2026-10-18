@@ -154,7 +154,7 @@ func (service *Service) captureGroupWork(ctx context.Context, scope releasequeri
 	}
 	for _, hook := range capture.Root.Preflight {
 		item := capturedReleaseItem(task, hook.WorkItemID, hook.ServiceID, placement, workexecution.Script)
-		item.TargetID, item.Phase, item.Wait, item.Input = hook.ScriptID, workexecution.Ready, nil, &hook.Input
+		item.TargetID = hook.ScriptID
 		if previous != "" {
 			item.Dependencies = []string{previous}
 		}

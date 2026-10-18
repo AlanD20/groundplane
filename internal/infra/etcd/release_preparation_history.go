@@ -25,6 +25,12 @@ func releasePreparationHistoryReference(key string, value []byte) (*storagemaint
 	if key != releaserender.ServiceRolloutKey(capture.Scope.EnvironmentID, capture.TaskID, capture.WorkItemID) {
 		return nil, recordcodec.CorruptRecord()
 	}
+	if capture.Group != nil {
+		// The accepted Group root pins every unfinished member through graph
+		// publication. A promoted member need not have its item stored yet and
+		// must not create a second pin that assumes publication already finished.
+		return nil, nil
+	}
 	return &storagemaintenance.Pin{Kind: releasePreparationHistoryKind,
 		OwnerID: capture.WorkItemID, Revision: capture.SourceReadRevision}, nil
 }

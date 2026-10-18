@@ -83,7 +83,8 @@ func (capture GroupReleaseCapture) Validate() (workexecution.Task, error) {
 		if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.Input != hook.Input ||
 			execution.CurrentTaskID != task.ID || execution.WorkItemID != hook.WorkItemID ||
 			execution.ScriptID != hook.ScriptID || execution.ServiceID != hook.ServiceID ||
-			execution.EnvironmentID != task.Scope.EnvironmentID || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
+			execution.EnvironmentID != task.Scope.EnvironmentID || execution.ReleaseID != capture.Root.Policy.Members[hook.Ordinal-1].Member.ReleaseID ||
+			execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			execution.StartAuthorized || execution.AttemptID != "" || execution.Executor != nil || execution.SourceMembershipCount != 0 ||
 			preflight.Sources.Script.Record.Desired.ID != hook.ScriptID || preflight.Sources.Service.Record.Desired.ID != hook.ServiceID ||
 			preflight.Sources.Environment.Record.ID != task.Scope.EnvironmentID {

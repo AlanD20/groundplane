@@ -116,7 +116,7 @@ func (capture ExecutionCapture) Validate() error {
 			hook.Ordinal == 0 || int(hook.Ordinal) > len(capture.Policy.Members) ||
 			capture.Policy.Members[hook.Ordinal-1].Member.ServiceID != hook.ServiceID ||
 			item.Operation != workexecution.Script || item.TargetID != hook.ScriptID ||
-			item.Input == nil || *item.Input != hook.Input || item.Phase != workexecution.Ready ||
+			item.Input != nil || item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput ||
 			!slices.Contains(item.Claims, workexecution.Claim{ScopeID: capture.Scope.EnvironmentID}) ||
 			!slices.Contains(item.Claims, workexecution.Claim{HostID: capture.Placement.HostID, ScopeID: hook.ServiceID}) ||
 			previous != "" && !slices.Contains(item.Dependencies, previous) {
