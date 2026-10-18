@@ -9,8 +9,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/attachplan"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
-	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	testbackupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
@@ -142,22 +142,21 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 		t.Fatalf("NewPendingAttachRecord() error = %v", err)
 	}
 	repository.facts = *encrypted
-	var taskIdentity testtaskplanning.AttachPlanIdentity
-	err = service.ResolveTaskIdentity(
-		ctx, testkeyvalue.Versioned[testattachments.Record]{Record: pending, Revision: 9, ReadRevision: 9}, taskID,
-		func(identity testtaskplanning.AttachPlanIdentity) error {
-			taskIdentity = testtaskplanning.AttachPlanIdentity{
+	var taskIdentity attachplan.Identity
+	err = service.openStoredBundle(ctx, pending, repository.facts, func(bundle *attachFactBundle) error {
+		return consumeAttachTaskIdentity(bundle, func(identity attachplan.Identity) error {
+			taskIdentity = attachplan.Identity{
 				Database: identity.Database, Role: identity.Role,
 				Password: append([]byte(nil), identity.Password...),
-				Grants:   append([]testtaskplanning.AttachPlanGrantIdentity(nil), identity.Grants...),
+				Grants:   append([]attachplan.GrantIdentity(nil), identity.Grants...),
 			}
 			return nil
-		},
-	)
+		})
+	})
 	if err != nil || taskIdentity.Database != "appdb" || taskIdentity.Role != "app" ||
 		string(taskIdentity.Password) != "correct-horse" || len(taskIdentity.Grants) != 1 ||
 		taskIdentity.Grants[0].Database != "reporting" {
-		t.Fatalf("ResolveTaskIdentity() = %#v, %v", taskIdentity, err)
+		t.Fatalf("captured identity = %#v, %v", taskIdentity, err)
 	}
 	taskIdentity.Clear()
 	owner := readyAttachRecord(
