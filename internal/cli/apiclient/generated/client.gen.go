@@ -5183,12 +5183,14 @@ type TaskWork struct {
 	Deadline        time.Time              `json:"deadline"`
 	Id              string                 `json:"id"`
 	Operation       string                 `json:"operation"`
+	OriginalFailure *TaskAttempt           `json:"original_failure,omitempty"`
 	Outcome         *string                `json:"outcome,omitempty"`
 	Phase           TaskWorkPhase          `json:"phase"`
 	Placement       Placement              `json:"placement"`
 	Preparation     *TaskWorkPreparation   `json:"preparation,omitempty"`
 	Retry           TaskActionAvailability `json:"retry"`
 	TargetId        string                 `json:"target_id"`
+	TargetName      *string                `json:"target_name,omitempty"`
 	UpdatedAt       time.Time              `json:"updated_at"`
 	Wait            *Wait                  `json:"wait,omitempty"`
 }

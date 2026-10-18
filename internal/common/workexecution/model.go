@@ -136,27 +136,29 @@ type Wait struct {
 // Item is the resource execution record. Public Task identity is its parent,
 // not a second Task manufactured to obtain an Agent assignment.
 type Item struct {
-	ID              string    `json:"id"`
-	TaskID          string    `json:"task_id"`
-	Operation       Operation `json:"operation"`
-	TargetID        string    `json:"target_id"`
-	Placement       Placement `json:"placement"`
-	Dependencies    []string  `json:"dependencies,omitempty"`
-	Claims          []Claim   `json:"claims"`
-	Input           *Input    `json:"input,omitempty"`
-	Phase           Phase     `json:"phase"`
-	Wait            *Wait     `json:"wait,omitempty"`
-	AttemptNumber   uint64    `json:"attempt_number"`
-	ActiveAttemptID string    `json:"active_attempt_id,omitempty"`
-	Outcome         Outcome   `json:"outcome,omitempty"`
-	FirstFailure    *Input    `json:"first_failure,omitempty"`
-	Result          *Input    `json:"result,omitempty"`
-	CleanupResult   *Input    `json:"cleanup_result,omitempty"`
-	Cleanup         Cleanup   `json:"cleanup"`
-	ForwardRevoked  bool      `json:"forward_revoked"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	Deadline        time.Time `json:"deadline"`
+	ID                  string    `json:"id"`
+	TaskID              string    `json:"task_id"`
+	Operation           Operation `json:"operation"`
+	TargetID            string    `json:"target_id"`
+	TargetName          string    `json:"target_name,omitempty"`
+	Placement           Placement `json:"placement"`
+	Dependencies        []string  `json:"dependencies,omitempty"`
+	Claims              []Claim   `json:"claims"`
+	Input               *Input    `json:"input,omitempty"`
+	Phase               Phase     `json:"phase"`
+	Wait                *Wait     `json:"wait,omitempty"`
+	AttemptNumber       uint64    `json:"attempt_number"`
+	ActiveAttemptID     string    `json:"active_attempt_id,omitempty"`
+	Outcome             Outcome   `json:"outcome,omitempty"`
+	FirstFailure        *Input    `json:"first_failure,omitempty"`
+	FirstFailureAttempt uint64    `json:"first_failure_attempt,omitempty"`
+	Result              *Input    `json:"result,omitempty"`
+	CleanupResult       *Input    `json:"cleanup_result,omitempty"`
+	Cleanup             Cleanup   `json:"cleanup"`
+	ForwardRevoked      bool      `json:"forward_revoked"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
+	Deadline            time.Time `json:"deadline"`
 }
 
 // Identity binds the assignment to one authenticated executor incarnation. A

@@ -11,10 +11,13 @@ it does not redefine the [product contract](mvp.md) or authorize implementation.
 
 ## Available implementation and remaining proof
 
-The [Task execution redesign](decisions/task-execution-redesign.md) is accepted
-contract only: no replacement engine, new Task protocol or migration is implemented.
-Its remote-host assignment boundary does not establish multi-host runtime support.
-The table below describes the existing implementation and its evidence.
+The [Task execution redesign](decisions/task-execution-redesign.md) is under
+implementation. Native scheduling, typed work/attempt storage, protocol cutover
+guards and the replacement viewer are written but unqualified and undeployed;
+remaining source integration and final review still precede QA. No offline
+resource conversion is provided. The host-bound protocol does not establish
+multi-host runtime support. The table retains earlier feature evidence, not
+qualification of the replacement engine.
 
 | Area | Implementation position | Remaining qualification or limitation |
 | --- | --- | --- |

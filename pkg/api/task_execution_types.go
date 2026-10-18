@@ -35,10 +35,12 @@ type TaskActionAvailability struct {
 }
 
 type TaskWork struct {
+	OriginalFailure *TaskAttempt            `json:"original_failure,omitempty"`
 	Preparation     *TaskWorkPreparation    `json:"preparation,omitempty"`
 	Retry           TaskActionAvailability  `json:"retry"`
 	ID              string                  `json:"id"`
 	TargetID        string                  `json:"target_id"`
+	TargetName      string                  `json:"target_name,omitempty"`
 	Operation       workexecution.Operation `json:"operation"`
 	Placement       workexecution.Placement `json:"placement"`
 	Phase           workexecution.Phase     `json:"phase" enum:"waiting,ready,assigned,running,attention,settled"`

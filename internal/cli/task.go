@@ -23,7 +23,7 @@ func newTaskCmd() *cobra.Command {
 	var revision int64
 	show := &cobra.Command{
 		Use:   "show <id>",
-		Short: "Show a task (steps, current state)",
+		Short: "Show a Task, resource work, recorded failures and cleanup state",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)

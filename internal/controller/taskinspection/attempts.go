@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type Attempt struct {
@@ -36,10 +37,31 @@ func (service *Service) Attempts(ctx context.Context, taskID, workID string, aft
 	result := AttemptPage{Attempts: []Attempt{}, More: page.More, After: page.LastNumber, Revision: page.ReadRevision}
 	for _, snapshot := range page.Attempts {
 		attempt := snapshot.Attempt
-		result.Attempts = append(result.Attempts, Attempt{ID: attempt.ID, Number: attempt.Number,
-			Executor: attempt.Executor.Executor, HostID: attempt.Executor.HostID, AgentID: attempt.Executor.AgentID,
-			Generation: attempt.Executor.Generation, Direction: attempt.Direction, Outcome: attempt.Outcome,
-			AssignedAt: attempt.AssignedAt, Deadline: attempt.Deadline, StartedAt: attempt.StartedAt, FinishedAt: attempt.FinishedAt})
+		result.Attempts = append(result.Attempts, inspectAttempt(attempt))
 	}
 	return result, nil
+}
+
+func inspectAttempt(attempt workexecution.Attempt) Attempt {
+	return Attempt{ID: attempt.ID, Number: attempt.Number,
+		Executor: attempt.Executor.Executor, HostID: attempt.Executor.HostID, AgentID: attempt.Executor.AgentID,
+		Generation: attempt.Executor.Generation, Direction: attempt.Direction, Outcome: attempt.Outcome,
+		AssignedAt: attempt.AssignedAt, Deadline: attempt.Deadline, StartedAt: attempt.StartedAt, FinishedAt: attempt.FinishedAt}
+}
+
+func (service *Service) originalFailureAttempt(ctx context.Context, taskID string, item workexecution.Item, revision int64) (*Attempt, error) {
+	if item.FirstFailureAttempt == 0 {
+		return nil, nil
+	}
+	_, captured, err := service.queue.ReadAttempt(ctx, taskID, item.ID, item.FirstFailureAttempt, revision)
+	if err != nil {
+		return nil, err
+	}
+	attempt := captured.Attempt
+	if attempt.Direction != workexecution.Forward || attempt.Outcome != workexecution.Failed ||
+		attempt.Result == nil || item.FirstFailure == nil || *attempt.Result != *item.FirstFailure {
+		return nil, errs.New(errs.KindStateConflict, "original failure differs from its captured execution attempt")
+	}
+	result := inspectAttempt(attempt)
+	return &result, nil
 }

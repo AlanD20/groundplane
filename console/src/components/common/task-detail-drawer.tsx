@@ -7,6 +7,12 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { requestTask, abortTask, type TaskResponse } from "@/features/task/api";
 import { TaskExecution } from "@/features/task/task-execution";
+import { Disclosure } from "@/components/common/disclosure";
+import { taskFromAPI } from "@/features/task/journal-model";
+import { taskPresentation } from "@/features/task/task-overview";
+import { taskDuration } from "@/features/task/task-duration";
+import { useStore } from "@/lib/store";
+import { Link } from "react-router-dom";
 import type {
   ActivityEntry,
   TaskJournalScope,
@@ -25,6 +31,7 @@ export function TaskDetailDrawer({
   { entry: ActivityEntry; taskId?: never } | { taskId: string; entry?: never }
 )) {
   const id = taskId ?? entry!.id;
+  const store = useStore();
   const [detail, setDetail] = useState<TaskResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,6 +75,7 @@ export function TaskDetailDrawer({
     };
   }, [id, page, reload]);
   const task = detail?.task.id === id ? detail.task : null;
+  const presentation = task ? taskPresentation(taskFromAPI(task), store) : null;
   async function cancel() {
     setPending(true);
     setError(null);
@@ -90,11 +98,7 @@ export function TaskDetailDrawer({
       open
       onOpenChange={onOpenChange}
       context="Task"
-      title={
-        task
-          ? `${task.action.replaceAll("_", " ")} · ${task.target_name}`
-          : "Task details"
-      }
+      title={task ? (presentation?.title ?? task.target_name) : "Task details"}
       status={task && <StatusBadge status={task.status} />}
       footer={
         <>
@@ -159,8 +163,39 @@ export function TaskDetailDrawer({
             </p>
             <p className="text-sm text-muted-foreground">
               {task.counts.succeeded} succeeded · {task.counts.failed} failed ·{" "}
-              {task.counts.running} running · {task.counts.waiting} waiting
+              {task.counts.running + task.counts.assigned} active ·{" "}
+              {task.counts.waiting} waiting
+              {task.counts.attention > 0 &&
+                ` · ${task.counts.attention} need attention`}
+              {task.counts.cancelled > 0 &&
+                ` · ${task.counts.cancelled} cancelled`}
+              {task.counts.superseded > 0 &&
+                ` · ${task.counts.superseded} superseded`}
             </p>
+            <p className="text-xs text-muted-foreground">
+              {presentation?.scope} ·{" "}
+              {task.finished_at ? "Finished after" : "Requested"}{" "}
+              {taskDuration(
+                Math.max(
+                  0,
+                  ((task.finished_at
+                    ? Date.parse(task.finished_at)
+                    : Date.now()) -
+                    Date.parse(task.created_at)) /
+                    1000,
+                ),
+              )}
+              {!task.finished_at && " ago"}
+            </p>
+            {presentation?.destination && (
+              <Link
+                className="inline-block text-sm text-primary underline underline-offset-4"
+                to={presentation.destination.href}
+                onClick={() => onOpenChange(false)}
+              >
+                {presentation.destination.label}
+              </Link>
+            )}
             {task.stop_requested && (
               <p className="text-sm">
                 Stop requested. Running effects must be accounted for before
@@ -178,7 +213,14 @@ export function TaskDetailDrawer({
                 {task.cancel.reason}
               </p>
             )}
-            <CompactReference value={task.id} label="Task" />
+            <Disclosure
+              summary="Task identity"
+              summaryClassName="text-xs text-muted-foreground"
+            >
+              <div className="pt-2">
+                <CompactReference value={task.id} label="Task" />
+              </div>
+            </Disclosure>
           </section>
           {task.history_expired ? (
             <p className="text-sm text-muted-foreground">

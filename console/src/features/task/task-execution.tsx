@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Select } from "@/components/ui/select";
 import { WorkInspection } from "./work-inspection";
 import { WorkCheckEvidence } from "./work-check-evidence";
 import type { TaskResponse } from "./api";
@@ -14,6 +16,27 @@ export function TaskExecution({
   detail: TaskResponse;
   onChanged?: () => void;
 }) {
+  const [filter, setFilter] = useState("all");
+  const visible = detail.work.items.filter((work) => {
+    switch (filter) {
+      case "active":
+        return (
+          work.phase === "running" ||
+          work.phase === "assigned" ||
+          work.phase === "ready"
+        );
+      case "waiting":
+        return work.phase === "waiting";
+      case "attention":
+        return work.phase === "attention" || work.outcome === "failed";
+      case "succeeded":
+        return work.outcome === "succeeded";
+      case "cleanup":
+        return work.cleanup !== "none";
+      default:
+        return true;
+    }
+  });
   if (detail.task.history_expired)
     return (
       <p className="text-sm text-muted-foreground">
@@ -54,12 +77,42 @@ export function TaskExecution({
     );
   return (
     <section aria-label="Task work" className="min-w-0 space-y-4">
-      {detail.work.items.map((work) => (
+      {detail.work.items.length > 1 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-sm font-medium">Resource work</h2>
+          <Select
+            aria-label="Filter work on this page"
+            className="ml-auto w-48"
+            value={filter}
+            onValueChange={setFilter}
+            options={[
+              { value: "all", label: "All on this page" },
+              { value: "active", label: "Active" },
+              { value: "waiting", label: "Waiting" },
+              { value: "attention", label: "Needs attention" },
+              { value: "succeeded", label: "Succeeded" },
+              { value: "cleanup", label: "With cleanup" },
+            ]}
+          />
+        </div>
+      )}
+      {visible.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No work on this page matches this filter.
+        </p>
+      )}
+      {visible.map((work) => (
         <div key={work.id} className="space-y-3">
           <WorkInspection
             taskId={detail.task.id}
             work={work}
             revision={detail.work.revision}
+            targetName={
+              work.target_name ||
+              (work.target_id === detail.task.target_id
+                ? detail.task.target_name
+                : undefined)
+            }
             onChanged={onChanged}
           />
           <WorkCheckEvidence task={detail.task} work={work} />

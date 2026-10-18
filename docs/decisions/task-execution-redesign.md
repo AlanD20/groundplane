@@ -1,23 +1,20 @@
 # Task execution redesign
 
-- Status: Accepted design; not implemented or qualified.
+- Status: Accepted design; implementation in progress, not qualified or deployed.
 - Scope: replace Task execution and its storage/protocol boundaries, preserving
   existing feature behavior. This document does not authorize implementation.
 - Product owner: [Execution redesign](../mvp.md#accepted-task-execution-redesign).
 
-This is the single design reference for the replacement. The
-[existing execution decision](task-execution-and-event-delivery.md) describes the
-current mechanism. Where mechanisms differ, this contract governs the replacement;
-it does not make new behavior available in the installed product.
+This is the single execution design reference. The superseded shared worker,
+assignment journal and hidden child-Task mechanism are being removed, not retained
+as another execution path. This document does not qualify the replacement or make
+it available in an older installation.
 
 ## Why replace the execution machinery?
 
-The existing queue already claims work atomically. The problem is ownership:
-[claiming work](../../internal/infra/etcd/task_claim.go) knows feature-specific
-recovery rules, the [shared worker](../../internal/agent/worker_execution.go)
-dispatches and compensates many kinds of effects, and
-[plan validation](../../internal/common/executionplan/plan.go) knows their details.
-A feature change consequently crosses too many shared execution boundaries.
+Atomic queue claims alone did not isolate responsibilities: shared claim,
+worker and plan-validation code all owned feature-specific recovery rules.
+A feature change therefore crossed too many shared execution boundaries.
 
 Keep durable Tasks and typed execution. Replace this coupling with a small
 scheduler and complete operation implementations. Keep etcd as the control-plane
@@ -97,6 +94,27 @@ atomic with the affected resource state; modularization must not split these
 transactions into independently successful writes.
 
 ## Operation ownership
+
+### Typed effects and secret handling
+
+The Controller captures decisions and immutable inputs. The Agent executes a
+closed typed procedure; it does not read Blueprints, infer missing parameters or
+turn generic command text into host authority. Built-in adapter commands stay
+compiled. Custom Backing hooks are the explicit bounded exception: their captured
+command runs inside the selected Backing container, not as a host shell.
+
+Compose artifacts are derived, secret-free execution inputs. Compose CLI owns
+Compose mutations; bounded Docker observation checks exact object ownership.
+The task-scoped helper receives only the selected artifact, mounts and working
+environment. Its Docker access is root-equivalent, not a sandbox against a
+compromised Agent. Authentication and host binding remain mandatory.
+
+Secret and hook values use the authenticated transient input channel and encrypted
+operation-owned storage. They are not Task parameters, diagnostic text or result
+summaries. Missing observations stay missing; restoring a process cannot invent
+the cause of its earlier failure.
+
+### Complete operation handlers
 
 Each operation implementation owns execution, meaningful checkpoints, interruption
 inspection, safe retries and permitted cleanup. Deployment owns release strategy

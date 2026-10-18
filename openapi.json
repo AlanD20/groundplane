@@ -9522,6 +9522,9 @@
           "operation": {
             "type": "string"
           },
+          "original_failure": {
+            "$ref": "#/components/schemas/TaskAttempt"
+          },
           "outcome": {
             "type": "string"
           },
@@ -9546,6 +9549,9 @@
             "$ref": "#/components/schemas/TaskActionAvailability"
           },
           "target_id": {
+            "type": "string"
+          },
+          "target_name": {
             "type": "string"
           },
           "updated_at": {

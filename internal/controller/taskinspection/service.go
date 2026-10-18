@@ -63,9 +63,10 @@ type Summary struct {
 }
 
 type Work struct {
+	OriginalFailure                *Attempt
 	Preparation                    *WorkPreparation
 	Retry                          ActionAvailability
-	ID, TargetID                   string
+	ID, TargetID, TargetName       string
 	Operation                      workexecution.Operation
 	Placement                      workexecution.Placement
 	Phase                          workexecution.Phase
@@ -137,7 +138,11 @@ func (service *Service) WorkPage(ctx context.Context, taskID, after string, limi
 			}
 			retry = ActionAvailability{Allowed: allowed, Reason: reason}
 		}
-		result.Work = append(result.Work, Work{ID: item.ID, TargetID: item.TargetID, Operation: item.Operation, Preparation: preparation,
+		originalFailure, err := service.originalFailureAttempt(ctx, taskID, item, readRevision)
+		if err != nil {
+			return Page{}, err
+		}
+		result.Work = append(result.Work, Work{ID: item.ID, TargetID: item.TargetID, TargetName: item.TargetName, Operation: item.Operation, Preparation: preparation, OriginalFailure: originalFailure,
 			Placement: item.Placement, Phase: item.Phase, Outcome: item.Outcome, Wait: item.Wait, Cleanup: item.Cleanup,
 			AttemptCount: item.AttemptNumber, ActiveAttemptID: item.ActiveAttemptID, Retry: retry,
 			CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt, Deadline: item.Deadline})

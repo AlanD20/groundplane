@@ -140,6 +140,7 @@ func Finish(item Item, attempt Attempt, result Completion, at time.Time) (Item, 
 		if result.Outcome == Failed && next.FirstFailure == nil {
 			failure := result.Evidence
 			next.FirstFailure = &failure
+			next.FirstFailureAttempt = attempt.Number
 		}
 		if result.EffectsSettled {
 			next.Phase, next.Cleanup = Settled, CleanupNone

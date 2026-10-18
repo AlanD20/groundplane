@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { Disclosure } from "@/components/common/disclosure";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { CopyButton } from "@/components/common/copy-button";
 import { requestTaskAttemptEvents, type TaskAttemptEvents } from "./api";
 
 export function AttemptEvents({
@@ -19,6 +22,19 @@ export function AttemptEvents({
   const [value, setValue] = useState<TaskAttemptEvents | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const [query, setQuery] = useState("");
+  const [state, setState] = useState("all");
+  const search = query.trim().toLowerCase();
+  const events = (value?.items ?? []).filter(
+    (event) =>
+      (state === "all" || event.stage.state === state) &&
+      [
+        event.stage.name,
+        event.stage.expected,
+        event.stage.observed,
+        event.stage.failure_code,
+      ].some((text) => text?.toLowerCase().includes(search)),
+  );
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
@@ -71,6 +87,39 @@ export function AttemptEvents({
             </p>
           ) : (
             <>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  aria-label="Search retained execution events"
+                  placeholder="Search execution events…"
+                  className="min-w-40 flex-1"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+                <Select
+                  aria-label="Filter execution event state"
+                  className="w-40"
+                  value={state}
+                  onValueChange={setState}
+                  options={[
+                    { value: "all", label: "All states" },
+                    { value: "running", label: "Running" },
+                    { value: "failed", label: "Failed" },
+                    { value: "succeeded", label: "Succeeded" },
+                    { value: "waiting", label: "Waiting" },
+                    { value: "skipped", label: "Skipped" },
+                    { value: "unknown", label: "Unknown" },
+                  ]}
+                />
+                <CopyButton
+                  label="Copy visible execution events"
+                  value={events
+                    .map(
+                      (event) =>
+                        `${event.recorded_at} ${event.stage.name} [${event.stage.state}] ${event.stage.observed || event.stage.expected}${event.stage.failure_code ? ` (${event.stage.failure_code})` : ""}`,
+                    )
+                    .join("\n")}
+                />
+              </div>
               {value.finished_at && (
                 <p className="text-sm">
                   Attempt finished: <StatusBadge status={value.outcome} />
@@ -93,9 +142,13 @@ export function AttemptEvents({
                   No events are retained for this attempt. This does not mean no
                   work occurred.
                 </p>
+              ) : events.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No retained events match these filters.
+                </p>
               ) : (
                 <ol className="space-y-3">
-                  {value.items.map((event) => (
+                  {events.map((event) => (
                     <li
                       key={event.sequence}
                       className="space-y-1 border-l border-border pl-3 text-sm"

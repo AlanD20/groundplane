@@ -15,7 +15,7 @@ func executionSummary(value taskinspection.Summary) apiTypes.TaskSummary {
 }
 
 func executionWork(value taskinspection.Work) apiTypes.TaskWork {
-	result := apiTypes.TaskWork{ID: value.ID, TargetID: value.TargetID, Operation: value.Operation,
+	result := apiTypes.TaskWork{ID: value.ID, TargetID: value.TargetID, TargetName: value.TargetName, Operation: value.Operation,
 		Placement: value.Placement, Phase: value.Phase, Outcome: value.Outcome, Wait: value.Wait,
 		Cleanup: value.Cleanup, AttemptCount: value.AttemptCount, ActiveAttemptID: value.ActiveAttemptID,
 		Retry:     apiTypes.TaskActionAvailability{Allowed: value.Retry.Allowed, Reason: value.Retry.Reason},
@@ -23,6 +23,10 @@ func executionWork(value taskinspection.Work) apiTypes.TaskWork {
 	if value.Preparation != nil {
 		result.Preparation = &apiTypes.TaskWorkPreparation{Summary: value.Preparation.Summary,
 			DependencyID: value.Preparation.DependencyID, FinishedAt: value.Preparation.FinishedAt}
+	}
+	if value.OriginalFailure != nil {
+		attempt := executionAttempt(*value.OriginalFailure)
+		result.OriginalFailure = &attempt
 	}
 	return result
 }

@@ -240,8 +240,8 @@ Retry/recovery use the captured input, not the latest desired document.
 Partial failure must remain visible. Pinned configuration recovery is limited to
 files that the failed operation was authorized to replace; it is not database
 restoration or migration reversal.
-After a child fails and GP proves its effects were restored, the visible Apply
-fails. GP does not retry that child automatically; the operator submits a new
+After a resource work item fails and GP proves its effects were restored, the visible Apply
+fails. GP does not retry that work automatically; the operator submits a new
 Apply after correcting the cause. Unknown effects keep their claims and prevent
 premature completion.
 
@@ -256,12 +256,13 @@ repair from accounted-but-diverged effects. Unknown effects remain restricted.
 This does not authorize replaying Scripts or superseding ordinary Deploy,
 Backup, upgrade or destructive operations.
 
-Public Apply, the coordinator and protected omission paths are delivered.
-H98/H110/H111 record selected supersession and interrupted recovery journeys,
-not every fault or workload variant. Preparation conflicts retry
+Public Apply, the native work coordinator and protected omission paths are
+written but unqualified in the replacement engine. H98/H110/H111 record earlier
+supersession and interrupted recovery journeys, not qualification of the new
+engine or every fault and workload variant. Preparation conflicts retry
 when the captured head or unit ledger changed. An unchanged prerequisite failure
 closes the Apply's forward-publication gate and records its failed phase; already
-started children still require settlement. Resource-in-use waits and transient
+started work items still require settlement. Resource-in-use waits and transient
 storage failures retain their existing wait behavior. Do not depend on automatic
 supersession in production.
 

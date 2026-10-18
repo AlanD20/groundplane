@@ -42,8 +42,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-// WorkExecution is composed separately from the superseded Task runner during
-// source migration. The final daemon cutover starts only the replacement runtime.
+// WorkExecution composes the native scheduling, operation and retention owners.
+// The daemon starts one execution runtime, not parallel Task engines.
 type WorkExecution struct {
 	Runtime    *workdispatch.Runtime
 	Queue      *workqueue.Repository

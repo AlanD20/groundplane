@@ -3,39 +3,9 @@ import { Disclosure } from "@/components/common/disclosure";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { requestTaskStages, type TaskStages } from "./api";
+import { taskDuration } from "./task-duration";
 
 export function AttemptStages({
-  taskId,
-  workId,
-  attemptId,
-  revision,
-}: {
-  taskId: string;
-  workId: string;
-  attemptId: string;
-  revision: number;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <Disclosure
-      summary="Stages and results"
-      open={open}
-      onOpenChange={setOpen}
-      summaryClassName="text-sm font-medium"
-    >
-      {open && (
-        <StageEvidence
-          taskId={taskId}
-          workId={workId}
-          attemptId={attemptId}
-          revision={revision}
-        />
-      )}
-    </Disclosure>
-  );
-}
-
-function StageEvidence({
   taskId,
   workId,
   attemptId,
@@ -51,7 +21,6 @@ function StageEvidence({
   const [reload, setReload] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    setValue(null);
     setError(null);
     void requestTaskStages(
       taskId,
@@ -108,47 +77,108 @@ function StageEvidence({
           occurred.
         </p>
       ) : (
-        <ol className="space-y-3">
-          {value.items.map((stage) => (
-            <li
-              key={stage.key}
-              className="space-y-2 rounded-md border border-border p-3"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-sm font-medium">{stage.name}</h4>
-                <StatusBadge status={stage.state} />
-              </div>
-              <dl className="space-y-2 text-sm">
-                <div>
-                  <dt className="text-xs text-muted-foreground">Expected</dt>
-                  <dd className="break-words [overflow-wrap:anywhere]">
-                    {stage.expected}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Observed</dt>
-                  <dd className="break-words [overflow-wrap:anywhere]">
-                    {stage.observed || "No result recorded yet"}
-                  </dd>
-                </div>
-              </dl>
-              {stage.failure_code && (
-                <p className="break-words text-xs text-destructive">
-                  Error: {stage.failure_code}
-                </p>
-              )}
-              {stage.started_at && (
-                <p className="text-xs text-muted-foreground">
-                  Started {new Date(stage.started_at).toLocaleString()}
-                  {stage.finished_at
-                    ? ` · Finished ${new Date(stage.finished_at).toLocaleString()}`
-                    : " · No completion recorded"}
-                </p>
-              )}
-            </li>
-          ))}
-        </ol>
+        <div className="space-y-3">
+          {value.updated_at && (
+            <p className="text-xs text-muted-foreground">
+              Last recorded update{" "}
+              <time dateTime={value.updated_at}>
+                {new Date(value.updated_at).toLocaleString()}
+              </time>
+            </p>
+          )}
+          {value.items.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No stage observations are retained.
+            </p>
+          )}
+          <ol className="space-y-2">
+            {value.items.map((stage) => (
+              <StageRow key={stage.key} stage={stage} />
+            ))}
+          </ol>
+        </div>
       )}
     </div>
+  );
+}
+
+function StageRow({ stage }: { stage: TaskStages["items"][number] }) {
+  const duration =
+    stage.started_at && stage.finished_at
+      ? taskDuration(
+          (Date.parse(stage.finished_at) - Date.parse(stage.started_at)) / 1000,
+        )
+      : null;
+  return (
+    <li className="min-w-0 rounded-md border border-border p-3">
+      <Disclosure
+        summaryClassName="items-start"
+        summary={
+          <span className="min-w-0 flex-1 space-y-1">
+            <span className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-medium">{stage.name}</span>
+              <span className="flex items-center gap-2">
+                {duration && (
+                  <span className="text-xs text-muted-foreground">
+                    {duration}
+                  </span>
+                )}
+                <StatusBadge status={stage.state} />
+              </span>
+            </span>
+            <span className="block break-words text-sm [overflow-wrap:anywhere]">
+              {stage.observed || stage.expected}
+            </span>
+          </span>
+        }
+      >
+        <dl className="space-y-3 pt-3 text-sm">
+          <div>
+            <dt className="text-xs text-muted-foreground">Expected</dt>
+            <dd className="break-words [overflow-wrap:anywhere]">
+              {stage.expected}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Recorded result</dt>
+            <dd className="break-words [overflow-wrap:anywhere]">
+              {stage.observed || "No result recorded yet"}
+            </dd>
+          </div>
+          {stage.failure_code && (
+            <div>
+              <dt className="text-xs text-muted-foreground">Error code</dt>
+              <dd className="break-words text-destructive">
+                {stage.failure_code}
+              </dd>
+            </div>
+          )}
+          {stage.started_at && (
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                Recorded stage start
+              </dt>
+              <dd>
+                <time dateTime={stage.started_at}>
+                  {new Date(stage.started_at).toLocaleString()}
+                </time>
+              </dd>
+            </div>
+          )}
+          {stage.finished_at && (
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                Recorded stage completion
+              </dt>
+              <dd>
+                <time dateTime={stage.finished_at}>
+                  {new Date(stage.finished_at).toLocaleString()}
+                </time>
+              </dd>
+            </div>
+          )}
+        </dl>
+      </Disclosure>
+    </li>
   );
 }

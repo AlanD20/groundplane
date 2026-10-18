@@ -4866,6 +4866,7 @@ export interface components {
             deadline: string;
             id: string;
             operation: string;
+            original_failure?: components["schemas"]["TaskAttempt"];
             outcome?: string;
             /** @enum {string} */
             phase: "waiting" | "ready" | "assigned" | "running" | "attention" | "settled";
@@ -4873,6 +4874,7 @@ export interface components {
             preparation?: components["schemas"]["TaskWorkPreparation"];
             retry: components["schemas"]["TaskActionAvailability"];
             target_id: string;
+            target_name?: string;
             /** Format: date-time */
             updated_at: string;
             wait?: components["schemas"]["Wait"];

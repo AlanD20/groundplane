@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { AttemptStages } from "./attempt-stages";
 import { AttemptEvents } from "./attempt-events";
 import { WorkRetry } from "./work-retry";
+import { cleanupLabel, operationLabel } from "./operation-label";
 import {
   requestTaskAttempts,
   requestTaskImage,
@@ -18,7 +19,8 @@ const waiting: Record<string, string> = {
   input: "Waiting for captured input to be prepared",
   dependency: "Waiting for prerequisite work to finish",
   conflict: "Waiting for conflicting work to release this resource",
-  reservation: "Waiting for the blocking Task to finish its reserved resource changes",
+  reservation:
+    "Waiting for the blocking Task to finish its reserved resource changes",
   executor: "Waiting for an eligible executor",
   capacity: "Waiting for an execution slot",
   retry: "Waiting for the scheduled retry",
@@ -28,44 +30,48 @@ export function WorkInspection({
   taskId,
   work,
   revision,
+  targetName,
   onChanged,
 }: {
   taskId: string;
   work: TaskWork;
   revision: number;
+  targetName?: string;
   onChanged?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const atomicKeyRotation = work.operation === "secret_rotation" && work.attempt_count === 0;
-  const groupRemoval = work.operation === "release_group" && work.attempt_count === 0;
   return (
-    <section id={`task-work-${work.id}`} className="min-w-0 space-y-3 rounded-lg border border-border p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">
-          {atomicKeyRotation ? "Rotate Backup encryption key" : groupRemoval ? "Remove Release Group" : work.operation === "environment" ? "Provision Environment directory" : work.operation === "etcd_configuration" ? "Apply etcd configuration" : work.operation === "software_preparation" ? "Prepare Groundplane software" : work.operation === "controller_software" ? "Activate Controller release" : work.operation === "agent_software" ? "Update Agent image" : work.operation === "agent_lifecycle" ? "Manage Agent installation" : work.operation.replaceAll("_", " ")}
-        </h3>
+    <section
+      id={`task-work-${work.id}`}
+      className="min-w-0 space-y-4 rounded-lg border border-border p-4"
+    >
+      <header className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 space-y-1">
+          <h3 className="break-words text-sm font-medium">
+            {targetName || operationLabel(work.operation)}
+          </h3>
+          {targetName && (
+            <p className="text-xs text-muted-foreground">
+              {operationLabel(work.operation)}
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {work.placement.executor === "agent"
+              ? "Runs on the managed host"
+              : "Runs in the Controller"}
+          </p>
+        </div>
         <StatusBadge status={work.outcome || work.phase} />
-      </div>
-      <CompactReference value={work.target_id} label="Resource" />
-      <p className="text-xs text-muted-foreground">
-        {work.placement.executor === "agent" ? "Agent" : "Controller"}
-        {work.placement.host_id ? ` on ${work.placement.host_id}` : ""}
-      </p>
-      {atomicKeyRotation && (
-        <p className="text-sm">
-          {work.outcome === "succeeded"
-            ? "The new key is active for future backups. Existing recovery points keep their original key era."
-            : work.phase === "settled"
-              ? "Rotation ended before the key changed. Submit a new rotation when ready."
-              : "Waiting to atomically replace this Environment’s Backup encryption key."}
-        </p>
-      )}
+      </header>
       {work.preparation && (
         <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
-          <p className="font-medium">Stopped before execution</p>
+          <p className="font-medium">
+            {work.outcome === "succeeded"
+              ? "Completed without an executor"
+              : "Stopped before execution"}
+          </p>
           <p className="break-words">{work.preparation.summary}</p>
           <p className="text-xs text-muted-foreground">
-            No executor was assigned. Finished{" "}
+            Recorded{" "}
             <time dateTime={work.preparation.finished_at}>
               {new Date(work.preparation.finished_at).toLocaleString()}
             </time>
@@ -73,23 +79,19 @@ export function WorkInspection({
           {work.preparation.dependency_id && (
             <CompactReference
               value={work.preparation.dependency_id}
-              label="Unsuccessful prerequisite"
+              label="Prerequisite work"
             />
           )}
         </div>
       )}
-      {groupRemoval && (
-        <p className="text-sm">
-          {work.outcome === "succeeded"
-            ? "The Release Group and its membership indexes were removed together. Its Services and their running containers were not changed."
-            : work.phase === "settled"
-              ? "The Release Group was not removed. Its definition was preserved and this action’s deletion fence was released."
-              : "Waiting for the Controller to remove the captured Release Group definition and indexes atomically. No host command is needed."}
-        </p>
-      )}
       {work.wait && (
-        <div className="space-y-1 rounded-md bg-muted/40 p-3 text-sm">
-          <p>{waiting[work.wait.reason] ?? work.wait.reason}</p>
+        <div
+          role="status"
+          className="space-y-1 rounded-md bg-muted/40 p-3 text-sm"
+        >
+          <p>
+            {waiting[work.wait.reason] ?? "Waiting for execution permission"}
+          </p>
           {work.wait.task_id && (
             <a
               className="underline"
@@ -106,23 +108,29 @@ export function WorkInspection({
         </div>
       )}
       {work.cleanup !== "none" && (
-        <p className="text-sm">
-          Cleanup: {work.cleanup.replaceAll("_", " ")}. The original action
-          outcome is shown separately.
+        <div className="space-y-1 rounded-md border border-border p-3 text-sm">
+          <p className="font-medium">{cleanupLabel(work.cleanup)}</p>
+          <p className="text-xs text-muted-foreground">
+            {work.cleanup === "complete"
+              ? "Cleanup finished. The original action outcome above is unchanged."
+              : "The original action outcome is unchanged. Resource protection remains until its effects are resolved."}
+          </p>
+        </div>
+      )}
+      {work.attempt_count > 0 ? (
+        <WorkEvidence
+          key={`${taskId}/${work.id}`}
+          taskId={taskId}
+          work={work}
+          revision={revision}
+        />
+      ) : !work.preparation && !work.wait ? (
+        <p className="text-sm text-muted-foreground">
+          {work.phase === "settled"
+            ? "Settled in the Controller without an executor attempt."
+            : "No executor has started this work yet."}
         </p>
-      )}
-      {!work.preparation && !atomicKeyRotation && !groupRemoval && (
-        <Disclosure
-          open={open}
-          onOpenChange={setOpen}
-          summary={`Execution details · ${work.attempt_count} attempt${work.attempt_count === 1 ? "" : "s"}`}
-          summaryClassName="text-sm font-medium"
-        >
-          {open && (
-            <WorkEvidence taskId={taskId} work={work} revision={revision} />
-          )}
-        </Disclosure>
-      )}
+      ) : null}
       {onChanged && (
         <WorkRetry
           key={`${taskId}/${work.id}/${work.attempt_count}`}
@@ -131,6 +139,21 @@ export function WorkInspection({
           onAccepted={onChanged}
         />
       )}
+      <Disclosure
+        summary="Technical details"
+        summaryClassName="text-xs text-muted-foreground"
+      >
+        <div className="space-y-2 pt-2">
+          <CompactReference value={work.target_id} label="Resource" />
+          <CompactReference value={work.id} label="Work item" />
+          {work.placement.host_id && (
+            <CompactReference value={work.placement.host_id} label="Host" />
+          )}
+          <p className="text-xs text-muted-foreground">
+            Operation: {work.operation}
+          </p>
+        </div>
+      </Disclosure>
     </section>
   );
 }
@@ -147,6 +170,7 @@ function WorkEvidence({
   const [attempts, setAttempts] = useState<TaskAttempts | null>(null);
   const [image, setImage] = useState<TaskImage | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState(false);
   const [after, setAfter] = useState(0);
   const [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -157,10 +181,14 @@ function WorkEvidence({
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    setAttempts(null);
-    setImage(null);
     void Promise.all([
-      requestTaskAttempts(taskId, work.id, revision, after, controller.signal),
+      requestTaskAttempts(
+        taskId,
+        work.id,
+        revision,
+        history ? after : Math.max(0, work.attempt_count - 1),
+        controller.signal,
+      ),
       work.operation === "image"
         ? requestTaskImage(taskId, work.id, revision, controller.signal)
         : Promise.resolve(null),
@@ -183,10 +211,19 @@ function WorkEvidence({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [taskId, work.id, work.operation, revision, after, reload]);
+  }, [
+    taskId,
+    work.id,
+    work.operation,
+    work.attempt_count,
+    revision,
+    history,
+    after,
+    reload,
+  ]);
   return (
     <div className="min-w-0 space-y-3 pt-3">
-      {loading && (
+      {loading && !attempts && (
         <p role="status" className="text-sm text-muted-foreground">
           Loading execution evidence…
         </p>
@@ -242,6 +279,29 @@ function WorkEvidence({
       )}
       {attempts && (
         <>
+          {!history &&
+            work.original_failure &&
+            work.original_failure.number < work.attempt_count && (
+              <section
+                className="space-y-2 rounded-md border border-border p-3"
+                aria-label="Original failure"
+              >
+                <h4 className="text-sm font-medium">
+                  Original failure · attempt {work.original_failure.number}
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  This failure remains recorded independently of later retries
+                  and cleanup.
+                </p>
+                <AttemptStages
+                  key={work.original_failure.id}
+                  taskId={taskId}
+                  workId={work.id}
+                  attemptId={work.original_failure.id}
+                  revision={attempts.revision}
+                />
+              </section>
+            )}
           {attempts.items.length === 0 && (
             <p className="text-sm text-muted-foreground">
               No execution attempt has started.
@@ -254,7 +314,7 @@ function WorkEvidence({
                 className="space-y-1 border-l-2 border-border pl-3 text-sm"
               >
                 <p className="font-medium">
-                  Attempt {attempt.number} ·{" "}
+                  {history ? "Attempt" : "Latest attempt"} {attempt.number} ·{" "}
                   {attempt.direction === "recovery" ? "Cleanup" : "Execution"}
                 </p>
                 <p>
@@ -301,12 +361,12 @@ function WorkEvidence({
             ))}
           </ol>
           <div className="flex gap-2">
-            {after > 0 && (
+            {history && after > 0 && (
               <Button size="sm" variant="outline" onClick={() => setAfter(0)}>
                 First attempts
               </Button>
             )}
-            {attempts.more && (
+            {history && attempts.more && (
               <Button
                 size="sm"
                 variant="outline"

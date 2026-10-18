@@ -273,6 +273,9 @@ func (service *Service) applyAuthoredOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	if err := captureAuthoredWorkNames(&graph, baseline.previousIdentities.Record, owned); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	staged, err := desiredrevision.Stage(ctx, service.repository, desiredrevision.StageInput{
 		Claim: claim, Blueprint: desiredrevision.BlueprintRevision(environmentID, claim.TaskID, claim.CreatedAt, bundle),
 		DesiredInput: desired,

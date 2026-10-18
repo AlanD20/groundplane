@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
@@ -67,6 +68,9 @@ func (item Item) Validate() error {
 	if err := item.Placement.Validate(); err != nil {
 		return err
 	}
+	if len(item.TargetName) > 256 || !utf8.ValidString(item.TargetName) {
+		return invalid("captured work resource label exceeds its display bound")
+	}
 	if !validTime(item.CreatedAt) || !validTime(item.UpdatedAt) || !validTime(item.Deadline) ||
 		item.UpdatedAt.Before(item.CreatedAt) || !item.Deadline.After(item.CreatedAt) {
 		return invalid("work item timestamps are invalid")
@@ -111,6 +115,9 @@ func (item Item) Validate() error {
 		if err := item.FirstFailure.Validate(); err != nil {
 			return err
 		}
+	}
+	if item.FirstFailureAttempt > item.AttemptNumber || item.FirstFailureAttempt > 0 && item.FirstFailure == nil {
+		return invalid("original failure attempt does not belong to this work item")
 	}
 	for _, result := range []*Input{item.Result, item.CleanupResult} {
 		if result != nil {

@@ -10,14 +10,15 @@ explains the reasons for the important boundaries below.
 
 ## Processes and data flow
 
-The [Task execution replacement](decisions/task-execution-redesign.md) is accepted
-design, not the current implementation. It gives scheduling, operation handlers,
-resource state and diagnostics distinct owners and makes assignments host-specific.
-The process paths below describe today's implementation until coordinated cutover;
-they do not qualify remote-Agent operation.
+The [Task execution replacement](decisions/task-execution-redesign.md) is under
+implementation, not qualified or deployed. The [scheduler](../internal/controller/workdispatch)
+owns assignment and capacity; operation handlers own typed effects and recovery.
+[Execution storage](../internal/infra/etcd/workqueue), resource state and disposable
+diagnostics have separate owners. Assignments bind to the selected host and Agent
+generation. This does not qualify remote-Agent operation.
 
 Console or CLI → typed Controller API → capability-owned planning and publication
-→ durable Task → assigned executor → checked result → committed state.
+→ durable Task and resource work → host-bound attempt → checked result → committed state.
 
 The Controller selects work, validates resource ownership and captures immutable
 inputs. The Agent runs only its assigned typed procedures. Native Controller
@@ -25,7 +26,7 @@ execution owns bootstrap, Runner, connection-check and persistence orchestration
 Bootstrap and persistence-only work can run without an Agent. Backing access
 checks delegate a fixed consumer-network helper through the authenticated Agent
 stream while the Controller retains the captured input, result and cleanup
-ownership. These executors share the Task journal, not execution permission.
+ownership. These executors share scheduling, not execution permission.
 
 DNS checks capture the acknowledged resolver configuration rather than reconstruct
 authority from a previous Task's retained history. The compiled Component catalog
