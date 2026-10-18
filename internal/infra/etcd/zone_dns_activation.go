@@ -21,6 +21,24 @@ func (repository *EnvironmentBlueprintRepository) ReadZoneDNSActivation(
 	ctx context.Context,
 	upstreams []string,
 ) (ZoneDNSActivation, error) {
+	return readZoneDNSActivation(ctx, repository.store, upstreams)
+}
+
+// Direct Release preparation waits without holding an Agent slot. Successful
+// serving acknowledgement is joined to its final input publication, exactly as
+// it is for authored Apply work; bridge existence alone is not DNS readiness.
+func (ledger *ReleaseLedger) ReadReleaseZoneDNSActivation(ctx context.Context, upstreams []string) (ZoneDNSActivation, bool, error) {
+	if ledger == nil || ledger.store == nil {
+		return ZoneDNSActivation{}, false, errs.New(errs.KindInternal, "Release DNS activation reader is not configured")
+	}
+	activation, err := readZoneDNSActivation(ctx, ledger.store, upstreams)
+	if kind, found := errs.KindOf(err); found && kind == errs.KindResourceInUse {
+		return ZoneDNSActivation{}, false, nil
+	}
+	return activation, err == nil, err
+}
+
+func readZoneDNSActivation(ctx context.Context, store hierarchyStore, upstreams []string) (ZoneDNSActivation, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return ZoneDNSActivation{}, err
 	}
@@ -55,14 +73,14 @@ func (repository *EnvironmentBlueprintRepository) ReadZoneDNSActivation(
 	}
 	// Read an exact key only to capture the current MVCC view; the successful
 	// acknowledgement and its complete authority are read at that same revision.
-	read, err := repository.store.Get(ctx, platformcomponents.PlatformComponentKindKey(core.ComponentKindCoreDNS))
+	read, err := store.Get(ctx, platformcomponents.PlatformComponentKindKey(core.ComponentKindCoreDNS))
 	if err != nil {
 		return ZoneDNSActivation{}, err
 	}
 	if read == nil || read.ReadRevision <= 0 {
 		return ZoneDNSActivation{}, errs.New(errs.KindInternal, "Zone DNS activation read is incomplete")
 	}
-	ack, ready, err := readResolverAcknowledgement(ctx, repository.store, read.ReadRevision)
+	ack, ready, err := readResolverAcknowledgement(ctx, store, read.ReadRevision)
 	if err != nil {
 		return ZoneDNSActivation{}, err
 	}
@@ -76,14 +94,14 @@ func (repository *EnvironmentBlueprintRepository) ReadZoneDNSActivation(
 	}
 	if !ready {
 		if ack.attempt != nil {
-			failed, _, err := failedResolverConfigurationRequest(ctx, repository.store, read.ReadRevision, ack)
+			failed, _, err := failedResolverConfigurationRequest(ctx, store, read.ReadRevision, ack)
 			if err != nil {
 				return ZoneDNSActivation{}, err
 			}
 			if failed != "" {
 				return ZoneDNSActivation{}, errs.Newf(
 					errs.KindValidationFailed,
-					"coredns update Task %s failed; repair the resolver and submit a new Blueprint Apply",
+					"CoreDNS update Task %s failed; repair the resolver and submit a new Deploy or Blueprint Apply",
 					failed,
 				)
 			}

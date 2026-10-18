@@ -23,6 +23,13 @@ type WorkOwner interface {
 	PrepareAttemptRetirement(workqueue.View, workqueue.AttemptSnapshot) (workqueue.Change, error)
 }
 
+// UnpreparedWorkOwner releases operation-owned staging even when executable
+// input was never published. A generic no-effect receipt does not prove that
+// staged snapshots, secret pins or captured source references are gone.
+type UnpreparedWorkOwner interface {
+	RetireUnpreparedWork(context.Context, workqueue.View, time.Time) (bool, workqueue.Change, error)
+}
+
 type WorkRegistration struct {
 	Operation workexecution.Operation
 	Owner     WorkOwner
@@ -75,11 +82,23 @@ func (collector *Collector) collectOwnedWork(ctx context.Context, taskID, workID
 		if settlement == nil {
 			return false, errs.New(errs.KindStateConflict, "unprepared work has no authentic settlement to collect")
 		}
+		var authority workqueue.Change
+		if owner, ok := collector.workOwners[item.Item.Operation].(UnpreparedWorkOwner); ok {
+			retired, prepared, err := owner.RetireUnpreparedWork(ctx, view, at)
+			defer keyvalue.ClearMutationValues(prepared.Mutations)
+			if err != nil || !retired {
+				return false, err
+			}
+			if len(prepared.Conditions) == 0 {
+				return false, errs.New(errs.KindInternal, "unprepared work retirement requires operation protection comparisons")
+			}
+			authority = prepared
+		}
 		change, err := workqueue.PrepareWorkCollection(view.Task, view.Item)
 		if err != nil {
 			return false, err
 		}
-		_, err = collector.queue.Commit(ctx, change)
+		_, err = collector.queue.Commit(ctx, authority, change)
 		return false, err
 	}
 	owner := collector.workOwners[item.Item.Operation]

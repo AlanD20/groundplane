@@ -153,8 +153,7 @@ func (service *Service) DeployService(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.publish(ctx, scope, etcd.ReleaseDesiredService, serviceID, planning[0].Service.Revision,
-		"", []releaseCandidateInput{selected}, locator, durable, protected)
+	return service.publishServiceWork(ctx, scope, selected, locator, durable, protected)
 }
 
 func (service *Service) RollbackService(
@@ -193,8 +192,7 @@ func (service *Service) RollbackService(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.publish(ctx, scope, etcd.ReleaseDesiredService, serviceID, planning[0].Service.Revision,
-		"", []releaseCandidateInput{selected}, locator, durable, protected)
+	return service.publishServiceWork(ctx, scope, selected, locator, durable, protected)
 }
 
 func (service *Service) DeployReleaseGroup(

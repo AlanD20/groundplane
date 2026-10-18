@@ -71,6 +71,14 @@ func (service *Service) retainProxyRolloutImages(ctx context.Context, retention 
 		return errs.New(errs.KindStateConflict, "pending proxy rollout image capture belongs to another Service")
 	}
 	reason := "Pending proxy replacement in Apply " + parentID
+	return retainServiceRolloutImages(retention, capture, reason)
+}
+
+func retainServiceRolloutImages(retention *imageRetention, capture releaserender.ServiceRolloutCapture, reason string) error {
+	render, err := releaserender.OpenServiceRolloutCapture(capture)
+	if err != nil {
+		return err
+	}
 	artifact, err := releaserender.OpenReleaseCandidateArtifact(capture)
 	if err != nil {
 		return err

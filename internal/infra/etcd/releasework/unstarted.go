@@ -22,6 +22,9 @@ func PrepareQueuedStop(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot,
 		item.Item.TaskID != task.Task.ID || at.IsZero() || at.Location() != time.UTC {
 		return workqueue.Change{}, invalid()
 	}
+	if item.Item.Input == nil {
+		return workqueue.PrepareInputSettlement(workqueue.View{Task: task, Item: item}, at)
+	}
 	outcome := workexecution.Failed
 	if task.Task.Stop != nil {
 		outcome = task.Task.Stop.Outcome
@@ -41,6 +44,9 @@ func PrepareUnstartedSupersession(view workqueue.View, source []keyvalue.Conditi
 	if len(source) == 0 || item.Item.Operation != workexecution.Release || item.Item.AttemptNumber != 0 ||
 		item.Item.ActiveAttemptID != "" || item.Item.Phase != workexecution.Waiting && item.Item.Phase != workexecution.Ready {
 		return workqueue.Change{}, invalid()
+	}
+	if item.Item.Input == nil {
+		return workqueue.PrepareInputSupersession(view, source, at)
 	}
 	item.Item.ForwardRevoked = true
 	change, err := prepareUnstartedOutcome(view.Task, item, workexecution.Superseded, at)

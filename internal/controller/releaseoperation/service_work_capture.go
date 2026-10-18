@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"time"
 
@@ -125,6 +126,25 @@ func (service *Service) captureServiceWork(ctx context.Context, scope releaseque
 			EnvironmentRevision: scope.Environment.Revision, ProjectRevision: scope.Project.Revision,
 			TenantRevision: scope.Tenant.Revision, DesiredRevision: candidate.planning.Service.Revision,
 			EpochRevision: scope.EnvironmentEpochRevision}}
+	intentSHA, err := hex.DecodeString(requestSHA)
+	if err != nil {
+		return task, item, request, capture, errs.New(errs.KindValidationFailed, "Release request intent digest is invalid")
+	}
+	networks, err := executionplan.ReleaseNetworkWorkInputs(artifact, intentSHA)
+	if err != nil {
+		return task, item, request, capture, err
+	}
+	for _, network := range networks {
+		inputID := ids.DeriveAt(ids.KindPlan, at, task.ID, "dns-network-input/"+network.NetworkId)
+		_, raw, reference, err := executionplan.CaptureNetworkWorkInput(inputID, network)
+		if err != nil {
+			return task, item, request, capture, err
+		}
+		request.Networks = append(request.Networks, etcd.DirectReleaseNetwork{
+			WorkItemID: ids.DeriveAt(ids.KindWorkItem, at, task.ID, "dns-network/"+network.NetworkId),
+			NetworkID:  network.NetworkId, Input: reference, Data: raw,
+		})
+	}
 	for _, hook := range render.Hooks {
 		sources, found := hooks.sources[hook.ScriptExecutionID]
 		if !found {
@@ -132,6 +152,12 @@ func (service *Service) captureServiceWork(ctx context.Context, scope releaseque
 		}
 		request.Hooks = append(request.Hooks, etcd.DirectReleaseHookSources{ExecutionID: hook.ScriptExecutionID, Sources: sources})
 	}
+	task.ExpectedItems = uint32(len(request.Networks) + 1)
+	graph, err := request.WorkGraph(task, item)
+	if err != nil {
+		return task, item, request, capture, err
+	}
+	item = graph[len(graph)-1]
 	value, reference, err := etcd.EncodeDirectReleasePreparation(request)
 	clear(value)
 	if err != nil {

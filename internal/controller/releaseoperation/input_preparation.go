@@ -5,10 +5,13 @@ import (
 	"errors"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasework"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -61,11 +64,29 @@ func (owner *InputPreparation) Prepare(ctx context.Context, taskID, workID strin
 		return err
 	}
 	defer clear(rollout.Record.CandidateArtifact)
+	artifact, err := releaserender.OpenReleaseCandidateArtifact(rollout.Record)
+	if err != nil {
+		return err
+	}
+	networks, err := executionplan.CaptureReleaseNetworkPreparation(artifact,
+		ids.DeriveAt(ids.KindConfig, view.Item.Item.CreatedAt, view.Item.Item.ID, "dns-readiness"))
+	if err != nil {
+		return err
+	}
+	activation, ready, err := owner.ledger.ReadReleaseZoneDNSActivation(ctx, networks.Upstreams)
+	if err != nil || !ready {
+		return err
+	}
 	prepared, err := owner.work.PrepareCapturedService(ctx, view, request, rollout)
 	if err != nil {
 		return err
 	}
 	defer prepared.Clear()
+	publication, err := prepared.Publication.WithZoneDNSActivation(activation)
+	if err != nil {
+		return errors.Join(err, prepared.Abandon(ctx))
+	}
+	prepared.Publication = publication
 	dependencies := make([]workqueue.ItemSnapshot, len(view.Item.Item.Dependencies))
 	for index, id := range view.Item.Item.Dependencies {
 		dependency, err := owner.queue.ReadWork(ctx, taskID, id, view.ReadRevision)

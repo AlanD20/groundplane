@@ -27,7 +27,7 @@ func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
 		return IdempotencyTransactionResult{}, err
 	}
 	if ledger == nil || ledger.store == nil || task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback ||
-		task.ExpectedItems != 1 || task.TargetID != item.TargetID || item.TaskID != task.ID || item.Operation != workexecution.Release ||
+		task.TargetID != item.TargetID || item.TaskID != task.ID || item.Operation != workexecution.Release ||
 		item.Input != nil || item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput ||
 		marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment || marker.Locator.ScopeID != task.Scope.EnvironmentID {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Direct Release acceptance requires its pending native Service work")
@@ -35,7 +35,16 @@ func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
 	if err := request.Matches(task, item, rollout); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	change, err := workqueue.PrepareSingleTask(task, item, marker)
+	graph, err := request.WorkGraph(task, item)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	var change workqueue.Change
+	if len(graph) == 1 {
+		change, err = workqueue.PrepareSingleTask(task, item, marker)
+	} else {
+		change, err = workqueue.PrepareStagedGraph(task, graph, []workexecution.Item{item}, marker)
+	}
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -62,7 +71,7 @@ func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Direct Release target host changed during acceptance")
 	}
 	rolloutKey := releaserender.ServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID)
-	preparationKey := DirectReleasePreparationKey(item.ID)
+	preparationKey := DirectReleasePreparationKey(task.ID)
 	change.Conditions = append(change.Conditions, guards...)
 	change.Conditions = append(change.Conditions, host.Conditions...)
 	change.Conditions = append(change.Conditions, addresses.Conditions()...)

@@ -15,19 +15,7 @@ import (
 
 func (service *Service) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
 	if view.Item.Item.Input == nil {
-		retired, err := service.ledger.RetireUnpublishedHookStage(ctx, view)
-		if err != nil || !retired {
-			return false, workqueue.Change{}, err
-		}
-		retired, err = service.ledger.RetireUnpublishedRollout(ctx, view)
-		if err != nil || !retired {
-			return false, workqueue.Change{}, err
-		}
-		change, err := service.ledger.PrepareUnpublishedReleaseRetirement(ctx, view, at)
-		if err == nil {
-			change, err = service.retireDirectPreparation(ctx, view, change)
-		}
-		return err == nil, change, err
+		return service.RetireUnpreparedWork(ctx, view, at)
 	}
 	sources, ready, guards, err := service.retireCapturedSources(ctx, view, at)
 	if err != nil || !ready {
@@ -58,6 +46,22 @@ func (service *Service) RetireWork(ctx context.Context, view workqueue.View, at 
 		)
 	}
 	return true, guards, nil
+}
+
+func (service *Service) RetireUnpreparedWork(ctx context.Context, view workqueue.View, at time.Time) (bool, workqueue.Change, error) {
+	retired, err := service.ledger.RetireUnpublishedHookStage(ctx, view)
+	if err != nil || !retired {
+		return false, workqueue.Change{}, err
+	}
+	retired, err = service.ledger.RetireUnpublishedRollout(ctx, view)
+	if err != nil || !retired {
+		return false, workqueue.Change{}, err
+	}
+	change, err := service.ledger.PrepareUnpublishedReleaseRetirement(ctx, view, at)
+	if err == nil {
+		change, err = service.retireDirectPreparation(ctx, view, change)
+	}
+	return err == nil, change, err
 }
 
 func (service *Service) retireDirectPreparation(ctx context.Context, view workqueue.View, change workqueue.Change) (workqueue.Change, error) {

@@ -205,6 +205,10 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
+	directReleases, err := platform.newDirectReleaseWork(queue, networkRecords, dependencies.Releases)
+	if err != nil {
+		return nil, err
+	}
 	networkAgent, err := network.NewAgentWork(networkRecords, queue)
 	if err != nil {
 		return nil, err
@@ -480,10 +484,10 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	publications, err := workdispatch.NewPublications(queue, []workdispatch.PublicationRegistration{
+	publications, err := workdispatch.NewPublications(queue, append(directReleases.publication, []workdispatch.PublicationRegistration{
 		{Action: workexecution.ActionRemove, Owner: removalPublication},
 		{Action: workexecution.ActionApply, Owner: blueprintPublication},
-	})
+	}...))
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +524,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err := platform.dependencies.Channel.ConfigureEntryConfigurationWork(entryReports); err != nil {
 		return nil, err
 	}
-	inputs, err := workdispatch.NewInputs(queue, append(softwareWork.input, []workdispatch.InputRegistration{
+	inputs, err := workdispatch.NewInputs(queue, append(append(softwareWork.input, directReleases.input...), []workdispatch.InputRegistration{
 		{Action: workexecution.ActionApply, Operation: workexecution.ServiceRemoval, Owner: serviceRemovalPreparation},
 		{Action: workexecution.ActionApply, Operation: workexecution.Component, Owner: componentInputs},
 		{Action: workexecution.ActionApply, Operation: workexecution.Release, Owner: serviceInputs},

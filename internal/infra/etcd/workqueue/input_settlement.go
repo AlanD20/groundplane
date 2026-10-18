@@ -25,6 +25,28 @@ type InputSettlement struct {
 	DependencyID string                `json:"dependency_id,omitempty"`
 }
 
+// PrepareInputSupersession closes a captured preparation that has not acquired
+// executable input. The owner must prove the newer resource source in the same
+// transaction; this receipt cannot stand in for settlement of host effects.
+func PrepareInputSupersession(view View, source []keyvalue.Condition, at time.Time) (Change, error) {
+	task, item := view.Task.Task, view.Item.Item
+	if !waitingInput(item) || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
+		item.Cleanup != workexecution.CleanupNone || item.Result != nil || item.FirstFailure != nil ||
+		task.Stop != nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
+		len(source) == 0 || at.IsZero() || at.Location() != time.UTC || at.Before(task.UpdatedAt) || at.Before(item.UpdatedAt) {
+		return Change{}, invalid("input supersession requires unstarted preparation and current resource evidence")
+	}
+	change, err := prepareInputSettlement(view, InputSettlement{
+		TaskID: task.ID, WorkID: item.ID, Outcome: workexecution.Superseded,
+		Reason: "Captured resource configuration was superseded before executable input was published", At: at,
+	})
+	if err != nil {
+		return Change{}, err
+	}
+	change.Conditions = append(change.Conditions, source...)
+	return change, nil
+}
+
 // PrepareInputRejection records an operation owner's permanent refusal before
 // any executable input exists. The caller must join the exact resource evidence
 // that made preparation impossible; a transient storage error is not rejection.

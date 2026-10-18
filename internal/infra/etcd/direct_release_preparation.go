@@ -18,8 +18,8 @@ import (
 
 const directReleasePreparationPrefix = "/v1/execution/direct-release-preparations/"
 
-func DirectReleasePreparationKey(workItemID string) string {
-	return directReleasePreparationPrefix + workItemID
+func DirectReleasePreparationKey(taskID string) string {
+	return directReleasePreparationPrefix + taskID
 }
 
 // DirectReleaseSource is the fixed hierarchy and authored input selected by an
@@ -51,6 +51,7 @@ type DirectReleasePreparation struct {
 	Manifest      releases.VersionedReleaseManifest `json:"manifest"`
 	Predecessor   BlueprintNativePredecessorCapture `json:"predecessor"`
 	Hooks         []DirectReleaseHookSources        `json:"hooks,omitempty"`
+	Networks      []DirectReleaseNetwork            `json:"networks,omitempty"`
 }
 
 func (request DirectReleasePreparation) validate() error {
@@ -63,7 +64,7 @@ func (request DirectReleasePreparation) validate() error {
 		request.Manifest.Revision < request.Source.ReadRevision ||
 		request.Manifest.Record.OperationID != request.Intent.OperationID ||
 		releases.ValidatePublicationID(request.Manifest.Record.PublicationID) != nil ||
-		len(request.Manifest.Record.Members) != 1 || len(request.Hooks) > 16 ||
+		len(request.Manifest.Record.Members) != 1 || len(request.Hooks) > 16 || len(request.Networks) > 256 ||
 		request.Predecessor.ServiceID != request.Intent.ServiceID ||
 		request.Predecessor.FixedReadRevision != request.Source.ReadRevision {
 		return errs.New(errs.KindValidationFailed, "Direct Release preparation identity or source is invalid")
@@ -94,6 +95,16 @@ func (request DirectReleasePreparation) validate() error {
 			return errs.New(errs.KindValidationFailed, "Direct Release hook source membership is invalid")
 		}
 		seen[hook.ExecutionID] = true
+	}
+	workIDs := map[string]bool{request.Configuration.WorkItemID: true}
+	for index, network := range request.Networks {
+		if workIDs[network.WorkItemID] || index > 0 && request.Networks[index-1].NetworkID >= network.NetworkID {
+			return errs.New(errs.KindValidationFailed, "Direct Release network membership is duplicated or unordered")
+		}
+		if _, err := network.Open(request.Intent.EnvironmentID); err != nil {
+			return err
+		}
+		workIDs[network.WorkItemID] = true
 	}
 	return nil
 }
@@ -159,6 +170,7 @@ func (request DirectReleasePreparation) Matches(task workexecution.Task, item wo
 		return err
 	}
 	if task.Intent != reference || request.Rollout != rollout || capture.SourceReadRevision != request.Source.ReadRevision ||
+		task.ExpectedItems != uint32(len(request.Networks)+1) || !slices.Equal(item.Dependencies, request.releaseDependencies()) ||
 		capture.OperationID != request.Intent.OperationID || capture.PublicationID != request.Manifest.Record.PublicationID ||
 		request.Intent.Workspace.TenantID != task.Scope.TenantID || request.Intent.Workspace.ProjectID != task.Scope.ProjectID ||
 		request.Intent.Workspace.EnvironmentID != task.Scope.EnvironmentID ||

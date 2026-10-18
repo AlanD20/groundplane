@@ -25,24 +25,42 @@ func (ledger *ReleaseLedger) ReadDirectReleasePreparation(ctx context.Context, w
 		task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback {
 		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindValidationFailed, "Direct Release preparation requires its native work snapshot")
 	}
-	key := DirectReleasePreparationKey(item.ID)
-	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: work.ReadRevision})
+	request, guard, err := ledger.ReadDirectReleaseTaskPreparation(ctx, work.Task, work.ReadRevision)
 	if err != nil {
 		return DirectReleasePreparation{}, keyvalue.Condition{}, err
 	}
-	if read == nil || read.ReadRevision != work.ReadRevision || len(read.Values) != 1 {
+	if request.Configuration.WorkItemID != item.ID {
+		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Direct Release preparation belongs to another work item")
+	}
+	return request, guard, nil
+}
+
+func (ledger *ReleaseLedger) ReadDirectReleaseTaskPreparation(ctx context.Context, snapshot workqueue.TaskSnapshot,
+	revision int64,
+) (DirectReleasePreparation, keyvalue.Condition, error) {
+	task := snapshot.Task
+	if ledger == nil || ledger.store == nil || ctx == nil || snapshot.Revision <= 0 || revision < snapshot.Revision ||
+		task.Validate() != nil || task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback {
+		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindValidationFailed, "Direct Release preparation requires its accepted Task")
+	}
+	key := DirectReleasePreparationKey(task.ID)
+	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: revision})
+	if err != nil {
+		return DirectReleasePreparation{}, keyvalue.Condition{}, err
+	}
+	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 {
 		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Direct Release preparation snapshot is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	value := read.Values[0]
-	if value == nil || value.Key != key || value.ModRevision <= 0 || value.ModRevision > work.ReadRevision {
+	if value == nil || value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision {
 		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Direct Release has no accepted preparation")
 	}
 	request, err := DecodeDirectReleasePreparation(value.Value, task.Intent)
 	if err != nil {
 		return DirectReleasePreparation{}, keyvalue.Condition{}, err
 	}
-	if request.Configuration.WorkItemID != item.ID || request.Configuration.TaskID != task.ID ||
+	if request.Configuration.TaskID != task.ID || request.Intent.ServiceID != task.TargetID ||
 		request.Source.ReadRevision > value.ModRevision {
 		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Direct Release preparation belongs to another work item")
 	}
