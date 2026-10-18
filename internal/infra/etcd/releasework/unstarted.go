@@ -30,6 +30,28 @@ func PrepareQueuedStop(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot,
 	} else if at.Before(item.Item.Deadline) && at.Before(task.Task.Deadline) {
 		return workqueue.Change{}, invalid()
 	}
+	return prepareUnstartedOutcome(task, item, outcome, at)
+}
+
+// PrepareUnstartedSupersession requires a fresh owner-side comparison proving
+// that the captured source was superseded. It cannot settle an assigned or
+// started attempt; the first Start race is fenced by the native item revision.
+func PrepareUnstartedSupersession(view workqueue.View, source []keyvalue.Condition, at time.Time) (workqueue.Change, error) {
+	item := view.Item
+	if len(source) == 0 || item.Item.Operation != workexecution.Release || item.Item.AttemptNumber != 0 ||
+		item.Item.ActiveAttemptID != "" || item.Item.Phase != workexecution.Waiting && item.Item.Phase != workexecution.Ready {
+		return workqueue.Change{}, invalid()
+	}
+	item.Item.ForwardRevoked = true
+	change, err := prepareUnstartedOutcome(view.Task, item, workexecution.Superseded, at)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, source...)
+	return change, nil
+}
+
+func prepareUnstartedOutcome(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
 	value, err := recordcodec.Encode("release-unstarted", struct {
 		TaskID  string                `json:"task_id"`
 		WorkID  string                `json:"work_id"`

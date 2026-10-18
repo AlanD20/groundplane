@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasework"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -39,6 +40,20 @@ func (owner *InputPreparation) Prepare(ctx context.Context, taskID, workID strin
 	}
 	request, _, err := owner.ledger.ReadDirectReleasePreparation(ctx, view)
 	if err != nil {
+		return err
+	}
+	current, guards, err := owner.ledger.MatchDirectReleaseSource(ctx, view, request)
+	if err != nil {
+		return err
+	}
+	if !current {
+		change, err := releasework.PrepareUnstartedSupersession(view, guards, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		defer keyvalue.ZeroMutationBytes(change.Mutations)
+		result, err := owner.queue.Commit(ctx, change)
+		keyvalue.ClearValues(result.FailureReads)
 		return err
 	}
 	rollout, err := owner.ledger.GetServiceRollout(ctx, view)

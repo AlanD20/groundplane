@@ -33,6 +33,21 @@ func (service *Service) Admit(ctx context.Context, request workqueue.Assignment,
 		change, err := releasework.PrepareQueuedStop(request.Task, request.Item, at)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
+	if request.Task.Task.Action == workexecution.ActionDeploy || request.Task.Task.Action == workexecution.ActionRollback {
+		view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
+		captured, _, err := service.ledger.ReadDirectReleasePreparation(ctx, view)
+		if err != nil {
+			return workdispatch.Decision{}, err
+		}
+		current, guards, err := service.ledger.MatchDirectReleaseSource(ctx, view, captured)
+		if err != nil {
+			return workdispatch.Decision{}, err
+		}
+		if !current {
+			change, err := releasework.PrepareUnstartedSupersession(view, guards, at)
+			return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
+		}
+	}
 	return service.PrepareForwardAssignment(ctx, request, at)
 }
 
