@@ -313,7 +313,6 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		TenantMutations:         dependencies.hierarchy.tenantMutations,
 		TenantChanges:           dependencies.hierarchy.tenantChanges,
 		Console:                 dependencies.bootstrap.consoleAssets,
-		Tasks:                   dependencies.authority.tasks,
 		Logs:                    serviceReads.logs,
 	})
 	maintenanceScheduler := scheduler.New(

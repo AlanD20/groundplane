@@ -16,7 +16,6 @@ import (
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
-	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/releasegroup"
 	releaseoperation "github.com/AlanD20/groundplane/internal/controller/releaseoperation"

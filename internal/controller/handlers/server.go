@@ -15,9 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/hostterminal"
 	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
 	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -112,7 +110,6 @@ type Server struct {
 	controllerTaskWake      func()
 	agentTaskWake           func()
 	console                 fs.FS
-	tasks                   taskQueries
 	logs                    *servicelogs.Service
 	routePolicies           map[string]routePolicy
 }
@@ -197,28 +194,7 @@ type Options struct {
 	ControllerTaskWake      func()
 	AgentTaskWake           func()
 	Console                 fs.FS
-	Tasks                   *etcd.TaskRepository
 	Logs                    *servicelogs.Service
-}
-
-type taskQueries interface {
-	ListBlueprintTaskChildren(
-		context.Context,
-		etcd.TaskRecord,
-		etcdstore.PageRequest,
-	) (etcdstore.Page[etcd.TaskRecord], error)
-	GetInterruptedDetachRetry(context.Context, string) (*etcd.InterruptedDetachRetry, error)
-	GetStoppedRecoveryRetry(context.Context, string) (bool, error)
-	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
-	ListTasksByScope(
-		context.Context,
-		etcd.TaskListScope,
-		etcdstore.PageRequest,
-	) (etcdstore.Page[etcd.TaskRecord], error)
-	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
-	GetTaskRecovery(context.Context, etcd.TaskRecord, int64) (*etcd.TaskRecoverySnapshot, error)
-	GetReleasePreparation(context.Context, etcd.TaskRecord, int64) (*etcd.ReleasePreparationSnapshot, error)
-	GetTaskAttemptHistory(context.Context, etcd.TaskRecord, etcd.TaskEventSnapshot) (*taskjournal.AttemptHistory, error)
 }
 
 func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
@@ -310,7 +286,6 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		controllerTaskWake:      options.ControllerTaskWake,
 		agentTaskWake:           options.AgentTaskWake,
 		console:                 options.Console,
-		tasks:                   options.Tasks,
 		logs:                    options.Logs,
 		routePolicies:           make(map[string]routePolicy),
 	}
@@ -406,37 +381,7 @@ func (s *Server) routes() {
 	s.registerAgents()
 }
 
-func taskAPIStatus(status taskjournal.TaskStatus) (apiTypes.TaskStatus, error) {
-	switch status {
-	case taskjournal.TaskStatusPending:
-		return apiTypes.TaskPending, nil
-	case taskjournal.TaskStatusRunning:
-		return apiTypes.TaskRunning, nil
-	case taskjournal.TaskStatusCompleted:
-		return apiTypes.TaskCompleted, nil
-	case taskjournal.TaskStatusFailed:
-		return apiTypes.TaskFailed, nil
-	case taskjournal.TaskStatusAborted:
-		return apiTypes.TaskAborted, nil
-	case taskjournal.TaskStatusTimedOut:
-		return apiTypes.TaskTimedOut, nil
-	default:
-		return "", errs.New(errs.KindInternal, "Task has an invalid durable status")
-	}
-}
-
 func (s *Server) notImplemented(w http.ResponseWriter, r *http.Request) {
-	s.writeProblem(w, errs.New(errs.KindNotImplemented, "not implemented"))
-}
-
-// acceptTask is the shared shape for every action endpoint: dispatch a
-// Task and return 202 {task_id} immediately (mvp.md's task pipeline —
-// nothing blocks on a long operation).
-func (s *Server) acceptTask(w http.ResponseWriter, r *http.Request) {
-	// TODO: decode the typed request body, validate, call into
-	// internal/controller's task dispatcher (serialization lock checked
-	// here — KindDeployInFlight on a second in-flight deploy for the same
-	// service), write the task to etcd, return its id.
 	s.writeProblem(w, errs.New(errs.KindNotImplemented, "not implemented"))
 }
 

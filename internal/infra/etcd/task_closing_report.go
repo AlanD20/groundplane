@@ -191,26 +191,3 @@ func (repository *TaskRepository) prepareTaskClosingReport(
 	}
 	return report, condition, mutation, err
 }
-
-func (repository *TaskRepository) resumeTaskClosingReport(
-	ctx context.Context, current TaskAssignment,
-) (TaskAssignment, bool, error) {
-	if !taskHasClosingReport(current.Task.Record) {
-		return current, false, nil
-	}
-	report, value, err := repository.readTaskClosingReport(ctx, current)
-	if err != nil ||
-		value == nil {
-		return current, false, err
-	}
-	terminal, err := repository.AcknowledgeTask(ctx, report.AgentID, report.AgentGeneration,
-		report.TaskID, report.AssignmentID, report.Status, report.Result, report.ObservedAt)
-	if err != nil {
-		return TaskAssignment{}, true, err
-	}
-	if !taskjournal.IsTerminalTaskStatus(terminal.Record.Status) {
-		return TaskAssignment{}, true, taskassignments.CorruptTaskAssignment()
-	}
-	current.Task = terminal
-	return current, true, nil
-}
