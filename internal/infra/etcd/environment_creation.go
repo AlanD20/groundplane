@@ -5,32 +5,35 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprovision"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// CreateEnvironmentWithTask atomically publishes the provisioning
+// CreateEnvironmentWithWork atomically publishes the provisioning
 // Environment, its indexes, initial Components, the owning Task,
-// active-operation record, queue membership, and Task idempotency marker under
+// captured work input, native queue membership, and request replay under
 // Project/Tenant deletion fences. The same transaction creates the canonical
 // Environment mutation epoch consumed by every later persistence mutation.
-func (repository *HierarchyRepository) CreateEnvironmentWithTask(
+func (repository *HierarchyRepository) CreateEnvironmentWithWork(
 	ctx context.Context,
 	volumeRoot string,
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	poolRegistry etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry],
 	record hierarchyrecord.EnvironmentRecord,
 	components []componentrecord.Record,
-	task TaskRecord,
+	input environmentprovision.Input,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -62,36 +65,36 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	if err := networkreservations.ValidateEnvironmentPoolRegistry(poolRegistry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningProvisioning ||
-		record.CreateTaskID != task.ID || !record.CreatedAt.Equal(task.CreatedAt) ||
-		task.Type != taskjournal.TaskCreate || task.Target != record.ID || task.Status != taskjournal.TaskStatusPending {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"Environment creation Task does not own its provisioning record",
-		)
-	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
-		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID ||
-		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject ||
-		marker.Locator.ScopeID != project.Record.ID ||
-		!marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"Environment creation marker does not match its Project-scoped Task",
-		)
-	}
-	task = cloneTaskRecord(task)
-	if task.IdempotencyKey == "" {
-		task.IdempotencyKey = marker.Locator.Key
-	}
-	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := ValidateTaskRecord(task); err != nil {
+	if err := input.Validate(); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
+	if input.Environment != record || input.Scope.ProjectID != project.Record.ID ||
+		input.Scope.TenantID != project.Record.TenantID || input.VolumeRoot != volumeRoot {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Environment creation capture does not own its provisioning record")
+	}
+	if marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject || marker.Locator.ScopeID != project.Record.ID {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Environment creation replay must be Project-scoped")
+	}
+	task, item, err := input.Work()
+	if err != nil {
 		return IdempotencyTransactionResult{}, err
+	}
+	work, err := workqueue.PrepareSingleTask(task, item, marker)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer etcdstore.ClearMutationValues(work.Mutations)
+	captured, err := environmentprovision.Encode(input)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(captured)
+	host, err := hostbindings.ReadLocal(ctx, repository.store, 0)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if host.Binding.HostID != input.HostID {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Environment target host changed")
 	}
 
 	environmentValue, err := hierarchyrecord.EncodeEnvironment(record)
@@ -112,16 +115,6 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		}
 		defer clear(componentValues[index])
 	}
-	taskValue, err := EncodeTaskRecord(task)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(taskValue)
-	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(reference)
 	epochValue, err := backupruntime.EncodeEnvironmentMutationEpochRecord(backupruntime.EnvironmentMutationEpochRecord{
 		EnvironmentID: record.ID,
 	})
@@ -151,10 +144,6 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	scriptSetKey := scriptrecord.ScriptSetActiveKey(record.ID)
 
 	conditions := []etcdstore.Condition{
-		{Key: taskjournal.TaskStorageKey(task.ID)},
-		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
-		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(record.ID)},
 		{Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name)},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID)},
@@ -175,14 +164,6 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		)
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{
-			Type:  etcdstore.MutationPut,
-			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
-			Value: reference,
-		},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(record.ID), Value: environmentValue},
 		{
 			Type:  etcdstore.MutationPut,
@@ -230,13 +211,29 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newTaskIdempotencyMutationPlan(
-		task,
-		initiation,
-		conditions,
-		mutations,
-		classifyEnvironmentCreateConflict(project, poolRegistry, components, task.OperationID),
-	)
+	conditions = append(conditions, work.Conditions...)
+	conditions = append(conditions, etcdstore.Condition{Key: environmentprovision.InputKey(input.WorkItemID)})
+	conditions = append(conditions, host.Conditions...)
+	mutations = append(mutations, work.Mutations...)
+	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentprovision.InputKey(input.WorkItemID), Value: captured})
+	compareCount := len(conditions)
+	classify := func(_ int64, values []*etcdstore.KeyValue) error {
+		if len(values) != compareCount {
+			return errs.New(errs.KindInternal, "Environment creation compare evidence is incomplete")
+		}
+		if values[1] != nil {
+			return errs.New(errs.KindNameConflict, "Environment name is already in use")
+		}
+		if values[3] == nil {
+			return errs.New(errs.KindProjectNotFound, "Project was not found")
+		}
+		return errs.New(errs.KindStateConflict, "Environment creation admission changed")
+	}
+	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newIdempotencyMutationPlanForMarker(idempotencyrecord.IdempotencyMarkerTask, conditions, mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -283,75 +280,4 @@ func validateInitialEnvironmentComponents(environmentID string, components []com
 		wantKinds[component.Desired.Kind] = true
 	}
 	return nil
-}
-
-func classifyEnvironmentCreateConflict(
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	poolRegistry etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry],
-	components []componentrecord.Record,
-	operationID string,
-) idempotencyPlanClassifier {
-	return func(_ int64, values []*etcdstore.KeyValue) error {
-		if len(values) != 14+(3*len(components)) {
-			return errs.New(errs.KindInternal, "Environment creation compare evidence is incomplete")
-		}
-		if values[2] != nil {
-			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
-			if err != nil {
-				return err
-			}
-			return errs.Newf(
-				errs.KindStateConflict,
-				"operation %s already has active task %s",
-				operationID,
-				activeTaskID,
-			)
-		}
-		for _, index := range []int{0, 1, 3} {
-			if values[index] != nil {
-				return errs.New(errs.KindInternal, "Environment creation collided with durable Task state")
-			}
-		}
-		if values[4] != nil || values[6] != nil {
-			return errs.New(errs.KindInternal, "Environment creation collided with durable identity state")
-		}
-		if values[5] != nil {
-			return errs.New(errs.KindNameConflict, "Environment name is already in use")
-		}
-		if values[7] == nil {
-			return errs.New(errs.KindProjectNotFound, "project was not found")
-		}
-		if values[7].ModRevision != project.Revision {
-			return recordcodec.StateConflict("project", project.Record.ID)
-		}
-		if values[8] != nil {
-			return errs.New(errs.KindResourceInUse, "Environment deletion is in progress")
-		}
-		if values[9] != nil {
-			return errs.New(errs.KindResourceInUse, "Project deletion is in progress")
-		}
-		if values[10] != nil {
-			return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
-		}
-		if (poolRegistry.Revision == 0 && values[11] != nil) ||
-			(poolRegistry.Revision > 0 && (values[11] == nil || values[11].ModRevision != poolRegistry.Revision)) {
-			return recordcodec.StateConflict("environment pool registry", "global")
-		}
-		if values[12] != nil {
-			return errs.New(errs.KindInternal, "environment creation collided with mutation epoch state")
-		}
-		if values[13] != nil {
-			return errs.New(errs.KindInternal, "environment creation collided with hierarchy coordination state")
-		}
-		for index := range components {
-			offset := 14 + (index * 3)
-			if values[offset] != nil || values[offset+1] != nil {
-				return errs.New(errs.KindStateConflict, "Component stable identity is already in use")
-			}
-			if values[offset+2] != nil {
-				return errs.New(errs.KindInternal, "Environment creation collided with Component singleton state")
-			}
-		}
-		return recordcodec.StateConflict("environment", "creation")
-	}
 }

@@ -2,7 +2,6 @@ package environment
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -10,27 +9,24 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"net/netip"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprovision"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const (
 	environmentCreationRoute           = "/environments"
-	environmentCreationTimeoutSeconds  = int64(120)
 	maximumEnvironmentCreationAttempts = 3
 )
 
@@ -39,14 +35,15 @@ type environmentCreationRepository interface {
 	GetEnvironmentPoolRegistry(
 		context.Context,
 	) (etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry], error)
-	CreateEnvironmentWithTask(
+	ResolveResourceHost(context.Context) (workexecution.Placement, error)
+	CreateEnvironmentWithWork(
 		context.Context,
 		string,
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry],
 		hierarchyrecord.EnvironmentRecord,
 		[]componentrecord.Record,
-		etcd.TaskRecord,
+		environmentprovision.Input,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -271,18 +268,19 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	task, err := newEnvironmentCreationTask(
-		project.Record,
-		environment,
-		taskID,
-		idempotencyKey,
-		now,
-		service.volumeRoot,
-	)
+	placement, err := service.repository.ResolveResourceHost(ctx)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	capture := environmentprovision.Input{
+		TaskID: taskID, WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
+		Scope:  workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.ID},
+		HostID: placement.HostID, VolumeRoot: service.volumeRoot, Environment: environment, CreatedAt: now,
+	}
+	if err := capture.Validate(); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: capture.TaskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -294,16 +292,16 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: evidence.durable, Response: response,
-		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+		TaskID: capture.TaskID, CreatedAt: now, UpdatedAt: now,
 	}
-	result, createErr := service.repository.CreateEnvironmentWithTask(
+	result, createErr := service.repository.CreateEnvironmentWithWork(
 		ctx,
 		service.volumeRoot,
 		project,
 		poolRegistry,
 		environment,
 		components,
-		task,
+		capture,
 		marker,
 	)
 	if createErr != nil {
@@ -348,57 +346,6 @@ func newInitialEnvironmentComponents(environmentID string) ([]componentrecord.Re
 		components = append(components, record)
 	}
 	return components, nil
-}
-
-func newEnvironmentCreationTask(
-	project hierarchyrecord.ProjectRecord,
-	environment hierarchyrecord.EnvironmentRecord,
-	taskID string,
-	idempotencyKey string,
-	createdAt time.Time,
-	volumeRoot string,
-) (etcd.TaskRecord, error) {
-	owner, err := taskjournal.EnvironmentTaskOwner(project, environment)
-	if err != nil {
-		return etcd.TaskRecord{}, err
-	}
-	planID := ids.New(ids.KindPlan)
-	stepID := ids.New(ids.KindStep)
-	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
-		Schema: executionplan.SchemaVersion, PlanId: planID, RenderGeneration: 1,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE,
-		TargetId:  environment.ID,
-		Steps: []*agentpb.ExecutionStep{{
-			StepId: stepID, TimeoutSeconds: uint32(environmentCreationTimeoutSeconds),
-			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
-				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{
-					EnvironmentId: environment.ID, ExpectedVolumeDir: environment.VolumeDir,
-				},
-			},
-		}},
-	})
-	if err != nil {
-		return etcd.TaskRecord{}, err
-	}
-	if err := executionplan.AuthorizeVolumeDirectories(plan, volumeRoot); err != nil {
-		return etcd.TaskRecord{}, err
-	}
-	return etcd.TaskRecord{
-		ID: taskID, OperationID: ids.New(ids.KindOperation),
-		Owner: owner, Actor: taskjournal.TaskActorOperator,
-		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorAgent,
-		PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash), RenderGeneration: 1,
-		Type: taskjournal.TaskCreate, Target: environment.ID,
-		Params: map[string]string{
-			taskcontract.EnvironmentCreateVolumeDirectoryParam: environment.VolumeDir,
-		},
-		Steps: taskjournal.CaptureStepDescriptions(
-			[]taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}},
-			plan,
-		),
-		TimeoutSeconds: environmentCreationTimeoutSeconds,
-		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
-	}, nil
 }
 
 func isUnknownEnvironmentCreationOutcome(err error) bool {
