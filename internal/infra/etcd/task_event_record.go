@@ -1,11 +1,12 @@
 package etcd
 
 import (
+	"math"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"math"
-	"time"
 )
 
 // PreparedTaskEvent contains the values a repository must publish in one CAS

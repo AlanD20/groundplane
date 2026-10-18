@@ -65,7 +65,6 @@ const (
 	BackingCheckResultPhaseCleanupRequired BackingCheckResultPhase = "cleanup_required"
 	BackingCheckResultPhaseFinished        BackingCheckResultPhase = "finished"
 	BackingCheckResultPhaseReady           BackingCheckResultPhase = "ready"
-	BackingCheckResultPhaseTransferred     BackingCheckResultPhase = "transferred"
 )
 
 // Valid indicates whether the value is a known member of the BackingCheckResultPhase enum.
@@ -80,8 +79,6 @@ func (e BackingCheckResultPhase) Valid() bool {
 	case BackingCheckResultPhaseFinished:
 		return true
 	case BackingCheckResultPhaseReady:
-		return true
-	case BackingCheckResultPhaseTransferred:
 		return true
 	default:
 		return false
@@ -559,60 +556,6 @@ func (e ComponentEnableRequestConfig2Implementation) Valid() bool {
 	}
 }
 
-// Defines values for ConfiguredHealthcheckHttpProtocol.
-const (
-	ConfiguredHealthcheckHttpProtocolHttp  ConfiguredHealthcheckHttpProtocol = "http"
-	ConfiguredHealthcheckHttpProtocolHttps ConfiguredHealthcheckHttpProtocol = "https"
-)
-
-// Valid indicates whether the value is a known member of the ConfiguredHealthcheckHttpProtocol enum.
-func (e ConfiguredHealthcheckHttpProtocol) Valid() bool {
-	switch e {
-	case ConfiguredHealthcheckHttpProtocolHttp:
-		return true
-	case ConfiguredHealthcheckHttpProtocolHttps:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ConfiguredHealthcheckKind.
-const (
-	ConfiguredHealthcheckKindCustomExec   ConfiguredHealthcheckKind = "custom_exec"
-	ConfiguredHealthcheckKindCustomShell  ConfiguredHealthcheckKind = "custom_shell"
-	ConfiguredHealthcheckKindDisabled     ConfiguredHealthcheckKind = "disabled"
-	ConfiguredHealthcheckKindHttp         ConfiguredHealthcheckKind = "http"
-	ConfiguredHealthcheckKindImageDefault ConfiguredHealthcheckKind = "image_default"
-	ConfiguredHealthcheckKindProcess      ConfiguredHealthcheckKind = "process"
-	ConfiguredHealthcheckKindTcp          ConfiguredHealthcheckKind = "tcp"
-	ConfiguredHealthcheckKindUnavailable  ConfiguredHealthcheckKind = "unavailable"
-)
-
-// Valid indicates whether the value is a known member of the ConfiguredHealthcheckKind enum.
-func (e ConfiguredHealthcheckKind) Valid() bool {
-	switch e {
-	case ConfiguredHealthcheckKindCustomExec:
-		return true
-	case ConfiguredHealthcheckKindCustomShell:
-		return true
-	case ConfiguredHealthcheckKindDisabled:
-		return true
-	case ConfiguredHealthcheckKindHttp:
-		return true
-	case ConfiguredHealthcheckKindImageDefault:
-		return true
-	case ConfiguredHealthcheckKindProcess:
-		return true
-	case ConfiguredHealthcheckKindTcp:
-		return true
-	case ConfiguredHealthcheckKindUnavailable:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ConnectorCheckResultOutcome.
 const (
 	ConnectorCheckResultOutcomeFailed      ConnectorCheckResultOutcome = "failed"
@@ -641,7 +584,6 @@ const (
 	ConnectorCheckResultPhaseCleanupRequired ConnectorCheckResultPhase = "cleanup_required"
 	ConnectorCheckResultPhaseFinished        ConnectorCheckResultPhase = "finished"
 	ConnectorCheckResultPhaseReady           ConnectorCheckResultPhase = "ready"
-	ConnectorCheckResultPhaseTransferred     ConnectorCheckResultPhase = "transferred"
 )
 
 // Valid indicates whether the value is a known member of the ConnectorCheckResultPhase enum.
@@ -656,8 +598,6 @@ func (e ConnectorCheckResultPhase) Valid() bool {
 	case ConnectorCheckResultPhaseFinished:
 		return true
 	case ConnectorCheckResultPhaseReady:
-		return true
-	case ConnectorCheckResultPhaseTransferred:
 		return true
 	default:
 		return false
@@ -855,22 +795,22 @@ func (e EdgeCheckResultPhase) Valid() bool {
 
 // Defines values for EnvironmentBlueprintChangeAction.
 const (
-	EnvironmentBlueprintChangeActionCreate EnvironmentBlueprintChangeAction = "create"
-	EnvironmentBlueprintChangeActionRemove EnvironmentBlueprintChangeAction = "remove"
-	EnvironmentBlueprintChangeActionRetain EnvironmentBlueprintChangeAction = "retain"
-	EnvironmentBlueprintChangeActionUpdate EnvironmentBlueprintChangeAction = "update"
+	Create EnvironmentBlueprintChangeAction = "create"
+	Remove EnvironmentBlueprintChangeAction = "remove"
+	Retain EnvironmentBlueprintChangeAction = "retain"
+	Update EnvironmentBlueprintChangeAction = "update"
 )
 
 // Valid indicates whether the value is a known member of the EnvironmentBlueprintChangeAction enum.
 func (e EnvironmentBlueprintChangeAction) Valid() bool {
 	switch e {
-	case EnvironmentBlueprintChangeActionCreate:
+	case Create:
 		return true
-	case EnvironmentBlueprintChangeActionRemove:
+	case Remove:
 		return true
-	case EnvironmentBlueprintChangeActionRetain:
+	case Retain:
 		return true
-	case EnvironmentBlueprintChangeActionUpdate:
+	case Update:
 		return true
 	default:
 		return false
@@ -1016,7 +956,6 @@ const (
 	ImageFetchRecordStatusFailed    ImageFetchRecordStatus = "failed"
 	ImageFetchRecordStatusPending   ImageFetchRecordStatus = "pending"
 	ImageFetchRecordStatusRunning   ImageFetchRecordStatus = "running"
-	ImageFetchRecordStatusTimedOut  ImageFetchRecordStatus = "timed_out"
 )
 
 // Valid indicates whether the value is a known member of the ImageFetchRecordStatus enum.
@@ -1031,8 +970,6 @@ func (e ImageFetchRecordStatus) Valid() bool {
 	case ImageFetchRecordStatusPending:
 		return true
 	case ImageFetchRecordStatusRunning:
-		return true
-	case ImageFetchRecordStatusTimedOut:
 		return true
 	default:
 		return false
@@ -1093,36 +1030,6 @@ func (e PreparedSoftwareArtifactComponent) Valid() bool {
 	case PreparedSoftwareArtifactComponentAgent:
 		return true
 	case PreparedSoftwareArtifactComponentController:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ReadinessDiagnostic.
-const (
-	ReadinessDiagnosticCommandMissing       ReadinessDiagnostic = "command_missing"
-	ReadinessDiagnosticCommandNotExecutable ReadinessDiagnostic = "command_not_executable"
-	ReadinessDiagnosticCurlMissing          ReadinessDiagnostic = "curl_missing"
-	ReadinessDiagnosticNcMissing            ReadinessDiagnostic = "nc_missing"
-	ReadinessDiagnosticNone                 ReadinessDiagnostic = "none"
-	ReadinessDiagnosticPgrepMissing         ReadinessDiagnostic = "pgrep_missing"
-)
-
-// Valid indicates whether the value is a known member of the ReadinessDiagnostic enum.
-func (e ReadinessDiagnostic) Valid() bool {
-	switch e {
-	case ReadinessDiagnosticCommandMissing:
-		return true
-	case ReadinessDiagnosticCommandNotExecutable:
-		return true
-	case ReadinessDiagnosticCurlMissing:
-		return true
-	case ReadinessDiagnosticNcMissing:
-		return true
-	case ReadinessDiagnosticNone:
-		return true
-	case ReadinessDiagnosticPgrepMissing:
 		return true
 	default:
 		return false
@@ -1449,16 +1356,16 @@ func (e RunnerCheckStageOutcome) Valid() bool {
 
 // Defines values for ScriptOrigin.
 const (
-	ScriptOriginApi       ScriptOrigin = "api"
-	ScriptOriginBlueprint ScriptOrigin = "blueprint"
+	Api       ScriptOrigin = "api"
+	Blueprint ScriptOrigin = "blueprint"
 )
 
 // Valid indicates whether the value is a known member of the ScriptOrigin enum.
 func (e ScriptOrigin) Valid() bool {
 	switch e {
-	case ScriptOriginApi:
+	case Api:
 		return true
-	case ScriptOriginBlueprint:
+	case Blueprint:
 		return true
 	default:
 		return false
@@ -1593,22 +1500,22 @@ func (e ServiceDependencyCondition) Valid() bool {
 
 // Defines values for ServiceDependencyPhases.
 const (
-	ServiceDependencyPhasesAlways   ServiceDependencyPhases = "always"
-	ServiceDependencyPhasesDeploy   ServiceDependencyPhases = "deploy"
-	ServiceDependencyPhasesRollback ServiceDependencyPhases = "rollback"
-	ServiceDependencyPhasesStart    ServiceDependencyPhases = "start"
+	Always   ServiceDependencyPhases = "always"
+	Deploy   ServiceDependencyPhases = "deploy"
+	Rollback ServiceDependencyPhases = "rollback"
+	Start    ServiceDependencyPhases = "start"
 )
 
 // Valid indicates whether the value is a known member of the ServiceDependencyPhases enum.
 func (e ServiceDependencyPhases) Valid() bool {
 	switch e {
-	case ServiceDependencyPhasesAlways:
+	case Always:
 		return true
-	case ServiceDependencyPhasesDeploy:
+	case Deploy:
 		return true
-	case ServiceDependencyPhasesRollback:
+	case Rollback:
 		return true
-	case ServiceDependencyPhasesStart:
+	case Start:
 		return true
 	default:
 		return false
@@ -1819,14 +1726,125 @@ func (e SoftwareReleaseChoiceSelection) Valid() bool {
 	}
 }
 
-// Defines values for TaskActor.
+// Defines values for TaskAttemptDirection.
 const (
-	Operator TaskActor = "operator"
-	System   TaskActor = "system"
+	Forward  TaskAttemptDirection = "forward"
+	Recovery TaskAttemptDirection = "recovery"
 )
 
-// Valid indicates whether the value is a known member of the TaskActor enum.
-func (e TaskActor) Valid() bool {
+// Valid indicates whether the value is a known member of the TaskAttemptDirection enum.
+func (e TaskAttemptDirection) Valid() bool {
+	switch e {
+	case Forward:
+		return true
+	case Recovery:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskAttemptExecutor.
+const (
+	TaskAttemptExecutorAgent      TaskAttemptExecutor = "agent"
+	TaskAttemptExecutorController TaskAttemptExecutor = "controller"
+)
+
+// Valid indicates whether the value is a known member of the TaskAttemptExecutor enum.
+func (e TaskAttemptExecutor) Valid() bool {
+	switch e {
+	case TaskAttemptExecutorAgent:
+		return true
+	case TaskAttemptExecutorController:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskImageExecutionPhase.
+const (
+	TaskImageExecutionPhaseFetching  TaskImageExecutionPhase = "fetching"
+	TaskImageExecutionPhaseFinished  TaskImageExecutionPhase = "finished"
+	TaskImageExecutionPhaseReady     TaskImageExecutionPhase = "ready"
+	TaskImageExecutionPhaseRemoving  TaskImageExecutionPhase = "removing"
+	TaskImageExecutionPhaseTagging   TaskImageExecutionPhase = "tagging"
+	TaskImageExecutionPhaseUncertain TaskImageExecutionPhase = "uncertain"
+)
+
+// Valid indicates whether the value is a known member of the TaskImageExecutionPhase enum.
+func (e TaskImageExecutionPhase) Valid() bool {
+	switch e {
+	case TaskImageExecutionPhaseFetching:
+		return true
+	case TaskImageExecutionPhaseFinished:
+		return true
+	case TaskImageExecutionPhaseReady:
+		return true
+	case TaskImageExecutionPhaseRemoving:
+		return true
+	case TaskImageExecutionPhaseTagging:
+		return true
+	case TaskImageExecutionPhaseUncertain:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskPreparationOutcome.
+const (
+	TaskPreparationOutcomeCancelled  TaskPreparationOutcome = "cancelled"
+	TaskPreparationOutcomeFailed     TaskPreparationOutcome = "failed"
+	TaskPreparationOutcomeSuperseded TaskPreparationOutcome = "superseded"
+)
+
+// Valid indicates whether the value is a known member of the TaskPreparationOutcome enum.
+func (e TaskPreparationOutcome) Valid() bool {
+	switch e {
+	case TaskPreparationOutcomeCancelled:
+		return true
+	case TaskPreparationOutcomeFailed:
+		return true
+	case TaskPreparationOutcomeSuperseded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskPreparationReason.
+const (
+	PlanningDeadlineExceeded   TaskPreparationReason = "planning_deadline_exceeded"
+	PlanningDependencyConflict TaskPreparationReason = "planning_dependency_conflict"
+	PlanningInvalidInput       TaskPreparationReason = "planning_invalid_input"
+	PlanningStopped            TaskPreparationReason = "planning_stopped"
+)
+
+// Valid indicates whether the value is a known member of the TaskPreparationReason enum.
+func (e TaskPreparationReason) Valid() bool {
+	switch e {
+	case PlanningDeadlineExceeded:
+		return true
+	case PlanningDependencyConflict:
+		return true
+	case PlanningInvalidInput:
+		return true
+	case PlanningStopped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskSummaryActor.
+const (
+	Operator TaskSummaryActor = "operator"
+	System   TaskSummaryActor = "system"
+)
+
+// Valid indicates whether the value is a known member of the TaskSummaryActor enum.
+func (e TaskSummaryActor) Valid() bool {
 	switch e {
 	case Operator:
 		return true
@@ -1837,279 +1855,75 @@ func (e TaskActor) Valid() bool {
 	}
 }
 
-// Defines values for TaskExecutor.
+// Defines values for TaskSummaryStatus.
 const (
-	TaskExecutorAgent      TaskExecutor = "agent"
-	TaskExecutorBlueprint  TaskExecutor = "blueprint"
-	TaskExecutorController TaskExecutor = "controller"
-	TaskExecutorSoftware   TaskExecutor = "software"
+	TaskSummaryStatusAttentionRequired TaskSummaryStatus = "attention_required"
+	TaskSummaryStatusCancelled         TaskSummaryStatus = "cancelled"
+	TaskSummaryStatusFailed            TaskSummaryStatus = "failed"
+	TaskSummaryStatusFinishing         TaskSummaryStatus = "finishing"
+	TaskSummaryStatusPreparing         TaskSummaryStatus = "preparing"
+	TaskSummaryStatusQueued            TaskSummaryStatus = "queued"
+	TaskSummaryStatusRunning           TaskSummaryStatus = "running"
+	TaskSummaryStatusStopping          TaskSummaryStatus = "stopping"
+	TaskSummaryStatusSucceeded         TaskSummaryStatus = "succeeded"
+	TaskSummaryStatusSuperseded        TaskSummaryStatus = "superseded"
+	TaskSummaryStatusWaiting           TaskSummaryStatus = "waiting"
 )
 
-// Valid indicates whether the value is a known member of the TaskExecutor enum.
-func (e TaskExecutor) Valid() bool {
+// Valid indicates whether the value is a known member of the TaskSummaryStatus enum.
+func (e TaskSummaryStatus) Valid() bool {
 	switch e {
-	case TaskExecutorAgent:
+	case TaskSummaryStatusAttentionRequired:
 		return true
-	case TaskExecutorBlueprint:
+	case TaskSummaryStatusCancelled:
 		return true
-	case TaskExecutorController:
+	case TaskSummaryStatusFailed:
 		return true
-	case TaskExecutorSoftware:
+	case TaskSummaryStatusFinishing:
+		return true
+	case TaskSummaryStatusPreparing:
+		return true
+	case TaskSummaryStatusQueued:
+		return true
+	case TaskSummaryStatusRunning:
+		return true
+	case TaskSummaryStatusStopping:
+		return true
+	case TaskSummaryStatusSucceeded:
+		return true
+	case TaskSummaryStatusSuperseded:
+		return true
+	case TaskSummaryStatusWaiting:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for TaskType.
+// Defines values for TaskWorkPhase.
 const (
-	TaskTypeApply       TaskType = "apply"
-	TaskTypeAttach      TaskType = "attach"
-	TaskTypeBackup      TaskType = "backup"
-	TaskTypeBackupPrune TaskType = "backup_prune"
-	TaskTypeCheck       TaskType = "check"
-	TaskTypeCreate      TaskType = "create"
-	TaskTypeDeploy      TaskType = "deploy"
-	TaskTypeDestroy     TaskType = "destroy"
-	TaskTypeDetach      TaskType = "detach"
-	TaskTypeFetch       TaskType = "fetch"
-	TaskTypePrepare     TaskType = "prepare"
-	TaskTypeProvision   TaskType = "provision"
-	TaskTypeRemove      TaskType = "remove"
-	TaskTypeRestore     TaskType = "restore"
-	TaskTypeRollback    TaskType = "rollback"
-	TaskTypeRotate      TaskType = "rotate"
-	TaskTypeRun         TaskType = "run"
-	TaskTypeScript      TaskType = "script"
-	TaskTypeStart       TaskType = "start"
-	TaskTypeStop        TaskType = "stop"
-	TaskTypeUpdate      TaskType = "update"
+	TaskWorkPhaseAssigned  TaskWorkPhase = "assigned"
+	TaskWorkPhaseAttention TaskWorkPhase = "attention"
+	TaskWorkPhaseReady     TaskWorkPhase = "ready"
+	TaskWorkPhaseRunning   TaskWorkPhase = "running"
+	TaskWorkPhaseSettled   TaskWorkPhase = "settled"
+	TaskWorkPhaseWaiting   TaskWorkPhase = "waiting"
 )
 
-// Valid indicates whether the value is a known member of the TaskType enum.
-func (e TaskType) Valid() bool {
+// Valid indicates whether the value is a known member of the TaskWorkPhase enum.
+func (e TaskWorkPhase) Valid() bool {
 	switch e {
-	case TaskTypeApply:
+	case TaskWorkPhaseAssigned:
 		return true
-	case TaskTypeAttach:
+	case TaskWorkPhaseAttention:
 		return true
-	case TaskTypeBackup:
+	case TaskWorkPhaseReady:
 		return true
-	case TaskTypeBackupPrune:
+	case TaskWorkPhaseRunning:
 		return true
-	case TaskTypeCheck:
+	case TaskWorkPhaseSettled:
 		return true
-	case TaskTypeCreate:
-		return true
-	case TaskTypeDeploy:
-		return true
-	case TaskTypeDestroy:
-		return true
-	case TaskTypeDetach:
-		return true
-	case TaskTypeFetch:
-		return true
-	case TaskTypePrepare:
-		return true
-	case TaskTypeProvision:
-		return true
-	case TaskTypeRemove:
-		return true
-	case TaskTypeRestore:
-		return true
-	case TaskTypeRollback:
-		return true
-	case TaskTypeRotate:
-		return true
-	case TaskTypeRun:
-		return true
-	case TaskTypeScript:
-		return true
-	case TaskTypeStart:
-		return true
-	case TaskTypeStop:
-		return true
-	case TaskTypeUpdate:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TaskWorkspaceType.
-const (
-	TaskWorkspaceTypePlatform TaskWorkspaceType = "platform"
-	TaskWorkspaceTypeTenant   TaskWorkspaceType = "tenant"
-)
-
-// Valid indicates whether the value is a known member of the TaskWorkspaceType enum.
-func (e TaskWorkspaceType) Valid() bool {
-	switch e {
-	case TaskWorkspaceTypePlatform:
-		return true
-	case TaskWorkspaceTypeTenant:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TaskEventState.
-const (
-	TaskEventStateAborted   TaskEventState = "aborted"
-	TaskEventStateCompleted TaskEventState = "completed"
-	TaskEventStateFailed    TaskEventState = "failed"
-	TaskEventStatePending   TaskEventState = "pending"
-	TaskEventStateRunning   TaskEventState = "running"
-	TaskEventStateTimedOut  TaskEventState = "timed_out"
-)
-
-// Valid indicates whether the value is a known member of the TaskEventState enum.
-func (e TaskEventState) Valid() bool {
-	switch e {
-	case TaskEventStateAborted:
-		return true
-	case TaskEventStateCompleted:
-		return true
-	case TaskEventStateFailed:
-		return true
-	case TaskEventStatePending:
-		return true
-	case TaskEventStateRunning:
-		return true
-	case TaskEventStateTimedOut:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TaskFailureStatus.
-const (
-	TaskFailureStatusAborted  TaskFailureStatus = "aborted"
-	TaskFailureStatusFailed   TaskFailureStatus = "failed"
-	TaskFailureStatusTimedOut TaskFailureStatus = "timed_out"
-)
-
-// Valid indicates whether the value is a known member of the TaskFailureStatus enum.
-func (e TaskFailureStatus) Valid() bool {
-	switch e {
-	case TaskFailureStatusAborted:
-		return true
-	case TaskFailureStatusFailed:
-		return true
-	case TaskFailureStatusTimedOut:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TaskPreparationState.
-const (
-	TaskPreparationStateDnsFailed            TaskPreparationState = "dns_failed"
-	TaskPreparationStateDnsWaiting           TaskPreparationState = "dns_waiting"
-	TaskPreparationStateNetworkFailed        TaskPreparationState = "network_failed"
-	TaskPreparationStateNetworkPreparing     TaskPreparationState = "network_preparing"
-	TaskPreparationStateNetworkProofRequired TaskPreparationState = "network_proof_required"
-	TaskPreparationStateNetworkQueued        TaskPreparationState = "network_queued"
-	TaskPreparationStateNetworkReconciling   TaskPreparationState = "network_reconciling"
-	TaskPreparationStateReady                TaskPreparationState = "ready"
-)
-
-// Valid indicates whether the value is a known member of the TaskPreparationState enum.
-func (e TaskPreparationState) Valid() bool {
-	switch e {
-	case TaskPreparationStateDnsFailed:
-		return true
-	case TaskPreparationStateDnsWaiting:
-		return true
-	case TaskPreparationStateNetworkFailed:
-		return true
-	case TaskPreparationStateNetworkPreparing:
-		return true
-	case TaskPreparationStateNetworkProofRequired:
-		return true
-	case TaskPreparationStateNetworkQueued:
-		return true
-	case TaskPreparationStateNetworkReconciling:
-		return true
-	case TaskPreparationStateReady:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TaskRecoveryState.
-const (
-	TaskRecoveryStateAutomaticRetriesStopped TaskRecoveryState = "automatic_retries_stopped"
-	TaskRecoveryStateAwaitingConfirmation    TaskRecoveryState = "awaiting_confirmation"
-	TaskRecoveryStateCompleted               TaskRecoveryState = "completed"
-	TaskRecoveryStatePending                 TaskRecoveryState = "pending"
-	TaskRecoveryStateProofRequired           TaskRecoveryState = "proof_required"
-	TaskRecoveryStateRetryWait               TaskRecoveryState = "retry_wait"
-	TaskRecoveryStateRunning                 TaskRecoveryState = "running"
-)
-
-// Valid indicates whether the value is a known member of the TaskRecoveryState enum.
-func (e TaskRecoveryState) Valid() bool {
-	switch e {
-	case TaskRecoveryStateAutomaticRetriesStopped:
-		return true
-	case TaskRecoveryStateAwaitingConfirmation:
-		return true
-	case TaskRecoveryStateCompleted:
-		return true
-	case TaskRecoveryStatePending:
-		return true
-	case TaskRecoveryStateProofRequired:
-		return true
-	case TaskRecoveryStateRetryWait:
-		return true
-	case TaskRecoveryStateRunning:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TaskRecoveryStopReason.
-const (
-	NonTransientFailure  TaskRecoveryStopReason = "non_transient_failure"
-	RecoveryDeadline     TaskRecoveryStopReason = "recovery_deadline"
-	RetryBudgetExhausted TaskRecoveryStopReason = "retry_budget_exhausted"
-	UnsafeReplay         TaskRecoveryStopReason = "unsafe_replay"
-)
-
-// Valid indicates whether the value is a known member of the TaskRecoveryStopReason enum.
-func (e TaskRecoveryStopReason) Valid() bool {
-	switch e {
-	case NonTransientFailure:
-		return true
-	case RecoveryDeadline:
-		return true
-	case RetryBudgetExhausted:
-		return true
-	case UnsafeReplay:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TaskStepKind.
-const (
-	TaskStepKindOperation TaskStepKind = "operation"
-	TaskStepKindScript    TaskStepKind = "script"
-)
-
-// Valid indicates whether the value is a known member of the TaskStepKind enum.
-func (e TaskStepKind) Valid() bool {
-	switch e {
-	case TaskStepKindOperation:
-		return true
-	case TaskStepKindScript:
+	case TaskWorkPhaseWaiting:
 		return true
 	default:
 		return false
@@ -2152,36 +1966,6 @@ func (e ZoneRemovalImpactMode) Valid() bool {
 	}
 }
 
-// Defines values for ActivityListParamsStatus.
-const (
-	ActivityListParamsStatusAborted   ActivityListParamsStatus = "aborted"
-	ActivityListParamsStatusCompleted ActivityListParamsStatus = "completed"
-	ActivityListParamsStatusFailed    ActivityListParamsStatus = "failed"
-	ActivityListParamsStatusPending   ActivityListParamsStatus = "pending"
-	ActivityListParamsStatusRunning   ActivityListParamsStatus = "running"
-	ActivityListParamsStatusTimedOut  ActivityListParamsStatus = "timed_out"
-)
-
-// Valid indicates whether the value is a known member of the ActivityListParamsStatus enum.
-func (e ActivityListParamsStatus) Valid() bool {
-	switch e {
-	case ActivityListParamsStatusAborted:
-		return true
-	case ActivityListParamsStatusCompleted:
-		return true
-	case ActivityListParamsStatusFailed:
-		return true
-	case ActivityListParamsStatusPending:
-		return true
-	case ActivityListParamsStatusRunning:
-		return true
-	case ActivityListParamsStatusTimedOut:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for SoftwareReleasesParamsSelection.
 const (
 	SoftwareReleasesParamsSelectionAgent      SoftwareReleasesParamsSelection = "agent"
@@ -2197,36 +1981,6 @@ func (e SoftwareReleasesParamsSelection) Valid() bool {
 	case SoftwareReleasesParamsSelectionBoth:
 		return true
 	case SoftwareReleasesParamsSelectionController:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TaskListParamsStatus.
-const (
-	TaskListParamsStatusAborted   TaskListParamsStatus = "aborted"
-	TaskListParamsStatusCompleted TaskListParamsStatus = "completed"
-	TaskListParamsStatusFailed    TaskListParamsStatus = "failed"
-	TaskListParamsStatusPending   TaskListParamsStatus = "pending"
-	TaskListParamsStatusRunning   TaskListParamsStatus = "running"
-	TaskListParamsStatusTimedOut  TaskListParamsStatus = "timed_out"
-)
-
-// Valid indicates whether the value is a known member of the TaskListParamsStatus enum.
-func (e TaskListParamsStatus) Valid() bool {
-	switch e {
-	case TaskListParamsStatusAborted:
-		return true
-	case TaskListParamsStatusCompleted:
-		return true
-	case TaskListParamsStatusFailed:
-		return true
-	case TaskListParamsStatusPending:
-		return true
-	case TaskListParamsStatusRunning:
-		return true
-	case TaskListParamsStatusTimedOut:
 		return true
 	default:
 		return false
@@ -2420,7 +2174,6 @@ type BackingCheckResult struct {
 	// Examples: /api/v1/BackingCheckResult.json
 	Schema            *string                    `json:"$schema,omitempty"`
 	CleanupRequired   bool                       `json:"cleanup_required"`
-	CleanupTaskId     *string                    `json:"cleanup_task_id,omitempty"`
 	Configuration     BackingCheckConfiguration  `json:"configuration"`
 	CreatedAt         string                     `json:"created_at"`
 	EnvironmentId     string                     `json:"environment_id"`
@@ -2651,12 +2404,10 @@ type BuildProvenanceKind string
 
 // CleanupStatus defines model for CleanupStatus.
 type CleanupStatus struct {
-	Diagnostics        int64     `json:"diagnostics"`
 	FailureCode        *string   `json:"failure_code,omitempty"`
 	IdempotencyRecords int64     `json:"idempotency_records"`
 	ObservedAt         time.Time `json:"observed_at"`
 	State              string    `json:"state"`
-	Tasks              int64     `json:"tasks"`
 }
 
 // Component defines model for Component.
@@ -2977,28 +2728,6 @@ type ComponentProjection struct {
 	PinnedIpv4     *string `json:"pinned_ipv4,omitempty"`
 }
 
-// ConfiguredHealthcheck defines model for ConfiguredHealthcheck.
-type ConfiguredHealthcheck struct {
-	ExpectedReplicas int32                              `json:"expected_replicas"`
-	HttpProtocol     *ConfiguredHealthcheckHttpProtocol `json:"http_protocol,omitempty"`
-	Interval         *string                            `json:"interval,omitempty"`
-	Kind             ConfiguredHealthcheckKind          `json:"kind"`
-	LoopbackPort     *int32                             `json:"loopback_port,omitempty"`
-	RequiresHealthy  bool                               `json:"requires_healthy"`
-	Retries          *int32                             `json:"retries,omitempty"`
-	ServiceId        string                             `json:"service_id"`
-	StartInterval    *string                            `json:"start_interval,omitempty"`
-	StartPeriod      *string                            `json:"start_period,omitempty"`
-	Timeout          *string                            `json:"timeout,omitempty"`
-	Workload         string                             `json:"workload"`
-}
-
-// ConfiguredHealthcheckHttpProtocol defines model for ConfiguredHealthcheck.HttpProtocol.
-type ConfiguredHealthcheckHttpProtocol string
-
-// ConfiguredHealthcheckKind defines model for ConfiguredHealthcheck.Kind.
-type ConfiguredHealthcheckKind string
-
 // Connector defines model for Connector.
 type Connector struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -3036,7 +2765,6 @@ type ConnectorCheckResult struct {
 	// Examples: /api/v1/ConnectorCheckResult.json
 	Schema            *string                       `json:"$schema,omitempty"`
 	CleanupRequired   bool                          `json:"cleanup_required"`
-	CleanupTaskId     *string                       `json:"cleanup_task_id,omitempty"`
 	Configuration     Connector                     `json:"configuration"`
 	ConnectorRevision int64                         `json:"connector_revision"`
 	CreatedAt         string                        `json:"created_at"`
@@ -3240,18 +2968,18 @@ type DNSCheckAnswerSampleType string
 
 // DNSCheckConfiguration defines model for DNSCheckConfiguration.
 type DNSCheckConfiguration struct {
-	AgentGeneration     int64            `json:"agent_generation"`
-	AgentId             string           `json:"agent_id"`
-	AppliedTaskId       string           `json:"applied_task_id"`
-	ArtifactId          string           `json:"artifact_id"`
-	ArtifactSha256      string           `json:"artifact_sha256"`
-	ComponentId         string           `json:"component_id"`
-	ComponentRevision   int64            `json:"component_revision"`
-	ImageReference      string           `json:"image_reference"`
-	ObservationRevision int64            `json:"observation_revision"`
-	Queries             *[]DNSCheckQuery `json:"queries"`
-	RenderGeneration    int64            `json:"render_generation"`
-	ServiceId           string           `json:"service_id"`
+	AgentGeneration   int64            `json:"agent_generation"`
+	AgentId           string           `json:"agent_id"`
+	AppliedRevision   int64            `json:"applied_revision"`
+	ArtifactId        string           `json:"artifact_id"`
+	ArtifactSha256    string           `json:"artifact_sha256"`
+	ComponentId       string           `json:"component_id"`
+	ComponentRevision int64            `json:"component_revision"`
+	HostId            string           `json:"host_id"`
+	ImageReference    string           `json:"image_reference"`
+	Queries           *[]DNSCheckQuery `json:"queries"`
+	RenderGeneration  int64            `json:"render_generation"`
+	ServiceId         string           `json:"service_id"`
 }
 
 // DNSCheckQuery defines model for DNSCheckQuery.
@@ -3366,7 +3094,6 @@ type EdgeCheckResult struct {
 	Addresses            *[]string               `json:"addresses"`
 	CertificateExpiresAt *string                 `json:"certificate_expires_at,omitempty"`
 	CleanupRequired      bool                    `json:"cleanup_required"`
-	CleanupTaskId        *string                 `json:"cleanup_task_id,omitempty"`
 	Configuration        EdgeCheckConfiguration  `json:"configuration"`
 	CreatedAt            string                  `json:"created_at"`
 	EnvironmentId        string                  `json:"environment_id"`
@@ -3704,6 +3431,32 @@ type EtcdConfigReplacement struct {
 	Schema           *string `json:"$schema,omitempty"`
 	Content          string  `json:"content"`
 	ExpectedRevision string  `json:"expected_revision"`
+}
+
+// ExecutionPageTaskSummary defines model for ExecutionPageTaskSummary.
+type ExecutionPageTaskSummary struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ExecutionPageTaskSummary.json
+	Schema   *string       `json:"$schema,omitempty"`
+	After    *string       `json:"after,omitempty"`
+	Items    []TaskSummary `json:"items"`
+	More     bool          `json:"more"`
+	Revision int64         `json:"revision"`
+
+	// ScanLimited More history remains but this request reached its bounded scan budget; continue with after and revision
+	ScanLimited bool `json:"scan_limited"`
+}
+
+// ExecutionPageTaskWork defines model for ExecutionPageTaskWork.
+type ExecutionPageTaskWork struct {
+	After    *string    `json:"after,omitempty"`
+	Items    []TaskWork `json:"items"`
+	More     bool       `json:"more"`
+	Revision int64      `json:"revision"`
+
+	// ScanLimited More history remains but this request reached its bounded scan budget; continue with after and revision
+	ScanLimited bool `json:"scan_limited"`
 }
 
 // HierarchyDeleteOutputBody defines model for HierarchyDeleteOutputBody.
@@ -4076,24 +3829,6 @@ type PageService struct {
 	Revision   *int64     `json:"revision,omitempty"`
 }
 
-// PageTask defines model for PageTask.
-type PageTask struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/PageTask.json
-	Schema     *string `json:"$schema,omitempty"`
-	Items      *[]Task `json:"items"`
-	NextCursor *string `json:"next_cursor,omitempty"`
-	Revision   *int64  `json:"revision,omitempty"`
-}
-
-// PageTaskExecution defines model for PageTaskExecution.
-type PageTaskExecution struct {
-	Items      *[]TaskExecution `json:"items"`
-	NextCursor *string          `json:"next_cursor,omitempty"`
-	Revision   *int64           `json:"revision,omitempty"`
-}
-
 // PageVolume defines model for PageVolume.
 type PageVolume struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -4121,6 +3856,12 @@ type Pin struct {
 	Kind     string `json:"kind"`
 	OwnerId  string `json:"owner_id"`
 	Revision int64  `json:"revision"`
+}
+
+// Placement defines model for Placement.
+type Placement struct {
+	Executor string  `json:"executor"`
+	HostId   *string `json:"host_id,omitempty"`
 }
 
 // PreparedSoftwareArtifact defines model for PreparedSoftwareArtifact.
@@ -4204,23 +3945,6 @@ type PublicTarget struct {
 	Hostname string `json:"hostname"`
 	Path     string `json:"path"`
 }
-
-// Readiness defines model for Readiness.
-type Readiness struct {
-	Diagnostic          ReadinessDiagnostic `json:"diagnostic"`
-	ElapsedMilliseconds int64               `json:"elapsed_milliseconds"`
-	Exited              int32               `json:"exited"`
-	Expected            int32               `json:"expected"`
-	Observed            int32               `json:"observed"`
-	Ready               int32               `json:"ready"`
-	Running             int32               `json:"running"`
-	Starting            int32               `json:"starting"`
-	TimeoutMilliseconds int64               `json:"timeout_milliseconds"`
-	Unhealthy           int32               `json:"unhealthy"`
-}
-
-// ReadinessDiagnostic defines model for Readiness.Diagnostic.
-type ReadinessDiagnostic string
 
 // RecoveryPoint defines model for RecoveryPoint.
 type RecoveryPoint struct {
@@ -4706,6 +4430,13 @@ type RunnerRetryRequest struct {
 	RegistrationToken string  `json:"registration_token"`
 }
 
+// Scope defines model for Scope.
+type Scope struct {
+	EnvironmentId *string `json:"environment_id,omitempty"`
+	ProjectId     *string `json:"project_id,omitempty"`
+	TenantId      *string `json:"tenant_id,omitempty"`
+}
+
 // Script defines model for Script.
 type Script struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -5090,17 +4821,17 @@ type SoftwareActivation struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/SoftwareActivation.json
-	Schema            *string                     `json:"$schema,omitempty"`
-	AgentApplied      bool                        `json:"agent_applied"`
-	AgentTaskId       *string                     `json:"agent_task_id,omitempty"`
-	ControllerApplied bool                        `json:"controller_applied"`
-	ControllerTaskId  *string                     `json:"controller_task_id,omitempty"`
-	ErrorCode         *string                     `json:"error_code,omitempty"`
-	ErrorDetail       *string                     `json:"error_detail,omitempty"`
-	Phase             string                      `json:"phase"`
-	PreparationTaskId string                      `json:"preparation_task_id"`
-	Selection         SoftwareActivationSelection `json:"selection"`
-	TaskId            string                      `json:"task_id"`
+	Schema               *string                     `json:"$schema,omitempty"`
+	AgentApplied         bool                        `json:"agent_applied"`
+	AgentWorkItemId      *string                     `json:"agent_work_item_id,omitempty"`
+	ControllerApplied    bool                        `json:"controller_applied"`
+	ControllerWorkItemId *string                     `json:"controller_work_item_id,omitempty"`
+	ErrorCode            *string                     `json:"error_code,omitempty"`
+	ErrorDetail          *string                     `json:"error_detail,omitempty"`
+	Phase                string                      `json:"phase"`
+	PreparationTaskId    string                      `json:"preparation_task_id"`
+	Selection            SoftwareActivationSelection `json:"selection"`
+	TaskId               string                      `json:"task_id"`
 }
 
 // SoftwareActivationSelection defines model for SoftwareActivation.Selection.
@@ -5190,6 +4921,18 @@ type SoftwareReleaseChoice struct {
 // SoftwareReleaseChoiceSelection defines model for SoftwareReleaseChoice.Selection.
 type SoftwareReleaseChoiceSelection string
 
+// Stage defines model for Stage.
+type Stage struct {
+	Expected    string     `json:"expected"`
+	FailureCode *string    `json:"failure_code,omitempty"`
+	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+	Key         string     `json:"key"`
+	Name        string     `json:"name"`
+	Observed    *string    `json:"observed,omitempty"`
+	StartedAt   *time.Time `json:"started_at,omitempty"`
+	State       string     `json:"state"`
+}
+
 // Status defines model for Status.
 type Status struct {
 	BackendBytes      int64          `json:"backend_bytes"`
@@ -5215,58 +4958,6 @@ type Status struct {
 	WalBytes          int64          `json:"wal_bytes"`
 }
 
-// Task defines model for Task.
-type Task struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/Task.json
-	Schema                 *string             `json:"$schema,omitempty"`
-	Actor                  TaskActor           `json:"actor"`
-	AttemptHistory         *TaskAttemptHistory `json:"attempt_history,omitempty"`
-	CreatedAt              time.Time           `json:"created_at"`
-	DiagnosticsExpiredAt   *time.Time          `json:"diagnostics_expired_at,omitempty"`
-	EnvironmentId          *string             `json:"environment_id,omitempty"`
-	Executions             *PageTaskExecution  `json:"executions,omitempty"`
-	Executor               TaskExecutor        `json:"executor"`
-	Failure                *TaskFailure        `json:"failure,omitempty"`
-	FinishedAt             *time.Time          `json:"finished_at"`
-	Id                     string              `json:"id"`
-	ImageFetch             *TaskImageFetch     `json:"image_fetch,omitempty"`
-	InterruptedDetachRetry *TaskDetachRetry    `json:"interrupted_detach_retry,omitempty"`
-	OperationId            string              `json:"operation_id"`
-	PlanHash               *string             `json:"plan_hash,omitempty"`
-	Preparation            *TaskPreparation    `json:"preparation,omitempty"`
-	ProjectId              *string             `json:"project_id,omitempty"`
-	ReconciliationRequired bool                `json:"reconciliation_required"`
-	Recovery               *TaskRecovery       `json:"recovery,omitempty"`
-	RecoveryRetryAvailable bool                `json:"recovery_retry_available"`
-	ResourceKind           *string             `json:"resource_kind,omitempty"`
-	ResultSummary          *string             `json:"result_summary,omitempty"`
-	RetryOf                *string             `json:"retry_of,omitempty"`
-	StartedAt              *time.Time          `json:"started_at"`
-	Status                 string              `json:"status"`
-	Steps                  *[]TaskStep         `json:"steps,omitempty"`
-	Target                 string              `json:"target"`
-	TargetName             *string             `json:"target_name,omitempty"`
-	TenantId               *string             `json:"tenant_id,omitempty"`
-	TimeoutSeconds         int64               `json:"timeout_seconds"`
-	Type                   TaskType            `json:"type"`
-	UpdatedAt              time.Time           `json:"updated_at"`
-	WorkspaceType          TaskWorkspaceType   `json:"workspace_type"`
-}
-
-// TaskActor defines model for Task.Actor.
-type TaskActor string
-
-// TaskExecutor defines model for Task.Executor.
-type TaskExecutor string
-
-// TaskType defines model for Task.Type.
-type TaskType string
-
-// TaskWorkspaceType defines model for Task.WorkspaceType.
-type TaskWorkspaceType string
-
 // TaskAccepted defines model for TaskAccepted.
 type TaskAccepted struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -5276,158 +4967,240 @@ type TaskAccepted struct {
 	TaskId string  `json:"task_id"`
 }
 
-// TaskAttemptHistory defines model for TaskAttemptHistory.
-type TaskAttemptHistory struct {
-	DroppedSummaries int64                 `json:"dropped_summaries"`
-	Summaries        *[]TaskAttemptSummary `json:"summaries"`
-	ThroughSequence  int64                 `json:"through_sequence"`
+// TaskActionAvailability defines model for TaskActionAvailability.
+type TaskActionAvailability struct {
+	Allowed bool    `json:"allowed"`
+	Reason  *string `json:"reason,omitempty"`
 }
 
-// TaskAttemptSummary defines model for TaskAttemptSummary.
-type TaskAttemptSummary struct {
-	Action              string                   `json:"action"`
-	Attempt             int32                    `json:"attempt"`
-	ControllerOperation *TaskControllerOperation `json:"controller_operation,omitempty"`
-	Failure             *TaskFailure             `json:"failure,omitempty"`
-	FinishedReceivedAt  *time.Time               `json:"finished_received_at,omitempty"`
-	FirstSequence       int64                    `json:"first_sequence"`
-	LastReceivedAt      time.Time                `json:"last_received_at"`
-	LastSequence        int64                    `json:"last_sequence"`
-	Ordinal             int64                    `json:"ordinal"`
-	StartedReceivedAt   *time.Time               `json:"started_received_at,omitempty"`
-	State               string                   `json:"state"`
-	StepId              *string                  `json:"step_id,omitempty"`
-	Target              *string                  `json:"target,omitempty"`
+// TaskAttempt defines model for TaskAttempt.
+type TaskAttempt struct {
+	AgentId    *string              `json:"agent_id,omitempty"`
+	AssignedAt time.Time            `json:"assigned_at"`
+	Deadline   time.Time            `json:"deadline"`
+	Direction  TaskAttemptDirection `json:"direction"`
+	Executor   TaskAttemptExecutor  `json:"executor"`
+	FinishedAt *time.Time           `json:"finished_at,omitempty"`
+	Generation int64                `json:"generation"`
+	HostId     *string              `json:"host_id,omitempty"`
+	Id         string               `json:"id"`
+	Number     int64                `json:"number"`
+	Outcome    *string              `json:"outcome,omitempty"`
+	StartedAt  *time.Time           `json:"started_at,omitempty"`
 }
 
-// TaskControllerOperation defines model for TaskControllerOperation.
-type TaskControllerOperation struct {
-	Name  string `json:"name"`
-	Stage string `json:"stage"`
+// TaskAttemptDirection defines model for TaskAttempt.Direction.
+type TaskAttemptDirection string
+
+// TaskAttemptExecutor defines model for TaskAttempt.Executor.
+type TaskAttemptExecutor string
+
+// TaskAttemptEvent defines model for TaskAttemptEvent.
+type TaskAttemptEvent struct {
+	RecordedAt time.Time `json:"recorded_at"`
+	Sequence   int64     `json:"sequence"`
+	Stage      Stage     `json:"stage"`
 }
 
-// TaskDetachRetry defines model for TaskDetachRetry.
-type TaskDetachRetry struct {
-	AttachId string `json:"attach_id"`
-	StepId   string `json:"step_id"`
+// TaskAttemptEvents defines model for TaskAttemptEvents.
+type TaskAttemptEvents struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskAttemptEvents.json
+	Schema *string `json:"$schema,omitempty"`
+
+	// Expired The requested cursor precedes retained history; returned events do not cover the missing interval
+	Expired bool `json:"expired"`
+
+	// FinishedAt Recorded attempt completion, independent of diagnostic availability
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+
+	// First First retained sequence, or zero when no events are retained
+	First int64 `json:"first"`
+
+	// Incomplete Some diagnostics could not be recorded; execution outcomes remain independent
+	Incomplete bool               `json:"incomplete"`
+	Items      []TaskAttemptEvent `json:"items"`
+
+	// Last Last retained sequence, local to this attempt
+	Last     int64   `json:"last"`
+	Outcome  *string `json:"outcome,omitempty"`
+	Revision int64   `json:"revision"`
+}
+
+// TaskAttemptPage defines model for TaskAttemptPage.
+type TaskAttemptPage struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskAttemptPage.json
+	Schema   *string       `json:"$schema,omitempty"`
+	After    int64         `json:"after"`
+	Items    []TaskAttempt `json:"items"`
+	More     bool          `json:"more"`
+	Revision int64         `json:"revision"`
+}
+
+// TaskCounts defines model for TaskCounts.
+type TaskCounts struct {
+	Assigned   int32 `json:"assigned"`
+	Attention  int32 `json:"attention"`
+	Cancelled  int32 `json:"cancelled"`
+	Failed     int32 `json:"failed"`
+	Ready      int32 `json:"ready"`
+	Running    int32 `json:"running"`
+	Succeeded  int32 `json:"succeeded"`
+	Superseded int32 `json:"superseded"`
+	Waiting    int32 `json:"waiting"`
+}
+
+// TaskDetails defines model for TaskDetails.
+type TaskDetails struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskDetails.json
+	Schema      *string               `json:"$schema,omitempty"`
+	Preparation *TaskPreparation      `json:"preparation,omitempty"`
+	Task        TaskSummary           `json:"task"`
+	Work        ExecutionPageTaskWork `json:"work"`
 }
 
 // TaskEvent defines model for TaskEvent.
 type TaskEvent struct {
-	Attempt             int32                    `json:"attempt"`
-	ControllerOperation *TaskControllerOperation `json:"controller_operation,omitempty"`
-	Failure             *TaskFailure             `json:"failure,omitempty"`
-	HealthWait          *Readiness               `json:"health_wait,omitempty"`
-	Ordinal             int64                    `json:"ordinal"`
-	ReceivedAt          time.Time                `json:"received_at"`
-	Sequence            int64                    `json:"sequence"`
-	State               TaskEventState           `json:"state"`
-	StepId              string                   `json:"step_id"`
+	AttemptId       string    `json:"attempt_id"`
+	AttemptSequence int64     `json:"attempt_sequence"`
+	RecordedAt      time.Time `json:"recorded_at"`
+	Sequence        int64     `json:"sequence"`
+	Stage           Stage     `json:"stage"`
+	WorkItemId      string    `json:"work_item_id"`
 }
 
-// TaskEventState defines model for TaskEvent.State.
-type TaskEventState string
-
-// TaskExecution defines model for TaskExecution.
-type TaskExecution struct {
-	CreatedAt              time.Time     `json:"created_at"`
-	Failure                *TaskFailure  `json:"failure,omitempty"`
-	FinishedAt             *time.Time    `json:"finished_at"`
-	Id                     string        `json:"id"`
-	ReconciliationRequired bool          `json:"reconciliation_required"`
-	Recovery               *TaskRecovery `json:"recovery,omitempty"`
-	ResourceKind           *string       `json:"resource_kind,omitempty"`
-	StartedAt              *time.Time    `json:"started_at"`
-	Status                 string        `json:"status"`
-	Steps                  *[]TaskStep   `json:"steps,omitempty"`
-	Target                 string        `json:"target"`
-	TargetName             *string       `json:"target_name,omitempty"`
-	Type                   string        `json:"type"`
-	UpdatedAt              time.Time     `json:"updated_at"`
+// TaskImageExecution defines model for TaskImageExecution.
+type TaskImageExecution struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskImageExecution.json
+	Schema              *string                 `json:"$schema,omitempty"`
+	AttemptId           *string                 `json:"attempt_id,omitempty"`
+	FinishedAt          *time.Time              `json:"finished_at,omitempty"`
+	ImageId             string                  `json:"image_id"`
+	Manifest            *string                 `json:"manifest,omitempty"`
+	Outcome             *string                 `json:"outcome,omitempty"`
+	Phase               TaskImageExecutionPhase `json:"phase"`
+	Platform            *string                 `json:"platform,omitempty"`
+	Progress            *Progress               `json:"progress,omitempty"`
+	ProgressUnavailable bool                    `json:"progress_unavailable"`
+	Requested           *string                 `json:"requested,omitempty"`
+	Revision            int64                   `json:"revision"`
+	Summary             string                  `json:"summary"`
+	TaskId              string                  `json:"task_id"`
+	UncertainPhase      *string                 `json:"uncertain_phase,omitempty"`
+	UpdatedAt           time.Time               `json:"updated_at"`
+	WorkItemId          string                  `json:"work_item_id"`
 }
 
-// TaskFailure defines model for TaskFailure.
-type TaskFailure struct {
-	Code     *string           `json:"code,omitempty"`
-	ExitCode *int32            `json:"exit_code,omitempty"`
-	Status   TaskFailureStatus `json:"status"`
-	StepId   *string           `json:"step_id,omitempty"`
-	Summary  string            `json:"summary"`
-}
-
-// TaskFailureStatus defines model for TaskFailure.Status.
-type TaskFailureStatus string
-
-// TaskImageFetch defines model for TaskImageFetch.
-type TaskImageFetch struct {
-	Image     string   `json:"image"`
-	Platform  string   `json:"platform"`
-	Progress  Progress `json:"progress"`
-	Requested string   `json:"requested"`
-}
+// TaskImageExecutionPhase defines model for TaskImageExecution.Phase.
+type TaskImageExecutionPhase string
 
 // TaskPreparation defines model for TaskPreparation.
 type TaskPreparation struct {
-	Deadline     time.Time            `json:"deadline"`
-	Failure      *TaskFailure         `json:"failure,omitempty"`
-	NetworkCount int64                `json:"network_count"`
-	State        TaskPreparationState `json:"state"`
-	Summary      string               `json:"summary"`
+	FinishedAt time.Time              `json:"finished_at"`
+	NextAction string                 `json:"next_action"`
+	Outcome    TaskPreparationOutcome `json:"outcome"`
+	Reason     TaskPreparationReason  `json:"reason"`
+	Summary    string                 `json:"summary"`
 }
 
-// TaskPreparationState defines model for TaskPreparation.State.
-type TaskPreparationState string
+// TaskPreparationOutcome defines model for TaskPreparation.Outcome.
+type TaskPreparationOutcome string
 
-// TaskRecovery defines model for TaskRecovery.
-type TaskRecovery struct {
-	AutomaticFailures int32                   `json:"automatic_failures"`
-	CompletedSteps    *int32                  `json:"completed_steps,omitempty"`
-	Deadline          *time.Time              `json:"deadline,omitempty"`
-	LastFailure       *TaskFailure            `json:"last_failure,omitempty"`
-	RetryAfter        *time.Time              `json:"retry_after,omitempty"`
-	RetryAvailable    bool                    `json:"retry_available"`
-	State             TaskRecoveryState       `json:"state"`
-	StepIds           *[]string               `json:"step_ids,omitempty"`
-	StopReason        *TaskRecoveryStopReason `json:"stop_reason,omitempty"`
-	Summary           string                  `json:"summary"`
-	TotalSteps        *int32                  `json:"total_steps,omitempty"`
+// TaskPreparationReason defines model for TaskPreparation.Reason.
+type TaskPreparationReason string
+
+// TaskRetryRequest defines model for TaskRetryRequest.
+type TaskRetryRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskRetryRequest.json
+	Schema  *string `json:"$schema,omitempty"`
+	Attempt int64   `json:"attempt"`
+
+	// QueuedFailureAt Required only when attempt is zero; copy updated_at from the failed work item
+	QueuedFailureAt *time.Time `json:"queued_failure_at,omitempty"`
+	WorkItemId      string     `json:"work_item_id"`
 }
 
-// TaskRecoveryState defines model for TaskRecovery.State.
-type TaskRecoveryState string
+// TaskStages defines model for TaskStages.
+type TaskStages struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskStages.json
+	Schema *string `json:"$schema,omitempty"`
 
-// TaskRecoveryStopReason defines model for TaskRecovery.StopReason.
-type TaskRecoveryStopReason string
+	// Available False means no stage diagnostics are retained; it does not prove no effects occurred
+	Available bool `json:"available"`
 
-// TaskStep defines model for TaskStep.
-type TaskStep struct {
-	Action               string                   `json:"action"`
-	Description          *string                  `json:"description,omitempty"`
-	Failure              *TaskFailure             `json:"failure,omitempty"`
-	HealthWait           *Readiness               `json:"health_wait,omitempty"`
-	HealthWaitReceivedAt *time.Time               `json:"health_wait_received_at,omitempty"`
-	Healthchecks         *[]ConfiguredHealthcheck `json:"healthchecks,omitempty"`
-	Kind                 TaskStepKind             `json:"kind"`
-	Name                 string                   `json:"name"`
-	ScriptId             *string                  `json:"script_id,omitempty"`
-	ScriptSlug           *string                  `json:"script_slug,omitempty"`
-	Status               string                   `json:"status"`
-	Target               *string                  `json:"target,omitempty"`
-	TimeoutSeconds       *int32                   `json:"timeout_seconds,omitempty"`
-	union                json.RawMessage
+	// Expired Disposable stage diagnostics expired under retention; execution outcome and recovery ownership are unchanged
+	Expired    bool       `json:"expired"`
+	Incomplete bool       `json:"incomplete"`
+	Items      []Stage    `json:"items"`
+	Revision   int64      `json:"revision"`
+	Sequence   int64      `json:"sequence"`
+	UpdatedAt  *time.Time `json:"updated_at,omitempty"`
 }
 
-// TaskStepKind defines model for TaskStep.Kind.
-type TaskStepKind string
-
-// TaskStep0 defines model for TaskStep.0.
-type TaskStep0 struct {
-	Kind interface{} `json:"kind,omitempty"`
+// TaskSummary defines model for TaskSummary.
+type TaskSummary struct {
+	Action         string                 `json:"action"`
+	Actor          TaskSummaryActor       `json:"actor"`
+	Cancel         TaskActionAvailability `json:"cancel"`
+	Counts         TaskCounts             `json:"counts"`
+	CreatedAt      time.Time              `json:"created_at"`
+	Deadline       time.Time              `json:"deadline"`
+	FinishedAt     *time.Time             `json:"finished_at,omitempty"`
+	HistoryExpired bool                   `json:"history_expired"`
+	Id             string                 `json:"id"`
+	ResourceKind   string                 `json:"resource_kind"`
+	Scope          Scope                  `json:"scope"`
+	Status         TaskSummaryStatus      `json:"status"`
+	StopRequested  bool                   `json:"stop_requested"`
+	TargetId       string                 `json:"target_id"`
+	TargetName     string                 `json:"target_name"`
+	UpdatedAt      time.Time              `json:"updated_at"`
 }
 
-// TaskStep1 defines model for TaskStep.1.
-type TaskStep1 struct {
-	Kind interface{} `json:"kind,omitempty"`
+// TaskSummaryActor defines model for TaskSummary.Actor.
+type TaskSummaryActor string
+
+// TaskSummaryStatus defines model for TaskSummary.Status.
+type TaskSummaryStatus string
+
+// TaskWork defines model for TaskWork.
+type TaskWork struct {
+	ActiveAttemptId *string                `json:"active_attempt_id,omitempty"`
+	AttemptCount    int64                  `json:"attempt_count"`
+	Cleanup         string                 `json:"cleanup"`
+	CreatedAt       time.Time              `json:"created_at"`
+	Deadline        time.Time              `json:"deadline"`
+	Id              string                 `json:"id"`
+	Operation       string                 `json:"operation"`
+	Outcome         *string                `json:"outcome,omitempty"`
+	Phase           TaskWorkPhase          `json:"phase"`
+	Placement       Placement              `json:"placement"`
+	Preparation     *TaskWorkPreparation   `json:"preparation,omitempty"`
+	Retry           TaskActionAvailability `json:"retry"`
+	TargetId        string                 `json:"target_id"`
+	UpdatedAt       time.Time              `json:"updated_at"`
+	Wait            *Wait                  `json:"wait,omitempty"`
+}
+
+// TaskWorkPhase defines model for TaskWork.Phase.
+type TaskWorkPhase string
+
+// TaskWorkPreparation defines model for TaskWorkPreparation.
+type TaskWorkPreparation struct {
+	DependencyId *string   `json:"dependency_id,omitempty"`
+	FinishedAt   time.Time `json:"finished_at"`
+	Summary      string    `json:"summary"`
 }
 
 // Tenant defines model for Tenant.
@@ -5577,6 +5350,14 @@ type VolumeEdit struct {
 	Slug   string  `json:"slug"`
 }
 
+// Wait defines model for Wait.
+type Wait struct {
+	Reason     string     `json:"reason"`
+	TaskId     *string    `json:"task_id,omitempty"`
+	Until      *time.Time `json:"until,omitempty"`
+	WorkItemId *string    `json:"work_item_id,omitempty"`
+}
+
 // Zone defines model for Zone.
 type Zone struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -5656,18 +5437,14 @@ type ZoneRemovalImpactService struct {
 
 // ActivityListParams defines parameters for ActivityList.
 type ActivityListParams struct {
-	Limit        *int64                    `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor       *string                   `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Environment  *string                   `form:"environment,omitempty" json:"environment,omitempty"`
-	Project      *string                   `form:"project,omitempty" json:"project,omitempty"`
-	Workspace    *string                   `form:"workspace,omitempty" json:"workspace,omitempty"`
-	Status       *ActivityListParamsStatus `form:"status,omitempty" json:"status,omitempty"`
-	Type         *string                   `form:"type,omitempty" json:"type,omitempty"`
-	ResourceKind *string                   `form:"resource_kind,omitempty" json:"resource_kind,omitempty"`
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty"`
+	Scope        *string `form:"scope,omitempty" json:"scope,omitempty"`
+	Limit        *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	After        *string `form:"after,omitempty" json:"after,omitempty"`
+	Revision     *int64  `form:"revision,omitempty" json:"revision,omitempty"`
+	Action       *string `form:"action,omitempty" json:"action,omitempty"`
+	Status       *string `form:"status,omitempty" json:"status,omitempty"`
 }
-
-// ActivityListParamsStatus defines parameters for ActivityList.
-type ActivityListParamsStatus string
 
 // AgentListParams defines parameters for AgentList.
 type AgentListParams struct {
@@ -6281,23 +6058,20 @@ type SoftwareReleasesParamsSelection string
 
 // TaskListParams defines parameters for TaskList.
 type TaskListParams struct {
-	Limit        *int64                `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor       *string               `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Environment  *string               `form:"environment,omitempty" json:"environment,omitempty"`
-	Project      *string               `form:"project,omitempty" json:"project,omitempty"`
-	Workspace    *string               `form:"workspace,omitempty" json:"workspace,omitempty"`
-	Status       *TaskListParamsStatus `form:"status,omitempty" json:"status,omitempty"`
-	Type         *string               `form:"type,omitempty" json:"type,omitempty"`
-	ResourceKind *string               `form:"resource_kind,omitempty" json:"resource_kind,omitempty"`
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty"`
+	Scope        *string `form:"scope,omitempty" json:"scope,omitempty"`
+	Limit        *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	After        *string `form:"after,omitempty" json:"after,omitempty"`
+	Revision     *int64  `form:"revision,omitempty" json:"revision,omitempty"`
+	Action       *string `form:"action,omitempty" json:"action,omitempty"`
+	Status       *string `form:"status,omitempty" json:"status,omitempty"`
 }
-
-// TaskListParamsStatus defines parameters for TaskList.
-type TaskListParamsStatus string
 
 // TaskShowParams defines parameters for TaskShow.
 type TaskShowParams struct {
-	ExecutionLimit  *int64  `form:"execution_limit,omitempty" json:"execution_limit,omitempty"`
-	ExecutionCursor *string `form:"execution_cursor,omitempty" json:"execution_cursor,omitempty"`
+	Limit    *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	After    *string `form:"after,omitempty" json:"after,omitempty"`
+	Revision *int64  `form:"revision,omitempty" json:"revision,omitempty"`
 }
 
 // TaskAbortParams defines parameters for TaskAbort.
@@ -6314,6 +6088,29 @@ type TaskEventsParams struct {
 // TaskRetryParams defines parameters for TaskRetry.
 type TaskRetryParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// TaskAttemptsParams defines parameters for TaskAttempts.
+type TaskAttemptsParams struct {
+	After    *int64 `form:"after,omitempty" json:"after,omitempty"`
+	Limit    *int64 `form:"limit,omitempty" json:"limit,omitempty"`
+	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty"`
+}
+
+// TaskAttemptEventsParams defines parameters for TaskAttemptEvents.
+type TaskAttemptEventsParams struct {
+	After    *int64 `form:"after,omitempty" json:"after,omitempty"`
+	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty"`
+}
+
+// TaskStagesParams defines parameters for TaskStages.
+type TaskStagesParams struct {
+	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty"`
+}
+
+// TaskImageParams defines parameters for TaskImage.
+type TaskImageParams struct {
+	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty"`
 }
 
 // TenantListParams defines parameters for TenantList.
@@ -6551,6 +6348,9 @@ type ServiceRollbackJSONRequestBody = RollbackRequest
 
 // SoftwarePrepareJSONRequestBody defines body for SoftwarePrepare for application/json ContentType.
 type SoftwarePrepareJSONRequestBody = SoftwarePreparationRequest
+
+// TaskRetryJSONRequestBody defines body for TaskRetry for application/json ContentType.
+type TaskRetryJSONRequestBody = TaskRetryRequest
 
 // TenantCreateJSONRequestBody defines body for TenantCreate for application/json ContentType.
 type TenantCreateJSONRequestBody = TenantCreate
@@ -7641,262 +7441,6 @@ func (t *ScriptExecution) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Volumes)
 		if err != nil {
 			return fmt.Errorf("error reading 'volumes': %w", err)
-		}
-	}
-
-	return err
-}
-
-// AsTaskStep0 returns the union data inside the TaskStep as a TaskStep0
-func (t TaskStep) AsTaskStep0() (TaskStep0, error) {
-	var body TaskStep0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromTaskStep0 overwrites any union data inside the TaskStep as the provided TaskStep0
-func (t *TaskStep) FromTaskStep0(v TaskStep0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeTaskStep0 performs a merge with any union data inside the TaskStep, using the provided TaskStep0
-func (t *TaskStep) MergeTaskStep0(v TaskStep0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsTaskStep1 returns the union data inside the TaskStep as a TaskStep1
-func (t TaskStep) AsTaskStep1() (TaskStep1, error) {
-	var body TaskStep1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromTaskStep1 overwrites any union data inside the TaskStep as the provided TaskStep1
-func (t *TaskStep) FromTaskStep1(v TaskStep1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeTaskStep1 performs a merge with any union data inside the TaskStep, using the provided TaskStep1
-func (t *TaskStep) MergeTaskStep1(v TaskStep1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t TaskStep) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	object := make(map[string]json.RawMessage)
-	if t.union != nil {
-		err = json.Unmarshal(b, &object)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	object["action"], err = json.Marshal(t.Action)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'action': %w", err)
-	}
-
-	if t.Description != nil {
-		object["description"], err = json.Marshal(t.Description)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'description': %w", err)
-		}
-	}
-
-	if t.Failure != nil {
-		object["failure"], err = json.Marshal(t.Failure)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'failure': %w", err)
-		}
-	}
-
-	if t.HealthWait != nil {
-		object["health_wait"], err = json.Marshal(t.HealthWait)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'health_wait': %w", err)
-		}
-	}
-
-	if t.HealthWaitReceivedAt != nil {
-		object["health_wait_received_at"], err = json.Marshal(t.HealthWaitReceivedAt)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'health_wait_received_at': %w", err)
-		}
-	}
-
-	if t.Healthchecks != nil {
-		object["healthchecks"], err = json.Marshal(t.Healthchecks)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'healthchecks': %w", err)
-		}
-	}
-
-	object["kind"], err = json.Marshal(t.Kind)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'kind': %w", err)
-	}
-
-	object["name"], err = json.Marshal(t.Name)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'name': %w", err)
-	}
-
-	if t.ScriptId != nil {
-		object["script_id"], err = json.Marshal(t.ScriptId)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'script_id': %w", err)
-		}
-	}
-
-	if t.ScriptSlug != nil {
-		object["script_slug"], err = json.Marshal(t.ScriptSlug)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'script_slug': %w", err)
-		}
-	}
-
-	object["status"], err = json.Marshal(t.Status)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'status': %w", err)
-	}
-
-	if t.Target != nil {
-		object["target"], err = json.Marshal(t.Target)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'target': %w", err)
-		}
-	}
-
-	if t.TimeoutSeconds != nil {
-		object["timeout_seconds"], err = json.Marshal(t.TimeoutSeconds)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'timeout_seconds': %w", err)
-		}
-	}
-	b, err = json.Marshal(object)
-	return b, err
-}
-
-func (t *TaskStep) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	if err != nil {
-		return err
-	}
-	object := make(map[string]json.RawMessage)
-	err = json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["action"]; found {
-		err = json.Unmarshal(raw, &t.Action)
-		if err != nil {
-			return fmt.Errorf("error reading 'action': %w", err)
-		}
-	}
-
-	if raw, found := object["description"]; found {
-		err = json.Unmarshal(raw, &t.Description)
-		if err != nil {
-			return fmt.Errorf("error reading 'description': %w", err)
-		}
-	}
-
-	if raw, found := object["failure"]; found {
-		err = json.Unmarshal(raw, &t.Failure)
-		if err != nil {
-			return fmt.Errorf("error reading 'failure': %w", err)
-		}
-	}
-
-	if raw, found := object["health_wait"]; found {
-		err = json.Unmarshal(raw, &t.HealthWait)
-		if err != nil {
-			return fmt.Errorf("error reading 'health_wait': %w", err)
-		}
-	}
-
-	if raw, found := object["health_wait_received_at"]; found {
-		err = json.Unmarshal(raw, &t.HealthWaitReceivedAt)
-		if err != nil {
-			return fmt.Errorf("error reading 'health_wait_received_at': %w", err)
-		}
-	}
-
-	if raw, found := object["healthchecks"]; found {
-		err = json.Unmarshal(raw, &t.Healthchecks)
-		if err != nil {
-			return fmt.Errorf("error reading 'healthchecks': %w", err)
-		}
-	}
-
-	if raw, found := object["kind"]; found {
-		err = json.Unmarshal(raw, &t.Kind)
-		if err != nil {
-			return fmt.Errorf("error reading 'kind': %w", err)
-		}
-	}
-
-	if raw, found := object["name"]; found {
-		err = json.Unmarshal(raw, &t.Name)
-		if err != nil {
-			return fmt.Errorf("error reading 'name': %w", err)
-		}
-	}
-
-	if raw, found := object["script_id"]; found {
-		err = json.Unmarshal(raw, &t.ScriptId)
-		if err != nil {
-			return fmt.Errorf("error reading 'script_id': %w", err)
-		}
-	}
-
-	if raw, found := object["script_slug"]; found {
-		err = json.Unmarshal(raw, &t.ScriptSlug)
-		if err != nil {
-			return fmt.Errorf("error reading 'script_slug': %w", err)
-		}
-	}
-
-	if raw, found := object["status"]; found {
-		err = json.Unmarshal(raw, &t.Status)
-		if err != nil {
-			return fmt.Errorf("error reading 'status': %w", err)
-		}
-	}
-
-	if raw, found := object["target"]; found {
-		err = json.Unmarshal(raw, &t.Target)
-		if err != nil {
-			return fmt.Errorf("error reading 'target': %w", err)
-		}
-	}
-
-	if raw, found := object["timeout_seconds"]; found {
-		err = json.Unmarshal(raw, &t.TimeoutSeconds)
-		if err != nil {
-			return fmt.Errorf("error reading 'timeout_seconds': %w", err)
 		}
 	}
 
@@ -9176,10 +8720,39 @@ type ClientInterface interface {
 	// Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
 	TaskEvents(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// TaskRetry Retry a failed Task or authorize a captured Blueprint Detach hook
+	// TaskRetryWithBody Retry the selected captured work attempt within the same Task
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
-	TaskRetry(ctx context.Context, id string, params *TaskRetryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	TaskRetryWithBody(ctx context.Context, id string, params *TaskRetryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskRetry Retry the selected captured work attempt within the same Task
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
+	TaskRetry(ctx context.Context, id string, params *TaskRetryParams, body TaskRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskAttempts Inspect execution attempts for Task work
+	//
+	// Corresponds with GET /tasks/{id}/work/{work_id}/attempts (the `TaskAttempts` operationId).
+	TaskAttempts(ctx context.Context, id string, workId string, params *TaskAttemptsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskAttemptEvents Inspect retained execution events for one attempt
+	//
+	// Corresponds with GET /tasks/{id}/work/{work_id}/attempts/{attempt_id}/events (the `TaskAttemptEvents` operationId).
+	TaskAttemptEvents(ctx context.Context, id string, workId string, attemptId string, params *TaskAttemptEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskStages Inspect named execution stages and their observed results
+	//
+	// Corresponds with GET /tasks/{id}/work/{work_id}/attempts/{attempt_id}/stages (the `TaskStages` operationId).
+	TaskStages(ctx context.Context, id string, workId string, attemptId string, params *TaskStagesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskImage Inspect image operation evidence and download progress
+	//
+	// Corresponds with GET /tasks/{id}/work/{work_id}/image (the `TaskImage` operationId).
+	TaskImage(ctx context.Context, id string, workId string, params *TaskImageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TenantList List tenants
 	//
@@ -12490,11 +12063,90 @@ func (c *Client) TaskEvents(ctx context.Context, id string, params *TaskEventsPa
 	return c.Client.Do(req)
 }
 
-// TaskRetry Retry a failed Task or authorize a captured Blueprint Detach hook
+// TaskRetryWithBody Retry the selected captured work attempt within the same Task
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
-func (c *Client) TaskRetry(ctx context.Context, id string, params *TaskRetryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTaskRetryRequest(c.Server, id, params)
+func (c *Client) TaskRetryWithBody(ctx context.Context, id string, params *TaskRetryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskRetryRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskRetry Retry the selected captured work attempt within the same Task
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
+func (c *Client) TaskRetry(ctx context.Context, id string, params *TaskRetryParams, body TaskRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskRetryRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskAttempts Inspect execution attempts for Task work
+//
+// Corresponds with GET /tasks/{id}/work/{work_id}/attempts (the `TaskAttempts` operationId).
+func (c *Client) TaskAttempts(ctx context.Context, id string, workId string, params *TaskAttemptsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskAttemptsRequest(c.Server, id, workId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskAttemptEvents Inspect retained execution events for one attempt
+//
+// Corresponds with GET /tasks/{id}/work/{work_id}/attempts/{attempt_id}/events (the `TaskAttemptEvents` operationId).
+func (c *Client) TaskAttemptEvents(ctx context.Context, id string, workId string, attemptId string, params *TaskAttemptEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskAttemptEventsRequest(c.Server, id, workId, attemptId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskStages Inspect named execution stages and their observed results
+//
+// Corresponds with GET /tasks/{id}/work/{work_id}/attempts/{attempt_id}/stages (the `TaskStages` operationId).
+func (c *Client) TaskStages(ctx context.Context, id string, workId string, attemptId string, params *TaskStagesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskStagesRequest(c.Server, id, workId, attemptId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskImage Inspect image operation evidence and download progress
+//
+// Corresponds with GET /tasks/{id}/work/{work_id}/image (the `TaskImage` operationId).
+func (c *Client) TaskImage(ctx context.Context, id string, workId string, params *TaskImageParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskImageRequest(c.Server, id, workId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -12902,6 +12554,30 @@ func NewActivityListRequest(server string, params *ActivityListParams) (*http.Re
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
 
+		if params.ResourceKind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "resource_kind", *params.ResourceKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope", *params.Scope, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if params.Limit != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
@@ -12914,9 +12590,9 @@ func NewActivityListRequest(server string, params *ActivityListParams) (*http.Re
 
 		}
 
-		if params.Cursor != nil {
+		if params.After != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -12926,9 +12602,9 @@ func NewActivityListRequest(server string, params *ActivityListParams) (*http.Re
 
 		}
 
-		if params.Environment != nil {
+		if params.Revision != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -12938,21 +12614,9 @@ func NewActivityListRequest(server string, params *ActivityListParams) (*http.Re
 
 		}
 
-		if params.Project != nil {
+		if params.Action != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "project", *params.Project, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Workspace != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "workspace", *params.Workspace, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "action", *params.Action, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -12965,30 +12629,6 @@ func NewActivityListRequest(server string, params *ActivityListParams) (*http.Re
 		if params.Status != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Type != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "type", *params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.ResourceKind != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "resource_kind", *params.ResourceKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -20630,6 +20270,30 @@ func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, e
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
 
+		if params.ResourceKind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "resource_kind", *params.ResourceKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope", *params.Scope, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if params.Limit != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
@@ -20642,9 +20306,9 @@ func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, e
 
 		}
 
-		if params.Cursor != nil {
+		if params.After != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -20654,9 +20318,9 @@ func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, e
 
 		}
 
-		if params.Environment != nil {
+		if params.Revision != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -20666,21 +20330,9 @@ func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, e
 
 		}
 
-		if params.Project != nil {
+		if params.Action != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "project", *params.Project, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Workspace != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "workspace", *params.Workspace, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "action", *params.Action, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -20693,30 +20345,6 @@ func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, e
 		if params.Status != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Type != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "type", *params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.ResourceKind != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "resource_kind", *params.ResourceKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -20775,9 +20403,9 @@ func NewTaskShowRequest(server string, id string, params *TaskShowParams) (*http
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
 
-		if params.ExecutionLimit != nil {
+		if params.Limit != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "execution_limit", *params.ExecutionLimit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -20787,9 +20415,21 @@ func NewTaskShowRequest(server string, id string, params *TaskShowParams) (*http
 
 		}
 
-		if params.ExecutionCursor != nil {
+		if params.After != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "execution_cursor", *params.ExecutionCursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Revision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -20909,8 +20549,19 @@ func NewTaskEventsRequest(server string, id string, params *TaskEventsParams) (*
 	return req, nil
 }
 
-// NewTaskRetryRequest constructs an http.Request for the TaskRetry method
-func NewTaskRetryRequest(server string, id string, params *TaskRetryParams) (*http.Request, error) {
+// NewTaskRetryRequest calls the generic TaskRetry builder with application/json body
+func NewTaskRetryRequest(server string, id string, params *TaskRetryParams, body TaskRetryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTaskRetryRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewTaskRetryRequestWithBody constructs an http.Request for the TaskRetry method, with any body, and a specified content type
+func NewTaskRetryRequestWithBody(server string, id string, params *TaskRetryParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -20935,10 +20586,12 @@ func NewTaskRetryRequest(server string, id string, params *TaskRetryParams) (*ht
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -20951,6 +20604,328 @@ func NewTaskRetryRequest(server string, id string, params *TaskRetryParams) (*ht
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewTaskAttemptsRequest constructs an http.Request for the TaskAttempts method
+func NewTaskAttemptsRequest(server string, id string, workId string, params *TaskAttemptsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "work_id", workId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tasks/%s/work/%s/attempts", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Revision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewTaskAttemptEventsRequest constructs an http.Request for the TaskAttemptEvents method
+func NewTaskAttemptEventsRequest(server string, id string, workId string, attemptId string, params *TaskAttemptEventsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "work_id", workId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "attempt_id", attemptId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tasks/%s/work/%s/attempts/%s/events", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Revision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewTaskStagesRequest constructs an http.Request for the TaskStages method
+func NewTaskStagesRequest(server string, id string, workId string, attemptId string, params *TaskStagesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "work_id", workId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "attempt_id", attemptId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tasks/%s/work/%s/attempts/%s/stages", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Revision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewTaskImageRequest constructs an http.Request for the TaskImage method
+func NewTaskImageRequest(server string, id string, workId string, params *TaskImageParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "work_id", workId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tasks/%s/work/%s/image", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Revision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -23342,12 +23317,47 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
 	TaskEventsWithResponse(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*TaskEventsResponse, error)
 
-	// TaskRetryWithResponse Retry a failed Task or authorize a captured Blueprint Detach hook
+	// TaskRetryWithBodyWithResponse Retry the selected captured work attempt within the same Task
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
+	TaskRetryWithBodyWithResponse(ctx context.Context, id string, params *TaskRetryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TaskRetryResponse, error)
+
+	// TaskRetryWithResponse Retry the selected captured work attempt within the same Task
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
+	TaskRetryWithResponse(ctx context.Context, id string, params *TaskRetryParams, body TaskRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*TaskRetryResponse, error)
+
+	// TaskAttemptsWithResponse Inspect execution attempts for Task work
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
-	TaskRetryWithResponse(ctx context.Context, id string, params *TaskRetryParams, reqEditors ...RequestEditorFn) (*TaskRetryResponse, error)
+	// Corresponds with GET /tasks/{id}/work/{work_id}/attempts (the `TaskAttempts` operationId).
+	TaskAttemptsWithResponse(ctx context.Context, id string, workId string, params *TaskAttemptsParams, reqEditors ...RequestEditorFn) (*TaskAttemptsResponse, error)
+
+	// TaskAttemptEventsWithResponse Inspect retained execution events for one attempt
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /tasks/{id}/work/{work_id}/attempts/{attempt_id}/events (the `TaskAttemptEvents` operationId).
+	TaskAttemptEventsWithResponse(ctx context.Context, id string, workId string, attemptId string, params *TaskAttemptEventsParams, reqEditors ...RequestEditorFn) (*TaskAttemptEventsResponse, error)
+
+	// TaskStagesWithResponse Inspect named execution stages and their observed results
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /tasks/{id}/work/{work_id}/attempts/{attempt_id}/stages (the `TaskStages` operationId).
+	TaskStagesWithResponse(ctx context.Context, id string, workId string, attemptId string, params *TaskStagesParams, reqEditors ...RequestEditorFn) (*TaskStagesResponse, error)
+
+	// TaskImageWithResponse Inspect image operation evidence and download progress
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /tasks/{id}/work/{work_id}/image (the `TaskImage` operationId).
+	TaskImageWithResponse(ctx context.Context, id string, workId string, params *TaskImageParams, reqEditors ...RequestEditorFn) (*TaskImageResponse, error)
 
 	// TenantListWithResponse List tenants
 	//
@@ -23515,13 +23525,13 @@ type ActivityListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *PageTask
+	JSON200 *ExecutionPageTaskSummary
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ActivityListResponse) GetJSON200() *PageTask {
+func (r ActivityListResponse) GetJSON200() *ExecutionPageTaskSummary {
 	return r.JSON200
 }
 
@@ -30811,13 +30821,13 @@ type TaskListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *PageTask
+	JSON200 *ExecutionPageTaskSummary
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r TaskListResponse) GetJSON200() *PageTask {
+func (r TaskListResponse) GetJSON200() *ExecutionPageTaskSummary {
 	return r.JSON200
 }
 
@@ -30859,13 +30869,13 @@ type TaskShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Task
+	JSON200 *TaskDetails
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r TaskShowResponse) GetJSON200() *Task {
+func (r TaskShowResponse) GetJSON200() *TaskDetails {
 	return r.JSON200
 }
 
@@ -31048,6 +31058,198 @@ func (r TaskRetryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r TaskRetryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TaskAttemptsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TaskAttemptPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TaskAttemptsResponse) GetJSON200() *TaskAttemptPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskAttemptsResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskAttemptsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskAttemptsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskAttemptsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskAttemptsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TaskAttemptEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TaskAttemptEvents
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TaskAttemptEventsResponse) GetJSON200() *TaskAttemptEvents {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskAttemptEventsResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskAttemptEventsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskAttemptEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskAttemptEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskAttemptEventsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TaskStagesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TaskStages
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TaskStagesResponse) GetJSON200() *TaskStages {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskStagesResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskStagesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskStagesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskStagesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskStagesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TaskImageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TaskImageExecution
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TaskImageResponse) GetJSON200() *TaskImageExecution {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskImageResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskImageResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskImageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskImageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskImageResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -34505,17 +34707,82 @@ func (c *ClientWithResponses) TaskEventsWithResponse(ctx context.Context, id str
 	return ParseTaskEventsResponse(rsp)
 }
 
-// TaskRetryWithResponse Retry a failed Task or authorize a captured Blueprint Detach hook
+// TaskRetryWithBodyWithResponse Retry the selected captured work attempt within the same Task
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
-func (c *ClientWithResponses) TaskRetryWithResponse(ctx context.Context, id string, params *TaskRetryParams, reqEditors ...RequestEditorFn) (*TaskRetryResponse, error) {
-	rsp, err := c.TaskRetry(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) TaskRetryWithBodyWithResponse(ctx context.Context, id string, params *TaskRetryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TaskRetryResponse, error) {
+	rsp, err := c.TaskRetryWithBody(ctx, id, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseTaskRetryResponse(rsp)
+}
+
+// TaskRetryWithResponse Retry the selected captured work attempt within the same Task
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
+func (c *ClientWithResponses) TaskRetryWithResponse(ctx context.Context, id string, params *TaskRetryParams, body TaskRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*TaskRetryResponse, error) {
+	rsp, err := c.TaskRetry(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskRetryResponse(rsp)
+}
+
+// TaskAttemptsWithResponse Inspect execution attempts for Task work
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /tasks/{id}/work/{work_id}/attempts (the `TaskAttempts` operationId).
+func (c *ClientWithResponses) TaskAttemptsWithResponse(ctx context.Context, id string, workId string, params *TaskAttemptsParams, reqEditors ...RequestEditorFn) (*TaskAttemptsResponse, error) {
+	rsp, err := c.TaskAttempts(ctx, id, workId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskAttemptsResponse(rsp)
+}
+
+// TaskAttemptEventsWithResponse Inspect retained execution events for one attempt
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /tasks/{id}/work/{work_id}/attempts/{attempt_id}/events (the `TaskAttemptEvents` operationId).
+func (c *ClientWithResponses) TaskAttemptEventsWithResponse(ctx context.Context, id string, workId string, attemptId string, params *TaskAttemptEventsParams, reqEditors ...RequestEditorFn) (*TaskAttemptEventsResponse, error) {
+	rsp, err := c.TaskAttemptEvents(ctx, id, workId, attemptId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskAttemptEventsResponse(rsp)
+}
+
+// TaskStagesWithResponse Inspect named execution stages and their observed results
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /tasks/{id}/work/{work_id}/attempts/{attempt_id}/stages (the `TaskStages` operationId).
+func (c *ClientWithResponses) TaskStagesWithResponse(ctx context.Context, id string, workId string, attemptId string, params *TaskStagesParams, reqEditors ...RequestEditorFn) (*TaskStagesResponse, error) {
+	rsp, err := c.TaskStages(ctx, id, workId, attemptId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskStagesResponse(rsp)
+}
+
+// TaskImageWithResponse Inspect image operation evidence and download progress
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /tasks/{id}/work/{work_id}/image (the `TaskImage` operationId).
+func (c *ClientWithResponses) TaskImageWithResponse(ctx context.Context, id string, workId string, params *TaskImageParams, reqEditors ...RequestEditorFn) (*TaskImageResponse, error) {
+	rsp, err := c.TaskImage(ctx, id, workId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskImageResponse(rsp)
 }
 
 // TenantListWithResponse List tenants
@@ -34832,7 +35099,7 @@ func ParseActivityListResponse(rsp *http.Response) (*ActivityListResponse, error
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest PageTask
+		var dest ExecutionPageTaskSummary
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -40502,7 +40769,7 @@ func ParseTaskListResponse(rsp *http.Response) (*TaskListResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest PageTask
+		var dest ExecutionPageTaskSummary
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -40535,7 +40802,7 @@ func ParseTaskShowResponse(rsp *http.Response) (*TaskShowResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Task
+		var dest TaskDetails
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -40666,6 +40933,138 @@ func ParseTaskRetryResponse(rsp *http.Response) (*TaskRetryResponse, error) {
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseTaskAttemptsResponse parses an HTTP response from a TaskAttemptsWithResponse call
+func ParseTaskAttemptsResponse(rsp *http.Response) (*TaskAttemptsResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskAttemptsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TaskAttemptPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTaskAttemptEventsResponse parses an HTTP response from a TaskAttemptEventsWithResponse call
+func ParseTaskAttemptEventsResponse(rsp *http.Response) (*TaskAttemptEventsResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskAttemptEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TaskAttemptEvents
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTaskStagesResponse parses an HTTP response from a TaskStagesWithResponse call
+func ParseTaskStagesResponse(rsp *http.Response) (*TaskStagesResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskStagesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TaskStages
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTaskImageResponse parses an HTTP response from a TaskImageWithResponse call
+func ParseTaskImageResponse(rsp *http.Response) (*TaskImageResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskImageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TaskImageExecution
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

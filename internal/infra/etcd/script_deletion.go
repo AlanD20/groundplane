@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -14,7 +16,6 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
-	"net/http"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )

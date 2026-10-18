@@ -1713,8 +1713,76 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Retry a failed Task or authorize a captured Blueprint Detach hook */
+        /** Retry the selected captured work attempt within the same Task */
         post: operations["task.retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/work/{work_id}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect execution attempts for Task work */
+        get: operations["task.attempts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/work/{work_id}/attempts/{attempt_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect retained execution events for one attempt */
+        get: operations["task.attempt-events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/work/{work_id}/attempts/{attempt_id}/stages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect named execution stages and their observed results */
+        get: operations["task.stages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/work/{work_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect image operation evidence and download progress */
+        get: operations["task.image"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2081,7 +2149,6 @@ export interface components {
              */
             readonly $schema?: string;
             cleanup_required: boolean;
-            cleanup_task_id?: string;
             configuration: components["schemas"]["BackingCheckConfiguration"];
             created_at: string;
             environment_id: string;
@@ -2092,7 +2159,7 @@ export interface components {
             /** @enum {string} */
             outcome?: "passed" | "failed" | "interrupted";
             /** @enum {string} */
-            phase: "ready" | "checking" | "cleaning" | "finished" | "cleanup_required" | "transferred";
+            phase: "ready" | "checking" | "cleaning" | "finished" | "cleanup_required";
             stages: components["schemas"]["BackingCheckStage"][] | null;
             stale: boolean;
             started_at?: string;
@@ -2260,16 +2327,12 @@ export interface components {
             kind: "source_ref" | "release";
         };
         CleanupStatus: {
-            /** Format: int64 */
-            diagnostics: number;
             failure_code?: string;
             /** Format: int64 */
             idempotency_records: number;
             /** Format: date-time */
             observed_at: string;
             state: string;
-            /** Format: int64 */
-            tasks: number;
         };
         Component: {
             /**
@@ -2456,25 +2519,6 @@ export interface components {
             implementation: string;
             pinned_ipv4?: string;
         };
-        ConfiguredHealthcheck: {
-            /** Format: int32 */
-            expected_replicas: number;
-            /** @enum {string} */
-            http_protocol?: "http" | "https";
-            interval?: string;
-            /** @enum {string} */
-            kind: "http" | "tcp" | "process" | "custom_exec" | "custom_shell" | "disabled" | "image_default" | "unavailable";
-            /** Format: int32 */
-            loopback_port?: number;
-            requires_healthy: boolean;
-            /** Format: int32 */
-            retries?: number;
-            service_id: string;
-            start_interval?: string;
-            start_period?: string;
-            timeout?: string;
-            workload: string;
-        };
         Connector: {
             /**
              * Format: uri
@@ -2516,7 +2560,6 @@ export interface components {
              */
             readonly $schema?: string;
             cleanup_required: boolean;
-            cleanup_task_id?: string;
             configuration: components["schemas"]["Connector"];
             /** Format: int64 */
             connector_revision: number;
@@ -2531,7 +2574,7 @@ export interface components {
             /** @enum {string} */
             outcome?: "passed" | "failed" | "interrupted";
             /** @enum {string} */
-            phase: "ready" | "checking" | "cleaning" | "finished" | "cleanup_required" | "transferred";
+            phase: "ready" | "checking" | "cleaning" | "finished" | "cleanup_required";
             secret_sources: components["schemas"]["ConnectorCheckSecretSource"][] | null;
             stages: components["schemas"]["ConnectorCheckStage"][] | null;
             stale: boolean;
@@ -2693,15 +2736,15 @@ export interface components {
             /** Format: int64 */
             agent_generation: number;
             agent_id: string;
-            applied_task_id: string;
+            /** Format: int64 */
+            applied_revision: number;
             artifact_id: string;
             artifact_sha256: string;
             component_id: string;
             /** Format: int64 */
             component_revision: number;
+            host_id: string;
             image_reference: string;
-            /** Format: int64 */
-            observation_revision: number;
             queries: components["schemas"]["DNSCheckQuery"][] | null;
             /** Format: int64 */
             render_generation: number;
@@ -2822,7 +2865,6 @@ export interface components {
             addresses: string[] | null;
             certificate_expires_at?: string;
             cleanup_required: boolean;
-            cleanup_task_id?: string;
             configuration: components["schemas"]["EdgeCheckConfiguration"];
             created_at: string;
             environment_id: string;
@@ -3141,6 +3183,30 @@ export interface components {
             content: string;
             expected_revision: string;
         };
+        ExecutionPageTaskSummary: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ExecutionPageTaskSummary.json
+             */
+            readonly $schema?: string;
+            after?: string;
+            items: components["schemas"]["TaskSummary"][];
+            more: boolean;
+            /** Format: int64 */
+            revision: number;
+            /** @description More history remains but this request reached its bounded scan budget; continue with after and revision */
+            scan_limited: boolean;
+        };
+        ExecutionPageTaskWork: {
+            after?: string;
+            items: components["schemas"]["TaskWork"][];
+            more: boolean;
+            /** Format: int64 */
+            revision: number;
+            /** @description More history remains but this request reached its bounded scan budget; continue with after and revision */
+            scan_limited: boolean;
+        };
         HierarchyDeleteOutputBody: {
             /**
              * Format: uri
@@ -3291,7 +3357,7 @@ export interface components {
             requested: string;
             requested_at: string;
             /** @enum {string} */
-            status: "pending" | "running" | "completed" | "failed" | "aborted" | "timed_out";
+            status: "pending" | "running" | "completed" | "failed" | "aborted";
             task_id: string;
         };
         ImageFetchRequest: {
@@ -3496,24 +3562,6 @@ export interface components {
             /** Format: int64 */
             revision?: number;
         };
-        PageTask: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/v1/PageTask.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["Task"][] | null;
-            next_cursor?: string;
-            /** Format: int64 */
-            revision?: number;
-        };
-        PageTaskExecution: {
-            items: components["schemas"]["TaskExecution"][] | null;
-            next_cursor?: string;
-            /** Format: int64 */
-            revision?: number;
-        };
         PageVolume: {
             /**
              * Format: uri
@@ -3543,6 +3591,10 @@ export interface components {
             owner_id: string;
             /** Format: int64 */
             revision: number;
+        };
+        Placement: {
+            executor: string;
+            host_id?: string;
         };
         PreparedSoftwareArtifact: {
             architecture: string;
@@ -3619,28 +3671,6 @@ export interface components {
         PublicTarget: {
             hostname: string;
             path: string;
-        };
-        Readiness: {
-            /** @enum {string} */
-            diagnostic: "none" | "pgrep_missing" | "curl_missing" | "nc_missing" | "command_missing" | "command_not_executable";
-            /** Format: int64 */
-            elapsed_milliseconds: number;
-            /** Format: int32 */
-            exited: number;
-            /** Format: int32 */
-            expected: number;
-            /** Format: int32 */
-            observed: number;
-            /** Format: int32 */
-            ready: number;
-            /** Format: int32 */
-            running: number;
-            /** Format: int32 */
-            starting: number;
-            /** Format: int64 */
-            timeout_milliseconds: number;
-            /** Format: int32 */
-            unhealthy: number;
         };
         RecoveryPoint: {
             capture?: components["schemas"]["RecoveryPointCapture"];
@@ -4090,6 +4120,11 @@ export interface components {
             readonly $schema?: string;
             registration_token: string;
         };
+        Scope: {
+            environment_id?: string;
+            project_id?: string;
+            tenant_id?: string;
+        };
         Script: {
             /**
              * Format: uri
@@ -4462,9 +4497,9 @@ export interface components {
              */
             readonly $schema?: string;
             agent_applied: boolean;
-            agent_task_id?: string;
+            agent_work_item_id?: string;
             controller_applied: boolean;
-            controller_task_id?: string;
+            controller_work_item_id?: string;
             error_code?: string;
             error_detail?: string;
             phase: string;
@@ -4541,6 +4576,18 @@ export interface components {
             /** @enum {string} */
             selection: "controller" | "agent" | "both";
         };
+        Stage: {
+            expected: string;
+            failure_code?: string;
+            /** Format: date-time */
+            finished_at?: string;
+            key: string;
+            name: string;
+            observed?: string;
+            /** Format: date-time */
+            started_at?: string;
+            state: string;
+        };
         Status: {
             /** Format: int64 */
             backend_bytes: number;
@@ -4581,56 +4628,6 @@ export interface components {
             /** Format: int64 */
             wal_bytes: number;
         };
-        Task: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/v1/Task.json
-             */
-            readonly $schema?: string;
-            /** @enum {string} */
-            actor: "operator" | "system";
-            attempt_history?: components["schemas"]["TaskAttemptHistory"];
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            diagnostics_expired_at?: string;
-            environment_id?: string;
-            executions?: components["schemas"]["PageTaskExecution"];
-            /** @enum {string} */
-            executor: "agent" | "controller" | "blueprint" | "software";
-            failure?: components["schemas"]["TaskFailure"];
-            /** Format: date-time */
-            finished_at: string | null;
-            id: string;
-            image_fetch?: components["schemas"]["TaskImageFetch"];
-            interrupted_detach_retry?: components["schemas"]["TaskDetachRetry"];
-            operation_id: string;
-            plan_hash?: string;
-            preparation?: components["schemas"]["TaskPreparation"];
-            project_id?: string;
-            reconciliation_required: boolean;
-            recovery?: components["schemas"]["TaskRecovery"];
-            recovery_retry_available: boolean;
-            resource_kind?: string;
-            result_summary?: string;
-            retry_of?: string;
-            /** Format: date-time */
-            started_at: string | null;
-            status: string;
-            steps?: components["schemas"]["TaskStep"][] | null;
-            target: string;
-            target_name?: string;
-            tenant_id?: string;
-            /** Format: int64 */
-            timeout_seconds: number;
-            /** @enum {string} */
-            type: "deploy" | "rollback" | "backup" | "backup_prune" | "restore" | "attach" | "detach" | "run" | "script" | "provision" | "create" | "update" | "remove" | "start" | "stop" | "destroy" | "rotate" | "fetch" | "prepare" | "apply" | "check";
-            /** Format: date-time */
-            updated_at: string;
-            /** @enum {string} */
-            workspace_type: "platform" | "tenant";
-        };
         TaskAccepted: {
             /**
              * Format: uri
@@ -4640,148 +4637,252 @@ export interface components {
             readonly $schema?: string;
             task_id: string;
         };
-        TaskAttemptHistory: {
-            /** Format: int64 */
-            dropped_summaries: number;
-            summaries: components["schemas"]["TaskAttemptSummary"][] | null;
-            /** Format: int64 */
-            through_sequence: number;
+        TaskActionAvailability: {
+            allowed: boolean;
+            reason?: string;
         };
-        TaskAttemptSummary: {
-            action: string;
-            /** Format: int32 */
-            attempt: number;
-            controller_operation?: components["schemas"]["TaskControllerOperation"];
-            failure?: components["schemas"]["TaskFailure"];
+        TaskAttempt: {
+            agent_id?: string;
             /** Format: date-time */
-            finished_received_at?: string;
-            /** Format: int64 */
-            first_sequence: number;
+            assigned_at: string;
             /** Format: date-time */
-            last_received_at: string;
-            /** Format: int64 */
-            last_sequence: number;
-            /** Format: int64 */
-            ordinal: number;
+            deadline: string;
+            /** @enum {string} */
+            direction: "forward" | "recovery";
+            /** @enum {string} */
+            executor: "agent" | "controller";
             /** Format: date-time */
-            started_received_at?: string;
-            state: string;
-            step_id?: string;
-            target?: string;
+            finished_at?: string;
+            /** Format: int64 */
+            generation: number;
+            host_id?: string;
+            id: string;
+            /** Format: int64 */
+            number: number;
+            outcome?: string;
+            /** Format: date-time */
+            started_at?: string;
         };
-        TaskControllerOperation: {
-            name: string;
-            stage: string;
-        };
-        TaskDetachRetry: {
-            attach_id: string;
-            step_id: string;
-        };
-        TaskEvent: {
-            /** Format: int32 */
-            attempt: number;
-            controller_operation?: components["schemas"]["TaskControllerOperation"];
-            failure?: components["schemas"]["TaskFailure"];
-            health_wait?: components["schemas"]["Readiness"];
-            /** Format: int64 */
-            ordinal: number;
+        TaskAttemptEvent: {
             /** Format: date-time */
-            received_at: string;
+            recorded_at: string;
             /** Format: int64 */
             sequence: number;
-            /** @enum {string} */
-            state: "pending" | "running" | "completed" | "failed" | "aborted" | "timed_out";
-            step_id: string;
+            stage: components["schemas"]["Stage"];
         };
-        TaskExecution: {
+        TaskAttemptEvents: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskAttemptEvents.json
+             */
+            readonly $schema?: string;
+            /** @description The requested cursor precedes retained history; returned events do not cover the missing interval */
+            expired: boolean;
+            /**
+             * Format: date-time
+             * @description Recorded attempt completion, independent of diagnostic availability
+             */
+            finished_at?: string;
+            /**
+             * Format: int64
+             * @description First retained sequence, or zero when no events are retained
+             */
+            first: number;
+            /** @description Some diagnostics could not be recorded; execution outcomes remain independent */
+            incomplete: boolean;
+            items: components["schemas"]["TaskAttemptEvent"][];
+            /**
+             * Format: int64
+             * @description Last retained sequence, local to this attempt
+             */
+            last: number;
+            outcome?: string;
+            /** Format: int64 */
+            revision: number;
+        };
+        TaskAttemptPage: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskAttemptPage.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            after: number;
+            items: components["schemas"]["TaskAttempt"][];
+            more: boolean;
+            /** Format: int64 */
+            revision: number;
+        };
+        TaskCounts: {
+            /** Format: int32 */
+            assigned: number;
+            /** Format: int32 */
+            attention: number;
+            /** Format: int32 */
+            cancelled: number;
+            /** Format: int32 */
+            failed: number;
+            /** Format: int32 */
+            ready: number;
+            /** Format: int32 */
+            running: number;
+            /** Format: int32 */
+            succeeded: number;
+            /** Format: int32 */
+            superseded: number;
+            /** Format: int32 */
+            waiting: number;
+        };
+        TaskDetails: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskDetails.json
+             */
+            readonly $schema?: string;
+            preparation?: components["schemas"]["TaskPreparation"];
+            task: components["schemas"]["TaskSummary"];
+            work: components["schemas"]["ExecutionPageTaskWork"];
+        };
+        TaskEvent: {
+            attempt_id: string;
+            /** Format: int64 */
+            attempt_sequence: number;
             /** Format: date-time */
-            created_at: string;
-            failure?: components["schemas"]["TaskFailure"];
+            recorded_at: string;
+            /** Format: int64 */
+            sequence: number;
+            stage: components["schemas"]["Stage"];
+            work_item_id: string;
+        };
+        TaskImageExecution: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskImageExecution.json
+             */
+            readonly $schema?: string;
+            attempt_id?: string;
             /** Format: date-time */
-            finished_at: string | null;
-            id: string;
-            reconciliation_required: boolean;
-            recovery?: components["schemas"]["TaskRecovery"];
-            resource_kind?: string;
-            /** Format: date-time */
-            started_at: string | null;
-            status: string;
-            steps?: components["schemas"]["TaskStep"][] | null;
-            target: string;
-            target_name?: string;
-            type: string;
+            finished_at?: string;
+            image_id: string;
+            manifest?: string;
+            outcome?: string;
+            /** @enum {string} */
+            phase: "ready" | "fetching" | "tagging" | "removing" | "uncertain" | "finished";
+            platform?: string;
+            progress?: components["schemas"]["Progress"];
+            progress_unavailable: boolean;
+            requested?: string;
+            /** Format: int64 */
+            revision: number;
+            summary: string;
+            task_id: string;
+            uncertain_phase?: string;
             /** Format: date-time */
             updated_at: string;
-        };
-        TaskFailure: {
-            code?: string;
-            /** Format: int32 */
-            exit_code?: number;
-            /** @enum {string} */
-            status: "failed" | "timed_out" | "aborted";
-            step_id?: string;
-            summary: string;
-        };
-        TaskImageFetch: {
-            image: string;
-            platform: string;
-            progress: components["schemas"]["Progress"];
-            requested: string;
+            work_item_id: string;
         };
         TaskPreparation: {
             /** Format: date-time */
-            deadline: string;
-            failure?: components["schemas"]["TaskFailure"];
+            finished_at: string;
+            next_action: string;
+            /** @enum {string} */
+            outcome: "failed" | "cancelled" | "superseded";
+            /** @enum {string} */
+            reason: "planning_deadline_exceeded" | "planning_stopped" | "planning_invalid_input" | "planning_dependency_conflict";
+            summary: string;
+        };
+        TaskRetryRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskRetryRequest.json
+             */
+            readonly $schema?: string;
             /** Format: int64 */
-            network_count: number;
-            /** @enum {string} */
-            state: "network_queued" | "network_preparing" | "network_reconciling" | "network_proof_required" | "network_failed" | "dns_waiting" | "dns_failed" | "ready";
-            summary: string;
+            attempt: number;
+            /**
+             * Format: date-time
+             * @description Required only when attempt is zero; copy updated_at from the failed work item
+             */
+            queued_failure_at?: string;
+            work_item_id: string;
         };
-        TaskRecovery: {
-            /** Format: int32 */
-            automatic_failures: number;
-            /** Format: int32 */
-            completed_steps?: number;
+        TaskStages: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskStages.json
+             */
+            readonly $schema?: string;
+            /** @description False means no stage diagnostics are retained; it does not prove no effects occurred */
+            available: boolean;
+            /** @description Disposable stage diagnostics expired under retention; execution outcome and recovery ownership are unchanged */
+            expired: boolean;
+            incomplete: boolean;
+            items: components["schemas"]["Stage"][];
+            /** Format: int64 */
+            revision: number;
+            /** Format: int64 */
+            sequence: number;
             /** Format: date-time */
-            deadline?: string;
-            last_failure?: components["schemas"]["TaskFailure"];
-            /** Format: date-time */
-            retry_after?: string;
-            retry_available: boolean;
-            /** @enum {string} */
-            state: "pending" | "running" | "awaiting_confirmation" | "proof_required" | "retry_wait" | "automatic_retries_stopped" | "completed";
-            step_ids?: string[] | null;
-            /** @enum {string} */
-            stop_reason?: "non_transient_failure" | "retry_budget_exhausted" | "recovery_deadline" | "unsafe_replay";
-            summary: string;
-            /** Format: int32 */
-            total_steps?: number;
+            updated_at?: string;
         };
-        TaskStep: {
+        TaskSummary: {
             action: string;
-            description?: string;
-            failure?: components["schemas"]["TaskFailure"];
-            health_wait?: components["schemas"]["Readiness"];
-            /** Format: date-time */
-            health_wait_received_at?: string;
-            healthchecks?: components["schemas"]["ConfiguredHealthcheck"][] | null;
             /** @enum {string} */
-            kind: "operation" | "script";
-            name: string;
-            script_id?: string;
-            script_slug?: string;
-            status: string;
-            target?: string;
-            /** Format: int32 */
-            timeout_seconds?: number;
-        } & ({
-            /** @constant */
-            kind?: "operation";
-        } | {
-            /** @constant */
-            kind?: "script";
-        });
+            actor: "operator" | "system";
+            cancel: components["schemas"]["TaskActionAvailability"];
+            counts: components["schemas"]["TaskCounts"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            deadline: string;
+            /** Format: date-time */
+            finished_at?: string;
+            history_expired: boolean;
+            id: string;
+            resource_kind: string;
+            scope: components["schemas"]["Scope"];
+            /** @enum {string} */
+            status: "queued" | "preparing" | "waiting" | "running" | "attention_required" | "stopping" | "finishing" | "succeeded" | "failed" | "cancelled" | "superseded";
+            stop_requested: boolean;
+            target_id: string;
+            target_name: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TaskWork: {
+            active_attempt_id?: string;
+            /** Format: int64 */
+            attempt_count: number;
+            cleanup: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            deadline: string;
+            id: string;
+            operation: string;
+            outcome?: string;
+            /** @enum {string} */
+            phase: "waiting" | "ready" | "assigned" | "running" | "attention" | "settled";
+            placement: components["schemas"]["Placement"];
+            preparation?: components["schemas"]["TaskWorkPreparation"];
+            retry: components["schemas"]["TaskActionAvailability"];
+            target_id: string;
+            /** Format: date-time */
+            updated_at: string;
+            wait?: components["schemas"]["Wait"];
+        };
+        TaskWorkPreparation: {
+            dependency_id?: string;
+            /** Format: date-time */
+            finished_at: string;
+            summary: string;
+        };
         Tenant: {
             /**
              * Format: uri
@@ -4932,6 +5033,13 @@ export interface components {
             readonly $schema?: string;
             slug: string;
         };
+        Wait: {
+            reason: string;
+            task_id?: string;
+            /** Format: date-time */
+            until?: string;
+            work_item_id?: string;
+        };
         Zone: {
             /**
              * Format: uri
@@ -5009,14 +5117,13 @@ export interface operations {
     "activity.list": {
         parameters: {
             query?: {
-                limit?: number;
-                cursor?: string;
-                environment?: string;
-                project?: string;
-                workspace?: string;
-                status?: "pending" | "running" | "completed" | "failed" | "timed_out" | "aborted";
-                type?: string;
                 resource_kind?: string;
+                scope?: string;
+                limit?: number;
+                after?: string;
+                revision?: number;
+                action?: string;
+                status?: string;
             };
             header?: never;
             path?: never;
@@ -5030,7 +5137,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PageTask"];
+                    "application/json": components["schemas"]["ExecutionPageTaskSummary"];
                 };
             };
             /** @description Error */
@@ -9891,14 +9998,13 @@ export interface operations {
     "task.list": {
         parameters: {
             query?: {
-                limit?: number;
-                cursor?: string;
-                environment?: string;
-                project?: string;
-                workspace?: string;
-                status?: "pending" | "running" | "completed" | "failed" | "timed_out" | "aborted";
-                type?: string;
                 resource_kind?: string;
+                scope?: string;
+                limit?: number;
+                after?: string;
+                revision?: number;
+                action?: string;
+                status?: string;
             };
             header?: never;
             path?: never;
@@ -9912,7 +10018,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PageTask"];
+                    "application/json": components["schemas"]["ExecutionPageTaskSummary"];
                 };
             };
             /** @description Error */
@@ -9929,8 +10035,9 @@ export interface operations {
     "task.show": {
         parameters: {
             query?: {
-                execution_limit?: number;
-                execution_cursor?: string;
+                limit?: number;
+                after?: string;
+                revision?: number;
             };
             header?: never;
             path: {
@@ -9946,7 +10053,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"];
+                    "application/json": components["schemas"]["TaskDetails"];
                 };
             };
             /** @description Error */
@@ -10042,7 +10149,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRetryRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -10052,6 +10163,147 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "task.attempts": {
+        parameters: {
+            query?: {
+                after?: number;
+                limit?: number;
+                revision?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAttemptPage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "task.attempt-events": {
+        parameters: {
+            query?: {
+                after?: number;
+                revision?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+                work_id: string;
+                attempt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAttemptEvents"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "task.stages": {
+        parameters: {
+            query?: {
+                revision?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+                work_id: string;
+                attempt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStages"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "task.image": {
+        parameters: {
+            query?: {
+                revision?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskImageExecution"];
                 };
             };
             /** @description Error */

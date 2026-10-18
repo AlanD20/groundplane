@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"slices"
+
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backupconfigrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
@@ -12,7 +14,6 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"slices"
 )
 
 func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(

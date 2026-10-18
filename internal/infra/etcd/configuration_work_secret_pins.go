@@ -3,6 +3,8 @@ package etcd
 import (
 	"cmp"
 	"context"
+	"slices"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -12,7 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"slices"
 )
 
 type configurationPinStore interface {

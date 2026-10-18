@@ -1,8 +1,9 @@
 package etcd
 
 import (
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 const backupTaskTimeoutSeconds = 6 * 60 * 60

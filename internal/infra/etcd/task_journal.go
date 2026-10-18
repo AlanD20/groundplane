@@ -1,6 +1,8 @@
 package etcd
 
 import (
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -9,7 +11,6 @@ import (
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"time"
 )
 
 // TaskRecord is the versioned persistence DTO for one execution attempt.

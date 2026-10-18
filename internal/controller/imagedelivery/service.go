@@ -14,7 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 

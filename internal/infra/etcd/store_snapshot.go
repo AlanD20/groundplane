@@ -2,8 +2,9 @@ package etcd
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	"io"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (s *store) Snapshot(ctx context.Context, w io.Writer) error {

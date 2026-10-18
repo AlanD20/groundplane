@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"slices"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
@@ -11,7 +13,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
-	"slices"
 )
 
 type postgresBackingGuardCleanupWork struct {

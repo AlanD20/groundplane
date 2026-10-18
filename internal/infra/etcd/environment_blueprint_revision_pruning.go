@@ -2,6 +2,9 @@ package etcd
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -11,8 +14,6 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"strings"
-	"time"
 )
 
 const environmentBlueprintDeletionBatchSize int64 = 32

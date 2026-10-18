@@ -2,9 +2,10 @@ package etcd
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"sync"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 
 	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppruneevidence"

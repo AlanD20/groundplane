@@ -2,10 +2,11 @@ package etcd
 
 import (
 	"context"
+	"strings"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"strings"
 )
 
 func (s *store) Get(ctx context.Context, key string) (*etcdstore.GetResult, error) {

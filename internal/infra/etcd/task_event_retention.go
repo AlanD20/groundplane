@@ -2,13 +2,14 @@ package etcd
 
 import (
 	"context"
+	"slices"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"slices"
-	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )

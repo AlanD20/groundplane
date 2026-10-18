@@ -1,10 +1,11 @@
 package etcd
 
 import (
+	"time"
+
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"time"
 )
 
 func releaseTerminalGroupProgress(

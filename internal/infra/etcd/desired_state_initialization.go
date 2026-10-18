@@ -2,9 +2,10 @@ package etcd
 
 import (
 	"context"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredauthoring"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"time"
 )
 
 // InitializeEnvironmentDesiredState durably initializes first Entry/Zone authoring without host work.

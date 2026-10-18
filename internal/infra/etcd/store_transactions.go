@@ -2,11 +2,12 @@ package etcd
 
 import (
 	"context"
+	"strings"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"strings"
 )
 
 func (s *store) Transact(

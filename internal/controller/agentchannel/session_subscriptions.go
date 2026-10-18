@@ -2,7 +2,6 @@ package agentchannel
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Ready atomically subscribes to the first authenticated Ready report for an

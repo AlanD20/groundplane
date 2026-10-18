@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
@@ -93,41 +94,4 @@ func (repository *AttachRepository) GetBackingHookTaskInputs(
 		)
 	}
 	return record, nil
-}
-
-func (repository *TaskRepository) backingHookInputClaimConditions(
-	ctx context.Context,
-	task TaskRecord,
-	revision int64,
-) ([]etcdstore.Condition, error) {
-	if task.Configuration == nil || task.Configuration.BackingHookInputs == nil {
-		return nil, nil
-	}
-	key := taskconfiguration.BackingHookTaskInputKey(task.OperationID)
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
-	if err != nil {
-		return nil, err
-	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		if read != nil {
-			etcdstore.ClearValues(read.Values)
-		}
-		return nil, errs.New(errs.KindStateConflict, "Backing hook Task inputs are unavailable at claim")
-	}
-	defer etcdstore.ClearValues(read.Values)
-	record, err := taskconfiguration.DecodeBackingHookEncryptedInputs(read.Values[0].Value)
-	if err != nil {
-		return nil, err
-	}
-	defer clear(record.Ciphertext)
-	if record.OperationID != task.OperationID ||
-		record.CiphertextSHA256 != task.Configuration.BackingHookInputs.CiphertextSHA256 {
-		return nil, errs.New(errs.KindStateConflict, "Backing hook Task input authority changed before claim")
-	}
-	conditions := []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}
-	pins, err := repository.recoverySecretPinClaimConditions(ctx, task)
-	if err != nil {
-		return nil, err
-	}
-	return append(conditions, pins...), nil
 }

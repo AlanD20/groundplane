@@ -1,6 +1,8 @@
 package etcd
 
 import (
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -8,7 +10,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )

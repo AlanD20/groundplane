@@ -3,6 +3,8 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -11,7 +13,6 @@ import (
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
-	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )

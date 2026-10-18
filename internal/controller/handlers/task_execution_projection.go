@@ -8,7 +8,7 @@ import (
 func executionSummary(value taskinspection.Summary) apiTypes.TaskSummary {
 	return apiTypes.TaskSummary{ID: value.ID, Action: value.Action, TargetID: value.TargetID,
 		TargetName: value.TargetName, ResourceKind: value.ResourceKind, Scope: value.Scope, Actor: value.Actor, Status: value.Status,
-		Counts: value.Counts, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
+		Counts: apiTypes.TaskCounts(value.Counts), CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
 		Deadline: value.Deadline, FinishedAt: value.FinishedAt, HistoryExpired: value.HistoryExpired,
 		StopRequested: value.StopRequested,
 		Cancel:        apiTypes.TaskActionAvailability{Allowed: value.Cancel.Allowed, Reason: value.Cancel.Reason}}

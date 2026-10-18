@@ -3,6 +3,8 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -16,7 +18,6 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
-	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )

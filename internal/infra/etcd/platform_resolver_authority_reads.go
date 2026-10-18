@@ -2,6 +2,9 @@ package etcd
 
 import (
 	"context"
+	"sort"
+	"strings"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -10,8 +13,6 @@ import (
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"sort"
-	"strings"
 )
 
 func (repository *TaskRepository) platformResolverAtRevision(

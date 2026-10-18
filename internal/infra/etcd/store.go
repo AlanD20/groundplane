@@ -6,17 +6,18 @@ package etcd
 import (
 	"context"
 	"errors"
+	"io"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"io"
-	"path/filepath"
-	"strings"
-	"sync"
-	"sync/atomic"
 )
 
 type client interface {

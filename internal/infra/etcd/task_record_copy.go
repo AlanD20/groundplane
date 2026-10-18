@@ -1,9 +1,10 @@
 package etcd
 
 import (
+	"time"
+
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"time"
 )
 
 func parseOptionalTimestamp(value string) (*time.Time, error) {

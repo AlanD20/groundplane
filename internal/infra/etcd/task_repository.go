@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -12,7 +14,6 @@ import (
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"time"
 )
 
 type taskRepositoryStore interface {

@@ -3,11 +3,12 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"time"
+
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"

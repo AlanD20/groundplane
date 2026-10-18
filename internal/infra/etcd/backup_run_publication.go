@@ -1,11 +1,12 @@
 package etcd
 
 import (
+	"sync"
+
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
-	"sync"
 )
 
 type PreparedManualBackupRun struct {

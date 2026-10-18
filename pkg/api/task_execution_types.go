@@ -16,7 +16,7 @@ type TaskSummary struct {
 	Scope          workexecution.Scope    `json:"scope"`
 	Actor          workexecution.Actor    `json:"actor" enum:"operator,system"`
 	Status         string                 `json:"status" enum:"queued,preparing,waiting,running,attention_required,stopping,finishing,succeeded,failed,cancelled,superseded"`
-	Counts         workexecution.Progress `json:"counts"`
+	Counts         TaskCounts             `json:"counts"`
 	CreatedAt      time.Time              `json:"created_at"`
 	UpdatedAt      time.Time              `json:"updated_at"`
 	Deadline       time.Time              `json:"deadline"`
@@ -25,6 +25,9 @@ type TaskSummary struct {
 	StopRequested  bool                   `json:"stop_requested"`
 	Cancel         TaskActionAvailability `json:"cancel"`
 }
+
+// TaskCounts reports recorded work states, not an execution-time percentage.
+type TaskCounts workexecution.Progress
 
 type TaskActionAvailability struct {
 	Allowed bool   `json:"allowed"`

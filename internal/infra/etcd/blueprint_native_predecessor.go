@@ -3,8 +3,8 @@ package etcd
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"time"
+
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -13,12 +13,8 @@ import (
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
-	"slices"
-	"sort"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -66,146 +62,6 @@ func (capture BlueprintNativePredecessorCapture) Runtime() BlueprintNativePredec
 		}
 	}
 	return runtime
-}
-
-func buildBlueprintNativeRestorationAuthority(
-	task TaskRecord,
-	predecessor taskMaterializationAppliedPredecessor,
-	native []BlueprintNativePredecessor,
-	manifest releases.ReleaseStagedManifest,
-	procedure *agentpb.CandidateReleaseProcedure,
-	applied []byte,
-) (taskassignments.ReleaseRestorationAuthority, string, error) {
-	if !taskHasBlueprintCandidateAppliedAuthority(task) || predecessor.Present != (len(applied) != 0) ||
-		validateBlueprintNativePredecessors(native, procedure, task.Owner.EnvironmentID) != nil {
-		return taskassignments.ReleaseRestorationAuthority{}, "", taskassignments.CorruptTaskAssignment()
-	}
-	authority := taskassignments.ReleaseRestorationAuthority{
-		Schema:              1,
-		TaskID:              task.ID,
-		OperationID:         task.OperationID,
-		PlanHash:            task.PlanHash,
-		EnvironmentID:       task.Owner.EnvironmentID,
-		CandidateArtifactID: task.Params[taskjournal.TaskComposeArtifactParam],
-	}
-	if predecessor.Present {
-		if _, err := taskassignments.OpenRestorationWitness(task.Owner.EnvironmentID, applied); err != nil {
-			return taskassignments.ReleaseRestorationAuthority{}, "", err
-		}
-		digest := sha256.Sum256(applied)
-		authority.AppliedPredecessor = &taskassignments.ReleaseAppliedPredecessorAuthority{
-			KeyRevision:           predecessor.KeyRevision,
-			RevisionID:            predecessor.RevisionID,
-			RenderGeneration:      predecessor.RenderGeneration,
-			ComposeArtifactSHA256: hex.EncodeToString(digest[:]),
-			ComposeArtifact:       slices.Clone(applied),
-		}
-	}
-	for _, member := range manifest.Members {
-		candidate := taskassignments.ReleaseRestorationCandidate{
-			ServiceID: member.ServiceID,
-			ReleaseID: member.ReleaseID,
-			Target:    taskassignments.ReleaseRestorationCandidateAbsence,
-		}
-		witness := taskassignments.ReleaseNativePredecessorAuthority{ServiceID: member.ServiceID}
-		for _, captured := range native {
-			if captured.ServiceID != member.ServiceID {
-				continue
-			}
-			witness.CurrentArtifact, witness.RetainedPriorArtifact = slices.Clone(
-				captured.CurrentArtifact,
-			), slices.Clone(
-				captured.RetainedPriorArtifact,
-			)
-			if captured.Serving != nil {
-				candidate.Target = taskassignments.ReleaseRestorationServingPredecessor
-			}
-		}
-		authority.Candidates = append(authority.Candidates, candidate)
-		authority.NativePredecessors = append(authority.NativePredecessors, witness)
-	}
-	sort.Slice(
-		authority.Candidates,
-		func(i, j int) bool { return authority.Candidates[i].ServiceID < authority.Candidates[j].ServiceID },
-	)
-	sort.Slice(authority.NativePredecessors, func(i, j int) bool {
-		return authority.NativePredecessors[i].ServiceID < authority.NativePredecessors[j].ServiceID
-	})
-	digest, err := taskassignments.ReleaseRestorationAuthoritySHA256(authority)
-	return authority, digest, err
-}
-
-func bindNativeRecoveryExpectation(
-	expectation *releaseRecoveryProofExpectation,
-	assignment taskassignments.TaskAssignmentRecord,
-	native []BlueprintNativePredecessor,
-	procedure *agentpb.CandidateReleaseProcedure,
-	index int,
-) error {
-	authority := assignment.RestorationAuthority
-	if authority == nil || len(authority.NativePredecessors) != len(authority.Candidates) ||
-		index >= len(authority.NativePredecessors) ||
-		validateBlueprintNativePredecessors(native, procedure, authority.EnvironmentID) != nil {
-		return taskassignments.CorruptTaskAssignment()
-	}
-	witness := authority.NativePredecessors[index]
-	candidate := authority.Candidates[index]
-	if witness.ServiceID != candidate.ServiceID {
-		return taskassignments.CorruptTaskAssignment()
-	}
-	var expected, retained []byte
-	for _, captured := range native {
-		if captured.ServiceID == candidate.ServiceID {
-			expected, retained = captured.CurrentArtifact, captured.RetainedPriorArtifact
-		}
-	}
-	if !bytes.Equal(expected, witness.CurrentArtifact) || !bytes.Equal(retained, witness.RetainedPriorArtifact) ||
-		(len(expected) == 0) != (candidate.Target == taskassignments.ReleaseRestorationCandidateAbsence) {
-		return taskassignments.CorruptTaskAssignment()
-	}
-	expectation.nativeArtifact = slices.Clone(expected)
-	return nil
-}
-
-func validateNativeRestorationDescriptor(
-	authority taskassignments.ReleaseRestorationAuthority,
-	procedure *agentpb.CandidateReleaseProcedure,
-) error {
-	if len(authority.NativePredecessors) != len(procedure.GetMembers()) || len(authority.NativePredecessors) == 0 {
-		return taskassignments.CorruptTaskAssignment()
-	}
-	for index, member := range procedure.GetMembers() {
-		witness := authority.NativePredecessors[index]
-		if witness.ServiceID != member.GetServiceId() {
-			return taskassignments.CorruptTaskAssignment()
-		}
-		prior := member.GetServingPredecessor()
-		if len(witness.CurrentArtifact) == 0 {
-			if prior.GetPriorArtifactId() != "" || prior.GetPriorReleaseId() != "" || prior.GetPriorTarget() != "" ||
-				prior.GetRetainedPriorArtifactId() != "" {
-				return taskassignments.CorruptTaskAssignment()
-			}
-			continue
-		}
-		runtime, err := executionplan.OpenNativeServingRuntime(authority.EnvironmentID, witness.ServiceID,
-			witness.CurrentArtifact, witness.RetainedPriorArtifact)
-		if err != nil || runtime.Artifact.GetArtifactId() != prior.GetPriorArtifactId() ||
-			runtime.ReleaseID != prior.GetPriorReleaseId() || runtime.Target != prior.GetPriorTarget() {
-			return taskassignments.CorruptTaskAssignment()
-		}
-		if len(witness.RetainedPriorArtifact) != 0 {
-			retained, err := taskassignments.OpenRestorationWitness(
-				authority.EnvironmentID,
-				witness.RetainedPriorArtifact,
-			)
-			if err != nil || retained.GetArtifactId() != prior.GetRetainedPriorArtifactId() {
-				return taskassignments.CorruptTaskAssignment()
-			}
-		} else if prior.GetRetainedPriorArtifactId() != "" {
-			return taskassignments.CorruptTaskAssignment()
-		}
-	}
-	return nil
 }
 
 type ReleaseWorkPublicationEvidence struct {

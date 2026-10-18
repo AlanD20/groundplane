@@ -1,6 +1,10 @@
 package etcd
 
 import (
+	"slices"
+	"strconv"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -9,9 +13,6 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"slices"
-	"strconv"
-	"time"
 )
 
 func unassignedReleaseTerminal(task TaskRecord, status taskjournal.TaskStatus) bool {

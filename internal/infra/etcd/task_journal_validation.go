@@ -1,6 +1,8 @@
 package etcd
 
 import (
+	"unicode/utf8"
+
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -9,7 +11,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"unicode/utf8"
 )
 
 func ValidateTaskRecord(record TaskRecord) error {

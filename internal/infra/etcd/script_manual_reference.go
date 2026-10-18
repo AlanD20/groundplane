@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
+
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -13,7 +15,6 @@ import (
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
-	"slices"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"

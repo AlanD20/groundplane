@@ -17,7 +17,7 @@ type store interface {
 // work owns scheduling and attempts; there is no second activation queue.
 type Repository struct{ store store }
 
-func NewRepository(value etcdstore.Store) (*Repository, error) { return newRepository(value) }
+func NewRepository(value store) (*Repository, error) { return newRepository(value) }
 
 func newRepository(value store) (*Repository, error) {
 	if value == nil {

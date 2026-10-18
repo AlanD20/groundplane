@@ -4,7 +4,6 @@ import (
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
-	"slices"
 
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"

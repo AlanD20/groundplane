@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -9,7 +11,6 @@ import (
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"net/http"
 )
 
 func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(

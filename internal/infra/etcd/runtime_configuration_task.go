@@ -3,12 +3,13 @@ package etcd
 import (
 	"cmp"
 	"context"
+	"slices"
+
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
@@ -282,79 +283,3 @@ func bindRuntimeConfigurationPublication(
 
 // Claim checks retained members as well as the head before authorizing file I/O.
 // Immutable source records are never reconstructed from old Task history.
-func (repository *TaskRepository) runtimeConfigurationClaimConditions(
-	ctx context.Context, task TaskRecord, revision int64,
-) ([]etcdstore.Condition, error) {
-	condition, present, err := taskConfigurationCondition(task)
-	if err != nil || !present {
-		return nil, err
-	}
-	read, err := repository.store.GetMany(
-		ctx,
-		etcdstore.GetManyRequest{Keys: []string{condition.Key}, Revision: revision},
-	)
-	if err != nil {
-		return nil, err
-	}
-	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 1 ||
-		(revision > 0 && read.ReadRevision != revision) {
-		return nil, errs.New(errs.KindInternal, "configuration claim read is incomplete")
-	}
-	defer etcdstore.ClearValues(read.Values)
-	value := read.Values[0]
-	if etcdstore.RevisionOf(value) != condition.ModRevision ||
-		(value != nil && value.Key != condition.Key) {
-		return nil, errs.New(
-			errs.KindStateConflict,
-			"acknowledged configuration changed before claim",
-		)
-	}
-	if value != nil {
-		prior, decodeErr := runtimeconfiguration.DecodeReference(value.Value)
-		if decodeErr != nil || prior != *task.Configuration.Prior {
-			return nil, errs.New(errs.KindStateConflict, "configuration claim predecessor differs from captured source")
-		}
-	}
-	sources, err := runtimeconfiguration.New(repository.store)
-	if err != nil {
-		return nil, err
-	}
-	references := []runtimeconfiguration.Reference{task.Configuration.Current}
-	if task.Configuration.Prior != nil {
-		references = append(references, *task.Configuration.Prior)
-	}
-	for _, reference := range references {
-		if _, loadErr := sources.Load(ctx, reference, read.ReadRevision); loadErr != nil {
-			return nil, loadErr
-		}
-	}
-	pins, err := repository.recoverySecretPinClaimConditions(ctx, task)
-	if err != nil {
-		return nil, err
-	}
-	return append([]etcdstore.Condition{condition}, pins...), nil
-}
-
-func prepareRuntimeConfigurationAcknowledgement(
-	task TaskRecord,
-) (taskMaterializationProjectionChange, error) {
-	if task.Status != taskjournal.TaskStatusCompleted {
-		return taskMaterializationProjectionChange{}, nil
-	}
-	condition, present, err := taskConfigurationCondition(task)
-	if err != nil || !present {
-		return taskMaterializationProjectionChange{}, err
-	}
-	if task.Configuration.Prior != nil && task.Configuration.Current == *task.Configuration.Prior {
-		return taskMaterializationProjectionChange{}, nil
-	}
-	encoded, err := runtimeconfiguration.EncodeReference(task.Configuration.Current)
-	if err != nil {
-		return taskMaterializationProjectionChange{}, err
-	}
-	return taskMaterializationProjectionChange{
-		applies: true, conditions: []etcdstore.Condition{condition},
-		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: condition.Key,
-			Value: encoded}},
-	}, nil
-}

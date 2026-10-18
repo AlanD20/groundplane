@@ -4,7 +4,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"io/fs"
 	"log/slog"
@@ -16,7 +15,6 @@ import (
 	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
 	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"

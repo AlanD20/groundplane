@@ -3,12 +3,13 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	"strings"
+	"sync"
+
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"strings"
-	"sync"
 )
 
 type idempotencyPlanClassifier func(int64, []*etcdstore.KeyValue) error

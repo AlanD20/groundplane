@@ -2,6 +2,9 @@ package etcd
 
 import (
 	"context"
+	"maps"
+	"slices"
+
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -9,8 +12,6 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"maps"
-	"slices"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"

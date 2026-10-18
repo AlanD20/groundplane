@@ -2,8 +2,9 @@ package etcd
 
 import (
 	"context"
-	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"time"
+
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 )
 
 func (repository *HierarchyRepository) ResolveVolumeRemovalImpactAtRevision(

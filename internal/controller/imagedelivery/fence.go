@@ -16,6 +16,7 @@ type ImageStore interface {
 	GetMany(context.Context, keyvalue.GetManyRequest) (*keyvalue.GetManyResult, error)
 	Range(context.Context, keyvalue.RangeRequest) (*keyvalue.RangeResult, error)
 	Transact(context.Context, []keyvalue.Condition, []keyvalue.Mutation) (keyvalue.TransactionResult, error)
+	MeasureTransaction(context.Context, []keyvalue.Condition, []keyvalue.Mutation) (keyvalue.TransactionBudget, error)
 }
 
 // SelectionResolver fences the complete producer, not just its Agent lookup.

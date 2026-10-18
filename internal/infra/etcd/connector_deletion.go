@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	connectormutations "github.com/AlanD20/groundplane/internal/infra/etcd/connectormutations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorremoval"
@@ -13,7 +15,6 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"net/http"
 )
 
 const connectorDeletionRoute = "/connectors/{id}"

@@ -2,9 +2,10 @@ package etcd
 
 import (
 	"context"
+	"slices"
+
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"slices"
 )
 
 // Component RUNNING is durable mutation evidence. Workload restoration never

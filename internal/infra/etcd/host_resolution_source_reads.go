@@ -2,6 +2,10 @@ package etcd
 
 import (
 	"context"
+	"net/netip"
+	"sort"
+	"strings"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -11,9 +15,6 @@ import (
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"net/netip"
-	"sort"
-	"strings"
 )
 
 type scannedRoute struct {
