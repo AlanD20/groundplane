@@ -96,8 +96,12 @@ func (planner *PlatformRenderPlanner) PrepareWork(ctx context.Context, records *
 		generation, previous = applied.Record.Generation+1, applied.Record.Configuration
 	}
 	input := resolverexecution.Input{TaskID: request.TaskID, WorkID: request.WorkID, HostID: request.HostID,
-		OperationID: request.OperationID, ComponentID: desired.ID, Generation: generation, CreatedAt: request.CreatedAt.UTC(),
+		BaselineSHA256: baseline.Record.SHA256,
+		OperationID:    request.OperationID, ComponentID: desired.ID, Generation: generation, CreatedAt: request.CreatedAt.UTC(),
 		Deadline: request.Deadline.UTC(), Enabled: desired.Enabled, Previous: previous}
+	if hasApplied {
+		input.PreviousEnabled, input.PreviousFileOwner = applied.Record.Desired.Enabled, applied.Record.FileOwner
+	}
 	capture := resolverwork.Capture{PlanID: request.PlanID, TaskID: request.TaskID, WorkID: request.WorkID, HostID: request.HostID,
 		TargetName: "CoreDNS", Actor: request.Actor, Action: request.Action, Desired: replacement.Desired, ReadRevision: readRevision,
 		ComponentRevision: current.Revision, AppliedRevision: applied.Revision, IntentRevision: intentRevision, BaselineRevision: baseline.Revision,
@@ -138,6 +142,7 @@ func (planner *PlatformRenderPlanner) PrepareWork(ctx context.Context, records *
 		for _, address := range selected.ZoneListeners {
 			capture.ZoneListeners = append(capture.ZoneListeners, address.String())
 		}
+		request.EnsureRuntime = request.EnsureRuntime || !input.PreviousEnabled
 		candidate, ensure, err := planner.prepareNativeConfiguration(desired, selected, request, generation, previous)
 		if err != nil {
 			return PreparedWork{}, err

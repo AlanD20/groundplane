@@ -105,8 +105,14 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 		Desired: stored.Capture.Desired, Configuration: stored.Input.Candidate, ServingProof: proof,
 		BaselineSHA256: stored.Capture.BaselineSHA256, ProjectionSHA256: stored.Capture.Projection.InputSHA256, ObservedAt: at.UTC()}
 	if stored.Input.Enabled {
+		applied.FileOwner, err = resolverexecution.FileTransactionID(view.Attempt.Attempt, *stored.Input.Candidate)
+		if err != nil {
+			return workqueue.Change{}, workexecution.Input{}, err
+		}
 		applied.Hosts, applied.EnvironmentDNS = stored.Capture.Hosts, stored.Capture.EnvironmentDNS
 		applied.PrivateListener, applied.ZoneListeners = stored.Capture.PrivateListener, stored.Capture.ZoneListeners
+	} else {
+		applied.Configuration, applied.FileOwner = stored.Input.Previous, stored.Input.PreviousFileOwner
 	}
 	state, err := repository.prepareApplied(ctx, view, stored, applied)
 	if err != nil {
@@ -147,10 +153,10 @@ func (repository *Repository) prepareApplied(ctx context.Context, view workqueue
 		return workqueue.Change{}, err
 	}
 	var services []string
-	if applied.Configuration != nil {
+	if applied.Desired.Enabled {
 		services = []string{applied.Configuration.Runtime.Services[0].ServiceId}
 	}
-	current, err = componentrecord.SetRuntime(current, services, "", applied.Configuration != nil)
+	current, err = componentrecord.SetRuntime(current, services, "", applied.Desired.Enabled)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

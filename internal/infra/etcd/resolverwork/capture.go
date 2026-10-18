@@ -56,6 +56,7 @@ func (capture Capture) Validate(input resolverexecution.Input) error {
 		capture.AppliedRevision < 0 || capture.AppliedRevision > capture.ReadRevision ||
 		capture.IntentRevision < 0 || capture.IntentRevision > capture.ReadRevision ||
 		capture.BaselineRevision <= 0 || capture.BaselineRevision > capture.ReadRevision || !recordcodec.ValidSHA256(capture.BaselineSHA256) ||
+		capture.BaselineSHA256 != input.BaselineSHA256 ||
 		capture.ProjectionRevision < 0 || capture.ProjectionRevision > capture.ReadRevision ||
 		capture.TargetName == "" || len(capture.TargetName) > 256 || !utf8.ValidString(capture.TargetName) || len(capture.References) > 256 {
 		return invalid("DNS resolver resource capture differs from its executable input")

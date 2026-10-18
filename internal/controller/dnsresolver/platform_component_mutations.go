@@ -6,15 +6,13 @@ import (
 	"errors"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"net/netip"
 	"sort"
 	"time"
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
-	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -133,22 +131,19 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	if err := ValidateComponent(service.renderer, desired); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	now := service.now().UTC()
-	task := newPlatformComponentLifecycleTask(componentID, idempotencyKey, now, ensureService, disableService)
-	var renderInput platformcomponents.PlatformComponentTaskRenderInput
+	nativeAction := workexecution.ActionUpdate
+	if action == "enable" {
+		nativeAction = workexecution.ActionStart
+	}
 	if disableService {
-		renderInput, err = service.planner.PrepareDisableTask(ctx, current, desired, task)
-	} else {
-		renderInput, err = service.planner.PrepareConfigTask(ctx, current, desired, task)
+		nativeAction = workexecution.ActionStop
 	}
+	prepared, err := service.prepareMutation(ctx, current, desired, nativeAction, ensureService)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	task, err = finalizePlatformComponentTask(task, renderInput)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	now, taskID := prepared.Input.CreatedAt, prepared.Input.TaskID
+	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -156,12 +151,12 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	result, publishErr := service.tasks.ReplacePlatformComponentDesiredWithTask(
-		ctx, current, desired, task, renderInput,
+	result, publishErr := service.tasks.PublishResolverWork(
+		ctx, prepared.Input, prepared.Capture,
 		idempotencyrecord.IdempotencyMarker{
 			Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 			Locator: locator, Intent: intent.durable, Response: response,
-			TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+			TaskID: taskID, CreatedAt: now, UpdatedAt: now,
 		},
 	)
 	var resolution requestidempotency.Resolution
@@ -297,20 +292,17 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 	if err := ValidateComponent(service.renderer, desired); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-
-	now := service.now().UTC()
-	ensureService := len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy
-	task := newPlatformComponentConfigTask(componentID, idempotencyKey, now, ensureService)
-	renderInput, err := service.planner.PrepareConfigTask(ctx, current, desired, task)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	if !desired.Enabled {
+		return service.saveDisabledConfig(ctx, current, desired, locator, intent)
 	}
-	task, err = finalizePlatformComponentTask(task, renderInput)
+
+	ensureService := len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy
+	prepared, err := service.prepareMutation(ctx, current, desired, workexecution.ActionUpdate, ensureService)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	publicConfig := publicCoreDNSConfig(config)
-	taskID := task.ID
+	now, taskID := prepared.Input.CreatedAt, prepared.Input.TaskID
 	responseBody, err := json.Marshal(apiTypes.ComponentConfigMutationResult{
 		Resource: publicConfig, ReconcileTaskID: &taskID,
 	})
@@ -322,16 +314,12 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 		Status: http.StatusOK, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	result, publishErr := service.tasks.ReplacePlatformComponentDesiredWithTask(
-		ctx,
-		current,
-		desired,
-		task,
-		renderInput,
+	result, publishErr := service.tasks.PublishResolverWork(
+		ctx, prepared.Input, prepared.Capture,
 		idempotencyrecord.IdempotencyMarker{
 			Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 			Locator: locator, Intent: intent.durable, Response: response,
-			TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+			TaskID: taskID, CreatedAt: now, UpdatedAt: now,
 		},
 	)
 	var resolution requestidempotency.Resolution
@@ -516,55 +504,6 @@ func publicCoreDNSConfig(config core.CoreDNSComponentConfig) apiTypes.ComponentC
 			Forwarders: forwarders, TailnetDelegation: tailnetDelegation,
 		},
 	}
-}
-
-func newPlatformComponentConfigTask(
-	componentID string,
-	idempotencyKey string,
-	createdAt time.Time,
-	ensureService bool,
-) etcd.TaskRecord {
-	steps := []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
-	if ensureService {
-		steps = append(steps,
-			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
-			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
-			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
-		)
-	} else {
-		steps = append(steps, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)})
-	}
-	return etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
-		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorOperator,
-		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorAgent,
-		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
-		Type: taskjournal.TaskUpdate, Target: componentID,
-		Params:         map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceComponent},
-		Steps:          steps,
-		TimeoutSeconds: platformComponentTaskTimeoutSeconds,
-		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
-		CreatedAt: createdAt, UpdatedAt: createdAt,
-	}
-}
-
-func newPlatformComponentLifecycleTask(
-	componentID string,
-	idempotencyKey string,
-	createdAt time.Time,
-	ensureService bool,
-	disableService bool,
-) etcd.TaskRecord {
-	if !disableService {
-		return newPlatformComponentConfigTask(componentID, idempotencyKey, createdAt, ensureService)
-	}
-	task := newPlatformComponentConfigTask(componentID, idempotencyKey, createdAt, false)
-	task.Steps = task.Steps[:1]
-	task.Steps = append(
-		task.Steps,
-		taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
-	)
-	return task
 }
 
 func unknownPlatformComponentMutationOutcome(err error) bool {

@@ -32,6 +32,7 @@ type Layout struct {
 	ComponentID         string              `json:"component_id"`
 	Enabled             bool                `json:"enabled"`
 	EnsureRuntime       bool                `json:"ensure_runtime"`
+	PreviousEnabled     bool                `json:"previous_enabled"`
 	ConfigurationSHA256 string              `json:"configuration_sha256,omitempty"`
 }
 
@@ -41,7 +42,7 @@ func CaptureLayout(attempt workexecution.Attempt, input Input) (Layout, error) {
 		input.HostID != attempt.Executor.HostID {
 		return Layout{}, invalid("DNS resolver journal does not match its captured assignment")
 	}
-	layout := Layout{Input: reference, ComponentID: input.ComponentID, Enabled: input.Enabled, EnsureRuntime: input.EnsureRuntime}
+	layout := Layout{Input: reference, ComponentID: input.ComponentID, Enabled: input.Enabled, EnsureRuntime: input.EnsureRuntime, PreviousEnabled: input.PreviousEnabled}
 	if input.Enabled {
 		layout.ConfigurationSHA256 = hex.EncodeToString(input.Candidate.Apply.ArtifactDigest)
 	}

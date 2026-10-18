@@ -32,7 +32,7 @@ func (runtime *Runtime) CheckDNSConnections(
 	if err != nil {
 		return nil, errs.New(errs.KindValidationFailed, "DNS check action is not part of the compiled resolver catalog")
 	}
-	target, err := dnsResolverRuntimeRequest(input.Runtime, input.Action, recipe)
+	target, err := dnsresolverobserver.CapturedRequest(input.Runtime, input.Action, recipe)
 	if err != nil {
 		return nil, err
 	}

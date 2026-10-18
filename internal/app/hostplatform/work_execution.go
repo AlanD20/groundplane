@@ -281,11 +281,15 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
+	resolver, err := platform.newResolverWork(queue, diagnostics)
+	if err != nil {
+		return nil, err
+	}
 	groupRemoval, err := platform.newReleaseGroupWork(queue)
 	if err != nil {
 		return nil, err
 	}
-	scheduler, err := workdispatch.NewScheduler(queue, append(append(append(softwareWork.admission, directReleases.admission...), provisioning.admission...), []workdispatch.Registration{
+	scheduler, err := workdispatch.NewScheduler(queue, append(append(append(append(softwareWork.admission, directReleases.admission...), provisioning.admission...), resolver.admission...), []workdispatch.Registration{
 		{Operation: workexecution.ReleaseGroup, Executor: workexecution.Controller, Owner: groupRemoval, DecisionOnly: true},
 		{Operation: workexecution.AgentLifecycle, Executor: workexecution.Controller, Owner: agentWork},
 		{Operation: workexecution.AgentSoftware, Executor: workexecution.Controller, Owner: agentWork},
@@ -348,7 +352,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	retries, err := workdispatch.NewRetries(queue, append(append(softwareWork.retry, provisioning.retry...), []workdispatch.RetryRegistration{
+	retries, err := workdispatch.NewRetries(queue, append(append(append(softwareWork.retry, provisioning.retry...), resolver.retry...), []workdispatch.RetryRegistration{
 		{Operation: workexecution.ReleaseRestoration, Owner: directReleases.restoration},
 		{Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		{Operation: workexecution.AgentSoftware, Owner: agentWork},
@@ -394,7 +398,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	retentionOwners := append(append(softwareWork.retention, provisioning.retention...), []operationretention.WorkRegistration{
+	retentionOwners := append(append(append(softwareWork.retention, provisioning.retention...), resolver.retention...), []operationretention.WorkRegistration{
 		{Operation: workexecution.ReleaseGroup, Owner: groupRemoval},
 		operationretention.WorkRegistration{Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		operationretention.WorkRegistration{Operation: workexecution.AgentSoftware, Owner: agentWork},
@@ -435,7 +439,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	completions, err := workdispatch.NewCompletions(queue, append(append(append(softwareWork.completion, directReleases.completion...), provisioning.completion...), []workdispatch.CompletionRegistration{
+	completions, err := workdispatch.NewCompletions(queue, append(append(append(append(softwareWork.completion, directReleases.completion...), provisioning.completion...), resolver.completion...), []workdispatch.CompletionRegistration{
 		{Action: workexecution.ActionRemove, Operation: workexecution.ReleaseGroup, Owner: groupRemoval},
 		{Action: workexecution.ActionCreate, Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		{Action: workexecution.ActionRemove, Operation: workexecution.AgentLifecycle, Owner: agentWork},
@@ -535,7 +539,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	starts, err := workdispatch.NewAgentStarts(queue, append(provisioning.starts, []workdispatch.AgentStartRegistration{
+	starts, err := workdispatch.NewAgentStarts(queue, append(append(provisioning.starts, resolver.starts...), []workdispatch.AgentStartRegistration{
 		{Operation: workexecution.ReleaseRestoration, Owner: directReleases.restoration},
 		{Operation: workexecution.Backup, Owner: backupReports},
 		{Operation: workexecution.Restore, Owner: backupReports},
@@ -559,7 +563,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	deliveries, err := workdispatch.NewAgentDeliveries(queue, scheduler, dependencies.Releases, scripts, hierarchyAgent, volumeAgent, networkAgent, detaches, componentAgent, entryAgent, provisionReports, lifecycleAgent, serviceRemovalAgent, backupReports, provisioning.environment, directReleases.restoration, provisioning.backing)
+	deliveries, err := workdispatch.NewAgentDeliveries(queue, scheduler, dependencies.Releases, scripts, hierarchyAgent, volumeAgent, networkAgent, detaches, componentAgent, entryAgent, provisionReports, lifecycleAgent, serviceRemovalAgent, backupReports, provisioning.environment, directReleases.restoration, provisioning.backing, resolver.owner)
 	if err != nil {
 		return nil, err
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
 	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
 	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
+	"github.com/AlanD20/groundplane/internal/agent/resolverruntime"
 	scriptruntime "github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
 	"github.com/AlanD20/groundplane/internal/app/adaptercompiler"
@@ -388,6 +389,13 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	if err := client.SetBackingExecutor(backingExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	resolverExecutor, err := resolverruntime.New(workJournal, resources.helper, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetResolverExecutor(resolverExecutor); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	lifecycleHost, err := lifecycleruntime.NewHost(cfg.Storage.VolumeRoot, workJournal, resources.helper, ownership, backingCommands, processes)

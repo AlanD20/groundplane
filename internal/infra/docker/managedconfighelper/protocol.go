@@ -82,6 +82,12 @@ func applyAt(
 	rootPath string,
 	request *agentpb.ManagedConfigHelperRequest,
 ) (response *agentpb.ManagedConfigHelperResponse, resultErr error) {
+	return applyWithOwner(ctx, rootPath, request, nil, false)
+}
+
+func applyWithOwner(ctx context.Context, rootPath string, request *agentpb.ManagedConfigHelperRequest,
+	previousOwner *string, capturedRestoration bool,
+) (response *agentpb.ManagedConfigHelperResponse, resultErr error) {
 	if ctx == nil || rootPath == "" {
 		return nil, errs.New(errs.KindInternal, "managed-config helper context is required")
 	}
@@ -119,6 +125,19 @@ func applyAt(
 	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN)
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if capturedRestoration {
+		return restoreCaptured(ctx, root, owned, *previousOwner)
+	}
+	if previousOwner != nil && owned.Operation == agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_PUBLISH {
+		actual, exists, err := readTargetOwner(root, owned.RelativePath)
+		if err != nil {
+			return nil, err
+		}
+		if !targetOwnerMatches(actual, exists, *previousOwner, *previousOwner != "") &&
+			!targetOwnerMatches(actual, exists, owned.TransactionId, true) {
+			return nil, errs.New(errs.KindStateConflict, "managed configuration has a different captured predecessor owner")
+		}
 	}
 	switch owned.Operation {
 	case agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_PUBLISH:

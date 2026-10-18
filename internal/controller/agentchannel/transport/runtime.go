@@ -33,6 +33,7 @@ type Runtime struct {
 	networkReports         agentchannel.NetworkReporter
 	componentReports       agentchannel.ComponentReporter
 	backingReports         agentchannel.BackingReporter
+	resolverReports        agentchannel.ResolverReporter
 	entryReports           agentchannel.EntryReporter
 	volumeReports          agentchannel.VolumeReporter
 	backupWorkReports      agentchannel.BackupWorkReporter
@@ -97,6 +98,11 @@ func New(
 			return nil, errs.New(errs.KindInternal, "native Backing creation reporting is not configured")
 		}
 		channel.ConfigureBackingWork(runtime.backingReports)
+		if runtime.resolverReports == nil {
+			server.Stop()
+			return nil, errs.New(errs.KindInternal, "native DNS resolver reporting is not configured")
+		}
+		channel.ConfigureResolverWork(runtime.resolverReports)
 		if runtime.entryReports == nil {
 			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Entry reporting is not configured")
@@ -178,6 +184,14 @@ func (runtime *Runtime) ConfigureComponentWork(reports agentchannel.ComponentRep
 		return errs.New(errs.KindInternal, "Component reporting dependencies are missing or already configured")
 	}
 	runtime.componentReports = reports
+	return nil
+}
+
+func (runtime *Runtime) ConfigureResolverWork(reports agentchannel.ResolverReporter) error {
+	if runtime == nil || reports == nil || runtime.resolverReports != nil {
+		return errs.New(errs.KindInternal, "native DNS resolver reporting configuration is invalid")
+	}
+	runtime.resolverReports = reports
 	return nil
 }
 

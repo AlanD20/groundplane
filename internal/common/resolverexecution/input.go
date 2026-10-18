@@ -35,28 +35,32 @@ type Configuration struct {
 }
 
 type Input struct {
-	TaskID        string         `json:"task_id"`
-	WorkID        string         `json:"work_id"`
-	HostID        string         `json:"host_id"`
-	OperationID   string         `json:"operation_id"`
-	ComponentID   string         `json:"component_id"`
-	Generation    uint64         `json:"generation"`
-	CreatedAt     time.Time      `json:"created_at"`
-	Deadline      time.Time      `json:"deadline"`
-	Enabled       bool           `json:"enabled"`
-	EnsureRuntime bool           `json:"ensure_runtime"`
-	Candidate     *Configuration `json:"candidate,omitempty"`
-	Previous      *Configuration `json:"previous,omitempty"`
+	TaskID            string         `json:"task_id"`
+	WorkID            string         `json:"work_id"`
+	HostID            string         `json:"host_id"`
+	BaselineSHA256    string         `json:"baseline_sha256"`
+	OperationID       string         `json:"operation_id"`
+	ComponentID       string         `json:"component_id"`
+	Generation        uint64         `json:"generation"`
+	CreatedAt         time.Time      `json:"created_at"`
+	Deadline          time.Time      `json:"deadline"`
+	Enabled           bool           `json:"enabled"`
+	PreviousEnabled   bool           `json:"previous_enabled"`
+	PreviousFileOwner string         `json:"previous_file_owner,omitempty"`
+	EnsureRuntime     bool           `json:"ensure_runtime"`
+	Candidate         *Configuration `json:"candidate,omitempty"`
+	Previous          *Configuration `json:"previous,omitempty"`
 }
 
 func (input Input) Validate() error {
 	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindWorkItem, input.WorkID) != nil ||
-		ids.Validate(ids.KindHost, input.HostID) != nil || ids.Validate(ids.KindOperation, input.OperationID) != nil ||
+		ids.Validate(ids.KindHost, input.HostID) != nil || !validDigest(input.BaselineSHA256) || ids.Validate(ids.KindOperation, input.OperationID) != nil ||
 		ids.Validate(ids.KindComponent, input.ComponentID) != nil || input.Generation == 0 || !canonicalTime(input.CreatedAt) ||
 		!canonicalTime(input.Deadline) || !input.Deadline.After(input.CreatedAt) ||
 		input.Deadline.Sub(input.CreatedAt) > 24*time.Hour ||
-		input.Enabled != (input.Candidate != nil) || !input.Enabled && (input.EnsureRuntime || input.Previous == nil) ||
-		input.Enabled && !input.EnsureRuntime && input.Previous == nil {
+		input.Enabled != (input.Candidate != nil) || !input.Enabled && input.EnsureRuntime ||
+		input.PreviousEnabled && input.Previous == nil || input.Enabled && !input.EnsureRuntime && !input.PreviousEnabled ||
+		(input.Previous == nil) != (input.PreviousFileOwner == "") || input.Previous != nil && !ValidFileOwner(input.PreviousFileOwner) {
 		return invalid("DNS resolver input has invalid identity, timing or captured runtime selection")
 	}
 	if input.Candidate != nil && input.Candidate.Generation != input.Generation ||

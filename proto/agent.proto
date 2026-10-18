@@ -2315,6 +2315,19 @@ message ResolverWorkResultAck {
   bytes failure = 7; // canonical retained failure, absent for other result kinds
 }
 
+message ResolverWorkHelperRequest {
+  ResolverWorkAssignment assignment = 1;
+  WorkStartAck start = 2;
+  ResolverWorkCheckpointAck checkpoint = 3;
+  bool inspect_only = 4;
+}
+
+message ResolverWorkHelperResponse {
+  bytes observation = 1;
+  DNSResolverObservationEvidence serving_proof = 2;
+  bytes restoration = 3; // physical restoration proof; parent joins helper termination
+}
+
 // One Environment Component operation. The compiled handler owns sequencing;
 // neither a hidden Task nor a generic step program is part of this input.
 // Removal retains its exact predecessor for teardown and absence verification.

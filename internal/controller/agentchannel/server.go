@@ -28,6 +28,7 @@ type Server struct {
 	networkReports         NetworkReporter
 	componentReports       ComponentReporter
 	backingReports         BackingReporter
+	resolverReports        ResolverReporter
 	entryReports           EntryReporter
 	volumeReports          VolumeReporter
 	lifecycleReports       LifecycleReporter

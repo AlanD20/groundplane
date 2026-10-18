@@ -117,13 +117,36 @@ func (report RecoveryReport) validateEnvelope(attempt workexecution.Attempt, sou
 	return nil
 }
 
+// ValidateBoundary checks the report envelope against real retained recovery
+// authority. Callers must separately validate serving proof against captured
+// configuration before recording or settling successful restoration.
+func (report RecoveryReport) ValidateBoundary(attempt workexecution.Attempt, source Recovery, layout Layout) error {
+	if err := source.ValidateFor(attempt, layout); err != nil {
+		return err
+	}
+	return report.validateEnvelope(attempt, source)
+}
+
+// RecoveryDigest hashes a validated receipt without retaining executable input.
+func RecoveryDigest(attemptID string, report RecoveryReport) (workexecution.Input, error) {
+	if report.AttemptID != attemptID {
+		return workexecution.Input{}, invalid("DNS resolver cleanup digest names a different attempt")
+	}
+	id, err := derivedReferenceID(attemptID, "cleanup")
+	if err != nil {
+		return workexecution.Input{}, err
+	}
+	_, evidence, err := captureEvidence(id, report)
+	return evidence, err
+}
+
 func EncodeRecoveryReport(attempt workexecution.Attempt, input Input, source Recovery, report RecoveryReport) ([]byte, workexecution.Input, error) {
 	layout, err := CaptureLayout(attempt, input)
 	if err != nil || source.ValidateFor(attempt, layout) != nil || report.validateEnvelope(attempt, source) != nil {
 		return nil, workexecution.Input{}, invalid("DNS resolver cleanup report has no matching captured authority")
 	}
 	if report.Status == RecoveryComplete {
-		if input.Previous == nil && report.ServingProof != nil || input.Previous != nil &&
+		if !input.PreviousEnabled && report.ServingProof != nil || input.PreviousEnabled &&
 			(ValidateServingProof(*input.Previous, report.ServingProof) != nil || report.ServingProof.ObservedAt.AsTime().Before(*attempt.StartedAt) ||
 				report.ServingProof.ObservedAt.AsTime().After(report.ObservedAt)) {
 			return nil, workexecution.Input{}, invalid("DNS resolver cleanup did not prove its exact previous serving configuration")

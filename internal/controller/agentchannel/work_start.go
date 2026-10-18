@@ -15,6 +15,7 @@ import (
 // rotation and process registration have distinct counters. Request fields are
 // never used to select the host or either generation.
 type WorkIdentityResolver interface {
+	RecordWorkPlatform(context.Context, agentregistration.WorkAuthorization, string, string, string) error
 	ResolveWorkIdentity(context.Context, string, uint64, [16]byte) (agentregistration.WorkAuthorization, error)
 	RegisterWorkProcess(context.Context, string, uint64, [16]byte, uint16, []workexecution.Operation) (workexecution.Identity, error)
 }

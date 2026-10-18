@@ -63,9 +63,21 @@ func CompletionEvidence(attempt workexecution.Attempt, input Input, final Progre
 	} else if verification != nil || proof != nil {
 		return workexecution.Input{}, invalid("disabled DNS resolver cannot report a running serving proof")
 	}
+	return CompletionDigest(attempt, final, proof)
+}
+
+// CompletionDigest hashes already-validated evidence. It grants no execution or
+// settlement permission; Controller admission still uses CompletionEvidence.
+// This lets the compact Agent journal check a saved receipt without copying
+// the captured Corefile and Compose artifacts into every local record.
+func CompletionDigest(attempt workexecution.Attempt, final Progress, proof *agentpb.DNSResolverObservationEvidence) (workexecution.Input, error) {
+	if attempt.Validate() != nil || final.AttemptID != attempt.ID || final.Stage != Complete || final.InFlight {
+		return workexecution.Input{}, invalid("DNS resolver completion digest has no final captured boundary")
+	}
 	normalized := attempt
 	normalized.FinishedAt, normalized.Outcome, normalized.Result = nil, "", nil
 	var encodedProof []byte
+	var err error
 	if proof != nil {
 		encodedProof, err = (proto.MarshalOptions{Deterministic: true}).Marshal(proof)
 		if err != nil {

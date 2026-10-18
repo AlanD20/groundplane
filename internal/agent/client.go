@@ -31,6 +31,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
 	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
 	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
+	"github.com/AlanD20/groundplane/internal/agent/resolverruntime"
 	"github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
@@ -96,6 +97,7 @@ type Client struct {
 	networkExecutor         *networkruntime.Executor
 	componentExecutor       *componentruntime.Executor
 	backingExecutor         *backingruntime.Executor
+	resolverExecutor        *resolverruntime.Executor
 	entryExecutor           *entryruntime.Executor
 	volumeExecutor          *volumeruntime.Executor
 	attachRemovalExecutor   *hierarchyruntime.AttachExecutor

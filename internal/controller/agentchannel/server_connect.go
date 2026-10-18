@@ -358,6 +358,13 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					}
 					continue
 				}
+				identity, err := s.authenticatedWorkIdentity(stream.Context(), session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := s.workIdentities.RecordWorkPlatform(stream.Context(), identity, ready.OperatingSystem, ready.Architecture, ready.ArchitectureVariant); err != nil {
+					return taskStoreStatus(err)
+				}
 				if err := session.RecordReady(s.now(), ready.Capacity, ready.Version, source); err != nil {
 					return status.Error(codes.FailedPrecondition, "agent session is not current")
 				}

@@ -91,10 +91,10 @@ func (repository *Repository) prepareRestoredRuntime(ctx context.Context, view w
 		return workqueue.Change{}, err
 	}
 	var services []string
-	if prior := stored.Input.Previous; prior != nil {
+	if prior := stored.Input.Previous; stored.Input.PreviousEnabled {
 		services = []string{prior.Runtime.Services[0].ServiceId}
 	}
-	current, err = componentrecord.SetRuntime(current, services, "", stored.Input.Previous != nil)
+	current, err = componentrecord.SetRuntime(current, services, "", stored.Input.PreviousEnabled)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

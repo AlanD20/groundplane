@@ -63,6 +63,7 @@ func (repository *Repository) ReadAdmission(ctx context.Context, view workqueue.
 			return StoredInput{}, workqueue.Change{}, false, err
 		}
 		if applied.HostID != input.HostID || applied.ComponentID != input.ComponentID || applied.Generation >= input.Generation ||
+			applied.Desired.Enabled != input.PreviousEnabled || applied.FileOwner != input.PreviousFileOwner ||
 			(applied.Configuration == nil) != (input.Previous == nil) {
 			return stored, change, false, nil
 		}

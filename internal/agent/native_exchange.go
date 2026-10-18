@@ -68,7 +68,7 @@ func (exchange *nativeExchange) bindExecutor(registration *agentpb.WorkExecutorR
 }
 
 func (exchange *nativeExchange) request(ctx context.Context, message *agentpb.AgentMessage, identity *agentpb.WorkAttemptIdentity, kind, executionID string) (*agentpb.ControllerMessage, error) {
-	if ctx == nil || identity == nil || identity.AttemptId == "" || executionplan.RejectUnknown(message) != nil || proto.Size(message) > 20*1024 {
+	if ctx == nil || identity == nil || identity.AttemptId == "" || executionplan.RejectUnknown(message) != nil || proto.Size(message) > resolverRequestLimit(message) {
 		return nil, errs.New(errs.KindValidationFailed, "native work exchange request is invalid")
 	}
 	key := nativeExchangeKey{identity.AttemptId, kind}
@@ -126,6 +126,16 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 	var identity *agentpb.WorkAttemptIdentity
 	kind, executionID := "", ""
 	switch {
+	case message.GetResolverWorkCheckpointAck() != nil:
+		identity, kind = message.GetResolverWorkCheckpointAck().Attempt, "resolver_checkpoint"
+	case message.GetResolverWorkResultAck() != nil:
+		ack := message.GetResolverWorkResultAck()
+		switch ack.Kind {
+		case "completion", "failure", "recovery":
+			identity, kind = ack.Attempt, "resolver_"+ack.Kind
+		default:
+			return true, errs.New(errs.KindStateConflict, "DNS resolver acknowledgement has an unknown result kind")
+		}
 	case message.GetBackingProvisionCheckpointAck() != nil:
 		identity, kind = message.GetBackingProvisionCheckpointAck().Attempt, "backing_checkpoint"
 	case message.GetBackingProvisionCompletionAck() != nil:

@@ -12,11 +12,25 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
 	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
 	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
+	"github.com/AlanD20/groundplane/internal/agent/resolverruntime"
 	"github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
 	"github.com/AlanD20/groundplane/internal/infra/agentownership"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func (c *Client) SetResolverExecutor(executor *resolverruntime.Executor) error {
+	if c == nil || executor == nil {
+		return errs.New(errs.KindValidationFailed, "Agent DNS resolver executor is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.resolverExecutor != nil {
+		return errs.New(errs.KindStateConflict, "Agent DNS resolver executor cannot change after configuration")
+	}
+	c.resolverExecutor = executor
+	return nil
+}
 
 func (c *Client) SetBackingExecutor(executor *backingruntime.Executor) error {
 	if c == nil || executor == nil {
