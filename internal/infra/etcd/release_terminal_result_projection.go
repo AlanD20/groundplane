@@ -14,6 +14,19 @@ import (
 	"time"
 )
 
+func unassignedReleaseTerminal(task TaskRecord, status taskjournal.TaskStatus) bool {
+	preflightFailure := task.Result != nil && !task.Result.ReconciliationRequired &&
+		(status == taskjournal.TaskStatusFailed &&
+			(task.Result.Diagnostic == taskjournal.TaskResultDiagnosticReleaseNetworkFailed || task.Result.Diagnostic == taskjournal.TaskResultDiagnosticDNSActivationFailed) ||
+			status == taskjournal.TaskStatusTimedOut && task.Result.Diagnostic == taskjournal.TaskResultDiagnosticDNSActivationTimedOut)
+	return (status == taskjournal.TaskStatusAborted || preflightFailure) && task.Status == status &&
+		task.StartedAt == nil &&
+		task.FinishedAt != nil &&
+		task.Executor == taskjournal.TaskExecutorAgent &&
+		(task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback) &&
+		task.Params[releaserender.TaskReleasePublicationParam] != ""
+}
+
 func releasePreparedRuntime(
 	marker releases.ReleasePublicationMarker,
 	serviceID string,

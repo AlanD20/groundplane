@@ -84,8 +84,6 @@ const (
 type TaskRepository struct {
 	*groupstore.Preparer
 	store                    taskRepositoryStore
-	blueprintTerminalStore   blueprintTaskTerminalStore
-	blueprintChildStore      blueprintChildTransactionStore
 	retryPolicy              taskCASRetryPolicy
 	platformResolverSelector PlatformResolverComponentSelector
 	dispatchClaims           chan struct{}
@@ -105,6 +103,10 @@ func (repository *TaskRepository) SetPlatformResolverComponentSelector(
 
 func newTaskRepository(store taskRepositoryStore) (*TaskRepository, error) {
 	return newTaskRepositoryWithRetryPolicy(store, defaultTaskCASRetryPolicy())
+}
+
+func NewTaskRepository(store taskRepositoryStore) (*TaskRepository, error) {
+	return newTaskRepository(store)
 }
 
 func newTaskRepositoryWithRetryPolicy(
