@@ -31,7 +31,12 @@ func ResultKey(attemptID string) string {
 	return "/v1/execution/controller-software/results/" + attemptID
 }
 func TargetID() string {
-	return ids.DeriveAt(ids.KindComponent, time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), "groundplane-platform", "controller-software")
+	return ids.DeriveAt(
+		ids.KindComponent,
+		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		"groundplane-platform",
+		"controller-software",
+	)
 }
 
 func EncodeCapture(capture Capture) ([]byte, error) {
@@ -59,6 +64,10 @@ func (capture Capture) Journal(start, deadline time.Time) (upgrade.Journal, erro
 	input := capture.Input
 	journal := upgrade.Journal{Schema: 2, TaskID: capture.TaskID, Release: input.Release, Manifest: input.Manifest,
 		PreviousController: input.PreviousController, Agent: input.Agent, StartedAt: start, Deadline: deadline, Phase: upgrade.PhasePrepared}
+	if journal.Agent != nil {
+		agent := *journal.Agent
+		journal.Agent = &agent
+	}
 	return journal, journal.Validate()
 }
 
@@ -70,7 +79,8 @@ func (capture Capture) Match(item workexecution.Item) error {
 	if item.Operation != workexecution.ControllerSoftware || item.ID != capture.WorkItemID || item.TaskID != capture.TaskID ||
 		item.TargetID != TargetID() || item.Input == nil || *item.Input != reference ||
 		item.Placement != (workexecution.Placement{Executor: workexecution.Controller}) ||
-		!slices.Equal(item.Claims, Claims()) || !item.CreatedAt.Equal(capture.CreatedAt) {
+		!slices.Equal(item.Claims, Claims()) ||
+		!item.CreatedAt.Equal(capture.CreatedAt) {
 		return errs.New(errs.KindStateConflict, "controller activation differs from its captured work")
 	}
 	return nil
@@ -84,12 +94,32 @@ func (capture Capture) Work() (workexecution.Task, workexecution.Item, error) {
 	if err := capture.Input.Validate(); err != nil {
 		return workexecution.Task{}, workexecution.Item{}, err
 	}
-	task := workexecution.Task{ID: capture.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionUpdate,
-		TargetID: TargetID(), TargetName: "Controller", Intent: reference, ExpectedItems: 1, CreatedAt: capture.CreatedAt,
-		UpdatedAt: capture.CreatedAt, Deadline: capture.CreatedAt.Add(upgrade.TaskTimeoutSeconds * time.Second)}
-	item := workexecution.Item{ID: capture.WorkItemID, TaskID: task.ID, Operation: workexecution.ControllerSoftware, TargetID: task.TargetID,
-		Placement: workexecution.Placement{Executor: workexecution.Controller}, Claims: Claims(),
-		Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
+	task := workexecution.Task{
+		ID:            capture.TaskID,
+		Actor:         workexecution.OperatorActor,
+		Action:        workexecution.ActionUpdate,
+		TargetID:      TargetID(),
+		TargetName:    "Controller",
+		Intent:        reference,
+		ExpectedItems: 1,
+		CreatedAt:     capture.CreatedAt,
+		UpdatedAt:     capture.CreatedAt,
+		Deadline:      capture.CreatedAt.Add(upgrade.TaskTimeoutSeconds * time.Second),
+	}
+	item := workexecution.Item{
+		ID:        capture.WorkItemID,
+		TaskID:    task.ID,
+		Operation: workexecution.ControllerSoftware,
+		TargetID:  task.TargetID,
+		Placement: workexecution.Placement{Executor: workexecution.Controller},
+		Claims:    Claims(),
+		Input:     &reference,
+		Phase:     workexecution.Ready,
+		Cleanup:   workexecution.CleanupNone,
+		CreatedAt: task.CreatedAt,
+		UpdatedAt: task.CreatedAt,
+		Deadline:  task.Deadline,
+	}
 	return task, item, workexecution.ValidateGraph(task, []workexecution.Item{item})
 }
 

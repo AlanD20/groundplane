@@ -11,12 +11,9 @@ import (
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -27,30 +24,31 @@ func TestCoordinatorHandsOffThenQualifiesSameTask(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	h.unit.launch = cancel
 	old := h.coordinator(t, h.input.PreviousController)
-	if err := old.Restore(ctx, h.claim); err != nil {
+	if err := old.Restore(ctx, h.expected); err != nil {
 		t.Fatal(err)
 	}
-	status, err := old.Execute(ctx, h.claim.Task.Record, h.claim.Assignment.Record.Deadline, h.progress(ctx))
-	if !errors.Is(err, context.Canceled) || status.Status != "" || h.store.current().Phase != upgrade.PhaseActivating ||
+	status, err := old.Execute(ctx, h.expected, true, h.progress(ctx))
+	if !errors.Is(err, context.Canceled) || status.Outcome != "" ||
+		h.store.current().Phase != upgrade.PhaseActivating ||
 		len(h.agents.goals) != 0 {
-		t.Fatalf("handoff = %s, %v, journal %s", status.Status, err, h.store.current().Phase)
+		t.Fatalf("handoff = %s, %v, journal %s", status.Outcome, err, h.store.current().Phase)
 	}
 	h.store.startCandidate()
 	candidate := h.coordinator(t, h.input.Manifest.ControllerSHA256)
-	if err := candidate.Restore(context.Background(), h.claim); err != nil {
+	if err := candidate.Restore(context.Background(), h.expected); err != nil {
 		t.Fatal(err)
 	}
 	status, err = candidate.Execute(
 		context.Background(),
-		h.claim.Task.Record,
-		h.claim.Assignment.Record.Deadline,
+		h.expected,
+		true,
 		h.progress(context.Background()),
 	)
-	if err != nil || status.Status != testtaskjournal.TaskStatusCompleted ||
+	if err != nil || status.Outcome != workexecution.Succeeded ||
 		h.store.current().Phase != upgrade.PhaseHealthy ||
 		len(h.agents.goals) != 1 ||
 		h.agents.goals[0] != localagent.UpdateFinish {
-		t.Fatalf("qualification = %s, %v, journal %s", status.Status, err, h.store.current().Phase)
+		t.Fatalf("qualification = %s, %v, journal %s", status.Outcome, err, h.store.current().Phase)
 	}
 }
 
@@ -68,18 +66,18 @@ func TestCoordinatorBusyDrainLeavesRuntimeAndDispatchUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
-	if err := coordinator.Restore(context.Background(), h.claim); err != nil {
+	if err := coordinator.Restore(context.Background(), h.expected); err != nil {
 		t.Fatal(err)
 	}
 	status, err := coordinator.Execute(
 		context.Background(),
-		h.claim.Task.Record,
-		h.claim.Assignment.Record.Deadline,
+		h.expected,
+		true,
 		h.progress(context.Background()),
 	)
-	if err != nil || status.Status != testtaskjournal.TaskStatusFailed || h.store.found || h.unit.launches != 0 ||
+	if err != nil || status.Outcome != workexecution.Failed || h.store.found || h.unit.launches != 0 ||
 		len(h.agents.goals) != 0 || !session.AssignmentsAllowed() {
-		t.Fatalf("busy preparation = %s, %v, dispatch %t", status.Status, err, session.AssignmentsAllowed())
+		t.Fatalf("busy preparation = %s, %v, dispatch %t", status.Outcome, err, session.AssignmentsAllowed())
 	}
 }
 
@@ -93,29 +91,30 @@ func TestCoordinatorBadCandidateRequestsNativeRollbackAndPredecessorRecovers(t *
 	ctx, cancel := context.WithCancel(context.Background())
 	h.unit.launch = cancel
 	candidate := h.coordinator(t, h.input.Manifest.ControllerSHA256)
-	if err := candidate.Restore(ctx, h.claim); err != nil {
+	if err := candidate.Restore(ctx, h.expected); err != nil {
 		t.Fatal(err)
 	}
-	status, err := candidate.Execute(ctx, h.claim.Task.Record, h.claim.Assignment.Record.Deadline, h.progress(ctx))
-	if !errors.Is(err, context.Canceled) || status.Status != "" || h.store.current().Phase != upgrade.PhaseRollingBack {
-		t.Fatalf("candidate failure = %s, %v, journal %s", status.Status, err, h.store.current().Phase)
+	status, err := candidate.Execute(ctx, h.expected, true, h.progress(ctx))
+	if !errors.Is(err, context.Canceled) || status.Outcome != "" ||
+		h.store.current().Phase != upgrade.PhaseRollingBack {
+		t.Fatalf("candidate failure = %s, %v, journal %s", status.Outcome, err, h.store.current().Phase)
 	}
 	h.store.restorePredecessor()
 	h.agents.err = nil
 	predecessor := h.coordinator(t, h.input.PreviousController)
-	if err := predecessor.Restore(context.Background(), h.claim); err != nil {
+	if err := predecessor.Restore(context.Background(), h.expected); err != nil {
 		t.Fatal(err)
 	}
 	status, err = predecessor.Execute(
 		context.Background(),
-		h.claim.Task.Record,
-		h.claim.Assignment.Record.Deadline,
+		h.expected,
+		true,
 		h.progress(context.Background()),
 	)
-	if err != nil || status.Status != testtaskjournal.TaskStatusFailed ||
+	if err != nil || status.Outcome != workexecution.Failed ||
 		h.store.current().Phase != upgrade.PhaseRecovered ||
 		h.agents.goals[len(h.agents.goals)-1] != localagent.UpdateRestore {
-		t.Fatalf("predecessor recovery = %s, %v, journal %s", status.Status, err, h.store.current().Phase)
+		t.Fatalf("predecessor recovery = %s, %v, journal %s", status.Outcome, err, h.store.current().Phase)
 	}
 }
 
@@ -130,13 +129,12 @@ func TestCoordinatorAbortHasOneWinnerWithActivation(t *testing.T) {
 				h.store.journal.Phase = upgrade.PhaseActivating
 			}
 			coordinator := h.coordinator(t, h.input.PreviousController)
-			if err := coordinator.Restore(context.Background(), h.claim); err != nil {
+			if err := coordinator.Restore(context.Background(), h.expected); err != nil {
 				t.Fatal(err)
 			}
-			err := coordinator.Abort(context.Background(), h.claim.Task.Record.ID)
+			err := coordinator.RequestAbort(context.Background(), h.expected.TaskID)
 			if committed {
-				if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) ||
-					h.store.current().Phase != upgrade.PhaseActivating {
+				if err != nil || coordinator.active.aborted || h.store.current().Phase != upgrade.PhaseActivating {
 					t.Fatalf("committed abort = %v", err)
 				}
 				return
@@ -146,14 +144,14 @@ func TestCoordinatorAbortHasOneWinnerWithActivation(t *testing.T) {
 			}
 			status, err := coordinator.Execute(
 				context.Background(),
-				h.claim.Task.Record,
-				h.claim.Assignment.Record.Deadline, h.progress(
+				h.expected,
+				true, h.progress(
 					context.Background()))
 
-			if err != nil || status.Status != testtaskjournal.TaskStatusAborted ||
+			if err != nil || status.Outcome != workexecution.Cancelled ||
 				h.store.current().Phase != upgrade.PhaseCancelled ||
 				h.unit.launches != 0 {
-				t.Fatalf("prepared abort = %s, %v", status.Status, err)
+				t.Fatalf("prepared abort = %s, %v", status.Outcome, err)
 			}
 		})
 	}
@@ -168,35 +166,34 @@ func TestCoordinatorExpiredRecoveryKeepsUnresolvedClaim(t *testing.T) {
 	h.now = h.expected.Deadline.Add(time.Hour)
 	h.agents.err = errs.New(errs.KindStorageUnavailable, "recovery unavailable")
 	coordinator := h.coordinator(t, h.input.PreviousController)
-	if err := coordinator.Restore(context.Background(), h.claim); err != nil {
+	if err := coordinator.Restore(context.Background(), h.expected); err != nil {
 		t.Fatal(err)
 	}
 	status, err := coordinator.Execute(
 		context.Background(),
-		h.claim.Task.Record,
-		h.claim.Assignment.Record.Deadline,
+		h.expected,
+		true,
 		h.progress(context.Background()),
 	)
-	if !errors.Is(err, h.agents.err) || status.Status != "" || h.store.current().Phase != upgrade.PhaseRolledBack {
-		t.Fatalf("unresolved late recovery = %s, %v", status.Status, err)
+	if !errors.Is(err, h.agents.err) || status.Outcome != "" || h.store.current().Phase != upgrade.PhaseRolledBack {
+		t.Fatalf("unresolved late recovery = %s, %v", status.Outcome, err)
 	}
 	h.agents.err = nil
 	status, err = coordinator.Execute(
 		context.Background(),
-		h.claim.Task.Record,
-		h.claim.Assignment.Record.Deadline,
+		h.expected,
+		true,
 		h.progress(context.Background()),
 	)
-	if err != nil || status.Status != testtaskjournal.TaskStatusFailed ||
+	if err != nil || status.Outcome != workexecution.Failed ||
 		h.store.current().Phase != upgrade.PhaseRecovered {
-		t.Fatalf("resolved late recovery = %s, %v", status.Status, err)
+		t.Fatalf("resolved late recovery = %s, %v", status.Outcome, err)
 	}
 }
 
 type coordinatorHarness struct {
-	input    Input
+	input    upgrade.Input
 	expected upgrade.Journal
-	claim    etcd.TaskAssignment
 	store    *coordinatorStore
 	unit     *coordinatorUnit
 	agents   *coordinatorAgents
@@ -209,21 +206,12 @@ func newCoordinatorHarness(t *testing.T) *coordinatorHarness {
 	t.Helper()
 	now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	input := nativeTestInput(t)
-	task, err := NewTask(now, "native-update-key", input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected, err := DecodeTask(task, now, now.Add(600*time.Second))
+	capture := nativeTestCapture(t, input, now)
+	expected, err := capture.Journal(now, now.Add(600*time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return &coordinatorHarness{input: input, expected: expected, now: now,
-		claim: etcd.TaskAssignment{Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: task},
-			Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
-				Record: testtaskassignments.TaskAssignmentRecord{
-					TaskID: task.ID, Executor: testtaskjournal.TaskExecutorController, AssignedAt: now, Deadline: expected.Deadline,
-				},
-			}},
 		store: &coordinatorStore{manifest: input.Manifest, installed: input.PreviousController},
 		unit:  &coordinatorUnit{}, work: &coordinatorWork{},
 		agents: &coordinatorAgents{agent: localagent.Agent{ID: input.Agent.ID, Image: input.Agent.Image,

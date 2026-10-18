@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Rationale: a host handoff journal alone must not bypass durable Task authority
@@ -17,10 +17,10 @@ func TestNativeStartupJournalRequiresMatchingClaim(t *testing.T) {
 	if err := coordinator.RestoreJournal(context.Background(), startupClaims{}); err == nil {
 		t.Fatal("orphaned journal accepted")
 	}
-	if err := coordinator.RestoreJournal(context.Background(), startupClaims{h.claim}); err != nil {
+	if err := coordinator.RestoreJournal(context.Background(), startupClaims{h.expected}); err != nil {
 		t.Fatal(err)
 	}
-	if coordinator.active == nil || coordinator.active.expected.TaskID != h.claim.Task.Record.ID {
+	if coordinator.active == nil || coordinator.active.expected.TaskID != h.expected.TaskID {
 		t.Fatal("matching journal did not restore admission")
 	}
 	h.store.journal.Phase = upgrade.PhaseCancelled
@@ -29,8 +29,13 @@ func TestNativeStartupJournalRequiresMatchingClaim(t *testing.T) {
 	}
 }
 
-type startupClaims []etcd.TaskAssignment
+type startupClaims []upgrade.Journal
 
-func (claims startupClaims) ListControllerTaskClaims(context.Context) ([]etcd.TaskAssignment, error) {
-	return claims, nil
+func (claims startupClaims) ControllerRecovery(_ context.Context, taskID string) (upgrade.Journal, error) {
+	for _, journal := range claims {
+		if journal.TaskID == taskID {
+			return journal, nil
+		}
+	}
+	return upgrade.Journal{}, errs.New(errs.KindStateConflict, "captured native work is missing")
 }

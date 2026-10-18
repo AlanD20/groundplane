@@ -8,77 +8,84 @@ import (
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 )
 
-// Rationale: native recovery must replay exact immutable inputs from its Task,
-// not mutable installation configuration or a subsequently staged manifest.
-func TestNativeUpdateTaskFreezesValidatedRecoveryInput(t *testing.T) {
+// Rationale: a native recovery journal must own captured predecessor identity,
+// not share a mutable Agent pointer with its caller.
+func TestNativeUpdateCaptureFreezesRecoveryInput(t *testing.T) {
 	input := nativeTestInput(t)
 	now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
-	task, err := NewTask(now, "native-update-key", input)
+	capture := nativeTestCapture(t, input, now)
+	task, item, err := capture.Work()
 	if err != nil {
 		t.Fatal(err)
 	}
-	journal, err := DecodeTask(task, now, now.Add(600*time.Second))
+	if err := capture.Match(item); err != nil {
+		t.Fatal(err)
+	}
+	journal, err := capture.Journal(now, task.Deadline)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if journal.TaskID != task.ID || journal.Manifest != input.Manifest || journal.Release != input.Release ||
 		journal.PreviousController != input.PreviousController || *journal.Agent != *input.Agent {
-		t.Fatal("native update Task changed its frozen recovery input")
+		t.Fatal("captured recovery input changed")
 	}
 	input.Agent.Generation++
 	if journal.Agent.Generation == input.Agent.Generation {
-		t.Fatal("Task decoding retained a mutable input alias")
+		t.Fatal("journal aliases caller Agent predecessor")
 	}
 }
 
-// Rationale: changes to the manifest, execution authority or deadline cannot
-// smuggle a new executable or extend a committed native operation's budget.
-func TestNativeUpdateTaskRejectsChangedAuthority(t *testing.T) {
-	for _, scenario := range []string{"hash", "target", "executor", "extra", "timeout", "manifest", "deadline"} {
+// Rationale: changed execution/input ownership cannot authorize another binary,
+// resource, host or budget under the accepted Controller software action.
+func TestNativeUpdateCaptureRejectsChangedAuthority(t *testing.T) {
+	for _, scenario := range []string{"hash", "target", "executor", "work item", "task", "claims", "manifest", "deadline"} {
 		t.Run(scenario, func(t *testing.T) {
-			input := nativeTestInput(t)
 			now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
-			task, err := NewTask(now, "native-update-key", input)
+			capture := nativeTestCapture(t, nativeTestInput(t), now)
+			task, item, err := capture.Work()
 			if err != nil {
 				t.Fatal(err)
 			}
-			deadline := now.Add(600 * time.Second)
+			if scenario == "deadline" {
+				if _, err := capture.Journal(now, task.Deadline.Add(time.Second)); err == nil {
+					t.Fatal("extended activation deadline accepted")
+				}
+				return
+			}
 			switch scenario {
 			case "hash":
-				task.PlanHash = string(upgrade.Hash([]byte("other")))[7:]
+				item.Input.SHA256 = string(upgrade.Hash([]byte("other")))[7:]
 			case "target":
-				task.Target = ids.New(ids.KindAgent)
+				item.TargetID = ids.New(ids.KindAgent)
 			case "executor":
-				task.Executor = testtaskjournal.TaskExecutorAgent
-			case "extra":
-				task.Params["path"] = "/other/controller"
-			case "timeout":
-				task.TimeoutSeconds++
+				item.Placement = workexecution.Placement{Executor: workexecution.Agent, HostID: ids.New(ids.KindHost)}
+			case "work item":
+				item.ID = ids.New(ids.KindWorkItem)
+			case "task":
+				item.TaskID = ids.New(ids.KindTask)
+			case "claims":
+				item.Claims = nil
 			case "manifest":
-				input.Manifest.ControllerVersion = "changed"
-				raw, err := json.Marshal(input)
-				if err != nil {
-					t.Fatal(err)
-				}
-				canonical, err := jcs.Canonicalize(raw)
-				if err != nil {
-					t.Fatal(err)
-				}
-				task.Params[InputParam] = string(canonical)
-			case "deadline":
-				deadline = deadline.Add(time.Second)
+				capture.Input.Manifest.ControllerVersion = "changed"
 			}
-			if _, err := DecodeTask(task, now, deadline); err == nil {
-				t.Fatal("changed native recovery authority accepted")
+			if err := capture.Match(item); err == nil {
+				t.Fatal("changed native activation authority accepted")
 			}
 		})
 	}
 }
 
-func nativeTestInput(t *testing.T) Input {
+func nativeTestCapture(t *testing.T, input upgrade.Input, now time.Time) controllersoftware.Capture {
+	t.Helper()
+	return controllersoftware.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
+		PlanID: ids.New(ids.KindPlan), Input: input, CreatedAt: now}
+}
+
+func nativeTestInput(t *testing.T) upgrade.Input {
 	t.Helper()
 	journal := watchdogJournal()
 	raw, err := json.Marshal(journal.Manifest)
@@ -89,7 +96,7 @@ func nativeTestInput(t *testing.T) Input {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Input{
+	return upgrade.Input{
 		Release: upgrade.Hash(canonical), Manifest: journal.Manifest, PreviousController: journal.PreviousController,
 		Agent: &upgrade.AgentPredecessor{ID: ids.New(ids.KindAgent), Generation: 1,
 			Image: "registry.example/agent@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},

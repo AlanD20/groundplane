@@ -12,6 +12,7 @@ import (
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -30,11 +31,17 @@ func TestNativeUpdateServicePublishesAndReplaysPinnedTask(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatal(err)
 	}
-	task, err := h.tasks.GetTask(ctx, accepted.TaskID)
+	current, found, err := h.service.records.Current(ctx, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	journal, err := DecodeTask(task.Record, task.Record.CreatedAt, task.Record.CreatedAt.Add(600*time.Second))
+	if !found || current.Record.Capture.TaskID != accepted.TaskID {
+		t.Fatal("accepted activation input not published")
+	}
+	journal, err := current.Record.Capture.Journal(
+		current.Record.Capture.CreatedAt,
+		current.Record.Capture.CreatedAt.Add(600*time.Second),
+	)
 	if err != nil || journal.Release != h.input.Release || journal.PreviousController != h.input.PreviousController ||
 		journal.Agent == nil || *journal.Agent != *h.input.Agent {
 		t.Fatalf("frozen Task = %#v, %v", journal, err)
@@ -144,8 +151,12 @@ func newServiceHarness(t *testing.T) *serviceHarness {
 		t.Fatal(err)
 	}
 	catalog := &serviceCatalog{coordinatorStore: h.store}
+	records, err := controllersoftware.New(storage)
+	if err != nil {
+		t.Fatal(err)
+	}
 	service, err := NewService(ServiceDependencies{Catalog: catalog, Unit: h.unit, Agents: h.agents,
-		Tasks: tasks, Evidence: evidence, Intents: intents, ProcessDigest: h.input.PreviousController,
+		Tasks: tasks, Records: records, Evidence: evidence, Intents: intents, ProcessDigest: h.input.PreviousController,
 		BootstrapAgentImage: h.input.Agent.Image})
 	if err != nil {
 		t.Fatal(err)

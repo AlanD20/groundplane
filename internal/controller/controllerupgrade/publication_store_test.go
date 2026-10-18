@@ -18,7 +18,7 @@ type publicationStore struct {
 	revision     int64
 	transactions int
 	loseResponse bool
-	rangeError   error
+	readError    error
 }
 
 func (store *publicationStore) entry(key string) *testkeyvalue.KeyValue {
@@ -43,6 +43,9 @@ func (store *publicationStore) GetMany(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if store.readError != nil {
+		return nil, store.readError
+	}
 	if request.Revision != 0 && request.Revision != store.revision {
 		return nil, unexpectedStorage()
 	}
@@ -61,8 +64,8 @@ func (store *publicationStore) Range(
 	ctx context.Context,
 	request testkeyvalue.RangeRequest,
 ) (*testkeyvalue.RangeResult, error) {
-	if store.rangeError != nil {
-		return nil, store.rangeError
+	if store.readError != nil {
+		return nil, store.readError
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -160,26 +163,6 @@ func (*publicationStore) Watch(context.Context, string, int64) (*testkeyvalue.Wa
 }
 func (*publicationStore) Snapshot(context.Context, io.Writer) error { return unexpectedStorage() }
 func (*publicationStore) Close() error                              { return unexpectedStorage() }
-func (*publicationStore) ValidateBlueprintTaskTerminal(context.Context, etcd.BlueprintTaskTerminalTransaction) error {
-	return unexpectedStorage()
-}
-
-func (*publicationStore) TransactBlueprintTaskTerminal(
-	context.Context,
-	etcd.BlueprintTaskTerminalTransaction,
-) (testkeyvalue.TransactionResult, error) {
-	return testkeyvalue.TransactionResult{}, unexpectedStorage()
-}
 func unexpectedStorage() error {
 	return errs.New(errs.KindInternal, "unexpected storage operation in native publication test")
-}
-
-func (store *publicationStore) TransactBlueprintChild(ctx context.Context,
-	tx etcd.BlueprintChildTransaction,
-) (testkeyvalue.TransactionResult, error) {
-	conditions, mutations, err := tx.Operations()
-	if err != nil {
-		return testkeyvalue.TransactionResult{}, err
-	}
-	return store.Transact(ctx, conditions, mutations)
 }
