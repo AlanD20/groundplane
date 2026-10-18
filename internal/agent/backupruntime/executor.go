@@ -15,8 +15,16 @@ import (
 )
 
 type Exchange interface {
-	BackupRecoveryCheckpoint(context.Context, *agentpb.BackupRecoveryAssignment, *agentpb.BackupWorkCheckpointRequest) (*agentpb.BackupWorkCheckpointAck, error)
-	PrepareConfigRecovery(context.Context, *agentpb.BackupRecoveryAssignment, uint32) (*agentpb.BackupConfigRecoveryPrepareAck, error)
+	BackupRecoveryCheckpoint(
+		context.Context,
+		*agentpb.BackupRecoveryAssignment,
+		*agentpb.BackupWorkCheckpointRequest,
+	) (*agentpb.BackupWorkCheckpointAck, error)
+	PrepareConfigRecovery(
+		context.Context,
+		*agentpb.BackupRecoveryAssignment,
+		uint32,
+	) (*agentpb.BackupConfigRecoveryPrepareAck, error)
 	RegisterBackupConfigs(*agentpb.BackupWorkAssignment) error
 	ReleaseBackupConfigs(string)
 	CaptureConfigStream(backupconfigtransfer.Binding) (*backupconfiguration.CaptureStream, error)
@@ -42,11 +50,23 @@ type Executor struct {
 	ownership    interface{ Check() error }
 }
 
-func NewExecutor(journal *agentworkjournal.Journal, volumeRoot string, helper BackupConsumerHelper, materializer backupconfiguration.ConfigFileMaterializer, ownership interface{ Check() error }) (*Executor, error) {
+func NewExecutor(
+	journal *agentworkjournal.Journal,
+	volumeRoot string,
+	helper BackupConsumerHelper,
+	materializer backupconfiguration.ConfigFileMaterializer,
+	ownership interface{ Check() error },
+) (*Executor, error) {
 	if journal == nil || volumeRoot == "" || helper == nil || materializer == nil || ownership == nil {
 		return nil, errs.New(errs.KindInternal, "Backup execution requires a durable Agent journal")
 	}
-	return &Executor{journal: journal, volumeRoot: volumeRoot, helper: helper, materializer: materializer, ownership: ownership}, nil
+	return &Executor{
+		journal:      journal,
+		volumeRoot:   volumeRoot,
+		helper:       helper,
+		materializer: materializer,
+		ownership:    ownership,
+	}, nil
 }
 
 func (executor *Executor) Run(ctx context.Context, assignment *agentpb.BackupWorkAssignment,
@@ -86,7 +106,10 @@ func (executor *Executor) Run(ctx context.Context, assignment *agentpb.BackupWor
 	}
 	attempt.StartedAt = &started
 	if savedAttempt != nil && (savedAttempt.StartedAt == nil || !savedAttempt.StartedAt.Equal(started)) {
-		return workexecution.Attempt{}, errs.New(errs.KindStateConflict, "Backup start grant differs from its local journal")
+		return workexecution.Attempt{}, errs.New(
+			errs.KindStateConflict,
+			"Backup start grant differs from its local journal",
+		)
 	}
 	if reconcile && saved == nil {
 		// No local receipt is not a clean first execution. Stop this attempt;
@@ -103,13 +126,21 @@ func (executor *Executor) Run(ctx context.Context, assignment *agentpb.BackupWor
 	if err := exchange.RegisterBackupSecrets(owned); err != nil {
 		return workexecution.Attempt{}, err
 	}
-	defer exchange.ReleaseBackupSecrets(attempt.ID)
-	if err := executor.runSources(ctx, owned, attempt, exchange, staging); err != nil {
+	err = executor.runSources(ctx, owned, attempt, exchange, staging)
+	// Source execution has ended. Terminal delivery may wait for reconnect or
+	// an ACK, but it must not retain credential buffers or accept more frames.
+	exchange.ReleaseBackupSecrets(attempt.ID)
+	if err != nil {
 		// Source execution has returned. Only report delivery may outlive its
 		// deadline; this context cannot run another remote deletion.
 		reportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
-		delivery, deliveryErr := checkpointdelivery.NewBackup(owned, attempt, executor.journal, exchange.BackupCheckpoint)
+		delivery, deliveryErr := checkpointdelivery.NewBackup(
+			owned,
+			attempt,
+			executor.journal,
+			exchange.BackupCheckpoint,
+		)
 		if deliveryErr != nil {
 			return workexecution.Attempt{}, deliveryErr
 		}

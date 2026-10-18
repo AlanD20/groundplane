@@ -35,7 +35,10 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment *agentpb.B
 	if saved != nil && len(saved.Recovery.Report) != 0 {
 		// The Controller may already have settled this report. Do not request
 		// another start grant before replaying the exact durable evidence.
-		ack, err := exchange.RecoverBackup(ctx, &agentpb.BackupRecoveryRequest{Attempt: owned.Attempt, Report: saved.Recovery.Report})
+		ack, err := exchange.RecoverBackup(
+			ctx,
+			&agentpb.BackupRecoveryRequest{Attempt: owned.Attempt, Report: saved.Recovery.Report},
+		)
 		if err != nil {
 			return workexecution.Attempt{}, err
 		}
@@ -51,7 +54,10 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment *agentpb.B
 	}
 	attempt.StartedAt = &started
 	if savedAttempt != nil && (savedAttempt.StartedAt == nil || !savedAttempt.StartedAt.Equal(started)) {
-		return workexecution.Attempt{}, errs.New(errs.KindStateConflict, "Backup recovery start differs from its saved execution")
+		return workexecution.Attempt{}, errs.New(
+			errs.KindStateConflict,
+			"Backup recovery start differs from its saved execution",
+		)
 	}
 	if _, err := executor.journal.PrepareBackupRecovery(ctx, attempt, source); err != nil {
 		return workexecution.Attempt{}, err
@@ -68,7 +74,6 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment *agentpb.B
 		if err := exchange.RegisterBackupRecoverySecrets(owned); err != nil {
 			return workexecution.Attempt{}, err
 		}
-		defer exchange.ReleaseBackupSecrets(attempt.ID)
 	}
 	var report executionplan.BackupRecoveryReport
 	switch owned.Input.Operation {
@@ -79,7 +84,12 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment *agentpb.B
 		report, err = recoverCapture(bounded, owned, attempt, source, ownership, staging)
 	case agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_RESTORE:
 		var delivery *checkpointdelivery.BackupRestoreRecovery
-		delivery, err = checkpointdelivery.NewBackupRestoreRecovery(owned, attempt, executor.journal, exchange.BackupRecoveryCheckpoint)
+		delivery, err = checkpointdelivery.NewBackupRestoreRecovery(
+			owned,
+			attempt,
+			executor.journal,
+			exchange.BackupRecoveryCheckpoint,
+		)
 		if err != nil {
 			break
 		}
@@ -110,7 +120,9 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment *agentpb.B
 			progress := cursor.GetRestore().GetConfigProgress()
 			if progress.GetTransfer() == nil && progress.GetMaterialization() == nil {
 				err = delivery.Source().Config(bounded, &agentpb.BackupConfigCheckpoint{
-					Checkpoint: &agentpb.BackupConfigCheckpoint_TransferCompleted{TransferCompleted: prepared.Completed},
+					Checkpoint: &agentpb.BackupConfigCheckpoint_TransferCompleted{
+						TransferCompleted: prepared.Completed,
+					},
 				})
 				if err != nil {
 					break
@@ -121,7 +133,16 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment *agentpb.B
 		if owned.RestoreMode == agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION &&
 			step.GetRestore().GetConfig() != nil && !restoreRecoveryHasCompletion(step, owned.Sources[0].GetRestore()) {
 			var cursor *agentpb.BackupStepResume
-			cursor, err = executor.recoverConfigRestore(bounded, owned, attempt, source, ownership, staging, delivery.Source(), exchange)
+			cursor, err = executor.recoverConfigRestore(
+				bounded,
+				owned,
+				attempt,
+				source,
+				ownership,
+				staging,
+				delivery.Source(),
+				exchange,
+			)
 			if err != nil {
 				break
 			}
@@ -130,18 +151,40 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment *agentpb.B
 		if owned.RestoreMode == agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION &&
 			(step.GetRestore().GetPostgres() != nil || step.GetRestore().GetMysql() != nil) &&
 			!restoreRecoveryHasCompletion(step, owned.Sources[0].GetRestore()) {
-			owned.Sources[0], err = executor.continueDatabaseRestore(bounded, owned, attempt, source, ownership, staging, delivery.Source())
+			owned.Sources[0], err = executor.continueDatabaseRestore(
+				bounded,
+				owned,
+				attempt,
+				source,
+				ownership,
+				staging,
+				delivery.Source(),
+			)
 			if err != nil {
 				break
 			}
 		}
 		if owned.RestoreMode == agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION &&
 			step.GetRestore().GetVolume() != nil && !restoreRecoveryHasCompletion(step, owned.Sources[0].GetRestore()) {
-			owned.Sources[0], err = executor.recoverVolumeFilesystem(bounded, owned, attempt, source, ownership, staging, delivery.Source(), exchange)
+			owned.Sources[0], err = executor.recoverVolumeFilesystem(
+				bounded,
+				owned,
+				attempt,
+				source,
+				ownership,
+				staging,
+				delivery.Source(),
+				exchange,
+			)
 			if err != nil {
 				break
 			}
-			owned.Sources[0], err = executor.recoverVolumeServiceSet(bounded, owned, attempt.Executor, delivery.Source())
+			owned.Sources[0], err = executor.recoverVolumeServiceSet(
+				bounded,
+				owned,
+				attempt.Executor,
+				delivery.Source(),
+			)
 			if err != nil {
 				break
 			}
@@ -150,6 +193,8 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment *agentpb.B
 	default:
 		err = errs.New(errs.KindStateConflict, "Restore cleanup requires captured mutation recovery")
 	}
+	// Recovery effects have ended; result delivery needs evidence, not secrets.
+	exchange.ReleaseBackupSecrets(attempt.ID)
 	if err != nil {
 		reason := executionplan.BackupExecutionFailed
 		if !time.Now().Before(attempt.Deadline) {
@@ -180,7 +225,10 @@ func (executor *Executor) failRecovery(ctx context.Context, assignment *agentpb.
 	if saved.Completion != nil {
 		return *saved.Completion, nil
 	}
-	ack, err := exchange.FailBackup(reportCtx, &agentpb.BackupWorkFailureRequest{Attempt: assignment.Attempt, Reason: string(saved.FailureReason)})
+	ack, err := exchange.FailBackup(
+		reportCtx,
+		&agentpb.BackupWorkFailureRequest{Attempt: assignment.Attempt, Reason: string(saved.FailureReason)},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
