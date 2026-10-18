@@ -2,54 +2,52 @@ package agentregistration
 
 import (
 	"context"
-	etcd "github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// UpdateConfigIdempotent atomically replaces the generation-bound config
-// singleton and commits the exact completed replay marker. The lifecycle
-// primary and singleton pointer fence deletion or replacement of the Agent.
-func (repository *Repository) UpdateConfigIdempotent(
+// PrepareConfigurationUpdate captures the singleton, generation and configuration
+// comparisons. Its caller joins this closed update to request replay atomically.
+func (repository *Repository) PrepareConfigurationUpdate(
 	ctx context.Context,
 	current etcdstore.Versioned[localagentrecord.LocalAgentRecord],
 	config localagentrecord.LocalAgentConfig,
 	marker idempotencyrecord.IdempotencyMarker,
-) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], etcd.IdempotencyTransactionResult, error) {
+) (ConfigurationUpdate, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
+		return ConfigurationUpdate{}, err
 	}
 	if err := localagentrecord.ValidateLocalAgentConfig(config); err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
+		return ConfigurationUpdate{}, err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
 		current.Record.ID == "" || marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
 		marker.State != idempotencyrecord.IdempotencyMarkerCompleted || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform ||
 		marker.Locator.ScopeID != "-" || marker.Locator.Method != "PUT" ||
 		marker.Locator.Route != "/agents/{id}/config" {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, errs.New(
+		return ConfigurationUpdate{}, errs.New(
 			errs.KindValidationFailed,
 			"local Agent config mutation identity is invalid",
 		)
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
+		return ConfigurationUpdate{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
 	if err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
+		return ConfigurationUpdate{}, err
 	}
 	if evidence.record.ID != current.Record.ID || evidence.record.Generation != current.Record.Generation ||
 		evidence.primaryRevision != current.Revision {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, errs.New(
+		return ConfigurationUpdate{}, errs.New(
 			errs.KindStateConflict,
 			"local Agent generation or revision changed",
 		)
 	}
 	if evidence.record.Phase == localagentrecord.LocalAgentPhaseDeleting {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, errs.New(
+		return ConfigurationUpdate{}, errs.New(
 			errs.KindStateConflict,
 			"deleting local Agent config cannot be changed",
 		)
@@ -58,31 +56,48 @@ func (repository *Repository) UpdateConfigIdempotent(
 	replacement.Config = localagentrecord.CloneLocalAgentConfig(config)
 	configValue, err := localagentrecord.EncodeLocalAgentConfig(replacement)
 	if err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
+		return ConfigurationUpdate{}, err
 	}
 	defer clear(configValue)
-	plan, err := etcd.NewIdempotencyMutationPlan(
-		[]etcdstore.Condition{
+	return ConfigurationUpdate{
+		record: etcdstore.Versioned[localagentrecord.LocalAgentRecord]{Record: replacement, Revision: evidence.primaryRevision, ReadRevision: current.ReadRevision},
+		conditions: []etcdstore.Condition{
 			{Key: localagentrecord.LocalAgentSingletonKey, ModRevision: evidence.singleton.ModRevision},
 			{Key: localagentrecord.LocalAgentPrimaryKey(current.Record.ID), ModRevision: evidence.primary.ModRevision},
 			{Key: localagentrecord.LocalAgentConfigKey(current.Record.ID), ModRevision: evidence.config.ModRevision},
 		},
-		[]etcdstore.Mutation{{
-			Type: etcdstore.MutationPut, Key: localagentrecord.LocalAgentConfigKey(current.Record.ID), Value: configValue,
-		}},
-		classifyLocalAgentConfigConflict(current.Record.ID),
-	)
-	if err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
+		value: append([]byte(nil), configValue...),
+	}, nil
+}
+
+type ConfigurationUpdate struct {
+	record     etcdstore.Versioned[localagentrecord.LocalAgentRecord]
+	conditions []etcdstore.Condition
+	value      []byte
+}
+
+func (update ConfigurationUpdate) Changes() ([]etcdstore.Condition, []etcdstore.Mutation, error) {
+	if update.record.Revision <= 0 || len(update.conditions) != 3 || len(update.value) == 0 {
+		return nil, nil, errs.New(errs.KindInternal, "Agent configuration update has not been prepared")
 	}
-	idempotency, err := etcd.NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
-	}
-	result, err := idempotency.Apply(ctx, marker, plan)
-	return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{
-		Record: replacement, Revision: evidence.primaryRevision, ReadRevision: result.Revision(),
-	}, result, err
+	return append([]etcdstore.Condition(nil), update.conditions...), []etcdstore.Mutation{{Type: etcdstore.MutationPut,
+		Key: localagentrecord.LocalAgentConfigKey(update.record.Record.ID), Value: append([]byte(nil), update.value...)}}, nil
+}
+
+func (update ConfigurationUpdate) ClassifyConflict(revision int64, values []*etcdstore.KeyValue) error {
+	return classifyLocalAgentConfigConflict(update.record.Record.ID)(revision, values)
+}
+
+func (update ConfigurationUpdate) Stored(revision int64) etcdstore.Versioned[localagentrecord.LocalAgentRecord] {
+	result := update.record
+	result.Record = localagentrecord.CloneLocalAgentRecord(result.Record)
+	result.ReadRevision = revision
+	return result
+}
+
+func (update *ConfigurationUpdate) Clear() {
+	clear(update.value)
+	*update = ConfigurationUpdate{}
 }
 
 func classifyLocalAgentConfigConflict(agentID string) func(int64, []*etcdstore.KeyValue) error {

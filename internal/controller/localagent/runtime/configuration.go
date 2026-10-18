@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"net/http"
@@ -27,6 +28,7 @@ type localAgentConfigEvidence struct {
 }
 
 type localAgentConfigIdempotency interface {
+	Apply(context.Context, agentregistration.ConfigurationUpdate, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 	Prepare(context.Context, string, localagent.Config) (localAgentConfigEvidence, error)
 	ResolveExisting(
 		context.Context,
@@ -224,7 +226,7 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	updated, transaction, mutationErr := adapter.repository.UpdateConfigIdempotent(
+	prepared, err := adapter.repository.PrepareConfigurationUpdate(
 		ctx,
 		current,
 		localagentrecord.LocalAgentConfig{
@@ -234,6 +236,12 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 		},
 		marker,
 	)
+	if err != nil {
+		return localagent.ConfigUpdateResult{}, err
+	}
+	defer prepared.Clear()
+	transaction, mutationErr := adapter.idempotency.Apply(ctx, prepared, marker)
+	updated := prepared.Stored(transaction.Revision())
 	if mutationErr != nil {
 		if !isUnknownAgentConfigOutcome(mutationErr) {
 			return localagent.ConfigUpdateResult{}, mutationErr

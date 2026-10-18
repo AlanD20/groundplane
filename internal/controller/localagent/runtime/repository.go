@@ -4,13 +4,13 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -22,12 +22,12 @@ type localAgentRecords interface {
 	GetSingleton(context.Context) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	RecordReplacementFailure(context.Context, etcdstore.Versioned[localagentrecord.LocalAgentRecord],
 		*taskprogress.Failure) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
-	UpdateConfigIdempotent(
+	PrepareConfigurationUpdate(
 		context.Context,
 		etcdstore.Versioned[localagentrecord.LocalAgentRecord],
 		localagentrecord.LocalAgentConfig,
 		idempotencyrecord.IdempotencyMarker,
-	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], etcd.IdempotencyTransactionResult, error)
+	) (agentregistration.ConfigurationUpdate, error)
 	MarkReady(
 		context.Context,
 		string,
