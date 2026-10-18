@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 
@@ -57,7 +58,8 @@ func (store *memoryHierarchyStore) Range(
 	}
 	keys := make([]string, 0)
 	for key := range store.history {
-		if !strings.HasPrefix(key, request.Prefix) || key <= request.StartExclusive {
+		if !strings.HasPrefix(key, request.Prefix) || request.StartExclusive != "" &&
+			(!request.Descending && key <= request.StartExclusive || request.Descending && key >= request.StartExclusive) {
 			continue
 		}
 		if store.valueAt(key, revision) != nil {
@@ -65,6 +67,9 @@ func (store *memoryHierarchyStore) Range(
 		}
 	}
 	sort.Strings(keys)
+	if request.Descending {
+		slices.Reverse(keys)
+	}
 	more := int64(len(keys)) > request.Limit
 	if more {
 		keys = keys[:request.Limit]

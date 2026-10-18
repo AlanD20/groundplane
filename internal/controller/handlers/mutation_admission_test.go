@@ -75,9 +75,10 @@ func TestNativeMutationAdmissionBlocksScriptAuthoring(t *testing.T) {
 	}
 }
 
-// Rationale: read access, native acceptance replay and exact native Abort remain
-// usable; adjacent paths, other Tasks and other verbs cannot borrow exceptions.
-// QA: UP-10; HTTP guard against a recording handler, not native replay/Abort execution.
+// Rationale: read access, native acceptance replay and the exact native Task's
+// Abort/operation-classified Retry remain usable. Other Tasks and adjacent paths
+// cannot borrow those exceptions. This guard grants no operation Retry authority.
+// QA: UP-10; HTTP admission only, not replay, Retry classification or execution.
 func TestNativeMutationAdmissionHTTPExceptionsAreExact(t *testing.T) {
 	for _, test := range []struct {
 		method, path string
@@ -90,7 +91,9 @@ func TestNativeMutationAdmissionHTTPExceptionsAreExact(t *testing.T) {
 		{"POST", "/api/v1/controller/update", true},
 		{"POST", "/api/v1/tasks/" + nativeAdmissionTaskID + "/abort", true},
 		{"POST", "/api/v1/tasks/task_01ARZ3NDEKTSV4RRFFQ69G5FAW/abort", false},
-		{"POST", "/api/v1/tasks/" + nativeAdmissionTaskID + "/retry", false},
+		{"POST", "/api/v1/tasks/" + nativeAdmissionTaskID + "/retry", true},
+		{"POST", "/api/v1/tasks/task_01ARZ3NDEKTSV4RRFFQ69G5FAW/retry", false},
+		{"POST", "/api/v1/tasks/" + nativeAdmissionTaskID + "/retry/extra", false},
 		{"DELETE", "/api/v1/tasks/" + nativeAdmissionTaskID + "/abort", false},
 		{"POST", "/api/v1/tasks/" + nativeAdmissionTaskID + "/abort/extra", false},
 		{"PATCH", "/api/v1/controller/update", false},
