@@ -37,7 +37,11 @@ func SlotKey(identity workexecution.Identity, index uint16) string {
 }
 
 func SlotsPrefix(identity workexecution.Identity) string {
-	return root + "slots/" + placement(identity.Executor, identity.HostID) + "/"
+	return slotsPrefix(workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID})
+}
+
+func slotsPrefix(target workexecution.Placement) string {
+	return root + "slots/" + placement(target.Executor, target.HostID) + "/"
 }
 
 func HostClaimsPrefix(hostID string) string { return root + "claims/" + hostID + "/" }

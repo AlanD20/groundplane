@@ -6,8 +6,10 @@ import (
 
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,31 +20,29 @@ type localAgentHealthReader interface {
 	UpdateConfig(context.Context, string, localagent.Config, string) ([]byte, error)
 }
 
-type localAgentAssignmentReader interface {
-	ListAgentAssignments(context.Context, string, uint64, int32) ([]etcd.TaskAssignment, error)
-}
-
 type ReadService struct {
-	health      localAgentHealthReader
-	assignments localAgentAssignmentReader
-	hostname    string
+	health   localAgentHealthReader
+	hosts    hostbindings.Reader
+	queue    *workqueue.Repository
+	hostname string
 }
 
 func NewReadService(
 	health localAgentHealthReader,
-	assignments localAgentAssignmentReader,
+	hosts hostbindings.Reader,
+	queue *workqueue.Repository,
 	hostname string,
 ) (*ReadService, error) {
 	if health == nil {
 		return nil, errs.New(errs.KindInternal, "local Agent health reader is required")
 	}
-	if assignments == nil {
-		return nil, errs.New(errs.KindInternal, "local Agent assignment reader is required")
+	if hosts == nil || queue == nil {
+		return nil, errs.New(errs.KindInternal, "Agent host binding and native capacity readers are required")
 	}
 	if strings.TrimSpace(hostname) == "" {
 		return nil, errs.New(errs.KindInternal, "Controller hostname is required")
 	}
-	return &ReadService{health: health, assignments: assignments, hostname: hostname}, nil
+	return &ReadService{health: health, hosts: hosts, queue: queue, hostname: hostname}, nil
 }
 
 func (service *ReadService) ListAgents(ctx context.Context) ([]apiTypes.Agent, error) {
@@ -104,12 +104,11 @@ func (service *ReadService) projectAgent(
 	if err != nil {
 		return apiTypes.Agent{}, err
 	}
-	assignments, err := service.assignments.ListAgentAssignments(
-		ctx,
-		health.Agent.ID,
-		health.Agent.Generation,
-		health.Agent.Config.MaxConcurrentTasks,
-	)
+	binding, err := hostbindings.Read(ctx, service.hosts, health.Agent.ID, 0)
+	if err != nil {
+		return apiTypes.Agent{}, err
+	}
+	inFlight, err := service.queue.OccupiedSlots(ctx, workexecution.Placement{Executor: workexecution.Agent, HostID: binding.Binding.HostID}, binding.ReadRevision)
 	if err != nil {
 		return apiTypes.Agent{}, err
 	}
@@ -119,7 +118,7 @@ func (service *ReadService) projectAgent(
 		Host:             service.hostname,
 		Status:           status,
 		Labels:           copyAgentLabels(health.Agent.Config.Labels),
-		InFlight:         len(assignments),
+		InFlight:         inFlight,
 	}
 	if !health.Agent.ReadyAt.IsZero() {
 		readyAt := health.Agent.ReadyAt.UTC()

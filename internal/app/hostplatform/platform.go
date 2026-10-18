@@ -232,7 +232,7 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	platform.AgentReads, err = agentmanagement.NewReadService(platform.agents, dependencies.Tasks, hostname)
+	platform.AgentReads, err = agentmanagement.NewReadService(platform.agents, dependencies.Store, maintenanceQueue, hostname)
 	if err != nil {
 		return nil, err
 	}
