@@ -127,6 +127,9 @@ func (service *Service) WorkPage(ctx context.Context, taskID, after string, limi
 		retry := ActionAvailability{Reason: "This work has no retryable failure"}
 		if preparation != nil {
 			retry.Reason = "No executable input was prepared. Submit a new action after resolving the reported problem."
+			if item.Outcome == workexecution.Succeeded {
+				retry.Reason = "The captured operation policy required no host execution for this work."
+			}
 		} else if (item.Phase == workexecution.Attention || item.Phase == workexecution.Settled && item.Outcome == workexecution.Failed) && item.ActiveAttemptID == "" {
 			allowed, reason, err := service.retries.Availability(ctx, taskID, item.ID, item.AttemptNumber, readRevision, time.Now().UTC())
 			if err != nil {

@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
@@ -64,6 +65,13 @@ func (s *store) historicalReferenceHeld(
 	pin *storagemaintenance.Pin,
 	revision int64,
 ) (bool, error) {
+	if pin.Kind == releasegroups.ExecutionHistoryKind {
+		repository, err := releasegroups.NewExecutionRepository(s)
+		if err != nil {
+			return false, err
+		}
+		return repository.PreparationHistoryHeld(ctx, pin, revision)
+	}
 	if pin.Kind == releasePreparationHistoryKind {
 		return s.releasePreparationHistoryHeld(ctx, pin, revision)
 	}

@@ -23,6 +23,28 @@ type InputSettlement struct {
 	Reason       string                `json:"reason"`
 	At           time.Time             `json:"at"`
 	DependencyID string                `json:"dependency_id,omitempty"`
+	Authority    *workexecution.Input  `json:"authority,omitempty"`
+}
+
+// PrepareInputDecision records a captured operation policy that makes this
+// never-executable item unnecessary. The accepted Task intent authorizes the
+// decision; callers join the exact policy/source comparisons before committing.
+// This is not success inferred from a missing input or a skipped host command.
+func PrepareInputDecision(view View, authority workexecution.Input, outcome workexecution.Outcome, reason string, at time.Time) (Change, error) {
+	task, item := view.Task.Task, view.Item.Item
+	if !waitingInput(item) || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
+		item.Cleanup != workexecution.CleanupNone || item.Result != nil || item.FirstFailure != nil ||
+		!task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
+		authority.Validate() != nil || authority != task.Intent ||
+		outcome != workexecution.Succeeded && outcome != workexecution.Failed && outcome != workexecution.Cancelled && outcome != workexecution.Superseded ||
+		at.IsZero() || at.Location() != time.UTC || at.Before(task.UpdatedAt) || at.Before(item.UpdatedAt) ||
+		reason == "" || len(reason) > 512 || strings.TrimSpace(reason) != reason ||
+		task.Stop != nil && outcome != task.Stop.Outcome {
+		return Change{}, invalid("input decision requires an accepted policy and never-executable work")
+	}
+	return prepareInputSettlement(view, InputSettlement{
+		TaskID: task.ID, WorkID: item.ID, Outcome: outcome, Reason: reason, At: at, Authority: &authority,
+	})
 }
 
 // PrepareInputSupersession closes a captured preparation that has not acquired

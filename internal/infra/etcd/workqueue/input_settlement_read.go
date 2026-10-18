@@ -36,9 +36,11 @@ func (repository *Repository) ReadInputSettlement(ctx context.Context, view View
 	}
 	result, err := recordcodec.Decode[InputSettlement](value.Value, "execution_input_settlement")
 	if err != nil || result.TaskID != task.ID || result.WorkID != item.ID || result.Outcome != item.Outcome ||
-		result.Outcome == workexecution.Succeeded || !result.At.Equal(item.UpdatedAt) ||
+		!result.At.Equal(item.UpdatedAt) ||
 		result.Reason == "" || len(result.Reason) > 512 || strings.TrimSpace(result.Reason) != result.Reason ||
-		result.DependencyID != "" && !slices.Contains(item.Dependencies, result.DependencyID) {
+		result.DependencyID != "" && !slices.Contains(item.Dependencies, result.DependencyID) ||
+		result.Outcome == workexecution.Succeeded && result.Authority == nil ||
+		result.Authority != nil && (result.Authority.Validate() != nil || *result.Authority != task.Intent || result.DependencyID != "") {
 		return nil, corrupt()
 	}
 	digest := sha256.Sum256(value.Value)
