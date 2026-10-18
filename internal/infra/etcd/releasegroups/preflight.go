@@ -26,7 +26,7 @@ func (repository *ExecutionRepository) PreflightAuthority(ctx context.Context, v
 	expected := root.Record.memberWork(item.ID)
 	if hook.ScriptID != item.TargetID || hook.Input != *item.Input || item.TaskID != view.Task.Task.ID ||
 		item.Placement != root.Record.Placement || !item.CreatedAt.Equal(expected.CreatedAt) ||
-		!item.Deadline.Equal(expected.Deadline) || !slices.Equal(item.Claims, expected.Claims) ||
+		item.AttemptNumber == 0 && !item.Deadline.Equal(expected.Deadline) || !slices.Equal(item.Claims, expected.Claims) ||
 		!slices.Equal(item.Dependencies, expected.Dependencies) {
 		return nil, errs.New(errs.KindStateConflict, "Script differs from its accepted Group preflight")
 	}

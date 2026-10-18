@@ -61,7 +61,7 @@ func (ledger *ReleaseLedger) readGroupReleasePreparation(ctx context.Context, wo
 		request.Intent.GroupOperationID != root.Record.Policy.Manifest.OperationID || request.Source.ReadRevision != root.Record.SourceReadRevision ||
 		request.Intent.OnFailure != root.Record.Policy.Manifest.FailurePolicy || request.Source.ReadRevision > value.ModRevision ||
 		actual.TaskID != expected.TaskID || actual.TargetID != expected.TargetID || actual.Placement != expected.Placement ||
-		!actual.CreatedAt.Equal(expected.CreatedAt) || !actual.Deadline.Equal(expected.Deadline) ||
+		!actual.CreatedAt.Equal(expected.CreatedAt) || actual.AttemptNumber == 0 && !actual.Deadline.Equal(expected.Deadline) ||
 		!slices.Equal(actual.Claims, expected.Claims) || !slices.Equal(actual.Dependencies, expected.Dependencies) {
 		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Group Release preparation differs from its accepted membership")
 	}

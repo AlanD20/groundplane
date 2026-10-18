@@ -58,7 +58,7 @@ func (repository *ExecutionRepository) LoadRestorationInput(ctx context.Context,
 	expected := root.Record.memberWork(item.ID)
 	if input.Preparation != preparation || input.Authority.GroupInput != task.Intent ||
 		input.Source.Executor.HostID != root.Record.Placement.HostID || item.TaskID != task.ID || item.TargetID != preparation.ServiceID ||
-		item.Placement != root.Record.Placement || !item.CreatedAt.Equal(expected.CreatedAt) || !item.Deadline.Equal(expected.Deadline) ||
+		item.Placement != root.Record.Placement || !item.CreatedAt.Equal(expected.CreatedAt) || item.AttemptNumber == 0 && !item.Deadline.Equal(expected.Deadline) ||
 		!slices.Equal(item.Claims, expected.Claims) || !slices.Equal(item.Dependencies, expected.Dependencies) {
 		return RestorationSnapshot{}, errs.New(errs.KindStateConflict, "Group restoration input differs from its accepted source or host")
 	}

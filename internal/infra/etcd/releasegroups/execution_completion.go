@@ -35,7 +35,7 @@ func (repository *ExecutionRepository) PrepareFinish(ctx context.Context, finish
 		captured, found := expected[item.ID]
 		if !found || snapshot.Revision <= 0 || snapshot.Revision > finished.ReadRevision || item.TaskID != task.ID ||
 			item.Operation != captured.Operation || item.TargetID != captured.TargetID || item.Placement != captured.Placement ||
-			!item.CreatedAt.Equal(captured.CreatedAt) || !item.Deadline.Equal(captured.Deadline) ||
+			!item.CreatedAt.Equal(captured.CreatedAt) || item.AttemptNumber == 0 && !item.Deadline.Equal(captured.Deadline) ||
 			!slices.Equal(item.Claims, captured.Claims) || !slices.Equal(item.Dependencies, captured.Dependencies) ||
 			item.Phase != workexecution.Settled || item.Result == nil || item.ActiveAttemptID != "" ||
 			item.Operation == workexecution.Network && (item.Input == nil || captured.Input == nil || *item.Input != *captured.Input) {
@@ -56,7 +56,7 @@ func (repository *ExecutionRepository) PrepareFinish(ctx context.Context, finish
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if len(expected) != 0 || decision.Action != domain.GroupWorkFinish {
+	if len(expected) != 0 || task.Stop == nil && decision.Action != domain.GroupWorkFinish {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Group completion still needs member or restoration settlement")
 	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{

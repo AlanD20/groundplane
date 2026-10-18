@@ -47,9 +47,11 @@ func (capture ServiceRolloutCapture) MatchesWork(task workexecution.Task, item w
 		item.TaskID != task.ID || item.Operation != workexecution.Release ||
 		capture.TaskID != task.ID || capture.WorkItemID != item.ID || capture.Scope != task.Scope ||
 		capture.Placement != item.Placement || render.ServiceID != item.TargetID ||
-		!capture.CreatedAt.Equal(item.CreatedAt) || !capture.Deadline.Equal(item.Deadline) ||
+		!capture.CreatedAt.Equal(item.CreatedAt) || item.AttemptNumber == 0 && !capture.Deadline.Equal(item.Deadline) ||
 		capture.Deadline.After(task.Deadline) {
 		return errs.New(errs.KindStateConflict, "Service rollout belongs to another Task action, work item or host")
 	}
+	// Captured input keeps its original budget. An operation-authorized Retry
+	// may extend the item's scheduling deadline, never replace this capture.
 	return nil
 }

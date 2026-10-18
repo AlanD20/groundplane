@@ -61,6 +61,9 @@ func (request DirectReleasePreparation) WorkGraph(task workexecution.Task, relea
 		return nil, errs.New(errs.KindStateConflict, "Direct Release graph belongs to another native action")
 	}
 	graph := make([]workexecution.Item, 0, len(request.Networks)+1)
+	// Reconstruct accepted membership, not a mutable post-Retry deadline.
+	// Assignment/recovery budgets are owned by the native attempt records.
+	release.Deadline = task.Deadline
 	previous := ""
 	for _, network := range request.Networks {
 		item := workexecution.Item{ID: network.WorkItemID, TaskID: task.ID, Operation: workexecution.Network,

@@ -62,7 +62,7 @@ func (owner *GraphPublication) PrepareFinish(ctx context.Context, finished workq
 		item := snapshot.Item
 		if !found || item.Operation != expected.Operation || item.TargetID != expected.TargetID ||
 			item.Placement != expected.Placement || !item.CreatedAt.Equal(expected.CreatedAt) ||
-			!item.Deadline.Equal(expected.Deadline) || !slices.Equal(item.Claims, expected.Claims) ||
+			item.AttemptNumber == 0 && !item.Deadline.Equal(expected.Deadline) || !slices.Equal(item.Claims, expected.Claims) ||
 			!slices.Equal(item.Dependencies, expected.Dependencies) ||
 			item.Operation == workexecution.Network && (item.Input == nil || *item.Input != *expected.Input) {
 			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release completion membership differs from the accepted action")
