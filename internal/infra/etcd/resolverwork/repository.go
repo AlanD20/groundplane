@@ -25,8 +25,11 @@ func NewRepository(store workqueue.Store) (*Repository, error) {
 
 func InputKey(workID string) string   { return "/v1/execution/resolver/inputs/" + workID }
 func CaptureKey(workID string) string { return "/v1/execution/resolver/captures/" + workID }
+
+const AppliedPrefix = "/v1/applied/resolver/"
+
 func AppliedKey(hostID, componentID string) string {
-	return "/v1/applied/resolver/" + hostID + "/" + componentID
+	return AppliedPrefix + hostID + "/" + componentID
 }
 
 func IntentKey(hostID, componentID string) string {
@@ -84,6 +87,11 @@ func PreparePublication(input resolverexecution.Input, capture Capture) (workque
 	if err != nil {
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err
+	}
+	if len(raw)+len(authority)+len(request.Mutations[0].Value) > keyvalue.MaximumBytes-64*1024 {
+		keyvalue.ClearMutationValues(change.Mutations)
+		keyvalue.ClearMutationValues(request.Mutations)
+		return workqueue.Change{}, invalid("DNS resolver publication exceeds the atomic input and retained-request budget")
 	}
 	change.Conditions = append(change.Conditions, request.Conditions...)
 	change.Mutations = append(change.Mutations, request.Mutations...)

@@ -86,14 +86,14 @@ func readZoneDNSActivation(ctx context.Context, store hierarchyStore, upstreams 
 	}
 	if ready {
 		for _, address := range addresses {
-			if !slices.Contains(ack.input.ZoneListeners, address) {
+			if ack.state.Applied == nil || !ack.state.Applied.Desired.Enabled || !slices.Contains(ack.state.Applied.ZoneListeners, address) {
 				ready = false
 				break
 			}
 		}
 	}
 	if !ready {
-		if ack.attempt != nil {
+		if ack.state.Request != nil {
 			failed, _, err := failedResolverConfigurationRequest(ctx, store, read.ReadRevision, ack)
 			if err != nil {
 				return ZoneDNSActivation{}, err

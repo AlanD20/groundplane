@@ -86,7 +86,10 @@ func (item Item) Validate() error {
 	}
 	claims := make(map[Claim]struct{}, len(item.Claims))
 	for _, claim := range item.Claims {
-		if !validResourceID(claim.ScopeID) || claim.HostID != "" && claim.HostID != item.Placement.HostID {
+		// Controller orchestration may reserve a host resource without running
+		// on that host. Agent work may claim only its own assigned host.
+		if !validResourceID(claim.ScopeID) || claim.HostID != "" &&
+			(ids.Validate(ids.KindHost, claim.HostID) != nil || item.Placement.Executor == Agent && claim.HostID != item.Placement.HostID) {
 			return invalid("work item claim does not belong to its target host")
 		}
 		if _, exists := claims[claim]; exists {

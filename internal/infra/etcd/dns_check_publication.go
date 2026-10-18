@@ -58,7 +58,7 @@ func (repository *TaskRepository) CreateDNSCheck(ctx context.Context, source DNS
 	defer keyvalue.ClearMutationValues(mutations)
 	item := workexecution.Item{ID: input.Owner.WorkItemID, TaskID: task.ID, Operation: workexecution.DNSCheck,
 		TargetID: task.TargetID, Placement: workexecution.Placement{Executor: workexecution.Controller},
-		Claims: []workexecution.Claim{{ScopeID: task.TargetID}}, Input: &task.Intent,
+		Claims: []workexecution.Claim{{HostID: source.configuration.HostID, ScopeID: task.TargetID}}, Input: &task.Intent,
 		Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
 		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
 	work, err := workqueue.PrepareSingleTask(task, item, marker)

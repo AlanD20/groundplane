@@ -46,5 +46,12 @@ func (repository *Repository) PrepareQueuedStop(ctx context.Context, view workqu
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, stored.Guards...)
+	request, err := repository.prepareRequestResult(ctx, view, outcome)
+	if err != nil {
+		keyvalue.ClearMutationValues(change.Mutations)
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, request.Conditions...)
+	change.Mutations = append(change.Mutations, request.Mutations...)
 	return change, nil
 }

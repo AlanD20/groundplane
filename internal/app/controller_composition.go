@@ -62,14 +62,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, err
 	}
 	resolverComposition, err := newControllerResolverComposition(
-		ctx,
 		cfg,
 		dataServices.componentRecords,
 		dataServices.resolverBaselines,
 		dataServices.resolutionProjections,
 		authority.tasks,
 		authority.intentCoordinator,
-		execution.planResolver,
 		bootstrap.logger,
 	)
 	if err != nil {
@@ -82,7 +80,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		execution.planResolver,
 		execution.materializationResolver,
 		execution.backupSecrets,
-		resolverComposition.executionPlanner,
 		execution.scriptArtifacts,
 		dataServices.scriptCheckpoints,
 		execution.backingHookCheckpoints,

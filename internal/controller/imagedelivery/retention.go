@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
@@ -74,6 +75,11 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 	if err := retainRunnerRuntimeImages(&result, read); err != nil {
 		return imageRetention{}, err
 	}
+	if err := read(resolverwork.AppliedPrefix, func(value keyvalue.KeyValue) error {
+		return retainResolverAppliedImages(&result, value)
+	}); err != nil {
+		return imageRetention{}, err
+	}
 	if err := read(taskjournal.TaskPrefix, func(value keyvalue.KeyValue) error {
 		task, err := etcd.DecodeTaskRecord(value.Value)
 		if err != nil {
@@ -113,6 +119,9 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 		return result, err
 	}
 	if err := read(workqueue.ItemKey(""), func(value keyvalue.KeyValue) error {
+		if err := service.retainResolverWorkImages(ctx, &result, value, revision); err != nil {
+			return err
+		}
 		if err := service.retainBackingWorkImages(ctx, &result, value, revision); err != nil {
 			return err
 		}

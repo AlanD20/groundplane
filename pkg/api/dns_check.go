@@ -12,18 +12,18 @@ type DNSCheckRequest struct {
 }
 
 type DNSCheckConfiguration struct {
-	ComponentID         string          `json:"component_id"`
-	ComponentRevision   int64           `json:"component_revision"`
-	ObservationRevision int64           `json:"observation_revision"`
-	AgentID             string          `json:"agent_id"`
-	AgentGeneration     uint64          `json:"agent_generation"`
-	AppliedTaskID       string          `json:"applied_task_id"`
-	ServiceID           string          `json:"service_id"`
-	ArtifactID          string          `json:"artifact_id"`
-	ArtifactSHA256      string          `json:"artifact_sha256"`
-	ImageReference      string          `json:"image_reference"`
-	RenderGeneration    uint64          `json:"render_generation"`
-	Queries             []DNSCheckQuery `json:"queries"`
+	ComponentID       string          `json:"component_id"`
+	ComponentRevision int64           `json:"component_revision"`
+	HostID            string          `json:"host_id"`
+	AppliedRevision   int64           `json:"applied_revision"`
+	AgentID           string          `json:"agent_id"`
+	AgentGeneration   uint64          `json:"agent_generation"`
+	ServiceID         string          `json:"service_id"`
+	ArtifactID        string          `json:"artifact_id"`
+	ArtifactSHA256    string          `json:"artifact_sha256"`
+	ImageReference    string          `json:"image_reference"`
+	RenderGeneration  uint64          `json:"render_generation"`
+	Queries           []DNSCheckQuery `json:"queries"`
 }
 
 type DNSCheckAnswerSample struct {

@@ -18,10 +18,17 @@ import (
 // Request retains only duplicate-suppression authority. Neither a retained Task
 // nor its execution diagnostics are needed to avoid retrying the same failure.
 type Request struct {
-	HostID      string `json:"host_id"`
-	ComponentID string `json:"component_id"`
-	WorkID      string `json:"work_id"`
-	Fingerprint string `json:"fingerprint"`
+	HostID          string                `json:"host_id"`
+	ComponentID     string                `json:"component_id"`
+	WorkID          string                `json:"work_id"`
+	TaskID          string                `json:"task_id"`
+	Fingerprint     string                `json:"fingerprint"`
+	DesiredSHA256   string                `json:"desired_sha256"`
+	DNSFingerprint  string                `json:"dns_fingerprint"`
+	PrivateListener string                `json:"private_listener,omitempty"`
+	ZoneListeners   []string              `json:"zone_listeners,omitempty"`
+	References      []keyvalue.Condition  `json:"references"`
+	Outcome         workexecution.Outcome `json:"outcome,omitempty"`
 }
 
 func RequestKey(hostID, componentID string) string {
@@ -30,8 +37,22 @@ func RequestKey(hostID, componentID string) string {
 
 func (request Request) validate() error {
 	if ids.Validate(ids.KindHost, request.HostID) != nil || ids.Validate(ids.KindComponent, request.ComponentID) != nil ||
-		ids.Validate(ids.KindWorkItem, request.WorkID) != nil || !recordcodec.ValidSHA256(request.Fingerprint) {
+		ids.Validate(ids.KindWorkItem, request.WorkID) != nil || ids.Validate(ids.KindTask, request.TaskID) != nil ||
+		!recordcodec.ValidSHA256(request.Fingerprint) || !recordcodec.ValidSHA256(request.DesiredSHA256) ||
+		!recordcodec.ValidSHA256(request.DNSFingerprint) || len(request.References) > 256 {
 		return invalid("CoreDNS reconciliation request is corrupt")
+	}
+	if request.Outcome != "" && request.Outcome != workexecution.Succeeded && request.Outcome != workexecution.Failed &&
+		request.Outcome != workexecution.Cancelled && request.Outcome != workexecution.Superseded {
+		return invalid("CoreDNS request outcome is invalid")
+	}
+	if _, err := platformcomponents.ParseZoneListeners(request.ZoneListeners); err != nil {
+		return err
+	}
+	for _, guard := range request.References {
+		if guard.Key == "" || guard.ModRevision < 0 {
+			return invalid("CoreDNS request source comparison is invalid")
+		}
 	}
 	return nil
 }
@@ -80,7 +101,7 @@ func (repository *Repository) ReadRequest(ctx context.Context, hostID, component
 	if value == nil {
 		return keyvalue.Versioned[Request]{ReadRevision: read.ReadRevision}, nil
 	}
-	request, err := recordcodec.Decode[Request](value.Value, "resolver_request")
+	request, err := decodeRequest(value.Value)
 	if err != nil {
 		return keyvalue.Versioned[Request]{}, err
 	}
@@ -90,18 +111,43 @@ func (repository *Repository) ReadRequest(ctx context.Context, hostID, component
 	return keyvalue.Versioned[Request]{Record: request, Revision: value.ModRevision, ReadRevision: read.ReadRevision}, nil
 }
 
+func decodeRequest(raw []byte) (Request, error) {
+	if len(raw) == 0 || len(raw) > maximumCaptureBytes {
+		return Request{}, invalid("CoreDNS request exceeds its retained source bound")
+	}
+	request, err := recordcodec.Decode[Request](raw, "resolver_request")
+	if err != nil {
+		return Request{}, err
+	}
+	return request, request.validate()
+}
+
 func prepareRequest(input resolverexecution.Input, capture Capture) (workqueue.Change, error) {
 	digest, err := fingerprint(input, capture, capture.AppliedRevision)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	request := Request{HostID: input.HostID, ComponentID: input.ComponentID, WorkID: input.WorkID, Fingerprint: digest}
+	desired, err := DesiredDigest(capture.Desired)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	dns, err := platformcomponents.ResolverConfigurationFingerprint(capture.PrivateListener, capture.EnvironmentDNS, capture.ZoneListeners)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	request := Request{HostID: input.HostID, ComponentID: input.ComponentID, WorkID: input.WorkID, TaskID: input.TaskID, Fingerprint: digest,
+		DesiredSHA256: desired, DNSFingerprint: dns, PrivateListener: capture.PrivateListener,
+		ZoneListeners: append([]string(nil), capture.ZoneListeners...), References: append([]keyvalue.Condition(nil), capture.References...)}
 	if err := request.validate(); err != nil {
 		return workqueue.Change{}, err
 	}
 	value, err := recordcodec.Encode("resolver_request", request)
 	if err != nil {
 		return workqueue.Change{}, err
+	}
+	if len(value) > maximumCaptureBytes {
+		clear(value)
+		return workqueue.Change{}, invalid("CoreDNS request exceeds its retained source bound")
 	}
 	key := RequestKey(input.HostID, input.ComponentID)
 	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: capture.RequestRevision}},

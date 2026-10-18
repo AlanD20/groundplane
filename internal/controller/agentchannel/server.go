@@ -14,7 +14,6 @@ type Server struct {
 	tasks                  TaskStore
 	plans                  PlanResolver
 	materials              MaterializationResolver
-	managed                ManagedConfigResolver
 	secrets                RestoreIdentityReleaser
 	scriptCheckpoints      ScriptCheckpointer
 	workIdentities         WorkIdentityResolver
@@ -46,14 +45,6 @@ func (s *Server) EnableBackingHookCheckpoints(checkpointer BackingHookCheckpoint
 		return errs.New(errs.KindInternal, "backing hook checkpoint service is invalid")
 	}
 	s.backingHookCheckpoints = checkpointer
-	return nil
-}
-
-func (s *Server) EnableManagedConfigTransfers(resolver ManagedConfigResolver) error {
-	if s == nil || resolver == nil {
-		return errs.New(errs.KindInternal, "managed-config resolver is required")
-	}
-	s.managed = resolver
 	return nil
 }
 
@@ -120,22 +111,6 @@ func NewWithRuntimeServices(
 	}
 }
 
-// NewWithManagedRuntimeServices returns the authenticated Agent channel with
-// the generic managed-config transfer capability enabled when managed is set.
-func NewWithManagedRuntimeServices(
-	auth Authenticator,
-	sessions *Registry,
-	tasks TaskStore,
-	plans PlanResolver,
-	materials MaterializationResolver,
-	secrets RestoreIdentityReleaser,
-	managed ManagedConfigResolver,
-) *Server {
-	server := NewWithRuntimeServices(auth, sessions, tasks, plans, materials, secrets)
-	server.managed = managed
-	return server
-}
-
 func NewWithScriptRuntimeServices(
 	auth Authenticator,
 	sessions *Registry,
@@ -143,12 +118,11 @@ func NewWithScriptRuntimeServices(
 	plans PlanResolver,
 	materials MaterializationResolver,
 	secrets RestoreIdentityReleaser,
-	managed ManagedConfigResolver,
 	scripts ScriptArtifactResolver,
 	scriptCheckpoints ScriptCheckpointer,
 ) *Server {
-	server := NewWithManagedRuntimeServices(
-		auth, sessions, tasks, plans, materials, secrets, managed,
+	server := NewWithRuntimeServices(
+		auth, sessions, tasks, plans, materials, secrets,
 	)
 	server.scriptArtifacts = scripts
 	server.scriptCheckpoints = scriptCheckpoints

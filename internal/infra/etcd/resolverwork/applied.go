@@ -2,12 +2,14 @@ package resolverwork
 
 import (
 	"context"
+	"encoding/hex"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/resolverexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -33,6 +35,13 @@ type Applied struct {
 	PrivateListener  string                                     `json:"private_listener,omitempty"`
 	ZoneListeners    []string                                   `json:"zone_listeners,omitempty"`
 	ObservedAt       time.Time                                  `json:"observed_at"`
+}
+
+func (applied Applied) ConfigurationSHA256() string {
+	if applied.Configuration == nil {
+		return ""
+	}
+	return hex.EncodeToString(applied.Configuration.Apply.ArtifactDigest)
 }
 
 func (applied Applied) Validate() error {
@@ -88,11 +97,19 @@ func DecodeApplied(raw []byte) (Applied, error) {
 }
 
 func (repository *Repository) ReadApplied(ctx context.Context, hostID, componentID string, revision int64) (keyvalue.Versioned[Applied], bool, error) {
-	if ids.Validate(ids.KindHost, hostID) != nil || ids.Validate(ids.KindComponent, componentID) != nil {
+	return ReadApplied(ctx, repository.store, hostID, componentID, revision)
+}
+
+// ReadApplied needs no mutation capability, Task lookup or live Agent binding.
+func ReadApplied(ctx context.Context, store hostbindings.Reader, hostID, componentID string, revision int64) (keyvalue.Versioned[Applied], bool, error) {
+	if err := keyvalue.ValidateContext(ctx); err != nil {
+		return keyvalue.Versioned[Applied]{}, false, err
+	}
+	if store == nil || revision < 0 || ids.Validate(ids.KindHost, hostID) != nil || ids.Validate(ids.KindComponent, componentID) != nil {
 		return keyvalue.Versioned[Applied]{}, false, invalid("DNS resolver applied read requires its actual host and Component")
 	}
 	key := AppliedKey(hostID, componentID)
-	read, err := repository.read(ctx, []string{key}, revision)
+	read, err := readStateKeys(ctx, store, []string{key}, revision)
 	if err != nil {
 		return keyvalue.Versioned[Applied]{}, false, err
 	}

@@ -80,23 +80,6 @@ type MaterializationResolver interface {
 	) (io.ReadCloser, error)
 }
 
-type ManagedConfigSource struct {
-	MediaType string
-	Length    uint64
-	Content   io.ReadCloser
-}
-
-// ManagedConfigResolver reconstructs one immutable Component artifact from
-// durable, revision-pinned inputs. The channel owns and closes Content.
-type ManagedConfigResolver interface {
-	ResolveManagedConfig(
-		context.Context,
-		etcd.TaskRecord,
-		*agentpb.ExecutionPlan,
-		*agentpb.ExecutionStep,
-	) (ManagedConfigSource, error)
-}
-
 // RestoreIdentityReleaser clears Task-owned transient restore identities.
 type RestoreIdentityReleaser interface {
 	ReleaseRestoreIdentity(context.Context, string) error

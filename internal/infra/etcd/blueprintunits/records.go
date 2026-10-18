@@ -268,17 +268,13 @@ func validateApplied(record AppliedRecord) error {
 		return invalidRecord()
 	}
 	if record.ControllerDNS != nil && (record.Target.Kind != ids.KindDNSRecord ||
-		(record.ControllerOperationID == "" && record.NativeOperationID == "") || !validDNSReceipt(record)) {
+		record.ControllerOperationID == "" || !validDNSReceipt(record)) {
 		return invalidRecord()
 	}
 	if record.ControllerServiceDeclarationAbsence != nil && !validServiceDeclarationAbsence(record) {
 		return invalidRecord()
 	}
 	if record.NativeOperationID != "" {
-		if record.Target.Kind == ids.KindDNSRecord && (record.ControllerDNS == nil ||
-			record.Execution == nil || record.ControllerDNS.TaskID != record.Execution.TaskID) {
-			return invalidRecord()
-		}
 		if record.State != Absent || !nativeRemovalTarget(record.Target) || record.ParentTaskID != "" ||
 			ids.Validate(ids.KindOperation, record.NativeOperationID) != nil ||
 			record.Execution == nil || record.Execution.Validate() != nil ||

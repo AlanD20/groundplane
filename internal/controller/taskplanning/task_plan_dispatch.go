@@ -26,7 +26,6 @@ type TaskPlanResolver struct {
 	componentCatalog      []componentrender.EnvironmentComponentRegistration
 	serviceProxyImages    map[serviceproxy.Implementation]*releasedomain.ProxyImage
 	releases              *etcd.ReleaseLedger
-	componentPlans        ComponentTaskPlanResolver
 	materializations      componentMaterializationContentRepository
 	configurationRecovery *configurationrecovery.Sources
 	scriptPlans           ScriptExecutionPlanReader
@@ -76,12 +75,6 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	}
 	if task.Params[taskjournal.TaskReleaseNetworkParentParam] != "" {
 		return resolver.resolveReleaseNetworkPlan(ctx, task)
-	}
-	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceComponent {
-		if resolver.componentPlans == nil {
-			return nil, errs.New(errs.KindInternal, "Component Task plan resolver is not configured")
-		}
-		return resolver.componentPlans.ResolveComponentExecutionPlan(ctx, task)
 	}
 	if _, backingCreation := task.Params[taskjournal.TaskBackingServiceCreationParam]; task.Type == taskjournal.TaskUpdate &&
 		backingCreation {

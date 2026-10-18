@@ -49,18 +49,18 @@ func projectDNSCheck(record dnschecks.Record, stale bool) (apiTypes.DNSCheckResu
 	}
 	source := record.Source
 	configuration := apiTypes.DNSCheckConfiguration{
-		ComponentID:         source.ComponentID,
-		ComponentRevision:   source.ComponentRevision,
-		ObservationRevision: source.ObservationRevision,
-		AgentID:             source.AgentID,
-		AgentGeneration:     source.AgentGeneration,
-		AppliedTaskID:       source.AppliedTaskID,
-		ServiceID:           source.ServiceID,
-		ArtifactID:          source.ArtifactID,
-		ArtifactSHA256:      source.ArtifactSHA256,
-		ImageReference:      source.ImageReference,
-		RenderGeneration:    source.RenderGeneration,
-		Queries:             []apiTypes.DNSCheckQuery{},
+		ComponentID:       source.ComponentID,
+		ComponentRevision: source.ComponentRevision,
+		HostID:            source.HostID,
+		AppliedRevision:   source.AppliedRevision,
+		AgentID:           source.AgentID,
+		AgentGeneration:   source.AgentGeneration,
+		ServiceID:         source.ServiceID,
+		ArtifactID:        source.ArtifactID,
+		ArtifactSHA256:    source.ArtifactSHA256,
+		ImageReference:    source.ImageReference,
+		RenderGeneration:  source.RenderGeneration,
+		Queries:           []apiTypes.DNSCheckQuery{},
 	}
 	for _, query := range request.Queries {
 		configuration.Queries = append(

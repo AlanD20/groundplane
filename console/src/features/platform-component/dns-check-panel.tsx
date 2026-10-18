@@ -202,8 +202,8 @@ export function DNSCheckPanel({
               value={result.configuration.component_revision}
             />
             <DetailRow
-              label="Applied configuration Task"
-              value={<TaskLink taskId={result.configuration.applied_task_id} />}
+              label="Applied revision"
+              value={result.configuration.applied_revision}
             />
             <DetailRow
               label="Render generation"

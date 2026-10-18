@@ -14,7 +14,6 @@ type NativeRemoval struct {
 	Target      ResourceKey
 	OperationID string
 	Execution   AppliedExecution
-	DNS         *DNSReceipt
 }
 
 func PrepareNativeRemovalReceipt(snapshot Snapshot, source NativeRemoval) (MutationPlan, error) {
@@ -31,7 +30,6 @@ func PrepareNativeRemovalReceipt(snapshot Snapshot, source NativeRemoval) (Mutat
 	absent := AppliedRecord{
 		EnvironmentID: snapshot.EnvironmentID, Target: target, State: Absent,
 		NativeOperationID: source.OperationID, Execution: &source.Execution,
-		ControllerDNS: source.DNS,
 	}
 	if err := validateApplied(absent); err != nil {
 		return MutationPlan{}, err
@@ -40,6 +38,6 @@ func PrepareNativeRemovalReceipt(snapshot Snapshot, source NativeRemoval) (Mutat
 }
 
 func nativeRemovalTarget(target ResourceKey) bool {
-	return (target.Kind == ids.KindService || target.Kind == ids.KindAttach || target.Kind == ids.KindNetwork || target.Kind == ids.KindDNSRecord) &&
+	return (target.Kind == ids.KindService || target.Kind == ids.KindAttach || target.Kind == ids.KindNetwork) &&
 		validKey(target)
 }

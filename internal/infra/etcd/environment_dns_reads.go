@@ -4,12 +4,9 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -47,21 +44,22 @@ func (repository *EnvironmentBlueprintRepository) GetEnvironmentDNS(
 	if !enabled {
 		result.State = "resolver_disabled"
 	}
-	failedTask := ""
+	failedTask, _, err := failedResolverConfigurationRequest(ctx, repository.store, desired.ReadRevision, ack)
+	if err != nil {
+		return result, err
+	}
 	if ready {
-		failedTask, _, err = failedResolverConfigurationRequest(ctx, repository.store, desired.ReadRevision, ack)
-		if err != nil {
-			return result, err
-		}
-		result.State, result.TaskID = "applied", ack.observation.TaskID
+		result.State, result.TaskID = "applied", ""
+	} else if enabled && failedTask != "" {
+		result.State, result.TaskID = "failed", failedTask
 	}
 	bindings := selection.Bindings()
 	for _, binding := range bindings {
 		state, taskID := result.State, result.TaskID
 		if ready {
 			switch {
-			case blueprintDNSBindingAcknowledged(ack.observation, binding.Record.ID, &binding):
-				state, taskID = "applied", ack.observation.TaskID
+			case blueprintDNSBindingAcknowledged(*ack.state.Applied, binding.Record.ID, &binding):
+				state, taskID = "applied", ""
 				if binding.Address == "" {
 					state = "waiting_for_service"
 				}
@@ -79,7 +77,7 @@ func (repository *EnvironmentBlueprintRepository) GetEnvironmentDNS(
 		})
 	}
 	if ready {
-		for _, previous := range ack.observation.EnvironmentDNS {
+		for _, previous := range ack.state.Applied.EnvironmentDNS {
 			if previous.Binding.Record.EnvironmentID != environmentID {
 				continue
 			}
@@ -107,58 +105,14 @@ func (repository *EnvironmentBlueprintRepository) GetEnvironmentDNS(
 	return result, nil
 }
 
-func (repository *EnvironmentBlueprintRepository) environmentDNSAcknowledgement(
-	ctx context.Context,
-	revision int64,
-) (resolverAcknowledgement, bool, bool, string, error) {
-	var empty resolverAcknowledgement
-	index, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
-		Keys: []string{platformcomponents.PlatformComponentKindKey(core.ComponentKindCoreDNS)}, Revision: revision,
-	})
+func (repository *EnvironmentBlueprintRepository) environmentDNSAcknowledgement(ctx context.Context, revision int64) (resolverAcknowledgement, bool, bool, string, error) {
+	// Reads can display the last applied answers while a replacement is pending;
+	// execution still uses the strict serving/withdrawal purposes.
+	ack, ready, err := readResolverStateAcknowledgement(ctx, repository.store, revision, resolverWithdrawalFinalization)
 	if err != nil {
-		return empty, false, false, "", err
+		return ack, false, false, "", err
 	}
-	if index == nil || len(index.Values) != 1 || index.ReadRevision != revision {
-		return empty, false, false, "", errs.New(errs.KindInternal, "DNS resolver index read is incomplete")
-	}
-	defer keyvalue.ClearValues(index.Values)
-	if index.Values[0] == nil {
-		return empty, false, false, "", nil
-	}
-	componentID := string(index.Values[0].Value)
-	if ids.Validate(ids.KindComponent, componentID) != nil {
-		return empty, false, false, "", errs.New(errs.KindInternal, "DNS resolver identity is corrupt")
-	}
-	state, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
-		Keys: []string{
-			components.RecordKey(componentID),
-			platformcomponents.ActiveTaskKey(componentID),
-		}, Revision: revision,
-	})
-	if err != nil {
-		return empty, false, false, "", err
-	}
-	if state == nil || len(state.Values) != 2 || state.ReadRevision != revision || state.Values[0] == nil {
-		return empty, false, false, "", errs.New(errs.KindInternal, "DNS resolver read is incomplete")
-	}
-	defer keyvalue.ClearValues(state.Values)
-	component, err := components.DecodeRecord(state.Values[0].Value)
-	if err != nil {
-		return empty, false, false, "", err
-	}
-	if component.Desired.ID != componentID || component.Desired.Kind != core.ComponentKindCoreDNS {
-		return empty, false, false, "", errs.New(errs.KindInternal, "DNS resolver ownership is corrupt")
-	}
-	if !component.Desired.Enabled {
-		return empty, false, false, "", nil
-	}
-	if state.Values[1] != nil {
-		active := string(state.Values[1].Value)
-		if ids.Validate(ids.KindTask, active) != nil {
-			return empty, false, true, "", errs.New(errs.KindInternal, "DNS resolver Task identity is corrupt")
-		}
-		return empty, false, true, active, nil
-	}
-	ack, ready, err := readResolverAcknowledgement(ctx, repository.store, revision)
-	return ack, ready, true, "", err
+	enabled := ack.component.Desired.Enabled
+	serving := ready && ack.state.Applied != nil && ack.state.Applied.Desired.Enabled
+	return ack, serving, enabled, ack.pendingTaskID, nil
 }

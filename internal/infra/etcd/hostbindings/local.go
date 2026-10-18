@@ -20,36 +20,18 @@ type localHost struct {
 // The returned explicit binding and comparisons must be captured at publication;
 // an assigned attempt never resolves this singleton again.
 func ReadLocal(ctx context.Context, store Reader, revision int64) (Snapshot, error) {
-	if err := keyvalue.ValidateContext(ctx); err != nil {
-		return Snapshot{}, err
-	}
-	if store == nil || revision < 0 {
-		return Snapshot{}, errs.New(errs.KindValidationFailed, "local host selection is invalid")
-	}
-	read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{localHostKey}, Revision: revision})
+	anchor, err := ReadLocalIdentity(ctx, store, revision)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 {
-		return Snapshot{}, errs.New(errs.KindInternal, "local host selection read is incomplete")
-	}
-	defer keyvalue.ClearValues(read.Values)
-	anchor := read.Values[0]
-	if anchor == nil {
+	if anchor.Revision == 0 {
 		return Snapshot{}, errs.New(errs.KindStateConflict, "enroll an Agent before creating host work")
 	}
-	if anchor.Key != localHostKey || anchor.ModRevision <= 0 || anchor.ModRevision > read.ReadRevision {
-		return Snapshot{}, errs.New(errs.KindInternal, "local host selection revision is invalid")
-	}
-	host, err := recordcodec.Decode[localHost](anchor.Value, "local-host")
-	if err != nil || ids.Validate(ids.KindHost, host.ID) != nil {
-		return Snapshot{}, errs.New(errs.KindInternal, "local host selection is corrupt")
-	}
-	owners, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{HostKey(host.ID)}, Revision: read.ReadRevision})
+	owners, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{HostKey(anchor.Record)}, Revision: anchor.ReadRevision})
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if owners == nil || owners.ReadRevision != read.ReadRevision || len(owners.Values) != 1 {
+	if owners == nil || owners.ReadRevision != anchor.ReadRevision || len(owners.Values) != 1 {
 		return Snapshot{}, errs.New(errs.KindInternal, "local host binding read is incomplete")
 	}
 	defer keyvalue.ClearValues(owners.Values)
@@ -57,18 +39,18 @@ func ReadLocal(ctx context.Context, store Reader, revision int64) (Snapshot, err
 	if owner == nil {
 		return Snapshot{}, errs.New(errs.KindStateConflict, "local host has no enrolled Agent")
 	}
-	if owner.Key != HostKey(host.ID) || owner.ModRevision <= 0 || owner.ModRevision > read.ReadRevision {
+	if owner.Key != HostKey(anchor.Record) || owner.ModRevision <= 0 || owner.ModRevision > anchor.ReadRevision {
 		return Snapshot{}, errs.New(errs.KindInternal, "local host binding revision is invalid")
 	}
 	binding, err := Decode(owner.Value)
-	if err != nil || binding.HostID != host.ID {
+	if err != nil || binding.HostID != anchor.Record {
 		return Snapshot{}, errs.New(errs.KindInternal, "local host binding identity is inconsistent")
 	}
-	snapshot, err := Read(ctx, store, binding.AgentID, read.ReadRevision)
+	snapshot, err := Read(ctx, store, binding.AgentID, anchor.ReadRevision)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	snapshot.Conditions = append(snapshot.Conditions, keyvalue.Condition{Key: localHostKey, ModRevision: anchor.ModRevision})
+	snapshot.Conditions = append(snapshot.Conditions, keyvalue.Condition{Key: localHostKey, ModRevision: anchor.Revision})
 	return snapshot, nil
 }
 

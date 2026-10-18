@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	model "github.com/AlanD20/groundplane/internal/common/dnsrecords"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -13,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverwork"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
 )
@@ -32,54 +34,60 @@ func (reader *Reader) references(ctx context.Context, revision int64) (reference
 	if err != nil {
 		return referenceSnapshot{}, err
 	}
-	if index == nil || len(index.Values) != 1 {
+	if index == nil || index.ReadRevision <= 0 || revision > 0 && index.ReadRevision != revision || len(index.Values) != 1 {
 		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS reference index read is incomplete")
 	}
-	conditions := []keyvalue.Condition{{Key: kindKey}}
+	defer keyvalue.ClearValues(index.Values)
+	conditions := []keyvalue.Condition{{Key: kindKey, ModRevision: keyvalue.RevisionOf(index.Values[0])}}
 	if index.Values[0] == nil {
 		return referenceSnapshot{conditions: conditions}, nil
 	}
-	conditions[0].ModRevision = index.Values[0].ModRevision
 	id := string(index.Values[0].Value)
-	keys := []string{
-		components.RecordKey(id),
-		platformcomponents.ComponentObservationKey(id),
-		platformcomponents.ActiveTaskKey(id),
+	if ids.Validate(ids.KindComponent, id) != nil {
+		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS resolver index identity is corrupt")
 	}
-	read, err := reader.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: index.ReadRevision})
+	key := components.RecordKey(id)
+	read, err := reader.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: index.ReadRevision})
 	if err != nil {
 		return referenceSnapshot{}, err
 	}
-	if read == nil || len(read.Values) != len(keys) || read.Values[0] == nil {
-		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS reference authority is missing")
+	if read == nil || read.ReadRevision != index.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
+		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS reference resource is unavailable")
 	}
+	defer keyvalue.ClearValues(read.Values)
 	component, err := components.DecodeRecord(read.Values[0].Value)
 	if err != nil {
 		return referenceSnapshot{}, err
 	}
-	if component.Desired.Config.CoreDNS == nil {
-		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS config authority is missing")
+	if component.Desired.ID != id || component.Desired.Kind != core.ComponentKindCoreDNS || component.Desired.Owner != core.ComponentOwnerPlatform || component.Desired.Config.CoreDNS == nil {
+		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS reference configuration identity is invalid")
 	}
-	records := slices.Clone(component.Desired.Config.CoreDNS.Records)
-	for i, key := range keys {
-		condition := keyvalue.Condition{Key: key}
-		if read.Values[i] != nil {
-			condition.ModRevision = read.Values[i].ModRevision
-		}
-		conditions = append(conditions, condition)
+	conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
+	state, err := resolverwork.ReadLocalState(ctx, reader.store, id, index.ReadRevision)
+	if err != nil {
+		return referenceSnapshot{}, err
 	}
-	snapshot := referenceSnapshot{records: records, conditions: conditions, updating: read.Values[2] != nil}
-	if read.Values[1] != nil {
-		observation, err := platformcomponents.DecodeComponentObservation(read.Values[1].Value)
-		if err != nil {
-			return referenceSnapshot{}, err
+	snapshot := referenceSnapshot{records: slices.Clone(component.Desired.Config.CoreDNS.Records),
+		conditions: append(conditions, state.Conditions...), updating: state.Pending != nil || state.Active != nil}
+	if applied := state.Applied; applied != nil && applied.Desired.Enabled {
+		snapshot.records = append(snapshot.records, applied.Desired.Config.CoreDNS.Records...)
+		snapshot.hosts = platformcomponents.CloneDNSHosts(applied.Hosts)
+		for _, capture := range applied.EnvironmentDNS {
+			snapshot.bindings = append(snapshot.bindings, capture.Binding)
 		}
-		if observation.Enabled {
-			snapshot.records = append(snapshot.records, observation.DNSRecords...)
-			snapshot.hosts = platformcomponents.CloneDNSHosts(observation.ResolvedDNSHosts)
-			for _, capture := range observation.EnvironmentDNS {
-				snapshot.bindings = append(snapshot.bindings, capture.Binding)
-			}
+	}
+	// New intent cannot hide the candidate an older unresolved execution still
+	// owns. Protect captured targets until that execution proves them settled.
+	for _, captured := range []*resolverwork.CapturedState{state.Active, state.Pending} {
+		if captured == nil || !captured.Input.Enabled {
+			continue
+		}
+		if config := captured.Capture.Desired.Config.CoreDNS; config != nil {
+			snapshot.records = append(snapshot.records, config.Records...)
+		}
+		snapshot.hosts = append(snapshot.hosts, platformcomponents.CloneDNSHosts(captured.Capture.Hosts)...)
+		for _, binding := range captured.Capture.EnvironmentDNS {
+			snapshot.bindings = append(snapshot.bindings, binding.Binding)
 		}
 	}
 	return snapshot, nil

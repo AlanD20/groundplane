@@ -56,15 +56,14 @@ func (repository *ComponentRepository) GetComponentInstalledSoftware(
 		if len(component.Runtime.GeneratedServices) == 0 {
 			return nil, nil
 		}
-		host, err := hostbindings.ReadLocal(ctx, repository.store, revision)
+		host, err := hostbindings.ReadLocalIdentity(ctx, repository.store, revision)
 		if err != nil {
 			return nil, err
 		}
-		resolvers, err := resolverwork.NewRepository(repository.store)
-		if err != nil {
-			return nil, err
+		if host.Revision == 0 {
+			return nil, recordcodec.CorruptRecord()
 		}
-		applied, found, err := resolvers.ReadApplied(ctx, host.Binding.HostID, componentID, revision)
+		applied, found, err := resolverwork.ReadApplied(ctx, repository.store, host.Record, componentID, revision)
 		if err != nil {
 			return nil, err
 		}

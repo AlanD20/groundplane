@@ -87,11 +87,11 @@ func (repository *TaskRepository) GetReleasePreparation(ctx context.Context,
 }
 
 func releaseNetworkResolverReady(ack resolverAcknowledgement, ready bool, upstreams []string) bool {
-	if !ready {
+	if !ready || ack.state.Applied == nil || !ack.state.Applied.Desired.Enabled {
 		return false
 	}
 	for _, address := range upstreams {
-		if !slices.Contains(ack.input.ZoneListeners, address) {
+		if !slices.Contains(ack.state.Applied.ZoneListeners, address) {
 			return false
 		}
 	}

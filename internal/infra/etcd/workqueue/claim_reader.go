@@ -7,7 +7,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 )
 
 // ReadServiceClaim resolves the current effect owner at one fixed revision.
@@ -28,8 +27,8 @@ func (repository *Repository) ReadServiceClaim(ctx context.Context, resourceID s
 	if value == nil {
 		return result, workexecution.Placement{}, nil
 	}
-	owner, err := recordcodec.Decode[ClaimOwner](value.Value, "execution_claim")
-	if err != nil || validateOwner(owner) != nil {
+	owner, err := DecodeClaimOwner(value.Value)
+	if err != nil {
 		return ClaimSnapshot{}, workexecution.Placement{}, corrupt()
 	}
 	view, err := repository.ReadWork(ctx, owner.TaskID, owner.WorkItemID, read.ReadRevision)

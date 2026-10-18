@@ -15,17 +15,17 @@ import (
 // unit. The binding is present for a retained record, including waiting records;
 // removal instead proves withdrawal and retires its hostname claims atomically.
 type DNSReceipt struct {
-	ComponentID         string                         `json:"component_id"`
-	TaskID              string                         `json:"task_id"`
-	ObservationRevision int64                          `json:"observation_revision"`
-	CorefileSHA256      string                         `json:"corefile_sha256"`
-	Binding             *dnsrecords.EnvironmentBinding `json:"binding,omitempty"`
+	ComponentID     string                         `json:"component_id"`
+	HostID          string                         `json:"host_id"`
+	AppliedRevision int64                          `json:"applied_revision"`
+	CorefileSHA256  string                         `json:"corefile_sha256"`
+	Binding         *dnsrecords.EnvironmentBinding `json:"binding,omitempty"`
 }
 
 func validDNSReceipt(record AppliedRecord) bool {
 	proof := record.ControllerDNS
 	if proof == nil || ids.Validate(ids.KindComponent, proof.ComponentID) != nil ||
-		ids.Validate(ids.KindTask, proof.TaskID) != nil || proof.ObservationRevision <= 0 ||
+		ids.Validate(ids.KindHost, proof.HostID) != nil || proof.AppliedRevision <= 0 ||
 		!recordcodec.ValidSHA256(proof.CorefileSHA256) {
 		return false
 	}

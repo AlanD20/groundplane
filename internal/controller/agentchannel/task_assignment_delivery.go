@@ -64,14 +64,6 @@ func (s *Server) sendAssignmentPayloads(
 	assignment *agentpb.TaskAssignment,
 ) error {
 	for _, step := range assignment.GetPlan().GetSteps() {
-		if action := step.GetComponentApply(); action != nil && action.GetManagedConfigContent() &&
-			assignment.GetPlan().GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
-			if err := s.sendManagedConfig(
-				stream, claim.Task.Record, assignment.GetAssignmentId(), assignment.GetPlan(), step,
-			); err != nil {
-				return err
-			}
-		}
 		if step.GetMaterializeFile() == nil {
 			continue
 		}

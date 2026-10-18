@@ -53,7 +53,6 @@ func New(
 	plans agentchannel.PlanResolver,
 	materials agentchannel.MaterializationResolver,
 	secrets agentchannel.RestoreIdentityReleaser,
-	managed agentchannel.ManagedConfigResolver,
 	scripts agentchannel.ScriptArtifactResolver,
 	scriptCheckpoints agentchannel.ScriptCheckpointer,
 	backingHookCheckpoints agentchannel.BackingHookCheckpointer,
@@ -65,7 +64,7 @@ func New(
 			grpc.MaxSendMsgSize(agentChannelControllerMaximumSendMessageBytes),
 		)
 		channel := agentchannel.NewWithScriptRuntimeServices(
-			authenticator, registry, tasks, plans, materials, secrets, managed,
+			authenticator, registry, tasks, plans, materials, secrets,
 			scripts, scriptCheckpoints,
 		)
 		if backingHookCheckpoints != nil {

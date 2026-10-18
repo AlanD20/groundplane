@@ -10,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -79,7 +79,7 @@ func (repository *TaskRepository) zoneDNSWithdrawalConditions(ctx context.Contex
 	if err != nil || !ready {
 		return nil, false, err
 	}
-	if ack.observation.Enabled && slices.Contains(ack.input.ZoneListeners, gateway) {
+	if ack.state.Applied != nil && ack.state.Applied.Desired.Enabled && slices.Contains(ack.state.Applied.ZoneListeners, gateway) {
 		return nil, false, nil
 	}
 	if ack.pendingTaskID != "" {
@@ -94,53 +94,19 @@ func (repository *TaskRepository) zoneDNSWithdrawalConditions(ctx context.Contex
 	return ack.conditions, true, nil
 }
 
-func (repository *TaskRepository) pendingResolverExcludesGateway(ctx context.Context,
-	ack resolverAcknowledgement, gateway string, revision int64,
-) ([]keyvalue.Condition, bool, error) {
-	taskID := ack.pendingTaskID
-	taskKey := taskjournal.TaskStorageKey(taskID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{taskKey}, Revision: revision})
-	if err != nil {
-		return nil, false, err
+func (repository *TaskRepository) pendingResolverExcludesGateway(_ context.Context, ack resolverAcknowledgement, gateway string, _ int64) ([]keyvalue.Condition, bool, error) {
+	for _, captured := range []*resolverwork.CapturedState{ack.state.Active, ack.state.Pending} {
+		if captured == nil {
+			continue
+		}
+		if captured.Input.Enabled && slices.Contains(captured.Capture.ZoneListeners, gateway) {
+			return nil, false, nil
+		}
+		// A recovery may restore its previous runtime. Its exact captured predecessor
+		// must be the applied state already proven to exclude this retiring gateway.
+		if captured.Input.PreviousEnabled && captured.Capture.AppliedRevision != ack.state.AppliedRevision {
+			return nil, false, nil
+		}
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return nil, false, errs.New(errs.KindStateConflict, "active CoreDNS Task is unavailable")
-	}
-	task, err := DecodeTaskRecord(read.Values[0].Value)
-	if err != nil {
-		return nil, false, err
-	}
-	inputKey := platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)
-	inputRead, err := repository.store.GetMany(
-		ctx,
-		keyvalue.GetManyRequest{Keys: []string{inputKey}, Revision: revision},
-	)
-	if err != nil {
-		return nil, false, err
-	}
-	if inputRead == nil || inputRead.ReadRevision != revision || len(inputRead.Values) != 1 ||
-		inputRead.Values[0] == nil {
-		return nil, false, errs.New(errs.KindStateConflict, "active CoreDNS Task input is unavailable")
-	}
-	input, err := platformcomponents.DecodePlatformComponentTaskRenderInput(inputRead.Values[0].Value)
-	if err != nil {
-		return nil, false, err
-	}
-	if task.ID != taskID || task.Target != ack.observation.ComponentID || input.ComponentID != task.Target ||
-		input.PlanID != task.PlanID || input.ExecutionPlanSHA256 != task.PlanHash ||
-		input.PredecessorTaskID != ack.observation.TaskID ||
-		input.ExpectedPreviousArtifactSHA256 != ack.observation.CorefileSHA256 ||
-		!ack.observation.Enabled && input.RollbackComposeArtifact != nil {
-		return nil, false, errs.New(errs.KindStateConflict, "active CoreDNS Task input differs from its owner")
-	}
-	ownerConditions, err := resolverInputTaskOwnerConditions(ctx, repository.store, task, input, revision)
-	if err != nil {
-		return nil, false, err
-	}
-	if !input.DisableService && slices.Contains(input.ZoneListeners, gateway) {
-		return nil, false, nil
-	}
-	conditions := []keyvalue.Condition{{Key: taskKey, ModRevision: read.Values[0].ModRevision},
-		{Key: inputKey, ModRevision: inputRead.Values[0].ModRevision}}
-	return append(conditions, ownerConditions...), true, nil
+	return ack.state.Conditions, true, nil
 }

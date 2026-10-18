@@ -11,29 +11,30 @@ import (
 // settings are a separate revision: checking applied files never validates a
 // newer desired configuration that has not been activated successfully.
 type Source struct {
-	ComponentID         string `json:"component_id"`
-	ComponentRevision   int64  `json:"component_revision"`
-	ObservationRevision int64  `json:"observation_revision"`
-	SingletonRevision   int64  `json:"singleton_revision"`
-	AgentID             string `json:"agent_id"`
-	AgentRevision       int64  `json:"agent_revision"`
-	AgentGeneration     uint64 `json:"agent_generation"`
-	AppliedTaskID       string `json:"applied_task_id"`
-	ServiceID           string `json:"service_id"`
-	ArtifactID          string `json:"artifact_id"`
-	ArtifactSHA256      string `json:"artifact_sha256"`
-	ImageReference      string `json:"image_reference"`
-	ImageConfigDigest   string `json:"image_config_digest"`
-	RenderGeneration    uint64 `json:"render_generation"`
+	ComponentID       string `json:"component_id"`
+	ComponentRevision int64  `json:"component_revision"`
+	HostID            string `json:"host_id"`
+	AppliedRevision   int64  `json:"applied_revision"`
+	IntentRevision    int64  `json:"intent_revision"`
+	SingletonRevision int64  `json:"singleton_revision"`
+	AgentID           string `json:"agent_id"`
+	AgentRevision     int64  `json:"agent_revision"`
+	AgentGeneration   uint64 `json:"agent_generation"`
+	ServiceID         string `json:"service_id"`
+	ArtifactID        string `json:"artifact_id"`
+	ArtifactSHA256    string `json:"artifact_sha256"`
+	ImageReference    string `json:"image_reference"`
+	ImageConfigDigest string `json:"image_config_digest"`
+	RenderGeneration  uint64 `json:"render_generation"`
 }
 
 func (source Source) Validate() error {
 	if ids.Validate(ids.KindComponent, source.ComponentID) != nil ||
 		ids.Validate(ids.KindAgent, source.AgentID) != nil ||
-		ids.Validate(ids.KindTask, source.AppliedTaskID) != nil ||
+		ids.Validate(ids.KindHost, source.HostID) != nil ||
 		ids.Validate(ids.KindService, source.ServiceID) != nil ||
 		ids.Validate(ids.KindConfig, source.ArtifactID) != nil ||
-		source.ComponentRevision <= 0 || source.ObservationRevision <= 0 ||
+		source.ComponentRevision <= 0 || source.AppliedRevision <= 0 || source.IntentRevision <= 0 ||
 		source.SingletonRevision <= 0 || source.AgentRevision <= 0 ||
 		source.AgentGeneration == 0 || source.RenderGeneration == 0 ||
 		!recordcodec.ValidSHA256(source.ArtifactSHA256) ||

@@ -68,6 +68,13 @@ func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue
 		keyvalue.Condition{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision},
 		keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: FailureKey(evidence.ID), Value: raw})
+	request, err := repository.prepareRequestResult(ctx, view.Work, outcome)
+	if err != nil {
+		keyvalue.ClearMutationValues(change.Mutations)
+		return workqueue.Change{}, workexecution.Input{}, err
+	}
+	change.Conditions = append(change.Conditions, request.Conditions...)
+	change.Mutations = append(change.Mutations, request.Mutations...)
 	return change, evidence, nil
 }
 

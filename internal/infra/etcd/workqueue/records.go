@@ -160,6 +160,14 @@ func validateOwner(owner ClaimOwner) error {
 	return nil
 }
 
+func DecodeClaimOwner(raw []byte) (ClaimOwner, error) {
+	owner, err := recordcodec.Decode[ClaimOwner](raw, "execution_claim")
+	if err != nil {
+		return ClaimOwner{}, err
+	}
+	return owner, validateOwner(owner)
+}
+
 func encode[T any](kind string, value T) ([]byte, error) {
 	encoded, err := recordcodec.Encode(kind, value)
 	if err != nil {

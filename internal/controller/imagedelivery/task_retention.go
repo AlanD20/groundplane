@@ -8,7 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -33,46 +32,12 @@ func (service *Service) retainTaskImages(
 	if task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate {
 		return false, nil
 	}
-	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceComponent {
-		return true, service.retainComponentTaskImages(ctx, retention, task, revision)
-	}
 	if ids.Validate(ids.KindEnvironment, task.Target) == nil {
 		if _, valid := taskcontract.ParseBlueprintComposeProcedure(task.Params[taskcontract.EnvironmentBlueprintProcedureParam]); valid {
 			return true, service.retainBlueprintTaskImages(ctx, retention, task, revision)
 		}
 	}
 	return false, nil
-}
-
-func (service *Service) retainComponentTaskImages(
-	ctx context.Context,
-	retention *imageRetention,
-	task etcd.TaskRecord,
-	revision int64,
-) error {
-	key := platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)
-	read, err := service.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: revision})
-	if err != nil {
-		return err
-	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil ||
-		read.Values[0].Key != key {
-		return errs.New(errs.KindInternal, "retained Component Task image input is missing")
-	}
-	input, err := platformcomponents.DecodePlatformComponentTaskRenderInput(read.Values[0].Value)
-	if err != nil {
-		return err
-	}
-	if input.PlanID != task.PlanID || input.ComponentID != task.Target || input.ExecutionPlanSHA256 != task.PlanHash ||
-		(input.TaskID != task.ID && task.RetryOf == "") {
-		return errs.New(errs.KindInternal, "retained Component Task image input differs from its Task")
-	}
-	reason := "Retained Task " + task.ID
-	retention.retain(input.ImageReference, reason)
-	retention.retain("sha256:"+input.ImageConfigDigest, reason)
-	retention.composeArtifact(input.ComposeArtifact, reason)
-	retention.composeArtifact(input.RollbackComposeArtifact, reason)
-	return nil
 }
 
 func (service *Service) retainBlueprintTaskImages(
