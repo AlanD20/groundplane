@@ -2,426 +2,210 @@ package executionplan
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
-	"errors"
-	"slices"
-	"sort"
+	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	attachRuntimeArtifactID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAX"
-	attachRuntimePlanID     = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAX"
-	attachRuntimeTargetID   = "att_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	attachRuntimeStepID     = "step_01ARZ3NDEKTSV4RRFFQ69G5FBA"
-)
-
-// QA: ATT-08, ATT-10; local plan projection, not live qualification.
-// Rationale: successful Attach and Detach mutate only the selected running
-// workload; release authority, the stable proxy, and the retained inactive
-// slot must remain the last acknowledged bytes rather than the render source.
-func TestPrepareAttachRuntimesPreservesUnselectedAuthority(t *testing.T) {
-	for _, operation := range []agentpb.PlanOperation{
-		agentpb.PlanOperation_PLAN_OPERATION_ATTACH,
-		agentpb.PlanOperation_PLAN_OPERATION_DETACH,
-	} {
-		t.Run(operation.String(), func(t *testing.T) {
-			plan, previous := attachRuntimePlan(t, operation, true)
-			originalPlan := proto.CloneOf(plan)
-			originalPrevious := cloneAttachCandidateRuntime(previous)
-
-			got, err := PrepareAttachRuntimes(plan, []CandidateRuntime{previous})
-			if err != nil {
-				t.Fatalf("PrepareAttachRuntimes() error = %v", err)
-			}
-			if !proto.Equal(plan, originalPlan) || !candidateRuntimeEqual(previous, originalPrevious) {
-				t.Fatal("PrepareAttachRuntimes() mutated an input")
-			}
-			if len(got) != 1 || got[0].ServiceID != previous.ServiceID ||
-				got[0].ReleaseID != previous.ReleaseID || got[0].Target != previous.Target ||
-				got[0].ProxyGeneration != previous.ProxyGeneration ||
-				!bytes.Equal(got[0].ProxyConfigSHA256, previous.ProxyConfigSHA256) ||
-				!bytes.Equal(got[0].RetainedPriorArtifact, previous.RetainedPriorArtifact) {
-				t.Fatalf("prepared runtime = %#v", got)
-			}
-
-			current := candidateRuntimeOpenArtifact(t, got[0].CurrentArtifact)
-			priorCurrent := candidateRuntimeOpenArtifact(t, previous.CurrentArtifact)
-			source := plan.GetArtifacts()[0]
-			selected := candidateRuntimeService(
-				source,
-				previous.ServiceID,
-				previous.Target,
-				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-			)
-			workload := candidateRuntimeService(
-				current,
-				previous.ServiceID,
-				previous.Target,
-				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-			)
-			proxy := candidateRuntimeService(
-				current,
-				previous.ServiceID,
-				"",
-				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-			)
-			priorProxy := candidateRuntimeService(
-				priorCurrent,
-				previous.ServiceID,
-				"",
-				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-			)
-			if current.GetArtifactId() != attachRuntimeArtifactID || len(current.GetServices()) != 2 ||
-				!proto.Equal(workload, selected) || !proto.Equal(proxy, priorProxy) {
-				t.Fatalf("current runtime services = %#v", current.GetServices())
-			}
-			if !bytes.Contains(current.GetCanonicalYaml(), []byte("attached-network")) ||
-				bytes.Contains(current.GetCanonicalYaml(), []byte("SOURCE_PROXY_SENTINEL")) ||
-				bytes.Contains(current.GetCanonicalYaml(), []byte("INACTIVE_SENTINEL")) ||
-				bytes.Contains(current.GetCanonicalYaml(), []byte("api--green:")) {
-				t.Fatalf("current runtime YAML widened the selected mutation:\n%s", current.GetCanonicalYaml())
-			}
-			if !bytes.Equal(
-				attachRuntimeYAMLServiceBytes(t, current.GetCanonicalYaml(), "api"),
-				attachRuntimeYAMLServiceBytes(t, priorCurrent.GetCanonicalYaml(), "api"),
-			) {
-				t.Fatal("stable proxy YAML changed")
-			}
-			assertAttachRuntimeCanonical(t, got[0])
-			if err := ValidateNativePredecessorWitness(
-				candidateRuntimeEnvironmentID,
-				previous.ServiceID,
-				got[0].CurrentArtifact,
-				got[0].RetainedPriorArtifact,
-			); err != nil {
-				t.Fatalf("prepared runtime is not a native witness: %v", err)
-			}
-			repeated, err := PrepareAttachRuntimes(plan, []CandidateRuntime{previous})
-			if err != nil || len(repeated) != 1 || !candidateRuntimeEqual(got[0], repeated[0]) {
-				t.Fatalf("repeated projection diverged: %#v, %v", repeated, err)
-			}
-		})
+// QA: ATT-08, ATT-10. Native captured-artifact proof, not live settlement.
+// Rationale: Attach/Detach changes only selected workload network edges, never
+// its image, command, proxy or unrelated definitions. Re-delivery is repeatable.
+func TestAttachConsumerTransitionPreservesCapturedRuntime(t *testing.T) {
+	ctx := context.Background()
+	baseline := nativeAttachBaseline(t)
+	original := proto.CloneOf(baseline)
+	networkID := ids.New(ids.KindNetwork)
+	connected, err := PrepareAttachConsumerConnection(ctx, baseline, baseline.OwnerId,
+		"env_01ARZ3NDEKTSV4RRFFQ69G5FAW", candidateRuntimeServiceID, networkID, ids.New(ids.KindConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeated, err := PrepareAttachConsumerConnection(ctx, baseline, baseline.OwnerId,
+		connected.BackingEnvironmentId, connected.ServiceId, networkID, connected.Candidate.ArtifactId)
+	if err != nil || !proto.Equal(connected, repeated) {
+		t.Fatalf("repeated connection changed captured mutation: %v", err)
+	}
+	if !proto.Equal(baseline, original) {
+		t.Fatal("connection mutated captured baseline")
+	}
+	names, err := AttachConsumerNames(connected)
+	if err != nil || !reflect.DeepEqual(names, []string{"api--blue"}) {
+		t.Fatalf("selected workloads: %v, %v", names, err)
+	}
+	before := nativeAttachDocument(t, baseline)
+	after := nativeAttachDocument(t, connected.Candidate)
+	key := "gp_attach_" + strings.ToLower(networkID)
+	services := after["services"].(map[string]any)
+	networks := services["api--blue"].(map[string]any)["networks"].(map[string]any)
+	if _, ok := networks[key]; !ok {
+		t.Fatal("selected workload did not join backing network")
+	}
+	dockerName, err := networkname.New(networkID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declaration := after["networks"].(map[string]any)[key].(map[string]any)
+	if declaration["name"] != dockerName || declaration["external"] != true {
+		t.Fatalf("wrong backing network: %v", declaration)
+	}
+	delete(networks, key)
+	delete(after["networks"].(map[string]any), key)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("connection changed more than the selected network edge")
+	}
+	disconnected, err := PrepareAttachConsumerTransition(ctx, connected.Candidate, baseline.OwnerId,
+		connected.BackingEnvironmentId, connected.ServiceId, networkID, ids.New(ids.KindConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(before, nativeAttachDocument(t, disconnected.Candidate)) {
+		t.Fatal("detach failed to restore original network membership")
 	}
 }
 
-// QA: ATT-10, SVC-13; local authority rejection.
-// Rationale: an Attach compiler cannot fabricate acknowledged runtime from a
-// missing Release input, accept a different release/slot, or choose between
-// duplicate records for the same selected Service.
-func TestPrepareAttachRuntimesRejectsMissingWrongOrAmbiguousPredecessor(t *testing.T) {
-	plan, previous := attachRuntimePlan(t, agentpb.PlanOperation_PLAN_OPERATION_ATTACH, true)
+// Rationale: detaching one consumer cannot erase an external network still
+// referenced by another Service in the same captured Compose artifact.
+func TestAttachConsumerTransitionRetainsSharedBackingNetwork(t *testing.T) {
+	baseline := nativeAttachBaseline(t)
+	networkID := ids.New(ids.KindNetwork)
+	key := "gp_attach_" + strings.ToLower(networkID)
+	dockerName, err := networkname.New(networkID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutateNativeAttachYAML(t, baseline, func(document map[string]any) {
+		document["networks"].(map[string]any)[key] = map[string]any{"name": dockerName, "external": true}
+		document["services"].(map[string]any)["worker"].(map[string]any)["networks"].(map[string]any)[key] = map[string]any{}
+	})
+	connected, err := PrepareAttachConsumerConnection(context.Background(), baseline, baseline.OwnerId,
+		"env_01ARZ3NDEKTSV4RRFFQ69G5FAW", candidateRuntimeServiceID, networkID, ids.New(ids.KindConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	disconnected, err := PrepareAttachConsumerTransition(context.Background(), connected.Candidate, baseline.OwnerId,
+		connected.BackingEnvironmentId, connected.ServiceId, networkID, ids.New(ids.KindConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(nativeAttachDocument(t, baseline), nativeAttachDocument(t, disconnected.Candidate)) {
+		t.Fatal("detach disturbed another Service's backing network")
+	}
+}
+
+// Rationale: network-only authority cannot carry desired Service edits,
+// altered proxy/shared resources or an ambiguous workload selection.
+func TestAttachConsumerTransitionRejectsWidenedMutation(t *testing.T) {
+	baseline := nativeAttachBaseline(t)
+	connected, err := PrepareAttachConsumerConnection(context.Background(), baseline, baseline.OwnerId,
+		"env_01ARZ3NDEKTSV4RRFFQ69G5FAW", candidateRuntimeServiceID, ids.New(ids.KindNetwork), ids.New(ids.KindConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
-		name     string
-		previous []CandidateRuntime
+		name   string
+		mutate func(*agentpb.AttachConsumerTransition)
 	}{
-		{name: "missing"},
-		{name: "wrong release", previous: []CandidateRuntime{func() CandidateRuntime {
-			value := cloneAttachCandidateRuntime(previous)
-			value.ReleaseID = candidateRuntimePriorRelease
-			return value
-		}()}},
-		{name: "wrong target", previous: []CandidateRuntime{func() CandidateRuntime {
-			value := cloneAttachCandidateRuntime(previous)
-			value.Target = "green"
-			return value
-		}()}},
-		{name: "wrong proxy hash", previous: []CandidateRuntime{func() CandidateRuntime {
-			value := cloneAttachCandidateRuntime(previous)
-			value.ProxyConfigSHA256[0] ^= 0xff
-			return value
-		}()}},
-		{name: "ambiguous", previous: []CandidateRuntime{
-			cloneAttachCandidateRuntime(previous),
-			cloneAttachCandidateRuntime(previous),
+		{"desired image", func(r *agentpb.AttachConsumerTransition) {
+			mutateNativeAttachYAML(t, r.Candidate, func(d map[string]any) {
+				d["services"].(map[string]any)["api--blue"].(map[string]any)["image"] = "sha256:" + strings.Repeat(
+					"b",
+					64,
+				)
+			})
+		}},
+		{"desired command", func(r *agentpb.AttachConsumerTransition) {
+			mutateNativeAttachYAML(t, r.Candidate, func(d map[string]any) {
+				d["services"].(map[string]any)["api--blue"].(map[string]any)["command"] = []any{
+					"unrequested",
+					"command",
+				}
+			})
+		}},
+		{"proxy", func(r *agentpb.AttachConsumerTransition) {
+			mutateNativeAttachYAML(t, r.Candidate, func(d map[string]any) {
+				d["services"].(map[string]any)["api"].(map[string]any)["image"] = "proxy:changed"
+			})
+		}},
+		{"shared network", func(r *agentpb.AttachConsumerTransition) {
+			mutateNativeAttachYAML(t, r.Candidate, func(d map[string]any) {
+				d["networks"].(map[string]any)["shared"].(map[string]any)["name"] = "changed-shared"
+			})
+		}},
+		{"release authority", func(r *agentpb.AttachConsumerTransition) { r.Candidate.Services[0].ExpectedReplicas++ }},
+		{"foreign environment", func(r *agentpb.AttachConsumerTransition) { r.EnvironmentId = r.BackingEnvironmentId }},
+		{"different action", func(r *agentpb.AttachConsumerTransition) {
+			r.Action = agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT
+		}},
+		{"duplicate workload", func(r *agentpb.AttachConsumerTransition) {
+			r.Baseline.Services = append(r.Baseline.Services, proto.CloneOf(r.Baseline.Services[1]))
+			r.Candidate.Services = append(r.Candidate.Services, proto.CloneOf(r.Candidate.Services[1]))
 		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := PrepareAttachRuntimes(plan, test.previous); !errors.Is(
-				err,
-				errs.New(errs.KindValidationFailed, ""),
-			) {
-				t.Fatalf("PrepareAttachRuntimes() error = %v, want validation.failed", err)
+			modified := proto.CloneOf(connected)
+			test.mutate(modified)
+			if err := ValidateAttachConsumerTransition(context.Background(), modified); err == nil {
+				t.Fatal("widened mutation accepted")
 			}
 		})
 	}
 }
 
-// QA: ATT-09; local stopped-selection proof.
-// Rationale: a stopped Attach or Detach is validation-only and must not
-// backfill a missing runtime record or acknowledge any captured inactive bytes.
-func TestPrepareAttachRuntimesStoppedSelectionReturnsNoUpdate(t *testing.T) {
-	for _, operation := range []agentpb.PlanOperation{
-		agentpb.PlanOperation_PLAN_OPERATION_ATTACH,
-		agentpb.PlanOperation_PLAN_OPERATION_DETACH,
-	} {
-		plan, _ := attachRuntimePlan(t, operation, false)
-		original := proto.CloneOf(plan)
-		got, err := PrepareAttachRuntimes(plan, nil)
-		if err != nil || len(got) != 0 {
-			t.Fatalf("PrepareAttachRuntimes(%s) = %#v, %v", operation, got, err)
+func nativeAttachBaseline(t *testing.T) *agentpb.ComposeArtifact {
+	t.Helper()
+	artifact := candidateRuntimeFixtureArtifact(t, ids.New(ids.KindConfig), testPlanID, 7,
+		candidateRuntimeReleaseID, "blue", candidateRuntimeProxyConfig(candidateRuntimeReleaseID, "blue", 7), false)
+	artifact.Services = append(
+		artifact.Services,
+		&agentpb.ComposeService{ServiceId: candidateRuntimeOtherService, ComposeName: "worker", ExpectedReplicas: 1},
+	)
+	mutateNativeAttachYAML(t, artifact, func(document map[string]any) {
+		document["services"].(map[string]any)["worker"] = map[string]any{
+			"image": "worker:captured", "command": []any{"process", "captured-input"},
+			"networks": map[string]any{"shared": map[string]any{}},
 		}
-		if !proto.Equal(plan, original) {
-			t.Fatal("PrepareAttachRuntimes() mutated a stopped plan")
-		}
-	}
-}
-
-// QA: ATT-10; local operation-scope proof.
-// Rationale: only the closed Attach/Detach plan contract may advance runtime;
-// an otherwise valid ordinary Release plan is not interchangeable authority.
-func TestPrepareAttachRuntimesRejectsOtherOperations(t *testing.T) {
-	plan := candidateRuntimeBlueGreenPlan(t, true)
-	if _, err := PrepareAttachRuntimes(plan, nil); !errors.Is(
-		err,
-		errs.New(errs.KindValidationFailed, ""),
-	) {
-		t.Fatalf("PrepareAttachRuntimes() error = %v, want validation.failed", err)
-	}
-}
-
-// QA: ATT-08.
-// Rationale: preserving the proxy service node is insufficient if a replaced
-// top-level network definition changes the network that proxy would restore.
-func TestPrepareAttachRuntimesRejectsChangedSharedProxyResource(t *testing.T) {
-	plan, previous := attachRuntimePlan(t, agentpb.PlanOperation_PLAN_OPERATION_ATTACH, true)
-	artifact := plan.GetArtifacts()[0]
-	var document yaml.Node
-	if err := yaml.Unmarshal(artifact.GetCanonicalYaml(), &document); err != nil {
-		t.Fatal(err)
-	}
-	shared := candidateRuntimeMappingValue(candidateRuntimeMappingValue(document.Content[0], "networks"), "shared")
-	shared.Content = append(shared.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "name"},
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "different-shared-network"})
-	encoded, err := yaml.Marshal(&document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	artifact.CanonicalYaml = encoded
-	digest := sha256.Sum256(encoded)
-	artifact.YamlSha256 = slices.Clone(digest[:])
-	plan.PlanHash = nil
-	plan, err = Seal(plan)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := PrepareAttachRuntimes(plan, []CandidateRuntime{previous}); !errors.Is(
-		err,
-		errs.New(errs.KindValidationFailed, ""),
-	) {
-		t.Fatalf("changed shared proxy network accepted: %v", err)
-	}
-}
-
-// QA: ATT-08.
-// Rationale: equivalent mapping order must not become a false rejection,
-// while changed scalar types, values and ordered sequences remain significant.
-func TestAttachRuntimeSharedResourceEquality(t *testing.T) {
-	for _, test := range []struct {
-		name, left, right string
-		equal             bool
-	}{
-		{"mapping order", "{external: true, name: shared}", "{name: shared, external: true}", true},
-		{"changed name", "{external: true, name: shared}", "{external: true, name: other}", false},
-		{"scalar type", "{external: true}", "{external: 'true'}", false},
-		{"sequence order", "{names: [a, b]}", "{names: [b, a]}", false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			var left, right yaml.Node
-			if yaml.Unmarshal([]byte(test.left), &left) != nil || yaml.Unmarshal([]byte(test.right), &right) != nil {
-				t.Fatal("invalid fixture")
-			}
-			if attachRuntimeYAMLEqual(&left, &right) != test.equal {
-				t.Fatal("resource comparison differs")
-			}
-		})
-	}
-}
-
-func attachRuntimePlan(
-	t *testing.T,
-	operation agentpb.PlanOperation,
-	running bool,
-) (*agentpb.ExecutionPlan, CandidateRuntime) {
-	t.Helper()
-	prepared, err := PrepareCandidateRuntimes(candidateRuntimeBlueGreenPlan(t, true))
-	if err != nil || len(prepared) != 1 {
-		t.Fatalf("prepare predecessor = %#v, %v", prepared, err)
-	}
-	previous := prepared[0]
-	artifact := proto.CloneOf(candidateRuntimeOpenArtifact(t, previous.CurrentArtifact))
-	artifact.ArtifactId = attachRuntimeArtifactID
-	retained := candidateRuntimeOpenArtifact(t, previous.RetainedPriorArtifact)
-	inactive := proto.CloneOf(retained.GetServices()[0])
-	inactive.ExpectedReplicas = 0
-	inactive.ImageReference = "sha256:" + strings.Repeat("b", 64)
-	artifact.Services = append(artifact.Services, inactive)
-	sort.Slice(artifact.Services, func(left, right int) bool {
-		leftKey := artifact.Services[left].GetServiceId() + "\x00" + artifact.Services[left].GetComposeName()
-		rightKey := artifact.Services[right].GetServiceId() + "\x00" + artifact.Services[right].GetComposeName()
-		return leftKey < rightKey
 	})
-	if !running {
-		candidateRuntimeService(
-			artifact,
-			previous.ServiceID,
-			previous.Target,
-			agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-		).ExpectedReplicas = 0
+	return artifact
+}
+
+func mutateNativeAttachYAML(t *testing.T, artifact *agentpb.ComposeArtifact, mutate func(map[string]any)) {
+	t.Helper()
+	var document map[string]any
+	if err := yaml.Unmarshal(artifact.CanonicalYaml, &document); err != nil {
+		t.Fatal(err)
 	}
-	mutateAttachRuntimeYAML(t, artifact, retained, previous, running)
-	selected := []string(nil)
-	if running {
-		selected = []string{previous.ServiceID}
-	}
-	plan, err := Seal(&agentpb.ExecutionPlan{
-		Schema: SchemaVersion, PlanId: attachRuntimePlanID, RenderGeneration: 8,
-		Operation: operation, TargetId: attachRuntimeTargetID,
-		Artifacts: []*agentpb.ComposeArtifact{artifact},
-		Steps: []*agentpb.ExecutionStep{{
-			StepId: attachRuntimeStepID, TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-				ArtifactId: artifact.GetArtifactId(), ServiceIds: selected, NoDependencies: true,
-			}},
-		}},
-	})
+	mutate(document)
+	raw, err := yaml.Marshal(document)
 	if err != nil {
-		t.Fatalf("Seal(%s Attach runtime fixture) error = %v", operation, err)
+		t.Fatal(err)
 	}
-	return plan, previous
+	artifact.CanonicalYaml = raw
+	digest := sha256.Sum256(raw)
+	artifact.YamlSha256 = bytes.Clone(digest[:])
 }
 
-func mutateAttachRuntimeYAML(
-	t *testing.T,
-	artifact, retained *agentpb.ComposeArtifact,
-	previous CandidateRuntime,
-	running bool,
-) {
+func nativeAttachDocument(t *testing.T, artifact *agentpb.ComposeArtifact) map[string]any {
 	t.Helper()
-	var document, retainedDocument yaml.Node
-	if yaml.Unmarshal(artifact.GetCanonicalYaml(), &document) != nil ||
-		yaml.Unmarshal(retained.GetCanonicalYaml(), &retainedDocument) != nil {
-		t.Fatal("unmarshal Attach runtime fixture YAML")
-	}
-	root, retainedRoot := document.Content[0], retainedDocument.Content[0]
-	workload := attachRuntimeTestServiceNode(t, root, "api--blue")
-	if running {
-		networks := candidateRuntimeMappingValue(workload, "networks")
-		networks.Content = append(networks.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "attached-network"},
-			&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"},
-		)
-		definitions := candidateRuntimeMappingValue(root, "networks")
-		definitions.Content = append(definitions.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "attached-network"},
-			&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
-				{Kind: yaml.ScalarNode, Tag: "!!str", Value: "external"},
-				{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"},
-			}},
-		)
-	}
-	proxy := attachRuntimeTestServiceNode(t, root, "api")
-	proxy.Content = append(proxy.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "environment"},
-		&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "SOURCE_PROXY_SENTINEL"},
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "present"},
-		}},
-	)
-	sourceProxyConfig := candidateRuntimeProxyConfig(previous.ReleaseID, "green", previous.ProxyGeneration+1)
-	sourceProxy := candidateRuntimeService(
-		artifact,
-		previous.ServiceID,
-		"",
-		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-	)
-	sourceProxy.ProxyConfigJson = sourceProxyConfig
-	sourceProxyDigest := sha256.Sum256(sourceProxyConfig)
-	sourceProxy.ProxyConfigSha256 = slices.Clone(sourceProxyDigest[:])
-	config := candidateRuntimeMappingValue(candidateRuntimeMappingValue(root, "configs"), "gp-proxy-runtime")
-	candidateRuntimeMappingValue(config, "content").Value = string(sourceProxyConfig)
-
-	retainedWorkload := attachRuntimeTestServiceNode(t, retainedRoot, "api--green")
-	retainedWorkload.Content = append(retainedWorkload.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "environment"},
-		&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "INACTIVE_SENTINEL"},
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "present"},
-		}},
-	)
-	services := candidateRuntimeMappingValue(root, "services")
-	services.Content = append(services.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "api--green"},
-		retainedWorkload,
-	)
-	encoded, err := yaml.Marshal(&document)
+	project, err := loadCapturedComposeProject(context.Background(), artifact)
 	if err != nil {
-		t.Fatalf("marshal Attach runtime fixture YAML: %v", err)
+		t.Fatal(err)
 	}
-	artifact.CanonicalYaml = encoded
-	digest := sha256.Sum256(encoded)
-	artifact.YamlSha256 = slices.Clone(digest[:])
-}
-
-func attachRuntimeTestServiceNode(t *testing.T, root *yaml.Node, name string) *yaml.Node {
-	t.Helper()
-	services := candidateRuntimeMappingValue(root, "services")
-	index, err := attachRuntimeYAMLMappingIndex(services, name)
-	if err != nil || index < 0 {
-		t.Fatalf("find fixture Service %q: %v", name, err)
-	}
-	return services.Content[index+1]
-}
-
-func attachRuntimeYAMLServiceBytes(t *testing.T, encoded []byte, name string) []byte {
-	t.Helper()
-	var document yaml.Node
-	if err := yaml.Unmarshal(encoded, &document); err != nil {
-		t.Fatalf("unmarshal runtime YAML: %v", err)
-	}
-	service := attachRuntimeTestServiceNode(t, document.Content[0], name)
-	result, err := yaml.Marshal(service)
+	raw, err := project.MarshalYAML()
 	if err != nil {
-		t.Fatalf("marshal runtime Service YAML: %v", err)
+		t.Fatal(err)
 	}
-	return result
-}
-
-func assertAttachRuntimeCanonical(t *testing.T, runtime CandidateRuntime) {
-	t.Helper()
-	artifact := candidateRuntimeOpenArtifact(t, runtime.CurrentArtifact)
-	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil || !bytes.Equal(encoded, runtime.CurrentArtifact) {
-		t.Fatalf("runtime protobuf is not canonical: %v", err)
+	var document map[string]any
+	if err := yaml.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
 	}
-	var document yaml.Node
-	if yaml.Unmarshal(artifact.GetCanonicalYaml(), &document) != nil {
-		t.Fatal("runtime YAML is invalid")
-	}
-	canonical, err := yaml.Marshal(&document)
-	if err != nil || !bytes.Equal(canonical, artifact.GetCanonicalYaml()) {
-		t.Fatalf("runtime YAML is not canonical: %v", err)
-	}
-	digest := sha256.Sum256(artifact.GetCanonicalYaml())
-	if !bytes.Equal(digest[:], artifact.GetYamlSha256()) {
-		t.Fatal("runtime YAML hash does not match")
-	}
-}
-
-func cloneAttachCandidateRuntime(value CandidateRuntime) CandidateRuntime {
-	return CandidateRuntime{
-		ServiceID: value.ServiceID, ReleaseID: value.ReleaseID, Target: value.Target,
-		ProxyGeneration:       value.ProxyGeneration,
-		ProxyConfigSHA256:     slices.Clone(value.ProxyConfigSHA256),
-		CurrentArtifact:       slices.Clone(value.CurrentArtifact),
-		RetainedPriorArtifact: slices.Clone(value.RetainedPriorArtifact),
-	}
+	return document
 }

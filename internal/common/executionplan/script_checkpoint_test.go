@@ -56,7 +56,6 @@ func TestValidateScriptCheckpointRequestAcceptsClosedSequence(t *testing.T) {
 		),
 	}
 	for _, request := range cases {
-		request.ControlPayloadSha256 = mustScriptCheckpointDigest(t, request)
 		if _, err := ValidateScriptCheckpointRequest(request); err != nil {
 			t.Fatalf("ValidateScriptCheckpointRequest(%s): %v", request.State, err)
 		}
@@ -105,7 +104,6 @@ func TestValidateScriptCheckpointRequestAcceptsStartFailureAfterContainerCreated
 		agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED,
 		outcome,
 	)
-	request.ControlPayloadSha256 = mustScriptCheckpointDigest(t, request)
 	if _, err := ValidateScriptCheckpointRequest(request); err != nil {
 		t.Fatalf("validate captured-container start failure: %v", err)
 	}
@@ -125,16 +123,16 @@ func TestValidateScriptCheckpointAckRequiresExactDelivery(t *testing.T) {
 		agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_START_AUTHORIZED,
 		&agentpb.ScriptStartAuthorizedCheckpoint{},
 	)
-	request.ControlPayloadSha256 = mustScriptCheckpointDigest(t, request)
 	ack := &agentpb.ScriptCheckpointAck{
-		TaskId: request.TaskId, OperationId: request.OperationId, AssignmentId: request.AssignmentId,
-		StepId: request.StepId, ScriptExecutionId: request.ScriptExecutionId, State: request.State,
-		ControlPayloadSha256: append([]byte(nil), request.ControlPayloadSha256...),
+		TaskId: request.TaskId, OperationId: request.OperationId, AttemptId: request.AttemptId, WorkItemId: request.WorkItemId,
+		StageId: request.StageId, Sequence: request.Sequence, ScriptExecutionId: request.ScriptExecutionId, State: request.State,
+		RequestSha256: mustScriptCheckpointDigest(t, request), EvidenceId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+		EvidenceSha256: bytes.Repeat([]byte{1}, sha256.Size),
 	}
 	if _, err := ValidateScriptCheckpointAck(ack, request); err != nil {
 		t.Fatalf("ValidateScriptCheckpointAck(): %v", err)
 	}
-	ack.AssignmentId = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	ack.AttemptId = "try_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	if _, err := ValidateScriptCheckpointAck(ack, request); err == nil {
 		t.Fatal("expected mismatched acknowledgement to be rejected")
 	}
@@ -147,9 +145,10 @@ func scriptCheckpointRequest(
 ) *agentpb.ScriptCheckpointRequest {
 	request := &agentpb.ScriptCheckpointRequest{
 		TaskId: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", OperationId: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV", StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		ScriptExecutionId: testScriptExecutionID, PlanHash: bytes.Repeat([]byte{0xd3}, sha256.Size),
-		ExpectedState: expected, State: state,
+		AttemptId: "try_01ARZ3NDEKTSV4RRFFQ69G5FAV", WorkItemId: "work_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		StageId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", Sequence: 1, RecordedAt: timestamppb.Now(),
+		InputId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", InputSha256: bytes.Repeat([]byte{0xd3}, sha256.Size),
+		ScriptExecutionId: testScriptExecutionID, ExpectedState: expected, State: state,
 	}
 	switch value := evidence.(type) {
 	case *agentpb.ScriptStartAuthorizedCheckpoint:

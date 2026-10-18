@@ -68,7 +68,8 @@ func validAdapterProcedurePlan() *agentpb.ExecutionPlan {
 		Payload: &agentpb.ExecutionStep_AdapterProcedure{AdapterProcedure: &agentpb.AdapterProcedure{
 			AdapterKey: "postgres", Phase: agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
 			AttachId: testAttachID, BackingServiceId: testBackingServiceID,
-			Role: "api_5d3f9a", Password: []byte("URL_safe-1"), Database: "api_5d3f9a",
+			Authentication: agentpb.BackingAuthentication_BACKING_AUTHENTICATION_USERNAME_PASSWORD,
+			Role:           "api_5d3f9a", Password: []byte("URL_safe-1"), Database: "api_5d3f9a",
 		}},
 	}}
 	return plan

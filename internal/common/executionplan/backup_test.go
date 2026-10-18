@@ -212,176 +212,184 @@ func TestSealRejectsBackupAndPruneStepOperationMismatch(t *testing.T) {
 	}
 }
 
-// Rationale: the validated checkpoint is an owned copy, and the acknowledgement
-// can release the Agent only when it carries the exact execution tuple plus a
-// durable committed fence for the same authority digest.
-func TestValidateBackupCheckpointRequestAndAck(t *testing.T) {
-	request := validBackupCheckpointRequest()
-	validated, err := ValidateBackupCheckpointRequest(request, request.CheckpointSequence)
+// Rationale: owned checkpoint bytes and an exact durable ACK prevent a caller
+// mutation or unrelated receipt from releasing the next external effect.
+func TestValidateBackupWorkCheckpointAndAck(t *testing.T) {
+	request, input, identity := nativeBackupCheckpoint(t)
+	validated, err := ValidateBackupWorkCheckpoint(request, input, identity)
 	if err != nil {
-		t.Fatalf("ValidateBackupCheckpointRequest() error = %v", err)
+		t.Fatal(err)
 	}
-	validated.AuthorityDigest[0]++
-	if bytes.Equal(validated.AuthorityDigest, request.AuthorityDigest) {
-		t.Fatal("validated checkpoint aliases request authority digest")
+	validated.Attempt.Input.Sha256[0]++
+	if bytes.Equal(validated.Attempt.Input.Sha256, request.Attempt.Input.Sha256) {
+		t.Fatal("validated checkpoint aliases captured input")
 	}
-	ack := &agentpb.BackupCheckpointAck{
-		TaskId: request.TaskId, AssignmentId: request.AssignmentId,
-		StepId: request.StepId, ExecutionId: request.ExecutionId,
-		CheckpointSequence: request.CheckpointSequence,
-		Committed: &agentpb.CheckpointFence{
-			AuthorityDigest: append([]byte(nil), request.AuthorityDigest...), DedupeKeyModRevision: 12,
+	ack := nativeBackupCheckpointAck(t, request, input)
+	if _, err := ValidateBackupWorkCheckpointAck(ack, request, input, identity); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Rationale: Config restoration names a Config generation, never a Task.
+func TestBackupConfigCheckpointRequiresConfigIdentity(t *testing.T) {
+	request, _, _ := nativeBackupCheckpoint(t)
+	request.Checkpoint = &agentpb.BackupWorkCheckpointRequest_Config{Config: &agentpb.BackupConfigCheckpoint{
+		Checkpoint: &agentpb.BackupConfigCheckpoint_TransferCompleted{
+			TransferCompleted: &agentpb.BackupConfigTransferCompleted{
+				RestoreGenerationId: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV", Content: testBackupConfigContent(),
+				CommittedRecordCount: 4, ValueChainSha256: bytes.Repeat([]byte{26}, sha256.Size),
+				TransferTranscriptSha256: bytes.Repeat([]byte{27}, sha256.Size), RenderGeneration: 1,
+			},
+		},
+	}}
+	if _, err := BackupWorkCheckpointDigest(request); err != nil {
+		t.Fatal(err)
+	}
+	request.GetConfig().GetTransferCompleted().RestoreGenerationId = request.Attempt.TaskId
+	if _, err := BackupWorkCheckpointDigest(request); err == nil {
+		t.Fatal("Task accepted as Config generation")
+	}
+}
+
+// Rationale: replay identity and immutable upload outcome must both affect the
+// checkpoint digest, while identical typed reports remain replayable.
+func TestBackupWorkCheckpointDigestBindsAttemptAndUploadOutcome(t *testing.T) {
+	request, _, _ := nativeBackupCheckpoint(t)
+	digest, err := BackupWorkCheckpointDigest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeated, err := BackupWorkCheckpointDigest(proto.CloneOf(request))
+	if err != nil || !bytes.Equal(digest, repeated) {
+		t.Fatalf("same report changed digest: %v", err)
+	}
+	other := proto.CloneOf(request)
+	other.Attempt.AttemptId = "try_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	changed, err := BackupWorkCheckpointDigest(other)
+	if err != nil || bytes.Equal(digest, changed) {
+		t.Fatalf("digest failed to bind attempt: %v", err)
+	}
+
+	upload, _, _ := nativeBackupUploadCheckpoint(t)
+	digest, err = BackupWorkCheckpointDigest(upload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upload.GetUploadCompleted().GetReturnedObject().GetEtag().Value = "different-etag"
+	changed, err = BackupWorkCheckpointDigest(upload)
+	if err != nil || bytes.Equal(digest, changed) {
+		t.Fatalf("digest failed to bind uploaded object: %v", err)
+	}
+}
+
+// Rationale: malformed orphan evidence cannot be accepted as a committed upload.
+func TestValidateBackupWorkCheckpointRejectsMalformedUpload(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*agentpb.BackupWorkCheckpointRequest)
+	}{
+		{"nil payload", func(r *agentpb.BackupWorkCheckpointRequest) {
+			r.Checkpoint = &agentpb.BackupWorkCheckpointRequest_UploadVerified{}
+		}},
+		{"bad point", func(r *agentpb.BackupWorkCheckpointRequest) { r.GetUploadCompleted().PointId = "rp_invalid" }},
+		{
+			"zero stored size",
+			func(r *agentpb.BackupWorkCheckpointRequest) { r.GetUploadCompleted().Evidence.StoredSizeBytes = 0 },
+		},
+		{
+			"short stored digest",
+			func(r *agentpb.BackupWorkCheckpointRequest) { r.GetUploadCompleted().Evidence.StoredSha256 = []byte{1} },
 		},
 	}
-	if _, err := ValidateBackupCheckpointAck(ack, request); err != nil {
-		t.Fatalf("ValidateBackupCheckpointAck() error = %v", err)
-	}
-}
-
-// Rationale: a Config restore generation is a stable Controller-owned Config
-// identity distinct from the Task attempt carried by the checkpoint envelope.
-func TestValidateBackupConfigCheckpointRequiresConfigIdentity(t *testing.T) {
-	request := validBackupConfigCheckpointRequest()
-	if _, err := ValidateBackupCheckpointRequest(request, request.CheckpointSequence); err != nil {
-		t.Fatalf("ValidateBackupCheckpointRequest(config transfer) error = %v", err)
-	}
-	request.GetConfig().GetTransferCompleted().RestoreGenerationId = request.TaskId
-	if _, err := ComputeBackupCheckpointPayloadDigest(request); err == nil {
-		t.Fatal("Task identity accepted as restore generation")
-	}
-}
-
-// Rationale: the durable checkpoint digest binds delivery identity and cannot
-// be replayed under another valid assignment identity.
-func TestComputeBackupCheckpointPayloadDigestBindsDeliveryIdentity(t *testing.T) {
-	request := validBackupCheckpointRequest()
-	digest, err := ComputeBackupCheckpointPayloadDigest(request)
-	if err != nil {
-		t.Fatalf("ComputeBackupCheckpointPayloadDigest() error = %v", err)
-	}
-	other := proto.Clone(request).(*agentpb.BackupCheckpointRequest)
-	other.AssignmentId = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	otherDigest, err := ComputeBackupCheckpointPayloadDigest(other)
-	if err != nil {
-		t.Fatalf("ComputeBackupCheckpointPayloadDigest(other assignment) error = %v", err)
-	}
-	repeated, err := ComputeBackupCheckpointPayloadDigest(proto.Clone(request).(*agentpb.BackupCheckpointRequest))
-	if err != nil {
-		t.Fatalf("ComputeBackupCheckpointPayloadDigest(repeated) error = %v", err)
-	}
-	if !bytes.Equal(digest, repeated) {
-		t.Fatal("checkpoint digest changed for the same typed request")
-	}
-	if bytes.Equal(digest, otherDigest) {
-		t.Fatal("checkpoint digest did not bind assignment identity")
-	}
-}
-
-// Rationale: upload-completed digesting must bind the returned immutable object
-// discriminator rather than only the shared checkpoint delivery envelope.
-func TestComputeBackupCheckpointPayloadDigestBindsUploadOutcome(t *testing.T) {
-	request := validUploadCompletedCheckpointRequest()
-	digest, err := ComputeBackupCheckpointPayloadDigest(request)
-	if err != nil {
-		t.Fatalf("ComputeBackupCheckpointPayloadDigest(upload completed) error = %v", err)
-	}
-	request.GetUploadCompleted().GetReturnedObject().GetEtag().Value = "different-etag"
-	changed, err := ComputeBackupCheckpointPayloadDigest(request)
-	if err != nil {
-		t.Fatalf("ComputeBackupCheckpointPayloadDigest(changed upload outcome) error = %v", err)
-	}
-	if bytes.Equal(digest, changed) {
-		t.Fatal("upload-completed digest did not bind immutable object outcome")
-	}
-}
-
-// Rationale: upload-completed is useful as orphan evidence only when it names
-// one canonical point and exact immutable byte/object evidence.
-func TestValidateBackupCheckpointRequestRejectsMalformedUploadCompleted(t *testing.T) {
-	checks := []struct {
-		name   string
-		mutate func(*agentpb.BackupCheckpointRequest)
-	}{
-		{name: "nil typed payload", mutate: func(request *agentpb.BackupCheckpointRequest) {
-			request.Checkpoint = &agentpb.BackupCheckpointRequest_UploadVerified{}
-		}},
-		{name: "bad point", mutate: func(request *agentpb.BackupCheckpointRequest) {
-			request.GetUploadCompleted().PointId = "rp_invalid"
-		}},
-		{name: "zero stored size", mutate: func(request *agentpb.BackupCheckpointRequest) {
-			request.GetUploadCompleted().Evidence.StoredSizeBytes = 0
-		}},
-		{name: "short stored digest", mutate: func(request *agentpb.BackupCheckpointRequest) {
-			evidence := request.GetUploadCompleted().Evidence
-			evidence.StoredSha256 = evidence.StoredSha256[:sha256.Size-1]
-		}},
-	}
-	for _, check := range checks {
-		t.Run(check.name, func(t *testing.T) {
-			request := validUploadCompletedCheckpointRequest()
-			check.mutate(request)
-			if _, err := ValidateBackupCheckpointRequest(request, request.CheckpointSequence); err == nil {
-				t.Fatal("malformed upload-completed checkpoint error = nil")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request, input, identity := nativeBackupUploadCheckpoint(t)
+			if _, err := ValidateBackupWorkCheckpoint(request, input, identity); err != nil {
+				t.Fatal(err)
+			}
+			test.mutate(request)
+			if _, err := ValidateBackupWorkCheckpoint(request, input, identity); err == nil {
+				t.Fatal("malformed upload accepted")
 			}
 		})
 	}
 }
 
-// Rationale: no stale sequence, malformed authority digest, invalid predecessor
-// or malformed typed payload may reach the durable checkpoint classifier.
-func TestValidateBackupCheckpointRequestRejectsMalformedDelivery(t *testing.T) {
-	checks := []struct {
+// Rationale: a source report must bind its captured input, authenticated host,
+// valid sequence and predecessor. Persisted next-sequence CAS is the repository's
+// separate responsibility, not inferred by this resource validator.
+func TestValidateBackupWorkCheckpointRejectsForeignOrMalformedReport(t *testing.T) {
+	tests := []struct {
 		name   string
-		mutate func(*agentpb.BackupCheckpointRequest)
+		mutate func(*agentpb.BackupWorkCheckpointRequest)
 	}{
-		{name: "zero sequence", mutate: func(request *agentpb.BackupCheckpointRequest) {
-			request.CheckpointSequence = 0
-		}},
-		{name: "short authority digest", mutate: func(request *agentpb.BackupCheckpointRequest) {
-			request.AuthorityDigest = request.AuthorityDigest[:sha256.Size-1]
-		}},
-		{name: "predecessor on first checkpoint", mutate: func(request *agentpb.BackupCheckpointRequest) {
-			request.PrecedingCheckpoint = &agentpb.CheckpointFence{
-				AuthorityDigest: append([]byte(nil), request.AuthorityDigest...), DedupeKeyModRevision: 1,
+		{"zero sequence", func(r *agentpb.BackupWorkCheckpointRequest) { r.CheckpointSequence = 0 }},
+		{"uncaptured source", func(r *agentpb.BackupWorkCheckpointRequest) { r.SourceOrdinal = 1 }},
+		{
+			"wrong host",
+			func(r *agentpb.BackupWorkCheckpointRequest) { r.Attempt.HostId = "host_01ARZ3NDEKTSV4RRFFQ69G5FAW" },
+		},
+		{"changed captured input", func(r *agentpb.BackupWorkCheckpointRequest) { r.Attempt.Input.Sha256[0]++ }},
+		{"predecessor on first", func(r *agentpb.BackupWorkCheckpointRequest) {
+			r.PrecedingCheckpoint = &agentpb.CheckpointFence{
+				AuthorityDigest:      bytes.Repeat([]byte{1}, sha256.Size),
+				DedupeKeyModRevision: 1,
 			}
 		}},
-		{name: "bad point", mutate: func(request *agentpb.BackupCheckpointRequest) {
-			request.GetArtifactPrepared().PointId = "rp_invalid"
+		{"foreign predecessor", func(r *agentpb.BackupWorkCheckpointRequest) {
+			r.CheckpointSequence = 2
+			r.PrecedingCheckpoint = &agentpb.CheckpointFence{
+				AuthorityDigest:      bytes.Repeat([]byte{1}, sha256.Size),
+				DedupeKeyModRevision: 1,
+			}
 		}},
-		{name: "short artifact digest", mutate: func(request *agentpb.BackupCheckpointRequest) {
-			evidence := request.GetArtifactPrepared().Evidence
-			evidence.StoredSha256 = evidence.StoredSha256[:sha256.Size-1]
+		{"missing predecessor", func(r *agentpb.BackupWorkCheckpointRequest) { r.CheckpointSequence = 2 }},
+		{"bad point", func(r *agentpb.BackupWorkCheckpointRequest) { r.GetArtifactPrepared().PointId = "rp_invalid" }},
+		{"short artifact digest", func(r *agentpb.BackupWorkCheckpointRequest) {
+			r.GetArtifactPrepared().Evidence.StoredSha256 = []byte{1}
 		}},
 	}
-	for _, check := range checks {
-		t.Run(check.name, func(t *testing.T) {
-			request := validBackupCheckpointRequest()
-			check.mutate(request)
-			if _, err := ValidateBackupCheckpointRequest(request, 1); err == nil {
-				t.Fatal("ValidateBackupCheckpointRequest(malformed) error = nil")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request, input, identity := nativeBackupCheckpoint(t)
+			test.mutate(request)
+			if _, err := ValidateBackupWorkCheckpoint(request, input, identity); err == nil {
+				t.Fatal("foreign or malformed report accepted")
 			}
 		})
 	}
-	request := validBackupCheckpointRequest()
-	if _, err := ValidateBackupCheckpointRequest(request, 2); err == nil {
-		t.Fatal("ValidateBackupCheckpointRequest(stale sequence) error = nil")
-	}
 }
 
-// Rationale: the acknowledgement is useful only for the exact request; a
-// different sequence cannot release the Agent's next action.
-func TestValidateBackupCheckpointAckRejectsDifferentIdentity(t *testing.T) {
-	request := validBackupCheckpointRequest()
-	ack := &agentpb.BackupCheckpointAck{
-		TaskId: request.TaskId, AssignmentId: request.AssignmentId,
-		StepId: request.StepId, ExecutionId: request.ExecutionId,
-		CheckpointSequence: request.CheckpointSequence + 1,
-		Committed: &agentpb.CheckpointFence{
-			AuthorityDigest: append([]byte(nil), request.AuthorityDigest...), DedupeKeyModRevision: 1,
+// Rationale: an ACK may release only this exact report and source cursor;
+// accepting a valid but unrelated receipt could skip an external effect.
+func TestValidateBackupWorkCheckpointAckRejectsDifferentReceipt(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*agentpb.BackupWorkCheckpointAck)
+	}{
+		{
+			"attempt",
+			func(a *agentpb.BackupWorkCheckpointAck) { a.Attempt.AttemptId = "try_01ARZ3NDEKTSV4RRFFQ69G5FAW" },
 		},
+		{"sequence", func(a *agentpb.BackupWorkCheckpointAck) { a.CheckpointSequence++ }},
+		{"source ordinal", func(a *agentpb.BackupWorkCheckpointAck) { a.SourceOrdinal++ }},
+		{"request digest", func(a *agentpb.BackupWorkCheckpointAck) { a.RequestSha256[0]++ }},
+		{"authority", func(a *agentpb.BackupWorkCheckpointAck) { a.Committed.AuthorityDigest[0]++ }},
+		{"uncommitted", func(a *agentpb.BackupWorkCheckpointAck) { a.Committed.DedupeKeyModRevision = 0 }},
+		{"resume cursor", func(a *agentpb.BackupWorkCheckpointAck) { a.Source.GetCapture().CheckpointSequence++ }},
 	}
-	if _, err := ValidateBackupCheckpointAck(ack, request); err == nil {
-		t.Fatal("ValidateBackupCheckpointAck(different sequence) error = nil")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request, input, identity := nativeBackupCheckpoint(t)
+			ack := nativeBackupCheckpointAck(t, request, input)
+			if _, err := ValidateBackupWorkCheckpointAck(ack, request, input, identity); err != nil {
+				t.Fatal(err)
+			}
+			test.mutate(ack)
+			if _, err := ValidateBackupWorkCheckpointAck(ack, request, input, identity); err == nil {
+				t.Fatal("different receipt accepted")
+			}
+		})
 	}
 }
 
@@ -539,72 +547,6 @@ func testBackupConfigContent() *agentpb.BackupConfigContentAuthority {
 		ManifestSha256: bytes.Repeat([]byte{13}, sha256.Size), EntryCount: 1,
 		TotalSelectedValueBytes: 32, ManifestSizeBytes: 128, SourceSizeBytes: 1536,
 		MetadataSnapshotSha256: bytes.Repeat([]byte{14}, sha256.Size),
-	}
-}
-
-func validBackupCheckpointRequest() *agentpb.BackupCheckpointRequest {
-	digest := bytes.Repeat([]byte{21}, sha256.Size)
-	sameInode := true
-	return &agentpb.BackupCheckpointRequest{
-		TaskId: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", ExecutionId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		CheckpointSequence: 1, AuthorityDigest: bytes.Repeat([]byte{20}, sha256.Size),
-		Checkpoint: &agentpb.BackupCheckpointRequest_ArtifactPrepared{ArtifactPrepared: &agentpb.BackupArtifactPrepared{
-			PointId: testBackupPointID,
-			Evidence: &agentpb.BackupArtifactEvidence{
-				SourceSizeBytes: 1536, SourceSha256: append([]byte(nil), digest...),
-				StoredSizeBytes: 1536, StoredSha256: append([]byte(nil), digest...),
-			},
-			Finals: &agentpb.BackupStagingFinals{
-				SourceRelativeName: BackupSourceStagingFinal, StoredRelativeName: BackupSourceStagingFinal,
-				SameInode: &sameInode,
-			},
-			Archive: &agentpb.BackupArtifactPrepared_Volume{Volume: &agentpb.BackupVolumeArchiveEvidence{
-				EntryCount: 1, ContentManifestSha256: bytes.Repeat([]byte{22}, sha256.Size),
-				FullTreeSha256: bytes.Repeat([]byte{23}, sha256.Size), SourceSizeBytes: 1536,
-			}},
-		}},
-	}
-}
-
-func validUploadCompletedCheckpointRequest() *agentpb.BackupCheckpointRequest {
-	target := testBackupTarget(testBackupConnectorID, testBackupSourceID, testBackupPointID, true)
-	digest := bytes.Repeat([]byte{24}, sha256.Size)
-	return &agentpb.BackupCheckpointRequest{
-		TaskId: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", ExecutionId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		CheckpointSequence: 1, AuthorityDigest: bytes.Repeat([]byte{20}, sha256.Size),
-		Checkpoint: &agentpb.BackupCheckpointRequest_UploadCompleted{UploadCompleted: &agentpb.BackupUploadCompleted{
-			PointId: testBackupPointID,
-			Evidence: &agentpb.BackupArtifactEvidence{
-				SourceSizeBytes: 4096, SourceSha256: append([]byte(nil), digest...),
-				StoredSizeBytes: 4096, StoredSha256: append([]byte(nil), digest...),
-			},
-			Target: target,
-			Outcome: &agentpb.BackupUploadCompleted_ReturnedObject{ReturnedObject: &agentpb.BackupObjectIdentity{
-				Connector: proto.Clone(target.Connector).(*agentpb.BackupConnectorAuthority), Bucket: target.Bucket,
-				ObjectKey:     target.ObjectKey,
-				Discriminator: &agentpb.BackupObjectIdentity_Etag{Etag: &agentpb.BackupS3ETag{Value: "etag"}},
-			}},
-			MetadataCount: 10, MetadataSha256: bytes.Repeat([]byte{25}, sha256.Size),
-		}},
-	}
-}
-
-func validBackupConfigCheckpointRequest() *agentpb.BackupCheckpointRequest {
-	return &agentpb.BackupCheckpointRequest{
-		TaskId: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", ExecutionId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		CheckpointSequence: 1, AuthorityDigest: bytes.Repeat([]byte{20}, sha256.Size),
-		Checkpoint: &agentpb.BackupCheckpointRequest_Config{Config: &agentpb.BackupConfigCheckpoint{
-			Checkpoint: &agentpb.BackupConfigCheckpoint_TransferCompleted{
-				TransferCompleted: &agentpb.BackupConfigTransferCompleted{
-					RestoreGenerationId: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV", Content: testBackupConfigContent(),
-					CommittedRecordCount: 4, ValueChainSha256: bytes.Repeat([]byte{26}, sha256.Size),
-					TransferTranscriptSha256: bytes.Repeat([]byte{27}, sha256.Size), RenderGeneration: 1,
-				},
-			},
-		}},
 	}
 }
 
