@@ -9,9 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverwork"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -31,7 +32,6 @@ func (repository *ComponentRepository) GetComponentInstalledSoftware(
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
 		Keys: []string{
 			components.RecordKey(componentID),
-			platformcomponents.ComponentObservationKey(componentID),
 			componentplanning.RuntimeKey(componentID),
 		},
 		Revision: revision,
@@ -39,7 +39,7 @@ func (repository *ComponentRepository) GetComponentInstalledSoftware(
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 3 || read.Values[0] == nil {
+	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 || read.Values[0] == nil {
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
@@ -53,23 +53,31 @@ func (repository *ComponentRepository) GetComponentInstalledSoftware(
 	var artifact *agentpb.ComposeArtifact
 	switch component.Desired.Owner {
 	case core.ComponentOwnerPlatform:
+		if len(component.Runtime.GeneratedServices) == 0 {
+			return nil, nil
+		}
+		host, err := hostbindings.ReadLocal(ctx, repository.store, revision)
+		if err != nil {
+			return nil, err
+		}
+		resolvers, err := resolverwork.NewRepository(repository.store)
+		if err != nil {
+			return nil, err
+		}
+		applied, found, err := resolvers.ReadApplied(ctx, host.Binding.HostID, componentID, revision)
+		if err != nil {
+			return nil, err
+		}
+		if !found || !applied.Record.Desired.Enabled {
+			return nil, nil
+		}
+		artifact = applied.Record.Configuration.Runtime
+	case core.ComponentOwnerEnvironment:
 		if read.Values[1] == nil {
 			return nil, nil
 		}
-		observed, err := platformcomponents.DecodeComponentObservation(read.Values[1].Value)
-		if err != nil || observed.ComponentID != componentID {
-			return nil, recordcodec.CorruptRecord()
-		}
-		if !observed.Enabled {
-			return nil, nil
-		}
-		artifact = observed.ComposeArtifact
-	case core.ComponentOwnerEnvironment:
-		if read.Values[2] == nil {
-			return nil, nil
-		}
 		acknowledged, err := recordcodec.Decode[componentplanning.Runtime](
-			read.Values[2].Value,
+			read.Values[1].Value,
 			"blueprint-component-runtime",
 		)
 		if err != nil || componentplanning.ValidateRuntime(acknowledged) != nil ||
