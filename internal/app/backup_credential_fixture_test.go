@@ -2,6 +2,7 @@ package app
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -43,6 +44,7 @@ type nativeBackupCredentialFixture struct {
 	attempt       *agentpb.WorkAttemptIdentity
 	operations    []workexecution.Operation
 	agentID       string
+	token         [32]byte
 	environmentID string
 	secretKey     string
 	sourceKey     string
@@ -67,6 +69,9 @@ func newNativeBackupCredentialFixture(t *testing.T) *nativeBackupCredentialFixtu
 		t.Fatal(err)
 	}
 	record := agentConfigurationTestRecord()
+	f.token = [32]byte{7}
+	tokenDigest := sha256.Sum256(f.token[:])
+	record.TokenDigest = base64.RawURLEncoding.EncodeToString(tokenDigest[:])
 	record.CreatedAt, record.TokenUpdatedAt = at.Add(-time.Hour), at.Add(-time.Hour)
 	f.agentID = record.ID
 	registered, err := f.agents.CreateSingleton(ctx, record)
