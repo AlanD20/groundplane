@@ -17,17 +17,18 @@ import (
 // it was requested by Deploy, Rollback or Blueprint Apply. It grants no effect
 // or file-restoration authority; those join the native work publication.
 type ServiceRolloutCapture struct {
-	Action            workexecution.Action    `json:"action"`
-	TaskID            string                  `json:"task_id"`
-	WorkItemID        string                  `json:"work_item_id"`
-	OperationID       string                  `json:"operation_id"`
-	PublicationID     string                  `json:"publication_id"`
-	Scope             workexecution.Scope     `json:"scope"`
-	Placement         workexecution.Placement `json:"placement"`
-	CreatedAt         time.Time               `json:"created_at"`
-	Deadline          time.Time               `json:"deadline"`
-	Render            ReleaseRenderInput      `json:"render"`
-	CandidateArtifact []byte                  `json:"candidate_artifact"`
+	Action             workexecution.Action    `json:"action"`
+	TaskID             string                  `json:"task_id"`
+	WorkItemID         string                  `json:"work_item_id"`
+	OperationID        string                  `json:"operation_id"`
+	PublicationID      string                  `json:"publication_id"`
+	SourceReadRevision int64                   `json:"source_read_revision"`
+	Scope              workexecution.Scope     `json:"scope"`
+	Placement          workexecution.Placement `json:"placement"`
+	CreatedAt          time.Time               `json:"created_at"`
+	Deadline           time.Time               `json:"deadline"`
+	Render             ReleaseRenderInput      `json:"render"`
+	CandidateArtifact  []byte                  `json:"candidate_artifact"`
 }
 
 // OpenServiceRolloutCapture returns owned typed input, not a decoded
@@ -37,6 +38,7 @@ func OpenServiceRolloutCapture(capture ServiceRolloutCapture) (ReleaseRenderInpu
 		ids.Validate(ids.KindWorkItem, capture.WorkItemID) != nil ||
 		ids.Validate(ids.KindOperation, capture.OperationID) != nil ||
 		releases.ValidatePublicationID(capture.PublicationID) != nil ||
+		capture.SourceReadRevision <= 0 ||
 		capture.Scope.Validate() != nil || capture.Scope.EnvironmentID == "" ||
 		capture.Placement.Validate() != nil || capture.Placement.Executor != workexecution.Agent ||
 		capture.CreatedAt.IsZero() || !capture.Deadline.After(capture.CreatedAt) ||

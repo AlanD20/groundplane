@@ -24,6 +24,9 @@ func (ledger *ReleaseLedger) rolloutPreparationGuards(ctx context.Context, captu
 	if err := capture.MatchesWork(view.Task.Task, view.Item.Item); err != nil {
 		return nil, err
 	}
+	if capture.SourceReadRevision > view.ReadRevision {
+		return nil, errs.New(errs.KindStateConflict, "Release preparation cannot refer to a future resource snapshot")
+	}
 	task, item := view.Task.Task, view.Item.Item
 	if task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil || item.ForwardRevoked ||
 		item.Phase == workexecution.Settled || item.Input != nil || item.AttemptNumber != 0 {

@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,6 +17,9 @@ import (
 // fresh fixed view. Only unfinished capture/planning needs mutable old MVCC
 // values. Add a producer here when introducing another durable old-view owner.
 func historicalReference(key string, value []byte) (*storagemaintenance.Pin, error) {
+	if strings.HasPrefix(key, releaserender.ServiceRolloutPrefix) {
+		return releasePreparationHistoryReference(key, value)
+	}
 	const snapshots = "/v1/runtime/backup-config-snapshots/"
 	if strings.HasPrefix(key, snapshots) && !strings.Contains(strings.TrimPrefix(key, snapshots), "/") {
 		snapshot, err := backupconfiguration.DecodeBackupConfigSnapshotRecord(value)
@@ -79,7 +83,7 @@ func (s *store) validateHistoricalPublication(mutations []keyvalue.Mutation) err
 
 func (s *store) protectedHistoryFloor(ctx context.Context, revision int64) (*storagemaintenance.Pin, error) {
 	var oldest *storagemaintenance.Pin
-	for _, prefix := range []string{"/v1/runtime/backup-config-snapshots/", "/v1/runtime/deletions/", blueprintHistorySourcePrefix} {
+	for _, prefix := range []string{"/v1/runtime/backup-config-snapshots/", "/v1/runtime/deletions/", blueprintHistorySourcePrefix, releaserender.ServiceRolloutPrefix} {
 		start := ""
 		for {
 			page, err := s.Range(

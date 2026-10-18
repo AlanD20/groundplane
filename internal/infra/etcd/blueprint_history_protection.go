@@ -64,6 +64,9 @@ func (s *store) historicalReferenceHeld(
 	pin *storagemaintenance.Pin,
 	revision int64,
 ) (bool, error) {
+	if pin.Kind == releasePreparationHistoryKind {
+		return s.releasePreparationHistoryHeld(ctx, pin, revision)
+	}
 	if pin.Kind != "blueprint_proxy_preparation" {
 		return true, nil
 	}

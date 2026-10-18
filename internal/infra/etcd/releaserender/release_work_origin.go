@@ -29,8 +29,10 @@ func IsReleaseAction(action workexecution.Action) bool {
 
 // ServiceRolloutKey belongs to execution, not the authored Blueprint revision.
 // Resource identity and applied runtime survive collection of this capture.
+const ServiceRolloutPrefix = "/v1/execution/service-rollouts/"
+
 func ServiceRolloutKey(environmentID, taskID, workItemID string) string {
-	return "/v1/execution/service-rollouts/" + environmentID + "/" + taskID + "/" + workItemID
+	return ServiceRolloutPrefix + environmentID + "/" + taskID + "/" + workItemID
 }
 
 // MatchesWork validates provenance as well as ordinary input ownership. Direct

@@ -174,8 +174,9 @@ func (service *Service) stageSelectedRuntime(
 	capture := releaserender.ServiceRolloutCapture{
 		Action: task.Action,
 		TaskID: task.ID, WorkItemID: item.ID, OperationID: input.OperationID,
-		PublicationID: manifest.Record.PublicationID,
-		Scope:         task.Scope, Placement: item.Placement, CreatedAt: item.CreatedAt,
+		PublicationID:      manifest.Record.PublicationID,
+		SourceReadRevision: input.Environment.ReadRevision,
+		Scope:              task.Scope, Placement: item.Placement, CreatedAt: item.CreatedAt,
 		Deadline: item.Deadline, Render: releaserender.CloneReleaseRenderInput(members[0].Render),
 		CandidateArtifact: artifactBytes,
 	}
