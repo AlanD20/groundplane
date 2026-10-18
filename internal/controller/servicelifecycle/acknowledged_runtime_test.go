@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -179,14 +180,22 @@ func acknowledgedRuntimeFixture(
 	runtime.ProxyGeneration = 7
 	digest := sha256.Sum256(proxyConfig)
 	runtime.ProxyConfigSHA256 = slices.Clone(digest[:])
+	at := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	attemptID := ids.New(ids.KindAttempt)
 	record := serviceruntimerecord.Record{
 		EnvironmentID: environmentID,
 		Runtime:       runtime,
 		Source: serviceruntimerecord.Acknowledgement{
-			TaskID: ids.New(ids.KindTask), PlanID: ids.New(ids.KindPlan), PlanHash: strings.Repeat("a", 64),
-			StepID: ids.New(ids.KindStep), AgentID: ids.New(ids.KindAgent),
-			AssignmentID: ids.New(ids.KindAssignment), ExecutionEpoch: 1, RenderGeneration: 1,
-			EffectDigest: strings.Repeat("b", 64), AcknowledgedAt: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC),
+			TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), AttemptID: attemptID,
+			Executor: workexecution.Identity{Executor: workexecution.Agent, HostID: ids.New(ids.KindHost),
+				AgentID: ids.New(ids.KindAgent), Generation: 1},
+			Input: workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: strings.Repeat("a", 64)},
+			Checkpoint: workexecution.Checkpoint{AttemptID: attemptID, Sequence: 1, StageID: ids.New(ids.KindStep),
+				Evidence: workexecution.Input{
+					ID:     ids.New(ids.KindPlan),
+					SHA256: strings.Repeat("b", 64),
+				}, RecordedAt: at},
+			RenderGeneration: 1, AcknowledgedAt: at,
 		},
 	}
 	if err := serviceruntimerecord.Validate(record); err != nil {

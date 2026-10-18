@@ -38,31 +38,32 @@ func (schedules *nativeAdmissionBackupSchedules) RunBackupSchedules(context.Cont
 // and idempotency state while its predecessor still owns possible recovery.
 // QA: UP-10; scheduler calls against fake stores, not durable trial recovery.
 func TestNativeMutationAdmissionPausesScheduler(t *testing.T) {
-	tasks, markers, agents, schedules := &fakeTaskExpiration{}, &fakeIdempotencyPruning{}, &fakeStaleAgentExpiration{}, &nativeAdmissionBackupSchedules{}
+	sources, markers, schedules := &fakeSourceReleases{}, &fakeIdempotencyPruning{}, &nativeAdmissionBackupSchedules{}
 	blueprintRevisions := &fakeBlueprintRevisionCleanup{}
 	admission := &closedMutationAdmission{}
 	scheduler := &Scheduler{
-		admission: admission, tasks: tasks, idempotency: markers, agents: agents,
+		admission: admission, sources: sources, idempotency: markers,
 		maintenancePolicy:  schedulerTestPolicy(),
 		blueprintRevisions: blueprintRevisions, backupSchedules: schedules, now: time.Now,
 	}
 	if err := scheduler.tick(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if tasks.calls != 0 || tasks.pruneCalls != 0 || markers.calls != 0 || agents.calls != 0 ||
+	if sources.calls != 0 || markers.calls != 0 ||
 		blueprintRevisions.calls != 0 || schedules.calls != 0 ||
 		!scheduler.nextPrune.IsZero() {
 		t.Fatal("trial scheduler reached ordinary durable mutation")
 	}
 	admission.failure = errs.New(errs.KindInternal, "journal unavailable")
-	if scheduler.tick(context.Background()) == nil || tasks.calls != 0 {
+	if scheduler.tick(context.Background()) == nil || sources.calls != 0 || markers.calls != 0 ||
+		blueprintRevisions.calls != 0 || schedules.calls != 0 {
 		t.Fatal("unavailable admission did not fail closed")
 	}
 	scheduler.admission = nil
 	if err := scheduler.tick(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if tasks.calls != 1 || tasks.pruneCalls != 1 || markers.calls != 1 || agents.calls != 1 ||
+	if sources.calls != 1 || markers.calls != 1 ||
 		blueprintRevisions.calls != 1 || schedules.calls != 1 {
 		t.Fatal("scheduler did not resume")
 	}

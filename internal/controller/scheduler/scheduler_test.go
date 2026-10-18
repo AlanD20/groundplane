@@ -3,26 +3,23 @@ package scheduler
 import (
 	"context"
 	"errors"
-	"github.com/AlanD20/groundplane/internal/common/config"
 	"io"
 	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/config"
 	testbackup "github.com/AlanD20/groundplane/internal/controller/backup"
 	testbackupscheduling "github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
 	testidempotencyowner "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type fakeTaskExpiration struct {
-	now          time.Time
-	calls        int
-	err          error
-	pruneNow     time.Time
-	pruneCalls   int
-	pruneErr     error
-	releaseCalls int
+type fakeSourceReleases struct{ calls int }
+
+func (source *fakeSourceReleases) ResumeTaskSourceReleases(context.Context) (bool, error) {
+	source.calls++
+	return true, nil
 }
 
 type fakeIdempotencyPruning struct {
@@ -31,10 +28,10 @@ type fakeIdempotencyPruning struct {
 	err   error
 }
 
-type fakeStaleAgentExpiration struct {
-	now   time.Time
-	calls int
-	err   error
+func (pruning *fakeIdempotencyPruning) PruneExpired(_ context.Context, now time.Time, remaining int) (int, error) {
+	pruning.calls++
+	pruning.now = now
+	return min(3, remaining), pruning.err
 }
 
 type fakeBlueprintRevisionCleanup struct {
@@ -45,47 +42,11 @@ type fakeBlueprintRevisionCleanup struct {
 }
 
 func (cleanup *fakeBlueprintRevisionCleanup) CleanupEnvironmentBlueprintStaging(
-	_ context.Context,
-	now time.Time,
-	limit int,
+	_ context.Context, now time.Time, limit int,
 ) (int, error) {
 	cleanup.calls++
-	cleanup.now = now
-	cleanup.limit = limit
+	cleanup.now, cleanup.limit = now, limit
 	return 1, cleanup.err
-}
-
-func (expiration *fakeStaleAgentExpiration) ExpireStaleAgentTasks(_ context.Context, now time.Time) (int, error) {
-	expiration.calls++
-	expiration.now = now
-	return 1, expiration.err
-}
-
-func (pruning *fakeIdempotencyPruning) PruneExpired(_ context.Context, now time.Time, remaining int) (int, error) {
-	pruning.calls++
-	pruning.now = now
-	return min(3, remaining), pruning.err
-}
-
-func (expiration *fakeTaskExpiration) ExpireTimedOutTasks(_ context.Context, now time.Time) (int, error) {
-	expiration.calls++
-	expiration.now = now
-	return 2, expiration.err
-}
-
-func (expiration *fakeTaskExpiration) PruneExpiredTasks(_ context.Context, now time.Time) (int, error) {
-	expiration.pruneCalls++
-	expiration.pruneNow = now
-	return 1, expiration.pruneErr
-}
-
-func (expiration *fakeTaskExpiration) ResumeTaskSourceReleases(context.Context) (bool, error) {
-	expiration.releaseCalls++
-	return true, nil
-}
-
-func (*fakeTaskExpiration) ExpireTaskDiagnostics(context.Context, time.Time, time.Duration, int) (int, error) {
-	return 0, nil
 }
 func schedulerTestPolicy() config.MaintenancePolicy {
 	policy := config.DefaultMaintenancePolicy()
@@ -93,122 +54,87 @@ func schedulerTestPolicy() config.MaintenancePolicy {
 	return policy
 }
 
-func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
-	wantNow := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
-	expiration := &fakeTaskExpiration{}
-	pruning := &fakeIdempotencyPruning{}
-	agents := &fakeStaleAgentExpiration{}
-	blueprintRevisions := &fakeBlueprintRevisionCleanup{}
-	now := wantNow
+// Rationale: source release and abandoned drafts must keep progressing between
+// bounded replay-retention passes, without reintroducing Task timeout finalization.
+func TestSchedulerSourceReleaseContinuesBetweenRetentionPasses(t *testing.T) {
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	first := now
+	sources, pruning := &fakeSourceReleases{}, &fakeIdempotencyPruning{}
+	drafts := &fakeBlueprintRevisionCleanup{}
 	scheduler := &Scheduler{
-		maintenancePolicy: schedulerTestPolicy(),
-		Interval:          time.Second, tasks: expiration, idempotency: pruning, agents: agents,
-		blueprintRevisions: blueprintRevisions, now: func() time.Time { return now },
+		maintenancePolicy: schedulerTestPolicy(), sources: sources, idempotency: pruning,
+		blueprintRevisions: drafts, now: func() time.Time { return now },
 	}
-	if err := scheduler.tick(context.Background()); err != nil {
-		t.Fatalf("tick() error = %v", err)
+	for pass, offset := range []time.Duration{0, schedulerTestPolicy().CleanupInterval - time.Second, schedulerTestPolicy().CleanupInterval} {
+		now = first.Add(offset)
+		if err := scheduler.tick(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		expectedPrunes := 1
+		if pass == 2 {
+			expectedPrunes = 2
+		}
+		if sources.calls != pass+1 || drafts.calls != pass+1 || pruning.calls != expectedPrunes ||
+			!drafts.now.Equal(now) || drafts.limit != 16 {
+			t.Fatalf("pass %d: source=%d drafts=%d prune=%d at=%v limit=%d",
+				pass, sources.calls, drafts.calls, pruning.calls, drafts.now, drafts.limit)
+		}
 	}
-	if expiration.calls != 1 || !expiration.now.Equal(wantNow) ||
-		expiration.pruneCalls != 1 || !expiration.pruneNow.Equal(wantNow) ||
-		pruning.calls != 1 || !pruning.now.Equal(wantNow) || agents.calls != 1 || !agents.now.Equal(wantNow) ||
-		blueprintRevisions.calls != 1 || !blueprintRevisions.now.Equal(wantNow) || blueprintRevisions.limit != 16 {
-		t.Fatalf("ExpireTimedOutTasks() calls/time = %d/%s", expiration.calls, expiration.now)
-	}
-	now = wantNow.Add(schedulerTestPolicy().CleanupInterval - time.Second)
-	if err := scheduler.tick(context.Background()); err != nil {
-		t.Fatalf("tick(before daily prune) error = %v", err)
-	}
-	// SEC-07: source release must run before the daily history-pruning deadline.
-	if expiration.calls != 2 || agents.calls != 2 || pruning.calls != 1 || expiration.pruneCalls != 1 ||
-		expiration.releaseCalls != 2 ||
-		blueprintRevisions.calls != 2 {
-		t.Fatalf(
-			"before daily deadline expiration/stale/pruning calls = %d/%d/%d",
-			expiration.calls,
-			agents.calls,
-			pruning.calls,
-		)
-	}
-	now = wantNow.Add(schedulerTestPolicy().CleanupInterval)
-	if err := scheduler.tick(context.Background()); err != nil {
-		t.Fatalf("tick(at daily prune) error = %v", err)
-	}
-	if expiration.calls != 3 || agents.calls != 3 || pruning.calls != 2 || expiration.pruneCalls != 2 ||
-		!pruning.now.Equal(now) || !expiration.pruneNow.Equal(now) ||
-		blueprintRevisions.calls != 3 ||
-		!blueprintRevisions.now.Equal(now) {
-		t.Fatalf(
-			"at daily deadline expiration/stale/pruning calls/time = %d/%d/%d/%s",
-			expiration.calls,
-			agents.calls,
-			pruning.calls,
-			pruning.now,
-		)
+	if !pruning.now.Equal(now) {
+		t.Fatal("retention used an earlier pass timestamp")
 	}
 }
 
 func TestSchedulerTickHonorsCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+	sources, pruning, drafts := &fakeSourceReleases{}, &fakeIdempotencyPruning{}, &fakeBlueprintRevisionCleanup{}
 	err := (&Scheduler{
-		maintenancePolicy: schedulerTestPolicy(),
-		tasks:             &fakeTaskExpiration{}, idempotency: &fakeIdempotencyPruning{},
-		blueprintRevisions: &fakeBlueprintRevisionCleanup{}, agents: &fakeStaleAgentExpiration{}, now: time.Now,
+		maintenancePolicy: schedulerTestPolicy(), sources: sources, idempotency: pruning,
+		blueprintRevisions: drafts, now: time.Now,
 	}).tick(ctx)
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("tick() error = %v, want context.Canceled", err)
+	if !errors.Is(err, context.Canceled) || sources.calls != 0 || pruning.calls != 0 || drafts.calls != 0 {
+		t.Fatalf(
+			"cancelled pass: error=%v source=%d prune=%d drafts=%d",
+			err,
+			sources.calls,
+			pruning.calls,
+			drafts.calls,
+		)
 	}
 }
 
-func TestSchedulerRetriesFailedPruningOnNextScheduledPass(t *testing.T) {
+// Rationale: failed cleanup must wait for its next scheduled pass, while
+// independent source release and Backup scheduling continue in between.
+func TestSchedulerFailedPruningWaitsWithoutStarvingOtherMaintenance(t *testing.T) {
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 	failure := errors.New("prune failed")
-	pruning := &fakeIdempotencyPruning{err: failure}
+	pruning, sources, schedules := &fakeIdempotencyPruning{
+		err: failure,
+	}, &fakeSourceReleases{}, &nativeAdmissionBackupSchedules{}
 	scheduler := &Scheduler{
-		maintenancePolicy: schedulerTestPolicy(),
-		tasks:             &fakeTaskExpiration{}, idempotency: pruning, agents: &fakeStaleAgentExpiration{},
-		blueprintRevisions: &fakeBlueprintRevisionCleanup{}, now: func() time.Time { return now },
+		maintenancePolicy: schedulerTestPolicy(), sources: sources, idempotency: pruning,
+		blueprintRevisions: &fakeBlueprintRevisionCleanup{}, backupSchedules: schedules, now: func() time.Time { return now },
 	}
-	if err := scheduler.tick(context.Background()); !errors.Is(err, failure) {
-		t.Fatalf("first tick error = %v, want prune failure", err)
+	if err := scheduler.tick(t.Context()); !errors.Is(err, failure) {
+		t.Fatalf("first pass=%v", err)
 	}
-	pruning.err = nil
-	now = now.Add(schedulerTestPolicy().CleanupInterval)
-	if err := scheduler.tick(context.Background()); err != nil {
-		t.Fatalf("retry tick error = %v", err)
+	next := now.Add(schedulerTestPolicy().CleanupInterval)
+	now = now.Add(time.Second)
+	if err := scheduler.tick(t.Context()); err != nil {
+		t.Fatal(err)
 	}
-	if pruning.calls != 2 || !scheduler.nextPrune.Equal(now.Add(schedulerTestPolicy().CleanupInterval)) {
-		t.Fatalf("pruning calls/next = %d/%s", pruning.calls, scheduler.nextPrune)
+	if pruning.calls != 1 || sources.calls != 2 || schedules.calls != 2 || !scheduler.nextPrune.Equal(next) {
+		t.Fatalf("failed cleanup looped or starved work: prune=%d source=%d schedules=%d next=%v",
+			pruning.calls, sources.calls, schedules.calls, scheduler.nextPrune)
 	}
-}
-
-func TestSchedulerTaskPruningFailureDoesNotCreateImmediateRetryLoop(t *testing.T) {
-	// Rationale: TASK-19 bounds repeated cleanup failures while marker and
-	// diagnostic owners remain independently scheduled and guarded.
-	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
-	failure := errors.New("Task prune failed")
-	tasks := &fakeTaskExpiration{pruneErr: failure}
-	pruning := &fakeIdempotencyPruning{}
-	scheduler := &Scheduler{
-		maintenancePolicy: schedulerTestPolicy(),
-		tasks:             tasks, idempotency: pruning, agents: &fakeStaleAgentExpiration{},
-		blueprintRevisions: &fakeBlueprintRevisionCleanup{}, now: func() time.Time { return now },
+	pruning.err, now = nil, next
+	if err := scheduler.tick(t.Context()); err != nil {
+		t.Fatal(err)
 	}
-	if err := scheduler.tick(context.Background()); !errors.Is(err, failure) {
-		t.Fatalf("first tick error = %v, want Task prune failure", err)
-	}
-	if pruning.calls != 1 || tasks.pruneCalls != 1 ||
+	if pruning.calls != 2 || sources.calls != 3 || schedules.calls != 3 ||
 		!scheduler.nextPrune.Equal(now.Add(schedulerTestPolicy().CleanupInterval)) {
-		t.Fatalf("first marker/Task prune calls/next = %d/%d/%s", pruning.calls, tasks.pruneCalls, scheduler.nextPrune)
-	}
-	tasks.pruneErr = nil
-	now = now.Add(schedulerTestPolicy().CleanupInterval)
-	if err := scheduler.tick(context.Background()); err != nil {
-		t.Fatalf("retry tick error = %v", err)
-	}
-	if pruning.calls != 2 || tasks.pruneCalls != 2 ||
-		!scheduler.nextPrune.Equal(now.Add(schedulerTestPolicy().CleanupInterval)) {
-		t.Fatalf("retry marker/Task prune calls/next = %d/%d/%s", pruning.calls, tasks.pruneCalls, scheduler.nextPrune)
+		t.Fatal("cleanup did not retry at its next scheduled pass")
 	}
 }
 
