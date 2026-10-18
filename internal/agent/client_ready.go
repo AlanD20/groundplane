@@ -16,11 +16,7 @@ func (c *Client) sendReady(stream agentStream) error {
 	if source.Known() {
 		provenance = &agentpb.BuildProvenance{Kind: source.Kind, Commit: source.Commit}
 	}
-	clean, err := c.terminalDeliveryClean()
-	if err != nil {
-		return err
-	}
-	clean = clean && c.staging != nil && c.staging.ready && !c.staging.reinspect.Load()
+	clean := c.staging != nil && c.staging.ready && !c.staging.reinspect.Load()
 	capacity := c.availableWorkCapacity()
 	if !clean {
 		capacity = 0
@@ -41,9 +37,8 @@ func (c *Client) sendReady(stream agentStream) error {
 }
 
 func (c *Client) availableWorkCapacity() int {
-	capacity := c.pool.Capacity()
-	if c.executionWorkers != nil {
-		capacity -= c.executionWorkers.limit - c.executionWorkers.capacity()
+	if c.executionWorkers == nil {
+		return 0
 	}
-	return max(0, capacity)
+	return c.executionWorkers.capacity()
 }

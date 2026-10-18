@@ -99,11 +99,6 @@ func (c *Client) runSession(
 		}
 		c.staging = nil
 	}()
-	poolCancel, workersDone := c.startWorkerPool(streamCtx, int(config.MaxConcurrentTasks))
-	defer func() {
-		poolCancel()
-		<-workersDone
-	}()
 	releases, err := newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, c.environmentExecutor, c.backingExecutor, c.resolverExecutor, native, c.processOwnership)
 	if err != nil {
 		return false, err
@@ -115,9 +110,6 @@ func (c *Client) runSession(
 		}
 		c.executionWorkers = nil
 	}()
-	if err := c.replayTerminalDelivery(streamCtx, stream); err != nil {
-		return agentChannelTransportResult(ctx, err, "agent: replay terminal delivery", false)
-	}
 	if err := c.sendReady(stream); err != nil {
 		return agentChannelTransportResult(ctx, err, "agent: send readiness", false)
 	}
@@ -139,23 +131,13 @@ func (c *Client) runSession(
 	edgeChecks := newEdgeCheckSession(c.edgeChecks)
 	defer edgeChecks.close()
 	receiveNext(streamCtx, stream, received)
-	controlBurst := 0
 	for {
-		// PostgreSQL execution markers outlive source-file cleanup. Drain
-		// existing work and finish terminal delivery before
-		// reopening the normal startup handshake; do not advertise Ready first.
+		// Reopen staging only after native workers have drained and joined.
 		if staging.reinspect.Load() && c.availableWorkCapacity() == int(config.MaxConcurrentTasks) {
-			clean, err := c.terminalDeliveryClean()
-			if err != nil {
-				return false, err
-			}
-			if clean {
-				return true, nil
-			}
+			return true, nil
 		}
 		event := nextSessionEvent(
 			ctx,
-			c.pool,
 			observations,
 			images,
 			backingAccess,
@@ -164,11 +146,9 @@ func (c *Client) runSession(
 			received,
 			c.logs.Outputs(),
 			ticker.C,
-			controlBurst,
 			native.outgoing,
 			releases.outputs,
 		)
-		controlBurst = min(controlBurst+1, maximumControlBurst)
 		switch event.kind {
 		case sessionNativeResult:
 			if err := releases.consume(event.nativeResult); err != nil {
@@ -188,11 +168,6 @@ func (c *Client) runSession(
 			}
 		case sessionEnded:
 			return false, nil
-		case sessionBulk:
-			if err := c.pool.sendBackupBulkFrame(stream, event.bulk); err != nil {
-				return agentChannelTransportResult(ctx, err, "agent: send Config Restore frame", false)
-			}
-			controlBurst = 0
 		case sessionObservation:
 			if err := observations.Close(); err != nil {
 				return false, err
@@ -422,13 +397,6 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
-			if handled, err := c.handleTerminalDelivery(streamCtx, stream, result.message); handled {
-				if err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: terminal delivery", false)
-				}
-				receiveNext(streamCtx, stream, received)
-				continue
-			}
 			if handled, err := backingAccess.handle(streamCtx, stream, result.message); handled {
 				if err != nil {
 					return agentChannelTransportResult(ctx, err, "agent: receive Backing access check", true)
@@ -476,14 +444,11 @@ func (c *Client) runSession(
 				if c.availableWorkCapacity() != int(config.MaxConcurrentTasks) {
 					return false, errs.New(
 						errs.KindStateConflict,
-						"agent: live configuration arrived before the worker pool drained",
+						"agent: live configuration arrived before native executions drained",
 					)
 				}
-				poolCancel()
-				<-workersDone
 				releases.close()
 				config = proto.Clone(next).(*agentpb.AgentConfig)
-				poolCancel, workersDone = c.startWorkerPool(streamCtx, int(config.MaxConcurrentTasks))
 				releases, err = newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, c.environmentExecutor, c.backingExecutor, c.resolverExecutor, native, c.processOwnership)
 				if err != nil {
 					return false, err
@@ -503,20 +468,6 @@ func (c *Client) runSession(
 				continue
 			}
 
-			if acknowledgement := result.message.GetScriptCheckpointAck(); acknowledgement != nil {
-				if err := c.pool.AcceptScriptCheckpointAck(acknowledgement); err != nil {
-					return false, err
-				}
-				receiveNext(streamCtx, stream, received)
-				continue
-			}
-			if acknowledgement := result.message.GetBackingHookCheckpointAck(); acknowledgement != nil {
-				if err := c.pool.AcceptBackingHookCheckpointAck(acknowledgement); err != nil {
-					return false, err
-				}
-				receiveNext(streamCtx, stream, received)
-				continue
-			}
 			shutdown, err := c.handleControllerMessage(streamCtx, result.message)
 			if err != nil {
 				return false, err
@@ -525,47 +476,6 @@ func (c *Client) runSession(
 				return false, nil
 			}
 			receiveNext(streamCtx, stream, received)
-		case sessionWorker:
-			output := event.worker
-			if err := output.validate(); err != nil {
-				return false, err
-			}
-			if output.Error != nil {
-				return false, output.Error
-			}
-			if output.BackingHookCheckpoint != nil {
-				if err := c.sendBackingHookCheckpoint(stream, output.BackingHookCheckpoint); err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: send backing hook checkpoint", false)
-				}
-				continue
-			}
-			if output.ScriptCheckpoint != nil {
-				if err := c.sendScriptCheckpoint(stream, output.ScriptCheckpoint); err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: send Script checkpoint", false)
-				}
-				continue
-			}
-
-			if output.BackupConfigCredit != nil {
-				if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupConfigCredit{
-					BackupConfigCredit: output.BackupConfigCredit,
-				}}); err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: send Config credit", false)
-				}
-				continue
-			}
-			if output.Progress != nil {
-				if err := c.sendTaskEvent(stream, *output.Progress); err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: send task event", false)
-				}
-				continue
-			}
-			if err := c.sendTaskAck(stream, *output.Result); err != nil {
-				return agentChannelTransportResult(ctx, err, "agent: send task acknowledgement", false)
-			}
-			if err := c.sendReady(stream); err != nil {
-				return agentChannelTransportResult(ctx, err, "agent: send readiness", false)
-			}
 		case sessionLog:
 			if err := stream.Send(event.log); err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send log message", false)

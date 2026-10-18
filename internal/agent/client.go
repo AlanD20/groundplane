@@ -1,5 +1,4 @@
-// Package agent is the execution plane: an authenticated gRPC stream client
-// driving a bounded worker pool for Controller-assigned tasks.
+// Package agent executes captured native work over an authenticated host channel.
 package agent
 
 import (
@@ -33,14 +32,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
 	"github.com/AlanD20/groundplane/internal/agent/resolverruntime"
 	"github.com/AlanD20/groundplane/internal/agent/scriptruntime"
-	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/internal/infra/agentownership"
 	"github.com/AlanD20/groundplane/internal/infra/agentstagingjournal"
 	"github.com/AlanD20/groundplane/internal/infra/agentterminaljournal"
@@ -227,8 +224,8 @@ func NewClientWithLogReader(
 	return client, nil
 }
 
-// Run authenticates, requires the initial runtime configuration, starts the
-// worker pool, and maintains Ready heartbeats until shutdown or cancellation.
+// Run authenticates, reconciles saved native results and runs typed handlers
+// with one shared capacity limit until shutdown or cancellation.
 func (c *Client) Run(ctx context.Context) error {
 	token, err := c.takeToken()
 	if err != nil {
@@ -241,12 +238,6 @@ func (c *Client) Run(ctx context.Context) error {
 	if c.reconnect == nil {
 		return errs.New(errs.KindInternal, "agent: reconnect waiter is not configured")
 	}
-	journal, err := agentterminaljournal.Open(c.statePath + "/terminal")
-	if err != nil {
-		return err
-	}
-	c.terminalJournal = journal
-	defer journal.Close()
 	stagingJournal, err := c.openStagingJournal(c.statePath + "/staging")
 	if err != nil {
 		return err
@@ -278,64 +269,6 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
-func (c *Client) sendScriptCheckpoint(
-	stream agentStream,
-	request *agentpb.ScriptCheckpointRequest,
-) error {
-	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_ScriptCheckpointRequest{
-		ScriptCheckpointRequest: proto.Clone(request).(*agentpb.ScriptCheckpointRequest),
-	}})
-}
-
-func (c *Client) sendBackingHookCheckpoint(
-	stream agentStream,
-	request *agentpb.BackingHookCheckpointRequest,
-) error {
-	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackingHookCheckpointRequest{
-		BackingHookCheckpointRequest: proto.Clone(request).(*agentpb.BackingHookCheckpointRequest),
-	}})
-}
-
-func (c *Client) startWorkerPool(ctx context.Context, size int) (context.CancelFunc, <-chan struct{}) {
-	poolCtx, cancel := context.WithCancel(ctx)
-	var pool *WorkerPool
-	if c.compose == nil && c.environmentDirectories == nil && c.materializer == nil {
-		pool = NewWorkerPool(size, c.volumeRoot, runner.New(c.logger), c.logger)
-	} else {
-		pool = NewWorkerPoolWithRuntimes(
-			size,
-			c.volumeRoot,
-			runner.New(c.logger),
-			c.logger,
-			c.compose,
-			c.environmentDirectories,
-			c.materializer,
-		)
-	}
-	if c.componentActions != nil {
-		pool.SetComponentActionRuntime(c.componentActions)
-	}
-	if c.adapterCompiler != nil {
-		pool.SetAdapterCompiler(c.adapterCompiler)
-	}
-	if c.hostResolution != nil {
-		pool.SetHostResolutionRuntime(c.hostResolution)
-	}
-	if c.scriptRuntime != nil {
-		pool.SetScriptRuntime(c.scriptRuntime)
-	}
-	c.pool = pool
-	pool.persistBackupTerminal = c.persistBackupTerminal
-	pool.backupStaging = c.staging
-	done := make(chan struct{})
-	c.workersDone = done
-	go func() {
-		defer close(done)
-		pool.Run(poolCtx)
-	}()
-	return cancel, done
-}
-
 func validRuntimeConfig(config *agentpb.AgentConfig) bool {
 	if config == nil || config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks <= 0 {
 		return false
@@ -358,32 +291,6 @@ func validRuntimeConfig(config *agentpb.AgentConfig) bool {
 	return true
 }
 
-func (c *Client) sendTaskEvent(stream agentStream, progress TaskProgress) error {
-	state := agentpb.TaskState_TASK_STATE_UNSPECIFIED
-	switch progress.State {
-	case TaskProgressRunning:
-		state = agentpb.TaskState_TASK_STATE_RUNNING
-	case TaskProgressCompleted:
-		state = agentpb.TaskState_TASK_STATE_COMPLETED
-	case TaskProgressFailed:
-		state = agentpb.TaskState_TASK_STATE_FAILED
-	case TaskProgressTimedOut:
-		state = agentpb.TaskState_TASK_STATE_TIMED_OUT
-	case TaskProgressAborted:
-		state = agentpb.TaskState_TASK_STATE_ABORTED
-	default:
-		return errs.New(errs.KindInternal, "agent: worker returned an invalid progress state")
-	}
-	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskEvent{
-		TaskEvent: &agentpb.TaskEvent{
-			AssignmentId: progress.AssignmentID,
-			TaskId:       progress.TaskID, PlanHash: append([]byte(nil), progress.PlanHash[:]...),
-			StepId: progress.StepID, ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
-			State: state, Chunk: append([]byte(nil), progress.Chunk...), HealthWait: progress.HealthWait, Failure: progress.Failure,
-		},
-	}})
-}
-
 func (c *Client) takeToken() ([agentprotocol.RawTokenBytes]byte, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -397,17 +304,11 @@ func (c *Client) takeToken() ([agentprotocol.RawTokenBytes]byte, error) {
 }
 
 func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.ControllerMessage) (bool, error) {
-	if acknowledgement := message.GetTaskEventAck(); acknowledgement != nil {
-		if c.pool == nil {
-			return false, errs.New(
-				errs.KindInternal,
-				"agent: Task event acknowledgement arrived before worker configuration",
-			)
-		}
-		return false, c.pool.AcceptTaskEventAck(ctx, acknowledgement)
+	if message == nil {
+		return false, errs.New(errs.KindValidationFailed, "Controller sent an empty message")
 	}
 	if subscription := message.GetLogSubscribe(); subscription != nil {
-		c.logs.Subscribe(ctx, proto.Clone(subscription).(*agentpb.LogSubscribe))
+		c.logs.Subscribe(ctx, proto.CloneOf(subscription))
 		return false, nil
 	}
 	if cancellation := message.GetLogCancel(); cancellation != nil {
@@ -417,66 +318,10 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 	if credit := message.GetLogCredit(); credit != nil {
 		return false, c.logs.Grant(credit)
 	}
-	if assignment := message.GetTaskAssignment(); assignment != nil {
-		if c.executionWorkers != nil && c.availableWorkCapacity() == 0 {
-			return false, errs.New(errs.KindStateConflict, "Agent execution capacity is exhausted")
-		}
-		if c.staging == nil || !c.staging.ready {
-			return false, invalidAgentStaging()
-		}
-		if err := c.staging.verifyPreparedAssignment(assignment); err != nil {
-			return false, err
-		}
-		if assignment.ForwardDeadline == nil || assignment.ForwardDeadline.CheckValid() != nil ||
-			assignment.RecoveryDeadline == nil || assignment.RecoveryDeadline.CheckValid() != nil ||
-			assignment.ExecutionDeadline == nil || assignment.ExecutionDeadline.CheckValid() != nil {
-			return false, errs.New(errs.KindInternal, "agent: Controller sent invalid fixed deadlines")
-		}
-		if assignment.GetExecutionEpoch() == 0 ||
-			(assignment.GetExecutionMode() != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD &&
-				assignment.GetExecutionMode() != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY) {
-			return false, errs.New(errs.KindInternal, "agent: Controller sent invalid execution authority")
-		}
-		defer taskassignment.ClearScriptArtifacts(assignment.ScriptArtifacts)
-		executionDeadline := assignment.ExecutionDeadline.AsTime()
-		recoveryProofRequired := assignment.GetExecutionMode() == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY &&
-			executionDeadline.After(assignment.RecoveryDeadline.AsTime())
-		if assignment.GetExecutionMode() == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD &&
-			!executionDeadline.Equal(assignment.ForwardDeadline.AsTime()) ||
-			assignment.GetExecutionMode() == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY &&
-				!recoveryProofRequired && !executionDeadline.Equal(assignment.RecoveryDeadline.AsTime()) {
-			return false, errs.New(errs.KindInternal, "agent: Controller sent mismatched execution deadline")
-		}
-		return false, c.pool.Submit(ctx, taskassignment.Assignment{
-			BackupAuthority: assignment.BackupAuthority, BackupResume: assignment.BackupResume,
-			BackupAuthoritySHA256: assignment.BackupAuthoritySha256, AssignmentGeneration: assignment.AssignmentGeneration,
-			AssignmentID: assignment.AssignmentId,
-			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
-			RetryOf: assignment.RetryOf, Plan: assignment.Plan, ScriptArtifacts: assignment.ScriptArtifacts,
-			ScriptCheckpoints:  assignment.ScriptCheckpoints,
-			AutomaticReconcile: assignment.GetAutomaticReconcile(), ExecutionEpoch: assignment.GetExecutionEpoch(),
-			ExecutionMode: assignment.GetExecutionMode(), ForwardDeadline: assignment.ForwardDeadline.AsTime(),
-			RecoveryDeadline:            assignment.RecoveryDeadline.AsTime(),
-			Deadline:                    executionDeadline,
-			RecoveryProofRequired:       recoveryProofRequired,
-			RestorationAuthority:        assignment.GetRestorationAuthority(),
-			ReleaseRecoveryDirective:    assignment.GetReleaseRecoveryDirective(),
-			ReleaseRecoveryRecordSHA256: append([]byte(nil), assignment.GetReleaseRecoveryRecordSha256()...),
-		})
-	}
-	if abort := message.GetTaskAbort(); abort != nil {
-		return false, c.handleTaskAbort(ctx, abort)
-	}
-	if transfer := message.GetMaterializationTransfer(); transfer != nil {
-		return false, c.pool.AcceptMaterializationTransfer(ctx, transfer)
-	}
-	if transfer := message.GetManagedConfigTransfer(); transfer != nil {
-		return false, c.pool.AcceptManagedConfigTransfer(ctx, transfer)
-	}
 	if message.GetShutdown() != nil {
 		return true, nil
 	}
-	return false, errs.New(errs.KindInternal, "agent: Controller sent an empty message")
+	return false, errs.New(errs.KindValidationFailed, "Controller sent an unsupported native channel message")
 }
 
 type receiveResult struct {
