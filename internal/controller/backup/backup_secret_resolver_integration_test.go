@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -18,21 +19,24 @@ import (
 
 // Rationale: mixed Connector mode must decrypt only its direct member, late-
 // bind the referenced member, and return exactly the two capture S3 purposes.
-func TestBackupSecretResolverResolvesMixedDirectAndReferencedCredentials(t *testing.T) {
+func TestOpenCapturedSlotsResolvesMixedDirectAndReferencedCredentials(t *testing.T) {
 	evidence := mixedBackupSecretEvidence()
 	directCiphertext := evidence.Credentials.Ciphertext
 	secretCiphertext := evidence.SecretValues[0].Value.Ciphertext
-	reader := &staticBackupSecretEvidenceReader{evidence: evidence}
 	crypt := &observingBackupSecretCrypt{}
 	protector, err := secretvalue.NewProtector(crypt, crypt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolver, err := NewBackupSecretResolver(t.Context(), reader, protector)
+	// This exercises decryption and buffer ownership only. Native grant admission
+	// and source reads belong to the application credential-delivery integration.
+	resolver := &BackupSecretResolver{protector: protector}
+	step := mixedBackupSecretSource()
+	purposes, err := backupsecret.SourcePurposes(step)
 	if err != nil {
 		t.Fatal(err)
 	}
-	slots, err := resolver.ResolveBackupSecretSlots(context.Background(), mixedBackupSecretRequest())
+	slots, err := resolver.openCapturedSlots(t.Context(), "", time.Now().Add(time.Minute), step, evidence, purposes)
 	if err != nil {
 		t.Fatalf("resolve backup secret slots: %v", err)
 	}
@@ -55,26 +59,32 @@ func TestBackupSecretResolverResolvesMixedDirectAndReferencedCredentials(t *test
 	if !allZeroBytes(directCiphertext) || !allZeroBytes(secretCiphertext) {
 		t.Fatal("resolver retained durable ciphertext")
 	}
+	for _, returned := range crypt.returned {
+		if !allZeroBytes(returned) {
+			t.Fatal("successful resolution retained provider plaintext")
+		}
+	}
 }
 
 // Rationale: a later credential decryption failure must clear the earlier
 // direct plaintext, provider partial output, and every ciphertext buffer.
-func TestBackupSecretResolverClearsPartialMixedResolution(t *testing.T) {
+func TestOpenCapturedSlotsClearsPartialMixedResolution(t *testing.T) {
 	evidence := mixedBackupSecretEvidence()
 	directCiphertext := evidence.Credentials.Ciphertext
 	secretCiphertext := evidence.SecretValues[0].Value.Ciphertext
-	reader := &staticBackupSecretEvidenceReader{evidence: evidence}
 	crypt := &observingBackupSecretCrypt{failOpenAt: 2}
 	protector, err := secretvalue.NewProtector(crypt, crypt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolver, err := NewBackupSecretResolver(t.Context(), reader, protector)
+	resolver := &BackupSecretResolver{protector: protector}
+	step := mixedBackupSecretSource()
+	purposes, err := backupsecret.SourcePurposes(step)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slots, err := resolver.ResolveBackupSecretSlots(
-		context.Background(), mixedBackupSecretRequest(),
+	if slots, err := resolver.openCapturedSlots(
+		t.Context(), "", time.Now().Add(time.Minute), step, evidence, purposes,
 	); err == nil || slots != nil {
 		t.Fatalf("resolve backup secret slots = %#v, %v", slots, err)
 	}
@@ -86,17 +96,6 @@ func TestBackupSecretResolverClearsPartialMixedResolution(t *testing.T) {
 			t.Fatal("failed resolution retained provider plaintext")
 		}
 	}
-}
-
-type staticBackupSecretEvidenceReader struct {
-	evidence testbackupsecrets.Evidence
-}
-
-func (reader *staticBackupSecretEvidenceReader) ResolveBackupSecretEvidence(
-	context.Context,
-	backupsecret.Request,
-) (testbackupsecrets.Evidence, error) {
-	return reader.evidence, nil
 }
 
 type observingBackupSecretCrypt struct {
@@ -119,14 +118,12 @@ func (crypt *observingBackupSecretCrypt) Open(_ context.Context, value []byte) (
 	return plaintext, nil
 }
 
-func mixedBackupSecretRequest() backupsecret.Request {
-	return backupsecret.Request{Step: &agentpb.ExecutionStep{
-		Payload: &agentpb.ExecutionStep_BackupStep{BackupStep: &agentpb.BackupStepAuthority{
-			Operation: &agentpb.BackupStepAuthority_Capture{Capture: &agentpb.BackupCaptureAuthority{
-				Encryption: &agentpb.BackupEncryptionAuthority{Kind: agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE},
-			}},
+func mixedBackupSecretSource() *agentpb.BackupStepAuthority {
+	return &agentpb.BackupStepAuthority{
+		Operation: &agentpb.BackupStepAuthority_Capture{Capture: &agentpb.BackupCaptureAuthority{
+			Encryption: &agentpb.BackupEncryptionAuthority{Kind: agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE},
 		}},
-	}}
+	}
 }
 
 func mixedBackupSecretEvidence() testbackupsecrets.Evidence {
