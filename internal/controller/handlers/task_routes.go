@@ -54,7 +54,6 @@ type taskMutationOutput struct {
 
 func (s *Server) registerTasks() {
 	s.registerTaskWork()
-	taskStepOpenAPISchema(s.API.OpenAPI().Components.Schemas)
 	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
 		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
 	)

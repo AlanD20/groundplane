@@ -34,19 +34,19 @@ func retainImageOperations(retention *imageRetention, excludingOperation string,
 	})
 }
 
-func imageOperationStatus(record imageoperations.Record) apiTypes.TaskStatus {
+func imageOperationStatus(record imageoperations.Record) apiTypes.ImageFetchStatus {
 	if record.Phase == imageoperations.Ready {
-		return apiTypes.TaskPending
+		return apiTypes.ImageFetchPending
 	}
 	if record.Phase != imageoperations.Finished {
-		return apiTypes.TaskRunning
+		return apiTypes.ImageFetchRunning
 	}
 	switch record.Outcome {
 	case workexecution.Succeeded:
-		return apiTypes.TaskCompleted
+		return apiTypes.ImageFetchCompleted
 	case workexecution.Cancelled, workexecution.Superseded:
-		return apiTypes.TaskAborted
+		return apiTypes.ImageFetchAborted
 	default:
-		return apiTypes.TaskFailed
+		return apiTypes.ImageFetchFailed
 	}
 }

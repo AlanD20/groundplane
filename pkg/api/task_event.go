@@ -15,8 +15,3 @@ type TaskEvent struct {
 	RecordedAt      time.Time           `json:"recorded_at"`
 	Stage           workexecution.Stage `json:"stage"`
 }
-
-type TaskControllerOperation struct {
-	Stage string `json:"stage"`
-	Name  string `json:"name"`
-}

@@ -84,7 +84,7 @@ func (c *Client) ListImages(ctx context.Context) (apiTypes.ImageList, error) {
 					Requested:   fetch.Requested,
 					Image:       fetch.Image,
 					TaskID:      fetch.TaskId,
-					RequestedAt: fetch.RequestedAt, Status: apiTypes.TaskStatus(fetch.Status),
+					RequestedAt: fetch.RequestedAt, Status: apiTypes.ImageFetchStatus(fetch.Status),
 				},
 			)
 		}

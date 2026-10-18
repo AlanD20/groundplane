@@ -38,12 +38,22 @@ type ImageContainerOwner struct {
 	Backing         bool   `json:"backing"`
 }
 
+type ImageFetchStatus string
+
+const (
+	ImageFetchPending   ImageFetchStatus = "pending"
+	ImageFetchRunning   ImageFetchStatus = "running"
+	ImageFetchCompleted ImageFetchStatus = "completed"
+	ImageFetchFailed    ImageFetchStatus = "failed"
+	ImageFetchAborted   ImageFetchStatus = "aborted"
+)
+
 type ImageFetchRecord struct {
-	Requested   string     `json:"requested"`
-	Image       string     `json:"image" doc:"Immutable manifest reference selected for this Fetch"`
-	TaskID      string     `json:"task_id"`
-	RequestedAt string     `json:"requested_at"`
-	Status      TaskStatus `json:"status" enum:"pending,running,completed,failed,aborted,timed_out"`
+	Requested   string           `json:"requested"`
+	Image       string           `json:"image" doc:"Immutable manifest reference selected for this Fetch"`
+	TaskID      string           `json:"task_id"`
+	RequestedAt string           `json:"requested_at"`
+	Status      ImageFetchStatus `json:"status" enum:"pending,running,completed,failed,aborted"`
 }
 
 type ImageList struct {

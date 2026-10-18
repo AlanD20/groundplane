@@ -12,7 +12,7 @@ type retainedFetch struct {
 	plan        imagefetch.Plan
 	taskID      string
 	requestedAt time.Time
-	status      apiTypes.TaskStatus
+	status      apiTypes.ImageFetchStatus
 }
 
 // Match immutable content, never a mutable tag. Multiple manifests can share a
