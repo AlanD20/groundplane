@@ -97,6 +97,33 @@ func TestAgentUpdateServiceReplaysBeforeTargetLookup(t *testing.T) {
 	}
 }
 
+// Rationale: captured rollback generations must not wrap, and selecting the
+// running image cannot publish a second replacement operation.
+func TestAgentUpdateRefusesInvalidReplacementBeforePublication(t *testing.T) {
+	for _, scenario := range []string{"generation overflow", "same image"} {
+		t.Run(scenario, func(t *testing.T) {
+			generation := uint64(7)
+			image := testAgentUpdateDesiredImage
+			if scenario == "generation overflow" {
+				generation = ^uint64(0) - 1
+			} else {
+				image = testAgentUpdatePreviousImage
+			}
+			tasks := &fakeAgentUpdateTasks{}
+			service, err := NewUpdateService(&fakeAgentUpdateTargets{health: localagent.Health{Agent: localagent.Agent{
+				ID: testAgentUpdateID, Image: testAgentUpdatePreviousImage, Generation: generation, Phase: localagent.PhaseReady,
+			}}}, tasks, &fakeAgentUpdateIdempotency{resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.UpdateAgent(t.Context(), testAgentUpdateID, image, "invalid-agent-update-0001"); err == nil ||
+				tasks.capture.TaskID != "" {
+				t.Fatalf("invalid replacement published: %#v, %v", tasks.capture, err)
+			}
+		})
+	}
+}
+
 type fakeAgentUpdateTargets struct {
 	health localagent.Health
 	err    error

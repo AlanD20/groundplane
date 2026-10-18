@@ -186,6 +186,10 @@ func (configTestSessions) WaitOffline(context.Context, string, uint64) error {
 
 type configTestTasks struct{}
 
+func (configTestTasks) ResumeForward(context.Context, string, uint64) error {
+	return errs.New(errs.KindInternal, "configuration update unexpectedly resumed host work")
+}
+
 func (configTestTasks) RequireIdle(context.Context, string, uint64, int32) error {
 	return nil
 }

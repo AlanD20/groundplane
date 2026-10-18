@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"testing"
 	"time"
 
@@ -32,7 +33,10 @@ func TestUncertainUncommittedUpdateEventuallyResumesDispatch(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer session.Close()
-			err = harness.manager.Update(
+			if err := session.RecordReady(testNow, 1, "test", buildversion.BuildProvenance{}); err != nil {
+				t.Fatal(err)
+			}
+			err = harness.manager.update(
 				context.Background(),
 				UpdateRequest{AgentID: testAgentID, PreviousImage: testImage,
 					DesiredImage: replacementTestImage, StartingGeneration: initialGeneration},
@@ -45,7 +49,10 @@ func TestUncertainUncommittedUpdateEventuallyResumesDispatch(t *testing.T) {
 					t.Fatal("unresolved publication reopened dispatch")
 				}
 				uncertain.resolutionUnavailable = false
-				if err := harness.manager.Reconcile(context.Background()); err != nil {
+				if _, err := harness.manager.RecoverUpdate(context.Background(), UpdateRequest{
+					AgentID: testAgentID, PreviousImage: testImage,
+					DesiredImage: replacementTestImage, StartingGeneration: initialGeneration,
+				}, UpdateRestore, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -69,7 +76,7 @@ func TestUncertainCommittedUpdateCompletesSameGeneration(t *testing.T) {
 		fakeRepository: repository,
 		committed:      true,
 	}
-	err := harness.manager.Update(
+	err := harness.manager.update(
 		context.Background(),
 		UpdateRequest{AgentID: testAgentID, PreviousImage: testImage,
 			DesiredImage: replacementTestImage, StartingGeneration: initialGeneration},
@@ -104,7 +111,7 @@ func TestCancelledUnknownPublicationReleasesProvenUncommittedPause(t *testing.T)
 		t.Fatal(err)
 	}
 	defer session.Close()
-	err = harness.manager.Update(ctx, UpdateRequest{AgentID: testAgentID, PreviousImage: testImage,
+	err = harness.manager.update(ctx, UpdateRequest{AgentID: testAgentID, PreviousImage: testImage,
 		DesiredImage: replacementTestImage, StartingGeneration: initialGeneration})
 	if !errors.Is(err, context.Canceled) || !session.AssignmentsAllowed() ||
 		harness.manager.pending != nil {
@@ -141,7 +148,7 @@ func TestDeferredCommittedRecoveryRetainsRollbackIdentity(t *testing.T) {
 		DesiredImage:       replacementTestImage,
 		StartingGeneration: initialGeneration,
 	}
-	if err := harness.manager.Update(context.Background(), request); !errors.Is(
+	if err := harness.manager.update(context.Background(), request); !errors.Is(
 		err,
 		errs.New(errs.KindStorageUnavailable, ""),
 	) {
@@ -150,15 +157,19 @@ func TestDeferredCommittedRecoveryRetainsRollbackIdentity(t *testing.T) {
 	uncertain.resolutionUnavailable = false
 	harness.sessions.readySequence = []<-chan struct{}{make(chan struct{}), closedSignal()}
 	result := make(chan error, 1)
-	go func() { result <- harness.manager.Reconcile(context.Background()) }()
+	go func() {
+		_, err := harness.manager.RecoverUpdate(context.Background(), request, UpdateFinish, nil)
+		result <- err
+	}()
 	harness.clock.awaitTimer(t).fire(testNow.Add(ReadyTimeout))
 	if err := <-result; !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) {
 		t.Fatalf("unknown rollback=%v", err)
 	}
-	if harness.manager.pending == nil {
-		t.Fatal("unsettled rollback identity was discarded")
+	if current := repository.record.Record; current.Generation != initialGeneration+2 ||
+		current.Image != request.PreviousImage || current.Phase != PhaseUpdating || current.ReplacementFailure == nil {
+		t.Fatalf("unsettled rollback lost captured predecessor or failure: %#v", current)
 	}
-	if err := harness.manager.Reconcile(context.Background()); err != nil {
+	if _, err := harness.manager.RecoverUpdate(context.Background(), request, UpdateRestore, nil); err != nil {
 		t.Fatal(err)
 	}
 	if harness.manager.pending != nil || repository.record.Record.Generation != initialGeneration+2 ||

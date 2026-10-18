@@ -62,7 +62,7 @@ func TestEnrollCommitsCredentialBeforeRuntimeAndEnforcesSingletonCAS(t *testing.
 	}
 }
 
-func TestReconcileResumesProvisioningAfterCrashWithoutRotatingIdentity(t *testing.T) {
+func TestCapturedEnrollmentResumesProvisioningWithoutRotatingIdentity(t *testing.T) {
 
 	t.Parallel()
 
@@ -80,8 +80,9 @@ func TestReconcileResumesProvisioningAfterCrashWithoutRotatingIdentity(t *testin
 
 	resumed := newTestManager(t, repository, trace)
 	resumed.sessions.ready = closedSignal()
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("Reconcile() error = %v", err)
+	if ready, err := resumed.manager.RecoverEnrollment(context.Background(), testRequest(testAgentID), true); err != nil ||
+		!ready {
+		t.Fatalf("RecoverEnrollment() ready=%t error=%v", ready, err)
 	}
 	after := repository.record.Record
 	if after.Phase != PhaseReady || after.ID != before.ID || after.Generation != before.Generation {
@@ -89,7 +90,7 @@ func TestReconcileResumesProvisioningAfterCrashWithoutRotatingIdentity(t *testin
 	}
 	if string(after.Credential.EncryptedToken) != string(before.Credential.EncryptedToken) ||
 		after.Credential.Digest != before.Credential.Digest {
-		t.Fatal("Reconcile() rotated the durable credential")
+		t.Fatal("RecoverEnrollment() rotated the durable credential")
 	}
 	if resumed.runtime.generateCalls != 0 {
 		t.Fatalf("resumed GenerateCredential calls = %d, want 0", resumed.runtime.generateCalls)
@@ -149,11 +150,11 @@ func TestReconcileAndRemoveAreIdempotent(t *testing.T) {
 			harness.container.convergeCalls,
 		)
 	}
-	if err := harness.manager.Remove(context.Background(), testAgentID); err != nil {
+	if err := harness.manager.Remove(context.Background(), testAgentID, testImage, initialGeneration); err != nil {
 		t.Fatalf("first Remove() error = %v", err)
 	}
 	removeCalls := harness.container.removeCalls
-	if err := harness.manager.Remove(context.Background(), testAgentID); err != nil {
+	if err := harness.manager.Remove(context.Background(), testAgentID, testImage, initialGeneration); err != nil {
 		t.Fatalf("second Remove() error = %v", err)
 	}
 	if harness.container.removeCalls != removeCalls {
@@ -168,13 +169,13 @@ func TestRemovePersistsRevocationBeforeRuntimeDeletion(t *testing.T) {
 	trace := &traceLog{}
 	repository := seededRepository(trace, PhaseReady)
 	harness := newTestManager(t, repository, trace)
-	if err := harness.manager.Remove(context.Background(), testAgentID); err != nil {
+	if err := harness.manager.Remove(context.Background(), testAgentID, testImage, initialGeneration); err != nil {
 		t.Fatalf("Remove() error = %v", err)
 	}
 	want := []string{
-		"stop_assignments",
 		"abort_active",
 		"begin_delete",
+		"stop_assignments",
 		"revoke",
 		"wait_offline",
 		"container_remove",
@@ -245,6 +246,8 @@ func TestRemoveFailureNeverAdvancesPastTheFailedBoundary(t *testing.T) {
 			if err := harness.manager.Remove(
 				context.Background(),
 				testAgentID,
+				testImage,
+				initialGeneration,
 			); !errors.Is(
 				err,
 				errs.New(errs.KindInternal, ""),
@@ -267,7 +270,7 @@ func TestRemoveFailureNeverAdvancesPastTheFailedBoundary(t *testing.T) {
 	}
 }
 
-func TestReconcileResumesDeletingAfterDockerOutage(t *testing.T) {
+func TestCapturedRemovalResumesDeletingAfterDockerOutage(t *testing.T) {
 
 	t.Parallel()
 
@@ -275,8 +278,8 @@ func TestReconcileResumesDeletingAfterDockerOutage(t *testing.T) {
 	repository := seededRepository(trace, PhaseDeleting)
 	first := newTestManager(t, repository, trace)
 	first.container.removeError = errors.New("Docker unavailable")
-	if err := first.manager.Reconcile(context.Background()); err == nil {
-		t.Fatal("Reconcile() error = nil, want Docker outage")
+	if _, err := first.manager.RecoverRemoval(context.Background(), testAgentID, testImage, initialGeneration); err == nil {
+		t.Fatal("RecoverRemoval() error = nil, want Docker outage")
 	}
 	if !repository.exists || repository.record.Record.Phase != PhaseDeleting ||
 		repository.record.Record.Credential.Digest != "" {
@@ -284,8 +287,9 @@ func TestReconcileResumesDeletingAfterDockerOutage(t *testing.T) {
 	}
 
 	resumed := newTestManager(t, repository, trace)
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("resumed Reconcile() error = %v", err)
+	if removed, err := resumed.manager.RecoverRemoval(context.Background(), testAgentID, testImage, initialGeneration); err != nil ||
+		!removed {
+		t.Fatalf("RecoverRemoval() removed=%t error=%v", removed, err)
 	}
 	if repository.exists {
 		t.Fatal("record still exists after resumed deletion")

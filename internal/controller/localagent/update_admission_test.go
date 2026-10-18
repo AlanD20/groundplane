@@ -26,7 +26,7 @@ func TestUpdateBusyAgentRestoresRealRegistryDispatch(t *testing.T) {
 	}
 	defer session.Close()
 	harness.tasks.idleError = errs.New(errs.KindResourceInUse, "active Task assignment")
-	err = harness.manager.Update(context.Background(), UpdateRequest{
+	err = harness.manager.update(context.Background(), UpdateRequest{
 		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 		StartingGeneration: initialGeneration,
 	})
@@ -75,7 +75,7 @@ func TestUpdatePreparationFailureRestoresRealRegistryDispatch(t *testing.T) {
 			harness.manager.runtime = &failedPreparationRuntime{
 				fakeRuntime: harness.runtime, failure: failure, cancel: cancel,
 			}
-			err = harness.manager.Update(ctx, UpdateRequest{
+			err = harness.manager.update(ctx, UpdateRequest{
 				AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 				StartingGeneration: initialGeneration,
 			})
@@ -111,7 +111,7 @@ func TestUpdatePublicationFailureRetainsUncertainGenerationPause(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer session.Close()
-			err = harness.manager.Update(context.Background(), UpdateRequest{
+			err = harness.manager.update(context.Background(), UpdateRequest{
 				AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 				StartingGeneration: initialGeneration,
 			})

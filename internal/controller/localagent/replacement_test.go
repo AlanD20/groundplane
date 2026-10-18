@@ -7,7 +7,7 @@ import (
 	testing "testing"
 )
 
-func TestReconcileFencesPriorGenerationAfterCancellationAtReplacementCommit(t *testing.T) {
+func TestRecoveryFencesPriorGenerationAfterCancellationAtReplacementCommit(t *testing.T) {
 
 	t.Parallel()
 
@@ -24,7 +24,7 @@ func TestReconcileFencesPriorGenerationAfterCancellationAtReplacementCommit(t *t
 		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 		StartingGeneration: initialGeneration,
 	}
-	if err := first.manager.Update(ctx, request); !errors.Is(err, context.Canceled) {
+	if err := first.manager.update(ctx, request); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Update() error = %v, want context.Canceled", err)
 	}
 	interrupted := cloneRecord(repository.record.Record)
@@ -33,8 +33,8 @@ func TestReconcileFencesPriorGenerationAfterCancellationAtReplacementCommit(t *t
 	}
 
 	resumed := newTestManager(t, repository, trace)
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("Reconcile() error = %v", err)
+	if _, err := resumed.manager.RecoverUpdate(context.Background(), request, UpdateFinish, nil); err != nil {
+		t.Fatalf("RecoverUpdate() error = %v", err)
 	}
 	if len(resumed.sessions.fencedThrough) != 1 ||
 		resumed.sessions.fencedThrough[0] != initialGeneration {
@@ -50,7 +50,7 @@ func TestReconcileFencesPriorGenerationAfterCancellationAtReplacementCommit(t *t
 	}
 }
 
-func TestReconcileFencesReplacementGenerationAfterCancellationAtRollbackCommit(t *testing.T) {
+func TestRecoveryFencesReplacementGenerationAfterCancellationAtRollbackCommit(t *testing.T) {
 
 	t.Parallel()
 
@@ -69,7 +69,7 @@ func TestReconcileFencesReplacementGenerationAfterCancellationAtRollbackCommit(t
 		StartingGeneration: initialGeneration,
 	}
 	result := make(chan error, 1)
-	go func() { result <- first.manager.Update(ctx, request) }()
+	go func() { result <- first.manager.update(ctx, request) }()
 	first.clock.awaitTimer(t).fire(testNow.Add(ReadyTimeout))
 	if err := <-result; !errors.Is(err, context.Canceled) {
 		t.Fatalf("Update() error = %v, want context.Canceled", err)
@@ -81,8 +81,8 @@ func TestReconcileFencesReplacementGenerationAfterCancellationAtRollbackCommit(t
 	}
 
 	resumed := newTestManager(t, repository, trace)
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("Reconcile() error = %v", err)
+	if _, err := resumed.manager.RecoverUpdate(context.Background(), request, UpdateFinish, nil); err != nil {
+		t.Fatalf("RecoverUpdate() error = %v", err)
 	}
 	if len(resumed.sessions.fencedThrough) != 1 ||
 		resumed.sessions.fencedThrough[0] != initialGeneration+1 {
@@ -104,7 +104,7 @@ func TestReconcileFencesReplacementGenerationAfterCancellationAtRollbackCommit(t
 	}
 }
 
-func TestReconcileCompletesInterruptedUpdateAfterAuthenticatedReady(t *testing.T) {
+func TestRecoveryCompletesInterruptedUpdateAfterAuthenticatedReady(t *testing.T) {
 
 	t.Parallel()
 
@@ -120,7 +120,7 @@ func TestReconcileCompletesInterruptedUpdateAfterAuthenticatedReady(t *testing.T
 		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 		StartingGeneration: initialGeneration,
 	}
-	go func() { result <- first.manager.Update(ctx, request) }()
+	go func() { result <- first.manager.update(ctx, request) }()
 	first.clock.awaitTimer(t)
 	cancel()
 	if err := <-result; !errors.Is(err, context.Canceled) {
@@ -133,11 +133,11 @@ func TestReconcileCompletesInterruptedUpdateAfterAuthenticatedReady(t *testing.T
 	}
 
 	resumed := newTestManager(t, repository, trace)
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("resumed Reconcile() error = %v", err)
+	if _, err := resumed.manager.RecoverUpdate(context.Background(), request, UpdateFinish, nil); err != nil {
+		t.Fatalf("resumed RecoverUpdate() error = %v", err)
 	}
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("repeated Reconcile() error = %v", err)
+	if _, err := resumed.manager.RecoverUpdate(context.Background(), request, UpdateFinish, nil); err != nil {
+		t.Fatalf("repeated RecoverUpdate() error = %v", err)
 	}
 	got := repository.record.Record
 	if got.ID != interrupted.ID || got.EnrollmentTaskID != interrupted.EnrollmentTaskID ||
@@ -150,7 +150,7 @@ func TestReconcileCompletesInterruptedUpdateAfterAuthenticatedReady(t *testing.T
 	if resumed.runtime.generateCalls != 0 {
 		t.Fatalf("reconciliation generated %d credentials, want 0", resumed.runtime.generateCalls)
 	}
-	if err := resumed.manager.Update(context.Background(), request); err != nil {
+	if err := resumed.manager.update(context.Background(), request); err != nil {
 		t.Fatalf("completed update replay error = %v", err)
 	}
 	if repository.record.Record.Generation != interrupted.Generation {
@@ -162,7 +162,7 @@ func TestReconcileCompletesInterruptedUpdateAfterAuthenticatedReady(t *testing.T
 	}
 }
 
-func TestReconcileCompletesInterruptedRollbackAfterAuthenticatedReady(t *testing.T) {
+func TestRecoveryCompletesInterruptedRollbackAfterAuthenticatedReady(t *testing.T) {
 
 	t.Parallel()
 
@@ -178,7 +178,7 @@ func TestReconcileCompletesInterruptedRollbackAfterAuthenticatedReady(t *testing
 		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 		StartingGeneration: initialGeneration,
 	}
-	go func() { result <- first.manager.Update(ctx, request) }()
+	go func() { result <- first.manager.update(ctx, request) }()
 	first.clock.awaitTimer(t).fire(testNow.Add(ReadyTimeout))
 	first.clock.awaitTimer(t)
 	cancel()
@@ -192,11 +192,11 @@ func TestReconcileCompletesInterruptedRollbackAfterAuthenticatedReady(t *testing
 	}
 
 	resumed := newTestManager(t, repository, trace)
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("resumed Reconcile() error = %v", err)
+	if _, err := resumed.manager.RecoverUpdate(context.Background(), request, UpdateFinish, nil); err != nil {
+		t.Fatalf("resumed RecoverUpdate() error = %v", err)
 	}
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("repeated Reconcile() error = %v", err)
+	if _, err := resumed.manager.RecoverUpdate(context.Background(), request, UpdateFinish, nil); err != nil {
+		t.Fatalf("repeated RecoverUpdate() error = %v", err)
 	}
 	got := repository.record.Record
 	if got.ID != interrupted.ID || got.EnrollmentTaskID != interrupted.EnrollmentTaskID ||
@@ -209,7 +209,7 @@ func TestReconcileCompletesInterruptedRollbackAfterAuthenticatedReady(t *testing
 	if resumed.runtime.generateCalls != 0 {
 		t.Fatalf("rollback reconciliation generated %d credentials, want 0", resumed.runtime.generateCalls)
 	}
-	if err := resumed.manager.Update(context.Background(), UpdateRequest{
+	if err := resumed.manager.update(context.Background(), UpdateRequest{
 		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 		StartingGeneration: interrupted.Generation,
 	}); err != nil {
@@ -231,7 +231,7 @@ func TestUpdateRejectsBusyAgentBeforeCredentialOrDurableMutation(t *testing.T) {
 	harness := newTestManager(t, repository, trace)
 	harness.tasks.idleError = errs.New(errs.KindResourceInUse, "active Task assignment")
 
-	err := harness.manager.Update(context.Background(), UpdateRequest{
+	err := harness.manager.update(context.Background(), UpdateRequest{
 		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 		StartingGeneration: initialGeneration,
 	})
@@ -264,7 +264,7 @@ func TestUpdateRotatesIdleAgentAndPreservesStableMetadata(t *testing.T) {
 	wantReadyAt := repository.record.Record.ReadyAt
 	harness := newTestManager(t, repository, trace)
 
-	err := harness.manager.Update(context.Background(), UpdateRequest{
+	err := harness.manager.update(context.Background(), UpdateRequest{
 		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 		StartingGeneration: initialGeneration,
 	})
@@ -301,7 +301,7 @@ func TestUpdateRollsBackPreviousDigestAfterReplacementReadinessTimeout(t *testin
 
 	result := make(chan error, 1)
 	go func() {
-		result <- harness.manager.Update(context.Background(), UpdateRequest{
+		result <- harness.manager.update(context.Background(), UpdateRequest{
 			AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 			StartingGeneration: initialGeneration,
 		})
@@ -334,7 +334,7 @@ func TestUpdateReplayRecognizesCompletedRollback(t *testing.T) {
 	repository.record.Record.Generation = initialGeneration + 2
 	harness := newTestManager(t, repository, trace)
 
-	err := harness.manager.Update(context.Background(), UpdateRequest{
+	err := harness.manager.update(context.Background(), UpdateRequest{
 		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
 		StartingGeneration: initialGeneration,
 	})

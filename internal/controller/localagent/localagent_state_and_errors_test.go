@@ -176,6 +176,17 @@ type fakeTasks struct {
 	idleError  error
 }
 
+func (tasks *fakeTasks) ResumeForward(ctx context.Context, agentID string, generation uint64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if agentID != testAgentID || generation != initialGeneration {
+		return errors.New("unexpected forward-resume identity")
+	}
+	tasks.trace.add("resume_forward")
+	return nil
+}
+
 func (tasks *fakeTasks) RequireIdle(ctx context.Context, _ string, _ uint64, _ int32) error {
 	if err := ctx.Err(); err != nil {
 		return err
