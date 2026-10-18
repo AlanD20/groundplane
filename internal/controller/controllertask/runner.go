@@ -179,17 +179,6 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 	if err := progress.Err(); err != nil {
 		return err
 	}
-	if executionErr != nil &&
-		claim.Task.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceSoftwarePreparation {
-		runner.mu.Lock()
-		operatorAbort := active.operatorAbort
-		runner.mu.Unlock()
-		if !operatorAbort && (errs.IsRetryable(executionErr) ||
-			errors.Is(executionErr, errs.New(errs.KindStorageUnavailable, "")) ||
-			errors.Is(executionErr, context.DeadlineExceeded)) {
-			return executionErr
-		}
-	}
 	terminalAt := runner.now().UTC()
 	status := taskjournal.TaskStatusCompleted
 	if executionErr != nil {

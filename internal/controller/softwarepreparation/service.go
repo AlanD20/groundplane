@@ -12,9 +12,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	preparation "github.com/AlanD20/groundplane/internal/infra/softwarepreparation"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -33,52 +35,43 @@ type Accepted struct {
 }
 
 type TaskPublisher interface {
-	CreateSoftwarePreparationTask(
+	CreateSoftwarePreparationWork(
 		context.Context,
-		etcd.TaskRecord,
+		preparationrecord.Capture,
 		preparationrecord.Record,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-type RecordStore interface {
-	Get(context.Context, string) (etcdstore.Versioned[preparationrecord.Record], error)
-	List(context.Context, etcdstore.PageRequest) (etcdstore.Page[preparationrecord.Record], error)
-	Checkpoint(
-		context.Context,
-		string,
-		string,
-		string,
-		preparation.Progress,
-		time.Time,
-	) (etcdstore.Versioned[preparationrecord.Record], error)
-}
-
 type ServiceDependencies struct {
-	Preparer *preparation.Preparer
-	Tasks    TaskPublisher
-	Records  RecordStore
-	Evidence requestidempotency.EvidenceRepository
-	Intents  *requestidempotency.Coordinator
+	Preparer    *preparation.Preparer
+	Tasks       TaskPublisher
+	Records     *preparationrecord.Repository
+	Queue       *workqueue.Repository
+	Diagnostics *executiondiagnostics.Repository
+	Evidence    requestidempotency.EvidenceRepository
+	Intents     *requestidempotency.Coordinator
 }
 
 type Service struct {
-	preparer *preparation.Preparer
-	tasks    TaskPublisher
-	records  RecordStore
-	evidence requestidempotency.EvidenceRepository
-	intents  *requestidempotency.Coordinator
-	now      func() time.Time
+	preparer    *preparation.Preparer
+	tasks       TaskPublisher
+	records     *preparationrecord.Repository
+	queue       *workqueue.Repository
+	diagnostics *executiondiagnostics.Repository
+	evidence    requestidempotency.EvidenceRepository
+	intents     *requestidempotency.Coordinator
+	now         func() time.Time
 }
 
 func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if dependencies.Preparer == nil || dependencies.Tasks == nil || dependencies.Records == nil ||
-		dependencies.Evidence == nil || dependencies.Intents == nil {
+		dependencies.Evidence == nil || dependencies.Intents == nil || dependencies.Queue == nil || dependencies.Diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "software preparation service dependencies are incomplete")
 	}
 	return &Service{
 		preparer: dependencies.Preparer, tasks: dependencies.Tasks, records: dependencies.Records,
-		evidence: dependencies.Evidence, intents: dependencies.Intents, now: time.Now,
+		evidence: dependencies.Evidence, intents: dependencies.Intents, queue: dependencies.Queue, diagnostics: dependencies.Diagnostics, now: time.Now,
 	}, nil
 }
 
@@ -117,15 +110,16 @@ func (service *Service) Start(ctx context.Context, request Request, key string) 
 		input.ControllerCatalogSHA256 = sha256Value(input.ControllerToolCatalog)
 	}
 	now := service.now().UTC()
-	task, inputHash, err := newTask(now, key, input)
+	capture := preparationrecord.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan), Input: input, CreatedAt: now}
+	reference, err := capture.Reference()
 	if err != nil {
 		return Accepted{}, err
 	}
-	record, err := preparationrecord.NewRecord(task.ID, operationID, inputHash, resolved, now)
+	record, err := preparationrecord.NewRecord(capture.TaskID, operationID, reference.SHA256, resolved, now)
 	if err != nil {
 		return Accepted{}, err
 	}
-	accepted := Accepted{TaskID: task.ID}
+	accepted := Accepted{TaskID: capture.TaskID}
 	body, err := json.Marshal(accepted)
 	if err != nil {
 		return Accepted{}, errs.Wrap(errs.KindInternal, err)
@@ -139,10 +133,10 @@ func (service *Service) Start(ctx context.Context, request Request, key string) 
 		return Accepted{}, err
 	}
 	defer clear(intent.Ciphertext)
-	result, publicationErr := service.tasks.CreateSoftwarePreparationTask(
-		ctx, task, record, idempotencyrecord.IdempotencyMarker{
+	result, publicationErr := service.tasks.CreateSoftwarePreparationWork(
+		ctx, capture, record, idempotencyrecord.IdempotencyMarker{
 			Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-			Locator: locator, Intent: intent, Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+			Locator: locator, Intent: intent, Response: response, TaskID: capture.TaskID, CreatedAt: now, UpdatedAt: now,
 		},
 	)
 	return service.resolvePublication(ctx, locator, evidence, result, publicationErr, accepted)

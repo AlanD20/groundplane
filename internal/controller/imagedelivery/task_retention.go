@@ -25,8 +25,7 @@ func (service *Service) retainTaskImages(
 	if !taskjournal.IsTerminalTaskStatus(task.Status) {
 		return false, nil
 	}
-	if resource := task.Params[taskjournal.TaskResourceKindParam]; resource == taskjournal.TaskResourceSoftwarePreparation ||
-		resource == taskjournal.TaskResourceSoftware {
+	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceSoftware {
 		// Durable preparation/activation records retain exact outputs and
 		// predecessors independently, including terminal partial failures.
 		return true, nil

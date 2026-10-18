@@ -24,7 +24,6 @@ const (
 	TaskStop        TaskType = "stop"
 	TaskDestroy     TaskType = "destroy"
 	TaskFetch       TaskType = "fetch"
-	TaskPrepare     TaskType = "prepare"
 	TaskApply       TaskType = "apply"
 	TaskCheck       TaskType = "check"
 )

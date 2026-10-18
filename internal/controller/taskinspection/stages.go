@@ -48,6 +48,9 @@ func (service *Service) Stages(ctx context.Context, taskID, workID, attemptID st
 	if err := service.etcdOutcome(ctx, snapshot.Attempt, &result); err != nil {
 		return Stages{}, err
 	}
+	if err := service.preparationOutcome(ctx, snapshot.Attempt, &result); err != nil {
+		return Stages{}, err
+	}
 	return result, nil
 }
 

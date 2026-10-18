@@ -28,6 +28,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
+	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 )
 
 type controllerStaleTaskMaintenance interface {
@@ -111,6 +112,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		Hierarchy:       dependencies.hierarchyDeletions,
 		AttachFacts:     dependencies.execution.attachFactValues,
 		BackupRemoval:   dependencies.backup.cleanup,
+		Keys:            dependencies.backup.keys,
 		ScriptArtifacts: dependencies.execution.scriptArtifacts,
 		Releases:        dependencies.blueprintReleases,
 		CapturedFiles:   dependencies.execution.materializationResolver,
@@ -184,7 +186,14 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize etcd activation inspection: %w", err)
 	}
-	taskInspection, err := taskinspection.New(executionQueue, imageRecords, executionDiagnostics, workRuntime.Retries, hierarchyInspection, componentInspection, runnerInspection, etcdInspection)
+	preparationInspection, err := preparationrecord.NewRepository(dependencies.store)
+	if err != nil {
+		_ = hostTerminals.Close()
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize software preparation inspection: %w", err)
+	}
+	taskInspection, err := taskinspection.New(executionQueue, imageRecords, executionDiagnostics, workRuntime.Retries, hierarchyInspection, componentInspection, runnerInspection, etcdInspection, preparationInspection)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()

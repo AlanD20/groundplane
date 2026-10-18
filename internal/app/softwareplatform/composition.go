@@ -20,10 +20,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	preparation "github.com/AlanD20/groundplane/internal/infra/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/softwarestaging"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -64,8 +66,17 @@ func New(deps Dependencies) (*Composition, error) {
 	if err != nil {
 		return nil, err
 	}
+	queue, err := workqueue.NewRepository(deps.Store)
+	if err != nil {
+		return nil, err
+	}
+	diagnostics, err := executiondiagnostics.New(deps.Store, queue)
+	if err != nil {
+		return nil, err
+	}
 	preparations, err := softwarepreparation.NewService(softwarepreparation.ServiceDependencies{
 		Preparer: preparer, Records: records, Tasks: deps.Tasks, Evidence: deps.Evidence, Intents: deps.Intents,
+		Queue: queue, Diagnostics: diagnostics,
 	})
 	if err != nil {
 		return nil, err

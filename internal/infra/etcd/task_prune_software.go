@@ -7,7 +7,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	activation "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
-	preparation "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -58,15 +57,10 @@ func (repository *TaskRepository) prepareSoftwareProjectionPrune(
 	task TaskRecord,
 	revision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
-	var key string
-	switch task.Params[taskjournal.TaskResourceKindParam] {
-	case taskjournal.TaskResourceSoftwarePreparation:
-		key = preparation.Key(task.ID)
-	case taskjournal.TaskResourceSoftware:
-		key = activation.Key(task.ID)
-	default:
+	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceSoftware {
 		return nil, nil, nil
 	}
+	key := activation.Key(task.ID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return nil, nil, err
@@ -75,17 +69,9 @@ func (repository *TaskRepository) prepareSoftwareProjectionPrune(
 		return nil, nil, errs.New(errs.KindInternal, "software prune projection is missing")
 	}
 	defer etcdstore.ClearValues(read.Values)
-	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceSoftwarePreparation {
-		record, err := preparation.Decode(read.Values[0].Value)
-		if err != nil || record.TaskID != task.ID || record.OperationID != task.OperationID ||
-			record.InputSHA256 != task.PlanHash {
-			return nil, nil, errs.New(errs.KindInternal, "software preparation prune authority differs")
-		}
-	} else {
-		record, err := activation.Decode(read.Values[0].Value)
-		if err != nil || record.TaskID != task.ID || record.OperationID != task.OperationID || record.InputSHA256 != task.PlanHash || record.Progress.Phase != activation.PhaseCompleted && record.Progress.Phase != activation.PhaseFailed {
-			return nil, nil, errs.New(errs.KindInternal, "software activation prune authority differs")
-		}
+	record, err := activation.Decode(read.Values[0].Value)
+	if err != nil || record.TaskID != task.ID || record.OperationID != task.OperationID || record.InputSHA256 != task.PlanHash || record.Progress.Phase != activation.PhaseCompleted && record.Progress.Phase != activation.PhaseFailed {
+		return nil, nil, errs.New(errs.KindInternal, "software activation prune authority differs")
 	}
 	conditions := []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: key}}

@@ -25,7 +25,7 @@ func ValidTaskType(taskType TaskType) bool {
 	switch taskType {
 	case TaskDeploy, TaskRollback, TaskBackup, TaskBackupPrune, TaskRestore, TaskAttach, TaskDetach,
 		TaskRun, TaskScript, TaskProvision, TaskCreate, TaskUpdate, TaskRemove,
-		TaskStart, TaskStop, TaskDestroy, TaskFetch, TaskPrepare, TaskApply, TaskCheck:
+		TaskStart, TaskStop, TaskDestroy, TaskFetch, TaskApply, TaskCheck:
 		return true
 	default:
 		return false

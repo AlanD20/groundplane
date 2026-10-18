@@ -27,14 +27,8 @@ func (platform *Platform) newSoftwareRuntime(
 	if err != nil {
 		return nil, nil, err
 	}
-	dispatcher, err := taskdispatch.NewSoftwarePreparationDispatcher(
-		handler,
-		software.Preparations,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	return software, dispatcher, nil
+	platform.preparations = software.Preparations
+	return software, handler, nil
 }
 
 // Native Task composition establishes recovery admission before NewController

@@ -25,6 +25,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
@@ -64,6 +65,7 @@ type Platform struct {
 	reconciliation reconciliationScheduler
 	Upgrades       *controllerupgrade.Service
 	EtcdConfig     *etcdconfig.Service
+	preparations   *softwarepreparation.Service
 	native         controllertask.UpdateExecutor
 	Readiness      *controllerupgrade.Readiness
 	container      *agentcontainer.Manager
