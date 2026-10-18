@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -16,13 +17,13 @@ import (
 // The shared projection is restored from its immutable candidate, not a current
 // Environment read. This also checks compact records before they are staged.
 func validateProxyRolloutCapture(preparation BlueprintProxyServiceRollout,
-	capture releaserender.BlueprintServiceRolloutCapture,
+	capture releaserender.ServiceRolloutCapture,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) error {
-	if len(preparation.Members) != 1 || len(preparation.Manifest.Record.Members) != 1 {
+	if capture.Action != workexecution.ActionApply || len(preparation.Members) != 1 || len(preparation.Manifest.Record.Members) != 1 {
 		return errs.New(errs.KindStateConflict, "captured proxy rollout requires one Service")
 	}
-	render, err := releaserender.OpenBlueprintServiceRolloutCapture(capture)
+	render, err := releaserender.OpenServiceRolloutCapture(capture)
 	if err != nil {
 		return err
 	}

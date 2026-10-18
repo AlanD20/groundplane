@@ -33,7 +33,7 @@ func (service *Service) loadCapturedAssignment(ctx context.Context, view workque
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
 		return nil, errs.New(errs.KindStateConflict, "Release input requires its retained assignment")
 	}
-	sources, err := service.ledger.LoadBlueprintReleaseWorkInput(ctx, view.Work)
+	sources, err := service.ledger.LoadReleaseWorkInput(ctx, view.Work)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (service *Service) loadCapturedAssignment(ctx context.Context, view workque
 		return nil, errs.New(errs.KindStateConflict, "Release delivery has no exact Service predecessor")
 	}
 	capture, render := sources.Rollout.Record, sources.Rollout.Record.Render
-	candidate, err := releaserender.OpenBlueprintCandidateArtifact(capture)
+	candidate, err := releaserender.OpenReleaseCandidateArtifact(capture)
 	if err != nil {
 		return nil, err
 	}

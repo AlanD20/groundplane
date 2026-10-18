@@ -28,12 +28,12 @@ func (service *Service) PrepareCheckpointEvidence(ctx context.Context, view work
 	if err := releaseexecution.ValidateTransition(input, prior, report.Progress); err != nil {
 		return workqueue.Change{}, err
 	}
-	var sources etcd.BlueprintReleaseWorkSources
+	var sources etcd.ReleaseWorkSources
 	var err error
 	if report.Progress.InFlight {
 		sources, err = service.ledger.LoadBlueprintReleaseCheckpointSources(ctx, view)
 	} else {
-		sources, err = service.ledger.LoadBlueprintReleaseWorkInput(ctx, view.Work)
+		sources, err = service.ledger.LoadReleaseWorkInput(ctx, view.Work)
 	}
 	if err != nil {
 		return workqueue.Change{}, err
@@ -42,7 +42,7 @@ func (service *Service) PrepareCheckpointEvidence(ctx context.Context, view work
 	if !report.Progress.InFlight {
 		return workqueue.Change{Conditions: sources.Conditions}, nil
 	}
-	artifact, err := releaserender.OpenBlueprintCandidateArtifact(sources.Rollout.Record)
+	artifact, err := releaserender.OpenReleaseCandidateArtifact(sources.Rollout.Record)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

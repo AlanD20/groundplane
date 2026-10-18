@@ -12,7 +12,7 @@ import (
 // Publication makes prepared hooks executable only in the owning native work
 // transaction. The caller must join the retained source publication fragment in
 // that same transaction; staging snapshots alone never publishes an execution.
-func (prepared PreparedBlueprintReleaseHooks) Publication(evidence ReleaseHookWorkPublication) (workqueue.Change, error) {
+func (prepared PreparedReleaseWorkHooks) Publication(evidence ReleaseHookWorkPublication) (workqueue.Change, error) {
 	if len(evidence.Hooks) == 0 || evidence.Item.Input == nil ||
 		prepared.revision <= 0 || prepared.key != blueprintReleaseHookStageKey(evidence.Item.ID) ||
 		prepared.stage.TaskID != evidence.Task.ID || prepared.stage.WorkItemID != evidence.Item.ID ||
@@ -32,7 +32,7 @@ func (prepared PreparedBlueprintReleaseHooks) Publication(evidence ReleaseHookWo
 		unretained.Hooks[index].Execution.SourceMembershipCount = 0
 		unretained.Hooks[index].Execution.SourceMembershipSHA256 = ""
 	}
-	original, err := prepareBlueprintReleaseHookPublicationFragment(unretained)
+	original, err := prepareReleaseWorkHookPublicationFragment(unretained)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -46,7 +46,7 @@ func (prepared PreparedBlueprintReleaseHooks) Publication(evidence ReleaseHookWo
 	if hex.EncodeToString(hash.Sum(nil)) != prepared.stage.Digest {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint hook captured inputs changed after preparation")
 	}
-	fragment, err := prepareBlueprintReleaseHookPublicationFragment(evidence)
+	fragment, err := prepareReleaseWorkHookPublicationFragment(evidence)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

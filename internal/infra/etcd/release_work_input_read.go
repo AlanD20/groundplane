@@ -12,23 +12,23 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type BlueprintReleaseWorkSources struct {
-	Input        releaserender.BlueprintReleaseWorkInput
-	Rollout      keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]
+type ReleaseWorkSources struct {
+	Input        releaserender.ReleaseWorkInput
+	Rollout      keyvalue.Versioned[releaserender.ServiceRolloutCapture]
 	Conditions   []keyvalue.Condition
 	Predecessors []BlueprintNativePredecessor
 }
 
-// LoadBlueprintReleaseWorkInput resolves only the input selected by native work.
+// LoadReleaseWorkInput resolves only the input selected by native work.
 // It does not consult desired heads, Task Params or generic execution plans.
 // Admission separately joins file-head and operation-specific effect checks;
 // recovery can still load its captured input after partially completed effects.
-func (ledger *ReleaseLedger) LoadBlueprintReleaseWorkInput(ctx context.Context,
+func (ledger *ReleaseLedger) LoadReleaseWorkInput(ctx context.Context,
 	work workqueue.View,
-) (BlueprintReleaseWorkSources, error) {
-	sources, err := ledger.loadCapturedBlueprintReleaseInput(ctx, work)
+) (ReleaseWorkSources, error) {
+	sources, err := ledger.loadCapturedReleaseWorkInput(ctx, work)
 	if err != nil {
-		return BlueprintReleaseWorkSources{}, err
+		return ReleaseWorkSources{}, err
 	}
 	if sources.Input.Secrets == nil {
 		return sources, nil
@@ -36,67 +36,67 @@ func (ledger *ReleaseLedger) LoadBlueprintReleaseWorkInput(ctx context.Context,
 	pins, err := tasksecretpins.NewEtcdRepository(ledger.store, work.Task.Task.Scope.ProjectID)
 	if err != nil {
 		clear(sources.Rollout.Record.CandidateArtifact)
-		return BlueprintReleaseWorkSources{}, err
+		return ReleaseWorkSources{}, err
 	}
 	root, found, err := pins.LoadActive(ctx, sources.Input.OperationID, work.ReadRevision)
 	if err != nil || !found {
 		clear(sources.Rollout.Record.CandidateArtifact)
 		if err != nil {
-			return BlueprintReleaseWorkSources{}, err
+			return ReleaseWorkSources{}, err
 		}
-		return BlueprintReleaseWorkSources{}, errs.New(errs.KindStateConflict, "Blueprint Release no longer retains its recovery Secret values")
+		return ReleaseWorkSources{}, errs.New(errs.KindStateConflict, "Service Release no longer retains its recovery Secret values")
 	}
 	condition, err := root.AdmissionCondition(*sources.Input.Secrets)
 	if err != nil {
 		clear(sources.Rollout.Record.CandidateArtifact)
-		return BlueprintReleaseWorkSources{}, err
+		return ReleaseWorkSources{}, err
 	}
 	sources.Conditions = append(sources.Conditions, keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision})
 	return sources, nil
 }
 
-// LoadRetiringBlueprintReleaseInput reads captured metadata only after the
+// LoadRetiringReleaseWorkInput reads captured metadata only after the
 // collection fence. It cannot authorize assignment, execution or recovery.
-func (ledger *ReleaseLedger) LoadRetiringBlueprintReleaseInput(ctx context.Context, work workqueue.View) (BlueprintReleaseWorkSources, error) {
+func (ledger *ReleaseLedger) LoadRetiringReleaseWorkInput(ctx context.Context, work workqueue.View) (ReleaseWorkSources, error) {
 	if work.Task.Task.CollectionStartedAt == nil || work.Task.Task.FinishedAt == nil ||
 		work.Task.Task.Progress.Unsettled() != 0 || work.Item.Item.Phase != workexecution.Settled || work.Item.Item.ActiveAttemptID != "" {
-		return BlueprintReleaseWorkSources{}, errs.New(errs.KindStateConflict, "Release metadata retirement requires settled collecting work")
+		return ReleaseWorkSources{}, errs.New(errs.KindStateConflict, "Release metadata retirement requires settled collecting work")
 	}
-	return ledger.loadCapturedBlueprintReleaseInput(ctx, work)
+	return ledger.loadCapturedReleaseWorkInput(ctx, work)
 }
 
-func (ledger *ReleaseLedger) loadCapturedBlueprintReleaseInput(ctx context.Context, work workqueue.View) (BlueprintReleaseWorkSources, error) {
-	var empty BlueprintReleaseWorkSources
+func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(ctx context.Context, work workqueue.View) (ReleaseWorkSources, error) {
+	var empty ReleaseWorkSources
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return empty, err
 	}
 	task, item := work.Task.Task, work.Item.Item
 	if ledger == nil || ledger.store == nil || work.ReadRevision <= 0 || work.Task.Revision <= 0 || work.Item.Revision <= 0 ||
 		task.Validate() != nil || item.Validate() != nil || item.TaskID != task.ID ||
-		task.Action != workexecution.ActionApply || item.Operation != workexecution.Release || item.Input == nil {
-		return empty, errs.New(errs.KindValidationFailed, "Blueprint Release input requires captured native work")
+		!releaserender.IsReleaseAction(task.Action) || item.Operation != workexecution.Release || item.Input == nil {
+		return empty, errs.New(errs.KindValidationFailed, "Service Release input requires captured native work")
 	}
-	key := BlueprintReleaseWorkInputKey(item.ID)
+	key := ReleaseWorkInputKey(item.ID)
 	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: work.ReadRevision})
 	if err != nil {
 		return empty, err
 	}
 	if read == nil || read.ReadRevision != work.ReadRevision || len(read.Values) != 1 {
-		return empty, errs.New(errs.KindStateConflict, "Blueprint Release input read is incomplete")
+		return empty, errs.New(errs.KindStateConflict, "Service Release input read is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	value := read.Values[0]
 	if value == nil || value.Key != key || value.ModRevision <= 0 || value.ModRevision > work.ReadRevision {
-		return empty, errs.New(errs.KindStateConflict, "Blueprint Release input is unavailable")
+		return empty, errs.New(errs.KindStateConflict, "Service Release input is unavailable")
 	}
-	input, err := releaserender.DecodeBlueprintReleaseWorkInput(value.Value, *item.Input)
+	input, err := releaserender.DecodeReleaseWorkInput(value.Value, *item.Input)
 	if err != nil {
 		return empty, err
 	}
 	if err := input.Configuration.Matches(task, item); err != nil {
 		return empty, err
 	}
-	rollout, err := ledger.GetBlueprintServiceRollout(ctx, work)
+	rollout, err := ledger.GetServiceRollout(ctx, work)
 	if err != nil {
 		return empty, err
 	}
@@ -138,11 +138,11 @@ func (ledger *ReleaseLedger) loadCapturedBlueprintReleaseInput(ctx context.Conte
 		{Key: workqueue.TaskKey(task.ID), ModRevision: work.Task.Revision},
 		{Key: workqueue.ItemKey(item.ID), ModRevision: work.Item.Revision},
 		{Key: key, ModRevision: value.ModRevision},
-		{Key: BlueprintServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID), ModRevision: rollout.Revision},
+		{Key: releaserender.ServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID), ModRevision: rollout.Revision},
 		{Key: publicationKey, ModRevision: published.Values[0].ModRevision},
 		{Key: manifestKey, ModRevision: published.Values[1].ModRevision},
 	}
-	member, memberConditions, err := ledger.blueprintWorkManifestMember(ctx, BlueprintReleasePublicationEvidence{
+	member, memberConditions, err := ledger.releaseWorkManifestMember(ctx, ReleaseWorkPublicationEvidence{
 		Work: work, ServiceRollout: &rollout,
 		Manifest: releases.VersionedReleaseManifest{Record: manifest, Revision: published.Values[1].ModRevision, ReadRevision: work.ReadRevision},
 	})
@@ -159,5 +159,5 @@ func (ledger *ReleaseLedger) loadCapturedBlueprintReleaseInput(ctx context.Conte
 		}
 	}
 	conditions = append(conditions, memberConditions...)
-	return BlueprintReleaseWorkSources{Input: input, Rollout: rollout, Conditions: conditions, Predecessors: predecessors}, nil
+	return ReleaseWorkSources{Input: input, Rollout: rollout, Conditions: conditions, Predecessors: predecessors}, nil
 }

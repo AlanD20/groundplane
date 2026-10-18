@@ -23,7 +23,7 @@ import (
 // their sources. It does not publish a Task, hold a Release fence or establish
 // applied runtime. Final file binding and publication remain separate decisions.
 type preparedSelectedRuntime struct {
-	capture           releaserender.BlueprintServiceRolloutCapture
+	capture           releaserender.ServiceRolloutCapture
 	artifact          *agentpb.ComposeArtifact
 	storageConditions []keyvalue.Condition
 	members           []releaserender.ReleaseTaskRenderMember
@@ -171,14 +171,15 @@ func (service *Service) stageSelectedRuntime(
 		return preparedSelectedRuntime{}, errs.Wrap(errs.KindInternal, err)
 	}
 	task, item := input.Work.Task.Task, input.Work.Item.Item
-	capture := releaserender.BlueprintServiceRolloutCapture{
+	capture := releaserender.ServiceRolloutCapture{
+		Action: task.Action,
 		TaskID: task.ID, WorkItemID: item.ID, OperationID: input.OperationID,
 		PublicationID: manifest.Record.PublicationID,
 		Scope:         task.Scope, Placement: item.Placement, CreatedAt: item.CreatedAt,
 		Deadline: item.Deadline, Render: releaserender.CloneReleaseRenderInput(members[0].Render),
 		CandidateArtifact: artifactBytes,
 	}
-	if _, err := releaserender.OpenBlueprintServiceRolloutCapture(capture); err != nil {
+	if _, err := releaserender.OpenServiceRolloutCapture(capture); err != nil {
 		return preparedSelectedRuntime{}, err
 	}
 

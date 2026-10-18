@@ -27,7 +27,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintRecoveryRetry(ctx context.Context, 
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	sources, err := ledger.LoadBlueprintReleaseWorkInput(ctx, view)
+	sources, err := ledger.LoadReleaseWorkInput(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

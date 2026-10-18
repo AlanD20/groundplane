@@ -33,7 +33,7 @@ func (ledger *ReleaseLedger) LoadBlueprintReleaseRecoveryConfiguration(ctx conte
 	if err != nil {
 		return nil, nil, err
 	}
-	sources, err := ledger.LoadBlueprintReleaseWorkInput(ctx, view.Work)
+	sources, err := ledger.LoadReleaseWorkInput(ctx, view.Work)
 	if err != nil {
 		return nil, nil, err
 	}

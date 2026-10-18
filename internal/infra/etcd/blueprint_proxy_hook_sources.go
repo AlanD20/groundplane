@@ -38,7 +38,7 @@ func (ledger *ReleaseLedger) BlueprintProxyHookSourceMembers(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	render, err := releaserender.OpenBlueprintServiceRolloutCapture(capture.Record)
+	render, err := releaserender.OpenServiceRolloutCapture(capture.Record)
 	if err != nil {
 		return nil, err
 	}

@@ -13,19 +13,19 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// OpenBlueprintCandidateArtifact opens the exact pre-execution artifact bound
+// OpenReleaseCandidateArtifact opens the exact pre-execution artifact bound
 // into the rollout digest. It never renders desired state or reads an old plan.
 // The artifact can retain unselected Services; only this work item's selected
 // Service is an executable Release target.
-func OpenBlueprintCandidateArtifact(capture BlueprintServiceRolloutCapture) (*agentpb.ComposeArtifact, error) {
+func OpenReleaseCandidateArtifact(capture ServiceRolloutCapture) (*agentpb.ComposeArtifact, error) {
 	render := capture.Render
 	encoded := capture.CandidateArtifact
 	if len(encoded) == 0 || len(encoded) > keyvalue.MaximumBytes {
-		return nil, errs.New(errs.KindValidationFailed, "Blueprint candidate artifact is missing or oversized")
+		return nil, errs.New(errs.KindValidationFailed, "Service candidate artifact is missing or oversized")
 	}
 	artifact := &agentpb.ComposeArtifact{}
 	if proto.Unmarshal(encoded, artifact) != nil || executionplan.RejectUnknown(artifact) != nil {
-		return nil, errs.New(errs.KindValidationFailed, "Blueprint candidate artifact cannot be decoded")
+		return nil, errs.New(errs.KindValidationFailed, "Service candidate artifact cannot be decoded")
 	}
 	canonical, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	if err != nil {
@@ -38,7 +38,7 @@ func OpenBlueprintCandidateArtifact(capture BlueprintServiceRolloutCapture) (*ag
 		artifact.OwnerId != render.EnvironmentID || artifact.ProjectName != "gp-"+strings.ToLower(render.EnvironmentID) ||
 		artifact.AuthorizedVolumeDir != render.AuthorizedVolumeDir || len(artifact.CanonicalYaml) == 0 ||
 		!bytes.Equal(digest[:], artifact.YamlSha256) {
-		return nil, errs.New(errs.KindValidationFailed, "Blueprint candidate artifact differs from its captured identity or content")
+		return nil, errs.New(errs.KindValidationFailed, "Service candidate artifact differs from its captured identity or content")
 	}
 	role := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON
 	expectedMembers := 1
@@ -49,7 +49,7 @@ func OpenBlueprintCandidateArtifact(capture BlueprintServiceRolloutCapture) (*ag
 	} else if render.Strategy == domain.StrategyRolling {
 		role = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA
 		if render.Rolling == nil {
-			return nil, errs.New(errs.KindValidationFailed, "Blueprint rolling candidate has no replica plan")
+			return nil, errs.New(errs.KindValidationFailed, "Service rolling candidate has no replica plan")
 		}
 		expectedMembers = len(render.Rolling.Candidate)
 	}
@@ -60,29 +60,29 @@ func OpenBlueprintCandidateArtifact(capture BlueprintServiceRolloutCapture) (*ag
 		}
 		if service.GetRole() != role || service.GetImageReference() != render.CandidateWorkload.LocalImageID ||
 			service.GetOwnerComponentId() != "" {
-			return nil, errs.New(errs.KindValidationFailed, "Blueprint candidate workload differs from its captured Release")
+			return nil, errs.New(errs.KindValidationFailed, "Service candidate workload differs from its captured Release")
 		}
 		releaseID := ""
 		for _, label := range service.GetExpectedLabels() {
 			if label.GetKey() == "com.groundplane.release-id" {
 				if releaseID != "" {
-					return nil, errs.New(errs.KindValidationFailed, "Blueprint candidate repeats its Release label")
+					return nil, errs.New(errs.KindValidationFailed, "Service candidate repeats its Release label")
 				}
 				releaseID = label.GetValue()
 			}
 		}
 		if releaseID != render.ReleaseID {
-			return nil, errs.New(errs.KindValidationFailed, "Blueprint candidate belongs to another Release")
+			return nil, errs.New(errs.KindValidationFailed, "Service candidate belongs to another Release")
 		}
 		if render.Strategy != domain.StrategyRolling &&
 			(service.GetExpectedReplicas() != render.CandidateWorkload.ReplicaCount ||
 				service.GetSlot() != expectedSlot) {
-			return nil, errs.New(errs.KindValidationFailed, "Blueprint candidate count or target differs from its captured Release")
+			return nil, errs.New(errs.KindValidationFailed, "Service candidate count or target differs from its captured Release")
 		}
 		count++
 	}
 	if count != expectedMembers {
-		return nil, errs.New(errs.KindValidationFailed, "Blueprint candidate workload membership is incomplete")
+		return nil, errs.New(errs.KindValidationFailed, "Service candidate workload membership is incomplete")
 	}
 	if render.Rolling != nil {
 		for _, replica := range render.Rolling.Candidate {

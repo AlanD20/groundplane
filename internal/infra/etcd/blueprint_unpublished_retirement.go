@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasework"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -25,8 +26,8 @@ func (ledger *ReleaseLedger) PrepareUnpublishedReleaseRetirement(ctx context.Con
 		item.Input != nil || item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Phase != workexecution.Settled || item.Result == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Unpublished Release retirement requires settled unstarted work")
 	}
-	keys := []string{BlueprintReleaseWorkInputKey(item.ID), blueprintReleaseHookStageKey(item.ID),
-		BlueprintServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID), releasework.UnstartedKey(item.ID) + "/0"}
+	keys := []string{ReleaseWorkInputKey(item.ID), blueprintReleaseHookStageKey(item.ID),
+		releaserender.ServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID), releasework.UnstartedKey(item.ID) + "/0"}
 	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: view.ReadRevision})
 	if err != nil {
 		return workqueue.Change{}, err

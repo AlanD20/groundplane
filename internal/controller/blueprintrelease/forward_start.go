@@ -20,7 +20,7 @@ func (service *Service) PrepareForwardStart(ctx context.Context, view workqueue.
 		return workqueue.Change{}, err
 	}
 	defer clear(sources.Rollout.Record.CandidateArtifact)
-	artifact, err := releaserender.OpenBlueprintCandidateArtifact(sources.Rollout.Record)
+	artifact, err := releaserender.OpenReleaseCandidateArtifact(sources.Rollout.Record)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

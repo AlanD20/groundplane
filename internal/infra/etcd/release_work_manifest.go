@@ -11,11 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 )
 
-// blueprintWorkManifestMember binds the original staged intent and render to the
+// releaseWorkManifestMember binds the original staged intent and render to the
 // native rollout. Hook snapshots are sealed after manifest staging; they belong
 // to the rollout/input digest, not a rewritten manifest.
-func (ledger *ReleaseLedger) blueprintWorkManifestMember(ctx context.Context,
-	evidence BlueprintReleasePublicationEvidence,
+func (ledger *ReleaseLedger) releaseWorkManifestMember(ctx context.Context,
+	evidence ReleaseWorkPublicationEvidence,
 ) (releaserender.ReleaseTaskRenderMember, []keyvalue.Condition, error) {
 	var empty releaserender.ReleaseTaskRenderMember
 	if evidence.ServiceRollout == nil || len(evidence.Manifest.Record.Members) != 1 ||
@@ -23,7 +23,11 @@ func (ledger *ReleaseLedger) blueprintWorkManifestMember(ctx context.Context,
 		return empty, nil, releases.CorruptReleaseRecord()
 	}
 	capture := evidence.ServiceRollout.Record
-	if err := validateBlueprintServiceRolloutWork(capture, evidence.Work.Task.Task, evidence.Work.Item.Item); err != nil {
+	if err := capture.MatchesWork(evidence.Work.Task.Task, evidence.Work.Item.Item); err != nil {
+		return empty, nil, err
+	}
+	operationKind, err := releaserender.ReleaseOperationKind(capture.Action)
+	if err != nil {
 		return empty, nil, err
 	}
 	manifest := evidence.Manifest.Record
@@ -57,7 +61,7 @@ func (ledger *ReleaseLedger) blueprintWorkManifestMember(ctx context.Context,
 		intent.ID != reference.ReleaseID || intent.ServiceID != reference.ServiceID ||
 		intent.OperationID != capture.OperationID || intent.OperationID != manifest.OperationID ||
 		intent.OriginatingTaskID != capture.TaskID || intent.EnvironmentID != capture.Scope.EnvironmentID ||
-		intent.OperationKind != domain.OperationBlueprintApply || render.ReleaseID != intent.ID ||
+		intent.OperationKind != operationKind || render.ReleaseID != intent.ID ||
 		render.ServiceID != intent.ServiceID || render.CandidateWorkload != intent.CandidateWorkload {
 		return empty, nil, releases.CorruptReleaseRecord()
 	}

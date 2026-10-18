@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasework"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -35,8 +36,8 @@ func (service *Service) RetireWork(ctx context.Context, view workqueue.View, at 
 	// Keep the immutable input until the last attempt is collected. These keys
 	// belong to execution, unlike the published Release and applied runtime.
 	guards.Mutations = append(guards.Mutations,
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: etcd.BlueprintReleaseWorkInputKey(view.Item.Item.ID)},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: etcd.BlueprintServiceRolloutKey(view.Task.Task.Scope.EnvironmentID, view.Task.Task.ID, view.Item.Item.ID)},
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: etcd.ReleaseWorkInputKey(view.Item.Item.ID)},
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: releaserender.ServiceRolloutKey(view.Task.Task.Scope.EnvironmentID, view.Task.Task.ID, view.Item.Item.ID)},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: etcd.BlueprintProxyServiceRolloutKey(view.Task.Task.Scope.EnvironmentID, view.Task.Task.ID, view.Item.Item.ID)},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: releasework.UnstartedKey(view.Item.Item.ID) + "/", Prefix: true},
 	)

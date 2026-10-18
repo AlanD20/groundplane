@@ -34,7 +34,7 @@ func (ledger *ReleaseLedger) LoadBlueprintReleaseCompletion(ctx context.Context,
 		!workexecution.SameAssignment(input.Attempt, view.Attempt.Attempt) {
 		return empty, errs.New(errs.KindStateConflict, "Release completion requires its captured forward attempt")
 	}
-	sources, err := ledger.LoadBlueprintReleaseWorkInput(ctx, view.Work)
+	sources, err := ledger.LoadReleaseWorkInput(ctx, view.Work)
 	if err != nil {
 		return empty, err
 	}

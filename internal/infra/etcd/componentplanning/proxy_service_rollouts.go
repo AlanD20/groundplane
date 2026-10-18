@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -34,10 +35,6 @@ func ProxyServiceRolloutKey(environmentID, parentID, taskID string) string {
 		environmentID,
 		parentID,
 	) + "proxy-service-rollouts/" + taskID
-}
-
-func ProxyServiceNativeRolloutKey(environmentID, parentID, taskID string) string {
-	return blueprints.EnvironmentBlueprintRevisionPrefixFinal(environmentID, parentID) + "service-rollouts/" + taskID
 }
 
 func (reference ProxyServiceRolloutReference) Validate() error {
@@ -110,7 +107,7 @@ func BindProxyServiceRollouts(captured ProxyServicePreflight,
 				ModRevision: rollout.Revision,
 			},
 			keyvalue.Condition{
-				Key: ProxyServiceNativeRolloutKey(
+				Key: releaserender.ServiceRolloutKey(
 					preflight.EnvironmentID,
 					preflight.ParentTaskID,
 					rollout.WorkItemID,

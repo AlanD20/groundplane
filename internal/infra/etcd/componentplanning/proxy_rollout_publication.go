@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
@@ -36,7 +37,7 @@ func validateProxyRolloutPublication(ctx context.Context, store planningStore,
 		}
 		reference := *source.Rollout
 		keys := []string{ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.WorkItemID),
-			ProxyServiceNativeRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.WorkItemID)}
+			releaserender.ServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.WorkItemID)}
 		read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: readRevision})
 		if err != nil {
 			return err
@@ -87,7 +88,7 @@ func validateProxyRolloutPublicationValues(preflight *ProxyServicePreflight, sou
 	if values[0] == nil || values[1] == nil || values[0].ModRevision != reference.Revision ||
 		values[1].ModRevision != reference.NativeRevision ||
 		values[0].Key != ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.WorkItemID) ||
-		values[1].Key != ProxyServiceNativeRolloutKey(
+		values[1].Key != releaserender.ServiceRolloutKey(
 			preflight.EnvironmentID,
 			preflight.ParentTaskID,
 			reference.WorkItemID,
@@ -98,15 +99,15 @@ func validateProxyRolloutPublicationValues(preflight *ProxyServicePreflight, sou
 	if hex.EncodeToString(digest[:]) != reference.SHA256 {
 		return 0, errs.New(errs.KindStateConflict, "pending proxy rollout source digest changed")
 	}
-	capture, err := releaserender.DecodeBlueprintServiceRolloutCapture(values[1].Value)
+	capture, err := releaserender.DecodeServiceRolloutCapture(values[1].Value)
 	if err != nil {
 		return 0, err
 	}
-	render, err := releaserender.OpenBlueprintServiceRolloutCapture(capture)
+	render, err := releaserender.OpenServiceRolloutCapture(capture)
 	if err != nil {
 		return 0, err
 	}
-	if capture.WorkItemID != reference.WorkItemID || capture.Scope.EnvironmentID != preflight.EnvironmentID ||
+	if capture.Action != workexecution.ActionApply || capture.WorkItemID != reference.WorkItemID || capture.Scope.EnvironmentID != preflight.EnvironmentID ||
 		capture.TaskID != preflight.ParentTaskID || render.ServiceID != reference.ServiceID {
 		return 0, errs.New(errs.KindStateConflict, "pending proxy native rollout belongs to another Service or Apply")
 	}

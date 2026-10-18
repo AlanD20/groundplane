@@ -208,31 +208,31 @@ func validateNativeRestorationDescriptor(
 	return nil
 }
 
-type BlueprintReleasePublicationEvidence struct {
+type ReleaseWorkPublicationEvidence struct {
 	StorageConditions  []etcdstore.Condition
 	RenderingInput     projectionrecord.EnvironmentComposeProjection
-	ServiceRollout     *etcdstore.Versioned[releaserender.BlueprintServiceRolloutCapture]
+	ServiceRollout     *etcdstore.Versioned[releaserender.ServiceRolloutCapture]
 	ProxyAddresses     networkreservations.ProxyAddresses
 	NativePredecessors []BlueprintNativePredecessorCapture
 	Manifest           releases.VersionedReleaseManifest
 	EnvironmentID      string
 	Work               workqueue.View
-	PreparedInput      PreparedBlueprintWorkInput
+	PreparedInput      PreparedReleaseWorkInput
 	HookWork           ReleaseHookWorkPublication
 	PublishedAt        time.Time
 	SourcePrepared     scriptsourcepublication.PreparedSourceSet
 	SourceMembers      []scriptsourceevidence.ScriptSourcePreparationMember
-	HookPrepared       PreparedBlueprintReleaseHooks
+	HookPrepared       PreparedReleaseWorkHooks
 }
 
 func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 	ctx context.Context,
-	evidence BlueprintReleasePublicationEvidence,
+	evidence ReleaseWorkPublicationEvidence,
 ) ([]etcdstore.Condition, error) {
 	if len(evidence.NativePredecessors) > 0 && evidence.RenderingInput.EnvironmentID != evidence.EnvironmentID {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint predecessor rendering input changed")
 	}
-	member, conditions, err := ledger.blueprintWorkManifestMember(ctx, evidence)
+	member, conditions, err := ledger.releaseWorkManifestMember(ctx, evidence)
 	if err != nil {
 		return nil, err
 	}

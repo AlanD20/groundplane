@@ -21,7 +21,7 @@ func (ledger *ReleaseLedger) RetireUnpublishedRollout(ctx context.Context, view 
 		item.Operation != workexecution.Release || item.Input != nil || item.AttemptNumber != 0 || item.Phase != workexecution.Settled {
 		return false, errs.New(errs.KindStateConflict, "Rollout cleanup requires unpublished collecting work")
 	}
-	key := BlueprintServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID)
+	key := releaserender.ServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID)
 	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
 	if err != nil {
 		return false, err
@@ -34,17 +34,17 @@ func (ledger *ReleaseLedger) RetireUnpublishedRollout(ctx context.Context, view 
 	if value == nil {
 		return true, nil
 	}
-	capture, err := releaserender.DecodeBlueprintServiceRolloutCapture(value.Value)
+	capture, err := releaserender.DecodeServiceRolloutCapture(value.Value)
 	if err != nil {
 		return false, err
 	}
 	defer clear(capture.CandidateArtifact)
-	if value.Key != key || value.ModRevision <= 0 || validateBlueprintServiceRolloutWork(capture, task, item) != nil {
+	if value.Key != key || value.ModRevision <= 0 || capture.MatchesWork(task, item) != nil {
 		return false, errs.New(errs.KindStateConflict, "Rollout cleanup ownership differs")
 	}
 	guards := []keyvalue.Condition{{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
 		{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision}, {Key: key, ModRevision: value.ModRevision},
-		{Key: BlueprintReleaseWorkInputKey(item.ID)}, {Key: blueprintReleaseHookStageKey(item.ID)},
+		{Key: ReleaseWorkInputKey(item.ID)}, {Key: blueprintReleaseHookStageKey(item.ID)},
 		{Key: releases.ReleasePublicationKey(capture.PublicationID)}}
 	sources, err := scriptsourcepublication.NewAuthority(ledger.store)
 	if err != nil {

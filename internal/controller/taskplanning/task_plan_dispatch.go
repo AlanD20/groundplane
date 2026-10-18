@@ -88,9 +88,6 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		backingCreation {
 		return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
 	}
-	if task.Type == taskjournal.TaskUpdate {
-		return resolver.resolveUpdatePlan(ctx, task)
-	}
 	if task.Type == taskjournal.TaskRemove {
 		if ids.Validate(ids.KindEnvironment, task.Target) == nil {
 			return resolver.resolveEnvironmentRemovalPlan(ctx, task)

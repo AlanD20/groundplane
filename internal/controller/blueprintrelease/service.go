@@ -91,7 +91,7 @@ type prepareInput struct {
 type Prepared struct {
 	Item             workexecution.Item
 	Input            workexecution.Input
-	Publication      etcd.BlueprintReleasePublication
+	Publication      etcd.ReleaseWorkPublication
 	ledger           *etcd.ReleaseLedger
 	work             workqueue.View
 	secrets          tasksecretpins.Prepared

@@ -8,9 +8,9 @@ import (
 // Hook Attach and backing topology evidence can overlap the owning Blueprint's
 // own Attach comparisons. Preserve one equal comparison, never weaken a
 // conflicting revision to make the transaction fit.
-func (publication BlueprintReleasePublication) withExistingComparisons(
+func (publication ReleaseWorkPublication) withExistingComparisons(
 	existing []etcdstore.Condition,
-) (BlueprintReleasePublication, error) {
+) (ReleaseWorkPublication, error) {
 	seen := make(map[string]etcdstore.Condition, len(existing)+len(publication.conditions))
 	for _, condition := range existing {
 		seen[condition.Key] = condition
@@ -19,7 +19,7 @@ func (publication BlueprintReleasePublication) withExistingComparisons(
 	for _, condition := range publication.conditions {
 		if previous, found := seen[condition.Key]; found {
 			if previous != condition {
-				return BlueprintReleasePublication{}, errs.New(
+				return ReleaseWorkPublication{}, errs.New(
 					errs.KindStateConflict,
 					"Blueprint release source revisions disagree",
 				)

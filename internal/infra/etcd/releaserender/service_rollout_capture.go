@@ -13,10 +13,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// BlueprintServiceRolloutCapture freezes the typed Service input before the
-// router changes. It grants no execution or file-restoration authority. Source
-// references and final recovery input must join native work publication.
-type BlueprintServiceRolloutCapture struct {
+// ServiceRolloutCapture freezes one Service release, independently of whether
+// it was requested by Deploy, Rollback or Blueprint Apply. It grants no effect
+// or file-restoration authority; those join the native work publication.
+type ServiceRolloutCapture struct {
+	Action            workexecution.Action    `json:"action"`
 	TaskID            string                  `json:"task_id"`
 	WorkItemID        string                  `json:"work_item_id"`
 	OperationID       string                  `json:"operation_id"`
@@ -29,9 +30,9 @@ type BlueprintServiceRolloutCapture struct {
 	CandidateArtifact []byte                  `json:"candidate_artifact"`
 }
 
-// OpenBlueprintServiceRolloutCapture returns owned typed input, not a decoded
+// OpenServiceRolloutCapture returns owned typed input, not a decoded
 // legacy Task or generic execution plan. Strategy validation belongs to Release.
-func OpenBlueprintServiceRolloutCapture(capture BlueprintServiceRolloutCapture) (ReleaseRenderInput, error) {
+func OpenServiceRolloutCapture(capture ServiceRolloutCapture) (ReleaseRenderInput, error) {
 	if ids.Validate(ids.KindTask, capture.TaskID) != nil ||
 		ids.Validate(ids.KindWorkItem, capture.WorkItemID) != nil ||
 		ids.Validate(ids.KindOperation, capture.OperationID) != nil ||
@@ -43,51 +44,61 @@ func OpenBlueprintServiceRolloutCapture(capture BlueprintServiceRolloutCapture) 
 		capture.Render.EnvironmentID != capture.Scope.EnvironmentID ||
 		capture.Render.ProjectID != capture.Scope.ProjectID || capture.Render.TenantID != capture.Scope.TenantID ||
 		capture.Render.Projection.EnvironmentID != capture.Scope.EnvironmentID ||
-		capture.Render.Projection.RevisionID != capture.TaskID {
-		return ReleaseRenderInput{}, errs.New(errs.KindValidationFailed, "Blueprint rollout capture identity or deadline is invalid")
+		!IsReleaseAction(capture.Action) ||
+		capture.Action == workexecution.ActionApply && capture.Render.Projection.RevisionID != capture.TaskID {
+		return ReleaseRenderInput{}, errs.New(errs.KindValidationFailed, "Service rollout capture identity, action or deadline is invalid")
 	}
 	if err := ValidateReleaseRenderInput(capture.Render); err != nil {
 		return ReleaseRenderInput{}, err
 	}
-	if _, err := OpenBlueprintCandidateArtifact(capture); err != nil {
+	operation, err := ReleaseOperationKind(capture.Action)
+	if err != nil {
+		return ReleaseRenderInput{}, err
+	}
+	phases, err := OrderedReleaseHooks(operation, capture.Render.ServiceID, capture.Render.Hooks)
+	if err != nil {
+		return ReleaseRenderInput{}, err
+	}
+	phases.Clear()
+	if _, err := OpenReleaseCandidateArtifact(capture); err != nil {
 		return ReleaseRenderInput{}, err
 	}
 	return CloneReleaseRenderInput(capture.Render), nil
 }
 
-func EncodeBlueprintServiceRolloutCapture(capture BlueprintServiceRolloutCapture) ([]byte, error) {
-	if _, err := OpenBlueprintServiceRolloutCapture(capture); err != nil {
+func EncodeServiceRolloutCapture(capture ServiceRolloutCapture) ([]byte, error) {
+	if _, err := OpenServiceRolloutCapture(capture); err != nil {
 		return nil, err
 	}
-	value, err := recordcodec.Encode("blueprint-service-rollout", capture)
+	value, err := recordcodec.Encode("service-rollout", capture)
 	if err != nil {
 		return nil, err
 	}
 	if len(value) > keyvalue.MaximumBytes {
 		clear(value)
-		return nil, errs.New(errs.KindReleasePlanTooLarge, "Blueprint rollout capture exceeds the storage request budget")
+		return nil, errs.New(errs.KindReleasePlanTooLarge, "Service rollout capture exceeds the storage request budget")
 	}
 	return value, nil
 }
 
-func DecodeBlueprintServiceRolloutCapture(value []byte) (BlueprintServiceRolloutCapture, error) {
+func DecodeServiceRolloutCapture(value []byte) (ServiceRolloutCapture, error) {
 	if len(value) == 0 || len(value) > keyvalue.MaximumBytes {
-		return BlueprintServiceRolloutCapture{}, errs.New(errs.KindValidationFailed, "Blueprint rollout capture size is invalid")
+		return ServiceRolloutCapture{}, errs.New(errs.KindValidationFailed, "Service rollout capture size is invalid")
 	}
-	capture, err := recordcodec.Decode[BlueprintServiceRolloutCapture](value, "blueprint-service-rollout")
+	capture, err := recordcodec.Decode[ServiceRolloutCapture](value, "service-rollout")
 	if err != nil {
-		return BlueprintServiceRolloutCapture{}, err
+		return ServiceRolloutCapture{}, err
 	}
-	if _, err := OpenBlueprintServiceRolloutCapture(capture); err != nil {
-		return BlueprintServiceRolloutCapture{}, err
+	if _, err := OpenServiceRolloutCapture(capture); err != nil {
+		return ServiceRolloutCapture{}, err
 	}
 	return capture, nil
 }
 
-// BlueprintRolloutInput binds the full frozen input to the native work item.
+// ServiceRolloutInput binds the full frozen input to the native work item.
 // The final operation input may additionally bind file restoration evidence.
-func BlueprintRolloutInput(capture BlueprintServiceRolloutCapture) (workexecution.Input, error) {
-	value, err := EncodeBlueprintServiceRolloutCapture(capture)
+func ServiceRolloutInput(capture ServiceRolloutCapture) (workexecution.Input, error) {
+	value, err := EncodeServiceRolloutCapture(capture)
 	if err != nil {
 		return workexecution.Input{}, err
 	}

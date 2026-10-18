@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -24,7 +23,7 @@ func (service *Service) finishSelectedRuntime(
 	addresses networkreservations.ProxyAddresses,
 ) (_ Prepared, resultErr error) {
 	hooks, manifest := captured.hooks, captured.manifest
-	rollout, err := service.ledger.StageBlueprintServiceRollout(ctx, captured.capture)
+	rollout, err := service.ledger.StageServiceRollout(ctx, captured.capture)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -41,7 +40,7 @@ func (service *Service) finishSelectedRuntime(
 		}
 	}()
 	publishedAt := time.Now().UTC()
-	preparedInput, err := service.ledger.PrepareBlueprintWorkInput(ctx, input.Work,
+	preparedInput, err := service.ledger.PrepareReleaseWorkInput(ctx, input.Work,
 		rollout, configuration.Input, configuration.Secrets, publishedAt)
 	if err != nil {
 		return Prepared{}, err
@@ -56,7 +55,11 @@ func (service *Service) finishSelectedRuntime(
 			hookWork.Hooks[index].Execution.Clear()
 		}
 	}()
-	phases, err := releaserender.OrderedReleaseHooks(domain.OperationBlueprintApply,
+	operation, err := releaserender.ReleaseOperationKind(input.Work.Task.Task.Action)
+	if err != nil {
+		return Prepared{}, err
+	}
+	phases, err := releaserender.OrderedReleaseHooks(operation,
 		captured.capture.Render.ServiceID, captured.capture.Render.Hooks)
 	if err != nil {
 		return Prepared{}, err
@@ -80,7 +83,7 @@ func (service *Service) finishSelectedRuntime(
 	if len(hookWork.Hooks) != hooks.executions {
 		return Prepared{}, errs.New(errs.KindInternal, "Blueprint post-deploy execution authority is incomplete")
 	}
-	hookPrepared, err := service.ledger.PrepareBlueprintReleaseHooks(ctx, input.Work, hookWork)
+	hookPrepared, err := service.ledger.PrepareReleaseWorkHooks(ctx, input.Work, hookWork)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -110,10 +113,10 @@ func (service *Service) finishSelectedRuntime(
 		hookWork.Hooks[index].Execution.SourceMembershipCount = sourcePrepared.MembershipCount()
 		hookWork.Hooks[index].Execution.SourceMembershipSHA256 = sourcePrepared.MembershipSHA256()
 	}
-	publication, err := service.ledger.PrepareBlueprintReleasePublication(
+	publication, err := service.ledger.PrepareReleaseWorkPublication(
 		ctx,
 		service.sources,
-		etcd.BlueprintReleasePublicationEvidence{
+		etcd.ReleaseWorkPublicationEvidence{
 			RenderingInput:     input.Projection,
 			ServiceRollout:     &rollout,
 			ProxyAddresses:     addresses,

@@ -24,7 +24,7 @@ func (service *Service) PrepareRecoveryEvidence(ctx context.Context, view workqu
 	}
 	// Cleanup is bound to captured work, not current desired intent; superseding
 	// the forward action must not revoke permission to restore its saved runtime.
-	sources, err := service.ledger.LoadBlueprintReleaseWorkInput(ctx, view.Work)
+	sources, err := service.ledger.LoadReleaseWorkInput(ctx, view.Work)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

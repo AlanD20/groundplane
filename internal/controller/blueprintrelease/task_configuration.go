@@ -15,13 +15,13 @@ import (
 type preparedWorkConfiguration struct {
 	Capture   runtimeconfiguration.WorkCapture
 	Secrets   tasksecretpins.Prepared
-	Input     releaserender.BlueprintReleaseWorkInput
+	Input     releaserender.ReleaseWorkInput
 	Reference workexecution.Input
 	Value     []byte
 }
 
 func (service *Service) prepareWorkConfiguration(ctx context.Context, input prepareInput,
-	rollout releaserender.BlueprintServiceRolloutCapture,
+	rollout releaserender.ServiceRolloutCapture,
 	files []taskmaterialization.Record,
 ) (result preparedWorkConfiguration, err error) {
 	capture, err := service.ledger.PrepareReleaseWorkConfiguration(ctx, input.Work,
@@ -39,11 +39,11 @@ func (service *Service) prepareWorkConfiguration(ctx context.Context, input prep
 			err = errors.Join(err, service.ledger.AbandonReleaseWorkSecretPins(ctx, input.Work, secrets))
 		}
 	}()
-	rolloutReference, err := releaserender.BlueprintRolloutInput(rollout)
+	rolloutReference, err := releaserender.ServiceRolloutInput(rollout)
 	if err != nil {
 		return preparedWorkConfiguration{}, err
 	}
-	sealed := releaserender.BlueprintReleaseWorkInput{
+	sealed := releaserender.ReleaseWorkInput{
 		OperationID: input.OperationID, Rollout: rolloutReference, Configuration: capture,
 	}
 	if !secrets.IsZero() {
@@ -56,7 +56,7 @@ func (service *Service) prepareWorkConfiguration(ctx context.Context, input prep
 	if err := sealed.ValidateRollout(rollout); err != nil {
 		return preparedWorkConfiguration{}, err
 	}
-	value, reference, err := releaserender.EncodeBlueprintReleaseWorkInput(sealed)
+	value, reference, err := releaserender.EncodeReleaseWorkInput(sealed)
 	if err != nil {
 		return preparedWorkConfiguration{}, err
 	}

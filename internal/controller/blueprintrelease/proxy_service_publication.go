@@ -82,10 +82,10 @@ func (service *Service) prepareCapturedProxyServiceUnit(ctx context.Context,
 	if err != nil {
 		return Prepared{}, err
 	}
-	publication, err := prepared.Publication.WithProxyServiceRolloutCapture(stored.Input, reference, prepared.Task)
+	conditions, err := etcd.ProxyServiceRolloutConditions(stored.Input, reference, task, item)
 	if err != nil {
 		return Prepared{}, errors.Join(err, prepared.Abandon(ctx))
 	}
-	prepared.Publication = publication
+	prepared.sourceConditions = append(prepared.sourceConditions, conditions...)
 	return prepared, nil
 }

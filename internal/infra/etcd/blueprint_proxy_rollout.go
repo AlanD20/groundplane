@@ -37,7 +37,7 @@ func BlueprintProxyServiceRolloutKey(environmentID, parentID, taskID string) str
 }
 
 func (ledger *ReleaseLedger) StageBlueprintProxyServiceRollout(ctx context.Context,
-	preparation BlueprintProxyServiceRollout, capture releaserender.BlueprintServiceRolloutCapture,
+	preparation BlueprintProxyServiceRollout, capture releaserender.ServiceRolloutCapture,
 ) (componentplanning.ProxyServiceRolloutReference, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return componentplanning.ProxyServiceRolloutReference{}, err
@@ -60,7 +60,7 @@ func (ledger *ReleaseLedger) StageBlueprintProxyServiceRollout(ctx context.Conte
 	if err := validateProxyRolloutCapture(preparation, capture, input.Record); err != nil {
 		return componentplanning.ProxyServiceRolloutReference{}, err
 	}
-	stored, err := ledger.StageBlueprintServiceRollout(ctx, capture)
+	stored, err := ledger.StageServiceRollout(ctx, capture)
 	if err != nil {
 		return componentplanning.ProxyServiceRolloutReference{}, err
 	}
@@ -84,7 +84,7 @@ func (ledger *ReleaseLedger) StageBlueprintProxyServiceRollout(ctx context.Conte
 	conditions := []keyvalue.Condition{
 		{Key: key},
 		{Key: componentplanning.ProxyCandidateInputKey(preparation.Input), ModRevision: input.Revision},
-		{Key: BlueprintServiceRolloutKey(preparation.Input.EnvironmentID, preparation.Input.ParentTaskID,
+		{Key: releaserender.ServiceRolloutKey(preparation.Input.EnvironmentID, preparation.Input.ParentTaskID,
 			preparation.WorkItemID), ModRevision: stored.Revision},
 	}
 	// The input exists before this inert preparation. Fence its real root revision,
@@ -133,13 +133,13 @@ func (ledger *ReleaseLedger) ReadBlueprintProxyCandidateInput(ctx context.Contex
 // head can substitute for these captured values after router acknowledgement.
 func (ledger *ReleaseLedger) ReadBlueprintProxyServiceRollout(ctx context.Context,
 	environmentID, parentID string, reference componentplanning.ProxyServiceRolloutReference,
-) (BlueprintProxyServiceRollout, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture], error) {
+) (BlueprintProxyServiceRollout, keyvalue.Versioned[releaserender.ServiceRolloutCapture], error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, err
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, err
 	}
 	if ledger == nil || ledger.store == nil || reference.Validate() != nil ||
 		ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindTask, parentID) != nil {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, errs.New(
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, errs.New(
 			errs.KindValidationFailed,
 			"pre-switch Service rollout read is invalid",
 		)
@@ -147,21 +147,21 @@ func (ledger *ReleaseLedger) ReadBlueprintProxyServiceRollout(ctx context.Contex
 	key := BlueprintProxyServiceRolloutKey(environmentID, parentID, reference.WorkItemID)
 	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}})
 	if err != nil {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, err
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, err
 	}
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 1 || read.Values[0] == nil || read.Values[0].Key != key ||
 		read.Values[0].ModRevision != reference.Revision || len(read.Values[0].Value) > keyvalue.MaximumBytes {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, errs.New(
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, errs.New(
 			errs.KindStateConflict,
 			"pre-switch Service rollout preparation is missing or changed",
 		)
 	}
 	digest := sha256.Sum256(read.Values[0].Value)
 	if hex.EncodeToString(digest[:]) != reference.SHA256 {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, errs.New(
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, errs.New(
 			errs.KindStateConflict,
 			"pre-switch Service source preparation digest changed",
 		)
@@ -171,7 +171,7 @@ func (ledger *ReleaseLedger) ReadBlueprintProxyServiceRollout(ctx context.Contex
 		"blueprint-proxy-service-rollout",
 	)
 	if err != nil {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, err
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, err
 	}
 	if preparation.Input.Validate() != nil || preparation.Input.EnvironmentID != environmentID || preparation.Input.ParentTaskID != parentID ||
 		preparation.WorkItemID != reference.WorkItemID || ids.Validate(ids.KindOperation, preparation.OperationID) != nil ||
@@ -179,12 +179,12 @@ func (ledger *ReleaseLedger) ReadBlueprintProxyServiceRollout(ctx context.Contex
 		len(preparation.Manifest.Record.Members) != 1 || preparation.Manifest.Revision <= 0 ||
 		preparation.Manifest.Record.Members[0].ServiceID != reference.ServiceID ||
 		preparation.Manifest.Record.OperationID != preparation.OperationID {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{},
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{},
 			errs.New(errs.KindStateConflict, "Pre-switch Service preparation scope changed")
 	}
 	input, err := componentplanning.ReadProxyCandidateInput(ctx, ledger.store, preparation.Input, read.ReadRevision)
 	if err != nil {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, err
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, err
 	}
 	for index := range preparation.Members {
 		preparation.Members[index].Render.Projection = projectionrecord.CloneEnvironmentComposeProjection(input.Record)
@@ -194,37 +194,37 @@ func (ledger *ReleaseLedger) ReadBlueprintProxyServiceRollout(ctx context.Contex
 		sources.RenderInput.Record.Projection = projectionrecord.CloneEnvironmentComposeProjection(input.Record)
 		preparation.Hooks[executionID] = sources
 	}
-	captureKey := BlueprintServiceRolloutKey(environmentID, parentID, reference.WorkItemID)
+	captureKey := releaserender.ServiceRolloutKey(environmentID, parentID, reference.WorkItemID)
 	native, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{captureKey}, Revision: read.ReadRevision})
 	if err != nil {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, err
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, err
 	}
 	if native != nil {
 		defer keyvalue.ClearValues(native.Values)
 	}
 	if native == nil || native.ReadRevision != read.ReadRevision || len(native.Values) != 1 {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{},
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{},
 			errs.New(errs.KindStateConflict, "Captured Service rollout read is incomplete")
 	}
 	value := native.Values[0]
 	if value == nil || value.Key != captureKey || value.ModRevision != reference.NativeRevision {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{},
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{},
 			errs.New(errs.KindStateConflict, "Captured Service rollout revision changed")
 	}
-	record, err := releaserender.DecodeBlueprintServiceRolloutCapture(value.Value)
+	record, err := releaserender.DecodeServiceRolloutCapture(value.Value)
 	if err != nil {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, err
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, err
 	}
 	if record.TaskID != parentID || record.WorkItemID != reference.WorkItemID ||
 		record.Scope.EnvironmentID != environmentID || record.OperationID != preparation.OperationID ||
 		record.Render.ServiceID != reference.ServiceID {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{},
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{},
 			errs.New(errs.KindStateConflict, "Captured Service rollout belongs to another work item")
 	}
-	capture := keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{
+	capture := keyvalue.Versioned[releaserender.ServiceRolloutCapture]{
 		Record: record, Revision: value.ModRevision, ReadRevision: native.ReadRevision}
 	if err := validateProxyRolloutCapture(preparation, record, input.Record); err != nil {
-		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, err
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, err
 	}
 	return preparation, capture, nil
 }

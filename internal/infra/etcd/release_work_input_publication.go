@@ -12,46 +12,49 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func BlueprintReleaseWorkInputKey(workItemID string) string {
+func ReleaseWorkInputKey(workItemID string) string {
 	return "/v1/execution/release-inputs/" + workItemID
 }
 
-type PreparedBlueprintWorkInput struct {
+type PreparedReleaseWorkInput struct {
 	Item   workexecution.Item
 	Input  workexecution.Input
 	Change workqueue.Change
 }
 
-// PrepareBlueprintWorkInput joins native readiness, exact input storage, file
+// PrepareReleaseWorkInput joins native readiness, exact input storage, file
 // source comparisons and Secret activation. The Release owner must append its
 // manifest, hook/source publication, predecessor and dependency conditions to
 // this fragment and commit once. This method performs no publication transaction.
-func (ledger *ReleaseLedger) PrepareBlueprintWorkInput(ctx context.Context,
-	work workqueue.View, rollout keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture],
-	input releaserender.BlueprintReleaseWorkInput, secrets tasksecretpins.Prepared, at time.Time,
-) (PreparedBlueprintWorkInput, error) {
-	var empty PreparedBlueprintWorkInput
+func (ledger *ReleaseLedger) PrepareReleaseWorkInput(ctx context.Context,
+	work workqueue.View, rollout keyvalue.Versioned[releaserender.ServiceRolloutCapture],
+	input releaserender.ReleaseWorkInput, secrets tasksecretpins.Prepared, at time.Time,
+) (PreparedReleaseWorkInput, error) {
+	var empty PreparedReleaseWorkInput
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return empty, err
 	}
 	if ledger == nil || ledger.store == nil || work.Task.Revision <= 0 || work.Item.Revision <= 0 ||
-		work.Task.Task.Action != workexecution.ActionApply || work.Item.Item.Operation != workexecution.Release ||
+		!releaserender.IsReleaseAction(work.Task.Task.Action) || work.Item.Item.Operation != workexecution.Release ||
 		work.Task.Task.Stop != nil || work.Task.Task.FinishedAt != nil {
-		return empty, errs.New(errs.KindValidationFailed, "Blueprint input publication requires its waiting native work")
+		return empty, errs.New(errs.KindValidationFailed, "Release input publication requires its waiting native work")
 	}
 	if err := input.ValidateRollout(rollout.Record); err != nil {
+		return empty, err
+	}
+	if err := rollout.Record.MatchesWork(work.Task.Task, work.Item.Item); err != nil {
 		return empty, err
 	}
 	if err := input.Configuration.Matches(work.Task.Task, work.Item.Item); err != nil {
 		return empty, err
 	}
 	if (input.Secrets == nil) != secrets.IsZero() {
-		return empty, errs.New(errs.KindValidationFailed, "Blueprint input Secret activation is incomplete")
+		return empty, errs.New(errs.KindValidationFailed, "Release input Secret activation is incomplete")
 	}
 	if !secrets.IsZero() {
 		binding, err := secrets.Binding()
 		if err != nil || binding != *input.Secrets {
-			return empty, errs.New(errs.KindStateConflict, "Blueprint input Secret activation differs from its captured binding")
+			return empty, errs.New(errs.KindStateConflict, "Release input Secret activation differs from its captured binding")
 		}
 	}
 	// Immutable sources were staged after the planning snapshot. Refresh only
@@ -63,17 +66,17 @@ func (ledger *ReleaseLedger) PrepareBlueprintWorkInput(ctx context.Context,
 		return empty, err
 	}
 	if read == nil || read.ReadRevision < work.ReadRevision || len(read.Values) != 2 {
-		return empty, errs.New(errs.KindStateConflict, "Blueprint work publication snapshot is incomplete")
+		return empty, errs.New(errs.KindStateConflict, "Release work publication snapshot is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.Values[0] == nil || read.Values[1] == nil ||
 		read.Values[0].Key != workqueue.TaskKey(work.Task.Task.ID) || read.Values[0].ModRevision != work.Task.Revision ||
 		read.Values[1].Key != workqueue.ItemKey(work.Item.Item.ID) || read.Values[1].ModRevision != work.Item.Revision {
-		return empty, errs.New(errs.KindStateConflict, "Blueprint work changed during input preparation")
+		return empty, errs.New(errs.KindStateConflict, "Release work changed during input preparation")
 	}
 	current := work
 	current.ReadRevision = read.ReadRevision
-	rolloutCondition, err := BlueprintServiceRolloutPublicationCondition(current, rollout, input.Rollout)
+	rolloutCondition, err := ServiceRolloutPublicationCondition(current, rollout, input.Rollout)
 	if err != nil {
 		return empty, err
 	}
@@ -81,7 +84,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintWorkInput(ctx context.Context,
 	if err != nil {
 		return empty, err
 	}
-	value, reference, err := releaserender.EncodeBlueprintReleaseWorkInput(input)
+	value, reference, err := releaserender.EncodeReleaseWorkInput(input)
 	if err != nil {
 		return empty, err
 	}
@@ -101,10 +104,10 @@ func (ledger *ReleaseLedger) PrepareBlueprintWorkInput(ctx context.Context,
 		}
 	}()
 	change.Conditions = append(change.Conditions, rolloutCondition,
-		keyvalue.Condition{Key: BlueprintReleaseWorkInputKey(item.ID)})
+		keyvalue.Condition{Key: ReleaseWorkInputKey(item.ID)})
 	change.Conditions = append(change.Conditions, configurationConditions...)
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{
-		Type: keyvalue.MutationPut, Key: BlueprintReleaseWorkInputKey(item.ID), Value: append([]byte(nil), value...),
+		Type: keyvalue.MutationPut, Key: ReleaseWorkInputKey(item.ID), Value: append([]byte(nil), value...),
 	})
 	if !secrets.IsZero() {
 		activation, err := tasksecretpins.Activation(secrets)
@@ -120,5 +123,5 @@ func (ledger *ReleaseLedger) PrepareBlueprintWorkInput(ctx context.Context,
 		change.Mutations = append(change.Mutations, mutations...)
 	}
 	keep = true
-	return PreparedBlueprintWorkInput{Item: item, Input: reference, Change: change}, nil
+	return PreparedReleaseWorkInput{Item: item, Input: reference, Change: change}, nil
 }

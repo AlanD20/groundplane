@@ -48,7 +48,7 @@ func (ledger *ReleaseLedger) RetireUnpublishedHookStage(ctx context.Context, vie
 	}
 	conditions := []keyvalue.Condition{{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
 		{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision}, {Key: key, ModRevision: value.ModRevision},
-		{Key: BlueprintReleaseWorkInputKey(item.ID)}}
+		{Key: ReleaseWorkInputKey(item.ID)}}
 	sources, err := scriptsourcepublication.NewAuthority(ledger.store)
 	if err != nil {
 		return false, err

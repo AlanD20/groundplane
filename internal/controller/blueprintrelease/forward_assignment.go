@@ -28,7 +28,7 @@ func (service *Service) PrepareForwardAssignment(ctx context.Context,
 		return workdispatch.Decision{}, err
 	}
 	defer clear(sources.Rollout.Record.CandidateArtifact)
-	artifact, err := releaserender.OpenBlueprintCandidateArtifact(sources.Rollout.Record)
+	artifact, err := releaserender.OpenReleaseCandidateArtifact(sources.Rollout.Record)
 	if err != nil {
 		return workdispatch.Decision{}, err
 	}

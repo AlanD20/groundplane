@@ -32,16 +32,16 @@ type blueprintRuntimeRetention struct {
 // that exact applied-key revision without updating native applied authority.
 func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 	ctx context.Context,
-	publication BlueprintReleasePublication,
+	publication ReleaseWorkPublication,
 	task TaskRecord,
 	captured etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	sources []BlueprintRetainedRuntimeSource,
 	mixed *agentpb.ComposeArtifact,
-) (BlueprintReleasePublication, error) {
+) (ReleaseWorkPublication, error) {
 	environmentID := task.Target
 	if ctx == nil || ledger == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil || mixed == nil ||
 		mixed.OwnerId != environmentID || captured.Revision < 0 || captured.ReadRevision <= 0 || captured.ReadRevision < captured.Revision || len(sources) == 0 {
-		return BlueprintReleasePublication{}, errs.New(
+		return ReleaseWorkPublication{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint retained runtime source is invalid",
 		)
@@ -54,18 +54,18 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 	}
 	actual, found, err := ledger.GetPlanningAppliedProjection(ctx, scope)
 	if err != nil {
-		return BlueprintReleasePublication{}, err
+		return ReleaseWorkPublication{}, err
 	}
 	if found != (captured.Revision > 0) || actual.Revision != captured.Revision ||
 		!bytes.Equal(actual.Record.ComposeArtifact, captured.Record.ComposeArtifact) {
-		return BlueprintReleasePublication{}, errs.New(
+		return ReleaseWorkPublication{}, errs.New(
 			errs.KindStateConflict,
 			"Blueprint retained runtime source changed",
 		)
 	}
 	value, err := (proto.MarshalOptions{Deterministic: true}).Marshal(mixed)
 	if err != nil {
-		return BlueprintReleasePublication{}, errs.Wrap(errs.KindInternal, err)
+		return ReleaseWorkPublication{}, errs.Wrap(errs.KindInternal, err)
 	}
 	planning := make([]releasequeries.ReleasePlanningService, len(sources))
 	for index, source := range sources {
@@ -78,15 +78,15 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 		planning,
 	)
 	if err != nil {
-		return BlueprintReleasePublication{}, err
+		return ReleaseWorkPublication{}, err
 	}
 	sourceConditions, err := ledger.blueprintRuntimeSourceConditions(ctx, environmentID, captured.ReadRevision, sources)
 	if err != nil {
-		return BlueprintReleasePublication{}, err
+		return ReleaseWorkPublication{}, err
 	}
 	conditions = append(conditions, sourceConditions...)
 	if hasNative && captured.Revision == 0 {
-		return BlueprintReleasePublication{}, errs.New(
+		return ReleaseWorkPublication{}, errs.New(
 			errs.KindStateConflict,
 			"Blueprint retained serving runtime has no applied source",
 		)
@@ -101,13 +101,13 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 		conditions...)
 	if !publication.IsZero() {
 		if err := publication.validate(environmentID, task); err != nil {
-			return BlueprintReleasePublication{}, err
+			return ReleaseWorkPublication{}, err
 		}
-		fragment, err := (BlueprintReleasePublication{conditions: conditions}).withExistingComparisons(
+		fragment, err := (ReleaseWorkPublication{conditions: conditions}).withExistingComparisons(
 			publication.conditions,
 		)
 		if err != nil {
-			return BlueprintReleasePublication{}, err
+			return ReleaseWorkPublication{}, err
 		}
 		publication.conditions = append(slices.Clone(publication.conditions), fragment.conditions...)
 		if hasNative {
@@ -116,11 +116,11 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 				sourceSHA: sha256.Sum256(captured.Record.ComposeArtifact), mixedSHA: sha256.Sum256(value)}
 		}
 		if err := publication.validate(environmentID, task); err != nil {
-			return BlueprintReleasePublication{}, err
+			return ReleaseWorkPublication{}, err
 		}
 		return publication, nil
 	}
-	publication = BlueprintReleasePublication{environmentID: environmentID, operationID: task.OperationID,
+	publication = ReleaseWorkPublication{environmentID: environmentID, operationID: task.OperationID,
 		conditions: slices.Clone(conditions),
 		retained: &blueprintRuntimeRetention{
 			sourceRevision:     captured.Revision,
@@ -131,7 +131,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 			mixedSHA:           sha256.Sum256(value),
 		}}
 	if err := publication.validate(environmentID, task); err != nil {
-		return BlueprintReleasePublication{}, err
+		return ReleaseWorkPublication{}, err
 	}
 	return publication, nil
 }
@@ -176,7 +176,7 @@ func (ledger *ReleaseLedger) blueprintRuntimePlanningConditions(
 	return conditions, hasNative, nil
 }
 
-func (publication BlueprintReleasePublication) validateRetainedRuntime(
+func (publication ReleaseWorkPublication) validateRetainedRuntime(
 	task TaskRecord,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) error {

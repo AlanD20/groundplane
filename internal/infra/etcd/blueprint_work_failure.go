@@ -20,7 +20,7 @@ func (ledger *ReleaseLedger) SettleFailedBlueprintRelease(ctx context.Context, v
 	if ledger == nil || ledger.store == nil || len(authorization) == 0 {
 		return errs.New(errs.KindStateConflict, "Release failure requires authenticated execution authority")
 	}
-	sources, err := ledger.LoadBlueprintReleaseWorkInput(ctx, view.Work)
+	sources, err := ledger.LoadReleaseWorkInput(ctx, view.Work)
 	if err != nil {
 		return err
 	}

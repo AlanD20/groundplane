@@ -96,14 +96,14 @@ func (repository *EnvironmentBlueprintRepository) ReadZoneDNSActivation(
 	return ZoneDNSActivation{conditions: slices.Clone(ack.conditions)}, nil
 }
 
-func (publication BlueprintReleasePublication) WithZoneDNSActivation(
+func (publication ReleaseWorkPublication) WithZoneDNSActivation(
 	activation ZoneDNSActivation,
-) (BlueprintReleasePublication, error) {
+) (ReleaseWorkPublication, error) {
 	if len(activation.conditions) == 0 {
 		return publication, nil
 	}
 	if publication.IsZero() {
-		return BlueprintReleasePublication{}, errs.New(
+		return ReleaseWorkPublication{}, errs.New(
 			errs.KindInternal,
 			"Zone DNS activation requires a Service release publication",
 		)
@@ -112,7 +112,7 @@ func (publication BlueprintReleasePublication) WithZoneDNSActivation(
 	for _, candidate := range activation.conditions {
 		for _, existing := range conditions {
 			if existing.Key == candidate.Key && existing != candidate {
-				return BlueprintReleasePublication{}, errs.New(
+				return ReleaseWorkPublication{}, errs.New(
 					errs.KindResourceInUse,
 					"coredns activation changed while preparing the Service release",
 				)

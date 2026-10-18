@@ -30,7 +30,7 @@ func (ledger *ReleaseLedger) LoadBlueprintReleaseConfiguration(ctx context.Conte
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
 		return empty, nil, errs.New(errs.KindStateConflict, "Release configuration delivery requires an active started executor")
 	}
-	sources, err := ledger.LoadBlueprintReleaseWorkInput(ctx, view.Work)
+	sources, err := ledger.LoadReleaseWorkInput(ctx, view.Work)
 	if err != nil {
 		return empty, nil, err
 	}

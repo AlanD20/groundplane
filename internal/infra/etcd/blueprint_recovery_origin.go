@@ -25,7 +25,7 @@ func (ledger *ReleaseLedger) BlueprintRecoveryConditions(ctx context.Context, wo
 	if err != nil {
 		return nil, err
 	}
-	sources, err := ledger.LoadBlueprintReleaseWorkInput(ctx, work)
+	sources, err := ledger.LoadReleaseWorkInput(ctx, work)
 	if err != nil {
 		return nil, err
 	}

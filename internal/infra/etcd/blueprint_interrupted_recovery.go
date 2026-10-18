@@ -57,7 +57,7 @@ func (ledger *ReleaseLedger) QueueInterruptedBlueprintRecovery(ctx context.Conte
 	if progress.Record.Progress.Phase == releaseexecution.Complete {
 		return ledger.SettleInterruptedBlueprintRelease(ctx, view, input, authorization, at)
 	}
-	sources, err := ledger.LoadBlueprintReleaseWorkInput(ctx, view.Work)
+	sources, err := ledger.LoadReleaseWorkInput(ctx, view.Work)
 	if err != nil {
 		return err
 	}

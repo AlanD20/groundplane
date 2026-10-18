@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -61,7 +62,7 @@ func proxyPublicationRevision(preflight ProxyServicePreflight, change workqueue.
 		rollout := source.Rollout
 		for _, required := range []keyvalue.Condition{
 			{Key: ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, rollout.WorkItemID), ModRevision: rollout.Revision},
-			{Key: ProxyServiceNativeRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, rollout.WorkItemID), ModRevision: rollout.NativeRevision},
+			{Key: releaserender.ServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, rollout.WorkItemID), ModRevision: rollout.NativeRevision},
 		} {
 			if _, found := compared(required.Key, required.ModRevision); !found {
 				return 0, errs.New(errs.KindStateConflict, "Proxy publication must compare each staged Service rollout")

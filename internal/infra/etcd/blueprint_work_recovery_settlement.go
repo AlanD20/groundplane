@@ -34,7 +34,7 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRecovery(ctx context.Context, 
 		!workexecution.SameAssignment(input.Input.Attempt, view.Attempt.Attempt) {
 		return errs.New(errs.KindStateConflict, "Release recovery completion requires its authenticated captured attempt")
 	}
-	sources, err := ledger.LoadBlueprintReleaseWorkInput(ctx, view.Work)
+	sources, err := ledger.LoadReleaseWorkInput(ctx, view.Work)
 	if err != nil {
 		return err
 	}

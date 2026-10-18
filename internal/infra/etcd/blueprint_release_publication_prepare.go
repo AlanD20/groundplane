@@ -10,26 +10,27 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PrepareBlueprintReleasePublication seals the executed artifact, release marker,
+// PrepareReleaseWorkPublication seals the executed artifact, release marker,
 // indexes, Script checkpoints, and prepared source root into one opaque fragment.
-func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
+func (ledger *ReleaseLedger) PrepareReleaseWorkPublication(
 	ctx context.Context,
 	authority *scriptsourcepublication.Authority,
-	evidence BlueprintReleasePublicationEvidence,
-) (BlueprintReleasePublication, error) {
+	evidence ReleaseWorkPublicationEvidence,
+) (ReleaseWorkPublication, error) {
 	work, prepared := evidence.Work, evidence.PreparedInput
 	if ctx == nil || ledger == nil || ledger.store == nil || evidence.Manifest.Revision <= 0 ||
 		evidence.ServiceRollout == nil ||
 		evidence.Manifest.Record.PublicationID != evidence.ServiceRollout.Record.PublicationID ||
 		evidence.Manifest.Record.OperationID != evidence.ServiceRollout.Record.OperationID ||
-		work.Task.Task.Scope.EnvironmentID != evidence.EnvironmentID || work.Task.Task.Action != workexecution.ActionApply ||
+		work.Task.Task.Scope.EnvironmentID != evidence.EnvironmentID || !releaserender.IsReleaseAction(work.Task.Task.Action) ||
 		prepared.Item.ID != work.Item.Item.ID || prepared.Item.Input == nil || *prepared.Item.Input != prepared.Input ||
 		prepared.Item.Operation != workexecution.Release || len(prepared.Change.Mutations) == 0 ||
 		evidence.PublishedAt.IsZero() || evidence.PublishedAt.Location() != time.UTC {
-		return BlueprintReleasePublication{}, errs.New(
+		return ReleaseWorkPublication{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Release publication evidence is invalid",
 		)
@@ -37,7 +38,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	if len(evidence.Manifest.Record.Members) != 1 ||
 		evidence.Manifest.Record.Members[0].ServiceID != prepared.Item.TargetID ||
 		evidence.Manifest.Record.Members[0].ReleaseID != evidence.ServiceRollout.Record.Render.ReleaseID {
-		return BlueprintReleasePublication{}, errs.New(errs.KindValidationFailed, "Blueprint Release manifest differs from its work item")
+		return ReleaseWorkPublication{}, errs.New(errs.KindValidationFailed, "Blueprint Release manifest differs from its work item")
 	}
 	conditions := []etcdstore.Condition{
 		{
@@ -51,17 +52,17 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	conditions = append(conditions, evidence.StorageConditions...)
 	nativeConditions, err := ledger.blueprintNativePredecessorConditions(ctx, evidence)
 	if err != nil {
-		return BlueprintReleasePublication{}, err
+		return ReleaseWorkPublication{}, err
 	}
 	conditions = append(conditions, nativeConditions...)
 	primaryConditions, err := ledger.blueprintScriptPrimaryConditions(ctx, evidence.HookWork.Hooks)
 	if err != nil {
-		return BlueprintReleasePublication{}, err
+		return ReleaseWorkPublication{}, err
 	}
 	conditions = append(conditions, primaryConditions...)
 	nativeReferences, err := blueprintNativePredecessorReferences(evidence.NativePredecessors)
 	if err != nil {
-		return BlueprintReleasePublication{}, err
+		return ReleaseWorkPublication{}, err
 	}
 	publicationValue, err := releases.EncodeWorkPublication(releases.WorkPublication{
 		PublicationID:  evidence.Manifest.Record.PublicationID,
@@ -73,7 +74,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		PublishedAt:        evidence.PublishedAt,
 	})
 	if err != nil {
-		return BlueprintReleasePublication{}, err
+		return ReleaseWorkPublication{}, err
 	}
 	mutations := []etcdstore.Mutation{
 		{
@@ -90,7 +91,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		})
 		if encodeErr != nil {
 			etcdstore.ZeroMutationBytes(mutations)
-			return BlueprintReleasePublication{}, errs.Wrap(errs.KindInternal, encodeErr)
+			return ReleaseWorkPublication{}, errs.Wrap(errs.KindInternal, encodeErr)
 		}
 		serviceValue, encodeErr := json.Marshal(
 			releases.ReleaseServiceIndexValue{Schema: 1, PublicationID: evidence.Manifest.Record.PublicationID},
@@ -98,7 +99,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		if encodeErr != nil {
 			clear(environmentValue)
 			etcdstore.ZeroMutationBytes(mutations)
-			return BlueprintReleasePublication{}, errs.Wrap(errs.KindInternal, encodeErr)
+			return ReleaseWorkPublication{}, errs.Wrap(errs.KindInternal, encodeErr)
 		}
 		mutations = append(
 			mutations,
@@ -119,7 +120,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			evidence.HookWork.Task.Scope.EnvironmentID != evidence.EnvironmentID ||
 			evidence.SourcePrepared.IsZero() {
 			etcdstore.ZeroMutationBytes(mutations)
-			return BlueprintReleasePublication{}, errs.New(
+			return ReleaseWorkPublication{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint hook source publication is incomplete",
 			)
@@ -128,7 +129,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			if hook.Execution.SourceMembershipCount != evidence.SourcePrepared.MembershipCount() ||
 				hook.Execution.SourceMembershipSHA256 != evidence.SourcePrepared.MembershipSHA256() {
 				etcdstore.ZeroMutationBytes(mutations)
-				return BlueprintReleasePublication{}, errs.New(errs.KindValidationFailed, "Blueprint hook retained source membership changed")
+				return ReleaseWorkPublication{}, errs.New(errs.KindValidationFailed, "Blueprint hook retained source membership changed")
 			}
 			conditions = append(
 				conditions,
@@ -137,7 +138,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		hookChange, err := evidence.HookPrepared.Publication(evidence.HookWork)
 		if err != nil {
 			etcdstore.ZeroMutationBytes(mutations)
-			return BlueprintReleasePublication{}, err
+			return ReleaseWorkPublication{}, err
 		}
 		conditions = append(conditions, hookChange.Conditions...)
 		mutations = append(mutations, hookChange.Mutations...)
@@ -146,7 +147,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	if !evidence.SourcePrepared.IsZero() {
 		if authority == nil || len(evidence.SourceMembers) == 0 {
 			etcdstore.ZeroMutationBytes(mutations)
-			return BlueprintReleasePublication{}, errs.New(
+			return ReleaseWorkPublication{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint Script source publication is incomplete",
 			)
@@ -154,10 +155,10 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		sourceFragment, err = authority.FinalPublicationFragment(ctx, evidence.SourcePrepared)
 		if err != nil {
 			etcdstore.ZeroMutationBytes(mutations)
-			return BlueprintReleasePublication{}, err
+			return ReleaseWorkPublication{}, err
 		}
 	}
-	publication, err := newBlueprintReleasePublication(blueprintReleasePublicationInput{
+	publication, err := newReleaseWorkPublication(releaseWorkPublicationInput{
 		Work: work, Input: prepared.Input,
 		EnvironmentID: evidence.EnvironmentID, OperationID: evidence.Manifest.Record.OperationID,
 		Conditions: conditions, Mutations: mutations, SourceFragment: sourceFragment,
@@ -166,7 +167,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	etcdstore.ZeroMutationBytes(mutations)
 	if err != nil {
 		sourceFragment.Clear()
-		return BlueprintReleasePublication{}, err
+		return ReleaseWorkPublication{}, err
 	}
 	return publication, nil
 }
