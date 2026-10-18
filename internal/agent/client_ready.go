@@ -16,9 +16,9 @@ func (c *Client) sendReady(stream agentStream) error {
 	if source.Known() {
 		provenance = &agentpb.BuildProvenance{Kind: source.Kind, Commit: source.Commit}
 	}
-	clean := c.staging != nil && c.staging.ready && !c.staging.reinspect.Load()
+	stagingReady := c.staging != nil && c.staging.ready && !c.staging.reinspect.Load()
 	capacity := c.availableWorkCapacity()
-	if !clean {
+	if !stagingReady {
 		capacity = 0
 	}
 	variant := ""
@@ -28,9 +28,9 @@ func (c *Client) sendReady(stream agentStream) error {
 	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Ready{
 		Ready: &agentpb.Ready{
 			Capacity: int32(capacity), Version: version.Value,
-			Source:                provenance,
-			TerminalDeliveryClean: &clean,
-			OperatingSystem:       runtime.GOOS, Architecture: runtime.GOARCH,
+			Source:          provenance,
+			StagingReady:    &stagingReady,
+			OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH,
 			ArchitectureVariant: variant,
 		},
 	}})

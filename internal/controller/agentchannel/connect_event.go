@@ -20,7 +20,6 @@ const (
 	connectEdgeCheckExpired
 	connectEdgeCheckCommand
 	connectImageCommand
-	connectTaskAbort
 	connectLogCommand
 	connectDispatchWake
 	connectReceived
@@ -35,7 +34,6 @@ type connectEvent struct {
 	dnsCheck      *dnsCheckCommand
 	edgeCheck     *edgeCheckCommand
 	image         *imageCommand
-	abort         taskAbortCommand
 	log           logCommand
 	received      agentReceiveResult
 	frame         *assignmentPayloadFrame
@@ -92,8 +90,6 @@ func nextConnectEvent(
 		return connectEvent{kind: connectEdgeCheckCommand, edgeCheck: command}
 	case command := <-session.state.imageCommands:
 		return connectEvent{kind: connectImageCommand, image: command}
-	case abort := <-session.taskAborts():
-		return connectEvent{kind: connectTaskAbort, abort: abort}
 	case command := <-session.logMessages():
 		return connectEvent{kind: connectLogCommand, log: command}
 	case <-session.taskDispatchWake():
@@ -125,8 +121,6 @@ func nextConnectEvent(
 		return connectEvent{kind: connectEdgeCheckCommand, edgeCheck: command}
 	case command := <-session.state.imageCommands:
 		return connectEvent{kind: connectImageCommand, image: command}
-	case abort := <-session.taskAborts():
-		return connectEvent{kind: connectTaskAbort, abort: abort}
 	case command := <-session.logMessages():
 		return connectEvent{kind: connectLogCommand, log: command}
 	case <-session.taskDispatchWake():

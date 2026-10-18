@@ -39,7 +39,7 @@ func (server *Server) ConfigureBackupWork(reports BackupWorkReporter) error {
 }
 
 func (server *Server) backupWorkReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetBackupWorkCheckpointRequest() == nil && message.GetBackupWorkCompletionRequest() == nil && message.GetBackupWorkFailureRequest() == nil && message.GetBackupRecoveryRequest() == nil && message.GetBackupConfigRecoveryPrepareRequest() == nil {
+	if message.GetBackupWorkCheckpointRequest() == nil && message.GetBackupConfigRecoveryPrepareRequest() == nil {
 		return false, nil, nil
 	}
 	if server.backupWorkReports == nil {
@@ -50,50 +50,15 @@ func (server *Server) backupWorkReport(session *Session, generation uint64, mess
 		return true, nil, taskStoreStatus(err)
 	}
 	if request := message.GetBackupConfigRecoveryPrepareRequest(); request != nil {
-		assignment, err := server.backupWorkReports.PrepareConfigRecovery(session.ctx, authorization, request.Attempt, request.SourceOrdinal)
+		ack, err := server.backupWorkReports.PrepareConfigRecovery(session.ctx, authorization, request.Attempt, request.SourceOrdinal)
 		if err != nil {
 			return true, nil, taskStoreStatus(err)
 		}
-		return true, &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupConfigRecoveryPrepareAck{
-			BackupConfigRecoveryPrepareAck: assignment,
-		}}, nil
+		return true, &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupConfigRecoveryPrepareAck{BackupConfigRecoveryPrepareAck: ack}}, nil
 	}
-	if request := message.GetBackupWorkCheckpointRequest(); request != nil {
-		ack, err := server.backupWorkReports.Checkpoint(session.ctx, authorization, request)
-		if err != nil {
-			return true, nil, taskStoreStatus(err)
-		}
-		return true, &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupWorkCheckpointAck{BackupWorkCheckpointAck: ack}}, nil
-	}
-	if request := message.GetBackupWorkFailureRequest(); request != nil {
-		ack, err := server.backupWorkReports.Fail(session.ctx, authorization, request)
-		if err != nil {
-			return true, nil, taskStoreStatus(err)
-		}
-		return true, &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupWorkFailureAck{BackupWorkFailureAck: ack}}, nil
-	}
-	if request := message.GetBackupRecoveryRequest(); request != nil {
-		ack, err := server.backupWorkReports.Recover(session.ctx, authorization, request)
-		if err != nil {
-			return true, nil, taskStoreStatus(err)
-		}
-		// Only committed recovery completion retires the request-only identity.
-		// Failure reports keep it available for the same captured recovery.
-		if server.secrets != nil {
-			if err := server.secrets.ReleaseRestoreIdentity(session.ctx, ack.GetAttempt().GetTaskId()); err != nil {
-				return true, nil, taskStoreStatus(err)
-			}
-		}
-		return true, &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupRecoveryAck{BackupRecoveryAck: ack}}, nil
-	}
-	ack, err := server.backupWorkReports.Complete(session.ctx, authorization, message.GetBackupWorkCompletionRequest())
+	ack, err := server.backupWorkReports.Checkpoint(session.ctx, authorization, message.GetBackupWorkCheckpointRequest())
 	if err != nil {
 		return true, nil, taskStoreStatus(err)
 	}
-	if server.secrets != nil {
-		if err := server.secrets.ReleaseRestoreIdentity(session.ctx, ack.GetAttempt().GetTaskId()); err != nil {
-			return true, nil, taskStoreStatus(err)
-		}
-	}
-	return true, &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupWorkCompletionAck{BackupWorkCompletionAck: ack}}, nil
+	return true, &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupWorkCheckpointAck{BackupWorkCheckpointAck: ack}}, nil
 }

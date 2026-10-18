@@ -2,15 +2,35 @@ package agentchannel
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workreceipt"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// replayTerminalReport calls the same result owners as live delivery. This
+func (server *Server) terminalOperationReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
+	_, _, supported, err := workreceipt.Describe(message)
+	if !supported {
+		return false, nil, err
+	}
+	if err != nil {
+		return true, nil, taskStoreStatus(err)
+	}
+	authorization, err := server.authenticatedWorkIdentity(session.ctx, session, generation)
+	if err != nil {
+		return true, nil, taskStoreStatus(err)
+	}
+	reply, err := server.terminalReport(session.ctx, authorization, message)
+	if err != nil {
+		return true, nil, taskStoreStatus(err)
+	}
+	return true, reply, nil
+}
+
+// terminalReport is shared by live delivery and startup replay. This
 // switch is deliberately closed: no grant, hook, input or checkpoint route.
-func (server *Server) replayTerminalReport(ctx context.Context, authorization agentregistration.WorkAuthorization, message *agentpb.AgentMessage) (*agentpb.ControllerMessage, error) {
+func (server *Server) terminalReport(ctx context.Context, authorization agentregistration.WorkAuthorization, message *agentpb.AgentMessage) (*agentpb.ControllerMessage, error) {
 	switch payload := message.Payload.(type) {
 	case *agentpb.AgentMessage_ReleaseWorkCompletionRequest:
 		if server.releaseCheckpoints == nil {

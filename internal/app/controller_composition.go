@@ -77,12 +77,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	agentRuntime := channeltransport.New(
 		authority.authenticator,
 		authority.tasks,
-		execution.planResolver,
-		execution.materializationResolver,
 		execution.backupSecrets,
-		execution.scriptArtifacts,
 		dataServices.scriptCheckpoints,
-		execution.backingHookCheckpoints,
 	)
 	imageSelections := imagedelivery.SelectionResolver{Images: agentRuntime.Registry, Store: store}
 	blueprintReleases, err := blueprintrelease.NewService(

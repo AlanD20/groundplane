@@ -27,7 +27,6 @@ type sessionState struct {
 	sendFence             chan struct{}
 	sendFenced            bool
 	done                  <-chan struct{}
-	aborts                chan taskAbortCommand
 	logCommands           chan logCommand
 	offline               chan struct{}
 	offlineOnce           sync.Once
@@ -55,7 +54,7 @@ func newSessionState(
 	state := &sessionState{
 		generation: generation, fence: fence, online: true, assignmentsStopped: stopped,
 		cancel: cancel, dispatchWake: make(chan struct{}, 1), sendPermit: sendPermit,
-		sendFence: make(chan struct{}), done: ctx.Done(), aborts: make(chan taskAbortCommand),
+		sendFence: make(chan struct{}), done: ctx.Done(),
 		logCommands: make(chan logCommand), imageCommands: make(chan *imageCommand),
 		imageCounter: ids.NewImageCorrelationCounter(), offline: make(chan struct{}),
 		observationCommands:   make(chan *observationCommand),

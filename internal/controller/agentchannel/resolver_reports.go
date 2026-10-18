@@ -21,8 +21,7 @@ func (server *Server) ConfigureResolverWork(reports ResolverReporter) {
 }
 
 func (server *Server) resolverReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetResolverWorkCheckpointRequest() == nil && message.GetResolverWorkCompletionRequest() == nil &&
-		message.GetResolverWorkFailureRequest() == nil && message.GetResolverWorkRecoveryRequest() == nil {
+	if message.GetResolverWorkCheckpointRequest() == nil {
 		return false, nil, nil
 	}
 	if server.resolverReports == nil {
@@ -37,15 +36,6 @@ func (server *Server) resolverReport(session *Session, generation uint64, messag
 	case *agentpb.AgentMessage_ResolverWorkCheckpointRequest:
 		ack, reportErr := server.resolverReports.CheckpointResolver(session.ctx, identity, payload.ResolverWorkCheckpointRequest)
 		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ResolverWorkCheckpointAck{ResolverWorkCheckpointAck: ack}
-	case *agentpb.AgentMessage_ResolverWorkCompletionRequest:
-		ack, reportErr := server.resolverReports.CompleteResolver(session.ctx, identity, payload.ResolverWorkCompletionRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ResolverWorkResultAck{ResolverWorkResultAck: ack}
-	case *agentpb.AgentMessage_ResolverWorkFailureRequest:
-		ack, reportErr := server.resolverReports.FailResolver(session.ctx, identity, payload.ResolverWorkFailureRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ResolverWorkResultAck{ResolverWorkResultAck: ack}
-	case *agentpb.AgentMessage_ResolverWorkRecoveryRequest:
-		ack, reportErr := server.resolverReports.RecoverResolver(session.ctx, identity, payload.ResolverWorkRecoveryRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ResolverWorkResultAck{ResolverWorkResultAck: ack}
 	}
 	if err != nil {
 		return true, nil, taskStoreStatus(err)

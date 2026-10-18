@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log/slog"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
@@ -63,9 +62,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	if err != nil {
 		return taskStoreStatus(err)
 	}
-	delivered := make(map[string]string, authorization.Config.MaxConcurrentTasks)
 	workDelivered := make(map[string]string, authorization.Config.MaxConcurrentTasks)
-	quarantined := make(map[string]string, authorization.Config.MaxConcurrentTasks)
 
 	config := proto.Clone(authorization.Config).(*agentpb.AgentConfig)
 	if err := stream.Send(&agentpb.ControllerMessage{
@@ -169,27 +166,6 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			}}); err != nil {
 				return err
 			}
-		case connectTaskAbort:
-			abort := event.abort
-			message, resolveErr := s.taskAbortMessage(
-				stream.Context(),
-				authenticate.AgentId,
-				authorization.Generation,
-				abort,
-			)
-			if resolveErr != nil {
-				abort.result <- resolveErr
-				continue
-			}
-			sendErr := stream.Send(&agentpb.ControllerMessage{
-				Payload: &agentpb.ControllerMessage_TaskAbort{TaskAbort: message},
-			})
-			if sendErr != nil {
-				abort.result <- errs.New(errs.KindStorageUnavailable, "Agent Task abort delivery failed")
-				return sendErr
-			}
-			abort.result <- nil
-			payloads.stop(abort.assignmentID)
 		case connectLogCommand:
 			command := event.log
 			if err := stream.Send(command.message); err != nil {
@@ -279,12 +255,6 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
-			if handled, err := s.handleTaskTerminalDelivery(stream, session, authenticate.AgentId, authorization.Generation, result.message, delivered, quarantined); handled {
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				continue
-			}
 			if result.message.GetWorkloadImageResolutionResult() != nil {
 				session.acceptImageResult(result.message)
 				continue
@@ -355,9 +325,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if !journalReplayComplete {
 					return status.Error(codes.FailedPrecondition, "startup result replay must complete before Ready")
 				}
-				if executionplan.RejectUnknown(ready) != nil || ready.TerminalDeliveryClean == nil ||
-					(!ready.GetTerminalDeliveryClean() && ready.Capacity != 0) {
-					return status.Error(codes.InvalidArgument, "agent Ready terminal delivery state is invalid")
+				if executionplan.RejectUnknown(ready) != nil || ready.StagingReady == nil ||
+					(!ready.GetStagingReady() && ready.Capacity != 0) {
+					return status.Error(codes.InvalidArgument, "agent Ready staging state is invalid")
 				}
 				if err := validateReady(ready.Capacity, ready.Version); err != nil {
 					return status.Error(codes.InvalidArgument, "agent Ready is invalid")
@@ -373,7 +343,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					)
 				}
 				if !staging.ready {
-					if ready.Capacity != 0 || ready.GetTerminalDeliveryClean() {
+					if ready.Capacity != 0 || ready.GetStagingReady() {
 						return status.Error(codes.FailedPrecondition, "Agent startup staging is not reconciled")
 					}
 					continue
@@ -429,92 +399,6 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
-			if acknowledgement := result.message.GetTaskAck(); acknowledgement != nil {
-				if s.tasks == nil {
-					return status.Error(codes.Internal, "agent task store is not configured")
-				}
-				stage, err := s.acknowledge(
-					stream.Context(),
-					authenticate.AgentId,
-					authorization.Generation,
-					acknowledgement,
-				)
-				if err != nil {
-					if kind, _ := errs.KindOf(err); kind == errs.KindStateConflict &&
-						acknowledgement.GetBackupResult() != nil {
-						handled, deliveryErr := s.sendRejectedBackupTaskTerminal(
-							stream,
-							session,
-							authenticate.AgentId,
-							authorization.Generation,
-							acknowledgement,
-						)
-						if deliveryErr != nil {
-							return taskStoreStatus(deliveryErr)
-						}
-						if handled {
-							payloads.stop(acknowledgement.AssignmentId)
-							continue
-						}
-					}
-					if quarantineTaskReportConflict(stage, err, acknowledgement, delivered, quarantined) {
-						slog.Warn(
-							"controller: quarantine rejected Agent Task report",
-							slog.String("task_id", acknowledgement.TaskId),
-							slog.String("assignment_id", acknowledgement.AssignmentId),
-							slog.Any("error", err),
-						)
-						continue
-					}
-					slog.Error(
-						"controller: acknowledge Agent Task",
-						slog.String("task_id", acknowledgement.TaskId),
-						slog.String("assignment_id", acknowledgement.AssignmentId),
-						slog.Any("error", err),
-					)
-					return taskStoreStatus(err)
-				}
-				if acknowledgement.GetBackupResult() != nil {
-					payloads.stop(acknowledgement.AssignmentId)
-					if err := s.sendTaskTerminalReceipt(stream, session, authenticate.AgentId, authorization.Generation, acknowledgement, false); err != nil {
-						return taskStoreStatus(err)
-					}
-					continue
-				}
-				if err := session.RecordTaskTerminal(
-					acknowledgement.TaskId, acknowledgement.AssignmentId,
-				); err != nil {
-					return status.Error(codes.FailedPrecondition, "agent session is not current")
-				}
-				payloads.stop(acknowledgement.AssignmentId)
-				delete(delivered, acknowledgement.TaskId)
-				delete(quarantined, acknowledgement.TaskId)
-				continue
-			}
-			if event := result.message.GetTaskEvent(); event != nil {
-				if s.tasks == nil {
-					return status.Error(codes.Internal, "agent task store is not configured")
-				}
-				acknowledgement, err := s.recordTaskEvent(
-					stream.Context(), authenticate.AgentId, authorization.Generation, event,
-				)
-				if err != nil {
-					slog.Error(
-						"controller: record Agent Task event",
-						slog.String("task_id", event.TaskId),
-						slog.String("assignment_id", event.AssignmentId),
-						slog.String("step_id", event.StepId),
-						slog.Any("error", err),
-					)
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{
-					Payload: &agentpb.ControllerMessage_TaskEventAck{TaskEventAck: acknowledgement},
-				}); err != nil {
-					return err
-				}
-				continue
-			}
 
 			if request := result.message.GetWorkStartRequest(); request != nil {
 				ack, err := s.startWork(session.ctx, session, authorization.Generation, request)
@@ -529,78 +413,11 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
-			if request := result.message.GetScriptWorkFailureRequest(); request != nil {
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+			if handled, reply, err := s.terminalOperationReport(session, authorization.Generation, result.message); handled {
 				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.scriptCompletion.FailScript(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ScriptWorkFailureAck{ScriptWorkFailureAck: ack}}); err != nil {
 					return err
 				}
-				continue
-			}
-			if request := result.message.GetScriptRecoveryCompletionRequest(); request != nil {
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.scriptCompletion.CompleteScriptRecovery(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ScriptRecoveryCompletionAck{ScriptRecoveryCompletionAck: ack}}); err != nil {
-					return err
-				}
-				continue
-			}
-			if request := result.message.GetScriptWorkCompletionRequest(); request != nil {
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.scriptCompletion.CompleteScript(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ScriptWorkCompletionAck{ScriptWorkCompletionAck: ack}}); err != nil {
-					return err
-				}
-				continue
-			}
-			if request := result.message.GetReleaseWorkCompletionRequest(); request != nil {
-				if s.releaseCheckpoints == nil {
-					return status.Error(codes.Internal, "Release completion service is not configured")
-				}
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.releaseCheckpoints.CompleteRelease(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseWorkCompletionAck{ReleaseWorkCompletionAck: ack}}); err != nil {
-					return err
-				}
-				continue
-			}
-			if request := result.message.GetReleaseWorkFailureRequest(); request != nil {
-				if s.releaseCheckpoints == nil {
-					return status.Error(codes.Internal, "Release failure service is not configured")
-				}
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.releaseCheckpoints.FailRelease(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseWorkFailureAck{ReleaseWorkFailureAck: ack}}); err != nil {
+				if err := stream.Send(reply); err != nil {
 					return err
 				}
 				continue
@@ -654,40 +471,6 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					return taskStoreStatus(err)
 				}
 				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_EnvironmentRemovalCheckpointAck{EnvironmentRemovalCheckpointAck: ack}}); err != nil {
-					return err
-				}
-				continue
-			}
-			if request := result.message.GetEnvironmentRemovalFailureRequest(); request != nil {
-				if s.hierarchyReports == nil {
-					return status.Error(codes.Internal, "Environment removal reporting is not configured")
-				}
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.hierarchyReports.FailEnvironmentRemoval(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_EnvironmentRemovalFailureAck{EnvironmentRemovalFailureAck: ack}}); err != nil {
-					return err
-				}
-				continue
-			}
-			if request := result.message.GetEnvironmentRemovalCompletionRequest(); request != nil {
-				if s.hierarchyReports == nil {
-					return status.Error(codes.Internal, "Environment removal reporting is not configured")
-				}
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.hierarchyReports.CompleteEnvironmentRemoval(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_EnvironmentRemovalCompletionAck{EnvironmentRemovalCompletionAck: ack}}); err != nil {
 					return err
 				}
 				continue
@@ -793,46 +576,6 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					return taskStoreStatus(err)
 				}
 				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ScriptWorkCheckpointAck{ScriptWorkCheckpointAck: ack}}); err != nil {
-					return err
-				}
-				continue
-			}
-			if request := result.message.GetScriptCheckpointRequest(); request != nil {
-				if s.scriptCheckpoints == nil {
-					return status.Error(codes.Internal, "Script checkpoint service is not configured")
-				}
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				acknowledgement, err := s.scriptCheckpoints.CheckpointScript(
-					session.ctx, identity, request,
-				)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{
-					Payload: &agentpb.ControllerMessage_ScriptCheckpointAck{ScriptCheckpointAck: acknowledgement},
-				}); err != nil {
-					return err
-				}
-				continue
-			}
-			if request := result.message.GetBackingHookCheckpointRequest(); request != nil {
-				if s.backingHookCheckpoints == nil {
-					return status.Error(codes.Internal, "Backing hook checkpoint service is not configured")
-				}
-				acknowledgement, err := s.backingHookCheckpoints.CheckpointBackingHook(
-					stream.Context(), authenticate.AgentId, authorization.Generation, request,
-				)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{
-					Payload: &agentpb.ControllerMessage_BackingHookCheckpointAck{
-						BackingHookCheckpointAck: acknowledgement,
-					},
-				}); err != nil {
 					return err
 				}
 				continue

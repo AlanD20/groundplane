@@ -2,12 +2,7 @@ package agentchannel
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"io"
-	"time"
 )
 
 const tokenSize = 32
@@ -28,68 +23,7 @@ type Authenticator interface {
 	Configuration(context.Context, string, uint64) (*agentpb.AgentConfig, error)
 }
 
-// TaskStore is the durable execution seam used by one authenticated stream.
-// Its etcd DTOs remain inside the Controller daemon and never cross the human
-// API boundary.
-type TaskStore interface {
-	ListAgentAssignments(context.Context, string, uint64, int32) ([]etcd.TaskAssignment, error)
-	ReconnectAgentAssignment(context.Context, etcd.TaskAssignment) (etcd.TaskAssignment, error)
-	ClaimNextTask(context.Context, string, uint64, time.Time, int32) (etcd.TaskAssignment, bool, error)
-	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
-	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
-	AppendTaskEvent(context.Context, taskjournal.TaskEventInput, time.Time) (etcd.TaskEventAppend, error)
-	AcknowledgeTask(
-		context.Context,
-		string,
-		uint64,
-		string,
-		string,
-		taskjournal.TaskStatus,
-		taskjournal.TaskResultRecord,
-		time.Time,
-	) (etcdstore.Versioned[etcd.TaskRecord], error)
-}
-
-// PlanResolver deterministically rebuilds one Task's ephemeral execution plan
-// from retained etcd inputs. Rendered artifacts are never persisted.
-type PlanResolver interface {
-	ResolveExecutionPlan(context.Context, etcd.TaskRecord) (*agentpb.ExecutionPlan, error)
-}
-
-type ScriptArtifactResolver interface {
-	ResolveScriptAssignmentArtifacts(
-		context.Context,
-		etcd.TaskRecord,
-		*agentpb.ExecutionPlan,
-	) (*agentpb.ScriptAssignmentArtifacts, error)
-	ResolveScriptExecutionCheckpoints(
-		context.Context,
-		etcd.TaskRecord,
-		*agentpb.ExecutionPlan,
-	) ([]*agentpb.ScriptExecutionCheckpoint, error)
-}
-
-// MaterializationResolver returns one task-owned transient plaintext source.
-// The channel takes ownership and closes it on every path.
-type MaterializationResolver interface {
-	ResolveMaterialization(
-		context.Context,
-		etcd.TaskRecord,
-		*agentpb.ExecutionPlan,
-		*agentpb.ExecutionStep,
-	) (io.ReadCloser, error)
-}
-
 // RestoreIdentityReleaser clears Task-owned transient restore identities.
 type RestoreIdentityReleaser interface {
 	ReleaseRestoreIdentity(context.Context, string) error
-}
-
-type BackingHookCheckpointer interface {
-	CheckpointBackingHook(
-		context.Context,
-		string,
-		uint64,
-		*agentpb.BackingHookCheckpointRequest,
-	) (*agentpb.BackingHookCheckpointAck, error)
 }

@@ -29,7 +29,6 @@ type assignmentPayloadDelivery struct {
 	failures       chan error
 	limit          int
 	mu             sync.Mutex
-	active         map[string]*assignmentPayloadProducer
 	backupPayloads map[string]*backupPayloadProducer
 	workers        sync.WaitGroup
 }
@@ -38,19 +37,7 @@ func newAssignmentPayloadDelivery(ctx context.Context, limit int32) *assignmentP
 	owned, cancel := context.WithCancel(ctx)
 	return &assignmentPayloadDelivery{ctx: owned, cancel: cancel,
 		frames: make(chan *assignmentPayloadFrame, int(limit)), failures: make(chan error, 1),
-		limit: int(limit), active: make(map[string]*assignmentPayloadProducer), backupPayloads: make(map[string]*backupPayloadProducer)}
-}
-
-type assignmentPayloadProducer struct {
-	cancel context.CancelFunc
-}
-
-func (delivery *assignmentPayloadDelivery) stop(assignmentID string) {
-	delivery.mu.Lock()
-	defer delivery.mu.Unlock()
-	if producer := delivery.active[assignmentID]; producer != nil {
-		producer.cancel()
-	}
+		limit: int(limit), backupPayloads: make(map[string]*backupPayloadProducer)}
 }
 
 func (delivery *assignmentPayloadDelivery) acceptConfigCredit(credit *agentpb.BackupConfigCredit) error {
@@ -128,7 +115,7 @@ func (delivery *assignmentPayloadDelivery) volumeProducerLocked(transferID strin
 func (delivery *assignmentPayloadDelivery) resize(limit int32) bool {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
-	if len(delivery.active)+len(delivery.backupPayloads) != 0 {
+	if len(delivery.backupPayloads) != 0 {
 		return false
 	}
 	delivery.limit = int(limit)
@@ -197,14 +184,6 @@ func (stream *assignmentPayloadStream) Send(message *agentpb.ControllerMessage) 
 }
 
 func clearAssignmentPayloadFrame(message *agentpb.ControllerMessage) {
-	if chunk := message.GetMaterializationTransfer().GetChunk(); chunk != nil {
-		clear(chunk.Content)
-		chunk.Content = nil
-	}
-	if chunk := message.GetManagedConfigTransfer().GetChunk(); chunk != nil {
-		clear(chunk.Content)
-		chunk.Content = nil
-	}
 	if chunk := message.GetBackupConfigTransfer().GetValueChunk(); chunk != nil {
 		clear(chunk.Content)
 		chunk.Content = nil

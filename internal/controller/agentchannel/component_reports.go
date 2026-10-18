@@ -24,9 +24,7 @@ func (server *Server) ConfigureComponentWork(reports ComponentReporter) {
 }
 
 func (server *Server) componentReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetComponentWorkCheckpointRequest() == nil && message.GetComponentWorkCompletionRequest() == nil &&
-		message.GetComponentWorkFailureRequest() == nil && message.GetComponentWorkRecoveryReportRequest() == nil &&
-		message.GetComponentConfigurationRequest() == nil && message.GetComponentConfigurationFileRequest() == nil {
+	if message.GetComponentConfigurationRequest() == nil && message.GetComponentConfigurationFileRequest() == nil && message.GetComponentWorkCheckpointRequest() == nil {
 		return false, nil, nil
 	}
 	if server.componentReports == nil {
@@ -47,15 +45,6 @@ func (server *Server) componentReport(session *Session, generation uint64, messa
 	case *agentpb.AgentMessage_ComponentWorkCheckpointRequest:
 		ack, reportErr := server.componentReports.CheckpointComponent(session.ctx, identity, payload.ComponentWorkCheckpointRequest)
 		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ComponentWorkCheckpointAck{ComponentWorkCheckpointAck: ack}
-	case *agentpb.AgentMessage_ComponentWorkCompletionRequest:
-		ack, reportErr := server.componentReports.CompleteComponent(session.ctx, identity, payload.ComponentWorkCompletionRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ComponentWorkCompletionAck{ComponentWorkCompletionAck: ack}
-	case *agentpb.AgentMessage_ComponentWorkFailureRequest:
-		ack, reportErr := server.componentReports.FailComponent(session.ctx, identity, payload.ComponentWorkFailureRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ComponentWorkFailureAck{ComponentWorkFailureAck: ack}
-	case *agentpb.AgentMessage_ComponentWorkRecoveryReportRequest:
-		ack, reportErr := server.componentReports.RecoverComponent(session.ctx, identity, payload.ComponentWorkRecoveryReportRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ComponentWorkRecoveryReportAck{ComponentWorkRecoveryReportAck: ack}
 	}
 	if err != nil {
 		componentexecution.ClearConfigurationDelivery(reply.GetComponentConfigurationFileDelivery())

@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-const (
-	maximumTaskAbortReasonBytes = 128
-)
-
 // Snapshot is the non-secret, point-in-time state of an Agent session.
 type Snapshot struct {
 	Generation         uint64
@@ -33,7 +29,6 @@ type Registry struct {
 	agents           map[string]*sessionState
 	lifecycle        map[string]*lifecycleFence
 	ready            map[readyKey]map[uint64]*readySubscription
-	terminals        map[taskTerminalKey]map[uint64]*taskTerminalSubscription
 	logs             map[string]*LogSubscription
 }
 
@@ -42,13 +37,6 @@ type lifecycleFence struct {
 	revokedThrough  uint64
 	pauses          map[*assignmentPause]struct{}
 	preparations    map[*assignmentPreparation]struct{}
-}
-
-type taskAbortCommand struct {
-	taskID       string
-	assignmentID string
-	reason       string
-	result       chan error
 }
 
 type logCommand struct {
@@ -63,18 +51,6 @@ type readyKey struct {
 
 type readySubscription struct {
 	signal chan struct{}
-	stop   func() bool
-}
-
-type taskTerminalKey struct {
-	agentID      string
-	generation   uint64
-	taskID       string
-	assignmentID string
-}
-
-type taskTerminalSubscription struct {
-	result chan error
 	stop   func() bool
 }
 
@@ -93,7 +69,6 @@ func NewRegistry() *Registry {
 		agents:    make(map[string]*sessionState),
 		lifecycle: make(map[string]*lifecycleFence),
 		ready:     make(map[readyKey]map[uint64]*readySubscription),
-		terminals: make(map[taskTerminalKey]map[uint64]*taskTerminalSubscription),
 		logs:      make(map[string]*LogSubscription),
 	}
 }
@@ -223,18 +198,8 @@ func (s *Session) Close() {
 			s.state.assignmentsStopped = true
 			s.state.fenceAssignmentSendsLocked()
 			s.state.online = false
-			s.registry.failTaskTerminalsLocked(
-				s.agentID,
-				s.state.generation,
-				errs.New(errs.KindStateConflict, "Agent session ended before Task terminal acknowledgement"),
-			)
 			s.registry.failLogsLocked(s.state, errs.New(errs.KindStorageUnavailable, "Agent log session ended"))
 		} else {
-			s.registry.failTaskTerminalsLocked(
-				s.agentID,
-				s.state.generation,
-				errs.New(errs.KindStateConflict, "Agent session ended before Task terminal acknowledgement"),
-			)
 			s.registry.failLogsLocked(s.state, errs.New(errs.KindStorageUnavailable, "Agent log session ended"))
 		}
 		s.registry.mu.Unlock()

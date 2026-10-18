@@ -19,8 +19,7 @@ type NetworkReporter interface {
 func (server *Server) ConfigureNetworkWork(reports NetworkReporter) { server.networkReports = reports }
 
 func (server *Server) networkReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetNetworkWorkCheckpointRequest() == nil && message.GetNetworkWorkCompletionRequest() == nil &&
-		message.GetNetworkWorkFailureRequest() == nil && message.GetNetworkWorkRecoveryReportRequest() == nil {
+	if message.GetNetworkWorkCheckpointRequest() == nil {
 		return false, nil, nil
 	}
 	if server.networkReports == nil {
@@ -35,15 +34,6 @@ func (server *Server) networkReport(session *Session, generation uint64, message
 	case *agentpb.AgentMessage_NetworkWorkCheckpointRequest:
 		ack, reportErr := server.networkReports.CheckpointNetwork(session.ctx, identity, payload.NetworkWorkCheckpointRequest)
 		err, reply.Payload = reportErr, &agentpb.ControllerMessage_NetworkWorkCheckpointAck{NetworkWorkCheckpointAck: ack}
-	case *agentpb.AgentMessage_NetworkWorkCompletionRequest:
-		ack, reportErr := server.networkReports.CompleteNetwork(session.ctx, identity, payload.NetworkWorkCompletionRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_NetworkWorkCompletionAck{NetworkWorkCompletionAck: ack}
-	case *agentpb.AgentMessage_NetworkWorkFailureRequest:
-		ack, reportErr := server.networkReports.FailNetwork(session.ctx, identity, payload.NetworkWorkFailureRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_NetworkWorkFailureAck{NetworkWorkFailureAck: ack}
-	case *agentpb.AgentMessage_NetworkWorkRecoveryReportRequest:
-		ack, reportErr := server.networkReports.RecoverNetwork(session.ctx, identity, payload.NetworkWorkRecoveryReportRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_NetworkWorkRecoveryReportAck{NetworkWorkRecoveryReportAck: ack}
 	}
 	if err != nil {
 		return true, nil, taskStoreStatus(err)

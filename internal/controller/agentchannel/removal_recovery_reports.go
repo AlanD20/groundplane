@@ -22,7 +22,7 @@ func (server *Server) ConfigureServiceRemovalRecovery(reports RemovalRecoveryRep
 }
 
 func (server *Server) removalRecoveryReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetServiceRemovalRecoveryCheckpointRequest() == nil && message.GetServiceRemovalRecoveryCompletionRequest() == nil && message.GetServiceRemovalRecoveryFailureRequest() == nil && message.GetServiceRemovalConfigurationRequest() == nil && message.GetServiceRemovalConfigurationFileRequest() == nil {
+	if message.GetServiceRemovalConfigurationRequest() == nil && message.GetServiceRemovalConfigurationFileRequest() == nil && message.GetServiceRemovalRecoveryCheckpointRequest() == nil {
 		return false, nil, nil
 	}
 	if server.removalRecoveryReports == nil {
@@ -43,12 +43,6 @@ func (server *Server) removalRecoveryReport(session *Session, generation uint64,
 	case *agentpb.AgentMessage_ServiceRemovalRecoveryCheckpointRequest:
 		ack, reportErr := server.removalRecoveryReports.CheckpointRemovalRecovery(session.ctx, identity, payload.ServiceRemovalRecoveryCheckpointRequest)
 		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ServiceRemovalRecoveryCheckpointAck{ServiceRemovalRecoveryCheckpointAck: ack}
-	case *agentpb.AgentMessage_ServiceRemovalRecoveryCompletionRequest:
-		ack, reportErr := server.removalRecoveryReports.CompleteRemovalRecovery(session.ctx, identity, payload.ServiceRemovalRecoveryCompletionRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ServiceRemovalRecoveryCompletionAck{ServiceRemovalRecoveryCompletionAck: ack}
-	case *agentpb.AgentMessage_ServiceRemovalRecoveryFailureRequest:
-		ack, reportErr := server.removalRecoveryReports.FailRemovalRecovery(session.ctx, identity, payload.ServiceRemovalRecoveryFailureRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ServiceRemovalRecoveryFailureAck{ServiceRemovalRecoveryFailureAck: ack}
 	}
 	if err != nil {
 		if delivery := reply.GetServiceRemovalConfigurationFileDelivery(); delivery != nil {

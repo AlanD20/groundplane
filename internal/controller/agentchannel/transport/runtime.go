@@ -49,13 +49,9 @@ type agentChannelGRPCServer interface {
 
 func New(
 	authenticator agentchannel.Authenticator,
-	tasks agentchannel.TaskStore,
-	plans agentchannel.PlanResolver,
-	materials agentchannel.MaterializationResolver,
+	staging agentchannel.BackupStagingStore,
 	secrets agentchannel.RestoreIdentityReleaser,
-	scripts agentchannel.ScriptArtifactResolver,
 	scriptCheckpoints agentchannel.ScriptCheckpointer,
-	backingHookCheckpoints agentchannel.BackingHookCheckpointer,
 ) *Runtime {
 	runtime := &Runtime{Registry: agentchannel.NewRegistry(), listen: agentlistener.Listen}
 	runtime.newServer = func(registry *agentchannel.Registry) (agentChannelGRPCServer, error) {
@@ -63,16 +59,7 @@ func New(
 			grpc.MaxRecvMsgSize(agentChannelControllerMaximumReceiveMessageBytes),
 			grpc.MaxSendMsgSize(agentChannelControllerMaximumSendMessageBytes),
 		)
-		channel := agentchannel.NewWithScriptRuntimeServices(
-			authenticator, registry, tasks, plans, materials, secrets,
-			scripts, scriptCheckpoints,
-		)
-		if backingHookCheckpoints != nil {
-			if err := channel.EnableBackingHookCheckpoints(backingHookCheckpoints); err != nil {
-				server.Stop()
-				return nil, err
-			}
-		}
+		channel := agentchannel.New(authenticator, registry, staging, secrets, scriptCheckpoints)
 		if err := channel.ConfigureWorkExecution(runtime.workIdentities, runtime.workStarts, runtime.workCheckpoints, runtime.scriptCompletion, runtime.hierarchyReports, runtime.workDispatch); err != nil {
 			server.Stop()
 			return nil, err

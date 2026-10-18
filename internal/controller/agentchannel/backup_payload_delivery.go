@@ -69,7 +69,7 @@ func (delivery *assignmentPayloadDelivery) launchBackupPayloads(stream agentpb.A
 	producer := &backupPayloadProducer{attempt: attempt, exchange: exchange, configs: configs, start: make(chan struct{}), cancel: cancel}
 	id := attempt.AttemptId
 	delivery.mu.Lock()
-	if delivery.ctx.Err() != nil || delivery.backupPayloads[id] != nil || len(delivery.active)+len(delivery.backupPayloads) >= delivery.limit {
+	if delivery.ctx.Err() != nil || delivery.backupPayloads[id] != nil || len(delivery.backupPayloads) >= delivery.limit {
 		delivery.mu.Unlock()
 		cancel()
 		closeTransfers()

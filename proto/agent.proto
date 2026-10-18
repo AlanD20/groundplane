@@ -980,20 +980,16 @@ message AgentLabel {
 // ---- Agent -> Controller ----
 
 message AgentMessage {
-  reserved 6, 12;
+  reserved 3, 5, 6, 10, 12, 14, 38, 39;
   oneof payload {
     Authenticate authenticate = 1; // mandatory first message; no config or work is served before it succeeds
     Ready ready = 2;               // idle Ready IS the heartbeat; authoritative for dead-agent detection
-    TaskEvent task_event = 3;      // step progress + streamed output
     ObservedState observed_state = 4; // drift-detection feed for reconciliation
-    TaskAck task_ack = 5;          // completed / failed
     LogEvent log_event = 7;
     LogEnd log_end = 8;
     LogReady log_ready = 9;
-    ScriptCheckpointRequest script_checkpoint_request = 10;
     WorkloadImageResolutionResult workload_image_resolution_result = 11;
     ServiceObservationResult service_observation_result = 13;
-    BackingHookCheckpointRequest backing_hook_checkpoint_request = 14;
     BackingAccessResult backing_access_result = 15;
     DNSConnectionResult dns_connection_result = 16;
     EdgeConnectionResult edge_connection_result = 17;
@@ -1003,8 +999,6 @@ message AgentMessage {
     BackupStagingRecoveryAck backup_staging_recovery_ack = 35;
     BackupVolumeManifestTransfer backup_volume_manifest_transfer = 36;
     BackupVolumeManifestAckCredit backup_volume_manifest_ack_credit = 37;
-    TaskTerminalReceiptApplied task_terminal_receipt_applied = 38;
-    TaskTerminalAssignmentRetired task_terminal_assignment_retired = 39;
     WorkStartRequest work_start_request = 40;
     ReleaseWorkCheckpointRequest release_work_checkpoint_request = 41;
     ReleaseHookRequest release_hook_request = 42;
@@ -1088,7 +1082,7 @@ message Ready {
   string operating_system = 3;
   string architecture = 4;
   string architecture_variant = 5;
-  optional bool terminal_delivery_clean = 6; // presence required, including false
+  optional bool staging_ready = 6; // native Backup staging has completed startup reconciliation
   BuildProvenance source = 7; // exact immutable binary build provenance, when recorded
 }
 
@@ -1525,27 +1519,20 @@ enum TaskTerminal {
 // ---- Controller -> Agent ----
 
 message ControllerMessage {
-  reserved 6, 7, 13;
+  reserved 1, 2, 5, 6, 7, 10, 11, 13, 16, 22, 37, 38, 40;
   oneof payload {
-    TaskAssignment task_assignment = 1; // the full procedure: steps, params, timeout
-    TaskAbort task_abort = 2;           // cancel in-flight work NOW
     ConfigUpdate config_update = 3;     // delivered at the first fully idle Ready; applied without process restart
     Shutdown shutdown = 4;
-    MaterializationTransfer materialization_transfer = 5; // transient bytes; never durable Task or plan state
     LogSubscribe log_subscribe = 8;
     LogCancel log_cancel = 9;
-    ManagedConfigTransfer managed_config_transfer = 10;
-    ScriptCheckpointAck script_checkpoint_ack = 11;
     ResolveWorkloadImages resolve_workload_images = 12;
     ObserveServices observe_services = 14;
     CancelServiceObservation cancel_service_observation = 15;
-    BackingHookCheckpointAck backing_hook_checkpoint_ack = 16;
     LogCredit log_credit = 17;
     CheckBackingAccess check_backing_access = 18;
     CancelBackingAccess cancel_backing_access = 19;
     CheckDNSConnections check_dns_connections = 20;
     CancelDNSConnections cancel_dns_connections = 21;
-    TaskEventAck task_event_ack = 22;
     CheckEdgeConnections check_edge_connections = 23;
     CancelEdgeConnections cancel_edge_connections = 24;
     BackupConfigTransfer backup_config_transfer = 32;
@@ -1553,10 +1540,7 @@ message ControllerMessage {
     BackupStagingRecoveryPlan backup_staging_recovery_plan = 34;
     BackupVolumeManifestTransfer backup_volume_manifest_transfer = 35;
     BackupVolumeManifestAckCredit backup_volume_manifest_ack_credit = 36;
-    TaskTerminalReceiptAck task_terminal_receipt_ack = 37;
-    TaskTerminalReceiptAppliedAck task_terminal_receipt_applied_ack = 38;
     BackupStagingRecoveryAckReceipt backup_staging_recovery_ack_receipt = 39;
-    TaskTerminalAssignmentRetiredAck task_terminal_assignment_retired_ack = 40;
     WorkStartAck work_start_ack = 41;
     ReleaseWorkAssignment release_work_assignment = 42;
     ReleaseWorkCheckpointAck release_work_checkpoint_ack = 43;

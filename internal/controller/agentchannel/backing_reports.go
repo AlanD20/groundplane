@@ -25,9 +25,7 @@ func (server *Server) ConfigureBackingWork(reports BackingReporter) {
 }
 
 func (server *Server) backingReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetBackingProvisionCheckpointRequest() == nil && message.GetBackingProvisionCompletionRequest() == nil &&
-		message.GetBackingProvisionFailureRequest() == nil && message.GetBackingProvisionRecoveryRequest() == nil &&
-		message.GetBackingProvisionConfigurationRequest() == nil && message.GetBackingProvisionFileRequest() == nil && message.GetBackingProvisionHookRequest() == nil {
+	if message.GetBackingProvisionCheckpointRequest() == nil && message.GetBackingProvisionConfigurationRequest() == nil && message.GetBackingProvisionFileRequest() == nil && message.GetBackingProvisionHookRequest() == nil {
 		return false, nil, nil
 	}
 	if server.backingReports == nil {
@@ -42,15 +40,6 @@ func (server *Server) backingReport(session *Session, generation uint64, message
 	case *agentpb.AgentMessage_BackingProvisionCheckpointRequest:
 		ack, reportErr := server.backingReports.CheckpointBackingProvision(session.ctx, identity, payload.BackingProvisionCheckpointRequest)
 		err, reply.Payload = reportErr, &agentpb.ControllerMessage_BackingProvisionCheckpointAck{BackingProvisionCheckpointAck: ack}
-	case *agentpb.AgentMessage_BackingProvisionCompletionRequest:
-		ack, reportErr := server.backingReports.CompleteBackingProvision(session.ctx, identity, payload.BackingProvisionCompletionRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_BackingProvisionCompletionAck{BackingProvisionCompletionAck: ack}
-	case *agentpb.AgentMessage_BackingProvisionFailureRequest:
-		ack, reportErr := server.backingReports.FailBackingProvision(session.ctx, identity, payload.BackingProvisionFailureRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_BackingProvisionFailureAck{BackingProvisionFailureAck: ack}
-	case *agentpb.AgentMessage_BackingProvisionRecoveryRequest:
-		ack, reportErr := server.backingReports.RecoverBackingProvision(session.ctx, identity, payload.BackingProvisionRecoveryRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_BackingProvisionRecoveryAck{BackingProvisionRecoveryAck: ack}
 	case *agentpb.AgentMessage_BackingProvisionConfigurationRequest:
 		manifest, loadErr := server.backingReports.LoadBackingProvisionConfiguration(session.ctx, identity, payload.BackingProvisionConfigurationRequest)
 		err, reply.Payload = loadErr, &agentpb.ControllerMessage_BackingProvisionConfigurationManifest{BackingProvisionConfigurationManifest: manifest}

@@ -34,8 +34,7 @@ func clearLifecycleHookReply(message *agentpb.ControllerMessage) {
 }
 
 func (server *Server) lifecycleReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetServiceLifecycleCheckpointRequest() == nil && message.GetServiceLifecycleCompletionRequest() == nil &&
-		message.GetServiceLifecycleFailureRequest() == nil && message.GetServiceLifecycleHookRequest() == nil && message.GetServiceLifecycleRecoveryReportRequest() == nil {
+	if message.GetServiceLifecycleHookRequest() == nil && message.GetServiceLifecycleCheckpointRequest() == nil {
 		return false, nil, nil
 	}
 	if server.lifecycleReports == nil {
@@ -47,22 +46,12 @@ func (server *Server) lifecycleReport(session *Session, generation uint64, messa
 	}
 	reply := &agentpb.ControllerMessage{}
 	switch payload := message.Payload.(type) {
-	case *agentpb.AgentMessage_ServiceLifecycleRecoveryReportRequest:
-		ack, reportErr := server.lifecycleReports.RecoverLifecycle(session.ctx, identity, payload.ServiceLifecycleRecoveryReportRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ServiceLifecycleRecoveryReportAck{ServiceLifecycleRecoveryReportAck: ack}
 	case *agentpb.AgentMessage_ServiceLifecycleHookRequest:
 		ack, reportErr := server.lifecycleReports.DeliverLifecycleHook(session.ctx, identity, payload.ServiceLifecycleHookRequest)
 		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ServiceLifecycleHookDelivery{ServiceLifecycleHookDelivery: ack}
 	case *agentpb.AgentMessage_ServiceLifecycleCheckpointRequest:
 		ack, reportErr := server.lifecycleReports.CheckpointLifecycle(session.ctx, identity, payload.ServiceLifecycleCheckpointRequest)
 		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ServiceLifecycleCheckpointAck{ServiceLifecycleCheckpointAck: ack}
-	case *agentpb.AgentMessage_ServiceLifecycleCompletionRequest:
-		ack, reportErr := server.lifecycleReports.CompleteLifecycle(session.ctx, identity, payload.ServiceLifecycleCompletionRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ServiceLifecycleCompletionAck{ServiceLifecycleCompletionAck: ack}
-	case *agentpb.AgentMessage_ServiceLifecycleFailureRequest:
-		ack, reportErr := server.lifecycleReports.FailLifecycle(session.ctx, identity, payload.ServiceLifecycleFailureRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_ServiceLifecycleFailureAck{ServiceLifecycleFailureAck: ack}
-
 	}
 	if err != nil {
 		return true, nil, taskStoreStatus(err)

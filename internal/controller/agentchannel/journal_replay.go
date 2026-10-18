@@ -47,7 +47,7 @@ func (server *Server) replayWorkJournal(ctx context.Context, session *Session, g
 	ack := &agentpb.WorkJournalReplayAck{ReportSha256: digest[:]}
 	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	reply, err := server.replayTerminalReport(bounded, retained, message)
+	reply, err := server.terminalReport(bounded, retained, message)
 	if err != nil {
 		slog.WarnContext(ctx, "retained Agent result requires reconciliation", "task_id", identity.TaskId, "work_id", identity.WorkItemId, "attempt_id", identity.AttemptId, "error", err)
 		problem := errs.New(errs.KindInternal, "").ToProblem()

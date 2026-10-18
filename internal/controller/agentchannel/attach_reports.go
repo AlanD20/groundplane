@@ -23,8 +23,7 @@ func (server *Server) attachReport(session *Session, generation uint64, message 
 	if handled, reply, err := server.attachProvisionReport(session, generation, message); handled {
 		return handled, reply, err
 	}
-	if message.GetAttachRemovalFailureRequest() == nil && message.GetAttachRemovalCompletionRequest() == nil &&
-		message.GetAttachRemovalCheckpointRequest() == nil && message.GetAttachRecoveryCompletionRequest() == nil {
+	if message.GetAttachRemovalCheckpointRequest() == nil {
 		return false, nil, nil
 	}
 	if server.attachReports == nil {
@@ -36,22 +35,10 @@ func (server *Server) attachReport(session *Session, generation uint64, message 
 	}
 	reply := &agentpb.ControllerMessage{}
 	switch payload := message.Payload.(type) {
-	case *agentpb.AgentMessage_AttachRemovalFailureRequest:
-		ack, reportErr := server.attachReports.FailAttachRemoval(session.ctx, identity, payload.AttachRemovalFailureRequest)
-		err = reportErr
-		reply.Payload = &agentpb.ControllerMessage_AttachRemovalFailureAck{AttachRemovalFailureAck: ack}
-	case *agentpb.AgentMessage_AttachRemovalCompletionRequest:
-		ack, reportErr := server.attachReports.CompleteAttachRemoval(session.ctx, identity, payload.AttachRemovalCompletionRequest)
-		err = reportErr
-		reply.Payload = &agentpb.ControllerMessage_AttachRemovalCompletionAck{AttachRemovalCompletionAck: ack}
 	case *agentpb.AgentMessage_AttachRemovalCheckpointRequest:
 		ack, reportErr := server.attachReports.CheckpointAttachRemoval(session.ctx, identity, payload.AttachRemovalCheckpointRequest)
 		err = reportErr
 		reply.Payload = &agentpb.ControllerMessage_AttachRemovalCheckpointAck{AttachRemovalCheckpointAck: ack}
-	case *agentpb.AgentMessage_AttachRecoveryCompletionRequest:
-		ack, reportErr := server.attachReports.CompleteAttachRecovery(session.ctx, identity, payload.AttachRecoveryCompletionRequest)
-		err = reportErr
-		reply.Payload = &agentpb.ControllerMessage_AttachRecoveryCompletionAck{AttachRecoveryCompletionAck: ack}
 	}
 	if err != nil {
 		return true, nil, taskStoreStatus(err)

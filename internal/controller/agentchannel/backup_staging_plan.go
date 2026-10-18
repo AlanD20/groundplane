@@ -12,7 +12,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type backupStagingStore interface {
+// BackupStagingStore retains native startup transfer authority independently
+// of the retired Task assignment/event store.
+type BackupStagingStore interface {
 	ReadBackupStagingDelivery(
 		context.Context,
 		string,
@@ -30,7 +32,7 @@ type backupStagingStore interface {
 	) (*agentpb.BackupStagingRecoveryAckReceipt, error)
 }
 
-func (s *Server) resolveBackupStagingPlan(ctx context.Context, store backupStagingStore, process ProcessAuthentication,
+func (s *Server) resolveBackupStagingPlan(ctx context.Context, store BackupStagingStore, process ProcessAuthentication,
 	agentID string, agentGeneration uint64, identity workexecution.Identity, inventory *agentpb.BackupStagingInventory,
 ) (*agentpb.BackupStagingRecoveryPlan, error) {
 	if identity.Validate() != nil || identity.Executor != workexecution.Agent ||

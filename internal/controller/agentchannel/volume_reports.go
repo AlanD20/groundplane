@@ -19,8 +19,7 @@ type VolumeReporter interface {
 func (server *Server) ConfigureVolumeWork(reports VolumeReporter) { server.volumeReports = reports }
 
 func (server *Server) volumeReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetVolumeWorkCheckpointRequest() == nil && message.GetVolumeWorkCompletionRequest() == nil &&
-		message.GetVolumeWorkFailureRequest() == nil && message.GetVolumeWorkRecoveryReportRequest() == nil {
+	if message.GetVolumeWorkCheckpointRequest() == nil {
 		return false, nil, nil
 	}
 	if server.volumeReports == nil {
@@ -35,15 +34,6 @@ func (server *Server) volumeReport(session *Session, generation uint64, message 
 	case *agentpb.AgentMessage_VolumeWorkCheckpointRequest:
 		ack, reportErr := server.volumeReports.CheckpointVolume(session.ctx, identity, payload.VolumeWorkCheckpointRequest)
 		err, reply.Payload = reportErr, &agentpb.ControllerMessage_VolumeWorkCheckpointAck{VolumeWorkCheckpointAck: ack}
-	case *agentpb.AgentMessage_VolumeWorkCompletionRequest:
-		ack, reportErr := server.volumeReports.CompleteVolume(session.ctx, identity, payload.VolumeWorkCompletionRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_VolumeWorkCompletionAck{VolumeWorkCompletionAck: ack}
-	case *agentpb.AgentMessage_VolumeWorkFailureRequest:
-		ack, reportErr := server.volumeReports.FailVolume(session.ctx, identity, payload.VolumeWorkFailureRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_VolumeWorkFailureAck{VolumeWorkFailureAck: ack}
-	case *agentpb.AgentMessage_VolumeWorkRecoveryReportRequest:
-		ack, reportErr := server.volumeReports.RecoverVolume(session.ctx, identity, payload.VolumeWorkRecoveryReportRequest)
-		err, reply.Payload = reportErr, &agentpb.ControllerMessage_VolumeWorkRecoveryReportAck{VolumeWorkRecoveryReportAck: ack}
 	}
 	if err != nil {
 		return true, nil, taskStoreStatus(err)

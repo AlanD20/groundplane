@@ -23,8 +23,8 @@ func (s *Server) handleBackupStagingDelivery(
 	if err := executionplan.RejectUnknown(message); err != nil {
 		return true, err
 	}
-	store, ok := s.tasks.(backupStagingStore)
-	if !ok {
+	store := s.staging
+	if store == nil {
 		return true, errs.New(errs.KindInternal, "Backup staging authority store is unavailable")
 	}
 	process, err := session.ProcessAuthentication()
