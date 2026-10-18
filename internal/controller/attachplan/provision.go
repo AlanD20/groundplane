@@ -7,7 +7,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -15,7 +14,12 @@ import (
 
 type ProvisionFacts interface {
 	ResolveCapturedProvisionIdentity(context.Context, blueprintattachinputs.Generation, IdentityConsumer) error
-	ResolveCapturedProvisionHook(context.Context, blueprintattachinputs.Generation, workexecution.Scope, HookInputConsumer) error
+	ResolveCapturedProvisionHook(
+		context.Context,
+		blueprintattachinputs.Generation,
+		workexecution.Scope,
+		HookInputConsumer,
+	) error
 }
 
 type ProvisionPlanner struct{ facts ProvisionFacts }
@@ -50,10 +54,15 @@ func (planner *ProvisionPlanner) BuildCaptured(ctx context.Context, generation b
 	if err != nil {
 		return nil, err
 	}
-	input := &agentpb.AttachProvisionInput{CapturedSource: &agentpb.WorkInputReference{InputId: reference.ID, Sha256: digest},
-		AttachId: generation.AttachID, BackingServiceId: generation.BackingServiceID,
-		TenantId: task.Scope.TenantID, ProjectId: task.Scope.ProjectID, EnvironmentId: generation.EnvironmentID,
-		ServiceId: generation.ConsumerServiceID}
+	input := &agentpb.AttachProvisionInput{
+		CapturedSource:   &agentpb.WorkInputReference{InputId: reference.ID, Sha256: digest},
+		AttachId:         generation.AttachID,
+		BackingServiceId: generation.BackingServiceID,
+		TenantId:         task.Scope.TenantID,
+		ProjectId:        task.Scope.ProjectID,
+		EnvironmentId:    generation.EnvironmentID,
+		ServiceId:        generation.ConsumerServiceID,
+	}
 	input.Consumer, err = generation.Consumer()
 	if err != nil {
 		return nil, err
@@ -64,26 +73,31 @@ func (planner *ProvisionPlanner) BuildCaptured(ctx context.Context, generation b
 		}
 	}()
 	if generation.Provision != nil && generation.Provision.RequiresProvisioning {
+		authentication, authErr := credentialWireAuthentication(generation.AdapterKey, generation.Authentication)
+		if authErr != nil {
+			return nil, authErr
+		}
 		err = planner.facts.ResolveCapturedProvisionIdentity(ctx, generation, func(identity Identity) error {
-			if identity.Authentication != generation.Authentication || len(identity.Grants) != len(generation.Provision.Candidate.GrantAttachIDs) {
+			if identity.Authentication != generation.Authentication ||
+				len(identity.Grants) != len(generation.Provision.Candidate.GrantAttachIDs) {
 				return errs.New(errs.KindStateConflict, "Attach provisioning credential capture changed")
 			}
-			credential := &agentpb.AttachCredentialProvision{AdapterKey: generation.AdapterKey, Role: identity.Role,
-				Database: identity.Database, Password: append([]byte(nil), identity.Password...)}
-			input.Provision = &agentpb.AttachProvisionInput_Credential{Credential: credential}
-			switch identity.Authentication {
-			case core.BackingAuthenticationUsernamePassword:
-				credential.Authentication = agentpb.BackingAuthentication_BACKING_AUTHENTICATION_USERNAME_PASSWORD
-			case core.BackingAuthenticationPassword:
-				credential.Authentication = agentpb.BackingAuthentication_BACKING_AUTHENTICATION_PASSWORD
-			default:
-				return errs.New(errs.KindStateConflict, "Attach provisioning requires explicit credential authentication")
+			credential := &agentpb.AttachCredentialProvision{
+				AdapterKey:     generation.AdapterKey,
+				Authentication: authentication,
+				Role:           identity.Role,
+				Database:       identity.Database,
+				Password:       append([]byte(nil), identity.Password...),
 			}
+			input.Provision = &agentpb.AttachProvisionInput_Credential{Credential: credential}
 			for index, grant := range identity.Grants {
 				if grant.AttachID != generation.Provision.Candidate.GrantAttachIDs[index] {
 					return errs.New(errs.KindStateConflict, "Attach provisioning grant capture changed")
 				}
-				credential.Grants = append(credential.Grants, &agentpb.AttachGrantProvision{AttachId: grant.AttachID, Database: grant.Database})
+				credential.Grants = append(
+					credential.Grants,
+					&agentpb.AttachGrantProvision{AttachId: grant.AttachID, Database: grant.Database},
+				)
 			}
 			return attachexecution.ValidateProvision(input)
 		})

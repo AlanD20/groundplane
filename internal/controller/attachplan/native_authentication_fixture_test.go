@@ -112,6 +112,7 @@ type nativeAuthenticationFacts struct {
 	t          *testing.T
 	mode       core.BackingAuthentication
 	wrongMode  bool
+	grants     []GrantIdentity
 	provisions int
 	removals   int
 }
@@ -122,6 +123,10 @@ func (facts *nativeAuthenticationFacts) consume(consume IdentityConsumer) error 
 		mode = core.BackingAuthenticationUsernamePassword
 	}
 	identity := Identity{Authentication: mode, Role: "default", Password: []byte("captured-password")}
+	if facts.mode == core.BackingAuthenticationUsernamePassword || facts.mode == "" {
+		identity.Role, identity.Database = "app_role", "app_db"
+	}
+	identity.Grants = append([]GrantIdentity(nil), facts.grants...)
 	defer identity.Clear()
 	return consume(identity)
 }

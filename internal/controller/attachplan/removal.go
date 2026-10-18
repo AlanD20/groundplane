@@ -6,7 +6,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,7 +16,13 @@ import (
 // RemovalFacts is the Controller's encrypted-fact and exact Secret-capture
 // boundary. Planning has no dependency on the public Attach mutation service.
 type RemovalFacts interface {
-	SealBackingHookInputsAtRevision(context.Context, string, string, backinghook.Configuration, int64) (*taskconfiguration.BackingHookEncryptedInputs, error)
+	SealBackingHookInputsAtRevision(
+		context.Context,
+		string,
+		string,
+		backinghook.Configuration,
+		int64,
+	) (*taskconfiguration.BackingHookEncryptedInputs, error)
 	ResolveCapturedDetachHook(context.Context, attachremoval.Input, HookInputConsumer) error
 	ResolveDeletionIdentity(context.Context, attachremoval.Input, IdentityConsumer) error
 }
@@ -37,7 +42,8 @@ func NewRemovalPlanner(facts RemovalFacts) (*RemovalPlanner, error) {
 func (planner *RemovalPlanner) CaptureHookInputs(ctx context.Context, operationID string,
 	source attachremoval.Input,
 ) (*taskconfiguration.BackingHookEncryptedInputs, error) {
-	if attachremoval.Validate(source) != nil || source.Backing.Desired.Adapter != "custom" || source.Backing.Desired.Hooks == nil {
+	if attachremoval.Validate(source) != nil || source.Backing.Desired.Adapter != "custom" ||
+		source.Backing.Desired.Hooks == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Custom Attach removal capture is invalid")
 	}
 	return planner.facts.SealBackingHookInputsAtRevision(ctx, operationID, source.Attach.BackingProjectID,
@@ -76,10 +82,16 @@ func (planner *RemovalPlanner) Build(ctx context.Context, source attachremoval.I
 				BackingServiceId: input.BackingServiceId, AttachId: input.AttachId, TenantId: input.TenantId,
 				ProjectId: input.ProjectId, EnvironmentId: input.EnvironmentId, ServiceId: input.ServiceId}
 			for _, value := range values.Values {
-				hook.Inputs = append(hook.Inputs, &agentpb.BackingHookValue{Key: value.Key, Value: append([]byte(nil), value.Value...)})
+				hook.Inputs = append(
+					hook.Inputs,
+					&agentpb.BackingHookValue{Key: value.Key, Value: append([]byte(nil), value.Value...)},
+				)
 			}
 			for _, value := range values.Facts {
-				hook.Facts = append(hook.Facts, &agentpb.BackingHookValue{Key: value.Key, Value: append([]byte(nil), value.Value...)})
+				hook.Facts = append(
+					hook.Facts,
+					&agentpb.BackingHookValue{Key: value.Key, Value: append([]byte(nil), value.Value...)},
+				)
 			}
 			input.Cleanup = &agentpb.AttachRemovalInput_CustomDetach{CustomDetach: hook}
 			return attachexecution.ValidateRemoval(input)
@@ -89,30 +101,33 @@ func (planner *RemovalPlanner) Build(ctx context.Context, source attachremoval.I
 		}
 		return input, nil
 	}
-	authentication, err := core.ResolveBackingAuthentication(adapter.SupportsAuthenticationModes(), source.Backing.Desired.Authentication)
-	if err != nil || authentication != source.Backing.Desired.Authentication || authentication == core.BackingAuthenticationNone {
-		return nil, errs.New(errs.KindStateConflict, "captured Attach removal authentication is invalid")
+	authentication, err := credentialWireAuthentication(adapter.Key(), source.Backing.Desired.Authentication)
+	if err != nil {
+		return nil, err
 	}
 	err = planner.facts.ResolveDeletionIdentity(ctx, source, func(identity Identity) error {
-		if identity.Authentication != authentication || len(identity.Grants) != len(source.Attach.GrantAttachIDs) {
+		if identity.Authentication != source.Backing.Desired.Authentication ||
+			len(identity.Grants) != len(source.Attach.GrantAttachIDs) {
 			return errs.New(errs.KindStateConflict, "captured Attach credential identity changed")
 		}
-		credential := &agentpb.AttachCredentialRemoval{AdapterKey: adapter.Key(), Role: identity.Role, Database: identity.Database}
-		switch authentication {
-		case core.BackingAuthenticationUsernamePassword:
-			credential.Authentication = agentpb.BackingAuthentication_BACKING_AUTHENTICATION_USERNAME_PASSWORD
-		case core.BackingAuthenticationPassword:
-			credential.Authentication = agentpb.BackingAuthentication_BACKING_AUTHENTICATION_PASSWORD
+		credential := &agentpb.AttachCredentialRemoval{
+			AdapterKey:     adapter.Key(),
+			Authentication: authentication,
+			Role:           identity.Role,
+			Database:       identity.Database,
+		}
+		if authentication == agentpb.BackingAuthentication_BACKING_AUTHENTICATION_PASSWORD {
 			credential.Password = append([]byte(nil), identity.Password...)
-		default:
-			return errs.New(errs.KindValidationFailed, "Attach removal requires explicit credential authentication")
 		}
 		input.Cleanup = &agentpb.AttachRemovalInput_Credential{Credential: credential}
 		for index, grant := range identity.Grants {
 			if grant.AttachID != source.Attach.GrantAttachIDs[index] {
 				return errs.New(errs.KindStateConflict, "captured Attach grant membership changed")
 			}
-			credential.Grants = append(credential.Grants, &agentpb.AttachGrantRemoval{AttachId: grant.AttachID, Database: grant.Database})
+			credential.Grants = append(
+				credential.Grants,
+				&agentpb.AttachGrantRemoval{AttachId: grant.AttachID, Database: grant.Database},
+			)
 		}
 		return attachexecution.ValidateRemoval(input)
 	})
