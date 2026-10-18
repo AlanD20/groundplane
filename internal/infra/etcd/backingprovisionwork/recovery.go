@@ -1,0 +1,102 @@
+package backingprovisionwork
+
+import (
+	"context"
+
+	"github.com/AlanD20/groundplane/internal/common/backingprovision"
+	"github.com/AlanD20/groundplane/internal/common/jcs"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+)
+
+type RecoverySource struct {
+	Recovery   backingprovision.Recovery
+	Conditions []keyvalue.Condition
+}
+
+// LoadRecovery follows FirstFailure to its actual saved attempt and checkpoint.
+// Later cleanup failures do not change the original cause or select new input.
+func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.View) (RecoverySource, error) {
+	input, guard, err := repository.Load(ctx, view)
+	if err != nil {
+		return RecoverySource{}, err
+	}
+	defer clear(input.Wire)
+	procedure, err := input.Procedure()
+	if err != nil {
+		return RecoverySource{}, err
+	}
+	evidence := view.Item.Item.FirstFailure
+	if evidence == nil || evidence.Validate() != nil {
+		return RecoverySource{}, invalid("backing creation cleanup has no retained forward failure")
+	}
+	key := FailureKey(evidence.ID)
+	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	if err != nil {
+		return RecoverySource{}, err
+	}
+	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
+		return RecoverySource{}, invalid("backing creation original failure is unavailable")
+	}
+	defer keyvalue.ClearValues(read.Values)
+	value := read.Values[0]
+	if value.Key != key || value.ModRevision <= 0 || value.ModRevision > view.ReadRevision {
+		return RecoverySource{}, invalid("backing creation failure ownership is invalid")
+	}
+	failure, err := jcs.Decode[backingprovision.Failure](value.Value)
+	if err != nil {
+		return RecoverySource{}, invalid("backing creation original failure cannot be decoded")
+	}
+	queue, err := workqueue.NewRepository(repository.store)
+	if err != nil {
+		return RecoverySource{}, err
+	}
+	attemptRead, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
+		Keys: []string{workqueue.AttemptKey(failure.AttemptID)}, Revision: view.ReadRevision})
+	if err != nil {
+		return RecoverySource{}, err
+	}
+	if attemptRead == nil || attemptRead.ReadRevision != view.ReadRevision || len(attemptRead.Values) != 1 || attemptRead.Values[0] == nil {
+		return RecoverySource{}, invalid("backing creation original attempt is unavailable")
+	}
+	defer keyvalue.ClearValues(attemptRead.Values)
+	attemptValue := attemptRead.Values[0]
+	if attemptValue.Key != workqueue.AttemptKey(failure.AttemptID) || attemptValue.ModRevision <= 0 || attemptValue.ModRevision > view.ReadRevision {
+		return RecoverySource{}, invalid("backing creation original attempt revision is invalid")
+	}
+	forward, err := workqueue.DecodeAttempt(attemptValue.Value)
+	if err != nil {
+		return RecoverySource{}, err
+	}
+	if forward.ID != failure.AttemptID || forward.TaskID != view.Task.Task.ID || forward.WorkItemID != view.Item.Item.ID ||
+		forward.Input != *view.Item.Item.Input || forward.Executor.HostID != procedure.HostId {
+		return RecoverySource{}, invalid("backing creation failure belongs to another captured action")
+	}
+	layout, err := backingprovision.CaptureLayout(forward, procedure)
+	if err != nil {
+		return RecoverySource{}, err
+	}
+	failure, err = backingprovision.DecodeFailure(forward, layout, value.Value, *evidence)
+	if err != nil {
+		return RecoverySource{}, err
+	}
+	sourceView, err := queue.ReadResumeAt(ctx, forward.TaskID, forward.WorkItemID, forward.ID, forward.Executor, view.ReadRevision)
+	if err != nil {
+		return RecoverySource{}, err
+	}
+	boundary, err := repository.LoadProgress(ctx, sourceView)
+	if err != nil {
+		return RecoverySource{}, err
+	}
+	recovery := backingprovision.Recovery{Forward: forward, Failure: failure, Evidence: *evidence, Boundary: boundary}
+	if err := recovery.Validate(layout); err != nil {
+		return RecoverySource{}, err
+	}
+	return RecoverySource{Recovery: recovery, Conditions: []keyvalue.Condition{guard,
+		{Key: key, ModRevision: value.ModRevision},
+		{Key: attemptValue.Key, ModRevision: attemptValue.ModRevision},
+		{Key: workqueue.CheckpointKey(forward.ID), ModRevision: sourceView.Checkpoint.Revision},
+		{Key: workqueue.TaskKey(view.Task.Task.ID), ModRevision: view.Task.Revision},
+		{Key: workqueue.ItemKey(view.Item.Item.ID), ModRevision: view.Item.Revision}}}, nil
+}

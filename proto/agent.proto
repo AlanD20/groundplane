@@ -105,6 +105,53 @@ message EnvironmentProvisionInput {
   google.protobuf.Timestamp created_at = 11;
 }
 
+// Backing facade creation is one captured procedure, not an ExecutionPlan.
+// File bodies and hook values are delivered separately after the matching
+// stage has a durable checkpoint acknowledgement.
+message BackingProvisionInput {
+  string task_id = 1;
+  string work_item_id = 2;
+  string operation_id = 3;
+  string project_id = 4;
+  string environment_id = 5;
+  string service_id = 6;
+  string host_id = 7;
+  string volume_root = 8;
+  string volume_directory = 9;
+  uint64 render_generation = 10;
+  ComposeArtifact runtime = 11;
+  repeated string managed_volume_ids = 12;
+  WorkConfigurationReference configuration = 13;
+  repeated MaterializeFile files = 14;
+  BackingProvisionAfterStart after_start = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp deadline = 17;
+}
+
+message BackingProvisionAfterStart {
+  repeated string command = 1;
+  uint32 timeout_seconds = 2;
+  // Ciphertext digest and operation id, never the resolved input values.
+  WorkInputReference encrypted_inputs = 3;
+}
+
+message BackingProvisionAssignment {
+  WorkAttemptIdentity attempt = 1;
+  BackingProvisionInput input = 2;
+  bytes recovery_source = 3;
+}
+
+message BackingProvisionCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes progress = 2;
+}
+
+message BackingProvisionCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  bytes progress = 2;
+  WorkInputReference evidence = 3;
+}
+
 message EnvironmentProvisionAssignment {
   WorkAttemptIdentity attempt = 1;
   EnvironmentProvisionInput input = 2;
