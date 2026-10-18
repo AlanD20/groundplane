@@ -17,7 +17,7 @@ import (
 
 func (executor *Executor) recoverVolumeFilesystem(ctx context.Context, assignment *agentpb.BackupRecoveryAssignment,
 	attempt workexecution.Attempt, source executionplan.BackupWorkRecovery, ownership *agentownership.Lease,
-	staging *Staging, publisher *checkpointdelivery.BackupSource, exchange SourceExchange,
+	staging *Staging, publisher *checkpointdelivery.BackupSource, exchange Exchange,
 ) (_ *agentpb.BackupStepResume, resultErr error) {
 	if staging == nil || publisher == nil || ownership == nil {
 		return nil, invalidDatabaseStaging()
@@ -64,9 +64,6 @@ func (executor *Executor) recoverVolumeFilesystem(ctx context.Context, assignmen
 	if err != nil {
 		return nil, err
 	}
-	if !found && !volumeRestoreConsumersStopped(resume) {
-		return nil, errs.New(errs.KindStateConflict, "Volume recovery must finish stopping its captured consumers before creating the filesystem journal")
-	}
 	staged, err := staging.RestoreRecovery(ctx, assignment, attempt.Executor, 0)
 	if err != nil {
 		return nil, err
@@ -86,6 +83,38 @@ func (executor *Executor) recoverVolumeFilesystem(ctx context.Context, assignmen
 		}
 	}()
 	var oldTree backupvolumefs.Tree
+	if !volumeRestoreConsumersStopped(resume) {
+		stopped, digest, err := executor.finishVolumeConsumerStop(ctx, assignment, attempt.Executor, publisher)
+		if err != nil {
+			return nil, err
+		}
+		if err := ownership.CheckRecovery(source.Forward, attempt); err != nil {
+			return nil, err
+		}
+		oldTree, err = volume.Snapshot(ctx)
+		if err != nil {
+			return nil, err
+		}
+		oldBinding, err := backupvolumetransfer.BindRecoverySource(assignment, attempt.Executor, 0,
+			agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_OLD)
+		if err != nil {
+			return nil, err
+		}
+		if err := sendVolumeManifest(ctx, oldBinding, step,
+			agentpb.BackupVolumeManifestRole_BACKUP_VOLUME_MANIFEST_ROLE_STOPPED_LIVE_OLD,
+			oldTree.Entries, nil, exchange); err != nil {
+			return nil, err
+		}
+		if err := publisher.Volume(ctx, &agentpb.BackupVolumeCheckpoint{Checkpoint: &agentpb.BackupVolumeCheckpoint_ConsumersStopped{
+			ConsumersStopped: &agentpb.BackupConsumersStopped{StoppedCount: stopped, ServiceProgressSha256: digest[:]}}}); err != nil {
+			return nil, err
+		}
+		cursor, err = publisher.Current(ctx)
+		if err != nil {
+			return nil, err
+		}
+		resume = cursor.GetRestore()
+	}
 	if !found {
 		// findVolumeRestoreJournal rejects missing journals after any filesystem
 		// intent. Before the first intent, recheck stopped consumers and capture

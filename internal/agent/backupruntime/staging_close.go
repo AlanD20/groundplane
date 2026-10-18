@@ -22,6 +22,9 @@ func (state *Staging) Close(ctx context.Context) error {
 	for _, prepared := range state.prepared {
 		stages[prepared.Stage] = struct{}{}
 	}
+	for _, held := range state.held {
+		stages[held.Stage] = struct{}{}
+	}
 	for _, stage := range state.active {
 		stages[stage] = struct{}{}
 	}
@@ -34,6 +37,7 @@ func (state *Staging) Close(ctx context.Context) error {
 		return errs.Wrap(errs.KindStorageUnavailable, result)
 	}
 	clear(state.prepared)
+	clear(state.held)
 	clear(state.active)
 	return nil
 }

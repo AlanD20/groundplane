@@ -11,10 +11,11 @@ import (
 )
 
 type nativeVolumeSlot struct {
-	binding backupvolumetransfer.Binding
-	frames  chan *agentpb.BackupVolumeManifestTransfer
-	credits chan *agentpb.BackupVolumeManifestAckCredit
-	done    chan struct{}
+	ownerAttemptID string
+	binding        backupvolumetransfer.Binding
+	frames         chan *agentpb.BackupVolumeManifestTransfer
+	credits        chan *agentpb.BackupVolumeManifestAckCredit
+	done           chan struct{}
 }
 
 func (exchange *nativeExchange) RegisterBackupVolumes(assignment *agentpb.BackupWorkAssignment) error {
@@ -44,7 +45,7 @@ func (exchange *nativeExchange) RegisterBackupVolumes(assignment *agentpb.Backup
 			if exchange.backupVolumes[binding.TransferID] != nil || slots[binding.TransferID] != nil {
 				return errs.New(errs.KindStateConflict, "Backup Volume transfer is already registered")
 			}
-			slots[binding.TransferID] = &nativeVolumeSlot{binding: binding, frames: make(chan *agentpb.BackupVolumeManifestTransfer, 1), credits: make(chan *agentpb.BackupVolumeManifestAckCredit, 1), done: make(chan struct{})}
+			slots[binding.TransferID] = &nativeVolumeSlot{ownerAttemptID: owned.Attempt.AttemptId, binding: binding, frames: make(chan *agentpb.BackupVolumeManifestTransfer, 1), credits: make(chan *agentpb.BackupVolumeManifestAckCredit, 1), done: make(chan struct{})}
 		}
 	}
 	for id, slot := range slots {
@@ -53,11 +54,35 @@ func (exchange *nativeExchange) RegisterBackupVolumes(assignment *agentpb.Backup
 	return nil
 }
 
+func (exchange *nativeExchange) RegisterBackupRecoveryVolumes(assignment *agentpb.BackupRecoveryAssignment) error {
+	owned, attempt, _, err := executionplan.OpenBackupRecoveryAssignment(assignment, exchange.identity)
+	if err != nil {
+		return err
+	}
+	if owned.RestoreMode != agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION ||
+		len(owned.Input.Steps) != 1 || owned.Input.Steps[0].GetRestore().GetVolume() == nil {
+		return nil
+	}
+	binding, err := backupvolumetransfer.BindRecoverySource(owned, exchange.identity, 0,
+		agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_OLD)
+	if err != nil {
+		return err
+	}
+	exchange.mu.Lock()
+	defer exchange.mu.Unlock()
+	if exchange.closed || exchange.backupVolumes[binding.TransferID] != nil {
+		return errs.New(errs.KindStateConflict, "Volume recovery transfer is already registered or its session is closed")
+	}
+	exchange.backupVolumes[binding.TransferID] = &nativeVolumeSlot{ownerAttemptID: attempt.ID, binding: binding,
+		frames: make(chan *agentpb.BackupVolumeManifestTransfer, 1), credits: make(chan *agentpb.BackupVolumeManifestAckCredit, 1), done: make(chan struct{})}
+	return nil
+}
+
 func (exchange *nativeExchange) ReleaseBackupVolumes(attemptID string) {
 	exchange.mu.Lock()
 	defer exchange.mu.Unlock()
 	for id, slot := range exchange.backupVolumes {
-		if slot.binding.Attempt.ID == attemptID {
+		if slot.ownerAttemptID == attemptID {
 			close(slot.done)
 			delete(exchange.backupVolumes, id)
 		}

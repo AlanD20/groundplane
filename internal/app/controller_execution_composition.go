@@ -76,10 +76,6 @@ func newControllerExecutionComposition(
 		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Script plan resolver: %w", err)
 	}
-	if err := planResolver.EnableBackupPlans(dataServices.backupRuntimeRecords); err != nil {
-		_ = store.Close()
-		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize backup plan resolver: %w", err)
-	}
 	backingHookCheckpoints, err := taskcheckpoint.NewBackingHookCheckpointService(
 		authority.tasks, planResolver, attachRecords, attachFactValues,
 	)

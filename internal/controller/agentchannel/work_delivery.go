@@ -40,6 +40,13 @@ func (server *Server) dispatchWork(stream agentpb.AgentChannel_ConnectServer, se
 				return false, err
 			}
 		}
+		if assignment := message.GetBackupRecoveryAssignment(); assignment != nil {
+			var err error
+			cancel, err = payloads.prepareBackupRecoveryPayloads(stream, assignment, authorization, server.receiveRecoveryVolumeManifest)
+			if err != nil {
+				return false, err
+			}
+		}
 		sent, err := session.sendAssignment(func() error { return stream.Send(message) })
 		if !sent || err != nil {
 			cancel()

@@ -13,12 +13,12 @@ import (
 
 // One producer owns all bulk sources of a native Backup attempt.
 type backupPayloadProducer struct {
-	attempt *agentpb.WorkAttemptIdentity
-	exchange   *volumeManifestExchange
-	configs    *configTransferExchange
-	start      chan struct{}
-	once       sync.Once
-	cancel     context.CancelFunc
+	attempt  *agentpb.WorkAttemptIdentity
+	exchange *volumeManifestExchange
+	configs  *configTransferExchange
+	start    chan struct{}
+	once     sync.Once
+	cancel   context.CancelFunc
 }
 
 // Install the inbox before sending the assignment, but do not open a durable
@@ -62,7 +62,9 @@ func (delivery *assignmentPayloadDelivery) launchBackupPayloads(stream agentpb.A
 ) (func(), error) {
 	closeTransfers := func() {
 		exchange.close()
-		if configs != nil { configs.close() }
+		if configs != nil {
+			configs.close()
+		}
 	}
 	producer := &backupPayloadProducer{attempt: attempt, exchange: exchange, configs: configs, start: make(chan struct{}), cancel: cancel}
 	id := attempt.AttemptId
@@ -119,8 +121,9 @@ func (delivery *assignmentPayloadDelivery) finishBackupPayloads(message *agentpb
 	if request := message.GetBackupWorkFailureRequest(); request != nil {
 		attempt = request.Attempt
 	}
-	if request := message.GetBackupRecoveryRequest(); request != nil { attempt = request.Attempt }
-	if request := message.GetBackupRecoveryFailureRequest(); request != nil { attempt = request.Attempt }
+	if request := message.GetBackupRecoveryRequest(); request != nil {
+		attempt = request.Attempt
+	}
 	if attempt == nil {
 		return
 	}

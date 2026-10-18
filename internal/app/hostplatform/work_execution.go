@@ -334,6 +334,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	scheduler, err := workdispatch.NewScheduler(queue, []workdispatch.Registration{
+		{Operation: workexecution.Backup, Executor: workexecution.Agent, Owner: backupReports},
+		{Operation: workexecution.Restore, Executor: workexecution.Agent, Owner: backupReports},
 		{Operation: workexecution.BackupPrune, Executor: workexecution.Agent, Owner: backupReports},
 		{Operation: workexecution.ServiceRemoval, Executor: workexecution.Controller, Owner: serviceRemovalDecision, DecisionOnly: true},
 		{Operation: workexecution.ServiceRemoval, Executor: workexecution.Agent, Owner: serviceRemovalAgent},
@@ -383,6 +385,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	retries, err := workdispatch.NewRetries(queue, []workdispatch.RetryRegistration{
+		{Operation: workexecution.Backup, Owner: backupReports},
+		{Operation: workexecution.Restore, Owner: backupReports},
 		{Operation: workexecution.BackupPrune, Owner: backupReports},
 		{Operation: workexecution.ServiceRemoval, Owner: serviceRemovalAgent},
 		{Operation: workexecution.ServiceLifecycle, Owner: lifecycleAgent},
@@ -454,6 +458,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	completions, err := workdispatch.NewCompletions(queue, []workdispatch.CompletionRegistration{
+		{Action: workexecution.ActionBackup, Operation: workexecution.Backup, Owner: backupReports},
+		{Action: workexecution.ActionRestore, Operation: workexecution.Restore, Owner: backupReports},
 		{Action: workexecution.ActionBackupPrune, Operation: workexecution.BackupPrune, Owner: backupReports},
 		{Action: workexecution.ActionRemove, Operation: workexecution.ServiceRemoval, Owner: serviceRemovalAgent},
 		{Action: workexecution.ActionStart, Operation: workexecution.ServiceLifecycle, Owner: lifecycleAgent},

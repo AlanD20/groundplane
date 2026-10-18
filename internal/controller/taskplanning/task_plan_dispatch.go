@@ -21,7 +21,7 @@ import (
 )
 
 // TaskPlanResolver resolves exact procedures from their capability-owned sealed
-// inputs. Backup procedures are retained; rendered procedures use pinned inputs.
+// inputs. Rendered procedures use pinned inputs.
 type TaskPlanResolver struct {
 	volumeRoot            string
 	blueprints            blueprintPlanStateReader
@@ -30,7 +30,6 @@ type TaskPlanResolver struct {
 	componentCatalog      []componentrender.EnvironmentComponentRegistration
 	serviceProxyImages    map[serviceproxy.Implementation]*releasedomain.ProxyImage
 	releases              *etcd.ReleaseLedger
-	backupRuns            backupRunPlanReader
 	componentPlans        ComponentTaskPlanResolver
 	materializations      componentMaterializationContentRepository
 	configurationRecovery *configurationrecovery.Sources
@@ -87,10 +86,6 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 			return nil, errs.New(errs.KindInternal, "Component Task plan resolver is not configured")
 		}
 		return resolver.componentPlans.ResolveComponentExecutionPlan(ctx, task)
-	}
-	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune ||
-		task.Type == taskjournal.TaskRestore {
-		return resolver.resolveBackupRunPlan(ctx, task)
 	}
 	if _, backingCreation := task.Params[taskjournal.TaskBackingServiceCreationParam]; task.Type == taskjournal.TaskUpdate &&
 		backingCreation {

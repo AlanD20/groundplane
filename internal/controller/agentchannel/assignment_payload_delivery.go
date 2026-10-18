@@ -107,7 +107,7 @@ func (delivery *assignmentPayloadDelivery) acceptConfigCredit(credit *agentpb.Ba
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
 	producer := delivery.backupPayloads[credit.GetAttempt().GetAttemptId()]
-	if producer == nil {
+	if producer == nil || producer.configs == nil {
 		return errs.New(errs.KindStateConflict, "Config capture assignment is not active")
 	}
 	return producer.configs.accept(credit)
@@ -120,7 +120,7 @@ func (delivery *assignmentPayloadDelivery) acceptConfigRestoreFrame(frame *agent
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
 	producer := delivery.backupPayloads[frame.GetAttempt().GetAttemptId()]
-	if producer == nil {
+	if producer == nil || producer.configs == nil {
 		return errs.New(errs.KindStateConflict, "Config restore assignment is not active")
 	}
 	return producer.configs.acceptRestoreFrame(frame)
@@ -133,7 +133,7 @@ func (delivery *assignmentPayloadDelivery) acceptVolumeManifestFrame(
 		return errs.New(errs.KindValidationFailed, "Volume manifest frame is missing")
 	}
 	delivery.mu.Lock()
-	producer := delivery.backupPayloads[frame.GetAttempt().GetAttemptId()]
+	producer := delivery.volumeProducerLocked(frame.TransferId)
 	delivery.mu.Unlock()
 	if producer == nil {
 		return errs.New(errs.KindStateConflict, "Volume manifest assignment is not active")
@@ -148,12 +148,28 @@ func (delivery *assignmentPayloadDelivery) acceptVolumeManifestCredit(
 		return errs.New(errs.KindValidationFailed, "Volume manifest credit is missing")
 	}
 	delivery.mu.Lock()
-	producer := delivery.backupPayloads[credit.GetAttempt().GetAttemptId()]
+	producer := delivery.volumeProducerLocked(credit.TransferId)
 	delivery.mu.Unlock()
 	if producer == nil {
 		return errs.New(errs.KindStateConflict, "Volume manifest assignment is not active")
 	}
 	return producer.exchange.acceptCredit(credit)
+}
+
+// Transfer identity belongs to the original captured source even when its
+// current executor is a recovery attempt. The registered bounded inbox owns
+// routing; each frame is still checked against that inbox's exact binding.
+func (delivery *assignmentPayloadDelivery) volumeProducerLocked(transferID string) *backupPayloadProducer {
+	var found *backupPayloadProducer
+	for _, producer := range delivery.backupPayloads {
+		if producer.exchange.slots[transferID] != nil {
+			if found != nil {
+				return nil
+			}
+			found = producer
+		}
+	}
+	return found
 }
 
 func (delivery *assignmentPayloadDelivery) resize(limit int32) bool {

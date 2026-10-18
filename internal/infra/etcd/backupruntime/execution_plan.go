@@ -1,11 +1,7 @@
 package backupruntime
 
 import (
-	"context"
-
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -45,39 +41,4 @@ func DecodeBackupExecutionPlan(value []byte) (*agentpb.ExecutionPlan, error) {
 		return nil, CorruptBackupRuntimeRecord()
 	}
 	return plan, nil
-}
-
-func (reader *Reader) GetBackupExecutionPlan(
-	ctx context.Context,
-	taskID string,
-) (etcdstore.Versioned[*agentpb.ExecutionPlan], error) {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[*agentpb.ExecutionPlan]{}, err
-	}
-	if ids.Validate(ids.KindTask, taskID) != nil {
-		return etcdstore.Versioned[*agentpb.ExecutionPlan]{}, errs.New(
-			errs.KindValidationFailed,
-			"backup Task identity is invalid",
-		)
-	}
-	result, err := reader.store.Get(ctx, BackupExecutionPlanKey(taskID))
-	if err != nil {
-		return etcdstore.Versioned[*agentpb.ExecutionPlan]{}, err
-	}
-	if result == nil || result.Entry == nil {
-		return etcdstore.Versioned[*agentpb.ExecutionPlan]{}, errs.New(
-			errs.KindTaskNotFound,
-			"sealed backup procedure was not found",
-		)
-	}
-	defer clear(result.Entry.Value)
-	plan, err := DecodeBackupExecutionPlan(result.Entry.Value)
-	if err != nil {
-		return etcdstore.Versioned[*agentpb.ExecutionPlan]{}, err
-	}
-	return etcdstore.Versioned[*agentpb.ExecutionPlan]{
-		Record:       plan,
-		Revision:     result.Entry.ModRevision,
-		ReadRevision: result.ReadRevision,
-	}, nil
 }

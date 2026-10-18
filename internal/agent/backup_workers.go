@@ -97,10 +97,14 @@ func (workers *executionWorkers) submitBackupRecovery(delivery *agentpb.BackupRe
 	if err != nil {
 		return err
 	}
+	if err := workers.exchange.RegisterBackupRecoveryVolumes(owned); err != nil {
+		return errors.Join(err, execution.Close())
+	}
 	workers.active[attempt.WorkItemID] = activeExecution{attempt: attempt, backupRecovery: owned}
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()
+		defer workers.exchange.ReleaseBackupVolumes(attempt.ID)
 		terminal, err := workers.backups.RunRecovery(workers.ctx, owned, workers.identity, workers.exchange, workers.ownership, staging)
 		err = errors.Join(err, execution.Close())
 		select {

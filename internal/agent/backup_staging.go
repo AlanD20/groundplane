@@ -30,8 +30,6 @@ type backupStagingState struct {
 	volumes   map[string]recoveredVolumeRestore
 	stager    *backupstage.Stager
 	prepared  []*backupstage.PreparedStage
-	held      map[backupstage.IDs]*backupstage.Stage
-	holdIDs   map[backupstage.IDs]bool
 	plan      *agentpb.BackupStagingRecoveryPlan
 	ready     bool
 	reinspect atomic.Bool
@@ -63,8 +61,6 @@ func openBackupStaging(ctx context.Context, journal *agentstagingjournal.Journal
 		volumes:   make(map[string]recoveredVolumeRestore),
 		active:    make(map[backupstage.IDs]*backupstage.Stage),
 		cleaned:   make(map[backupstage.IDs]bool),
-		held:      make(map[backupstage.IDs]*backupstage.Stage),
-		holdIDs:   make(map[backupstage.IDs]bool),
 	}
 	for _, entry := range recovery.Inventory() {
 		key, err := executionplan.BackupSourceStagingKey(entry.IDs.Task, entry.IDs.Step, entry.IDs.Point)
@@ -237,7 +233,6 @@ func (state *backupStagingState) applyPlan(
 			}); err != nil {
 				return nil, err
 			}
-			state.holdIDs[entry.IDs] = true
 			continue
 		}
 		resume := disposition.GetResumePrepared()
@@ -322,11 +317,7 @@ func (state *backupStagingState) acceptReceipt(
 	}
 	state.stager, state.ready = stager, true
 	for _, entry := range prepared {
-		if state.holdIDs[entry.IDs] {
-			state.held[entry.IDs] = entry.Stage
-		} else {
-			state.prepared = append(state.prepared, entry)
-		}
+		state.prepared = append(state.prepared, entry)
 	}
 	runtime, err := backupruntime.NewStaging(state.stager, state.prepared, state.inventory, state.plan)
 	if err != nil {
@@ -335,6 +326,7 @@ func (state *backupStagingState) acceptReceipt(
 	// Ownership moves once, after the durable recovery receipt. The old worker
 	// pool cannot open another stage through the startup coordinator.
 	state.runtime = runtime
+	state.prepared = nil
 	state.stager = nil
 	state.prepared = nil
 	return nil
@@ -352,9 +344,6 @@ func (state *backupStagingState) close(ctx context.Context) error {
 		result = errors.Join(result, prepared.Stage.Suspend(ctx))
 	}
 	for _, stage := range state.active {
-		result = errors.Join(result, stage.Suspend(ctx))
-	}
-	for _, stage := range state.held {
 		result = errors.Join(result, stage.Suspend(ctx))
 	}
 	if state.runtime != nil {

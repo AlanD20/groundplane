@@ -20,6 +20,7 @@ type Staging struct {
 	closed         bool
 	stager         *backupstage.Stager
 	prepared       map[backupstage.IDs]*backupstage.PreparedStage
+	held           map[backupstage.IDs]*backupstage.PreparedStage
 	active         map[backupstage.IDs]*backupstage.Stage
 	volumeRecovery []volumeRecoveryPermission
 	sourceRecovery map[string]*agentpb.BackupStagingDisposition
@@ -31,7 +32,7 @@ func NewStaging(stager *backupstage.Stager, prepared []*backupstage.PreparedStag
 	if stager == nil {
 		return nil, errs.New(errs.KindInternal, "Backup staging requires completed startup recovery")
 	}
-	state := &Staging{stager: stager, prepared: make(map[backupstage.IDs]*backupstage.PreparedStage), active: make(map[backupstage.IDs]*backupstage.Stage)}
+	state := &Staging{stager: stager, prepared: make(map[backupstage.IDs]*backupstage.PreparedStage), held: make(map[backupstage.IDs]*backupstage.PreparedStage), active: make(map[backupstage.IDs]*backupstage.Stage)}
 	permissions, err := volumeRecoveryPermissions(inventory, plan)
 	if err != nil {
 		return nil, err
@@ -42,19 +43,24 @@ func NewStaging(stager *backupstage.Stager, prepared []*backupstage.PreparedStag
 		state.sourceRecovery[string(disposition.RecoveryKeySha256)] = proto.CloneOf(disposition)
 	}
 	for _, row := range prepared {
-		if row == nil || row.Stage == nil || row.DispositionID == "" || state.prepared[row.IDs] != nil {
+		if row == nil || row.Stage == nil || row.DispositionID == "" || state.prepared[row.IDs] != nil || state.held[row.IDs] != nil {
 			return nil, errs.New(errs.KindStateConflict, "Backup staging recovery contains an invalid or duplicate source")
 		}
 		key, err := executionplan.BackupSourceStagingKey(row.IDs.Task, row.IDs.Step, row.IDs.Point)
 		if err != nil {
 			return nil, err
 		}
-		if state.sourceRecovery[string(key)].GetResumePrepared() == nil {
+		disposition := state.sourceRecovery[string(key)]
+		if disposition.GetResumePrepared() == nil && disposition.GetRecoveryRequired() == nil {
 			return nil, errs.New(errs.KindStateConflict, "Prepared Backup files have no source resume decision")
 		}
 		owned := *row
 		owned.Files = append([]backupstage.PreparedArtifact(nil), row.Files...)
-		state.prepared[row.IDs] = &owned
+		if disposition.GetRecoveryRequired() != nil {
+			state.held[row.IDs] = &owned
+		} else {
+			state.prepared[row.IDs] = &owned
+		}
 	}
 	return state, nil
 }

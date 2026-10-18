@@ -58,6 +58,11 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment *agentpb.B
 	}
 	bounded, cancel := context.WithDeadline(ctx, attempt.Deadline)
 	defer cancel()
+	if owned.Input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_PRUNE {
+		if err := staging.AuthorizeRecovery(bounded, owned, attempt, ownership); err != nil {
+			return executor.failRecovery(ctx, owned, attempt, executionplan.BackupExecutionFailed, exchange)
+		}
+	}
 	if owned.Input.Operation == agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_RESTORE &&
 		owned.RestoreMode == agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION {
 		if err := exchange.RegisterBackupRecoverySecrets(owned); err != nil {

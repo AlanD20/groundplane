@@ -8,5 +8,5 @@ import (
 )
 
 func (owner *AgentWork) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
-	return owner.inputs.PreparePruneFinish(ctx, finished)
+	return owner.inputs.PrepareFinish(ctx, finished)
 }
