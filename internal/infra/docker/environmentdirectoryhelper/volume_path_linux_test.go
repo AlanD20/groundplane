@@ -9,12 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type volumePathTestCreator struct{}
@@ -32,7 +26,8 @@ func (volumePathTestCreator) RemoveManagedVolume(
 
 // Rationale: a real helper replay must recover when its saved cursor names a
 // child deleted by a call whose response was lost, without following symlinks.
-func TestVolumePathProtocolRecoversDeletedPendingChild(t *testing.T) {
+// VOL-07: filesystem cursor replay only; native checkpoint delivery is separate.
+func TestVolumePathDeletionRecoversLostBatchResponse(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "vol")
 	if err := os.Mkdir(root, 0o700); err != nil {
@@ -66,70 +61,32 @@ func TestVolumePathProtocolRecoversDeletedPendingChild(t *testing.T) {
 	if err := os.Symlink(sentinel, filepath.Join(leaf, "a", "escape")); err != nil {
 		t.Fatal(err)
 	}
-	request := validManagedVolumeRequest(t)
-	request.Plan.Operation, request.Plan.TargetId = agentpb.PlanOperation_PLAN_OPERATION_REMOVE, testVolumeID
-	request.Plan.Artifacts[0].AuthorizedVolumeDir = directory
 	intent := sha256.Sum256([]byte("authorized removal"))
-	request.Plan.Steps[0].Payload = &agentpb.ExecutionStep_ManagedVolumeDirectoryRemove{
-		ManagedVolumeDirectoryRemove: &agentpb.ManagedVolumeDirectoryRemove{
-			ArtifactId: testArtifactID, VolumeId: testVolumeID, ComposeKey: "app-data", IntentSha256: intent[:],
-		},
+	request := ManagedVolumeDirectoryRemoveRequest{
+		TaskID: testTaskID, OperationID: testOperationID, VolumeID: testVolumeID,
+		VolumeRoot: root, VolumeDir: directory, ComposeKey: "app-data", IntentSHA256: intent[:],
 	}
-	request.Plan.PlanHash = nil
-	var err error
-	request.Plan, err = executionplan.Seal(request.Plan)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pending := removal.PendingPath{
-		OperationID:     request.OperationId,
-		VolumeID:        testVolumeID,
-		Key:             "app-data",
-		IntentSHA256:    intent,
-		RequestOrdinal:  1,
-		MutationBudget:  128,
-		TaskID:          request.TaskId,
-		AssignmentID:    request.AssignmentId,
-		AgentID:         ids.New(ids.KindAgent),
-		AgentGeneration: 1,
-		CreatedAt:       time.Now().UTC(),
-	}
-	pending.RequestSHA256 = removal.PathRequestDigest(pending)
-	request.VolumeRemovalPendingPath, err = removal.EncodePendingPath(pending)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, err := Execute(ctx, root, creator, request)
-	if err != nil || first.ExitCode != 0 || first.Complete || first.MutationCount != 128 {
+	first, err := creator.RemoveManagedVolume(ctx, request)
+	if err != nil || first.Complete || first.MutationCount != 128 {
 		t.Fatalf("first bounded call: %+v %v", first, err)
 	}
-	pending.Cursor, pending.RequestOrdinal = first.NextCursor, 2
-	pending.RequestSHA256 = removal.PathRequestDigest(pending)
-	request.VolumeRemovalPendingPath, err = removal.EncodePendingPath(pending)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lost, err := Execute(ctx, root, creator, request)
-	if err != nil || lost.ExitCode != 0 || lost.Complete || lost.MutationCount > 128 {
+	request.Cursor = first.NextCursor
+	lost, err := creator.RemoveManagedVolume(ctx, request)
+	if err != nil || lost.Complete || lost.MutationCount > 128 {
 		t.Fatalf("lost partial call: %+v %v", lost, err)
 	}
 	if _, err := os.Stat(filepath.Join(leaf, "a")); !os.IsNotExist(err) {
 		t.Fatalf("pending child was not removed: %v", err)
 	}
-	recovered, err := Execute(ctx, root, creator, request)
-	if err != nil || recovered.ExitCode != 0 || !recovered.Complete || recovered.MutationCount > 128 {
+	recovered, err := creator.RemoveManagedVolume(ctx, request)
+	if err != nil || !recovered.Complete || recovered.MutationCount > 128 {
 		t.Fatalf("exact pending call replay: %+v %v", recovered, err)
-	}
-	completion, err := removal.DecodeCompletion(recovered.VolumeRemovalCompletion)
-	if err != nil || completion.RequestSHA256 != pending.RequestSHA256 || completion.RequestOrdinal != 2 ||
-		!completion.DirectoryAbsent {
-		t.Fatalf("canonical recovered completion: %+v %v", completion, err)
 	}
 	if _, err := os.Stat(leaf); !os.IsNotExist(err) {
 		t.Fatalf("Volume leaf remains: %v", err)
 	}
-	absent, err := Execute(ctx, root, creator, request)
-	if err != nil || absent.ExitCode != 0 || !absent.Complete || absent.MutationCount != 0 {
+	absent, err := creator.RemoveManagedVolume(ctx, request)
+	if err != nil || !absent.Complete || absent.MutationCount != 0 {
 		t.Fatalf("already-absent pending leaf replay: %+v %v", absent, err)
 	}
 	retained, err := os.ReadFile(sentinel)

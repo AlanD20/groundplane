@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -19,13 +20,13 @@ import (
 // without duplicating membership needed by SVC-15 and JOURNEY-02 recovery.
 func TestPrepareFencesSecretAuthorityAndResumesPartialWork(t *testing.T) {
 	ctx := context.Background()
-	store, operationID, taskID, pins := pinFixture(t, 3)
+	store, operationID, taskID, workID, pins := pinFixture(t, 3)
 	repository, err := NewRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
 	store.failTransaction = 3
-	if _, err := repository.Prepare(ctx, operationID, taskID, pins); !isKind(err, errs.KindStorageUnavailable) {
+	if _, err := repository.Prepare(ctx, operationID, taskID, workID, pins); !isKind(err, errs.KindStorageUnavailable) {
 		t.Fatalf("interrupted preparation = %v", err)
 	}
 	descriptor := store.mustSet(t, PreparationKey(operationID))
@@ -33,7 +34,7 @@ func TestPrepareFencesSecretAuthorityAndResumesPartialWork(t *testing.T) {
 		t.Fatalf("partial preparation = %#v", descriptor)
 	}
 	store.failTransaction = 0
-	prepared, err := repository.Prepare(ctx, operationID, taskID, pins)
+	prepared, err := repository.Prepare(ctx, operationID, taskID, workID, pins)
 	if err != nil || prepared.MembershipCount() != 3 || prepared.TaskID() != taskID {
 		t.Fatalf("resumed preparation = %#v/%v", prepared, err)
 	}
@@ -50,15 +51,21 @@ func TestPrepareFencesSecretAuthorityAndResumesPartialWork(t *testing.T) {
 
 	changed := append([]tasksecretpinrecord.Record(nil), pins...)
 	changed[0].CiphertextSHA256 = digestString("different")
-	if _, err := repository.Prepare(ctx, operationID, taskID, changed); !isKind(err, errs.KindStateConflict) {
+	if _, err := repository.Prepare(ctx, operationID, taskID, workID, changed); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("mismatched replay = %v", err)
 	}
 	unsorted := []tasksecretpinrecord.Record{pins[1], pins[0]}
-	if _, err := repository.Prepare(ctx, operationID, taskID, unsorted); !isKind(err, errs.KindValidationFailed) {
+	if _, err := repository.Prepare(ctx, operationID, taskID, workID, unsorted); !isKind(
+		err,
+		errs.KindValidationFailed,
+	) {
 		t.Fatalf("unsorted pins = %v", err)
 	}
 	tooMany := make([]tasksecretpinrecord.Record, MaximumPins+1)
-	if _, err := repository.Prepare(ctx, operationID, taskID, tooMany); !isKind(err, errs.KindValidationFailed) {
+	if _, err := repository.Prepare(ctx, operationID, taskID, workID, tooMany); !isKind(
+		err,
+		errs.KindValidationFailed,
+	) {
 		t.Fatalf("oversized pin set = %v", err)
 	}
 }
@@ -68,7 +75,7 @@ func TestPrepareFencesSecretAuthorityAndResumesPartialWork(t *testing.T) {
 // without leaving a forward or reverse recovery membership.
 func TestPrepareLosesSecretTombstoneRace(t *testing.T) {
 	ctx := context.Background()
-	store, operationID, taskID, pins := pinFixture(t, 1)
+	store, operationID, taskID, workID, pins := pinFixture(t, 1)
 	repository, err := NewRepository(store)
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +100,7 @@ func TestPrepareLosesSecretTombstoneRace(t *testing.T) {
 			return
 		}
 	}
-	if _, err := repository.Prepare(ctx, operationID, taskID, pins); !isKind(err, errs.KindStateConflict) {
+	if _, err := repository.Prepare(ctx, operationID, taskID, workID, pins); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("tombstone race = %v", err)
 	}
 	if store.values[tasksecretpinrecord.Key(pins[0].SecretID, operationID)] != nil ||
@@ -107,30 +114,29 @@ func TestPrepareLosesSecretTombstoneRace(t *testing.T) {
 // code can release SVC-15/JOURNEY-02 source pins.
 func TestActivationIsConstantSizeAndLoadActiveRestoresOwnership(t *testing.T) {
 	ctx := context.Background()
-	store, operationID, taskID, pins := pinFixture(t, 24)
+	store, operationID, taskID, workID, pins := pinFixture(t, 24)
 	repository, err := NewRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := repository.Prepare(ctx, operationID, taskID, pins)
+	prepared, err := repository.Prepare(ctx, operationID, taskID, workID, pins)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fragment, err := Activation(prepared)
-	if err != nil || len(fragment.Conditions) != 2 || len(fragment.Mutations) != 2 {
+	if err != nil {
 		t.Fatalf("activation fragment = %#v/%v", fragment, err)
 	}
 	defer fragment.Clear()
 	conditions := append(fragment.Conditions,
-		Condition{Key: taskKey(taskID)}, Condition{Key: activeTaskKey(operationID)})
+		Condition{Key: fixtureWorkInputKey(workID)})
 	mutations := append(fragment.Mutations,
-		Mutation{Type: MutationPut, Key: taskKey(taskID), Value: []byte("task")},
-		Mutation{Type: MutationPut, Key: activeTaskKey(operationID), Value: []byte(taskID)})
+		Mutation{Type: MutationPut, Key: fixtureWorkInputKey(workID), Value: []byte("captured input")})
 	result, err := store.Transact(ctx, conditions, mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("caller-owned activation = %#v/%v", result, err)
 	}
-	root, found, err := repository.LoadActive(ctx, operationID)
+	root, found, err := repository.LoadActive(ctx, operationID, 0)
 	if err != nil || !found || root.OperationID() != operationID || root.TaskID() != taskID ||
 		root.MembershipCount() != uint64(len(pins)) || root.MembershipSHA256() != prepared.MembershipSHA256() ||
 		root.Revision() != result.Revision || root.Phase() != RootPhaseActive {
@@ -143,12 +149,12 @@ func TestActivationIsConstantSizeAndLoadActiveRestoresOwnership(t *testing.T) {
 // another operation's pin for the same Secret must survive.
 func TestExplicitReleaseIsBoundedResumableAndOperationOwned(t *testing.T) {
 	ctx := context.Background()
-	store, operationID, taskID, pins := pinFixture(t, 20)
+	store, operationID, taskID, workID, pins := pinFixture(t, 20)
 	repository, err := NewRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := repository.Prepare(ctx, operationID, taskID, pins)
+	prepared, err := repository.Prepare(ctx, operationID, taskID, workID, pins)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,10 +163,9 @@ func TestExplicitReleaseIsBoundedResumableAndOperationOwned(t *testing.T) {
 		t.Fatal(err)
 	}
 	activationConditions := append(activation.Conditions,
-		Condition{Key: taskKey(taskID)}, Condition{Key: activeTaskKey(operationID)})
+		Condition{Key: fixtureWorkInputKey(workID)})
 	activationMutations := append(activation.Mutations,
-		Mutation{Type: MutationPut, Key: taskKey(taskID), Value: []byte("pending")},
-		Mutation{Type: MutationPut, Key: activeTaskKey(operationID), Value: []byte(taskID)})
+		Mutation{Type: MutationPut, Key: fixtureWorkInputKey(workID), Value: []byte("captured input")})
 	activationResult, err := store.Transact(ctx, activationConditions, activationMutations)
 	activation.Clear()
 	if err != nil || !activationResult.Succeeded {
@@ -189,14 +194,9 @@ func TestExplicitReleaseIsBoundedResumableAndOperationOwned(t *testing.T) {
 	if store.mustSet(t, RootKey(operationID)).Phase != phaseActive {
 		t.Fatal("pure BeginRelease changed the store")
 	}
-	task := store.values[taskKey(taskID)]
-	activeTask := store.values[activeTaskKey(operationID)]
-	releaseConditions := append(release.Conditions,
-		Condition{Key: task.Key, ModRevision: task.ModRevision},
-		Condition{Key: activeTask.Key, ModRevision: activeTask.ModRevision})
-	releaseMutations := append(release.Mutations,
-		Mutation{Type: MutationPut, Key: task.Key, Value: []byte("terminal")},
-		Mutation{Type: MutationDelete, Key: activeTask.Key})
+	input := store.values[fixtureWorkInputKey(workID)]
+	releaseConditions := append(release.Conditions, Condition{Key: input.Key, ModRevision: input.ModRevision})
+	releaseMutations := append(release.Mutations, Mutation{Type: MutationDelete, Key: input.Key})
 	result, err := store.Transact(ctx, releaseConditions, releaseMutations)
 	release.Clear()
 	if err != nil || !result.Succeeded {
@@ -206,7 +206,7 @@ func TestExplicitReleaseIsBoundedResumableAndOperationOwned(t *testing.T) {
 	if err != nil || !progressed || done {
 		t.Fatalf("first release batch = %t/%t/%v", progressed, done, err)
 	}
-	restarted, found, err := repository.LoadActive(ctx, operationID)
+	restarted, found, err := repository.LoadActive(ctx, operationID, 0)
 	if err != nil || !found || restarted.Phase() != RootPhaseReleasing ||
 		store.mustSet(t, RootKey(operationID)).ReleaseCursor != releaseBatchSize {
 		t.Fatalf("restarted release = %#v/%t/%v", restarted, found, err)
@@ -226,74 +226,91 @@ func TestExplicitReleaseIsBoundedResumableAndOperationOwned(t *testing.T) {
 	}
 }
 
-// Rationale: SEC-07 abandoned preparation cleanup must compare the exact
-// original Task and active-operation absences on every mutation; publication
-// winning that race preserves all pins, while an active root is never adopted.
-func TestAbandonCannotRaceTaskPublicationOrReleaseAnActiveRoot(t *testing.T) {
-	ctx := context.Background()
-	store, operationID, taskID, pins := pinFixture(t, 2)
-	repository, err := NewRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	store.failTransaction = 3
-	if _, err := repository.Prepare(ctx, operationID, taskID, pins); err == nil {
-		t.Fatal("partial preparation unexpectedly completed")
-	}
-	store.failTransaction = 0
-	store.beforeTransaction = func(store *pinStore, _ []Condition, mutations []Mutation) {
-		for _, mutation := range mutations {
-			if mutation.Key != PreparationKey(operationID) {
-				continue
+// Rationale: SEC-07 native input activation consumes the preparation atomically.
+// Whichever side wins must fence the other, without consulting Task history.
+func TestAbandonRacesAtomicWorkInputActivation(t *testing.T) {
+	for _, publicationWins := range []bool{false, true} {
+		t.Run(strconv.FormatBool(publicationWins), func(t *testing.T) {
+			ctx := context.Background()
+			store, operationID, taskID, workID, pins := pinFixture(t, 2)
+			repository, err := NewRepository(store)
+			if err != nil {
+				t.Fatal(err)
 			}
-			store.beforeTransaction = nil
-			store.put(taskKey(taskID), []byte("published"))
-			return
-		}
-	}
-	restarted, err := NewRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := restarted.Abandon(ctx, operationID); !isKind(err, errs.KindStateConflict) {
-		t.Fatalf("Task publication race = %v", err)
-	}
-	if store.values[tasksecretpinrecord.Key(pins[0].SecretID, operationID)] == nil {
-		t.Fatal("losing abandonment removed a published Task pin")
-	}
-	store.delete(taskKey(taskID))
-	if err := restarted.Abandon(ctx, operationID); err != nil {
-		t.Fatalf("authorized abandonment = %v", err)
-	}
-	if store.values[PreparationKey(operationID)] != nil ||
-		store.values[tasksecretpinrecord.Key(pins[0].SecretID, operationID)] != nil {
-		t.Fatal("authorized abandonment retained preparation state")
-	}
-
-	activeStore, activeOperation, activeTask, activePins := pinFixture(t, 1)
-	activeRepository, _ := NewRepository(activeStore)
-	prepared, err := activeRepository.Prepare(ctx, activeOperation, activeTask, activePins)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fragment, _ := Activation(prepared)
-	conditions := append(fragment.Conditions,
-		Condition{Key: taskKey(activeTask)}, Condition{Key: activeTaskKey(activeOperation)})
-	mutations := append(fragment.Mutations,
-		Mutation{Type: MutationPut, Key: taskKey(activeTask), Value: []byte("pending")},
-		Mutation{Type: MutationPut, Key: activeTaskKey(activeOperation), Value: []byte(activeTask)})
-	result, err := activeStore.Transact(ctx, conditions, mutations)
-	fragment.Clear()
-	if err != nil || !result.Succeeded {
-		t.Fatal("activate fixture", err)
-	}
-	if err := activeRepository.Abandon(ctx, activeOperation); !isKind(
-		err,
-		errs.KindStateConflict,
-	) {
-		t.Fatalf("active root abandonment = %v", err)
+			prepared, err := repository.Prepare(ctx, operationID, taskID, workID, pins)
+			if err != nil {
+				t.Fatal(err)
+			}
+			activation, err := Activation(prepared)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer activation.Clear()
+			activate := func() (TransactionResult, error) {
+				return store.Transact(
+					ctx,
+					append(activation.Conditions, Condition{Key: fixtureWorkInputKey(workID)}),
+					append(
+						activation.Mutations,
+						Mutation{Type: MutationPut, Key: fixtureWorkInputKey(workID), Value: []byte("captured input")},
+					),
+				)
+			}
+			if publicationWins {
+				store.beforeTransaction = func(store *pinStore, _ []Condition, mutations []Mutation) {
+					for _, mutation := range mutations {
+						if mutation.Key == PreparationKey(operationID) {
+							store.beforeTransaction = nil
+							result, err := activate()
+							if err != nil || !result.Succeeded {
+								t.Fatalf("racing activation: %+v/%v", result, err)
+							}
+							return
+						}
+					}
+				}
+			}
+			restarted, err := NewRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = restarted.Abandon(ctx, operationID)
+			if publicationWins {
+				if !isKind(err, errs.KindStateConflict) {
+					t.Fatalf("publication won but abandonment returned %v", err)
+				}
+				if store.values[RootKey(operationID)] == nil || store.values[fixtureWorkInputKey(workID)] == nil {
+					t.Fatal("atomic publication lost root or captured input")
+				}
+				for _, pin := range pins {
+					if store.values[tasksecretpinrecord.Key(pin.SecretID, operationID)] == nil {
+						t.Fatal("abandonment removed a published input pin")
+					}
+				}
+				if err := restarted.Abandon(ctx, operationID); !isKind(err, errs.KindStateConflict) {
+					t.Fatalf("active root abandoned: %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := activate()
+				if err != nil || result.Succeeded {
+					t.Fatalf("abandoned preparation published late: %+v/%v", result, err)
+				}
+				for _, pin := range pins {
+					if store.values[tasksecretpinrecord.Key(pin.SecretID, operationID)] != nil {
+						t.Fatal("abandoned preparation retained a pin")
+					}
+				}
+			}
+		})
 	}
 }
+
+// The pin owner treats work input publication as an opaque caller-owned write;
+// it must never inspect Task or diagnostic history to decide retention rights.
+func fixtureWorkInputKey(workID string) string { return "/test/captured-work-input/" + workID }
 
 type pinStore struct {
 	revision          int64
@@ -485,12 +502,13 @@ func containsCondition(conditions []Condition, key string) bool {
 func pinFixture(
 	t *testing.T,
 	count int,
-) (*pinStore, string, string, []tasksecretpinrecord.Record) {
+) (*pinStore, string, string, string, []tasksecretpinrecord.Record) {
 	t.Helper()
 	at := testTime()
 	store := newPinStore()
 	operationID := ids.NewAt(ids.KindOperation, at, 1)
 	taskID := ids.NewAt(ids.KindTask, at, 2)
+	workID := ids.NewAt(ids.KindWorkItem, at, 5)
 	projectID := ids.NewAt(ids.KindProject, at, 3)
 	tenantID := ids.NewAt(ids.KindTenant, at, 4)
 	pins := make([]tasksecretpinrecord.Record, count)
@@ -504,7 +522,7 @@ func pinFixture(
 		pins[index] = pin
 	}
 	sort.Slice(pins, func(left, right int) bool { return pins[left].SecretID < pins[right].SecretID })
-	return store, operationID, taskID, pins
+	return store, operationID, taskID, workID, pins
 }
 
 func digestString(value string) string {

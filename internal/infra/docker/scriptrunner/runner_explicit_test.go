@@ -77,7 +77,7 @@ func TestExplicitScriptWithoutNetworksRunsAndCleansCapturedContainer(t *testing.
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("networkless Script run: %#v, %v", result, err)
 	}
-	proof, err := runner.Cleanup(request, &body, &evidence)
+	proof, err := runner.Cleanup(capturedCleanup(request), &body, &evidence)
 	if err != nil || !proof.ContainerAbsent || !proof.BodyAbsent || !proof.ExecutionDirectoryAbsent {
 		t.Fatalf("networkless Script cleanup: %#v, %v", proof, err)
 	}

@@ -26,12 +26,13 @@ import (
 
 const agentChannelTransportTestAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
+// TASK-29: transport behavior only, not full native operation composition.
 // Rationale: the native Controller must own the local gRPC socket before Agent
 // persistence exists, while missing authentication must reject every stream.
 func TestAgentChannelRuntimeServesUDSAndFailsClosedWithoutAuthenticator(t *testing.T) {
 	socketPath := shortUnixSocketPath(t)
 	listening := make(chan struct{})
-	runtime := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	runtime := newTransportTestRuntime(nil)
 	runtime.listen = func(context.Context) (net.Listener, error) {
 		listener, err := net.Listen("unix", socketPath)
 		if err == nil {
@@ -101,7 +102,7 @@ func TestAgentChannelRuntimeClassifiesLiveListenerFailure(t *testing.T) {
 		listen: func(context.Context) (net.Listener, error) {
 			return nil, cause
 		},
-		newServer: func(*agentchannel.Registry) agentChannelGRPCServer { return nil },
+		newServer: func(*agentchannel.Registry) (agentChannelGRPCServer, error) { return nil, nil },
 	}
 	err := runtime.Run(context.Background())
 	if !errors.Is(err, errs.New(errs.KindInternal, "")) || !errors.Is(err, cause) {
@@ -112,13 +113,6 @@ func TestAgentChannelRuntimeClassifiesLiveListenerFailure(t *testing.T) {
 // Rationale: the Controller must accept the complete 16 MiB Agent envelope
 // while rejecting the first byte beyond that transport boundary.
 func TestAgentChannelRuntimeEnforcesExactReceiveMessageLimit(t *testing.T) {
-	if agentChannelControllerMaximumReceiveMessageBytes != 16*1024*1024 {
-		t.Fatalf(
-			"Controller receive limit = %d, want 16 MiB",
-			agentChannelControllerMaximumReceiveMessageBytes,
-		)
-	}
-
 	for _, test := range []struct {
 		name     string
 		size     int
@@ -128,8 +122,8 @@ func TestAgentChannelRuntimeEnforcesExactReceiveMessageLimit(t *testing.T) {
 		{name: "one_byte_over", size: 16*1024*1024 + 1, wantCode: codes.ResourceExhausted},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			authenticator := &agentChannelTransportAuthenticator{config: transportTestAgentConfig()}
-			socketPath := startAgentChannelTransportRuntime(t, authenticator)
+			config := transportTestAgentConfig()
+			socketPath := startAgentChannelTransportRuntime(t, config)
 			connection, err := grpc.NewClient(
 				"unix://"+socketPath,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -156,13 +150,6 @@ func TestAgentChannelRuntimeEnforcesExactReceiveMessageLimit(t *testing.T) {
 // Rationale: the Controller must send the complete 5 MiB envelope while
 // rejecting the first byte beyond that transport boundary.
 func TestAgentChannelRuntimeEnforcesExactSendMessageLimit(t *testing.T) {
-	if agentChannelControllerMaximumSendMessageBytes != 5*1024*1024 {
-		t.Fatalf(
-			"Controller send limit = %d, want 5 MiB",
-			agentChannelControllerMaximumSendMessageBytes,
-		)
-	}
-
 	for _, test := range []struct {
 		name     string
 		size     int
@@ -172,8 +159,8 @@ func TestAgentChannelRuntimeEnforcesExactSendMessageLimit(t *testing.T) {
 		{name: "one_byte_over", size: 5*1024*1024 + 1, wantCode: codes.ResourceExhausted},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			authenticator := &agentChannelTransportAuthenticator{config: sizedAgentConfig(t, test.size)}
-			socketPath := startAgentChannelTransportRuntime(t, authenticator)
+			config := sizedAgentConfig(t, test.size)
+			socketPath := startAgentChannelTransportRuntime(t, config)
 			connection, err := grpc.NewClient(
 				"unix://"+socketPath,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -209,34 +196,14 @@ func TestAgentChannelRuntimeEnforcesExactSendMessageLimit(t *testing.T) {
 	}
 }
 
-type agentChannelTransportAuthenticator struct {
-	config *agentpb.AgentConfig
-}
-
-func (authenticator *agentChannelTransportAuthenticator) Authenticate(
-	context.Context,
-	string,
-	agentchannel.Token,
-) (agentchannel.Authorization, error) {
-	return agentchannel.Authorization{Generation: 1, Config: authenticator.config}, nil
-}
-
-func (authenticator *agentChannelTransportAuthenticator) Configuration(
-	context.Context,
-	string,
-	uint64,
-) (*agentpb.AgentConfig, error) {
-	return authenticator.config, nil
-}
-
 func startAgentChannelTransportRuntime(
 	t *testing.T,
-	authenticator agentchannel.Authenticator,
+	config *agentpb.AgentConfig,
 ) string {
 	t.Helper()
 	socketPath := shortUnixSocketPath(t)
 	listening := make(chan struct{})
-	runtime := New(authenticator, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	runtime := newTransportTestRuntime(config)
 	runtime.listen = func(context.Context) (net.Listener, error) {
 		listener, err := net.Listen("unix", socketPath)
 		if err == nil {
@@ -272,7 +239,7 @@ func startAgentChannelTransportRuntime(
 
 func shortUnixSocketPath(t *testing.T) string {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", ".tmp"))
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", "..", ".tmp"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,4 +294,35 @@ func sizedAgentConfig(t *testing.T, target int) *agentpb.AgentConfig {
 
 func transportTestAgentConfig() *agentpb.AgentConfig {
 	return &agentpb.AgentConfig{PullIntervalSeconds: 1, MaxConcurrentTasks: 1}
+}
+
+// These tests exercise the production gRPC transport factory, not operation
+// composition. The complete runtime still requires every native operation owner.
+func newTransportTestRuntime(config *agentpb.AgentConfig) *Runtime {
+	runtime := New(nil, nil, nil, nil)
+	runtime.newServer = func(registry *agentchannel.Registry) (agentChannelGRPCServer, error) {
+		if config == nil {
+			return newChannelGRPCServer(agentchannel.New(nil, registry, nil, nil, nil)), nil
+		}
+		return newChannelGRPCServer(&boundaryChannel{config: config}), nil
+	}
+	return runtime
+}
+
+type boundaryChannel struct {
+	agentpb.UnimplementedAgentChannelServer
+	config *agentpb.AgentConfig
+}
+
+func (channel *boundaryChannel) Connect(stream agentpb.AgentChannel_ConnectServer) error {
+	message, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	if len(message.GetAuthenticate().GetToken()) != 32 {
+		return status.Error(codes.Unauthenticated, "invalid test token size")
+	}
+	return stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ConfigUpdate{
+		ConfigUpdate: &agentpb.ConfigUpdate{AgentConfig: channel.config},
+	}})
 }

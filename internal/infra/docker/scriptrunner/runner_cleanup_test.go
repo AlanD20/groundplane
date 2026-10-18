@@ -3,12 +3,14 @@ package scriptrunner
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	containerderrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/container"
@@ -17,20 +19,22 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+// TASK-28: exact host-object ownership and uncertain-create cleanup boundaries.
 func TestCleanupMutatesOnlyCapturedOwnedContainer(t *testing.T) {
 	t.Parallel()
 
 	runner, engine, request, prepared := cleanupFixture(t)
 	engine.running = true
 
-	if err := runner.cleanup(request, engine.containerID, &prepared); err != nil {
+	if err := runner.cleanup(capturedCleanup(request), engine.containerID, &prepared); err != nil {
 		t.Fatalf("cleanup owned container: %v", err)
 	}
-	want := []string{"inspect", "stop", "inspect", "inspect", "remove", "inspect"}
+	want := []string{"inspect", "inspect", "stop", "inspect", "inspect", "remove", "inspect"}
 	if !slices.Equal(engine.operations, want) {
 		t.Fatalf("operations = %v, want %v", engine.operations, want)
 	}
@@ -46,7 +50,7 @@ func TestCleanupRefusesContainerWithMismatchedOwnership(t *testing.T) {
 	engine.running = true
 	engine.inspected.Container.Config.Labels["com.groundplane.task-id"] = "task_01k5v8k8yr0000000000000000"
 
-	if err := runner.cleanup(request, engine.containerID, &prepared); err == nil {
+	if err := runner.cleanup(capturedCleanup(request), engine.containerID, &prepared); err == nil {
 		t.Fatal("expected ownership mismatch to fail cleanup")
 	}
 	if !slices.Equal(engine.operations, []string{"inspect"}) {
@@ -67,7 +71,7 @@ func TestCleanupUsesCheckpointedOwnershipAfterRunnerShapeMismatch(t *testing.T) 
 	body := bodyEvidence(prepared)
 	container := containerEvidence(request, engine.containerID)
 
-	proof, err := runner.Cleanup(request, &body, &container)
+	proof, err := runner.Cleanup(capturedCleanup(request), &body, &container)
 	if err != nil {
 		t.Fatalf("cleanup checkpoint-owned container: %v", err)
 	}
@@ -76,19 +80,25 @@ func TestCleanupUsesCheckpointedOwnershipAfterRunnerShapeMismatch(t *testing.T) 
 	}
 }
 
-func TestCleanupRemovesBodyWhenNoContainerWasCaptured(t *testing.T) {
-	t.Parallel()
-
-	runner, engine, request, prepared := cleanupFixture(t)
-
-	if err := runner.cleanup(request, "", &prepared); err != nil {
-		t.Fatalf("cleanup body without container: %v", err)
-	}
-	if len(engine.operations) != 0 {
-		t.Fatalf("operations = %v, want none", engine.operations)
-	}
-	if _, err := os.Stat(prepared.hostPath); !os.IsNotExist(err) {
-		t.Fatalf("body still exists without a captured container: %v", err)
+// A lost create receipt is not absence. Retain mounted evidence unless an
+// independent name lookup confirms that no container can still use it.
+func TestCleanupWithoutCreationReceiptRequiresObservedAbsence(t *testing.T) {
+	for _, absent := range []bool{false, true} {
+		t.Run(strconv.FormatBool(absent), func(t *testing.T) {
+			runner, engine, request, prepared := cleanupFixture(t)
+			engine.removed = absent
+			err := runner.cleanup(capturedCleanup(request), "", &prepared)
+			if absent && err != nil || !absent && !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+				t.Fatalf("observed absence=%t cleanup=%v", absent, err)
+			}
+			if !slices.Equal(engine.operations, []string{"inspect"}) {
+				t.Fatalf("cleanup acted on a container without its receipt: %v", engine.operations)
+			}
+			_, statErr := os.Stat(prepared.hostPath)
+			if absent && !os.IsNotExist(statErr) || !absent && statErr != nil {
+				t.Fatalf("body retention differs from independently observed container absence: %v", statErr)
+			}
+		})
 	}
 }
 
@@ -173,16 +183,18 @@ func cleanupFixture(t *testing.T) (*Runner, *cleanupEngine, scriptexecution.Requ
 	}
 	t.Cleanup(func() { _ = bodies.Close() })
 	body := []byte("echo migration\n")
-	prepared, err := bodies.Prepare(ids.New(ids.KindAssignment), ids.NewULID(), body, uid, gid)
+	prepared, err := bodies.Prepare(ids.New(ids.KindWorkItem), ids.NewULID(), body, uid, gid)
 	if err != nil {
 		t.Fatalf("prepare body: %v", err)
 	}
 	bodyDigest := sha256.Sum256(body)
 
 	request := scriptexecution.Request{
-		TaskID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), StepID: ids.New(ids.KindStep),
-		AssignmentID: prepared.assignmentID, ExecutionID: prepared.executionID,
-		PlanHash: append([]byte(nil), bodyDigest[:]...), Body: append([]byte(nil), body...),
+		TaskID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
+		WorkItemID: prepared.workItemID, AttemptID: ids.New(ids.KindAttempt),
+		AssignedAt: time.Now().UTC(), ExecutionID: prepared.executionID,
+		Input: workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: hex.EncodeToString(bodyDigest[:])},
+		Body:  append([]byte(nil), body...),
 		BodyMetadata: &agentpb.ScriptBodyArtifactMetadata{
 			ScriptExecutionId: prepared.executionID, Size: uint32(len(body)), Sha256: append([]byte(nil), bodyDigest[:]...),
 			Uid: uid, Gid: gid,
@@ -196,6 +208,12 @@ func cleanupFixture(t *testing.T) (*Runner, *cleanupEngine, scriptexecution.Requ
 				{Key: "com.groundplane.kind", Value: "script-runner"},
 			},
 		}}
+	request.Projection.Labels = append(request.Projection.Labels,
+		&agentpb.ScriptStringPair{Key: "com.groundplane.task-id", Value: request.TaskID},
+		&agentpb.ScriptStringPair{Key: "com.groundplane.work-item-id", Value: request.WorkItemID},
+		&agentpb.ScriptStringPair{Key: "com.groundplane.operation-id", Value: request.OperationID},
+		&agentpb.ScriptStringPair{Key: "com.groundplane.script-execution-id", Value: request.ExecutionID},
+	)
 	containerID := strings.Repeat("a", 64)
 	engine := &cleanupEngine{containerID: containerID}
 	engine.inspected = client.ContainerInspectResult{Container: container.InspectResponse{
@@ -319,3 +337,11 @@ func (engine *cleanupEngine) ContainerRemove(
 }
 
 func (engine *cleanupEngine) Close() error { return nil }
+
+func capturedCleanup(request scriptexecution.Request) scriptexecution.CleanupRequest {
+	return scriptexecution.CleanupRequest{
+		QuiescenceRequest: scriptexecution.QuiescenceRequest{TaskID: request.TaskID, WorkItemID: request.WorkItemID,
+			OperationID: request.OperationID, ExecutionID: request.ExecutionID, Projection: request.Projection},
+		BodyMetadata: request.BodyMetadata,
+	}
+}

@@ -27,6 +27,7 @@ import (
 
 const helperImage = "registry.example/groundplane-agent@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
+// TASK-31: short-lived helper isolation, outcome reporting and cleanup.
 // Rationale: one request gets one unnamed helper with only static process
 // configuration, the Docker socket, and no persistent Agent or host-root mount.
 func TestExecuteUsesExactContainerPolicyAndRemovesByImmutableID(t *testing.T) {
@@ -229,6 +230,16 @@ func (*fakeEngine) ImageInspect(
 
 func (*fakeEngine) ImagePull(context.Context, string, client.ImagePullOptions) (client.ImagePullResponse, error) {
 	return nil, errors.New("unexpected image pull")
+}
+
+func (*fakeEngine) ContainerInspect(
+	context.Context,
+	string,
+	client.ContainerInspectOptions,
+) (client.ContainerInspectResult, error) {
+	return client.ContainerInspectResult{}, errors.New(
+		"unexpected recovery inspection during forward Compose execution",
+	)
 }
 
 func newFakeEngine(t *testing.T, response *agentpb.ComposeHelperResponse) *fakeEngine {

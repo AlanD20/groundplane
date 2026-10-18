@@ -10,7 +10,7 @@ import (
 // Rationale: opening a socket alone is insufficient; qualification waits until
 // the actual gRPC server has entered Accept and can serve the Agent channel.
 func TestAgentChannelSignalsReadinessWhenServing(t *testing.T) {
-	runtime := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	runtime := newTransportTestRuntime(nil)
 	ready := make(chan struct{})
 	runtime.OnReady = func() { close(ready) }
 	socket := shortUnixSocketPath(t)

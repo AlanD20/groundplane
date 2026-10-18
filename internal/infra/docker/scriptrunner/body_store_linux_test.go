@@ -22,11 +22,11 @@ func TestBodyStorePublishesAdoptsAndRemovesExactBody(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	assignmentID := ids.New(ids.KindAssignment)
+	workItemID := ids.New(ids.KindWorkItem)
 	executionID := ids.NewULID()
 	body := []byte("php artisan migrate --force\n")
 	prepared, err := store.Prepare(
-		assignmentID,
+		workItemID,
 		executionID,
 		body,
 		uint32(os.Geteuid()),
@@ -35,7 +35,7 @@ func TestBodyStorePublishesAdoptsAndRemovesExactBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
-	wantPath := filepath.Join(root, bodyStoreTasks, assignmentID, executionID, bodyLeaf)
+	wantPath := filepath.Join(root, bodyStoreWork, workItemID, executionID, bodyLeaf)
 	if prepared.hostPath != wantPath || prepared.identity.Leaf != bodyLeaf {
 		t.Fatalf("Prepare() = %#v", prepared)
 	}
@@ -50,7 +50,7 @@ func TestBodyStorePublishesAdoptsAndRemovesExactBody(t *testing.T) {
 	}
 
 	adopted, err := store.Prepare(
-		assignmentID,
+		workItemID,
 		executionID,
 		body,
 		uint32(os.Geteuid()),
@@ -63,7 +63,7 @@ func TestBodyStorePublishesAdoptsAndRemovesExactBody(t *testing.T) {
 		t.Fatalf("adopted identity = %#v, want %#v", adopted.identity, prepared.identity)
 	}
 	if _, err := store.Prepare(
-		assignmentID,
+		workItemID,
 		executionID,
 		[]byte("different\n"),
 		uint32(os.Geteuid()),
@@ -93,7 +93,7 @@ func TestBodyStoreRefusesReplacementInode(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	prepared, err := store.Prepare(
-		ids.New(ids.KindAssignment),
+		ids.New(ids.KindWorkItem),
 		ids.NewULID(),
 		[]byte("true\n"),
 		uint32(os.Geteuid()),
@@ -116,7 +116,7 @@ func TestBodyStoreRefusesReplacementInode(t *testing.T) {
 	}
 }
 
-func TestBodyStoreRejectsSymlinkedAssignment(t *testing.T) {
+func TestBodyStoreRejectsSymlinkedWork(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Chmod(root, directoryMode); err != nil {
 		t.Fatalf("Chmod(root) error = %v", err)
@@ -126,13 +126,13 @@ func TestBodyStoreRejectsSymlinkedAssignment(t *testing.T) {
 		t.Fatalf("newBodyStore() error = %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	assignmentID := ids.New(ids.KindAssignment)
+	workItemID := ids.New(ids.KindWorkItem)
 	outside := t.TempDir()
-	if err := os.Symlink(outside, filepath.Join(root, bodyStoreTasks, assignmentID)); err != nil {
+	if err := os.Symlink(outside, filepath.Join(root, bodyStoreWork, workItemID)); err != nil {
 		t.Fatalf("Symlink() error = %v", err)
 	}
 	if _, err := store.Prepare(
-		assignmentID,
+		workItemID,
 		ids.NewULID(),
 		[]byte("true\n"),
 		uint32(os.Geteuid()),

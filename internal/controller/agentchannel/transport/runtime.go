@@ -58,51 +58,38 @@ func New(
 ) *Runtime {
 	runtime := &Runtime{Registry: agentchannel.NewRegistry(), listen: agentlistener.Listen}
 	runtime.newServer = func(registry *agentchannel.Registry) (agentChannelGRPCServer, error) {
-		server := grpc.NewServer(
-			grpc.MaxRecvMsgSize(agentChannelControllerMaximumReceiveMessageBytes),
-			grpc.MaxSendMsgSize(agentChannelControllerMaximumSendMessageBytes),
-		)
 		channel := agentchannel.New(authenticator, registry, staging, secrets, scriptCheckpoints)
 		if err := channel.ConfigureWorkExecution(runtime.workIdentities, runtime.workStarts, runtime.workCheckpoints, runtime.scriptCompletion, runtime.hierarchyReports, runtime.workDispatch); err != nil {
-			server.Stop()
 			return nil, err
 		}
 		if runtime.volumeReports == nil {
-			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Volume reporting is not configured")
 		}
 		channel.ConfigureVolumeWork(runtime.volumeReports)
 		if runtime.networkReports == nil {
-			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Network reporting is not configured")
 		}
 		channel.ConfigureNetworkWork(runtime.networkReports)
 		if runtime.componentReports == nil {
-			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Component reporting is not configured")
 		}
 		channel.ConfigureComponentWork(runtime.componentReports)
 		if runtime.backingReports == nil {
-			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Backing creation reporting is not configured")
 		}
 		channel.ConfigureBackingWork(runtime.backingReports)
 		if runtime.resolverReports == nil {
-			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native DNS resolver reporting is not configured")
 		}
 		channel.ConfigureResolverWork(runtime.resolverReports)
 		if runtime.entryReports == nil {
-			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Entry reporting is not configured")
 		}
 		channel.ConfigureEntryConfigurationWork(runtime.entryReports)
 		if err := channel.ConfigureEnvironmentProvision(runtime.environmentProvision); err != nil {
-			server.Stop()
 			return nil, err
 		}
 		if runtime.lifecycleReports == nil || runtime.removalRecoveryReports == nil {
-			server.Stop()
 			return nil, errs.New(
 				errs.KindInternal,
 				"native Service lifecycle and removal recovery reporting are not configured",
@@ -111,27 +98,31 @@ func New(
 		channel.ConfigureServiceLifecycle(runtime.lifecycleReports)
 		channel.ConfigureServiceRemovalRecovery(runtime.removalRecoveryReports)
 		if runtime.attachReports == nil {
-			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Attach reporting is not configured")
 		}
 		channel.ConfigureAttachWork(runtime.attachReports)
 		if runtime.attachProvisionReports == nil {
-			server.Stop()
 			return nil, errs.New(errs.KindInternal, "native Attach provisioning reporting is not configured")
 		}
 		channel.ConfigureAttachProvision(runtime.attachProvisionReports)
 		if err := channel.ConfigureBackupWork(runtime.backupWorkReports); err != nil {
-			server.Stop()
 			return nil, err
 		}
 		if err := channel.ConfigureBackupWorkSecrets(runtime.backupWorkSecrets); err != nil {
-			server.Stop()
 			return nil, err
 		}
-		agentpb.RegisterAgentChannelServer(server, channel)
-		return server, nil
+		return newChannelGRPCServer(channel), nil
 	}
 	return runtime
+}
+
+func newChannelGRPCServer(channel agentpb.AgentChannelServer) *grpc.Server {
+	server := grpc.NewServer(
+		grpc.MaxRecvMsgSize(agentChannelControllerMaximumReceiveMessageBytes),
+		grpc.MaxSendMsgSize(agentChannelControllerMaximumSendMessageBytes),
+	)
+	agentpb.RegisterAgentChannelServer(server, channel)
+	return server
 }
 
 func (runtime *Runtime) ConfigureBackupWork(reports agentchannel.BackupWorkReporter) error {
