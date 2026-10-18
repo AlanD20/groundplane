@@ -33,7 +33,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/agent/componentaction"
-	"github.com/AlanD20/groundplane/internal/agent/hostresolution"
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
@@ -145,7 +144,7 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	}
 	defer clear(token)
 	image := os.Getenv(agentprotocol.AgentImageEnv)
-	compose, resources, err := newAgentComposeRuntime(
+	resources, err := newAgentComposeResources(
 		image,
 		func(image string) (ownedComposeHelper, error) {
 			return composehelpercontainer.New(image)
@@ -163,10 +162,6 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, resources.Close())
-	}
-	directories, err := directoryruntime.New(directoryHelper)
-	if err != nil {
-		return nil, preferAgentComposeCleanup(err, errors.Join(directoryHelper.Close(), resources.Close()))
 	}
 	materializerHelper, err := materializerrunner.New(ctx, image, cfg.Storage.VolumeRoot)
 	if err != nil {
@@ -282,21 +277,15 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 		managedConfigs: managedConfigs, dnsResolverObserver: dnsObserver,
 		hostResolution: hostResolution, logs: logReader, scripts: scripts,
 	}
-	client, err := agent.NewClientWithLogReader(
+	client, err := agent.NewClient(
 		agentprotocol.SocketPath,
 		cfg.AgentID,
 		token,
 		cfg.Storage.VolumeRoot,
 		logger,
-		compose,
-		directories,
-		materializer,
 		logReader,
 	)
 	if err != nil {
-		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
-	}
-	if err := client.SetComponentActionRuntime(componentActions); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	if err := client.SetProcessOwnership(ownership); err != nil {
@@ -464,15 +453,6 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	if err := client.SetDNSConnectionChecker(componentActions); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
-	if err := client.SetHostResolutionRuntime(hostresolution.New(hostResolution)); err != nil {
-		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
-	}
-	if err := client.SetScriptRuntime(scripts); err != nil {
-		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
-	}
-	if err := client.SetAdapterCompiler(adaptercompiler.Compile); err != nil {
-		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
-	}
 	return &Agent{Config: cfg, Logger: logger, Client: client, resources: runtimeResources}, nil
 }
 
@@ -543,31 +523,26 @@ func (resources *agentRuntimeResources) Close() error {
 	return nil
 }
 
-func newAgentComposeRuntime(
+func newAgentComposeResources(
 	image string,
 	newHelper func(string) (ownedComposeHelper, error),
 	newObserver func() (ownedComposeObserver, error),
-) (*composeruntime.Runtime, *agentComposeResources, error) {
+) (*agentComposeResources, error) {
 	if image == "" {
-		return nil, nil, errs.New(errs.KindValidationFailed, "agent: managed Agent image is required")
+		return nil, errs.New(errs.KindValidationFailed, "agent: managed Agent image is required")
 	}
 	if newHelper == nil || newObserver == nil {
-		return nil, nil, errs.New(errs.KindInternal, "agent: Compose runtime factories are required")
+		return nil, errs.New(errs.KindInternal, "agent: Compose helper factories are required")
 	}
 	helper, err := newHelper(image)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	observer, err := newObserver()
 	if err != nil {
-		return nil, nil, preferAgentComposeCleanup(err, helper.Close())
+		return nil, preferAgentComposeCleanup(err, helper.Close())
 	}
-	resources := &agentComposeResources{helper: helper, observer: observer}
-	runtime, err := composeruntime.New(helper, observer)
-	if err != nil {
-		return nil, nil, preferAgentComposeCleanup(err, resources.Close())
-	}
-	return runtime, resources, nil
+	return &agentComposeResources{helper: helper, observer: observer}, nil
 }
 
 func (resources *agentComposeResources) Close() error {

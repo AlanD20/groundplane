@@ -23,7 +23,7 @@ func (client *Client) SetDNSConnectionChecker(checker DNSConnectionChecker) erro
 	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	if client.started || client.pool != nil {
+	if client.started {
 		return errs.New(errs.KindStateConflict, "Agent DNS connection checker cannot change after start")
 	}
 	client.dnsChecks = checker

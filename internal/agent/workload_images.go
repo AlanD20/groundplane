@@ -21,7 +21,7 @@ func (c *Client) SetWorkloadImageResolver(resolver WorkloadImageResolver) error 
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.started || c.pool != nil {
+	if c.started {
 		return errs.New(errs.KindStateConflict, "agent: image resolver cannot change after start")
 	}
 	c.images = resolver

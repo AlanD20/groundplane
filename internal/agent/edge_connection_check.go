@@ -20,7 +20,7 @@ func (client *Client) SetEdgeConnectionChecker(checker EdgeConnectionChecker) er
 	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	if client.started || client.pool != nil {
+	if client.started {
 		return errs.New(errs.KindStateConflict, "Agent Tunnel checker cannot change after start")
 	}
 	client.edgeChecks = checker

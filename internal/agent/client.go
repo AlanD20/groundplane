@@ -16,17 +16,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
-	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	"github.com/AlanD20/groundplane/internal/agent/backingruntime"
 	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
-	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
-	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
 	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	logstream "github.com/AlanD20/groundplane/internal/agent/logstream"
-	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
 	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
 	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
@@ -40,7 +36,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/agentownership"
 	"github.com/AlanD20/groundplane/internal/infra/agentstagingjournal"
-	"github.com/AlanD20/groundplane/internal/infra/agentterminaljournal"
 	"github.com/AlanD20/groundplane/internal/infra/agentworkjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -90,7 +85,6 @@ type Client struct {
 
 	mu                      sync.Mutex
 	started                 bool
-	pool                    *WorkerPool
 	releaseExecutor         *releaseruntime.Executor
 	hierarchyExecutor       *hierarchyruntime.Executor
 	networkExecutor         *networkruntime.Executor
@@ -105,21 +99,12 @@ type Client struct {
 	releaseRecoveryExecutor *releaseruntime.RecoveryExecutor
 	processOwnership        *agentownership.Lease
 	executionWorkers        *executionWorkers
-	workersDone             <-chan struct{}
-	compose                 *composeruntime.Runtime
-	environmentDirectories  *directoryruntime.Runtime
-	materializer            *filematerialization.Runtime
-	adapterCompiler         backingadapter.Compiler
-	componentActions        ComponentActionRuntime
-	hostResolution          HostResolutionRuntime
-	scriptRuntime           ScriptRuntime
 	images                  WorkloadImageResolver
 	observer                ServiceObserver
 	backingAccess           BackingAccessChecker
 	dnsChecks               DNSConnectionChecker
 	edgeChecks              EdgeConnectionChecker
 	logs                    *logstream.Subscriptions
-	terminalJournal         *agentterminaljournal.Journal
 	stagingJournal          *agentstagingjournal.Journal
 	staging                 *backupStagingState
 }
@@ -130,6 +115,7 @@ func NewClient(
 	token []byte,
 	volumeRoot string,
 	logger *slog.Logger,
+	logReader agentprotocol.LogReader,
 ) (*Client, error) {
 	if socketPath != agentprotocol.SocketPath {
 		return nil, errs.New(errs.KindValidationFailed, "agent: invalid Controller socket path")
@@ -144,8 +130,8 @@ func NewClient(
 			agentprotocol.RawTokenBytes,
 		)
 	}
-	if logger == nil {
-		return nil, errs.New(errs.KindValidationFailed, "agent: logger is required")
+	if logger == nil || logReader == nil {
+		return nil, errs.New(errs.KindValidationFailed, "agent: logger and log reader are required")
 	}
 	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
 		return nil, errs.New(errs.KindValidationFailed, "agent: invalid volume root policy")
@@ -161,66 +147,12 @@ func NewClient(
 		logger:             logger,
 		connect:            connectGRPC,
 		reconnect:          waitForAgentChannelReconnect,
-		logs:               logstream.New(nil),
+		logs:               logstream.New(logReader),
 	}
 	if _, err := cryptorand.Read(client.processGeneration[:]); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	copy(client.token[:], token)
-	return client, nil
-}
-
-func NewClientWithRuntimes(
-	socketPath string,
-	agentID string,
-	token []byte,
-	volumeRoot string,
-	logger *slog.Logger,
-	compose *composeruntime.Runtime,
-	environmentDirectories *directoryruntime.Runtime,
-	materializer *filematerialization.Runtime,
-) (*Client, error) {
-	if compose == nil || environmentDirectories == nil || materializer == nil {
-		return nil, errs.New(errs.KindValidationFailed, "agent: execution runtimes are required")
-	}
-	client, err := NewClient(socketPath, agentID, token, volumeRoot, logger)
-	if err != nil {
-		return nil, err
-	}
-	client.compose = compose
-	client.environmentDirectories = environmentDirectories
-	client.materializer = materializer
-	return client, nil
-}
-
-func NewClientWithLogReader(
-	socketPath string,
-	agentID string,
-	token []byte,
-	volumeRoot string,
-	logger *slog.Logger,
-	compose *composeruntime.Runtime,
-	environmentDirectories *directoryruntime.Runtime,
-	materializer *filematerialization.Runtime,
-	logReader agentprotocol.LogReader,
-) (*Client, error) {
-	if logReader == nil {
-		return nil, errs.New(errs.KindValidationFailed, "agent: log reader is required")
-	}
-	client, err := NewClientWithRuntimes(
-		socketPath,
-		agentID,
-		token,
-		volumeRoot,
-		logger,
-		compose,
-		environmentDirectories,
-		materializer,
-	)
-	if err != nil {
-		return nil, err
-	}
-	client.logs = logstream.New(logReader)
 	return client, nil
 }
 

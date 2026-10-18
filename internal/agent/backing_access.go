@@ -20,7 +20,7 @@ func (client *Client) SetBackingAccessChecker(checker BackingAccessChecker) erro
 	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	if client.started || client.pool != nil {
+	if client.started {
 		return errs.New(errs.KindStateConflict, "Agent Backing access checker cannot change after start")
 	}
 	client.backingAccess = checker
