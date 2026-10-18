@@ -7,7 +7,6 @@ import (
 	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
-	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	backupsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/backupsecrets"
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
@@ -26,7 +25,6 @@ type controllerExecutionComposition struct {
 	attachFactValues        *attachments.FactService
 	attachFactReads         handlers.AttachFactReader
 	planResolver            *taskplanning.TaskPlanResolver
-	backingHookCheckpoints  *taskcheckpoint.BackingHookCheckpointService
 	materializationResolver *taskmaterialization.TaskMaterializationResolver
 	scriptArtifacts         *taskplanning.ScriptArtifactService
 	scriptSourceReferences  *scriptsourcepublication.Authority
@@ -75,16 +73,6 @@ func newControllerExecutionComposition(
 		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Script plan resolver: %w", err)
 	}
-	backingHookCheckpoints, err := taskcheckpoint.NewBackingHookCheckpointService(
-		authority.tasks, planResolver, attachRecords, attachFactValues,
-	)
-	if err != nil {
-		_ = store.Close()
-		return controllerExecutionComposition{}, fmt.Errorf(
-			"controller: initialize backing hook checkpoint service: %w",
-			err,
-		)
-	}
 	materializationResolver, err := initializeTaskMaterializationResolver(
 		store,
 		authority.hierarchyRecords,
@@ -129,7 +117,6 @@ func newControllerExecutionComposition(
 		attachFactValues:        attachFactValues,
 		attachFactReads:         attachFactReads,
 		planResolver:            planResolver,
-		backingHookCheckpoints:  backingHookCheckpoints,
 		materializationResolver: materializationResolver,
 		scriptArtifacts:         scriptArtifacts,
 		scriptSourceReferences:  scriptSourceReferences,

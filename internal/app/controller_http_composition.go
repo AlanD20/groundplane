@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/app/hostplatform"
 	"github.com/AlanD20/groundplane/internal/app/softwareplatform"
@@ -33,10 +32,6 @@ import (
 	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 )
-
-type controllerStaleTaskMaintenance interface {
-	ExpireStaleAgentTasks(context.Context, time.Time) (int, error)
-}
 
 type controllerHTTPDependencies struct {
 	bootstrap               controllerBootstrapComposition
@@ -68,7 +63,6 @@ type controllerHTTPDependencies struct {
 	environmentBlueprints   *blueprint.Service
 	hierarchyDeletions      *hierarchydeletion.Service
 	attachMutations         *attachments.MutationService
-	staleTasks              controllerStaleTaskMaintenance
 }
 
 func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Controller, error) {
@@ -325,7 +319,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 	maintenanceScheduler := scheduler.New(
 		dependencies.bootstrap.logger, dependencies.platform.Upgrades, dependencies.bootstrap.tick,
 		dependencies.authority.tasks, dependencies.authority.idempotency.Retention,
-		dependencies.dataServices.serviceDesiredRevisionRecords, dependencies.staleTasks,
+		dependencies.dataServices.serviceDesiredRevisionRecords,
 		dependencies.backup.schedules, dependencies.backup.retention, dependencies.backup.orphans,
 	)
 	maintenanceScheduler.ConfigureMaintenance(dependencies.bootstrap.storageMaintenance)

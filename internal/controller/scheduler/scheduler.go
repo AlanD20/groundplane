@@ -13,7 +13,6 @@ import (
 )
 
 type taskExpiration interface {
-	ExpireTimedOutTasks(context.Context, time.Time) (int, error)
 	PruneExpiredTasks(context.Context, time.Time) (int, error)
 	ExpireTaskDiagnostics(context.Context, time.Time, time.Duration, int) (int, error)
 	ResumeTaskSourceReleases(context.Context) (bool, error)
@@ -31,10 +30,6 @@ type storageMaintenance interface {
 
 type blueprintRevisionCleanup interface {
 	CleanupEnvironmentBlueprintStaging(context.Context, time.Time, int) (int, error)
-}
-
-type staleAgentExpiration interface {
-	ExpireStaleAgentTasks(context.Context, time.Time) (int, error)
 }
 
 // BackupScheduleRunner evaluates all due policy occurrences in one bounded
@@ -67,7 +62,6 @@ type Scheduler struct {
 	tasks                  taskExpiration
 	idempotency            idempotencyPruning
 	blueprintRevisions     blueprintRevisionCleanup
-	agents                 staleAgentExpiration
 	backupSchedules        BackupScheduleRunner
 	backupRetention        backupRetentionDispatcher
 	retentionCursor        string
@@ -87,13 +81,12 @@ func New(
 	tasks *etcd.TaskRepository,
 	idempotency idempotencyPruning,
 	blueprintRevisions blueprintRevisionCleanup,
-	agents staleAgentExpiration,
 	backupSchedules BackupScheduleRunner,
 	backupRetention backupRetentionDispatcher,
 	backupOrphans backupOrphanReconciler,
 ) *Scheduler {
 	return &Scheduler{
-		logger: logger, admission: admission, Interval: interval, tasks: tasks, idempotency: idempotency, agents: agents,
+		logger: logger, admission: admission, Interval: interval, tasks: tasks, idempotency: idempotency,
 		blueprintRevisions: blueprintRevisions,
 		backupSchedules:    backupSchedules, backupRetention: backupRetention, backupOrphans: backupOrphans, now: time.Now,
 		maintenancePolicy: config.DefaultMaintenancePolicy(),
@@ -129,7 +122,7 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if sch == nil || sch.tasks == nil || sch.idempotency == nil || sch.blueprintRevisions == nil || sch.agents == nil ||
+	if sch == nil || sch.tasks == nil || sch.idempotency == nil || sch.blueprintRevisions == nil ||
 		sch.now == nil {
 		return errs.New(errs.KindInternal, "scheduler task maintenance is not configured")
 	}
@@ -148,12 +141,6 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 		if err := sch.storageMaintenance.Tick(ctx, now); err != nil {
 			maintenanceErr = errors.Join(maintenanceErr, err)
 		}
-	}
-	if _, err := sch.tasks.ExpireTimedOutTasks(ctx, now); err != nil {
-		return err
-	}
-	if _, err := sch.agents.ExpireStaleAgentTasks(ctx, now); err != nil {
-		return err
 	}
 	if _, err := sch.tasks.ResumeTaskSourceReleases(ctx); err != nil {
 		return err
