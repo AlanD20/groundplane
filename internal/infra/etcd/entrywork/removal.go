@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -29,8 +30,10 @@ func (removal Removal) matches(view workqueue.View, environmentID string, genera
 	if environmentID != view.Task.Task.Scope.EnvironmentID || generation == 0 || view.Task.Task.Action != workexecution.ActionRemove || ids.Validate(ids.KindEnvEntry, removal.EntryID) != nil ||
 		ids.Validate(ids.KindTask, removal.BaseRevisionID) != nil ||
 		ids.Validate(ids.KindTask, "task_"+removal.DescriptorID) != nil ||
-		removal.RevisionID != view.Task.Task.ID || removal.BaseRevisionID == removal.RevisionID ||
-		removal.HeadRevision <= 0 || removal.HeadRevision > view.ReadRevision {
+		removal.RevisionID != view.Task.Task.ID ||
+		removal.BaseRevisionID == removal.RevisionID ||
+		removal.HeadRevision <= 0 ||
+		removal.HeadRevision > view.ReadRevision {
 		return conflict("Entry removal has no matching captured desired revision")
 	}
 	return nil
@@ -51,9 +54,46 @@ func (repository *InputRepository) prepareRemoval(ctx context.Context, view work
 }
 
 // PrepareRemoval commits only the captured desired metadata retirement. Host
-// callers must join acknowledged file cleanup; Controller-only callers must
-// join proof that the acknowledged configuration contains no target sources.
-func (repository *InputRepository) PrepareRemoval(ctx context.Context, view workqueue.View, removal Removal, generation uint64) (workqueue.Change, error) {
+// callers must join acknowledged file cleanup. Definition-only publication uses
+// its sealed candidate through PrepareDefinitionRemoval instead.
+func (repository *InputRepository) PrepareRemoval(
+	ctx context.Context,
+	view workqueue.View,
+	removal Removal,
+	generation uint64,
+) (workqueue.Change, error) {
+	environmentID := view.Task.Task.Scope.EnvironmentID
+	if err := removal.matches(view, environmentID, generation); err != nil {
+		return workqueue.Change{}, err
+	}
+	candidate, found, err := blueprints.ReadEffectiveProjectionRevisionAt(ctx, repository.store,
+		environmentID, removal.RevisionID, view.ReadRevision)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	if !found {
+		return workqueue.Change{}, conflict("Entry removal captured projection is unavailable")
+	}
+	return repository.prepareRemovalProjection(ctx, view, removal, generation, candidate.Record)
+}
+
+// PrepareDefinitionRemoval uses the candidate joining initial publication. It
+// does not yet exist as applied or persisted runtime. The sealed revision digest
+// still binds its complete projection; no missing-runtime fallback is allowed.
+func (repository *InputRepository) PrepareDefinitionRemoval(ctx context.Context, view workqueue.View,
+	removal Removal, generation uint64, candidate environmentprojection.EnvironmentComposeProjection,
+) (workqueue.Change, error) {
+	item := view.Item.Item
+	if item.Placement.Executor != workexecution.Controller || item.Operation != workexecution.EntryConfiguration ||
+		item.Input != nil || item.AttemptNumber != 0 || item.ActiveAttemptID != "" {
+		return workqueue.Change{}, conflict("Entry definition retirement requires unexecuted Controller work")
+	}
+	return repository.prepareRemovalProjection(ctx, view, removal, generation, candidate)
+}
+
+func (repository *InputRepository) prepareRemovalProjection(ctx context.Context, view workqueue.View,
+	removal Removal, generation uint64, candidate environmentprojection.EnvironmentComposeProjection,
+) (workqueue.Change, error) {
 	environmentID := view.Task.Task.Scope.EnvironmentID
 	if err := removal.matches(view, environmentID, generation); err != nil {
 		return workqueue.Change{}, err
@@ -93,16 +133,12 @@ func (repository *InputRepository) PrepareRemoval(ctx context.Context, view work
 		seal != blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor) {
 		return workqueue.Change{}, conflict("Entry removal staged revision changed")
 	}
-	candidate, found, err := blueprints.ReadEffectiveProjectionRevisionAt(ctx, repository.store,
-		environmentID, removal.RevisionID, view.ReadRevision)
-	if err != nil {
-		return workqueue.Change{}, err
+	digest, err := blueprints.EnvironmentBlueprintDependencyDigest(candidate)
+	if err != nil || candidate.EnvironmentID != environmentID ||
+		candidate.RevisionID != removal.RevisionID || candidate.RenderGeneration != generation || digest != seal.DependencyDigest {
+		return workqueue.Change{}, conflict("Entry removal candidate differs from its sealed revision")
 	}
-	if !found || candidate.Record.EnvironmentID != environmentID ||
-		candidate.Record.RevisionID != removal.RevisionID || candidate.Record.RenderGeneration != generation {
-		return workqueue.Change{}, conflict("Entry removal captured projection is unavailable")
-	}
-	for _, entry := range candidate.Record.Entries {
+	for _, entry := range candidate.Entries {
 		if entry.Entry.ID == removal.EntryID {
 			return workqueue.Change{}, conflict("Entry removal candidate still contains the Entry")
 		}
@@ -135,7 +171,10 @@ func (repository *InputRepository) PrepareRemoval(ctx context.Context, view work
 		{Type: keyvalue.MutationDelete, Key: entryvalues.SecretPrefix + removal.EntryID + "/", Prefix: true},
 	}}
 	for index, key := range keys {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision},
+		)
 	}
 	return change, nil
 }

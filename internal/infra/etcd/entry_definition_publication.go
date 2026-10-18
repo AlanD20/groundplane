@@ -16,8 +16,13 @@ func entryDefinitionConflict() error {
 	return errs.New(errs.KindStateConflict, "Entry has acknowledged configuration that requires host cleanup")
 }
 
-func (repository *HierarchyRepository) prepareEntryDefinitionPublication(ctx context.Context, request EntryWorkPublication,
-	inputs *entrywork.InputRepository, sources *runtimeconfiguration.Repository, revision int64, guards []keyvalue.Condition,
+func (repository *HierarchyRepository) prepareEntryDefinitionPublication(
+	ctx context.Context,
+	request EntryWorkPublication,
+	inputs *entrywork.InputRepository,
+	sources *runtimeconfiguration.Repository,
+	revision int64,
+	guards []keyvalue.Condition,
 ) (workqueue.Change, error) {
 	snapshot, head, err := sources.ReadAcknowledged(ctx, request.Task.Scope.EnvironmentID, revision)
 	if err != nil {
@@ -39,20 +44,32 @@ func (repository *HierarchyRepository) prepareEntryDefinitionPublication(ctx con
 			}
 		}
 	}
-	removal, err := inputs.PrepareRemoval(ctx, workqueue.View{
-		Task: workqueue.TaskSnapshot{Task: request.Task}, Item: workqueue.ItemSnapshot{Item: request.Item}, ReadRevision: revision,
-	}, *request.Capture.Removal, request.Claim.RenderGeneration)
+	removal, err := inputs.PrepareDefinitionRemoval(ctx, workqueue.View{
+		Task: workqueue.TaskSnapshot{
+			Task: request.Task,
+		}, Item: workqueue.ItemSnapshot{Item: request.Item}, ReadRevision: revision,
+	}, *request.Capture.Removal, request.Claim.RenderGeneration, request.Projection)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change, err := entrywork.PrepareDefinitionPublication(request.Task, request.Item, *request.Capture.Removal, head, request.Marker, time.Now().UTC())
+	change, err := entrywork.PrepareDefinitionPublication(
+		request.Task,
+		request.Item,
+		*request.Capture.Removal,
+		head,
+		request.Marker,
+		time.Now().UTC(),
+	)
 	if err != nil {
 		keyvalue.ClearMutationValues(removal.Mutations)
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, guards...)
 	change.Conditions = append(change.Conditions, removal.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: runtimeconfiguration.HeadKey(request.Task.Scope.EnvironmentID), ModRevision: head})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: runtimeconfiguration.HeadKey(request.Task.Scope.EnvironmentID), ModRevision: head},
+	)
 	change.Mutations = append(change.Mutations, removal.Mutations...)
 	markerKey, err := idempotency.IdempotencyMarkerKey(request.Marker.Locator)
 	if err != nil {
@@ -65,6 +82,9 @@ func (repository *HierarchyRepository) prepareEntryDefinitionPublication(ctx con
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: markerKey})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: markerKey, Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: markerKey, Value: value},
+	)
 	return change, nil
 }
