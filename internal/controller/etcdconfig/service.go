@@ -3,27 +3,24 @@ package etcdconfig
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/common/etcdactivation"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/jcs"
-	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/etcdconfiguration"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const applyRoute = "/etcd/config/apply"
-const inputParam = "etcd_config_input"
 
 type Document interface {
 	Current(context.Context) (string, string, bool, error)
@@ -31,11 +28,13 @@ type Document interface {
 type Runtime interface {
 	AppliedConfiguration(context.Context) (string, error)
 	Apply(context.Context, string, string, string) error
+	ObserveApply(context.Context, string, string, string) (etcdactivation.Outcome, error)
+	RecoverApply(context.Context, string, string, string) (etcdactivation.Outcome, error)
 }
 type TaskStore interface {
-	CreateTask(
+	CreateEtcdConfigurationWork(
 		context.Context,
-		etcd.TaskRecord,
+		etcdconfiguration.Input,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -45,23 +44,23 @@ type Service struct {
 	tasks    TaskStore
 	evidence requestidempotency.EvidenceRepository
 	intents  *requestidempotency.Coordinator
-}
-type input struct {
-	Candidate string `json:"candidate"`
-	Previous  string `json:"previous"`
+	inputs   *etcdconfiguration.Repository
+	queue    *workqueue.Repository
 }
 
 func New(
 	document Document,
 	runtime Runtime,
 	tasks TaskStore,
+	inputs *etcdconfiguration.Repository,
+	queue *workqueue.Repository,
 	evidence requestidempotency.EvidenceRepository,
 	intents *requestidempotency.Coordinator,
 ) (*Service, error) {
-	if document == nil || runtime == nil || tasks == nil || evidence == nil || intents == nil {
+	if document == nil || runtime == nil || tasks == nil || inputs == nil || queue == nil || evidence == nil || intents == nil {
 		return nil, errs.New(errs.KindInternal, "etcd config dependencies are required")
 	}
-	return &Service{document: document, runtime: runtime, tasks: tasks, evidence: evidence, intents: intents}, nil
+	return &Service{document: document, runtime: runtime, tasks: tasks, inputs: inputs, queue: queue, evidence: evidence, intents: intents}, nil
 }
 
 func (s *Service) Apply(
@@ -114,29 +113,10 @@ func (s *Service) Apply(
 			return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindValidationFailed, err)
 		}
 	}
-	raw, err := json.Marshal(input{Candidate: candidate, Previous: previous})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	canonical, err := jcs.Canonicalize(raw)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	hash := sha256.Sum256(canonical)
 	now := time.Now().UTC()
-	task := etcd.TaskRecord{
-		ID: ids.New(
-			ids.KindTask,
-		), OperationID: ids.New(ids.KindOperation), PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(hash[:]),
-		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
-		IdempotencyKey: key, RenderGeneration: 1, Type: taskjournal.TaskUpdate, Target: "etcd",
-		Params: map[string]string{
-			taskjournal.TaskResourceKindParam: taskjournal.TaskResourceEtcd,
-			inputParam:                        string(canonical),
-		},
-		TimeoutSeconds: 120, Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	captured := etcdconfiguration.Input{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
+		PlanID: ids.New(ids.KindPlan), SelectedRevision: revision, Candidate: candidate, Previous: previous, CreatedAt: now}
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: captured.TaskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -150,9 +130,9 @@ func (s *Service) Apply(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(intent.Ciphertext)
-	result, err := s.tasks.CreateTask(ctx, task, idempotencyrecord.IdempotencyMarker{
+	result, err := s.tasks.CreateEtcdConfigurationWork(ctx, captured, idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, Intent: intent, Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+		Locator: locator, Intent: intent, Response: response, TaskID: captured.TaskID, CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
 		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) {
@@ -199,37 +179,4 @@ func accepted(result requestidempotency.Resolution) (idempotencyrecord.Idempoten
 	response := result.Response
 	response.Body = append([]byte(nil), response.Body...)
 	return response, nil
-}
-
-type Dispatcher struct {
-	service  *Service
-	fallback controllertask.Handler
-}
-
-func (s *Service) Dispatcher(fallback controllertask.Handler) controllertask.Handler {
-	return &Dispatcher{service: s, fallback: fallback}
-}
-func (d *Dispatcher) Execute(ctx context.Context, task etcd.TaskRecord, progress *controllertask.Progress) error {
-	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEtcd {
-		return d.fallback.Execute(ctx, task, progress)
-	}
-	hash := sha256.Sum256([]byte(task.Params[inputParam]))
-	if task.Executor != taskjournal.TaskExecutorController || task.Owner != taskjournal.PlatformTaskOwner() ||
-		task.Actor != taskjournal.TaskActorOperator || task.Type != taskjournal.TaskUpdate || task.Target != "etcd" ||
-		task.TimeoutSeconds != 120 || task.RenderGeneration != 1 || len(task.Steps) != 0 || len(task.Materializations) != 0 ||
-		len(task.Params) != 2 || task.PlanHash != hex.EncodeToString(hash[:]) {
-		return errs.New(errs.KindValidationFailed, "etcd Apply Task authority is invalid")
-	}
-	frozen, err := jcs.Decode[input]([]byte(task.Params[inputParam]))
-	if err != nil {
-		return err
-	}
-	for _, doc := range []string{frozen.Candidate, frozen.Previous} {
-		if err := config.ValidateEtcdDocument(ctx, []byte(doc)); err != nil {
-			return errs.Wrap(errs.KindValidationFailed, err)
-		}
-	}
-	return progress.Run(ctx, "etcd_apply", func(ctx context.Context) error {
-		return d.service.runtime.Apply(ctx, task.ID, frozen.Candidate, frozen.Previous)
-	})
 }

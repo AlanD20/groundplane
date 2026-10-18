@@ -40,7 +40,7 @@ export function WorkInspection({
     <section id={`task-work-${work.id}`} className="min-w-0 space-y-3 rounded-lg border border-border p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">
-          {atomicKeyRotation ? "Rotate Backup encryption key" : work.operation.replaceAll("_", " ")}
+          {atomicKeyRotation ? "Rotate Backup encryption key" : work.operation === "etcd_configuration" ? "Apply etcd configuration" : work.operation.replaceAll("_", " ")}
         </h3>
         <StatusBadge status={work.outcome || work.phase} />
       </div>

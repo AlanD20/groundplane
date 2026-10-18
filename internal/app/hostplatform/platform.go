@@ -30,6 +30,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/etcdconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
 	"github.com/AlanD20/groundplane/internal/infra/systemd"
 )
@@ -245,9 +247,17 @@ func New(
 		return nil, err
 	}
 	dependencies.Channel.OnReady = platform.Readiness.MarkChannelReady
+	etcdInputs, err := etcdconfiguration.New(dependencies.Store)
+	if err != nil {
+		return nil, err
+	}
+	queue, err := workqueue.NewRepository(dependencies.Store)
+	if err != nil {
+		return nil, err
+	}
 	platform.EtcdConfig, err = etcdconfig.New(
 		dependencies.EtcdLifecycle.Configuration(), dependencies.EtcdLifecycle,
-		dependencies.Tasks, dependencies.Idempotency, dependencies.Intents,
+		dependencies.Tasks, etcdInputs, queue, dependencies.Idempotency, dependencies.Intents,
 	)
 	if err != nil {
 		return nil, err

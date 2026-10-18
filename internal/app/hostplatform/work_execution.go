@@ -304,6 +304,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	scheduler, err := workdispatch.NewScheduler(queue, []workdispatch.Registration{
+		{Operation: workexecution.EtcdConfiguration, Executor: workexecution.Controller, Owner: platform.EtcdConfig},
 		{Operation: workexecution.SecretRotation, Executor: workexecution.Controller, Owner: keyRotations, DecisionOnly: true},
 		{Operation: workexecution.Backup, Executor: workexecution.Agent, Owner: backupReports},
 		{Operation: workexecution.Restore, Executor: workexecution.Agent, Owner: backupReports},
@@ -343,6 +344,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	controller, err := workdispatch.NewControllerExecutor(queue, []workdispatch.ControllerRegistration{
+		{Operation: workexecution.EtcdConfiguration, Owner: platform.EtcdConfig},
 		{Operation: workexecution.Runner, Owner: dependencies.RunnerLifecycle},
 		{Operation: workexecution.RemovalBackupObject, Owner: backupRemoval},
 		{Operation: workexecution.Image, Owner: dependencies.Images},
@@ -356,6 +358,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	retries, err := workdispatch.NewRetries(queue, []workdispatch.RetryRegistration{
+		{Operation: workexecution.EtcdConfiguration, Owner: platform.EtcdConfig},
 		{Operation: workexecution.Backup, Owner: backupReports},
 		{Operation: workexecution.Restore, Owner: backupReports},
 		{Operation: workexecution.BackupPrune, Owner: backupReports},
@@ -396,6 +399,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	retention, err := operationretention.New(queue, checkRecords, backingRecords, dnsRecords, edgeRecords, runnerRecords, imageRecords, hierarchyRecords, networkRecords,
+		operationretention.WorkRegistration{Operation: workexecution.EtcdConfiguration, Owner: platform.EtcdConfig},
 		operationretention.WorkRegistration{Operation: workexecution.SecretRotation, Owner: keyRotations},
 		operationretention.WorkRegistration{Operation: workexecution.BackupPrune, Owner: backupReports},
 		operationretention.WorkRegistration{Operation: workexecution.Backup, Owner: backupReports},
@@ -430,6 +434,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	completions, err := workdispatch.NewCompletions(queue, []workdispatch.CompletionRegistration{
+		{Action: workexecution.ActionApply, Operation: workexecution.EtcdConfiguration, Owner: platform.EtcdConfig},
 		{Action: workexecution.ActionRotate, Operation: workexecution.SecretRotation, Owner: keyRotations},
 		{Action: workexecution.ActionBackup, Operation: workexecution.Backup, Owner: backupReports},
 		{Action: workexecution.ActionRestore, Operation: workexecution.Restore, Owner: backupReports},

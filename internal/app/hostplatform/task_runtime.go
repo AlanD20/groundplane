@@ -28,7 +28,7 @@ func (platform *Platform) newSoftwareRuntime(
 		return nil, nil, err
 	}
 	dispatcher, err := taskdispatch.NewSoftwarePreparationDispatcher(
-		platform.EtcdConfig.Dispatcher(handler),
+		handler,
 		software.Preparations,
 	)
 	if err != nil {

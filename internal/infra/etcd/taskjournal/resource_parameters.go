@@ -5,7 +5,6 @@ const (
 	TaskResourceKindParam             = "resource_kind"
 	TaskResourceAgent                 = "agent"
 	TaskResourceController            = "controller"
-	TaskResourceEtcd                  = "etcd"
 	TaskResourceImage                 = "image"
 	TaskResourceSoftware              = "software"
 	TaskResourceSoftwarePreparation   = "software_preparation"
