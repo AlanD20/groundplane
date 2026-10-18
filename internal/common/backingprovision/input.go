@@ -114,7 +114,8 @@ func Open(attempt workexecution.Attempt, input *agentpb.BackingProvisionInput) (
 		return nil, err
 	}
 	if reference != attempt.Input || input.TaskId != attempt.TaskID || input.WorkItemId != attempt.WorkItemID ||
-		input.HostId != attempt.Executor.HostID || attempt.AssignedAt.Before(input.CreatedAt.AsTime()) {
+		input.HostId != attempt.Executor.HostID || attempt.AssignedAt.Before(input.CreatedAt.AsTime()) ||
+		attempt.Deadline.Sub(attempt.AssignedAt) > input.Deadline.AsTime().Sub(input.CreatedAt.AsTime()) {
 		return nil, invalid("backing creation assignment differs from its captured input or host")
 	}
 	return proto.CloneOf(input), nil

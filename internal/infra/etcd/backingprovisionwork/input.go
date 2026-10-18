@@ -122,7 +122,7 @@ func (input Input) Matches(task workexecution.Task, item workexecution.Item) err
 		!task.Deadline.Equal(expected.Deadline) || task.ExpectedItems != 1 || !task.PublicationComplete ||
 		item.ID != descriptor.ID || item.TaskID != task.ID || item.TargetID != descriptor.TargetID || item.Operation != descriptor.Operation ||
 		item.Placement != descriptor.Placement || item.Input == nil || *item.Input != *descriptor.Input ||
-		!item.CreatedAt.Equal(descriptor.CreatedAt) || item.AttemptNumber == 0 && !item.Deadline.Equal(descriptor.Deadline) ||
+		!item.CreatedAt.Equal(descriptor.CreatedAt) ||
 		!slices.Equal(item.Claims, descriptor.Claims) || len(item.Dependencies) != 0 {
 		return invalid("backing creation input differs from its accepted native work")
 	}

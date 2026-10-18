@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"google.golang.org/protobuf/proto"
@@ -115,6 +116,13 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 	if err != nil {
 		return prepared, result, err
 	}
+	receipt, err := recordcodec.Encode("backing-provision-completion", CompletionRecord{Attempt: terminal,
+		Checkpoint: *view.Checkpoint.Record, Observation: observation})
+	if err != nil {
+		return prepared, result, err
+	}
+	prepared.Conditions = append(prepared.Conditions, keyvalue.Condition{Key: ResultKey(terminal.ID)})
+	prepared.Mutations = append(prepared.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ResultKey(terminal.ID), Value: receipt})
 	applied := environmentprojection.CloneEnvironmentComposeProjection(projection.Record)
 	if backingruntimepublication.IsManagedDatabase(applied, procedure.ServiceId) {
 		conditions, err := backingruntimepublication.Prepare(ctx, repository.store, backingruntimepublication.Input{
@@ -147,7 +155,7 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 		prepared.Conditions = append(prepared.Conditions, keyvalue.Condition{Key: key})
 		prepared.Mutations = append(prepared.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
 	}
-	directories, err := repository.prepareDirectoryReady(ctx, view.Work, input)
+	directories, err := repository.prepareDirectoryState(ctx, view.Work, input, true)
 	if err != nil {
 		return prepared, result, err
 	}
@@ -163,28 +171,39 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 	return prepared, evidence, nil
 }
 
-func (repository *Repository) prepareDirectoryReady(ctx context.Context, view workqueue.View, input Input) (workqueue.Change, error) {
+func (repository *Repository) prepareDirectoryState(ctx context.Context, view workqueue.View, input Input, ready bool) (workqueue.Change, error) {
 	key := hierarchy.EnvironmentKey(view.Task.Task.Scope.EnvironmentID)
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
+	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 {
 		return workqueue.Change{}, invalid("backing creation directory acknowledgement lost its Environment")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	stored := read.Values[0]
+	if stored == nil && !ready {
+		return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key}}}, nil
+	}
+	if stored == nil {
+		return workqueue.Change{}, invalid("backing creation cannot acknowledge a removed Environment")
+	}
+	if stored.Key != key || stored.ModRevision <= 0 || stored.ModRevision > view.ReadRevision {
+		return workqueue.Change{}, invalid("backing creation Environment revision is invalid")
+	}
 	current, err := hierarchy.DecodeEnvironment(stored.Value)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if stored.Key != key || stored.ModRevision <= 0 || stored.ModRevision > view.ReadRevision ||
-		current.ID != input.Environment.ID || current.CreateTaskID != view.Task.Task.ID || current.ProjectID != input.Environment.ProjectID ||
+	if !ready && current.CreateTaskID != view.Task.Task.ID {
+		return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: stored.ModRevision}}}, nil
+	}
+	if current.ID != input.Environment.ID || current.CreateTaskID != view.Task.Task.ID || current.ProjectID != input.Environment.ProjectID ||
 		current.VolumeDir != input.Environment.VolumeDir || current.DeletionTaskID != "" {
 		return workqueue.Change{}, invalid("backing creation directory no longer belongs to this action")
 	}
 	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: stored.ModRevision}}}
-	if current.ProvisioningState == hierarchy.EnvironmentProvisioningReady {
+	if current.ProvisioningState == hierarchy.EnvironmentProvisioningReady || !ready && current.ProvisioningState == hierarchy.EnvironmentProvisioningFailed {
 		return change, nil
 	}
 	if current.ProvisioningState == hierarchy.EnvironmentProvisioningFailed {
@@ -193,11 +212,11 @@ func (repository *Repository) prepareDirectoryReady(ctx context.Context, view wo
 			return workqueue.Change{}, err
 		}
 	}
-	ready, err := hierarchy.CompleteEnvironmentProvisioning(current, view.Task.Task.ID, true)
+	next, err := hierarchy.CompleteEnvironmentProvisioning(current, view.Task.Task.ID, ready)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	value, err := hierarchy.EncodeEnvironment(ready)
+	value, err := hierarchy.EncodeEnvironment(next)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

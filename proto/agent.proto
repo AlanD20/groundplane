@@ -152,6 +152,98 @@ message BackingProvisionCheckpointAck {
   WorkInputReference evidence = 3;
 }
 
+message BackingProvisionCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes runtime_observation = 3;
+}
+
+message BackingProvisionCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  string outcome = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}
+
+message BackingProvisionFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message BackingProvisionFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  bytes failure = 2;
+  WorkInputReference evidence = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp finished_at = 6;
+}
+
+message BackingProvisionConfigurationRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+}
+
+message BackingProvisionConfigurationManifest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  WorkConfigurationReference configuration = 3;
+  repeated MaterializeFile files = 4;
+}
+
+message BackingProvisionFileRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  string destination = 3;
+}
+
+message BackingProvisionFileDelivery {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  WorkConfigurationReference configuration = 3;
+  MaterializeFile file = 4;
+  bytes content = 5;
+}
+
+message BackingProvisionHookRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+}
+
+message BackingProvisionHookDelivery {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  BackingHookProcedure hook = 3;
+}
+
+message BackingProvisionRecoveryRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message BackingProvisionRecoveryAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  string outcome = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}
+
+message BackingProvisionHelperRequest {
+  BackingProvisionAssignment assignment = 1;
+  WorkStartAck start = 2;
+  BackingProvisionCheckpointRequest report = 3;
+  BackingProvisionCheckpointAck acknowledgement = 4;
+  bool inspect_only = 5;
+}
+
+message BackingProvisionHelperResponse {
+  bytes observation = 1;
+  bytes runtime_observation = 2;
+  bytes recovery_report = 3;
+}
+
 message EnvironmentProvisionAssignment {
   WorkAttemptIdentity attempt = 1;
   EnvironmentProvisionInput input = 2;
@@ -959,6 +1051,13 @@ message AgentMessage {
     BackupRecoveryRequest backup_recovery_request = 99;
     BackupConfigRecoveryPrepareRequest backup_config_recovery_prepare_request = 100;
     EnvironmentProvisionResultRequest environment_provision_result_request = 101;
+    BackingProvisionCheckpointRequest backing_provision_checkpoint_request = 102;
+    BackingProvisionCompletionRequest backing_provision_completion_request = 103;
+    BackingProvisionFailureRequest backing_provision_failure_request = 104;
+    BackingProvisionConfigurationRequest backing_provision_configuration_request = 105;
+    BackingProvisionFileRequest backing_provision_file_request = 106;
+    BackingProvisionHookRequest backing_provision_hook_request = 107;
+    BackingProvisionRecoveryRequest backing_provision_recovery_request = 108;
   }
 }
 
@@ -1519,6 +1618,14 @@ message ControllerMessage {
     WorkCancel work_cancel = 120;
     EnvironmentProvisionAssignment environment_provision_assignment = 121;
     EnvironmentProvisionResultAck environment_provision_result_ack = 122;
+    BackingProvisionAssignment backing_provision_assignment = 123;
+    BackingProvisionCheckpointAck backing_provision_checkpoint_ack = 124;
+    BackingProvisionCompletionAck backing_provision_completion_ack = 125;
+    BackingProvisionFailureAck backing_provision_failure_ack = 126;
+    BackingProvisionConfigurationManifest backing_provision_configuration_manifest = 127;
+    BackingProvisionFileDelivery backing_provision_file_delivery = 128;
+    BackingProvisionHookDelivery backing_provision_hook_delivery = 129;
+    BackingProvisionRecoveryAck backing_provision_recovery_ack = 130;
   }
 }
 
