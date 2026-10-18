@@ -13,6 +13,7 @@ import (
 type directReleaseExecution struct {
 	input       []workdispatch.InputRegistration
 	publication []workdispatch.PublicationRegistration
+	completion  []workdispatch.CompletionRegistration
 }
 
 func (platform *Platform) newDirectReleaseWork(queue *workqueue.Repository, networks *networkwork.InputRepository,
@@ -36,6 +37,10 @@ func (platform *Platform) newDirectReleaseWork(queue *workqueue.Repository, netw
 			{Action: workexecution.ActionRollback, Operation: workexecution.Release, Owner: inputs},
 		},
 		publication: []workdispatch.PublicationRegistration{
+			{Action: workexecution.ActionDeploy, Owner: publication},
+			{Action: workexecution.ActionRollback, Owner: publication},
+		},
+		completion: []workdispatch.CompletionRegistration{
 			{Action: workexecution.ActionDeploy, Owner: publication},
 			{Action: workexecution.ActionRollback, Owner: publication},
 		},

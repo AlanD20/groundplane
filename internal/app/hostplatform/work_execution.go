@@ -438,7 +438,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	completions, err := workdispatch.NewCompletions(queue, append(softwareWork.completion, []workdispatch.CompletionRegistration{
+	completions, err := workdispatch.NewCompletions(queue, append(append(softwareWork.completion, directReleases.completion...), []workdispatch.CompletionRegistration{
 		{Action: workexecution.ActionCreate, Operation: workexecution.Environment, Owner: environmentWork},
 		{Action: workexecution.ActionRemove, Operation: workexecution.ReleaseGroup, Owner: groupRemoval},
 		{Action: workexecution.ActionCreate, Operation: workexecution.AgentLifecycle, Owner: agentWork},

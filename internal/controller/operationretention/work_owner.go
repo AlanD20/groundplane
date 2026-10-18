@@ -51,10 +51,10 @@ func (collector *Collector) collectGraph(ctx context.Context, task workqueue.Tas
 	if len(page.Items) == 0 {
 		var change workqueue.Change
 		var err error
-		if task.Task.Action == workexecution.ActionActivate {
-			change, err = workqueue.PrepareTaskCollection(task)
-		} else {
+		if task.Task.Action == workexecution.ActionApply {
 			change, err = blueprintunits.PrepareGraphCollection(task)
+		} else {
+			change, err = workqueue.PrepareTaskCollection(task)
 		}
 		if err != nil {
 			return false, err

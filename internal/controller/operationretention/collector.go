@@ -68,7 +68,7 @@ func (collector *Collector) Collect(ctx context.Context, taskID string, at time.
 		task.Task.TargetID == task.Task.Scope.EnvironmentID {
 		return collector.collectGraph(ctx, task, revision, at)
 	}
-	if task.Task.Action == workexecution.ActionActivate {
+	if task.Task.Action == workexecution.ActionActivate || task.Task.Action == workexecution.ActionDeploy || task.Task.Action == workexecution.ActionRollback {
 		return collector.collectGraph(ctx, task, revision, at)
 	}
 	if task.Task.Action == workexecution.ActionRemove && ids.Validate(ids.KindNetwork, task.Task.TargetID) == nil {
