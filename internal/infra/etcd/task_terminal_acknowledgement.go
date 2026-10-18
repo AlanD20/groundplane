@@ -384,15 +384,6 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, hostResolutionChange.conditions[hostResolutionBaseConditionCount:]...)
 			mutations = append(mutations, hostResolutionChange.mutations...)
 		}
-		rotationChange, err := repository.prepareBackupKeyRotationTaskAcknowledgement(
-			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
-		)
-		if err != nil {
-			return etcdstore.Versioned[TaskRecord]{}, err
-		}
-		defer rotationChange.clear()
-		conditions = append(conditions, rotationChange.conditions...)
-		mutations = append(mutations, rotationChange.mutations...)
 		clearPrepared := func() {
 			journal.clearPrimary()
 			clear(taskRetentionValue)

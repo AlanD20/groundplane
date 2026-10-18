@@ -9,15 +9,15 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
-	corebackup "github.com/AlanD20/groundplane/internal/core/backup"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -38,10 +38,11 @@ type Repository interface {
 	PublishBackupKeyRotation(
 		context.Context,
 		etcd.PreparedBackupKeyRotation,
-		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	ApplyBackupKeyRotation(context.Context, string) error
+	PrepareBackupKeyRotationSettlement(context.Context, workqueue.View, workexecution.Outcome, time.Time) (workqueue.Change, error)
+	PrepareBackupKeyRotationFinish(context.Context, workqueue.FinishedWork) (workqueue.Change, error)
+	PrepareBackupKeyRotationRetention(context.Context, workqueue.View, time.Time, bool) (bool, workqueue.Change, error)
 }
 
 type KeyReader interface {
@@ -223,19 +224,12 @@ func (service *Service) RotateBackupKey(
 	defer clear(material.Ciphertext)
 	taskID, operationID, planID := ids.New(ids.KindTask), ids.New(ids.KindOperation), ids.New(ids.KindPlan)
 	prepared, err := service.repository.PrepareBackupKeyRotation(ctx, etcd.BackupKeyRotationInput{
-		EnvironmentID: environmentID, TaskID: taskID, OperationID: operationID, PlanID: planID, CreatedAt: now,
+		EnvironmentID: environmentID, TaskID: taskID, WorkItemID: ids.New(ids.KindWorkItem), OperationID: operationID, PlanID: planID, CreatedAt: now,
 	}, material)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer prepared.Clear()
-	task := etcd.TaskRecord{
-		ID: taskID, OperationID: operationID, IdempotencyKey: idempotencyKey,
-		Owner: prepared.Owner, Actor: taskjournal.TaskActorOperator,
-		Executor: taskjournal.TaskExecutorController, PlanID: planID, PlanHash: corebackup.KeyRotationPlanHash(), RenderGeneration: 1,
-		Type: taskjournal.TaskRotate, Target: environmentID, TimeoutSeconds: corebackup.KeyRotationTimeoutSeconds, Status: taskjournal.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -252,7 +246,7 @@ func (service *Service) RotateBackupKey(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	transaction, publishErr := service.repository.PublishBackupKeyRotation(ctx, prepared, task, marker)
+	transaction, publishErr := service.repository.PublishBackupKeyRotation(ctx, prepared, marker)
 	if publishErr != nil {
 		if !isUnknownBackupKeyPublicationOutcome(publishErr) {
 			return idempotencyrecord.IdempotencyResponse{}, publishErr
@@ -275,13 +269,6 @@ func (service *Service) RotateBackupKey(
 		errs.KindInternal,
 		"backup key rotation resolution is invalid",
 	)
-}
-
-func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error {
-	if task.Type != taskjournal.TaskRotate || task.Executor != taskjournal.TaskExecutorController {
-		return errs.New(errs.KindValidationFailed, "backup key rotation Task is invalid")
-	}
-	return service.repository.ApplyBackupKeyRotation(ctx, task.ID)
 }
 
 func (service *Service) ExportBackupKey(ctx context.Context, environmentID string) (Export, error) {

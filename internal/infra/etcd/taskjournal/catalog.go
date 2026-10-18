@@ -23,7 +23,6 @@ const (
 	TaskStart       TaskType = "start"
 	TaskStop        TaskType = "stop"
 	TaskDestroy     TaskType = "destroy"
-	TaskRotate      TaskType = "rotate"
 	TaskFetch       TaskType = "fetch"
 	TaskPrepare     TaskType = "prepare"
 	TaskApply       TaskType = "apply"

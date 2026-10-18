@@ -185,6 +185,7 @@ const (
 type BackupKeyRotationState string
 
 const (
-	BackupKeyRotationPrepared BackupKeyRotationState = "prepared"
-	BackupKeyRotationApplied  BackupKeyRotationState = "applied"
+	BackupKeyRotationPrepared  BackupKeyRotationState = "prepared"
+	BackupKeyRotationApplied   BackupKeyRotationState = "applied"
+	BackupKeyRotationDiscarded BackupKeyRotationState = "discarded"
 )

@@ -100,11 +100,6 @@ func (repository *TaskRepository) validateTaskAcknowledgementReplay(
 	); err != nil {
 		return err
 	}
-	if err := repository.validateBackupKeyRotationTaskAcknowledgementReplay(
-		ctx, task, terminalStatus, readRevision,
-	); err != nil {
-		return err
-	}
 	if err := repository.validateTaskRetentionReplay(
 		ctx, task, readRevision,
 	); err != nil {

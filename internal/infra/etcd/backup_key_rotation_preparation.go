@@ -2,7 +2,10 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -11,6 +14,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"time"
 )
 
 // PrepareBackupKeyRotation captures current key revisions and acquires no
@@ -29,6 +33,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	}
 	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, input.TaskID) != nil ||
+		ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil ||
 		ids.Validate(ids.KindOperation, input.OperationID) != nil ||
 		ids.Validate(ids.KindPlan, input.PlanID) != nil || !backuppolicy.ValidUTCInstant(input.CreatedAt) {
 		return PreparedBackupKeyRotation{}, errs.New(errs.KindValidationFailed, "backup key rotation input is invalid")
@@ -101,12 +106,36 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		return PreparedBackupKeyRotation{}, err
 	}
 	record := backupruntime.BackupKeyRotationRecord{
-		TaskID: input.TaskID, OperationID: input.OperationID, EnvironmentID: input.EnvironmentID,
+		TaskID: input.TaskID, WorkItemID: input.WorkItemID, InputID: input.PlanID, OperationID: input.OperationID, EnvironmentID: input.EnvironmentID,
 		ExpectedCurrentRecordRevision: anchor.Values[1].ModRevision,
 		ExpectedCurrentValueRevision:  anchor.Values[2].ModRevision,
 		CurrentKeyEra:                 current.KeyEra, NextKeyEra: current.KeyEra + 1,
 		NextRecipient: material.Recipient, NextEncryptedIdentity: append([]byte(nil), material.Ciphertext...),
 		State: backupruntime.BackupKeyRotationPrepared, CreatedAt: input.CreatedAt.UTC(), UpdatedAt: input.CreatedAt.UTC(),
+	}
+	digest := sha256.Sum256(material.Ciphertext)
+	record.NextIdentitySHA256 = hex.EncodeToString(digest[:])
+	reference, err := backupruntime.KeyRotationInput(record)
+	if err != nil {
+		clear(record.NextEncryptedIdentity)
+		return PreparedBackupKeyRotation{}, err
+	}
+	task := workexecution.Task{ID: record.TaskID, Actor: workexecution.OperatorActor,
+		Scope:  workexecution.Scope{TenantID: owner.TenantID, ProjectID: owner.ProjectID, EnvironmentID: owner.EnvironmentID},
+		Action: workexecution.ActionRotate, TargetID: record.EnvironmentID, TargetName: record.EnvironmentID,
+		Intent: reference, ExpectedItems: 1, CreatedAt: record.CreatedAt, UpdatedAt: record.CreatedAt,
+		Deadline: record.CreatedAt.Add(time.Duration(backupKeyRotationTimeoutSeconds) * time.Second)}
+	item := workexecution.Item{ID: record.WorkItemID, TaskID: record.TaskID, Operation: workexecution.SecretRotation,
+		TargetID: record.EnvironmentID, Placement: workexecution.Placement{Executor: workexecution.Controller},
+		Claims: []workexecution.Claim{{ScopeID: record.EnvironmentID}}, Input: &reference, Phase: workexecution.Ready,
+		Cleanup: workexecution.CleanupNone, CreatedAt: record.CreatedAt, UpdatedAt: record.CreatedAt, Deadline: task.Deadline}
+	if err := task.Validate(); err != nil {
+		clear(record.NextEncryptedIdentity)
+		return PreparedBackupKeyRotation{}, err
+	}
+	if err := item.Validate(); err != nil {
+		clear(record.NextEncryptedIdentity)
+		return PreparedBackupKeyRotation{}, err
 	}
 	rotationValue, err := backupruntime.EncodeBackupKeyRotationRecord(record)
 	if err != nil {
@@ -145,10 +174,9 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	}
 	mutations = append(mutations, epoch)
 	return PreparedBackupKeyRotation{
-		Owner: owner,
 		Publication: &PreparedBackupKeyRotationPublication{state: &preparedBackupKeyRotationState{
 			repository: repository,
-			plan:       backupKeyRotationPublicationPlan{conditions: conditions, mutations: mutations, record: record},
+			plan:       backupKeyRotationPublicationPlan{conditions: conditions, mutations: mutations, record: record, task: task, item: item, owner: owner},
 		}},
 	}, nil
 }

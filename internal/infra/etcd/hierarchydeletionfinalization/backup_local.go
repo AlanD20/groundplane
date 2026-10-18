@@ -139,7 +139,7 @@ func (repository *Preparer) prepareHierarchyDeletionBackupHistoryDetach(ctx cont
 	case hierarchydeletion.HierarchyDeletionBackupKeyRotationDetach:
 		record, decodeErr := backupruntime.DecodeBackupKeyRotationRecord(primary.Value)
 		valid = decodeErr == nil && record.TaskID == action.TargetID &&
-			record.State == backupruntime.BackupKeyRotationApplied
+			(record.State == backupruntime.BackupKeyRotationApplied || record.State == backupruntime.BackupKeyRotationDiscarded)
 		environmentID = record.EnvironmentID
 		operationID = record.OperationID
 		indexKey, err = backupruntime.BackupKeyRotationEnvironmentIndexKey(environmentID, action.TargetID)
@@ -148,16 +148,15 @@ func (repository *Preparer) prepareHierarchyDeletionBackupHistoryDetach(ctx cont
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	keys := []string{indexKey}
-	if action.ActionKind == hierarchydeletion.HierarchyDeletionBackupKeyRotationDetach {
-		keys = append(keys, taskjournal.TaskStorageKey(action.TargetID))
-	} else {
+	if action.ActionKind != hierarchydeletion.HierarchyDeletionBackupKeyRotationDetach {
 		keys = append(keys, backupruntime.BackupTerminalReceiptKey(action.TargetID))
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		return Effects{}, err
 	}
-	if read == nil || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil ||
+	if read == nil || len(read.Values) != len(keys) || read.Values[0] == nil ||
+		(len(keys) > 1 && read.Values[1] == nil) ||
 		string(read.Values[0].Value) != action.TargetID {
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
@@ -176,9 +175,12 @@ func (repository *Preparer) prepareHierarchyDeletionBackupHistoryDetach(ctx cont
 			return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 	}
+	conditions := []keyvalue.Condition{{Key: primary.Key, ModRevision: primary.ModRevision},
+		{Key: indexKey, ModRevision: read.Values[0].ModRevision}}
+	if len(keys) > 1 {
+		conditions = append(conditions, keyvalue.Condition{Key: keys[1], ModRevision: read.Values[1].ModRevision})
+	}
 	return Effects{fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(primary.Value),
-		conditions: []keyvalue.Condition{{Key: primary.Key, ModRevision: primary.ModRevision},
-			{Key: indexKey, ModRevision: read.Values[0].ModRevision},
-			{Key: keys[1], ModRevision: read.Values[1].ModRevision}},
-		mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: indexKey}}}, nil
+		conditions: conditions,
+		mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: indexKey}}}, nil
 }

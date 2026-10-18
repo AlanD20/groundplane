@@ -72,11 +72,6 @@ func (repository *TaskRepository) validatePendingAbortReplay(
 	); err != nil {
 		return err
 	}
-	if err := repository.validateBackupKeyRotationTaskAcknowledgementReplay(
-		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
-	); err != nil {
-		return err
-	}
 	if err := repository.validateTaskRetentionReplay(
 		ctx, current.Record, current.ReadRevision,
 	); err != nil {

@@ -13,8 +13,7 @@ func (repository *TaskRepository) backupHierarchyDeletionTaskPruneHeld(ctx conte
 	task TaskRecord,
 	readRevision int64,
 ) (bool, error) {
-	if task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskRestore &&
-		task.Type != taskjournal.TaskRotate {
+	if task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskRestore {
 		return false, nil
 	}
 	keys := make([]string, 0, 3)
@@ -59,9 +58,6 @@ func (repository *TaskRepository) prepareBackupNativeTaskPrune(ctx context.Conte
 	case taskjournal.TaskRestore:
 		primaryKey = backupruntime.BackupRestoreKey(task.ID)
 		indexKey, _ = backupruntime.BackupRestoreEnvironmentIndexKey(task.Owner.EnvironmentID, task.ID)
-	case taskjournal.TaskRotate:
-		primaryKey = backupruntime.BackupKeyRotationKey(task.ID)
-		indexKey, _ = backupruntime.BackupKeyRotationEnvironmentIndexKey(task.Owner.EnvironmentID, task.ID)
 	default:
 		return nil, nil, nil
 	}
@@ -93,10 +89,6 @@ func (repository *TaskRepository) prepareBackupNativeTaskPrune(ctx context.Conte
 			record.EnvironmentID == task.Owner.EnvironmentID &&
 			(record.State == backupruntime.BackupRestoreCompleted || record.State == backupruntime.BackupRestoreFailedSafe ||
 				record.State == backupruntime.BackupRestoreRecoveryRequired)
-	case taskjournal.TaskRotate:
-		record, decodeErr := backupruntime.DecodeBackupKeyRotationRecord(read.Values[0].Value)
-		valid = decodeErr == nil && record.TaskID == task.ID && record.OperationID == task.OperationID &&
-			record.EnvironmentID == task.Owner.EnvironmentID
 	}
 	if !valid || read.Values[1] != nil && string(read.Values[1].Value) != task.ID {
 		return nil, nil, taskjournal.CorruptPruneIntent()

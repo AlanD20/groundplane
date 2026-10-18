@@ -35,11 +35,12 @@ export function WorkInspection({
   onChanged?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const atomicKeyRotation = work.operation === "secret_rotation" && work.attempt_count === 0;
   return (
     <section id={`task-work-${work.id}`} className="min-w-0 space-y-3 rounded-lg border border-border p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">
-          {work.operation.replaceAll("_", " ")}
+          {atomicKeyRotation ? "Rotate Backup encryption key" : work.operation.replaceAll("_", " ")}
         </h3>
         <StatusBadge status={work.outcome || work.phase} />
       </div>
@@ -48,6 +49,15 @@ export function WorkInspection({
         {work.placement.executor === "agent" ? "Agent" : "Controller"}
         {work.placement.host_id ? ` on ${work.placement.host_id}` : ""}
       </p>
+      {atomicKeyRotation && (
+        <p className="text-sm">
+          {work.outcome === "succeeded"
+            ? "The new key is active for future backups. Existing recovery points keep their original key era."
+            : work.phase === "settled"
+              ? "Rotation ended before the key changed. Submit a new rotation when ready."
+              : "Waiting to atomically replace this Environment’s Backup encryption key."}
+        </p>
+      )}
       {work.preparation && (
         <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
           <p className="font-medium">Stopped before execution</p>
@@ -90,16 +100,18 @@ export function WorkInspection({
           outcome is shown separately.
         </p>
       )}
-      {!work.preparation && <Disclosure
-        open={open}
-        onOpenChange={setOpen}
-        summary={`Execution details · ${work.attempt_count} attempt${work.attempt_count === 1 ? "" : "s"}`}
-        summaryClassName="text-sm font-medium"
-      >
-        {open && (
-          <WorkEvidence taskId={taskId} work={work} revision={revision} />
-        )}
-      </Disclosure>}
+      {!work.preparation && !atomicKeyRotation && (
+        <Disclosure
+          open={open}
+          onOpenChange={setOpen}
+          summary={`Execution details · ${work.attempt_count} attempt${work.attempt_count === 1 ? "" : "s"}`}
+          summaryClassName="text-sm font-medium"
+        >
+          {open && (
+            <WorkEvidence taskId={taskId} work={work} revision={revision} />
+          )}
+        </Disclosure>
+      )}
       {onChanged && (
         <WorkRetry
           key={`${taskId}/${work.id}/${work.attempt_count}`}

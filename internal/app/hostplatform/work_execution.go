@@ -7,7 +7,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/attachreports"
 	"github.com/AlanD20/groundplane/internal/controller/attachwork"
 	"github.com/AlanD20/groundplane/internal/controller/backingchecks"
-	"github.com/AlanD20/groundplane/internal/controller/backup"
 	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	componentexecution "github.com/AlanD20/groundplane/internal/controller/componentwork"
@@ -31,8 +30,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachprovision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	backingrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backupvolumemanifest"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorchecks"
@@ -82,35 +79,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	backupInputs, err := backupwork.NewInputRepository(platform.dependencies.Store)
+	backupReports, keyRotations, err := platform.newBackupWork(queue, dependencies)
 	if err != nil {
-		return nil, err
-	}
-	backupManifests := backupvolumemanifest.NewRepository(platform.dependencies.Store, backupInputs.VolumeTransferGuard(queue))
-	backupSnapshots, err := backup.NewConfigSnapshotProducer(platform.dependencies.Store, platform.dependencies.Protector)
-	if err != nil {
-		return nil, err
-	}
-	backupRuntime, err := etcd.NewBackupRuntimeRepository(platform.dependencies.Store)
-	if err != nil {
-		return nil, err
-	}
-	backupRestores, err := backup.NewConfigRestoreProducer(platform.dependencies.Store, backupRuntime, platform.dependencies.Protector)
-	if err != nil {
-		return nil, err
-	}
-	backupReports, err := backup.NewAgentWork(backupInputs, queue, backupManifests, backupSnapshots, backupRuntime, backupRestores)
-	if err != nil {
-		return nil, err
-	}
-	if err := platform.dependencies.Channel.ConfigureBackupWork(backupReports); err != nil {
-		return nil, err
-	}
-	backupCredentials, err := backup.NewWorkSecretDelivery(dependencies.BackupSecrets, queue)
-	if err != nil {
-		return nil, err
-	}
-	if err := platform.dependencies.Channel.ConfigureBackupWorkSecrets(backupCredentials); err != nil {
 		return nil, err
 	}
 	scriptRecords, err := etcd.NewScriptRepository(platform.dependencies.Store)
@@ -334,6 +304,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	scheduler, err := workdispatch.NewScheduler(queue, []workdispatch.Registration{
+		{Operation: workexecution.SecretRotation, Executor: workexecution.Controller, Owner: keyRotations, DecisionOnly: true},
 		{Operation: workexecution.Backup, Executor: workexecution.Agent, Owner: backupReports},
 		{Operation: workexecution.Restore, Executor: workexecution.Agent, Owner: backupReports},
 		{Operation: workexecution.BackupPrune, Executor: workexecution.Agent, Owner: backupReports},
@@ -425,6 +396,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	retention, err := operationretention.New(queue, checkRecords, backingRecords, dnsRecords, edgeRecords, runnerRecords, imageRecords, hierarchyRecords, networkRecords,
+		operationretention.WorkRegistration{Operation: workexecution.SecretRotation, Owner: keyRotations},
 		operationretention.WorkRegistration{Operation: workexecution.BackupPrune, Owner: backupReports},
 		operationretention.WorkRegistration{Operation: workexecution.Backup, Owner: backupReports},
 		operationretention.WorkRegistration{Operation: workexecution.Restore, Owner: backupReports},
@@ -458,6 +430,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	completions, err := workdispatch.NewCompletions(queue, []workdispatch.CompletionRegistration{
+		{Action: workexecution.ActionRotate, Operation: workexecution.SecretRotation, Owner: keyRotations},
 		{Action: workexecution.ActionBackup, Operation: workexecution.Backup, Owner: backupReports},
 		{Action: workexecution.ActionRestore, Operation: workexecution.Restore, Owner: backupReports},
 		{Action: workexecution.ActionBackupPrune, Operation: workexecution.BackupPrune, Owner: backupReports},

@@ -1,10 +1,11 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	corebackup "github.com/AlanD20/groundplane/internal/core/backup"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"sync"
 	"time"
 )
@@ -16,6 +17,7 @@ const backupKeyRotationTimeoutSeconds = corebackup.KeyRotationTimeoutSeconds
 type BackupKeyRotationInput struct {
 	EnvironmentID string
 	TaskID        string
+	WorkItemID    string
 	OperationID   string
 	PlanID        string
 	CreatedAt     time.Time
@@ -25,7 +27,6 @@ type BackupKeyRotationInput struct {
 // Its wrapped identity is safe to retain durably; no plaintext identity is
 // present in this value.
 type PreparedBackupKeyRotation struct {
-	Owner       taskjournal.TaskOwner
 	Publication *PreparedBackupKeyRotationPublication
 }
 
@@ -36,13 +37,15 @@ func (prepared *PreparedBackupKeyRotation) Clear() {
 	}
 	prepared.Publication.Clear()
 	prepared.Publication = nil
-	prepared.Owner = taskjournal.TaskOwner{}
 }
 
 type backupKeyRotationPublicationPlan struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
 	record     backupruntime.BackupKeyRotationRecord
+	task       workexecution.Task
+	item       workexecution.Item
+	owner      taskjournal.TaskOwner
 }
 
 type preparedBackupKeyRotationState struct {

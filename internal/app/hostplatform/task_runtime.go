@@ -56,13 +56,9 @@ func (platform *Platform) newTaskRuntime(
 	if err != nil {
 		return nil, err
 	}
-	rotations, err := controllertask.NewDispatcher(handler, dependencies.Keys)
-	if err != nil {
-		return nil, err
-	}
 	runtime, err := controllertask.New(
 		platform.dependencies.Tasks,
-		rotations,
+		handler,
 		platformUpdates,
 		platform.dependencies.Tick,
 		platform.dependencies.Logger,
