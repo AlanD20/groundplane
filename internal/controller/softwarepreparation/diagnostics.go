@@ -60,8 +60,6 @@ func (observer *preparationObserver) record(ctx context.Context, stage workexecu
 
 func preparationStage(key string) (string, string, error) {
 	switch key {
-	case "software_checkpoint_check":
-		return "Verify previously published artifacts", "Read back exact captured registry manifests and configuration digests", nil
 	case "software_source_download":
 		return "Download captured source revision", "Download and validate only the resolved commit archive", nil
 	case "software_controller_build":

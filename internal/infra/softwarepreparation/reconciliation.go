@@ -46,7 +46,7 @@ func (preparer *Preparer) Reconcile(ctx context.Context, input Input, checkpoint
 	if ValidateResult(checkpoint, input.Source, false) != nil {
 		return result, nil
 	}
-	if err := preparer.verifyCheckpoint(ctx, checkpoint); err != nil {
+	if err := preparer.verifyArtifacts(ctx, checkpoint); err != nil {
 		return result, err
 	}
 	result.Verified = true

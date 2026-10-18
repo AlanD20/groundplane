@@ -64,7 +64,7 @@ func (service *Service) Execute(ctx context.Context, delivery workqueue.Delivery
 		return service.records.CheckpointWork(reportCtx, service.queue, attempt, progress, service.now().UTC())
 	}
 	observer := &preparationObserver{repository: service.diagnostics, attempt: attempt}
-	result, buildErr := service.preparer.Prepare(ctx, snapshot.Capture.Input, snapshot.Record.Record.Progress.Result, reporter, observer)
+	result, buildErr := service.preparer.Prepare(ctx, snapshot.Capture.Input, reporter, observer)
 	// Success already includes cleanup and registry readback. Failure needs a
 	// bounded observation; it must not start a second build or push.
 	state := preparation.Reconciliation{Cleaned: buildErr == nil, Verified: buildErr == nil}

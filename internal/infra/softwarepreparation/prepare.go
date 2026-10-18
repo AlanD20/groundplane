@@ -22,13 +22,12 @@ import (
 )
 
 // Prepare builds or imports the already-resolved source and publishes immutable
-// artifacts to the managed registry. Checkpoints are reported immediately after
-// each registry readback so a restarted durable Task can skip finished outputs.
-// It never stages or activates either component.
+// artifacts to the managed registry in one fresh execution. Checkpoints record
+// registry readback for reconciliation; they never authorize another build.
+// Interrupted execution uses Reconcile, not this method.
 func (preparer *Preparer) Prepare(
 	ctx context.Context,
 	input Input,
-	checkpoint Result,
 	reporter Reporter,
 	observation OperationObserver,
 ) (result Result, returnErr error) {
@@ -38,20 +37,7 @@ func (preparer *Preparer) Prepare(
 	if err := ValidateInput(input); err != nil {
 		return Result{}, err
 	}
-	if err := ValidateResult(checkpoint, input.Source, true); err != nil {
-		return Result{}, err
-	}
-	if checkpoint.Source.Selection == "" {
-		checkpoint.Source = input.Source
-	}
-	result = checkpoint
-	if result.Agent != nil || result.Controller != nil {
-		if err := observation.Run(ctx, "software_checkpoint_check", func(ctx context.Context) error {
-			return preparer.verifyCheckpoint(ctx, result)
-		}); err != nil {
-			return result, err
-		}
-	}
+	result = Result{Source: input.Source}
 	if err := reporter(ctx, Progress{Phase: PhasePreparing, Result: result}); err != nil {
 		return result, err
 	}
@@ -59,20 +45,8 @@ func (preparer *Preparer) Prepare(
 		return result, err
 	}
 	workspace := filepath.Join(preparer.workspaceRoot, ".software-preparation-"+input.OperationID)
-	if info, statErr := os.Lstat(workspace); statErr == nil {
-		status, statusOK := info.Sys().(*syscall.Stat_t)
-		if !info.IsDir() || info.Mode().Perm() != 0o700 || !statusOK || status.Uid != uint32(os.Geteuid()) {
-			return result, errs.New(errs.KindStateConflict, "stale software preparation workspace is unsafe")
-		}
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
-		cleanupErr := staleDockerOperation(preparer, workspace, input.OperationID, input.Source).cleanup(cleanupCtx)
-		cancel()
-		if cleanupErr != nil {
-			return result, errs.Wrap(errs.KindRequestUnavailable, cleanupErr)
-		}
-		if err := os.RemoveAll(workspace); err != nil {
-			return result, errs.Wrap(errs.KindRequestUnavailable, err)
-		}
+	if _, statErr := os.Lstat(workspace); statErr == nil {
+		return result, errs.New(errs.KindStateConflict, "software preparation workspace already exists; reconcile the captured execution instead of rebuilding")
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		return result, errs.Wrap(errs.KindInternal, statErr)
 	}
@@ -113,18 +87,17 @@ func (preparer *Preparer) Prepare(
 	if input.Source.SourceKind == SourceRef {
 		agentTag, controllerTag, controllerIdentity, err = operation.prepareSource(
 			ctx, input,
-			input.Source.Selection.includesAgent() && result.Agent == nil,
-			input.Source.Selection.includesController() && result.Controller == nil,
+			input.Source.Selection.includesAgent(),
+			input.Source.Selection.includesController(),
 			observation,
 		)
-	} else if input.Source.Selection.includesAgent() && result.Agent == nil ||
-		input.Source.Selection.includesController() && result.Controller == nil {
+	} else {
 		err = observation.Run(ctx, "software_release_import", func(ctx context.Context) error {
 			var importErr error
 			agentTag, agentUpstream, controllerTag, controllerIdentity, importErr = operation.prepareRelease(
 				ctx, input,
-				input.Source.Selection.includesAgent() && result.Agent == nil,
-				input.Source.Selection.includesController() && result.Controller == nil,
+				input.Source.Selection.includesAgent(),
+				input.Source.Selection.includesController(),
 			)
 			return importErr
 		})
@@ -133,7 +106,7 @@ func (preparer *Preparer) Prepare(
 		return result, err
 	}
 
-	if input.Source.Selection.includesAgent() && result.Agent == nil {
+	if input.Source.Selection.includesAgent() {
 		if err := observation.Run(ctx, "software_agent_publish", func(ctx context.Context) error {
 			artifact, err := operation.publish(ctx, agentTag, agentRepository, input.Source, SelectionAgent)
 			if err != nil {
@@ -145,7 +118,7 @@ func (preparer *Preparer) Prepare(
 			return result, err
 		}
 	}
-	if input.Source.Selection.includesController() && result.Controller == nil {
+	if input.Source.Selection.includesController() {
 		if err := observation.Run(ctx, "software_controller_publish", func(ctx context.Context) error {
 			artifact, err := operation.publish(
 				ctx, controllerTag, controllerRepository, input.Source, SelectionController,
@@ -169,7 +142,7 @@ func (preparer *Preparer) Prepare(
 		return result, errs.Wrap(errs.KindRequestUnavailable, err)
 	}
 	if err := observation.Run(ctx, "software_output_check", func(ctx context.Context) error {
-		return preparer.verifyCheckpoint(ctx, result)
+		return preparer.verifyArtifacts(ctx, result)
 	}); err != nil {
 		return result, err
 	}
@@ -317,7 +290,7 @@ func validateArtifact(artifact Artifact, repository string) error {
 	return nil
 }
 
-func (preparer *Preparer) verifyCheckpoint(ctx context.Context, result Result) error {
+func (preparer *Preparer) verifyArtifacts(ctx context.Context, result Result) error {
 	artifacts := make([]Artifact, 0, 2)
 	if result.Agent != nil {
 		artifacts = append(artifacts, result.Agent.Artifact)
