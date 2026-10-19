@@ -14,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumework"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	api "github.com/AlanD20/groundplane/pkg/api"
@@ -116,72 +117,108 @@ func TestNativeVolumeCreateRemoveAndReceiptReplay(t *testing.T) {
 }
 
 // TASK-56: no new host-stage grant can cross a concurrent desired-head or
-// authenticated registration change. The competing write must reach commit.
+// authenticated registration/resource-claim change. The competing write must
+// reach commit; the same guards protect destructive removal stages.
 func TestNativeVolumeCheckpointFencesConcurrentAuthority(t *testing.T) {
-	for _, source := range []string{"desired", "executor"} {
-		t.Run(source, func(t *testing.T) {
-			f := newNativeVolumeFixture(t)
-			view := f.start(t, f.created.TaskID)
-			input, err := f.inputs.LoadVolumeWorkInput(t.Context(), view.Work)
-			if err != nil {
-				t.Fatal(err)
-			}
-			progress := f.progress(t, view)
-			progress, err = progress.Begin(view.Attempt.Attempt, input.Action, input.VolumeId, time.Now().UTC())
-			if err != nil {
-				t.Fatal(err)
-			}
-			raw, err := volumeexecution.EncodeProgress(view.Attempt.Attempt, input.Action, input.VolumeId, progress)
-			if err != nil {
-				t.Fatal(err)
-			}
-			identity, err := workexecution.EncodeAgentAttempt(view.Attempt.Attempt)
-			if err != nil {
-				t.Fatal(err)
-			}
-			key := blueprints.EnvironmentBlueprintHeadKey(f.environmentID)
-			if source == "executor" {
-				key = workqueue.ExecutorKey(view.Attempt.Attempt.Executor)
-			}
-			old, err := f.store.Get(t.Context(), key)
-			if err != nil || old.Entry == nil {
-				t.Fatalf("authority fixture: %v", err)
-			}
-			f.store.beforeCommit = func(mutations []keyvalue.Mutation) {
-				for _, mutation := range mutations {
-					if mutation.Key != volumework.ReportKey(view.Attempt.Attempt.ID, 1) {
-						continue
+	for _, action := range []string{"create", "remove"} {
+		for _, source := range []string{"desired", "executor", "Volume claim", "host Environment claim", "Environment claim"} {
+			t.Run(action+"/"+source, func(t *testing.T) {
+				f := newNativeVolumeFixture(t)
+				view := f.start(t, f.created.TaskID)
+				if action == "remove" {
+					progress := f.progress(t, view)
+					for progress.Stage != volumeexecution.Complete {
+						progress = f.advance(t, view, progress)
 					}
-					f.store.beforeCommit = nil
-					if _, err := f.store.Put(t.Context(), key, old.Entry.Value); err != nil {
+					f.complete(t, view, progress)
+					view, _, _ = f.remove(t)
+				}
+				input, err := f.inputs.LoadVolumeWorkInput(t.Context(), view.Work)
+				if err != nil {
+					t.Fatal(err)
+				}
+				progress := f.progress(t, view)
+				progress, err = progress.Begin(view.Attempt.Attempt, input.Action, input.VolumeId, time.Now().UTC())
+				if err != nil {
+					t.Fatal(err)
+				}
+				raw, err := volumeexecution.EncodeProgress(view.Attempt.Attempt, input.Action, input.VolumeId, progress)
+				if err != nil {
+					t.Fatal(err)
+				}
+				identity, err := workexecution.EncodeAgentAttempt(view.Attempt.Attempt)
+				if err != nil {
+					t.Fatal(err)
+				}
+				key := blueprints.EnvironmentBlueprintHeadKey(f.environmentID)
+				if source == "executor" {
+					key = workqueue.ExecutorKey(view.Attempt.Attempt.Executor)
+				}
+				if source == "Volume claim" || source == "host Environment claim" || source == "Environment claim" {
+					found := false
+					for _, claim := range view.Work.Item.Item.Claims {
+						matches := source == "Volume claim" && claim.ScopeID == f.created.Volume.ID ||
+							source == "host Environment claim" && claim.ScopeID == f.environmentID &&
+								claim.HostID != "" ||
+							source == "Environment claim" && claim.ScopeID == f.environmentID && claim.HostID == ""
+						if matches {
+							key, found = workqueue.ClaimKey(claim), true
+							break
+						}
+					}
+					if !found {
+						t.Fatal("native Volume work did not capture its required resource claim")
+					}
+				}
+				old, err := f.store.Get(t.Context(), key)
+				if err != nil || old.Entry == nil {
+					t.Fatalf("authority fixture: %v", err)
+				}
+				replacement := old.Entry.Value
+				if source == "Volume claim" || source == "host Environment claim" || source == "Environment claim" {
+					replacement, err = recordcodec.Encode("execution_claim", workqueue.ClaimOwner{
+						TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
+					})
+					if err != nil {
 						t.Fatal(err)
 					}
-					return
 				}
-			}
-			_, err = f.reports.CheckpointVolume(
-				t.Context(),
-				f.authorization,
-				&agentpb.VolumeWorkCheckpointRequest{Attempt: identity, Progress: raw},
-			)
-			if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || f.store.beforeCommit != nil {
-				t.Fatalf("concurrent %s did not fence the actual grant: %v", source, err)
-			}
-			report, err := f.store.Get(t.Context(), volumework.ReportKey(view.Attempt.Attempt.ID, 1))
-			if err != nil || report.Entry != nil {
-				t.Fatalf("rejected grant persisted a report: %v", err)
-			}
-			resume, err := f.queue.ReadResume(
-				t.Context(),
-				view.Work.Task.Task.ID,
-				view.Work.Item.Item.ID,
-				view.Attempt.Attempt.ID,
-				view.Attempt.Attempt.Executor,
-			)
-			if err != nil || resume.Checkpoint.Record != nil {
-				t.Fatalf("rejected grant advanced the execution cursor: %v", err)
-			}
-		})
+				f.store.beforeCommit = func(mutations []keyvalue.Mutation) {
+					for _, mutation := range mutations {
+						if mutation.Key != volumework.ReportKey(view.Attempt.Attempt.ID, 1) {
+							continue
+						}
+						f.store.beforeCommit = nil
+						if _, err := f.store.Put(t.Context(), key, replacement); err != nil {
+							t.Fatal(err)
+						}
+						return
+					}
+				}
+				_, err = f.reports.CheckpointVolume(
+					t.Context(),
+					f.authorization,
+					&agentpb.VolumeWorkCheckpointRequest{Attempt: identity, Progress: raw},
+				)
+				if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || f.store.beforeCommit != nil {
+					t.Fatalf("concurrent %s did not fence the actual grant: %v", source, err)
+				}
+				report, err := f.store.Get(t.Context(), volumework.ReportKey(view.Attempt.Attempt.ID, 1))
+				if err != nil || report.Entry != nil {
+					t.Fatalf("rejected grant persisted a report: %v", err)
+				}
+				resume, err := f.queue.ReadResume(
+					t.Context(),
+					view.Work.Task.Task.ID,
+					view.Work.Item.Item.ID,
+					view.Attempt.Attempt.ID,
+					view.Attempt.Attempt.Executor,
+				)
+				if err != nil || resume.Checkpoint.Record != nil {
+					t.Fatalf("rejected grant advanced the execution cursor: %v", err)
+				}
+			})
+		}
 	}
 }
 

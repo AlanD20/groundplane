@@ -11,7 +11,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (repository *InputRepository) LoadVolumeWorkInput(ctx context.Context, view workqueue.View) (*agentpb.VolumeWorkInput, error) {
+func (repository *InputRepository) LoadVolumeWorkInput(
+	ctx context.Context,
+	view workqueue.View,
+) (*agentpb.VolumeWorkInput, error) {
 	input, _, err := repository.Load(ctx, view)
 	return input, err
 }
@@ -30,12 +33,19 @@ func (repository *InputRepository) PrepareVolumeWorkCheckpoint(ctx context.Conte
 	// new stage needs fresh desired-state authority; never reject its receipt
 	// merely because a later action changed the Environment.
 	if progress.InFlight && (view.Checkpoint.Record == nil || progress.Sequence > view.Checkpoint.Record.Sequence) {
+		claims, err := repository.transactions.ReadRunningClaimGuards(ctx, view)
+		if err != nil {
+			return workqueue.Change{}, err
+		}
+		guards = append(guards, claims...)
 		current, desired, err := repository.ReadDesiredMatch(ctx, view.Work)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
 		if !current {
-			return workqueue.Change{}, conflict("Environment configuration changed; this Volume action cannot start another stage")
+			return workqueue.Change{}, conflict(
+				"Environment configuration changed; this Volume action cannot start another stage",
+			)
 		}
 		guards = append(guards, desired...)
 	}

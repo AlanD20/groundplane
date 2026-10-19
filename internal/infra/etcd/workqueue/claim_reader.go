@@ -7,12 +7,59 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+// ReadRunningClaimGuards joins exact resource ownership to a new effect grant.
+// Receipts for an already-authorized effect do not use this gate: they still
+// need accounting after replacement, without gaining permission for more work.
+func (repository *Repository) ReadRunningClaimGuards(
+	ctx context.Context,
+	view ResumeView,
+) ([]keyvalue.Condition, error) {
+	item, attempt := view.Work.Item.Item, view.Attempt.Attempt
+	if view.Work.ReadRevision <= 0 || !view.ActiveAttempt || !view.CurrentExecutor ||
+		item.Phase != workexecution.Running || attempt.StartedAt == nil || attempt.FinishedAt != nil ||
+		view.Work.Task.Task.ID != item.TaskID || workexecution.ValidateDelivery(item, attempt) != nil {
+		return nil, errs.New(errs.KindStateConflict, "new execution stage requires its current running owner")
+	}
+	keys := make([]string, len(item.Claims))
+	for index, claim := range item.Claims {
+		keys[index] = ClaimKey(claim)
+	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	read, err := repository.read(ctx, keys, view.Work.ReadRevision)
+	if err != nil {
+		return nil, err
+	}
+	defer keyvalue.ClearValues(read.Values)
+	guards := make([]keyvalue.Condition, 0, len(keys))
+	for index, value := range read.Values {
+		if value == nil {
+			return nil, errs.New(errs.KindStateConflict, "execution resource protection is missing")
+		}
+		owner, err := DecodeClaimOwner(value.Value)
+		if err != nil {
+			return nil, err
+		}
+		if owner.TaskID != item.TaskID || owner.WorkItemID != item.ID {
+			return nil, errs.New(errs.KindStateConflict, "another operation owns an execution resource")
+		}
+		guards = append(guards, keyvalue.Condition{Key: keys[index], ModRevision: value.ModRevision})
+	}
+	return guards, nil
+}
 
 // ReadServiceClaim resolves the current effect owner at one fixed revision.
 // Ownership is cross-checked against the work item, not inferred from a Task's
 // overall status. It grants neither execution nor permission to release a claim.
-func (repository *Repository) ReadServiceClaim(ctx context.Context, resourceID string, revision int64) (ClaimSnapshot, workexecution.Placement, error) {
+func (repository *Repository) ReadServiceClaim(
+	ctx context.Context,
+	resourceID string,
+	revision int64,
+) (ClaimSnapshot, workexecution.Placement, error) {
 	if err := ids.Validate(ids.KindService, resourceID); err != nil {
 		return ClaimSnapshot{}, workexecution.Placement{}, err
 	}
