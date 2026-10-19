@@ -3,16 +3,16 @@ package etcd
 import (
 	context "context"
 	errors "errors"
+	netip "net/netip"
+	testing "testing"
+
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	runnerallocation "github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	testrunners "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	errs "github.com/AlanD20/groundplane/pkg/errs"
-	netip "net/netip"
-	testing "testing"
 )
 
 // Rationale: allocation exhaustion is a use conflict while malformed durable
@@ -27,34 +27,31 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 		config.HostPool.SubGIDEnd = config.HostPool.SubGIDStart + 5*runnerallocation.RunnerSubordinateBlockSize - 1
 		for index := 0; index < 5; index++ {
 			desired := runnerTestDesired(100+index, testrunners.RunnerOwnerTenant, tenantID, tenantID)
-			task := runnerTestTask(
-				desired,
-				testtaskjournal.TaskCreate,
-				110+index,
-				"runner-host-capacity-key-0"+string(rune('0'+index)),
-			)
-			if _, err := repository.CreateRunnerWithTask(
-				ctx, config, desired, task, runnerTestMarker(task, desired),
-			); err != nil {
-				t.Fatalf("CreateRunnerWithTask(%d) error = %v", index, err)
+			fixture, err := prepareRunnerCreationFixture(t, repository, config, desired, 110+index,
+				"runner-host-capacity-key-0"+string(rune('0'+index)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := fixture.publish(t, repository)
+			if outcome, _, conflict, err := result.Classify(); err != nil || conflict != nil ||
+				outcome != IdempotencyKnownApplied {
+				t.Fatalf("native Runner allocation = %v, %v, %v", outcome, conflict, err)
 			}
 		}
 		hierarchy, err := newHierarchyRepository(store)
 		if err != nil {
 			t.Fatalf("newHierarchyRepository() error = %v", err)
 		}
-		otherTenantID := ids.NewAt(ids.KindTenant, taskJournalTime(), 1800)
+		otherTenantID := ids.NewAt(ids.KindTenant, runnerStorageTime(), 1800)
 		if _, err := hierarchy.CreateTenant(ctx, testhierarchy.TenantRecord{
 			ID: otherTenantID, Slug: "other", Name: "Other",
 		}); err != nil {
 			t.Fatalf("CreateTenant(other) error = %v", err)
 		}
 		desired := runnerTestDesired(199, testrunners.RunnerOwnerTenant, otherTenantID, otherTenantID)
-		task := runnerTestTask(desired, testtaskjournal.TaskCreate, 199, "runner-host-capacity-over")
-		if _, err := repository.CreateRunnerWithTask(
-			ctx, config, desired, task, runnerTestMarker(task, desired),
-		); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
-			t.Fatalf("CreateRunnerWithTask(host exhausted) error = %v", err)
+		if _, err := repository.PrepareRunnerCreation(ctx, config, desired,
+			ids.NewAt(ids.KindTask, runnerStorageTime(), 199), runnerStorageTime()); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+			t.Fatalf("PrepareRunnerCreation(host exhausted) error = %v", err)
 		}
 	})
 
@@ -89,18 +86,16 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 			t.Fatalf("seed system pool = %#v, %v", result, err)
 		}
 		desired := runnerTestDesired(200, testrunners.RunnerOwnerTenant, tenantID, tenantID)
-		task := runnerTestTask(desired, testtaskjournal.TaskCreate, 201, "runner-network-capacity-key")
-		if _, err := repository.CreateRunnerWithTask(
-			ctx, config, desired, task, runnerTestMarker(task, desired),
-		); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-			t.Fatalf("CreateRunnerWithTask(non-Runner overlap) error = %v", err)
+		if _, err := repository.PrepareRunnerCreation(ctx, config, desired,
+			ids.NewAt(ids.KindTask, runnerStorageTime(), 199), runnerStorageTime()); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+			t.Fatalf("PrepareRunnerCreation(non-Runner overlap) error = %v", err)
 		}
 	})
 
 	t.Run("corrupt slot", func(t *testing.T) {
 		ctx := context.Background()
 		store, repository, tenantID, _ := newRunnerRepositoryFixture(t)
-		ownerID := ids.NewAt(ids.KindRunner, taskJournalTime(), 1900)
+		ownerID := ids.NewAt(ids.KindRunner, runnerStorageTime(), 1900)
 		value, err := testrunners.EncodeRunnerHostSlotRecord(
 			testrunners.RunnerHostSlotRecord{Slot: 1, RunnerID: ownerID},
 		)
@@ -119,13 +114,72 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 			t.Fatalf("seed corrupt host slot = %#v, %v", result, err)
 		}
 		desired := runnerTestDesired(202, testrunners.RunnerOwnerTenant, tenantID, tenantID)
-		task := runnerTestTask(desired, testtaskjournal.TaskCreate, 203, "runner-corrupt-slot-key")
-		if _, err := repository.CreateRunnerWithTask(
-			ctx, runnerTestAllocationConfig(), desired, task, runnerTestMarker(task, desired),
-		); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-			t.Fatalf("CreateRunnerWithTask(corrupt slot) error = %v", err)
+		if _, err := repository.PrepareRunnerCreation(ctx, runnerTestAllocationConfig(), desired,
+			ids.NewAt(ids.KindTask, runnerStorageTime(), 199), runnerStorageTime()); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+			t.Fatalf("PrepareRunnerCreation(corrupt slot) error = %v", err)
 		}
 	})
+}
+
+// RUN-03: a large occupied pool selects the first free slot, but publication
+// cannot overwrite another Runner that wins that slot after the source read.
+func TestRunnerNativeCreationRejectsSelectedSlotRace(t *testing.T) {
+	for _, race := range []bool{false, true} {
+		t.Run(map[bool]string{false: "lowest free slot", true: "concurrent winner"}[race], func(t *testing.T) {
+			base, _, tenantID, _ := newRunnerRepositoryFixture(t)
+			seedRunnerHostSlots(t, base, 80)
+			store := &runnerTransactionAuditStore{memoryHierarchyStore: base}
+			winner := ids.NewAt(ids.KindRunner, runnerStorageTime(), 6200)
+			if race {
+				value, err := testrunners.EncodeRunnerHostSlotRecord(
+					testrunners.RunnerHostSlotRecord{Slot: 80, RunnerID: winner},
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				store.allocationRaceKey, store.allocationRaceValue = testrunners.RunnerHostSlotKey(80), value
+			}
+			repository, err := newRunnerRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			desired := runnerTestDesired(302, testrunners.RunnerOwnerTenant, tenantID, tenantID)
+			fixture, err := prepareRunnerCreationFixture(
+				t,
+				repository,
+				runnerTestAllocationConfigWithSlots(96),
+				desired,
+				303,
+				"runner-native-slot-race",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := fixture.publish(t, repository)
+			outcome, _, conflict, err := result.Classify()
+			if race {
+				if err != nil || outcome != IdempotencyKnownConflict || !isKind(conflict, errs.KindStateConflict) {
+					t.Fatalf("raced allocation = %v, %v, %v", outcome, conflict, err)
+				}
+				entry := mustOptionalKey(t, base, testrunners.RunnerHostSlotKey(80))
+				owned, err := testrunners.DecodeRunnerHostSlotRecord(entry.Value)
+				if err != nil || owned.RunnerID != winner {
+					t.Fatalf("selected slot winner = %#v, %v", owned, err)
+				}
+				if _, err := repository.GetRunner(t.Context(), desired.ID); !isKind(err, errs.KindRunnerNotFound) {
+					t.Fatalf("raced creation left a Runner: %v", err)
+				}
+			} else {
+				if err != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+					t.Fatalf("allocation = %v, %v, %v", outcome, conflict, err)
+				}
+				current, err := repository.GetRunner(t.Context(), desired.ID)
+				if err != nil || current.Record.Allocation.Slot != 80 {
+					t.Fatalf("lowest free slot = %#v, %v", current, err)
+				}
+			}
+		})
+	}
 }
 
 func TestRunnerNetworkPoolBootstrapReservationIsExactAndReplayable(t *testing.T) {

@@ -9,7 +9,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -51,7 +50,10 @@ func (repository *Repository) Grant(ctx context.Context, attempt workexecution.A
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Runner effect permission changed or was already issued; inspect its outcome")
+		return errs.New(
+			errs.KindStateConflict,
+			"Runner effect permission changed or was already issued; inspect its outcome",
+		)
 	}
 	return nil
 }
@@ -62,7 +64,8 @@ func (repository *Repository) Grant(ctx context.Context, attempt workexecution.A
 func (repository *Repository) attemptAuthority(ctx context.Context, expected workexecution.Attempt,
 	forwardEffect bool,
 ) (Input, []keyvalue.Condition, error) {
-	if expected.Validate() != nil || expected.Executor.Executor != workexecution.Controller || expected.FinishedAt != nil {
+	if expected.Validate() != nil || expected.Executor.Executor != workexecution.Controller ||
+		expected.FinishedAt != nil {
 		return Input{}, nil, errs.New(errs.KindValidationFailed, "Runner execution attempt is invalid")
 	}
 	keys := []string{InputKey(expected.WorkItemID), workqueue.ItemKey(expected.WorkItemID),
@@ -112,7 +115,8 @@ func (repository *Repository) attemptAuthority(ctx context.Context, expected wor
 	}
 	if forwardEffect {
 		executor, err := workqueue.DecodeExecutor(read.Values[4].Value)
-		if err != nil || executor.Identity != expected.Executor || actual.StartedAt == nil || item.Phase != workexecution.Running ||
+		if err != nil || executor.Identity != expected.Executor || actual.StartedAt == nil ||
+			item.Phase != workexecution.Running ||
 			!time.Now().UTC().Before(actual.Deadline) ||
 			actual.Direction == workexecution.Forward && (task.Stop != nil || item.ForwardRevoked) {
 			return Input{}, nil, errs.New(errs.KindStateConflict, "Runner attempt no longer permits host effects")
@@ -137,7 +141,7 @@ func (repository *Repository) attemptAuthority(ctx context.Context, expected wor
 		if value == nil {
 			return Input{}, nil, errs.New(errs.KindStateConflict, "Runner execution lost its resource claim")
 		}
-		owner, err := recordcodec.Decode[workqueue.ClaimOwner](value.Value, "execution_owner")
+		owner, err := workqueue.DecodeClaimOwner(value.Value)
 		if err != nil || owner.TaskID != item.TaskID || owner.WorkItemID != item.ID {
 			return Input{}, nil, errs.New(errs.KindStateConflict, "Runner resource claim changed owner")
 		}
@@ -156,7 +160,11 @@ func (repository *Repository) attemptAuthority(ctx context.Context, expected wor
 	return input, conditions, nil
 }
 
-func (repository *Repository) creationAuthority(ctx context.Context, input Input, revision int64) ([]keyvalue.Condition, error) {
+func (repository *Repository) creationAuthority(
+	ctx context.Context,
+	input Input,
+	revision int64,
+) ([]keyvalue.Condition, error) {
 	id := input.Desired.ID
 	keys := []string{runners.RunnerKey(id), runners.RunnerLifecycleKey(id), runners.RunnerRuntimeOwnershipKey(id),
 		AppliedKey(id), deletions.TombstoneKey(string(deletions.DeletionTargetRunner), id)}
@@ -168,7 +176,8 @@ func (repository *Repository) creationAuthority(ctx context.Context, input Input
 		return nil, errs.New(errs.KindInternal, "Runner resource authority read is missing")
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if read.ReadRevision != revision || len(read.Values) != len(keys) || read.Values[0] == nil || read.Values[1] == nil {
+	if read.ReadRevision != revision || len(read.Values) != len(keys) || read.Values[0] == nil ||
+		read.Values[1] == nil {
 		return nil, errs.New(errs.KindStateConflict, "Runner resource authority is unavailable")
 	}
 	current, err := runners.DecodeRunnerAggregate(read.Values[0], read.Values[1])

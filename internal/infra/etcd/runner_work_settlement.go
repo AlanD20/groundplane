@@ -42,15 +42,32 @@ func (repository *RunnerRepository) PrepareRunnerCreationResult(ctx context.Cont
 		return workqueue.Change{}, err
 	}
 	if record.CreateTaskID != capture.TaskID || record.Allocation != capture.Plan.Allocation ||
-		!runnerCreationDesiredEqual(record.Desired, capture.Desired) || record.RuntimeEpoch > capture.Plan.RuntimeEpoch || read.Values[4] != nil {
+		!runnerCreationDesiredEqual(
+			record.Desired,
+			capture.Desired,
+		) || record.RuntimeEpoch > capture.Plan.RuntimeEpoch || read.Values[4] != nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Runner settlement allocation or ownership changed")
 	}
+	allocation, err := repository.ReadRunnerAllocationEvidence(ctx, record, read.ReadRevision)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	defer runners.ClearRunnerAllocationEvidence(allocation)
 	change := workqueue.Change{Conditions: []keyvalue.Condition{
 		{Key: runnerwork.InputKey(capture.WorkItemID), ModRevision: input.Revision},
 		{Key: runnerwork.ResultKey(outcome.Attempt.ID), ModRevision: result.Revision},
 	}}
 	for index, key := range keys {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])},
+		)
+	}
+	for _, value := range []*keyvalue.KeyValue{allocation.Owner, allocation.Slug, allocation.Quota, allocation.Host, allocation.System} {
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision},
+		)
 	}
 	record.ProvisioningState = runners.RunnerProvisioningFailed
 	switch outcome.Effects {
@@ -68,7 +85,9 @@ func (repository *RunnerRepository) PrepareRunnerCreationResult(ctx context.Cont
 		if err != nil {
 			return workqueue.Change{}, err
 		}
-		applied, err := runnerwork.EncodeApplied(runnerwork.AppliedRuntime{Plan: capture.Plan.Clone(), Evidence: evidence})
+		applied, err := runnerwork.EncodeApplied(
+			runnerwork.AppliedRuntime{Plan: capture.Plan.Clone(), Evidence: evidence},
+		)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
@@ -79,18 +98,27 @@ func (repository *RunnerRepository) PrepareRunnerCreationResult(ctx context.Cont
 		// A creation never replaces an applied Runner. Existing ownership must
 		// not be erased merely because this attempt reports no remaining effects.
 		if read.Values[2] != nil || read.Values[3] != nil {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Runner cleanup conflicts with an applied runtime")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Runner cleanup conflicts with an applied runtime",
+			)
 		}
 		record.ContainerID, record.Software = "", buildversion.ContainerIdentity{}
 	case runnerwork.EffectsUnknown:
 		if read.Values[2] != nil || read.Values[3] != nil {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Runner failed attempt conflicts with an applied runtime")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Runner failed attempt conflicts with an applied runtime",
+			)
 		}
 	}
 	value, err := runners.EncodeRunnerLifecycleRecord(record.RunnerLifecycleRecord)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: keys[1], Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: keys[1], Value: value},
+	)
 	return change, nil
 }

@@ -10,56 +10,43 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// RUN-01/05/07: an Environment Runner must keep its full owner chain through
-// publication, failed creation, retry and listing, without widening its owner.
-func TestRunnerEnvironmentOwnershipSurvivesRetry(t *testing.T) {
+// RUN-01/05: Environment publication and listing retain the complete owner
+// chain. Native Retry is exercised separately with the same captured input.
+func TestRunnerEnvironmentOwnershipAndScopedListing(t *testing.T) {
 	ctx := context.Background()
 	store, repository, tenantID, projectID := newRunnerRepositoryFixture(t)
 	environmentID := runnerTestEnvironment(t, store, tenantID, projectID)
 	desired := runnerTestDesired(800, runners.RunnerOwnerEnvironment, environmentID, tenantID)
 	desired.ParentProjectID = projectID
-	task := runnerTestTask(desired, taskjournal.TaskCreate, 801, "environment-runner-create")
-	if _, err := repository.CreateRunnerWithTask(ctx, runnerTestAllocationConfig(), desired, task, runnerTestMarker(task, desired)); err != nil {
-		t.Fatal(err)
-	}
-	failed := runnerTestFinishCreate(t, store, repository, task, taskjournal.TaskStatusFailed)
-	retry := runnerTestTask(desired, taskjournal.TaskCreate, 802, task.IdempotencyKey)
-	retry.RetryOf, retry.OperationID = task.ID, task.OperationID
-	marker := runnerTestMarker(retry, desired)
-	marker.Locator.Key = "environment-runner-retry"
-	if _, err := repository.RetryRunnerCreationWithTask(ctx, task.ID, retry, marker); err != nil {
-		t.Fatal(err)
-	}
-	tasks, err := newTaskRepository(store)
+	fixture, err := prepareRunnerCreationFixture(
+		t,
+		repository,
+		runnerTestAllocationConfig(),
+		desired,
+		801,
+		"environment-runner-create",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	published, err := tasks.GetTask(ctx, retry.ID)
-	if err != nil || published.Record.Owner != (taskjournal.TaskOwner{
-		WorkspaceType: taskjournal.TaskWorkspaceTenant, TenantID: tenantID, ProjectID: projectID, EnvironmentID: environmentID,
-	}) {
-		t.Fatalf("retry owner = %#v, %v", published.Record.Owner, err)
-	}
+	fixture.publish(t, repository)
 	current, err := repository.GetRunner(ctx, desired.ID)
-	if err != nil || current.Record.Allocation != failed.Record.Allocation ||
-		current.Record.Desired.ParentProjectID != projectID {
-		t.Fatalf("retry lost Environment owner or allocation: %#v, %v", current, err)
+	if err != nil {
+		t.Fatal(err)
 	}
+	assertRunnerNativePublication(t, store, current, fixture)
 	for _, filter := range []runners.RunnerFilter{{EnvironmentID: environmentID}, {TenantID: tenantID}} {
 		page, err := repository.ListRunners(ctx, filter, keyvalue.PageRequest{})
 		if err != nil || len(page.Items) != 1 || page.Items[0].Record.Desired.ID != desired.ID {
 			t.Fatalf("scoped listing = %#v, %v", page, err)
 		}
 	}
-	page, err := repository.ListRunners(
-		ctx,
-		runners.RunnerFilter{EnvironmentID: ids.New(ids.KindEnvironment)},
-		keyvalue.PageRequest{},
-	)
+	page, err := repository.ListRunners(ctx,
+		runners.RunnerFilter{EnvironmentID: ids.New(ids.KindEnvironment)}, keyvalue.PageRequest{})
 	if err != nil || len(page.Items) != 0 {
 		t.Fatalf("sibling Environment leaked Runner: %#v, %v", page, err)
 	}
@@ -103,13 +90,13 @@ func TestRunnerEnvironmentCreationFencesEveryParent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			task := runnerTestTask(desired, taskjournal.TaskCreate, 811, "environment-runner-fenced")
-			result, err := repository.CreateRunnerWithTask(
-				ctx,
+			fixture, err := prepareRunnerCreationFixture(
+				t,
+				repository,
 				runnerTestAllocationConfig(),
 				desired,
-				task,
-				runnerTestMarker(task, desired),
+				811,
+				"environment-runner-fenced",
 			)
 			if scope == "wrong-project" {
 				if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
@@ -119,15 +106,19 @@ func TestRunnerEnvironmentCreationFencesEveryParent(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				result := fixture.publish(t, repository)
 				_, _, conflict, classifyErr := result.Classify()
-				if classifyErr != nil || !errors.Is(conflict, errs.New(errs.KindResourceInUse, "")) {
+				if classifyErr != nil || !errors.Is(conflict, errs.New(errs.KindStateConflict, "")) {
 					t.Fatalf("parent race = %v, %v", conflict, classifyErr)
 				}
 			}
 			if _, err := repository.GetRunner(ctx, desired.ID); !errors.Is(err, errs.New(errs.KindRunnerNotFound, "")) {
 				t.Fatalf("rejected creation left Runner: %v", err)
 			}
-			read, err := base.Get(ctx, taskjournal.TaskStorageKey(task.ID))
+			read, err := base.Get(
+				ctx,
+				workqueue.TaskKey(ids.NewAt(ids.KindTask, runnerStorageTime(), runnerTaskEntropyBase+811)),
+			)
 			if err != nil || read.Entry != nil {
 				t.Fatalf("rejected creation left Task: %#v, %v", read, err)
 			}

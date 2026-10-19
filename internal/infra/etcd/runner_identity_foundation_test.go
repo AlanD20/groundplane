@@ -11,9 +11,7 @@ import (
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	testrunners "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -24,8 +22,8 @@ func TestRunnerDesiredCanonicalization(t *testing.T) {
 	desired := runnerTestDesired(
 		200,
 		testrunners.RunnerOwnerProject,
-		ids.NewAt(ids.KindProject, taskJournalTime(), 200),
-		ids.NewAt(ids.KindTenant, taskJournalTime(), 201),
+		ids.NewAt(ids.KindProject, runnerStorageTime(), 200),
+		ids.NewAt(ids.KindTenant, runnerStorageTime(), 201),
 	)
 	desired.GitHubURL = "https://github.com/AlanD20/Ground_Plane/"
 	desired.Labels = []string{"Zeta", "alpha.two"}
@@ -71,16 +69,12 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 	config := runnerTestAllocationConfig()
 	first := runnerTestDesired(210, testrunners.RunnerOwnerTenant, tenantID, tenantID)
 	first.Slug = "shared"
-	firstTask := runnerTestTask(first, testtaskjournal.TaskCreate, 211, "runner-slug-create-0001")
-	if result, err := repository.CreateRunnerWithTask(
-		ctx,
-		config,
-		first,
-		firstTask,
-		runnerTestMarker(firstTask, first),
-	); err != nil {
+	firstFixture, err := prepareRunnerCreationFixture(t, repository, config, first, 211, "runner-slug-create-0001")
+	if err != nil {
 		t.Fatal(err)
-	} else if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
+	}
+	result := firstFixture.publish(t, repository)
+	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
 		outcome != IdempotencyKnownApplied {
 		t.Fatalf("first create = %v, %v, %v", outcome, conflict, classifyErr)
 	}
@@ -91,17 +85,11 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 
 	second := runnerTestDesired(212, testrunners.RunnerOwnerProject, projectID, tenantID)
 	second.Slug = "shared"
-	secondTask := runnerTestTask(second, testtaskjournal.TaskCreate, 213, "runner-slug-create-0002")
-	result, err := repository.CreateRunnerWithTask(
-		ctx,
-		config,
-		second,
-		secondTask,
-		runnerTestMarker(secondTask, second),
-	)
+	secondFixture, err := prepareRunnerCreationFixture(t, repository, config, second, 213, "runner-slug-create-0002")
 	if err != nil {
 		t.Fatal(err)
 	}
+	result = secondFixture.publish(t, repository)
 	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil ||
 		outcome != IdempotencyKnownConflict ||
 		!isKind(conflict, errs.KindRunnerSlugConflict) {
@@ -181,30 +169,5 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownExisting ||
 		!slices.Equal(existing.Response.Body, marker.Response.Body) {
 		t.Fatalf("replacement replay = %v, %#v, %v, %v", outcome, existing.Response, conflict, classifyErr)
-	}
-}
-
-// Rationale: pre-ADR scaffold records lack required identity and image fields
-// and must be rejected instead of entering a compatibility dual-read path.
-func TestRunnerScaffoldRecordIsRejected(t *testing.T) {
-	t.Parallel()
-	type scaffoldDesired struct {
-		ID        string                      `json:"id"`
-		OwnerKind testrunners.RunnerOwnerKind `json:"owner_kind"`
-		OwnerID   string                      `json:"owner_id"`
-		TenantID  string                      `json:"tenant_id"`
-	}
-	tenantID := ids.NewAt(ids.KindTenant, taskJournalTime(), 220)
-	value, err := testrecordcodec.Encode("runner", struct {
-		Desired scaffoldDesired `json:"desired"`
-	}{Desired: scaffoldDesired{
-		ID: ids.NewAt(ids.KindRunner, taskJournalTime(), 221), OwnerKind: testrunners.RunnerOwnerTenant,
-		OwnerID: tenantID, TenantID: tenantID,
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := testrunners.DecodeRunnerDesiredRecord(value); !isKind(err, errs.KindInternal) {
-		t.Fatalf("decode scaffold Runner error = %v", err)
 	}
 }

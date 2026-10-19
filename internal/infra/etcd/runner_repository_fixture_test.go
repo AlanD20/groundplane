@@ -2,9 +2,15 @@ package etcd
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
@@ -12,7 +18,6 @@ import (
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testrunners "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func assertRunnerAllocationRetained(
@@ -44,8 +49,8 @@ func newRunnerRepositoryFixture(
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenantID := ids.NewAt(ids.KindTenant, taskJournalTime(), 700)
-	projectID := ids.NewAt(ids.KindProject, taskJournalTime(), 701)
+	tenantID := ids.NewAt(ids.KindTenant, runnerStorageTime(), 700)
+	projectID := ids.NewAt(ids.KindProject, runnerStorageTime(), 701)
 	if _, err := hierarchy.CreateTenant(context.Background(), testhierarchy.TenantRecord{
 		ID: tenantID, Slug: "example", Name: "Example",
 	}); err != nil {
@@ -68,13 +73,9 @@ func newRunnerRepositoryFixture(
 
 type runnerTransactionAuditStore struct {
 	*memoryHierarchyStore
-	maximumOperations   int
 	allocationRaceKey   string
 	allocationRaceValue []byte
 	allocationRaceDone  bool
-	terminalRunnerID    string
-	terminalRaceKey     string
-	terminalRaceDone    bool
 }
 
 func (store *runnerTransactionAuditStore) GetMany(
@@ -97,46 +98,12 @@ func (store *runnerTransactionAuditStore) GetMany(
 	return result, err
 }
 
-func (store *runnerTransactionAuditStore) Transact(
-	ctx context.Context,
-	conditions []testkeyvalue.Condition,
-	mutations []testkeyvalue.Mutation,
-) (testkeyvalue.TransactionResult, error) {
-	operations := len(conditions) + len(mutations)
-	if operations > store.maximumOperations {
-		store.maximumOperations = operations
-	}
-	if !store.terminalRaceDone && store.terminalRaceKey != "" &&
-		runnerMutationsTerminalize(mutations, store.terminalRunnerID) {
-		store.terminalRaceDone = true
-		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{
-			Type: testkeyvalue.MutationDelete, Key: store.terminalRaceKey,
-		}}); err != nil {
-			return testkeyvalue.TransactionResult{}, err
-		}
-	}
-	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
-}
-
-func runnerMutationsTerminalize(mutations []testkeyvalue.Mutation, runnerID string) bool {
-	for _, mutation := range mutations {
-		if mutation.Type != testkeyvalue.MutationPut || mutation.Key != testrunners.RunnerLifecycleKey(runnerID) {
-			continue
-		}
-		record, err := testrunners.DecodeRunnerLifecycleRecord(mutation.Value)
-		if err == nil && record.ProvisioningState != testrunners.RunnerProvisioningProvisioning {
-			return true
-		}
-	}
-	return false
-}
-
 func seedRunnerHostSlots(t *testing.T, store *memoryHierarchyStore, slots uint32) {
 	t.Helper()
 	mutations := make([]testkeyvalue.Mutation, 0, slots)
 	for slot := uint32(0); slot < slots; slot++ {
 		value, err := testrunners.EncodeRunnerHostSlotRecord(testrunners.RunnerHostSlotRecord{
-			Slot: slot, RunnerID: ids.NewAt(ids.KindRunner, taskJournalTime(), int64(6000+slot)),
+			Slot: slot, RunnerID: ids.NewAt(ids.KindRunner, runnerStorageTime(), int64(6000+slot)),
 		})
 		if err != nil {
 			t.Fatalf("encodeRunnerHostSlotRecord(%d) error = %v", slot, err)
@@ -178,9 +145,8 @@ func runnerTestAllocationConfigWithSlots(slots uint32) runnerallocation.RunnerAl
 }
 
 const (
-	runnerDesiredEntropyBase   = int64(800)
-	runnerTaskEntropyBase      = int64(900)
-	runnerOperationEntropyBase = int64(1000)
+	runnerDesiredEntropyBase = int64(800)
+	runnerTaskEntropyBase    = int64(900)
 )
 
 func runnerTestDesired(
@@ -189,7 +155,7 @@ func runnerTestDesired(
 	ownerID string,
 	tenantID string,
 ) testrunners.RunnerDesiredRecord {
-	runnerID := ids.NewAt(ids.KindRunner, taskJournalTime(), runnerDesiredEntropyBase+int64(offset))
+	runnerID := ids.NewAt(ids.KindRunner, runnerStorageTime(), runnerDesiredEntropyBase+int64(offset))
 	return testrunners.RunnerDesiredRecord{
 		ID:        runnerID,
 		Slug:      "runner-" + strings.ToLower(strings.TrimPrefix(runnerID, "run_")),
@@ -206,74 +172,100 @@ func runnerTestGitHubURL(ownerKind testrunners.RunnerOwnerKind) string {
 	return "https://github.com/aland20"
 }
 
-func runnerTestTask(
-	desired testrunners.RunnerDesiredRecord,
-	taskType testtaskjournal.TaskType,
-	offset int,
-	key string,
-) TaskRecord {
-	task := validTaskRecord(taskJournalTime())
-	owner := testtaskjournal.TaskOwner{WorkspaceType: testtaskjournal.TaskWorkspaceTenant, TenantID: desired.TenantID}
-	if desired.OwnerKind == testrunners.RunnerOwnerProject {
-		owner.ProjectID = desired.OwnerID
-	} else if desired.OwnerKind == testrunners.RunnerOwnerEnvironment {
-		owner.ProjectID, owner.EnvironmentID = desired.ParentProjectID, desired.OwnerID
-	}
-	task.ID = ids.NewAt(ids.KindTask, taskJournalTime(), runnerTaskEntropyBase+int64(offset))
-	task.OperationID = ids.NewAt(ids.KindOperation, taskJournalTime(), runnerOperationEntropyBase+int64(offset))
-	task.Executor = testtaskjournal.TaskExecutorController
-	task.Owner = owner
-	task.Actor = testtaskjournal.TaskActorOperator
-	task.Type = taskType
-	task.Target = desired.ID
-	task.IdempotencyKey = key
-	task.Params = map[string]string{testtaskjournal.TaskResourceKindParam: testrunners.TaskResourceRunner}
-	if taskType == testtaskjournal.TaskCreate {
-		task.Params[testrunners.RunnerRegistrationTokenPresentParam] = "true"
-	}
-	return task
-}
-
-func runnerTestMarker(task TaskRecord, desired testrunners.RunnerDesiredRecord) testidempotency.IdempotencyMarker {
-	marker := pendingTaskMarker(task)
-	marker.Locator.ScopeKind = testidempotency.IdempotencyScopeTenant
-	if desired.OwnerKind == testrunners.RunnerOwnerProject {
-		marker.Locator.ScopeKind = testidempotency.IdempotencyScopeProject
-	} else if desired.OwnerKind == testrunners.RunnerOwnerEnvironment {
-		marker.Locator.ScopeKind = testidempotency.IdempotencyScopeEnvironment
-	}
-	marker.Locator.ScopeID = desired.OwnerID
-	marker.Locator.Route = "/runners"
-	if task.Type == testtaskjournal.TaskRemove {
-		marker.Locator.Method = "DELETE"
-		marker.Locator.Route = "/runners/{id}"
-		target := testidempotency.IdempotencyReplayTarget{
-			Kind: testidempotency.IdempotencyReplayTargetRunner,
-			ID:   desired.ID,
-		}
-		marker.ReplayTarget = &target
-	} else if task.RetryOf != "" {
-		marker.Locator.Route = "/runners/{id}/retry"
-	}
-	marker.Locator.Key = task.IdempotencyKey
-	return marker
-}
-
 func runnerTestEnvironment(t *testing.T, store *memoryHierarchyStore, tenantID, projectID string) string {
 	t.Helper()
 	hierarchy, err := newHierarchyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	environmentID := ids.NewAt(ids.KindEnvironment, taskJournalTime(), 702)
+	environmentID := ids.NewAt(ids.KindEnvironment, runnerStorageTime(), 702)
 	_, err = hierarchy.CreateEnvironment(context.Background(), testhierarchy.EnvironmentRecord{
 		ID: environmentID, ProjectID: projectID, Name: "ci", NetworkPool: "10.242.0.0/24",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
 		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
-		CreateTaskID:      ids.NewAt(ids.KindTask, taskJournalTime(), 703), CreatedAt: taskJournalTime(),
+		CreateTaskID:      ids.NewAt(ids.KindTask, runnerStorageTime(), 703), CreatedAt: runnerStorageTime(),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return environmentID
+}
+
+func runnerStorageTime() time.Time {
+	return time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+}
+
+type runnerCreationFixture struct {
+	source RunnerCreationSource
+	input  runnerwork.Input
+	task   workexecution.Task
+	marker testidempotency.IdempotencyMarker
+}
+
+// The runtime plan is supplied storage input, not proof of runtime planning or
+// host isolation. Allocation and publication are actual repository operations.
+func prepareRunnerCreationFixture(t *testing.T, repository *RunnerRepository,
+	config runnerallocation.RunnerAllocationConfig, desired testrunners.RunnerDesiredRecord,
+	offset int, key string,
+) (runnerCreationFixture, error) {
+	t.Helper()
+	at := runnerStorageTime()
+	taskID := ids.NewAt(ids.KindTask, at, runnerTaskEntropyBase+int64(offset))
+	source, err := repository.PrepareRunnerCreation(t.Context(), config, desired, taskID, at)
+	if err != nil {
+		return runnerCreationFixture{}, err
+	}
+	t.Cleanup(source.Clear)
+	record := source.Runner()
+	plan := runnerallocation.RuntimePlan{
+		RunnerID: desired.ID, TenantID: desired.TenantID,
+		OwnerKind: string(desired.OwnerKind), OwnerID: desired.OwnerID,
+		RuntimeEpoch: record.RuntimeEpoch + 1, AllocationConfig: config, Allocation: record.Allocation,
+		Paths: runnerallocation.RunnerRuntimePaths{RawSocket: runnerallocation.DaemonSocketPath(desired.ID)},
+		Container: runnerallocation.RunnerContainer{
+			ImageRef: desired.ImageRef, GitHubURL: desired.GitHubURL, Labels: desired.Labels,
+		},
+	}
+	input := runnerwork.Input{TaskID: taskID,
+		WorkItemID: ids.NewAt(ids.KindWorkItem, at, int64(offset)),
+		PlanID:     ids.NewAt(ids.KindPlan, at, int64(offset)),
+		Operation:  runnerallocation.RuntimeOperationCreate, Desired: desired, Plan: plan, CreatedAt: at,
+	}
+	ref, err := input.Reference()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor,
+		Scope: workexecution.Scope{
+			TenantID:      desired.TenantID,
+			ProjectID:     desired.ProjectID(),
+			EnvironmentID: desired.EnvironmentID(),
+		},
+		Action: workexecution.ActionCreate, TargetID: desired.ID, TargetName: desired.Slug,
+		Intent: ref, ExpectedItems: 1, CreatedAt: at, UpdatedAt: at, Deadline: at.Add(5 * time.Minute),
+	}
+	marker := testDirectMarker()
+	marker.Kind, marker.State, marker.TaskID = testidempotency.IdempotencyMarkerTask, testidempotency.IdempotencyMarkerPending, taskID
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: desired.IdempotencyScope(), ScopeID: desired.OwnerID,
+		Method: http.MethodPost, Route: "/runners", Key: key,
+	}
+	marker.CreatedAt, marker.UpdatedAt, marker.TerminalAt, marker.RetainUntil = at, at, time.Time{}, time.Time{}
+	marker.Response.Status, marker.Response.Body = http.StatusAccepted, []byte(fmt.Sprintf(`{"task_id":%q}`, taskID))
+	return runnerCreationFixture{source: source, input: input, task: task, marker: marker}, nil
+}
+
+func (fixture runnerCreationFixture) publish(t *testing.T, repository *RunnerRepository) IdempotencyTransactionResult {
+	t.Helper()
+	result, err := repository.PublishRunnerCreation(
+		t.Context(),
+		fixture.source,
+		fixture.input,
+		fixture.task,
+		fixture.marker,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
 }
