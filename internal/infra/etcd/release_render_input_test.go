@@ -2,11 +2,15 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -18,6 +22,8 @@ import (
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestGetReleaseRenderInputAtDecodesStoredEnvelope(t *testing.T) {
@@ -27,6 +33,7 @@ func TestGetReleaseRenderInputAtDecodesStoredEnvelope(t *testing.T) {
 	input.PriorWorkload = releaseTestPriorWorkload("registry.example/worker:previous")
 	input.CandidateWorkload.ReplicaCount = 3
 	input.PriorWorkload.ReplicaCount = 2
+	input = withNativeRenderPredecessor(t, input)
 	raw, err := testreleaserender.EncodeReleaseRenderInput(input)
 	if err != nil {
 		t.Fatalf("EncodeReleaseRenderInput() error = %v", err)
@@ -152,6 +159,7 @@ func TestValidateReleaseRenderInputRejectsMismatchedDependencyAuthority(t *testi
 	}
 	input.Projection = withTestEnvironmentComposeArtifact(input.Projection)
 	input.ServiceDependencyPlans = projectionPlans
+	input = withNativeRenderPredecessor(t, input)
 	if err := testreleaserender.ValidateReleaseRenderInput(input); err != nil {
 		t.Fatalf("valid dependency authority baseline rejected: %v", err)
 	}
@@ -166,6 +174,7 @@ func TestValidateReleaseRenderInputAcceptsPortlessRecreate(t *testing.T) {
 	input := portlessReleaseRenderInput(domain.StrategyRecreate)
 	input.PriorArtifactID = ids.NewAt(ids.KindConfig, time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC), 10)
 	input.PriorWorkload = releaseTestPriorWorkload("registry.example/worker:previous")
+	input = withNativeRenderPredecessor(t, input)
 	if err := testreleaserender.ValidateReleaseRenderInput(input); err != nil {
 		t.Fatalf("validateReleaseRenderInput() error = %v", err)
 	}
@@ -180,6 +189,7 @@ func TestValidateReleaseRenderInputRejectsPortlessBlueGreen(t *testing.T) {
 	input.PriorArtifactID = ids.NewAt(ids.KindConfig, time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC), 11)
 	input.PriorWorkload = releaseTestPriorWorkload("registry.example/worker:previous")
 	input.ProxyGeneration, input.PriorProxyGeneration = 2, 1
+	input = withNativeRenderPredecessor(t, input)
 	if err := testreleaserender.ValidateReleaseRenderInput(input); err == nil {
 		t.Fatal("validateReleaseRenderInput() accepted blue-green without an addressable proxy port")
 	}
@@ -198,6 +208,7 @@ func TestValidateReleaseRenderInputAcceptsAddressableRecreateWithoutDurableSlot(
 	input.ProxyConfigDigest, input.PriorProxyDigest = "candidate", "prior"
 	input.PriorArtifactID = ids.NewAt(ids.KindConfig, time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC), 12)
 	input.PriorWorkload = releaseTestPriorWorkload("registry.example/worker:previous")
+	input = withNativeRenderPredecessor(t, input)
 	if err := testreleaserender.ValidateReleaseRenderInput(input); err != nil {
 		t.Fatalf("validateReleaseRenderInput() error = %v", err)
 	}
@@ -271,6 +282,70 @@ func portlessReleaseRenderInput(strategy domain.Strategy) testreleaserender.Rele
 		}},
 	}
 	input.Projection = withTestEnvironmentComposeArtifact(input.Projection)
+	return input
+}
+
+// These storage checks supply an acknowledged predecessor artifact. They do
+// not execute a prior deployment; absence of this native witness is corruption,
+// not permission to reconstruct runtime from the current desired projection.
+func withNativeRenderPredecessor(
+	t *testing.T,
+	input testreleaserender.ReleaseRenderInput,
+) testreleaserender.ReleaseRenderInput {
+	t.Helper()
+	priorID := ids.New(ids.KindDeployment)
+	role, label := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, "singleton"
+	if input.PriorSlot != "" {
+		role, label = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT, "slot"
+	}
+	workload := &agentpb.ComposeService{
+		ServiceId: input.ServiceID, ComposeName: "prior-worker", ExpectedReplicas: input.PriorWorkload.ReplicaCount,
+		ImageReference: input.PriorWorkload.LocalImageID, Role: role, Slot: string(input.PriorSlot), HasHealthcheck: true,
+		ExpectedLabels: []*agentpb.LabelPair{
+			{Key: "com.groundplane.release-id", Value: priorID},
+			{Key: "com.groundplane.runtime-role", Value: label},
+		},
+	}
+	if input.PriorSlot != "" {
+		workload.ExpectedLabels = append(
+			workload.ExpectedLabels,
+			&agentpb.LabelPair{Key: "com.groundplane.slot", Value: string(input.PriorSlot)},
+		)
+	}
+	artifact := &agentpb.ComposeArtifact{
+		ArtifactId: input.PriorArtifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId: input.EnvironmentID, ProjectName: "gp-" + strings.ToLower(input.EnvironmentID),
+		Services: []*agentpb.ComposeService{workload},
+	}
+	if len(input.ProxyPorts) != 0 {
+		ports := make([]serviceproxy.Port, len(input.ProxyPorts))
+		for index, port := range input.ProxyPorts {
+			ports[index] = serviceproxy.Port{Number: port.Port, Protocol: serviceproxy.Protocol(port.Protocol)}
+		}
+		configuration, err := serviceproxy.Render(serviceproxy.Configuration{
+			Implementation: input.ProxyImplementation, ReleaseID: priorID, Generation: input.PriorProxyGeneration,
+			Ports: ports, Upstreams: []string{workload.ComposeName},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		implementation, err := executionplan.SealProxyImplementation(input.ProxyImplementation)
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest := sha256.Sum256(configuration)
+		input.PriorProxyDigest = hex.EncodeToString(digest[:])
+		artifact.Services = append(artifact.Services, &agentpb.ComposeService{
+			ServiceId: input.ServiceID, ComposeName: "prior-proxy", Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+			ExpectedLabels:      []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "proxy"}},
+			ProxyImplementation: implementation, ProxyConfigJson: configuration, ProxyConfigSha256: digest[:],
+		})
+	}
+	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.PriorRuntime = &testreleaserender.ServingRuntimeCapture{ServiceID: input.ServiceID, CurrentArtifact: raw}
 	return input
 }
 

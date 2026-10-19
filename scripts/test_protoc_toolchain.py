@@ -26,7 +26,7 @@ class ProtocToolchainTests(unittest.TestCase):
                                         f"echo 'libprotoc {version}'\nelse\ntouch generated\nfi\n")
                     compiler.chmod(0o700)
                     environment = os.environ.copy()
-                    for key in ("TMPDIR", "GOTMPDIR", "GOCACHE", "GROUNDPLANE_COVERAGE_FILE",
+                    for key in ("TMPDIR", "GOTMPDIR", "GOCACHE", "STATICCHECK_CACHE", "GROUNDPLANE_COVERAGE_FILE",
                                 "MAKEFLAGS", "MFLAGS", "MAKELEVEL"):
                         environment.pop(key, None)
                     result = subprocess.run(["make", "proto", f"PROTOC={compiler}"], cwd=root,

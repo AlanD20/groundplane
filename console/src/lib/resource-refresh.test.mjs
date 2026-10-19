@@ -22,12 +22,13 @@ async function until(predicate) {
 // Mutation completion can arrive from multiple readers after its dialog closes.
 test("terminal observation deduplicates readers and includes failed partial effects", () => {
   const seen = [];
-  const unsubscribe = subscribeTerminalTasks((task) => seen.push(task.status));
+  const unsubscribe = subscribeTerminalTasks((response) => seen.push(response.task.status));
   try {
     const task = { id: "refresh-test", updated_at: "now", status: "running" };
-    observeTerminalTask(task);
-    observeTerminalTask({ ...task, status: "failed" });
-    observeTerminalTask({ ...task, status: "failed" });
+    observeTerminalTask({ task });
+    const failed = { ...task, status: "failed", finished_at: "now" };
+    observeTerminalTask({ task: failed });
+    observeTerminalTask({ task: failed });
     assert.deepEqual(seen, ["failed"]);
   } finally {
     unsubscribe();

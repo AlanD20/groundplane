@@ -11,7 +11,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 VERIFY = Path(".agents/skills/verify-groundplane/scripts")
-PATH_VARS = ("TMPDIR", "GOTMPDIR", "GOCACHE", "GROUNDPLANE_VERIFY_RUNTIME_DIR", "GROUNDPLANE_EVIDENCE_DIR")
+PATH_VARS = ("TMPDIR", "GOTMPDIR", "GOCACHE", "STATICCHECK_CACHE", "GROUNDPLANE_VERIFY_RUNTIME_DIR", "GROUNDPLANE_EVIDENCE_DIR")
 PROBE = "import json,os,tempfile; print(json.dumps({**{k:os.environ[k] for k in ('TMPDIR','GOTMPDIR','GOCACHE','GROUNDPLANE_COVERAGE_FILE')},'actual':tempfile.mkdtemp()}))"
 FAKE_GO = '''#!/usr/bin/env python3
 import json, os, pathlib, sys
