@@ -92,7 +92,6 @@ func TestManualScriptExpiryInterruptionPreservesTerminalAuthority(t *testing.T) 
 				&scriptSourceReferenceFailureStore{
 					memoryHierarchyStore: store,
 					failAt:               failAt,
-					ignoreCleanupCursor:  true,
 				},
 			)
 			if err != nil {

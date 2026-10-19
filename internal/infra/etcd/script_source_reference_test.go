@@ -6,6 +6,10 @@ import (
 	sha256 "crypto/sha256"
 	hex "encoding/hex"
 	errors "errors"
+	strings "strings"
+	testing "testing"
+	time "time"
+
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	core "github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -25,9 +29,6 @@ import (
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/oklog/ulid/v2"
 	proto "google.golang.org/protobuf/proto"
-	strings "strings"
-	testing "testing"
-	time "time"
 )
 
 func TestScriptSourceReferenceAuthorityPrepareSealAndActivate(t *testing.T) {
@@ -554,9 +555,8 @@ func (store *scriptSourceReferenceAuditStore) Transact(
 
 type scriptSourceReferenceFailureStore struct {
 	*memoryHierarchyStore
-	transacts           int
-	failAt              int
-	ignoreCleanupCursor bool
+	transacts int
+	failAt    int
 }
 
 func (store *scriptSourceReferenceFailureStore) Transact(
@@ -564,10 +564,6 @@ func (store *scriptSourceReferenceFailureStore) Transact(
 	conditions []testkeyvalue.Condition,
 	mutations []testkeyvalue.Mutation,
 ) (testkeyvalue.TransactionResult, error) {
-	if store.ignoreCleanupCursor && len(mutations) == 1 &&
-		(mutations[0].Key == taskRetentionScanKey || mutations[0].Key == taskPruneResumeScanKey) {
-		return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
-	}
 	store.transacts++
 	if store.transacts == store.failAt {
 		return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "injected source preparation failure")

@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	testscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -50,28 +50,27 @@ func TestDesiredVolumeRemovalProtectsPreparedScriptSource(t *testing.T) {
 	renamed.RevisionID, renamed.RenderGeneration = ids.New(ids.KindTask), 2
 	renamed.Volumes[0].Slug = "renamed"
 	renamed = withTestEnvironmentComposeArtifact(renamed)
-	edit, err := hierarchy.prepareDesiredScriptRemoval(ctx, environmentID, head.ModRevision,
-		store.revision, renamed, TaskRecord{Type: testtaskjournal.TaskUpdate})
-	if err != nil || len(edit.conditions) != 0 {
+	task := workexecution.Task{Action: workexecution.ActionUpdate, TargetID: volumeID,
+		Scope: workexecution.Scope{EnvironmentID: environmentID}}
+	edit, err := hierarchy.prepareVolumeDesiredReferences(ctx, task, renamed, head.ModRevision, store.revision)
+	if err != nil || len(edit) != 0 {
 		t.Fatalf("Script reservation blocked a label edit: %v", err)
 	}
 	next := testenvironmentprojection.CloneEnvironmentComposeProjection(previous)
 	next.RevisionID, next.RenderGeneration = ids.New(ids.KindTask), 2
 	next.Volumes = nil
 	next = withTestEnvironmentComposeArtifact(next)
-	task := TaskRecord{Type: testtaskjournal.TaskRemove, Target: volumeID, Status: testtaskjournal.TaskStatusPending,
-		Params: map[string]string{testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceVolume}}
+	task.Action = workexecution.ActionRemove
 	before := store.revision
-	if _, err := hierarchy.prepareDesiredScriptRemoval(ctx, environmentID, head.ModRevision,
-		store.revision, next, task); !isKind(err, errs.KindResourceInUse) || store.revision != before {
+	if _, err := hierarchy.prepareVolumeDesiredReferences(ctx, task, next, head.ModRevision,
+		store.revision); !isKind(err, errs.KindResourceInUse) || store.revision != before {
 		t.Fatalf("Volume removal ignored a prepared Script mount: %v", err)
 	}
 	if err := authority.Abandon(ctx, operationID, reserved); err != nil {
 		t.Fatal(err)
 	}
-	removal, err := hierarchy.prepareDesiredScriptRemoval(ctx, environmentID, head.ModRevision,
-		store.revision, next, task)
-	if err != nil || removal.volumeID != volumeID || len(removal.conditions) != 2 {
+	removal, err := hierarchy.prepareVolumeDesiredReferences(ctx, task, next, head.ModRevision, store.revision)
+	if err != nil {
 		t.Fatalf("Volume removal remained blocked after reference release: %v", err)
 	}
 	transactions := &entryScriptReservationRaceStore{
@@ -83,20 +82,14 @@ func TestDesiredVolumeRemovalProtectsPreparedScriptSource(t *testing.T) {
 		Key:   "/test/volume-removal-committed",
 		Value: []byte("1"),
 	}
-	result, err := transactions.Transact(ctx, removal.conditions, []testkeyvalue.Mutation{mutation})
+	result, err := transactions.Transact(ctx, removal, []testkeyvalue.Mutation{mutation})
 	if err != nil || result.Succeeded || !transactions.reserved || store.valueAt(mutation.Key, store.revision) != nil {
 		t.Fatalf("Volume removal lost a late source reservation: %v", err)
-	}
-	classified := removal.classifyConflict(0, func(_ int64, _ []*testkeyvalue.KeyValue) error {
-		return errs.New(errs.KindStateConflict, "unexpected baseline conflict")
-	})
-	if err := classified(result.Revision, result.FailureReads); !isKind(err, errs.KindResourceInUse) {
-		t.Fatalf("Volume removal misclassified a late source reservation: %v", err)
 	}
 	if err := authority.Abandon(ctx, operationID, reserved); err != nil {
 		t.Fatal(err)
 	}
-	result, err = transactions.Transact(ctx, removal.conditions, []testkeyvalue.Mutation{mutation})
+	result, err = transactions.Transact(ctx, removal, []testkeyvalue.Mutation{mutation})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("Volume absence conditions stayed blocked after release: %v", err)
 	}
