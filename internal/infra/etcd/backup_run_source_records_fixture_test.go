@@ -11,6 +11,7 @@ import (
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func newBackupRuntimeID(kind ids.Kind, at time.Time, seed int64) string {
@@ -66,4 +67,25 @@ func putBackupRuntimeLock(
 	if err != nil || !result.Succeeded {
 		t.Fatalf("put backup runtime lock = %#v/%v", result, err)
 	}
+}
+
+type backupRuntimeUnknownOutcomeStore struct {
+	hierarchyStore
+	failNext bool
+}
+
+func (store *backupRuntimeUnknownOutcomeStore) Transact(
+	ctx context.Context,
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
+	result, err := store.hierarchyStore.Transact(ctx, conditions, mutations)
+	if err == nil && result.Succeeded && store.failNext {
+		store.failNext = false
+		return testkeyvalue.TransactionResult{}, errs.New(
+			errs.KindStorageUnavailable,
+			"unknown backup runtime outcome",
+		)
+	}
+	return result, err
 }

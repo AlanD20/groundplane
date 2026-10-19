@@ -13,7 +13,6 @@ import (
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	errs "github.com/AlanD20/groundplane/pkg/errs"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -136,27 +135,6 @@ func (store *backupRuntimeAuthorityAuditStore) GetMany(
 		if len(result.Values) > 0 {
 			result.Values = result.Values[:len(result.Values)-1]
 		}
-	}
-	return result, err
-}
-
-type backupRuntimeUnknownOutcomeStore struct {
-	hierarchyStore
-	failNext bool
-}
-
-func (store *backupRuntimeUnknownOutcomeStore) Transact(
-	ctx context.Context,
-	conditions []testkeyvalue.Condition,
-	mutations []testkeyvalue.Mutation,
-) (testkeyvalue.TransactionResult, error) {
-	result, err := store.hierarchyStore.Transact(ctx, conditions, mutations)
-	if err == nil && result.Succeeded && store.failNext {
-		store.failNext = false
-		return testkeyvalue.TransactionResult{}, errs.New(
-			errs.KindStorageUnavailable,
-			"unknown backup runtime outcome",
-		)
 	}
 	return result, err
 }
