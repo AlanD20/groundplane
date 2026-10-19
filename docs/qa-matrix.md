@@ -277,11 +277,18 @@ Blueprint selection and rollout variants:
 
 The final source-writing checkpoint is `3ec2154fd` (2026-10-19). Whole production
 Go compilation, Console compilation/build and the architecture gate passed;
-these are mechanical checks, not product behavior. Test compilation still fails
-in obsolete Agent, common, application and root-storage fixtures that reference
-removed execution APIs. Native fixture migration and the behavior/installed/viewer
+these are mechanical checks, not product behavior. After native fixture migration,
+the full executionplan, releaseruntime and releasequeries packages pass under the
+race detector; the architecture gate also passes. Test compilation still fails
+in remaining obsolete Agent, application and root-storage fixtures that reference
+removed execution APIs. Remaining migration and the behavior/installed/viewer
 requirements below remain open. Evidence is ignored local
 `task-native-final-writing-{production-build,console-build,architecture,test-compile-inventory}.log`.
+Updated local evidence: `task-native-runtime-fixture-migration-race.log`,
+`task-native-releaseruntime-migration-race.log`,
+`task-native-release-publication-read-race.log` and
+`task-native-fixture-migration-architecture.log`. These package results do not
+qualify the complete Task replacement or make full CI green.
 
 Records below predate the native execution cutover unless explicitly labeled
 native. They do not qualify its replacement protocol, storage or viewer.
