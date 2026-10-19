@@ -21,12 +21,19 @@ func (repository *HierarchyRepository) prepareRouteWorkExecution(ctx context.Con
 ) (workqueue.Change, error) {
 	task, item := request.Task, request.Item
 	if item.Placement.Executor == workexecution.Controller {
-		if request.Input != nil || request.InputID != "" || !request.Secrets.IsZero() || len(request.InactiveRouterKinds) == 0 {
-			return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Controller Route decision cannot contain host execution input")
+		if request.Input != nil || request.InputID != "" || !request.Secrets.IsZero() ||
+			len(request.InactiveRouterKinds) == 0 {
+			return workqueue.Change{}, errs.New(
+				errs.KindValidationFailed,
+				"Controller Route decision cannot contain host execution input",
+			)
 		}
 		for _, component := range request.Projection.Components {
 			if component.Desired.Enabled && slices.Contains(request.InactiveRouterKinds, component.Desired.Kind) {
-				return workqueue.Change{}, errs.New(errs.KindStateConflict, "Enabled router requires Route host execution")
+				return workqueue.Change{}, errs.New(
+					errs.KindStateConflict,
+					"Enabled router requires Route host execution",
+				)
 			}
 		}
 		inactive, err := componentplanning.InactiveRouterConditions(ctx, repository.store, task.Scope.EnvironmentID,
@@ -34,31 +41,35 @@ func (repository *HierarchyRepository) prepareRouteWorkExecution(ctx context.Con
 		if err != nil {
 			return workqueue.Change{}, err
 		}
-		markerKey, err := idempotency.IdempotencyMarkerKey(request.Marker.Locator)
+		markerConditions, markerMutations, err := idempotency.PreparePublication(request.Marker)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
-		markerValue, err := idempotency.EncodeIdempotencyMarker(request.Marker)
-		if err != nil {
-			return workqueue.Change{}, err
-		}
+		defer keyvalue.ClearMutationValues(markerMutations)
 		change, err := componentwork.PrepareRouteDefinition(task, item, request.Marker, time.Now().UTC())
 		if err != nil {
-			clear(markerValue)
 			return workqueue.Change{}, err
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: markerKey})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: markerKey, Value: markerValue})
+		change.Conditions = append(change.Conditions, markerConditions...)
+		change.Mutations = append(change.Mutations, keyvalue.CloneMutations(markerMutations)...)
 		change.Conditions = append(change.Conditions, guards...)
 		change.Conditions = append(change.Conditions, inactive...)
 		return change, nil
 	}
 	if len(request.InactiveRouterKinds) != 0 {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Route execution cannot also declare a metadata-only decision")
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Route execution cannot also declare a metadata-only decision",
+		)
 	}
-	guards = append(guards,
+	guards = append(
+		guards,
 		keyvalue.Condition{Key: components.RecordKey(item.TargetID), ModRevision: request.Capture.CurrentRevision},
-		keyvalue.Condition{Key: componentplanning.RuntimeKey(item.TargetID), ModRevision: request.Capture.RuntimeRevision})
+		keyvalue.Condition{
+			Key:         componentplanning.RuntimeKey(item.TargetID),
+			ModRevision: request.Capture.RuntimeRevision,
+		},
+	)
 	sources, err := runtimeconfiguration.New(repository.store)
 	if err != nil {
 		return workqueue.Change{}, err

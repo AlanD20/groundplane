@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"sync"
 
@@ -318,11 +317,11 @@ func (repository *IdempotencyRepository) apply(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	markerValue, err := idempotencyrecord.EncodeIdempotencyMarker(marker)
+	replayConditions, replayMutations, err := idempotencyrecord.PreparePublication(marker)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clear(markerValue)
+	defer etcdstore.ClearMutationValues(replayMutations)
 	validateTransaction := plan.transactionValidator()
 	validateExisting := plan.existingReplayValidator()
 	conditions, mutations, classify, err := plan.consume()
@@ -330,42 +329,8 @@ func (repository *IdempotencyRepository) apply(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer etcdstore.ClearMutationValues(mutations)
-	conditions = append([]etcdstore.Condition{{Key: markerKey, ModRevision: 0}}, conditions...)
-	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue})
-	if marker.ReplayTarget != nil {
-		targetKey, targetErr := idempotencyrecord.IdempotencyReplayTargetKey(
-			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
-		)
-		if targetErr != nil {
-			return IdempotencyTransactionResult{}, targetErr
-		}
-		targetValue, targetErr := idempotencyrecord.EncodeReplayTargetReference(markerKey)
-		if targetErr != nil {
-			return IdempotencyTransactionResult{}, targetErr
-		}
-		defer clear(targetValue)
-		conditions = append(
-			conditions[:1],
-			append([]etcdstore.Condition{{Key: targetKey, ModRevision: 0}}, conditions[1:]...)...)
-		mutations = append(
-			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: targetKey, Value: targetValue},
-		)
-	}
-	if !marker.RetainUntil.IsZero() {
-		retentionKey, err := idempotencyrecord.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
-		if err != nil {
-			return IdempotencyTransactionResult{}, err
-		}
-		retentionValue, err := json.Marshal(idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
-		if err != nil {
-			return IdempotencyTransactionResult{}, errs.Wrap(errs.KindInternal, err)
-		}
-		mutations = append(
-			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
-		)
-	}
+	conditions = append(replayConditions, conditions...)
+	mutations = append(mutations, replayMutations...)
 	if validateTransaction != nil {
 		if err := validateTransaction(conditions, mutations); err != nil {
 			return IdempotencyTransactionResult{}, err

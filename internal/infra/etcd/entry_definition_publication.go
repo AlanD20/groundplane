@@ -71,20 +71,12 @@ func (repository *HierarchyRepository) prepareEntryDefinitionPublication(
 		keyvalue.Condition{Key: runtimeconfiguration.HeadKey(request.Task.Scope.EnvironmentID), ModRevision: head},
 	)
 	change.Mutations = append(change.Mutations, removal.Mutations...)
-	markerKey, err := idempotency.IdempotencyMarkerKey(request.Marker.Locator)
+	markerConditions, markerMutations, err := idempotency.PreparePublication(request.Marker)
 	if err != nil {
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err
 	}
-	value, err := idempotency.EncodeIdempotencyMarker(request.Marker)
-	if err != nil {
-		keyvalue.ClearMutationValues(change.Mutations)
-		return workqueue.Change{}, err
-	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: markerKey})
-	change.Mutations = append(
-		change.Mutations,
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: markerKey, Value: value},
-	)
+	change.Conditions = append(change.Conditions, markerConditions...)
+	change.Mutations = append(change.Mutations, markerMutations...)
 	return change, nil
 }

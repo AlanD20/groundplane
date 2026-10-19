@@ -152,12 +152,16 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
+	routeCompletions, err := componentexecution.RouteCompletions(owners.componentRecords)
+	if err != nil {
+		return nil, err
+	}
 	completions, err := workdispatch.NewCompletions(
 		queue,
 		append(
 			append(
 				append(
-					append(softwareWork.completion, owners.directReleases.completion...),
+					append(append(softwareWork.completion, routeCompletions...), owners.directReleases.completion...),
 					owners.provisioning.completion...),
 				owners.resolver.completion...),
 			[]workdispatch.CompletionRegistration{

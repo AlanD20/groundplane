@@ -38,7 +38,7 @@ func (repository *Repository) StageRouteWorkRevision(ctx context.Context, reques
 	if err := blueprints.ValidateEnvironmentDesiredMutationAudit(audit); err != nil {
 		return 0, err
 	}
-	if err := projectionrecord.ValidateEnvironmentComposeProjectionAdvance(current.Record, true, candidate); err != nil {
+	if err := validateRouteWorkCandidate(current.Record, candidate, request.Audit); err != nil {
 		return 0, err
 	}
 	digest, err := blueprints.EnvironmentBlueprintDependencyDigest(candidate)
@@ -50,7 +50,10 @@ func (repository *Repository) StageRouteWorkRevision(ctx context.Context, reques
 		return 0, err
 	}
 	key := hierarchy.EnvironmentMutationEpochKey(claim.EnvironmentID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: request.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: request.ReadRevision},
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -68,4 +71,44 @@ func (repository *Repository) StageRouteWorkRevision(ctx context.Context, reques
 		return 0, err
 	}
 	return read.Values[0].ModRevision, nil
+}
+
+// Removal is authorized for this Route alone. The ordinary advance validator
+// deliberately forbids omissions; an explicit Remove must instead match the
+// exact prior projection with only its selected Route deleted.
+func validateRouteWorkCandidate(current, candidate projectionrecord.EnvironmentComposeProjection,
+	audit blueprints.EnvironmentRouteMutationAudit,
+) error {
+	if audit.Action != blueprints.EnvironmentRouteMutationRemove {
+		return projectionrecord.ValidateEnvironmentComposeProjectionAdvance(current, true, candidate)
+	}
+	expected := projectionrecord.CloneEnvironmentComposeProjection(current)
+	selected := -1
+	for index, route := range expected.DesiredRoutes {
+		if route.Desired.ID == audit.RouteID {
+			selected = index
+			break
+		}
+	}
+	if selected < 0 {
+		return errs.New(errs.KindStateConflict, "Route removal target is absent from the captured Environment")
+	}
+	expected.DesiredRoutes = append(expected.DesiredRoutes[:selected], expected.DesiredRoutes[selected+1:]...)
+	expected.RevisionID = candidate.RevisionID
+	expected.RenderGeneration++
+	if err := projectionrecord.ValidateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(current, true, candidate, ""); err != nil {
+		return err
+	}
+	expectedDigest, err := blueprints.EnvironmentBlueprintDependencyDigest(expected)
+	if err != nil {
+		return err
+	}
+	digest, err := blueprints.EnvironmentBlueprintDependencyDigest(candidate)
+	if err != nil {
+		return err
+	}
+	if expectedDigest != digest {
+		return errs.New(errs.KindValidationFailed, "Route removal changed unrelated Environment desired state")
+	}
+	return nil
 }
