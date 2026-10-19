@@ -58,9 +58,6 @@ func newControllerResolverComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize platform Component render planner: %w", err)
 	}
-	if err := tasks.SetPlatformResolverComponentSelector(platformRenderPlanner.SelectResolver); err != nil {
-		return nil, fmt.Errorf("controller: configure platform resolver Component selector: %w", err)
-	}
 	configuration, err := controllerdns.NewConfigurationReconciler(
 		tasks,
 		componentRecords,
