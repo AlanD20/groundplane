@@ -19,20 +19,6 @@ type managedVolumeInspection struct {
 	Options map[string]string `json:"Options"`
 }
 
-func needsManagedVolumeEnsure(step *agentpb.ExecutionStep, artifact *agentpb.ComposeArtifact) bool {
-	apply := step.GetComposeApply()
-	if apply == nil || !apply.FullReconcile || artifact.GetAuthorizedVolumeDir() == "" ||
-		len(artifact.GetVolumes()) == 0 {
-		return false
-	}
-	for _, service := range artifact.GetServices() {
-		if service.GetExpectedReplicas() != 0 {
-			return false
-		}
-	}
-	return true
-}
-
 func ensureManagedComposeVolumes(
 	ctx context.Context,
 	taskRunner runner.Runner,

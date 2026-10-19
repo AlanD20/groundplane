@@ -2,10 +2,8 @@ package executionplan
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"slices"
 
-	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -66,13 +64,4 @@ func OpenNativeServingRuntime(environmentID, serviceID string, current, retained
 		result.Rolling.ProxyConfigSha256 = slices.Clone(proxy.GetProxyConfigSha256())
 	}
 	return result, nil
-}
-
-// RollingCompletion preserves the distinction between forward acknowledgement
-// and restoration when machine evidence becomes durable Controller state.
-func RollingCompletion(value *agentpb.RollingReleaseEvidence) rollingrelease.Completion {
-	return rollingrelease.Completion{ServiceID: value.GetServiceId(), ReleaseID: value.GetReleaseId(),
-		ArtifactID: value.GetArtifactId(), RuntimeSHA256: hex.EncodeToString(value.GetRuntimeSha256()),
-		Replicas: value.GetReplicas(), ProxyGeneration: value.GetProxyGeneration(),
-		ProxyConfigSHA256: hex.EncodeToString(value.GetProxyConfigSha256()), Compensated: value.GetCompensated()}
 }

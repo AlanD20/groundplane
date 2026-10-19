@@ -5,7 +5,6 @@ import (
 	"maps"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,18 +19,6 @@ type ensuredVolume struct {
 	External   bool              `yaml:"external"`
 	DriverOpts map[string]string `yaml:"driver_opts"`
 	Labels     map[string]string `yaml:"labels"`
-}
-
-func executeManagedVolumeEnsure(
-	ctx context.Context,
-	taskRunner runner.Runner,
-	timeout uint32,
-	artifact *agentpb.ComposeArtifact,
-	ensure *agentpb.ManagedVolumeEnsure,
-) (*agentpb.ComposeHelperResponse, error) {
-	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-	defer cancel()
-	return prepareCapturedVolume(executionCtx, taskRunner, artifact, ensure.GetVolumeId(), ensure.GetRequireExisting())
 }
 
 func prepareCapturedVolume(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact,

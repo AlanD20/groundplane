@@ -1,7 +1,6 @@
 package executionplan
 
 import (
-	"bytes"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -121,35 +120,6 @@ func removalOutput(kind agentpb.MaterializationOutputKind) bool {
 
 func invalidConfigurationRestoration(reason string) error {
 	return errs.New(errs.KindValidationFailed, "configuration restoration: "+reason)
-}
-
-// ConfigurationFilePair returns the sealed file procedure owning this step.
-// Callers must first validate the complete plan and assignment authority.
-func ConfigurationFilePair(plan *agentpb.ExecutionPlan, stepID string) *agentpb.ConfigurationFileRestoration {
-	for _, file := range ConfigurationRestorationForPlan(plan).GetFiles() {
-		if file.GetProbeStepId() == stepID || file.GetCompensateStepId() == stepID {
-			return proto.CloneOf(file)
-		}
-	}
-	return nil
-}
-
-// ConfigurationRestorationForPlan returns the captured Release file-restoration procedure.
-func ConfigurationRestorationForPlan(plan *agentpb.ExecutionPlan) *agentpb.ConfigurationRestoration {
-	if plan == nil {
-		return nil
-	}
-	if procedure := plan.GetCandidateReleaseProcedure(); procedure != nil {
-		return procedure.GetConfigurationRestoration()
-	}
-	return nil
-}
-
-// ConfigurationSnapshotMatches binds the retained source identity without
-// consulting current desired state or the host.
-func ConfigurationSnapshotMatches(configuration *agentpb.ConfigurationRestoration, id string, digest []byte) bool {
-	return configuration != nil && configuration.GetPriorSnapshotId() == id &&
-		bytes.Equal(configuration.GetPriorSnapshotSha256(), digest)
 }
 
 func materializationDestinationKey(step *agentpb.ExecutionStep) string {

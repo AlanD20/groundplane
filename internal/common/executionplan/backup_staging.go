@@ -17,17 +17,6 @@ const MaximumBackupRecoveredStages = 32
 const BackupSourceStagingFinal = "source"
 const BackupStoredStagingFinal = "stored"
 
-func BackupStagingAssignmentResumeSHA256(
-	authority *agentpb.BackupTaskAuthority,
-	resume *agentpb.BackupTaskResume,
-) ([]byte, error) {
-	validated, err := ValidateBackupTaskResume(resume, authority)
-	if err != nil {
-		return nil, err
-	}
-	return backupStagingDigest("groundplane.backup.staging-assignment-resume.schema-one.v1\x00", validated)
-}
-
 // BackupStagingRecoveryKey binds the local descriptor namespace to the sealed
 // Task step and Recovery Point. No mutable label or path appears on the wire.
 func BackupStagingRecoveryKey(taskID, stepID, pointID string) ([]byte, error) {

@@ -1721,12 +1721,6 @@ enum BackingHookEvent {
   BACKING_HOOK_EVENT_AFTER_START = 4;
 }
 
-enum BackingHookCheckpointState {
-  BACKING_HOOK_CHECKPOINT_STATE_UNSPECIFIED = 0;
-  BACKING_HOOK_CHECKPOINT_STATE_STARTED = 1;
-  BACKING_HOOK_CHECKPOINT_STATE_RESULT = 2;
-}
-
 message BackingHookValue {
   string key = 1;
   bytes value = 2;
@@ -1753,36 +1747,6 @@ message BackingHookProcedure {
   repeated BackingHookValue inputs = 10;
   repeated BackingHookValue facts = 11;
   repeated BackingHookFactDefinition fact_schema = 12;
-}
-
-// STARTED authorizes the irreversible hook execution. RESULT conveys the
-// complete validated result for Controller-side encryption and publication.
-message BackingHookCheckpointRequest {
-  string task_id = 1;
-  string operation_id = 2;
-  string assignment_id = 3;
-  uint32 execution_epoch = 4;
-  string step_id = 5;
-  bytes plan_hash = 6;
-  BackingHookEvent event = 7;
-  BackingHookCheckpointState state = 8;
-  bytes result_sha256 = 9;
-  repeated BackingHookValue facts = 10;
-}
-
-message BackingHookCheckpointAck {
-  string task_id = 1;
-  string operation_id = 2;
-  string assignment_id = 3;
-  uint32 execution_epoch = 4;
-  string step_id = 5;
-  bytes plan_hash = 6;
-  BackingHookEvent event = 7;
-  BackingHookCheckpointState state = 8;
-  bytes result_sha256 = 9;
-  bool existing = 10;
-  // A captured Detach result survived interruption; do not run its hook again.
-  bool result_already_recorded = 11;
 }
 
 message ExecutionPlan {
@@ -3263,25 +3227,7 @@ message BackupArtifactEvidence {
   bytes stored_sha256 = 4;
 }
 
-message BackupTaskAuthority {
-  uint32 authority_schema = 1; // exactly one
-  string task_id = 2;
-  string operation_id = 3;
-  uint32 task_attempt = 4;
-  bytes plan_hash = 5;
-  string project_id = 6;
-  RevisionDigest project = 7;
-  string environment_id = 8;
-  RevisionDigest environment = 9;
-  uint64 task_deadline_unix_nano = 10; // absolute, never extended on reconnect
-  string assignment_id = 11;
-  uint64 assignment_generation = 12;
-  repeated BackupServiceFact services = 13;
-  repeated BackupStepAuthority steps = 14;
-}
-
-// Sealed once during publication. Assignment adds only its exact delivery
-// identity and absolute claim deadline; reconnect never rereads live resources.
+// Sealed once during publication; reconnect never rereads live resources.
 // Captured Backup work has no attempt, assignment or generic plan identity.
 // Delivery binds this payload through WorkAttemptIdentity.input; retries retain
 // the payload and add a new attempt rather than rewriting source authority.
@@ -3462,12 +3408,6 @@ message BackupStepAuthority {
     BackupPruneAuthority prune = 11;
     BackupRestoreAuthority restore = 12;
   }
-}
-
-message BackupTaskResume {
-  string assignment_id = 1;
-  uint64 assignment_generation = 2;
-  repeated BackupStepResume steps = 3;
 }
 
 message BackupStepResume {

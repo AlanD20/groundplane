@@ -2,32 +2,18 @@ package executionplan
 
 import (
 	"bytes"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
-func ValidateBackupTaskResume(
-	resume *agentpb.BackupTaskResume,
-	authority *agentpb.BackupTaskAuthority,
-) (*agentpb.BackupTaskResume, error) {
-	if err := validateBackupTaskAuthority(authority); err != nil {
-		return nil, err
-	}
-	if resume == nil || RejectUnknown(resume) != nil || resume.AssignmentId != authority.AssignmentId ||
-		resume.AssignmentGeneration != authority.AssignmentGeneration || len(resume.Steps) != len(authority.Steps) {
-		return nil, errs.New(errs.KindValidationFailed, "backup resume assignment binding is invalid")
-	}
-	owned := proto.Clone(resume).(*agentpb.BackupTaskResume)
-	if err := ValidateBackupSourceResumes(owned.Steps, authority.Steps); err != nil {
-		return nil, err
-	}
-	return owned, nil
-}
-
 // ValidateBackupSourceResumes checks ordered source progress against captured
 // authority. Delivery identity is checked by the owning assignment protocol.
-func ValidateBackupSourceResumes(sources []*agentpb.BackupStepResume, authorities []*agentpb.BackupStepAuthority) error {
+func ValidateBackupSourceResumes(
+	sources []*agentpb.BackupStepResume,
+	authorities []*agentpb.BackupStepAuthority,
+) error {
 	if len(sources) == 0 || len(sources) != len(authorities) {
 		return errs.New(errs.KindValidationFailed, "Backup resume source count changed")
 	}

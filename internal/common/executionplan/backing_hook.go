@@ -1,14 +1,9 @@
 package executionplan
 
 import (
-	"bytes"
-	"crypto/sha256"
-
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 func validateBackingHookProcedure(
@@ -92,82 +87,4 @@ func BackingHookEvent(event agentpb.BackingHookEvent) (backinghook.Event, bool) 
 	default:
 		return "", false
 	}
-}
-
-func ValidateBackingHookCheckpointRequest(
-	request *agentpb.BackingHookCheckpointRequest,
-) (*agentpb.BackingHookCheckpointRequest, error) {
-	if request == nil || ids.Validate(ids.KindTask, request.GetTaskId()) != nil ||
-		ids.Validate(ids.KindOperation, request.GetOperationId()) != nil ||
-		ids.Validate(ids.KindAssignment, request.GetAssignmentId()) != nil || request.GetExecutionEpoch() == 0 ||
-		ids.Validate(ids.KindStep, request.GetStepId()) != nil || len(request.GetPlanHash()) != sha256.Size {
-		return nil, errs.New(errs.KindValidationFailed, "backing hook checkpoint identity is invalid")
-	}
-	if _, ok := BackingHookEvent(request.GetEvent()); !ok {
-		return nil, errs.New(errs.KindValidationFailed, "backing hook checkpoint event is invalid")
-	}
-	owned := proto.Clone(request).(*agentpb.BackingHookCheckpointRequest)
-	switch owned.GetState() {
-	case agentpb.BackingHookCheckpointState_BACKING_HOOK_CHECKPOINT_STATE_STARTED:
-		if len(owned.GetResultSha256()) != 0 || len(owned.GetFacts()) != 0 {
-			return nil, errs.New(errs.KindValidationFailed, "backing hook STARTED checkpoint carries a result")
-		}
-	case agentpb.BackingHookCheckpointState_BACKING_HOOK_CHECKPOINT_STATE_RESULT:
-		digest, err := ComputeBackingHookResultDigest(owned.GetEvent(), owned.GetFacts())
-		if err != nil || !bytes.Equal(digest, owned.GetResultSha256()) {
-			return nil, errs.New(errs.KindValidationFailed, "backing hook RESULT checkpoint digest is invalid")
-		}
-	default:
-		return nil, errs.New(errs.KindValidationFailed, "backing hook checkpoint state is invalid")
-	}
-	return owned, nil
-}
-
-func ComputeBackingHookResultDigest(
-	event agentpb.BackingHookEvent,
-	facts []*agentpb.BackingHookValue,
-) ([]byte, error) {
-	if _, ok := BackingHookEvent(event); !ok {
-		return nil, errs.New(errs.KindValidationFailed, "backing hook result event is invalid")
-	}
-	seen := make(map[string]struct{}, len(facts))
-	for _, fact := range facts {
-		if fact == nil || !backinghook.ValidKey(fact.GetKey()) || bytes.IndexByte(fact.GetValue(), 0) >= 0 ||
-			bytes.IndexByte(fact.GetValue(), '\n') >= 0 {
-			return nil, errs.New(errs.KindValidationFailed, "backing hook result fact is invalid")
-		}
-		if _, duplicate := seen[fact.GetKey()]; duplicate {
-			return nil, errs.New(errs.KindValidationFailed, "backing hook result fact is duplicated")
-		}
-		seen[fact.GetKey()] = struct{}{}
-	}
-	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.BackingHookCheckpointRequest{
-		Event: event, State: agentpb.BackingHookCheckpointState_BACKING_HOOK_CHECKPOINT_STATE_RESULT,
-		Facts: facts,
-	})
-	if err != nil {
-		return nil, errs.Wrap(errs.KindInternal, err)
-	}
-	digest := sha256.Sum256(encoded)
-	clear(encoded)
-	return append([]byte(nil), digest[:]...), nil
-}
-
-func ValidateBackingHookCheckpointAck(
-	ack *agentpb.BackingHookCheckpointAck,
-	request *agentpb.BackingHookCheckpointRequest,
-) error {
-	if ack == nil || request == nil || ack.GetTaskId() != request.GetTaskId() ||
-		ack.GetOperationId() != request.GetOperationId() || ack.GetAssignmentId() != request.GetAssignmentId() ||
-		ack.GetExecutionEpoch() != request.GetExecutionEpoch() || ack.GetStepId() != request.GetStepId() ||
-		!bytes.Equal(ack.GetPlanHash(), request.GetPlanHash()) || ack.GetEvent() != request.GetEvent() ||
-		ack.GetState() != request.GetState() || !bytes.Equal(ack.GetResultSha256(), request.GetResultSha256()) {
-		return errs.New(errs.KindStateConflict, "backing hook checkpoint acknowledgement does not match")
-	}
-	if ack.GetResultAlreadyRecorded() && (!ack.GetExisting() ||
-		request.GetEvent() != agentpb.BackingHookEvent_BACKING_HOOK_EVENT_DETACH ||
-		request.GetState() != agentpb.BackingHookCheckpointState_BACKING_HOOK_CHECKPOINT_STATE_STARTED) {
-		return errs.New(errs.KindStateConflict, "backing hook completed-result acknowledgement is invalid")
-	}
-	return nil
 }

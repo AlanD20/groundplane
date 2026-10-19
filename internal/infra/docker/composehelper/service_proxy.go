@@ -90,16 +90,6 @@ func runWithComposeBase(
 	return result, nil, nil
 }
 
-func releaseProxyName(artifact *agentpb.ComposeArtifact, serviceID string) string {
-	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() == serviceID &&
-			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
-			return service.GetComposeName()
-		}
-	}
-	return ""
-}
-
 func canonicalProxyJSON(value []byte) ([]byte, error) {
 	return jcs.Canonicalize(value)
 }

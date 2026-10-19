@@ -148,10 +148,6 @@ func retainCandidateRuntimeProxyYAML(
 	return encoded, proxyReferences, nil
 }
 
-func candidateRuntimeSingleService(values []string, serviceID string) bool {
-	return len(values) == 1 && values[0] == serviceID
-}
-
 func candidateRuntimeOppositeSlots(left, right string) bool {
 	return left == "blue" && right == "green" || left == "green" && right == "blue"
 }
@@ -162,10 +158,6 @@ func marshalCandidateRuntimeArtifact(artifact *agentpb.ComposeArtifact) ([]byte,
 		return nil, errs.New(errs.KindValidationFailed, "candidate runtime artifact encoding is invalid")
 	}
 	return encoded, nil
-}
-
-func invalidCandidateRuntimeForwardSteps() error {
-	return errs.New(errs.KindValidationFailed, "candidate runtime forward steps do not bind one exact activation")
 }
 
 func invalidCandidateRuntimeProxySource() error {
