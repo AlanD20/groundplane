@@ -1,20 +1,20 @@
-package etcd
+package entryvalues
 
 import (
 	context "context"
 	sha256 "crypto/sha256"
 	hex "encoding/hex"
 	errors "errors"
-	ids "github.com/AlanD20/groundplane/internal/common/ids"
-	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
-	errs "github.com/AlanD20/groundplane/pkg/errs"
 	testing "testing"
+
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Rationale: a Task retry must resolve the same immutable plain bytes even
 // after caller buffers are reused or a duplicate create is replayed.
 func TestPlainEntryValueGenerationIsImmutableAndOwned(t *testing.T) {
-	repository, err := testentryvalues.New(&releaseLogMemoryStore{newMemoryHierarchyStore()})
+	repository, err := newEntryValueGenerationRepository(newGenerationStore())
 	if err != nil {
 		t.Fatalf("newEntryValueGenerationRepository() error = %v", err)
 	}
@@ -46,8 +46,8 @@ func TestPlainEntryValueGenerationIsImmutableAndOwned(t *testing.T) {
 // Rationale: secret generations must persist only validated envelope bytes
 // under the non-listable secret root and reject generation-id reuse.
 func TestSecretEntryValueGenerationIsImmutableCiphertext(t *testing.T) {
-	store := newMemoryHierarchyStore()
-	repository, err := testentryvalues.New(&releaseLogMemoryStore{store})
+	store := newGenerationStore()
+	repository, err := newEntryValueGenerationRepository(store)
 	if err != nil {
 		t.Fatalf("newEntryValueGenerationRepository() error = %v", err)
 	}
@@ -59,8 +59,15 @@ func TestSecretEntryValueGenerationIsImmutableCiphertext(t *testing.T) {
 	if err != nil || !found || string(stored.Ciphertext) != "age-ciphertext" {
 		t.Fatalf("GetSecret() = %#v, %v, %v", stored, found, err)
 	}
-	if store.valueAt(testentryvalues.SecretKey(record.EntryID, record.GenerationID), store.revision) == nil ||
-		store.valueAt(testentryvalues.PlainKey(record.EntryID, record.GenerationID), store.revision) != nil {
+	secret, err := store.Get(t.Context(), SecretKey(record.EntryID, record.GenerationID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := store.Get(t.Context(), PlainKey(record.EntryID, record.GenerationID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secret.Entry == nil || plain.Entry != nil {
 		t.Fatal("secret Entry generation used the wrong durable keyspace")
 	}
 	record.Ciphertext = []byte("other-ciphertext")
@@ -75,23 +82,11 @@ func TestSecretEntryValueGenerationIsImmutableCiphertext(t *testing.T) {
 	clear(stored.Ciphertext)
 }
 
-func testPlainEntryValueGeneration() testentryvalues.PlainGeneration {
-	content := []byte("plain-entry-value")
-	digest := sha256.Sum256(content)
-	now := taskJournalTime()
-	return testentryvalues.PlainGeneration{
-		EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 40),
-		EntryID:       ids.NewAt(ids.KindEnvEntry, now, 41),
-		GenerationID:  ids.NewAt(ids.KindConfig, now, 42),
-		Content:       content, PlaintextSHA256: hex.EncodeToString(digest[:]), CreatedAt: now,
-	}
-}
-
-func testSecretEntryValueGeneration() testentryvalues.SecretGeneration {
+func testSecretEntryValueGeneration() SecretGeneration {
 	ciphertext := []byte("age-ciphertext")
 	digest := sha256.Sum256(ciphertext)
 	now := taskJournalTime()
-	return testentryvalues.SecretGeneration{
+	return SecretGeneration{
 		EnvironmentID:   ids.NewAt(ids.KindEnvironment, now, 40),
 		EntryID:         ids.NewAt(ids.KindEnvEntry, now, 41),
 		GenerationID:    ids.NewAt(ids.KindConfig, now, 42),

@@ -1046,6 +1046,32 @@ retains the full dated review narrative and local run locators.
 
 #### Retired application fixtures for the former execution engine
 
+Storage fixture migration preserves the current direct desired-state, Route,
+Entry, Connector, Backup-source catalog, Backing topology and deletion-tombstone
+checks without constructing former Tasks. Immutable Entry generations now live
+with `entryvalues`; their complete package race suite passes
+(`task-native-entry-value-owner-migration-race.log`). Plain caller-buffer reuse,
+exact replay, conflicting generation reuse and ciphertext-only storage remain
+covered. The test ciphertext is supplied, not encrypted by an actual key service.
+
+Selected root-storage race runs also pass:
+`task-native-direct-desired-migration-race.log` retains concurrent desired-head
+refusal, unchanged runtime authority, abandoned-stage collection and bounded
+large-input staging; `task-native-route-storage-migration-race.log` retains Route
+paging, target-deletion fences, exposure CAS and Service runtime-sidecar joins;
+`task-native-resource-storage-migration-race.log` retains Entry generation
+replacement/deletion, Connector encrypted-credential ownership, Backup-source
+catalog/operation-lock checks, Backing topology/transaction bounds and tombstone
+validation. Shared ready hierarchy and rendered snapshots are supplied. These
+checks do not prove native operation execution, actual etcd, external object
+storage, recovery or live deployment. Full root-storage compilation remains open.
+
+Removed only the former Backing classifier's positional-array layout check,
+the deleted generic Blueprint finalizer's private key parser check and the old
+platform Component observation DTO check. Native conflict classification,
+restart-safe hierarchy cleanup and retained resolver-file digest validation
+remain required under TASK-58/61/90/131; retirement does not qualify them.
+
 The native desired-plan expansion check now lives in
 [application integration](../internal/app/native_blueprint_desired_plan_integration_test.go).
 It persists an incomplete Attach-only plan, expands and seals its dependent Service,

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -79,22 +78,5 @@ func TestDeletionTombstoneAcceptsRunnerTarget(t *testing.T) {
 	}
 	if err := testdeletions.ValidateDeletionTombstone(record); err != nil {
 		t.Fatalf("validateDeletionTombstone() error = %v", err)
-	}
-}
-
-// Rationale: restart-safe Blueprint finalization must derive its checkpoint only from the closed Environment revision key grammar.
-func TestEnvironmentBlueprintRevisionIDFromKey(t *testing.T) {
-	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	revisionID := "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	prefix := testblueprints.EnvironmentBlueprintRevisionsPrefix(environmentID)
-	got, err := environmentBlueprintRevisionIDFromKey(
-		prefix,
-		prefix+revisionID+"/manifest",
-	)
-	if err != nil || got != revisionID {
-		t.Fatalf("environmentBlueprintRevisionIDFromKey() = %q, %v", got, err)
-	}
-	if _, err := environmentBlueprintRevisionIDFromKey(prefix, prefix+"invalid/manifest"); err == nil {
-		t.Fatal("environmentBlueprintRevisionIDFromKey() accepted an invalid revision id")
 	}
 }

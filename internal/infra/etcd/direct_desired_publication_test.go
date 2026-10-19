@@ -44,13 +44,13 @@ func TestDirectDesiredPublicationPreservesRuntimeAndRejectsStaleCandidate(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clearRouteHeadPublication(publication)
+	defer clearDesiredMutationFragment(publication)
 	stale, err := prepareDirectDesiredPublication(ctx, store, environment.Record.ID, marker,
 		func(input *core.BlueprintDesiredInput) error { input.NetworkPool = "10.49.0.0/16"; return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clearRouteHeadPublication(stale)
+	defer clearDesiredMutationFragment(stale)
 	result, err := store.Transact(ctx, publication.conditions, publication.mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("publish = %v/%v", result.Succeeded, err)

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -13,6 +14,7 @@ import (
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -22,7 +24,7 @@ func TestRouteRepositoryCreatesReadsAndPagesScopedRecords(t *testing.T) {
 	// membership while fencing the exact live target Service.
 	t.Parallel()
 	ctx := context.Background()
-	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
+	repository, store, environment, _, target := routeRepositoryTestHierarchy(t)
 	records := []testroutes.Record{
 		routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1010, "/api/*"),
 		routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1011, "/admin/*"),
@@ -40,7 +42,7 @@ func TestRouteRepositoryCreatesReadsAndPagesScopedRecords(t *testing.T) {
 			t.Fatalf("ApplyEnvironmentRoute(%s) error = %v", record.Desired.Path, err)
 		}
 	}
-	routeRepositoryTestSelectDesiredHead(t, store, project, environment, projection)
+	routeRepositoryTestSelectDesiredHead(t, store, projection)
 	duplicateMatch := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1012, "/api/*")
 	if _, err := testenvironmentprojection.ApplyEnvironmentRoute(projection, duplicateMatch); !isKind(
 		err,
@@ -159,17 +161,9 @@ func routeRepositoryTestHierarchy(
 	if err != nil {
 		t.Fatalf("NewServiceRecord(target) error = %v", err)
 	}
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 1005)
-	projection := routeRepositoryTestProjection(t, environment.Record.ID, targetID, task.ID)
-	projection.RevisionID = task.ID
-	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {api: {}}\n")
-	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
-	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
-	seedEffectiveBlueprintFixture(t, store, projection)
-	headValue, err := testidempotency.EncodeTaskReference(task.ID)
-	if err != nil {
-		t.Fatalf("encodeTaskReference() error = %v", err)
-	}
+	revisionID := ids.NewAt(ids.KindTask, environment.Record.CreatedAt, 1005)
+	projection := routeRepositoryTestProjection(t, environment.Record.ID, targetID, revisionID)
+	headValue := routeRepositoryTestStageProjection(t, hierarchy, projection)
 	defer clear(headValue)
 	configurationValue := stageTestRuntimeConfiguration(t, store, environment.Record.ID, projection.RenderGeneration)
 	defer clear(configurationValue)
@@ -181,7 +175,7 @@ func routeRepositoryTestHierarchy(
 	seed, err := store.Transact(context.Background(), []testkeyvalue.Condition{
 		{Key: testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID)},
 		{Key: testservices.ServiceRuntimeKey(targetID)},
-		{Key: runtimeConfigurationHeadKey(environment.Record.ID)},
+		{Key: runtimeconfiguration.HeadKey(environment.Record.ID)},
 	}, []testkeyvalue.Mutation{
 		{
 			Type:  testkeyvalue.MutationPut,
@@ -191,7 +185,7 @@ func routeRepositoryTestHierarchy(
 		{Type: testkeyvalue.MutationPut, Key: testservices.ServiceRuntimeKey(targetID), Value: runtimeValue},
 		{
 			Type:  testkeyvalue.MutationPut,
-			Key:   runtimeConfigurationHeadKey(environment.Record.ID),
+			Key:   runtimeconfiguration.HeadKey(environment.Record.ID),
 			Value: configurationValue,
 		},
 	})
@@ -234,8 +228,6 @@ func routeRepositoryTestProjection(
 func routeRepositoryTestSelectDesiredHead(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
-	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
 	projection testenvironmentprojection.EnvironmentComposeProjection,
 ) {
 	t.Helper()
@@ -243,16 +235,8 @@ func routeRepositoryTestSelectDesiredHead(
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 1005)
-	projection.RevisionID = task.ID
-	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {api: {}}\n")
-	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
-	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
-	seedEffectiveBlueprintFixture(t, store, projection)
-	headValue, err := testidempotency.EncodeTaskReference(task.ID)
-	if err != nil {
-		t.Fatalf("encodeTaskReference() error = %v", err)
-	}
+	projection.RevisionID = ids.New(ids.KindTask)
+	headValue := routeRepositoryTestStageProjection(t, hierarchy, projection)
 	defer clear(headValue)
 	conditions := make([]testkeyvalue.Condition, 0, len(projection.DesiredRoutes))
 	mutations := []testkeyvalue.Mutation{{
@@ -283,6 +267,37 @@ func routeRepositoryTestSelectDesiredHead(
 	if err != nil || !result.Succeeded {
 		t.Fatalf("select desired Environment head = %#v, %v", result, err)
 	}
+}
+
+// Seed only current desired-state storage. A revision identity is not an
+// execution Task, and these repository checks do not simulate execution.
+func routeRepositoryTestStageProjection(
+	t *testing.T,
+	hierarchy *HierarchyRepository,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+) []byte {
+	t.Helper()
+	marker := testDirectMarker()
+	marker.TaskID = projection.RevisionID
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: projection.EnvironmentID,
+		Method: http.MethodPut, Route: "/environments/{id}/blueprint", Key: projection.RevisionID,
+	}
+	revision := testblueprints.EnvironmentBlueprintRevision{
+		EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
+		RootPath: "blueprint.yaml", ComposeSources: []string{"blueprint.yaml"},
+		Files: []testblueprints.EnvironmentBlueprintFile{
+			{Path: "blueprint.yaml", Content: []byte("services: {api: {}}\n")},
+		},
+		CreatedAt: marker.CreatedAt,
+	}
+	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
+	seedEffectiveBlueprintFixture(t, hierarchy.store, projection)
+	value, err := testidempotency.EncodeTaskReference(projection.RevisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value
 }
 
 func routeRepositoryTestRecord(

@@ -258,28 +258,6 @@ func routeMutationAcceptanceMarker(
 	return marker
 }
 
-func stageTestRuntimeConfiguration(
-	t *testing.T, store *memoryHierarchyStore, environmentID string, generation uint64,
-) []byte {
-	t.Helper()
-	repository, err := runtimeconfiguration.New(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reference, err := repository.Stage(context.Background(), runtimeconfiguration.Snapshot{
-		ID: ids.New(ids.KindConfig), EnvironmentID: environmentID, Generation: generation,
-		Files: []testtaskmaterialization.Record{},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	value, err := runtimeconfiguration.EncodeReference(reference)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return value
-}
-
 func seedTestRuntimeConfigurationHead(
 	t *testing.T, store *memoryHierarchyStore, environmentID string, generation uint64,
 ) int64 {

@@ -4,31 +4,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-func TestClassifyBackingServiceCreationUsesCurrentConditionLayout(t *testing.T) {
-	publication := environmentBlueprintPublicationEvidence{
-		rootRevision: 11, descriptorRevision: 12, locatorRevision: 13,
-	}
-	values := make([]*testkeyvalue.KeyValue, 30)
-	values[5] = &testkeyvalue.KeyValue{ModRevision: publication.rootRevision}
-	values[6] = &testkeyvalue.KeyValue{ModRevision: publication.descriptorRevision}
-	values[7] = &testkeyvalue.KeyValue{ModRevision: publication.locatorRevision}
-
-	err := classifyBackingServiceCreation(BackingServiceCreation{}, publication, len(values))(1, values)
-	if err == nil || !strings.Contains(err.Error(), "Backing-service creation raced") {
-		t.Fatalf("classification error = %v, want final race classification", err)
-	}
-}
 
 func TestValidateBackingServiceComponentsRejectsNonEmpty(t *testing.T) {
 	t.Parallel()
@@ -110,7 +95,7 @@ func TestBackingServiceCreationValidatesDesiredTopology(t *testing.T) {
 			SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1,
 		},
 		Revision: testblueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: environmentID, RevisionID: taskID},
-		Task:     TaskRecord{ID: taskID},
+		Task:     workexecution.Task{ID: taskID},
 		Projection: testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID: environmentID, RevisionID: taskID, RenderGeneration: 1,
 			ComposeArtifact: []byte{1},
