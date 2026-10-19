@@ -8,21 +8,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backingprovision"
+	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/servicelifecyclework"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 )
 
-// SVC-02/03: a freshly provisioned database has no Release. Lifecycle must
+// SVC-02/03/TASK-73: a freshly provisioned database has no Release. Lifecycle must
 // preserve its original ownership and reject forged/mixed runtime authority.
 func TestNativeBackingLifecyclePinsProvisionedRuntime(t *testing.T) {
-	reader, creation := blueprintPlanTestState(t)
-	projection := reader.projection
+	source := nativeRetainedRenderFixture(t, domain.StrategyRecreate)
+	projection := source.Projection
 	projection.Volumes = nil
 	service := &projection.DesiredServices[0]
 	service.Desired.Adapter, service.Desired.AdapterVersion = "mysql", "8.4"
@@ -34,15 +40,39 @@ func TestNativeBackingLifecyclePinsProvisionedRuntime(t *testing.T) {
 		Networks: composetypes.Networks{"frontend": {}},
 	}
 	var err error
+	volumeDir, err := environmentpath.Derive(environmentpath.DefaultVolumeRoot, environmentpath.Scope{
+		ProjectKind: environmentpath.ProjectKindBacking, ProjectID: source.ProjectID, EnvironmentID: source.EnvironmentID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().UTC().Add(-time.Minute)
+	finished := at.Add(time.Second)
+	creation := workexecution.Attempt{
+		ID:         ids.New(ids.KindAttempt),
+		TaskID:     ids.New(ids.KindTask),
+		WorkItemID: ids.New(ids.KindWorkItem),
+		Number:     1,
+		Direction:  workexecution.Forward,
+		AssignedAt: at,
+		StartedAt:  &at,
+		Deadline:   at.Add(time.Hour),
+		Executor: workexecution.Identity{
+			Executor:   workexecution.Agent,
+			HostID:     ids.New(ids.KindHost),
+			AgentID:    ids.New(ids.KindAgent),
+			Generation: 1,
+		},
+		Input: workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: strings.Repeat("c", 64)},
+	}
 	projection.NormalizedCompose, err = project.MarshalYAML()
 	if err != nil {
 		t.Fatal(err)
 	}
 	artifact, err := composerender.RenderCompose(composerender.ComposeRenderInput{
 		Project: project, ArtifactID: ids.New(ids.KindConfig),
-		ProjectOwnerKind: composerender.ComposeProjectOwnerBacking, ProjectID: reader.project.ID,
-		EnvironmentID: projection.EnvironmentID, PlanID: creation.PlanID, RenderGeneration: projection.RenderGeneration,
-		AuthorizedVolumeDir: reader.environment.VolumeDir,
+		ProjectOwnerKind: composerender.ComposeProjectOwnerBacking, ProjectID: source.ProjectID,
+		EnvironmentID: projection.EnvironmentID, PlanID: creation.Input.ID, RenderGeneration: projection.RenderGeneration,
+		AuthorizedVolumeDir: volumeDir,
 		Identities:          mustComposeIdentitySnapshotFromProjection(t, projection),
 	})
 	if err != nil {
@@ -53,43 +83,57 @@ func TestNativeBackingLifecyclePinsProvisionedRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(projection.ComposeArtifact)
-	projection.BackingRuntime = &projectionrecord.BackingRuntimeReceipt{
-		ServiceID: service.Desired.ID, ArtifactSHA256: hex.EncodeToString(digest[:]),
-		LocalImageID: "sha256:" + strings.Repeat("b", 64), Adapter: "mysql",
-		TaskID: creation.ID, PlanID: creation.PlanID, PlanHash: strings.Repeat("c", 64),
-		AgentID: ids.New(ids.KindAgent), AssignmentID: ids.New(ids.KindAssignment),
-		ExecutionEpoch: 1, RenderGeneration: projection.RenderGeneration, AcknowledgedAt: creation.CreatedAt,
-	}
-	input := releaserender.ServiceLifecycleRenderInput{
-		PlanID: ids.New(ids.KindPlan), ServiceID: service.Desired.ID,
-		ProjectID: reader.project.ID, ProjectSlug: reader.project.Slug,
-		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
-		AuthorizedVolumeDir: reader.environment.VolumeDir, ArtifactID: artifact.ArtifactId,
-		NativeBacking: &projection, AppliedRenderGeneration: projection.RenderGeneration, AppliedProjectionRevision: 20,
-	}
-	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
+	stageID, err := backingprovision.StageID(creation.WorkItemID, backingprovision.VerifyRuntime)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, action := range []taskjournal.TaskType{taskjournal.TaskStop, taskjournal.TaskStart, taskjournal.TaskDestroy} {
-		task := etcd.TaskRecord{ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
-			PlanID: input.PlanID, Target: input.ServiceID, Type: action, Executor: taskjournal.TaskExecutorAgent,
-			TimeoutSeconds: 120, Status: taskjournal.TaskStatusPending, CreatedAt: time.Now().UTC()}
-		prepared, err := resolver.PrepareServiceLifecycleTask(t.Context(), task, input, []string{ids.New(ids.KindStep)})
-		if err != nil {
-			t.Fatalf("%s: %v", action, err)
-		}
-		plan, err := resolver.buildServiceLifecyclePlan(t.Context(), prepared, input)
+	checkpoint := workexecution.Checkpoint{AttemptID: creation.ID, Sequence: 8, StageID: stageID,
+		Evidence: creation.Input, RecordedAt: finished}
+	observation := backingruntimefact.Observation{ProjectName: artifact.ProjectName, ObservedAt: finished,
+		ContainerID: strings.Repeat("d", 64), ServiceID: service.Desired.ID, ImageReference: service.Desired.Image,
+		LocalImageID: "sha256:" + strings.Repeat(
+			"b",
+			64,
+		), State: agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING,
+		Health: agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE, Labels: artifact.Services[0].ExpectedLabels}
+	result, err := backingprovision.CompletionEvidence(creation, checkpoint, observation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	creation.FinishedAt, creation.Outcome, creation.Result = &finished, workexecution.Succeeded, &result
+	projection.BackingRuntime = &projectionrecord.BackingRuntimeReceipt{
+		ServiceID: service.Desired.ID, ArtifactSHA256: hex.EncodeToString(digest[:]),
+		LocalImageID: "sha256:" + strings.Repeat("b", 64), Adapter: "mysql",
+		Attempt: creation, Checkpoint: checkpoint, Observation: observation,
+		RenderGeneration: projection.RenderGeneration, AcknowledgedAt: finished,
+	}
+	input := releaserender.ServiceLifecycleRenderInput{
+		PlanID: ids.New(ids.KindPlan), ServiceID: service.Desired.ID,
+		ProjectID: source.ProjectID, ProjectSlug: source.ProjectSlug,
+		EnvironmentID: source.EnvironmentID, EnvironmentName: source.EnvironmentName,
+		AuthorizedVolumeDir: volumeDir, ArtifactID: artifact.ArtifactId,
+		NativeBacking: &projection, AppliedRenderGeneration: projection.RenderGeneration, AppliedProjectionRevision: 20,
+	}
+	for _, action := range []workexecution.Action{workexecution.ActionStop, workexecution.ActionStart, workexecution.ActionDestroy} {
+		capture := servicelifecyclework.Input{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
+			PlanID: input.PlanID, ServiceID: input.ServiceID, ServiceRevision: 1, Action: action, HostID: creation.Executor.HostID,
+			Scope: workexecution.Scope{
+				ProjectID:     source.ProjectID,
+				EnvironmentID: source.EnvironmentID,
+			}, Runtime: &input, CreatedAt: time.Now().UTC()}
+		work, err := servicelifecycle.BuildWorkInput(capture)
 		if err != nil {
 			t.Fatal(err)
 		}
-		member := plan.Artifacts[0].Services[0]
-		if len(plan.Artifacts) != 1 || len(plan.Steps) != 1 || !proto.Equal(member, artifact.Services[0]) ||
-			plan.ServiceLifecycleProcedure.Sources[0].SourcePlanId != creation.PlanID ||
-			plan.ServiceLifecycleProcedure.Sources[0].SourceRenderGeneration != projection.RenderGeneration {
+		if len(work.Members) != 1 {
+			t.Fatal("Backing lifecycle selected more than its provisioned workload")
+		}
+		member := work.Members[0].Artifact.Services[0]
+		if !proto.Equal(member, artifact.Services[0]) || work.Members[0].Ownership.SourcePlanId != creation.Input.ID ||
+			work.Members[0].Ownership.SourceRenderGeneration != projection.RenderGeneration {
 			t.Fatal("lifecycle changed provisioned runtime ownership or selected another workload")
 		}
-		if !bytes.Contains(plan.Artifacts[0].CanonicalYaml, []byte(service.Desired.Image)) {
+		if !bytes.Contains(work.Members[0].Artifact.CanonicalYaml, []byte(service.Desired.Image)) {
 			t.Fatal("lifecycle changed the provisioned image")
 		}
 	}
