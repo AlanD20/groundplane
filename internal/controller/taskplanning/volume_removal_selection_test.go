@@ -4,94 +4,79 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/common/volumeexecution"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
-	testtaskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 )
 
-// Rationale: a logical consumer includes a stable proxy and retained slot. Only
-// the actual mounted workload may be started, with no dependency expansion; a
-// desired mount that was never deployed must not become an unqualified up.
+// VOL-03 / TASK-76: a logical consumer includes a stable proxy and serving slot.
+// Native removal selects physical mounted workloads, not their proxy/dependency
+// or an unmounted desired consumer. This checks capture, not actual detachment.
 func TestVolumeRemovalSelectsOnlyMountedNativeWorkload(t *testing.T) {
 	for _, mounted := range []bool{true, false} {
-		request, workload := nativeVolumeRemovalRequest(t, mounted)
-		services, err := composehelper.StartupServices(request)
+		input, workload := nativeVolumeRemovalInput(t, mounted)
+		if err := executionplan.ValidateVolumeWorkInput(input); err != nil {
+			t.Fatal(err)
+		}
+		services, err := (volumeexecution.Removal{VolumeID: input.VolumeId, Key: input.ComposeKey,
+			Baseline: input.Baseline, Candidate: input.Candidate, ConsumerIDs: input.ConsumerIds}).Consumers()
 		if err != nil {
 			t.Fatal(err)
 		}
-		fake := runner.NewFake()
-		if _, err := composehelper.Execute(t.Context(), fake, request); err != nil {
-			t.Fatal(err)
-		}
-		calls := fake.RecordedCalls()
 		if !mounted {
-			if len(services) != 0 || len(calls) != 0 {
+			if len(services) != 0 {
 				t.Fatal("undeployed desired mount started workloads")
 			}
 			continue
 		}
-		if len(services) != 1 || services[0].ComposeName != workload || len(calls) != 2 {
-			t.Fatalf("startup=%v calls=%v", services, calls)
-		}
-		args := calls[1].Args
-		up := slices.Index(args, "up")
-		if up < 0 || !slices.Equal(args[up:], []string{"up", "--detach", "--no-deps", workload}) {
-			t.Fatalf("removal command selected a proxy/dependency: %v", args)
-		}
-		if !bytes.Equal(calls[1].Stdin, request.Plan.Artifacts[0].CanonicalYaml) {
-			t.Fatal("helper did not execute the sealed candidate")
+		if !slices.Equal(services, []string{workload}) {
+			t.Fatalf("removal selected proxy/dependency instead of mounted workload: %v", services)
 		}
 	}
 }
 
-// Rationale: no-deps is not general removal authority; both immutable artifacts
-// and the ordered single-Volume cleanup steps must agree before admission.
+// VOL-03 / TASK-76: both captured artifacts, selected consumers and immutable
+// Volume identity must agree; removing a mount grants no unrelated runtime edit.
 func TestVolumeRemovalRejectsChangedConsumerAuthority(t *testing.T) {
-	request, _ := nativeVolumeRemovalRequest(t, true)
-	for _, change := range []string{"baseline", "target", "steps", "mount", "metadata", "dependencies"} {
+	input, _ := nativeVolumeRemovalInput(t, true)
+	for _, change := range []string{"baseline", "target", "consumer", "mount", "metadata", "digest", "approval"} {
 		t.Run(change, func(t *testing.T) {
-			plan := proto.CloneOf(request.Plan)
-			plan.PlanHash = nil
+			changed := proto.CloneOf(input)
 			switch change {
 			case "baseline":
-				plan.Steps[2].GetManagedVolumeDirectoryRemove().ArtifactId = plan.Artifacts[0].ArtifactId
+				changed.Baseline = proto.CloneOf(changed.Candidate)
 			case "target":
-				plan.Steps[1].GetManagedVolumeRemove().VolumeId = "vol_01ARZ3NDEKTSV4RRFFQ69G5FC9"
-			case "steps":
-				plan.Steps[1], plan.Steps[2] = plan.Steps[2], plan.Steps[1]
+				changed.VolumeId = "vol_01ARZ3NDEKTSV4RRFFQ69G5FC9"
+			case "consumer":
+				changed.ConsumerIds = nil
 			case "mount":
-				plan.Artifacts[0].CanonicalYaml = append([]byte(nil), plan.Artifacts[1].CanonicalYaml...)
-				digest := sha256.Sum256(plan.Artifacts[0].CanonicalYaml)
-				plan.Artifacts[0].YamlSha256 = digest[:]
+				changed.Candidate.CanonicalYaml = bytes.Clone(changed.Baseline.CanonicalYaml)
+				digest := sha256.Sum256(changed.Candidate.CanonicalYaml)
+				changed.Candidate.YamlSha256 = digest[:]
 			case "metadata":
-				plan.Artifacts[0].Services[0].ExpectedReplicas++
-			case "dependencies":
-				plan.Steps[0].GetComposeApply().FullReconcile = true
+				changed.Candidate.Services[0].ExpectedReplicas++
+			case "digest":
+				changed.Baseline.YamlSha256[0] ^= 1
+			case "approval":
+				changed.RemovalImpactSha256 = nil
 			}
-			if _, err := executionplan.Seal(plan); err == nil {
+			if err := executionplan.ValidateVolumeWorkInput(changed); err == nil {
 				t.Fatal("accepted changed removal authority")
 			}
 		})
 	}
 }
 
-func nativeVolumeRemovalRequest(t *testing.T, mounted bool) (*agentpb.ComposeHelperRequest, string) {
+func nativeVolumeRemovalInput(t *testing.T, mounted bool) (*agentpb.VolumeWorkInput, string) {
 	t.Helper()
-	_, _, input := redeployRestorationInput(t, domain.StrategyBlueGreen)
-	render := input.Members[0].Render
-	baseline := &agentpb.ComposeArtifact{}
-	if err := proto.Unmarshal(render.PriorRuntime.CurrentArtifact, baseline); err != nil {
-		t.Fatal(err)
-	}
+	render := nativeRetainedRenderFixture(t, domain.StrategyBlueGreen)
+	baseline := nativeRuntimeFixture(t, render, true)
 	volume := baseline.Volumes[0]
 	var workload, proxy string
 	for _, service := range baseline.Services {
@@ -138,29 +123,8 @@ func nativeVolumeRemovalRequest(t *testing.T, mounted bool) (*agentpb.ComposeHel
 	if err != nil {
 		t.Fatal(err)
 	}
-	steps := []*agentpb.ExecutionStep{
-		{StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FC6", TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-				ArtifactId: artifactID, ServiceIds: []string{render.ServiceID}, NoDependencies: true,
-			}}},
-		{StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FC7", TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ManagedVolumeRemove{ManagedVolumeRemove: &agentpb.ManagedVolumeRemove{
-				VolumeId: volume.VolumeId, DockerName: "gp_vol_" + strings.ToLower(volume.VolumeId),
-			}}},
-		{StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FC8", TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoryRemove{
-				ManagedVolumeDirectoryRemove: &agentpb.ManagedVolumeDirectoryRemove{
-					ArtifactId: baseline.ArtifactId, VolumeId: volume.VolumeId, ComposeKey: volume.ComposeName,
-					IntentSha256: bytes.Repeat([]byte{1}, 32),
-				}}},
-	}
-	plan, err := testtaskplan.Build(testtaskplan.BuildInput{VolumeRoot: "/var/lib/groundplane/vol", PlanID: planID,
-		RenderGeneration: 3, Operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetID: volume.VolumeId,
-		Artifacts: []*agentpb.ComposeArtifact{candidate, baseline}, Steps: steps})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return &agentpb.ComposeHelperRequest{Schema: composehelper.SchemaVersion, Plan: plan, StepId: steps[0].StepId,
-		TimeoutSeconds: 30, AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		TaskId: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", OperationId: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV"}, workload
+	return &agentpb.VolumeWorkInput{Action: agentpb.VolumeWorkAction_VOLUME_WORK_ACTION_REMOVE,
+		EnvironmentId: baseline.OwnerId, VolumeId: volume.VolumeId, ComposeKey: volume.ComposeName,
+		IntentSha256: bytes.Repeat([]byte{1}, 32), RemovalImpactSha256: bytes.Repeat([]byte{2}, 32),
+		Baseline: baseline, Candidate: candidate, ConsumerIds: []string{render.ServiceID}}, workload
 }

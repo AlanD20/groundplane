@@ -209,7 +209,7 @@ x-gp-components:
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader := &blueprintPlanReader{
+	reader := &componentProjectionReader{
 		tenant: testhierarchy.TenantRecord{ID: identity.TenantID, Slug: identity.TenantSlug, Name: "Acme"},
 		project: testhierarchy.ProjectRecord{
 			ID: identity.ProjectID, TenantID: identity.TenantID, Slug: identity.ProjectSlug,
