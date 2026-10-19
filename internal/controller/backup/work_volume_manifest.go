@@ -21,8 +21,7 @@ func (owner *AgentWork) BeginVolumeManifest(ctx context.Context, authorization a
 	if err != nil {
 		return nil, false, err
 	}
-	credit, err := owner.manifests.Open(ctx, manifestOwner, guards)
-	if err != nil {
+	if _, err := owner.manifests.Open(ctx, manifestOwner, guards); err != nil {
 		return nil, false, err
 	}
 	cursor, found, err := owner.manifests.Read(ctx, manifestOwner, 0)
@@ -34,7 +33,7 @@ func (owner *AgentWork) BeginVolumeManifest(ctx context.Context, authorization a
 	}
 	// Return one cursor's credit and terminal state, rather than pairing an
 	// earlier grant with a later completion observed during reconnect.
-	credit, err = cursor.Record.LastCredit()
+	credit, err := cursor.Record.LastCredit()
 	return credit, cursor.Record.Complete, err
 }
 

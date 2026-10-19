@@ -23,7 +23,7 @@ func (delivery *WorkSecretDelivery) ResolveWorkSecretSlots(ctx context.Context, 
 	}
 	resolver, queue := delivery.resolver, delivery.queue
 	reader := resolver.reader
-	if resolver == nil || resolver.protector == nil || resolver.identities == nil || reader == nil || queue == nil {
+	if resolver.protector == nil || resolver.identities == nil || reader == nil || queue == nil {
 		return nil, nil, errs.New(errs.KindInternal, "Backup work credential delivery is not configured")
 	}
 	resolved, err := reader.ResolveWorkSecretEvidence(ctx, queue, authorization, attempt, ordinal)
