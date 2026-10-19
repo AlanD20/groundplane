@@ -11,6 +11,13 @@ import (
 	"testing"
 )
 
+const (
+	testTaskID        = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	testOperationID   = "op_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	testEnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	testVolumeID      = "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+)
+
 type volumePathTestCreator struct{}
 
 func (volumePathTestCreator) Create(ctx context.Context, root, directory string) error {
