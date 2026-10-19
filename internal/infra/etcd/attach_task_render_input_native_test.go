@@ -7,10 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	testattachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
-	testenvironmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -127,49 +124,5 @@ func capturedAttachRenderInputFixture(t *testing.T) testattachrender.AttachTaskR
 		}},
 		ConsumerServiceIDs:     []string{consumerID},
 		ServiceDependencyPlans: runtime.ServiceDependencyPlans.Clone(),
-	}
-}
-
-// Rationale: unchanged desired Blueprint state cannot hide a serving-runtime
-// change between capture and Attach publication.
-func TestAttachRuntimeEpochRejectsStaleCapture(t *testing.T) {
-	store := newAttachTestStore()
-	scope := seedAttachScope(t, t.Context(), store)
-	load := func() *testenvironmentfence.MutationContext {
-		context, err := testenvironmentfence.LoadMutationContext(
-			t.Context(),
-			store,
-			scope.Environment.Record.ID,
-			testhierarchy.EnvironmentKey(scope.Environment.Record.ID),
-			scope.Project.Record.ID,
-			scope.Tenant.Record.ID,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return context
-	}
-	key := testhierarchy.EnvironmentMutationEpochKey(scope.Environment.Record.ID)
-	captured := load()
-	epoch, found := captured.RevisionForKey(key)
-	if !found {
-		t.Fatal("capture lacks epoch")
-	}
-	input := testattachrender.AttachTaskRenderInput{EnvironmentEpochRevision: epoch}
-	if err := validateAttachRuntimeEpoch(captured, scope.Environment.Record.ID, input); err != nil {
-		t.Fatal(err)
-	}
-	current, err := store.Get(t.Context(), key)
-	if err != nil || current.Entry == nil {
-		t.Fatal("epoch read", err)
-	}
-	if _, err := store.Put(t.Context(), key, current.Entry.Value); err != nil {
-		t.Fatal(err)
-	}
-	if err := validateAttachRuntimeEpoch(load(), scope.Environment.Record.ID, input); !isKind(
-		err,
-		errs.KindStateConflict,
-	) {
-		t.Fatalf("stale Attach capture accepted: %v", err)
 	}
 }

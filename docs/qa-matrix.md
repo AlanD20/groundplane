@@ -1046,6 +1046,27 @@ retains the full dated review narrative and local run locators.
 
 #### Retired application fixtures for the former execution engine
 
+The native desired-plan expansion check now lives in
+[application integration](../internal/app/native_blueprint_desired_plan_integration_test.go).
+It persists an incomplete Attach-only plan, expands and seals its dependent Service,
+rejects changed head/epoch revisions without partial expansion, and refuses stale
+replacement or reopening. Named-file race checks pass over independent MVCC
+memory (`task-native-blueprint-desired-expansion-migration-race.log`). This proves
+the current desired-plan repository, not hook execution, scheduler ownership or
+joined resource settlement (BP-04, BACK-15, TASK-122). The old hidden-child ledger
+test is removed; native latest-wins claims, exact attempt receipts and late-result
+rejection retain their separate OPEN requirements. Its still-used initial-absence
+storage fixture remains independent of execution APIs.
+
+Projection/Attach capture checks retain exact desired topology/digest changes,
+generated-service ownership and coverage, Entry generation removal/replay and
+the captured current/older slot distinction. The named-file race suite passes
+(`task-native-projection-attach-capture-migration-race.log`). Removed two generic
+publication tests whose blanket omission prohibition contradicts foundational
+Blueprint cleanup, plus the old Attach Task-epoch gate. Separate protected Volume
+removal and proof before applied resource absence remain required; actual native
+publication, claims and host effects are not qualified by these capture checks.
+
 | Reviewed fixtures | Disposition | Native obligation still open |
 | --- | --- | --- |
 | Blueprint executed-artifact, hidden-child publication, mixed worker/recovery/observer and reconnect-epoch fixtures | Removed their old TaskRecord, assignment, Step and publisher helpers. Retained the independent shared digest builder; the image-catalog builder was removed after its last old-engine caller. Tests named “native” that still constructed hidden child Tasks were not proof of the replacement. | BP-04, GRP-04, TASK-70/95/98/122/126: publish the exact executed per-Service runtime, preserve independent runtimes and immutable history, reject changed source/proof without partial writes, restore every affected member, retain the original failure and replay completion after restart. Reconnect must retain the attempt rather than increment the former execution epoch. Removal qualifies none of these journeys. |
