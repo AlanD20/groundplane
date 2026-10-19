@@ -19,21 +19,16 @@ import (
 )
 
 const (
-	helperTaskID                 = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	helperOperationID            = "op_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	helperPlanID                 = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	helperArtifactID             = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	helperServiceID              = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	helperComponentID            = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	helperStepID                 = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	helperEnvironmentID          = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	helperTenantID               = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	helperProjectID              = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	componentConfigRelativePath  = "components/caddy/Caddyfile"
 	componentConfigContainerPath = "/etc/caddy/Caddyfile"
 	componentImageReference      = "docker.io/library/caddy@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
-	componentMaterializeStepID   = "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	componentComposeApplyStepID  = "step_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 )
 
 type componentCatalogFake struct{}
