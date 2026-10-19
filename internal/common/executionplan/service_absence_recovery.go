@@ -8,14 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// ServiceAbsenceRecoveryStepIDs returns the closed probe/compensation cursor.
-func ServiceAbsenceRecoveryStepIDs(procedure *agentpb.ServiceAbsenceRecoveryProcedure) []string {
-	if procedure == nil {
-		return nil
-	}
-	return []string{procedure.GetProbeStepId(), procedure.GetCompensateStepId()}
-}
-
 func validateServiceAbsenceRecoveryPlan(
 	plan *agentpb.ExecutionPlan,
 	artifacts map[string]*agentpb.ComposeArtifact,

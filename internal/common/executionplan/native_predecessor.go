@@ -12,15 +12,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// NativePredecessorWitness is the immutable, per-Service native runtime
-// witness carried by a Blueprint candidate. An empty CurrentArtifact is an
-// explicit candidate-absence witness; it never means "inspect applied state".
-type NativePredecessorWitness struct {
-	ServiceID             string
-	CurrentArtifact       []byte
-	RetainedPriorArtifact []byte
-}
-
 // ValidateNativePredecessorWitness validates one native runtime snapshot
 // without consulting a plan, a repository, or host state.
 func ValidateNativePredecessorWitness(environmentID, serviceID string, current, retained []byte) error {
@@ -64,60 +55,6 @@ func ValidateNativePredecessorWitness(environmentID, serviceID string, current, 
 		return invalidNativePredecessorWitness()
 	}
 	return nil
-}
-
-// SelectNativeRestorationMembers binds every candidate to exactly one sorted
-// native witness. Selection is deterministic and never falls back to an
-// acknowledged Environment artifact.
-func SelectNativeRestorationMembers(
-	environmentID string,
-	candidates []CandidateServiceIdentity,
-	witnesses []NativePredecessorWitness,
-) ([]CandidateRestorationSelection, error) {
-	if ids.Validate(ids.KindEnvironment, environmentID) != nil || len(candidates) == 0 ||
-		len(candidates) != len(witnesses) {
-		return nil, invalidNativePredecessorWitness()
-	}
-	result := make([]CandidateRestorationSelection, len(candidates))
-	previous := ""
-	for index, candidate := range candidates {
-		if ids.Validate(ids.KindService, candidate.ServiceID) != nil ||
-			ids.Validate(ids.KindDeployment, candidate.ReleaseID) != nil ||
-			index > 0 && candidate.ServiceID <= previous {
-			return nil, invalidNativePredecessorWitness()
-		}
-		previous = candidate.ServiceID
-		witness := witnesses[index]
-		if witness.ServiceID != candidate.ServiceID || index > 0 && witnesses[index-1].ServiceID >= witness.ServiceID {
-			return nil, invalidNativePredecessorWitness()
-		}
-		if len(witness.CurrentArtifact) == 0 {
-			if len(witness.RetainedPriorArtifact) != 0 {
-				return nil, invalidNativePredecessorWitness()
-			}
-			result[index] = CandidateRestorationSelection{
-				ServiceID: candidate.ServiceID, ReleaseID: candidate.ReleaseID,
-				Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE,
-			}
-			continue
-		}
-		if err := ValidateNativePredecessorWitness(environmentID, witness.ServiceID, witness.CurrentArtifact, witness.RetainedPriorArtifact); err != nil {
-			return nil, err
-		}
-		artifact, err := OpenNativePredecessorArtifact(environmentID, witness.CurrentArtifact)
-		if err != nil {
-			return nil, err
-		}
-		workload, _, err := nativePredecessorServices(artifact, candidate.ServiceID)
-		if err != nil || len(workload) == 0 || nativePredecessorReleaseID(workload[0]) == candidate.ReleaseID {
-			return nil, invalidNativePredecessorWitness()
-		}
-		result[index] = CandidateRestorationSelection{
-			ServiceID: candidate.ServiceID, ReleaseID: candidate.ReleaseID,
-			Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR,
-		}
-	}
-	return result, nil
 }
 
 // OpenNativePredecessorArtifact decodes a bounded canonical Environment artifact.

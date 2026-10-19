@@ -1623,60 +1623,6 @@ message LogEnd {
   LogEndReason reason = 2;
 }
 
-message ReleaseRecoveryDirective {
-  repeated string step_ids = 1;
-  uint32 cursor = 2;
-  bytes release_recovery_record_sha256 = 3;
-  ReleaseRecoveryPhase phase = 4;
-  repeated string applicable_compensation_step_ids = 5;
-}
-
-enum ReleaseRecoveryPhase {
-  RELEASE_RECOVERY_PHASE_UNSPECIFIED = 0;
-  RELEASE_RECOVERY_PHASE_PROBE = 1;
-  RELEASE_RECOVERY_PHASE_COMPENSATE = 2;
-  RELEASE_RECOVERY_PHASE_PROVEN = 3;
-}
-
-enum ReleaseRestorationTarget {
-  RELEASE_RESTORATION_TARGET_UNSPECIFIED = 0;
-  RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR = 1;
-  RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE = 2;
-}
-
-message ReleaseRestorationCandidate {
-  string service_id = 1;
-  string release_id = 2;
-  ReleaseRestorationTarget target = 3;
-}
-
-message ReleaseAppliedPredecessorAuthority {
-  int64 key_revision = 1;
-  string revision_id = 2;
-  uint64 render_generation = 3;
-  bytes compose_artifact_sha256 = 4;
-  bytes compose_artifact = 5;
-}
-
-message ReleaseRestorationAuthority {
-  reserved 1;
-  string task_id = 2;
-  string operation_id = 3;
-  bytes plan_hash = 4;
-  string environment_id = 5;
-  string candidate_artifact_id = 6;
-  repeated ReleaseRestorationCandidate candidates = 7;
-  ReleaseAppliedPredecessorAuthority applied_predecessor = 8;
-  bytes authority_sha256 = 9;
-  repeated ReleaseNativePredecessorAuthority native_predecessors = 10;
-}
-
-message ReleaseNativePredecessorAuthority {
-  string service_id = 1;
-  bytes current_artifact = 2;
-  bytes retained_prior_artifact = 3;
-}
-
 enum ScriptExecutionState {
   SCRIPT_EXECUTION_STATE_UNSPECIFIED = 0;
   SCRIPT_EXECUTION_STATE_NOT_STARTED = 1;
