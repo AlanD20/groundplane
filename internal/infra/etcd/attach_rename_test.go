@@ -2,9 +2,10 @@ package etcd
 
 import (
 	"context"
-	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"testing"
+
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 )
 
 // Rationale: an Attach rename must move the Environment-scoped name index and publish the completed
@@ -18,7 +19,7 @@ func TestRenameAttachIdempotentMovesTheScopedNameAtomically(t *testing.T) {
 	}
 	scope := seedAttachScope(t, ctx, store)
 	record, facts := testPendingAttach(t, scope, 91, "original-database", nil)
-	current := createTestAttach(t, ctx, repository, scope, record, &facts)
+	current := seedAttachMetadata(t, repository, record, &facts)
 	hierarchy, err := NewHierarchyRepository(store)
 	if err != nil {
 		t.Fatalf("NewHierarchyRepository() error = %v", err)

@@ -3,13 +3,14 @@ package etcd
 import (
 	context "context"
 	errors "errors"
+	testing "testing"
+	time "time"
+
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	core "github.com/AlanD20/groundplane/internal/core"
 	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	errs "github.com/AlanD20/groundplane/pkg/errs"
-	testing "testing"
-	time "time"
 )
 
 // Rationale: an Attach selected by an active Backup run must remain stable
@@ -24,7 +25,7 @@ func TestAttachRepositoryRejectsDestructiveBackupSourceMutations(t *testing.T) {
 			t.Fatalf("NewAttachRepository() error = %v", err)
 		}
 		record, facts := testPendingAttach(t, scope, 62, "backup-source-detach", nil)
-		ready := createTestAttach(t, ctx, repository, scope, record, &facts)
+		ready := seedAttachMetadata(t, repository, record, &facts)
 		ready, err = advanceAttachReady(ctx, repository, ready)
 		if err != nil {
 			t.Fatalf("advanceAttachReady() error = %v", err)
@@ -68,7 +69,7 @@ func TestAttachRepositoryRejectsDestructiveBackupSourceMutations(t *testing.T) {
 			t.Fatalf("NewAttachRepository() error = %v", err)
 		}
 		record, facts := testPendingAttach(t, scope, 63, "backup-source-removal", nil)
-		current := createTestAttach(t, ctx, repository, scope, record, &facts)
+		current := seedAttachMetadata(t, repository, record, &facts)
 		current, err = advanceAttachReady(ctx, repository, current)
 		if err != nil {
 			t.Fatalf("advanceAttachReady() error = %v", err)
@@ -125,7 +126,7 @@ func TestAttachRepositoryAllowsDetachFailureWithActiveBackupSourceExclusion(t *t
 		t.Fatalf("NewAttachRepository() error = %v", err)
 	}
 	record, facts := testPendingAttach(t, scope, 68, "backup-source-detach-failure", nil)
-	current := createTestAttach(t, ctx, repository, scope, record, &facts)
+	current := seedAttachMetadata(t, repository, record, &facts)
 	current, err = advanceAttachReady(ctx, repository, current)
 	if err != nil {
 		t.Fatalf("advanceAttachReady() error = %v", err)
@@ -205,7 +206,7 @@ func TestAttachRepositoryRejectsInvalidBackupSourceExclusionEvidence(t *testing.
 				t.Fatalf("NewAttachRepository() error = %v", err)
 			}
 			record, facts := testPendingAttach(t, scope, 67, "invalid-exclusion", nil)
-			current := createTestAttach(t, ctx, repository, scope, record, &facts)
+			current := seedAttachMetadata(t, repository, record, &facts)
 			current, err = advanceAttachReady(ctx, repository, current)
 			if err != nil {
 				t.Fatalf("advanceAttachReady() error = %v", err)

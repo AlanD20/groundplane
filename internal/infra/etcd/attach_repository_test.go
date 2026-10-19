@@ -13,15 +13,13 @@ import (
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	errs "github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Rationale: Attach creation must publish metadata, every ownership index, and encrypted facts in one revision.
-func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
+// Rationale: scoped reads must retain stable bindings and return encrypted facts without interpreting execution history.
+func TestAttachRepositoryReadsScopedMetadataAndEncryptedFacts(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	store := newAttachTestStore()
@@ -32,13 +30,9 @@ func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
 	}
 	record, facts := testPendingAttach(t, scope, 31, "api-db", nil)
 
-	created := createTestAttach(t, ctx, repository, scope, record, &facts)
+	created := seedAttachMetadata(t, repository, record, &facts)
 	if created.Revision == 0 || created.Record.ID != record.ID {
-		t.Fatalf("CreateAttach() = %#v", created)
-	}
-	epoch, err := store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(record.EnvironmentID))
-	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != created.Revision {
-		t.Fatalf("Attach creation mutation epoch = %#v, %v", epoch, err)
+		t.Fatalf("seeded Attach metadata = %#v", created)
 	}
 	resolved, err := repository.ResolveAttach(ctx, record.EnvironmentID, record.Name)
 	if err != nil {
@@ -65,108 +59,7 @@ func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
 	if !ok || string(storedFacts.Ciphertext) != "encrypted-facts" {
 		t.Fatalf("GetAttachFacts() = %#v, %t", storedFacts, ok)
 	}
-	for _, key := range []string{testattachments.AttachOwnerKey(record.EnvironmentID, record.ID), testattachments.AttachNameKey(record.EnvironmentID, record.Name), testattachments.AttachServiceKey(record.ServiceID, record.ID), testattachments.AttachBackingServiceKey(record.BackingServiceID, record.ID), testattachments.AttachBackingProjectKey(record.BackingProjectID, record.ID)} {
-		result, getErr := store.Get(ctx, key)
-		if getErr != nil || result.Entry == nil || string(result.Entry.Value) != record.ID ||
-			result.Entry.ModRevision != created.Revision {
-			t.Fatalf("index %s = %#v, error = %v", key, result, getErr)
-		}
-	}
-}
 
-// Rationale: direct Attach publication must durably capture the selected
-// backing authentication mode and publish no adapter-procedure Task steps for
-// a no-auth backing Service.
-func TestAttachRepositoryPublishesNoAuthenticationMode(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	store := newAttachTestStore()
-	scope := seedAttachScope(t, ctx, store)
-	backing := seedDesiredServiceFixture(
-		t,
-		ctx,
-		store,
-		scope.BackingEnvironment.Record.ID,
-		core.Service{
-			ID:   ids.NewAt(ids.KindService, testAttachTime, 301),
-			Name: "valkey", Image: "valkey/valkey:9-alpine",
-			Adapter: "valkey", AdapterVersion: "9", Authentication: core.BackingAuthenticationNone,
-		},
-		ids.NewAt(ids.KindNetwork, testAttachTime, 302),
-		303,
-		true,
-		true,
-	)
-	scope.BackingService = backing.Service
-	repository, err := NewAttachRepository(store)
-	if err != nil {
-		t.Fatalf("NewAttachRepository() error = %v", err)
-	}
-	record, facts := testPendingAttach(t, scope, 304, "api-cache", nil)
-
-	created := createTestAttach(t, ctx, repository, scope, record, &facts)
-	storedTask, err := store.Get(ctx, testtaskjournal.TaskStorageKey(created.Record.TaskID))
-	if err != nil || storedTask == nil || storedTask.Entry == nil {
-		t.Fatalf("Get(published Task) = %#v, %v", storedTask, err)
-	}
-	task, err := DecodeTaskRecord(storedTask.Entry.Value)
-	if err != nil {
-		t.Fatalf("decodeTaskRecord() error = %v", err)
-	}
-	stored, err := repository.GetAttachTaskRenderInput(ctx, task.PlanID)
-	if err != nil {
-		t.Fatalf("GetAttachTaskRenderInput() error = %v", err)
-	}
-	if stored.Record.Authentication != core.BackingAuthenticationNone {
-		t.Fatalf("published authentication = %q, want none", stored.Record.Authentication)
-	}
-	if len(task.Steps) != 1 {
-		t.Fatalf("published no-auth Task steps = %d, want 1", len(task.Steps))
-	}
-}
-
-// Rationale: retry must retain the exact generated identity and fact metadata while changing only task lifecycle state.
-func TestAttachLifecycleRetryPreservesIdentity(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	store := newAttachTestStore()
-	scope := seedAttachScope(t, ctx, store)
-	repository, err := NewAttachRepository(store)
-	if err != nil {
-		t.Fatalf("NewAttachRepository() error = %v", err)
-	}
-	record, facts := testPendingAttach(t, scope, 41, "worker-db", nil)
-	current := createTestAttach(t, ctx, repository, scope, record, &facts)
-	provisioning, err := testattachments.MarkAttachProvisioning(current.Record, current.Record.TaskID)
-	if err != nil {
-		t.Fatalf("MarkAttachProvisioning() error = %v", err)
-	}
-	current, err = repository.ReplaceLifecycle(ctx, current, provisioning)
-	if err != nil {
-		t.Fatalf("ReplaceLifecycle(provisioning) error = %v", err)
-	}
-	failed, err := testattachments.CompleteAttachProvisioning(current.Record, current.Record.TaskID, false)
-	if err != nil {
-		t.Fatalf("CompleteAttachProvisioning() error = %v", err)
-	}
-	current, err = repository.ReplaceLifecycle(ctx, current, failed)
-	if err != nil {
-		t.Fatalf("ReplaceLifecycle(failed) error = %v", err)
-	}
-	retryTaskID := ids.NewAt(ids.KindTask, testAttachTime.Add(time.Minute), 42)
-	retried, err := testattachments.RetryAttachOperation(current.Record, retryTaskID)
-	if err != nil {
-		t.Fatalf("RetryAttachOperation() error = %v", err)
-	}
-	if retried.ID != record.ID || retried.Name != record.Name || retried.TaskID != retryTaskID ||
-		retried.Status != core.AttachPending || retried.BackingNetworkID != record.BackingNetworkID ||
-		len(retried.FactSets) != len(record.FactSets) ||
-		retried.FactSets[0].Facts[0] != record.FactSets[0].Facts[0] {
-		t.Fatalf("RetryAttachOperation() changed durable identity: %#v", retried)
-	}
-	if _, err = repository.ReplaceLifecycle(ctx, current, retried); err != nil {
-		t.Fatalf("ReplaceLifecycle(retry) error = %v", err)
-	}
 }
 
 // Rationale: a missing Service runtime sidecar is the normal pre-observation state and must
@@ -205,7 +98,7 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 		t.Fatalf("NewAttachRepository() error = %v", err)
 	}
 	targetRecord, targetFacts := testPendingAttach(t, scope, 51, "target-db", nil)
-	target := createTestAttach(t, ctx, repository, scope, targetRecord, &targetFacts)
+	target := seedAttachMetadata(t, repository, targetRecord, &targetFacts)
 	target, err = advanceAttachReady(ctx, repository, target)
 	if err != nil {
 		t.Fatalf("advanceAttachReady() error = %v", err)
@@ -220,7 +113,7 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 		"source-db",
 		[]testkeyvalue.Versioned[testattachments.Record]{target},
 	)
-	createTestAttach(t, ctx, repository, grantScope, sourceRecord, &sourceFacts)
+	seedAttachMetadata(t, repository, sourceRecord, &sourceFacts)
 	target, err = repository.GetAttach(ctx, target.Record.ID)
 	if err != nil {
 		t.Fatalf("GetAttach(target) error = %v", err)
@@ -249,101 +142,6 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 	}
 }
 
-// Rationale: the locked one-consumer/eight-grant maximum must remain within the atomic transaction ceiling.
-func TestAttachRepositoryMaximumCombinationFitsTransactionBudget(t *testing.T) {
-	t.Parallel()
-	record := testattachments.Record{
-		ID:                 ids.NewAt(ids.KindAttach, testAttachTime, 902),
-		ServiceID:          ids.NewAt(ids.KindService, testAttachTime, 901),
-		CredentialAttachID: ids.NewAt(ids.KindAttach, testAttachTime, 902),
-		GrantAttachIDs:     make([]string, 8),
-	}
-	if got := attachCreateWithTaskOperationCount(record, true); got > testkeyvalue.MaximumOperations {
-		t.Fatalf(
-			"attachCreateWithTaskOperationCount() = %d, want at most %d",
-			got, testkeyvalue.MaximumOperations,
-		)
-	}
-	if got := attachDetachWithTaskOperationCount(record); got > testkeyvalue.MaximumOperations {
-		t.Fatalf("attachDetachWithTaskOperationCount() = %d, want at most %d", got, testkeyvalue.MaximumOperations)
-	}
-}
-
-// Rationale: detach intent, immutable plan input, Agent Task, queue membership, replay evidence,
-// and the Environment topology fence must become visible at one revision.
-func TestAttachRepositoryPublishesDetachTaskAtomically(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	store := newAttachTestStore()
-	scope := seedAttachScope(t, ctx, store)
-	repository, err := NewAttachRepository(store)
-	if err != nil {
-		t.Fatalf("NewAttachRepository() error = %v", err)
-	}
-	record, facts := testPendingAttach(t, scope, 61, "detach-atomic", nil)
-	ready := createTestAttach(t, ctx, repository, scope, record, &facts)
-	ready, err = advanceAttachReady(ctx, repository, ready)
-	if err != nil {
-		t.Fatalf("advanceAttachReady() error = %v", err)
-	}
-
-	task := publishTestDetach(t, ctx, repository, scope, ready, record.CreatedAt.Add(time.Minute))
-	detaching, err := repository.GetAttach(ctx, record.ID)
-	if err != nil || detaching.Record.Status != core.AttachDetaching || detaching.Record.TaskID != task.ID {
-		t.Fatalf("detaching Attach = %#v, %v", detaching, err)
-	}
-	tasks, err := newTaskRepository(store)
-	if err != nil {
-		t.Fatalf("newTaskRepository() error = %v", err)
-	}
-	currentTask, err := tasks.GetTask(ctx, task.ID)
-	if err != nil || currentTask.Revision != detaching.Revision {
-		t.Fatalf("detach Task = %#v, %v", currentTask, err)
-	}
-	renderInput, err := repository.GetAttachTaskRenderInput(ctx, task.PlanID)
-	if err != nil || renderInput.Revision != detaching.Revision {
-		t.Fatalf("detach render input = %#v, %v", renderInput, err)
-	}
-	epoch, err := store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(record.EnvironmentID))
-	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != detaching.Revision {
-		t.Fatalf("Attach mutation epoch = %#v, %v", epoch, err)
-	}
-}
-
-// Rationale: the final transaction after idempotency, Environment fencing,
-// and Backup exclusion composition must fit the store cap.
-func TestAttachDetachOperationBudgetMatchesComposedTransaction(t *testing.T) {
-	ctx := context.Background()
-	store := newAttachTestStore()
-	scope := seedAttachScope(t, ctx, store)
-	repository, err := NewAttachRepository(store)
-	if err != nil {
-		t.Fatalf("NewAttachRepository() error = %v", err)
-	}
-	record, facts := testPendingAttach(t, scope, 65, "detach-budget", nil)
-	ready := createTestAttach(t, ctx, repository, scope, record, &facts)
-	ready, err = advanceAttachReady(ctx, repository, ready)
-	if err != nil {
-		t.Fatalf("advanceAttachReady() error = %v", err)
-	}
-	capture := &attachDetachOperationCaptureStore{
-		attachTestStore: store,
-		attachID:        record.ID,
-	}
-	capturedRepository, err := NewAttachRepository(capture)
-	if err != nil {
-		t.Fatalf("NewAttachRepository(capture) error = %v", err)
-	}
-	publishTestDetach(t, ctx, capturedRepository, scope, ready, record.CreatedAt.Add(5*time.Minute))
-	if capture.operations <= 0 || capture.operations > testkeyvalue.MaximumOperations {
-		t.Fatalf(
-			"composed Attach detach operations = %d, want at most %d",
-			capture.operations,
-			testkeyvalue.MaximumOperations,
-		)
-	}
-}
-
 // Rationale: a new incoming grant committed after the fixed read must fail the
 // removal CAS so the detached Attach and its new reverse membership survive.
 func TestDeleteDetachedAttachRacesIncomingGrant(t *testing.T) {
@@ -356,7 +154,7 @@ func TestDeleteDetachedAttachRacesIncomingGrant(t *testing.T) {
 		t.Fatalf("NewAttachRepository() error = %v", err)
 	}
 	record, facts := testPendingAttach(t, scope, 66, "incoming-grant-race", nil)
-	current := createTestAttach(t, ctx, repository, scope, record, &facts)
+	current := seedAttachMetadata(t, repository, record, &facts)
 	current, err = advanceAttachReady(ctx, repository, current)
 	if err != nil {
 		t.Fatalf("advanceAttachReady() error = %v", err)
@@ -418,7 +216,7 @@ func TestAttachLifecycleReplacementRacesBackupSourceExclusion(t *testing.T) {
 		t.Fatalf("NewAttachRepository() error = %v", err)
 	}
 	record, facts := testPendingAttach(t, scope, 64, "backup-source-race", nil)
-	ready := createTestAttach(t, ctx, repository, scope, record, &facts)
+	ready := seedAttachMetadata(t, repository, record, &facts)
 	ready, err = advanceAttachReady(ctx, repository, ready)
 	if err != nil {
 		t.Fatalf("advanceAttachReady() error = %v", err)
@@ -559,26 +357,6 @@ type attachIncomingGrantRaceStore struct {
 	key      string
 	value    []byte
 	injected bool
-}
-
-type attachDetachOperationCaptureStore struct {
-	*attachTestStore
-	attachID   string
-	operations int
-}
-
-func (store *attachDetachOperationCaptureStore) Transact(
-	ctx context.Context,
-	conditions []testkeyvalue.Condition,
-	mutations []testkeyvalue.Mutation,
-) (testkeyvalue.TransactionResult, error) {
-	for _, mutation := range mutations {
-		if mutation.Type == testkeyvalue.MutationPut && mutation.Key == testattachments.AttachKey(store.attachID) {
-			store.operations = len(conditions) + len(mutations)
-			break
-		}
-	}
-	return store.attachTestStore.Transact(ctx, conditions, mutations)
 }
 
 func (store *attachIncomingGrantRaceStore) Transact(

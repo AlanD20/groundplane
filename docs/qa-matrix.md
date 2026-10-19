@@ -1073,6 +1073,17 @@ platform Component observation DTO check. Native conflict classification,
 restart-safe hierarchy cleanup and retained resolver-file digest validation
 remain required under TASK-58/61/90/131; retirement does not qualify them.
 
+Attach reader, lifecycle and rename checks now use explicit resource metadata
+setup, not deleted Task publication. Selected root-storage race checks pass
+(`task-native-attach-metadata-storage-migration-race.log`): scoped reads and
+encrypted facts, grant-protected removal and incoming-grant races, Backup-source
+exclusion validity/races, failure-state preservation, scoped rename and conflicting
+desired-head revisions. Setup is not acceptance or execution evidence. Native
+acceptance/Controller settlement has TASK-134 proof; managed credentials, grant
+publication at the eight-grant maximum, native Detach, Agent recovery and terminal
+settlement remain open. Removed the cloned-Task Retry expectation and former
+generic Attach/Detach publication/operation-count checks, not those requirements.
+
 The native desired-plan expansion check now lives in
 [application integration](../internal/app/native_blueprint_desired_plan_integration_test.go).
 It persists an incomplete Attach-only plan, expands and seals its dependent Service,
