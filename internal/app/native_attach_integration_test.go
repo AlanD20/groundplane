@@ -268,6 +268,9 @@ func nativeControllerAttachJourney(t *testing.T, adapter string) {
 	if err != nil || !bytes.Equal(replay.Body, response.Body) || f.base.store.revision != revision {
 		t.Fatalf("settled Attach replay lost its original action: %v", err)
 	}
+	if adapter == "custom" {
+		nativeUnstartedDetachJourney(t, f.base, mutations, records, item.TargetID)
+	}
 }
 
 func nativeAttachMutations(

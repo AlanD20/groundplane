@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	releasedomain "github.com/AlanD20/groundplane/internal/core/release"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -30,13 +31,16 @@ type Membership struct {
 // runtime at the same MVCC revision as the encrypted cleanup source. The epoch
 // protects against additions as well as edits/removals after this snapshot.
 type DetachSnapshot struct {
-	Source                 Input                        `json:"source"`
-	Members                []Membership                 `json:"members"`
-	EpochRevision          int64                        `json:"epoch_revision"`
-	ServiceRuntimeRevision int64                        `json:"service_runtime_revision"`
-	RuntimeIntent          string                       `json:"runtime_intent"`
-	Runtime                *serviceruntimerecord.Record `json:"runtime,omitempty"`
-	RuntimeRevision        int64                        `json:"runtime_revision"`
+	Source                    Input                            `json:"source"`
+	Members                   []Membership                     `json:"members"`
+	EpochRevision             int64                            `json:"epoch_revision"`
+	ServiceRuntimeRevision    int64                            `json:"service_runtime_revision"`
+	RuntimeIntent             string                           `json:"runtime_intent"`
+	LifecycleTaskID           string                           `json:"lifecycle_task_id"`
+	ReleaseProjection         *releasedomain.ServiceProjection `json:"release_projection"`
+	ReleaseProjectionRevision int64                            `json:"release_projection_revision"`
+	Runtime                   *serviceruntimerecord.Record     `json:"runtime,omitempty"`
+	RuntimeRevision           int64                            `json:"runtime_revision"`
 }
 
 type DetachReader interface {
@@ -77,7 +81,8 @@ func ReadDetachSnapshot(
 			NetworkID: record.BackingNetworkID, Operation: record.Operation, Detached: record.Status == "detached", Revision: binding.Revision})
 	}
 	keys := []string{hierarchy.EnvironmentMutationEpochKey(source.Attach.EnvironmentID),
-		services.ServiceRuntimeKey(source.Attach.ServiceID), serviceruntimerecord.Key(source.Attach.ServiceID)}
+		services.ServiceRuntimeKey(source.Attach.ServiceID), serviceruntimerecord.Key(source.Attach.ServiceID),
+		releases.ReleaseProjectionKey(source.Attach.ServiceID)}
 	read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
@@ -100,6 +105,17 @@ func ReadDetachSnapshot(
 	}
 	result.EpochRevision, result.ServiceRuntimeRevision = read.Values[0].ModRevision, read.Values[1].ModRevision
 	result.RuntimeIntent = string(state.Runtime.RuntimeIntent)
+	result.LifecycleTaskID = state.Runtime.UnconfirmedLifecycleTaskID
+	if value := read.Values[3]; value != nil {
+		projection, err := releases.DecodeReleaseRecord[releasedomain.ServiceProjection](
+			value.Value,
+			"service-release-projection",
+		)
+		if err != nil {
+			return DetachSnapshot{}, err
+		}
+		result.ReleaseProjection, result.ReleaseProjectionRevision = &projection, value.ModRevision
+	}
 	if value := read.Values[2]; value != nil {
 		runtime, err := releases.DecodeReleaseRecord[serviceruntimerecord.Record](
 			value.Value,
@@ -123,11 +139,27 @@ func (snapshot DetachSnapshot) Validate() error {
 		(snapshot.RuntimeIntent != "running" && snapshot.RuntimeIntent != "stopped" && snapshot.RuntimeIntent != "absent") {
 		return recordcodec.CorruptRecord()
 	}
+	if snapshot.ReleaseProjectionRevision < 0 ||
+		snapshot.ReleaseProjectionRevision > snapshot.Source.SnapshotRevision ||
+		(snapshot.ReleaseProjection == nil) != (snapshot.ReleaseProjectionRevision == 0) {
+		return recordcodec.CorruptRecord()
+	}
+	if projection := snapshot.ReleaseProjection; projection != nil {
+		if projection.EnvironmentID != snapshot.Source.Attach.EnvironmentID ||
+			projection.ServiceID != snapshot.Source.Attach.ServiceID || projection.Revision == 0 {
+			return recordcodec.CorruptRecord()
+		}
+	}
 	if snapshot.Runtime == nil {
-		if snapshot.RuntimeRevision != 0 || snapshot.RuntimeIntent == "running" {
+		projection := snapshot.ReleaseProjection
+		// Running intent is the initial state too. Positive applied or pending
+		// execution evidence, not intent alone, requires a captured host runtime.
+		if snapshot.RuntimeRevision != 0 || snapshot.LifecycleTaskID != "" ||
+			projection != nil &&
+				(projection.ServingReleaseID != "" || projection.CurrentSuccessfulReleaseID != "" || projection.ActiveOperationID != "") {
 			return errs.New(
 				errs.KindStateConflict,
-				"Detach cannot inspect a running Service without its acknowledged runtime",
+				"Detach requires the Service's acknowledged runtime while deployment or lifecycle effects exist",
 			)
 		}
 	} else if snapshot.RuntimeRevision <= 0 || snapshot.RuntimeRevision > snapshot.Source.SnapshotRevision ||
@@ -170,11 +202,22 @@ func (snapshot DetachSnapshot) KeepsConsumerNetwork() bool {
 }
 
 func (snapshot DetachSnapshot) ConsumerConditions() []keyvalue.Condition {
+	conditions := snapshot.RuntimeConditions()
+	return append(conditions, keyvalue.Condition{
+		Key: hierarchy.EnvironmentMutationEpochKey(
+			snapshot.Source.Attach.EnvironmentID,
+		), ModRevision: snapshot.EpochRevision,
+	})
+}
+
+// RuntimeConditions also protects a metadata-only Detach at settlement: absence
+// captured before first Deploy must not silently become a running consumer.
+func (snapshot DetachSnapshot) RuntimeConditions() []keyvalue.Condition {
 	target := snapshot.Source.Attach
 	return []keyvalue.Condition{
-		{Key: hierarchy.EnvironmentMutationEpochKey(target.EnvironmentID), ModRevision: snapshot.EpochRevision},
 		{Key: services.ServiceRuntimeKey(target.ServiceID), ModRevision: snapshot.ServiceRuntimeRevision},
 		{Key: serviceruntimerecord.Key(target.ServiceID), ModRevision: snapshot.RuntimeRevision},
+		{Key: releases.ReleaseProjectionKey(target.ServiceID), ModRevision: snapshot.ReleaseProjectionRevision},
 	}
 }
 

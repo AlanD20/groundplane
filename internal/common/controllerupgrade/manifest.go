@@ -16,7 +16,7 @@ import (
 
 const (
 	ManifestSchema         = 2
-	StorageEpoch           = 42
+	StorageEpoch           = 43
 	MaxManifestBytes       = 4096
 	TaskTimeoutSeconds     = 600
 	DrainTimeoutSeconds    = 120

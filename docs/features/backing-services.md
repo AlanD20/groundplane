@@ -110,6 +110,12 @@ do not authorize a route or a change to Destroy.
 
 ### Unified provisioning and optional Custom hooks
 
+You can disconnect an Attach before the consumer's first Deploy. Required
+credential cleanup and Custom Detach hooks still run; an undeployed consumer
+does not need a fabricated container or network transition. If GP records an
+active deployment but lacks its acknowledged runtime, it refuses the Detach
+rather than treating that missing evidence as an undeployed Service.
+
 Built-in adapters and Custom hooks implement the same logical input/output
 contract. Compiled adapters consume typed inputs; commands receive their
 environment-variable representation. Results are declared string facts with

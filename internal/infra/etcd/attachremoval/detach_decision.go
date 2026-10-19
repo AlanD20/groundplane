@@ -30,7 +30,7 @@ func DetachDecisionKey(workID, evidenceID string) string {
 
 // PrepareDetachDecision handles a captured no-host-effect binding or a stopped
 // never-assigned action. A successful metadata-only removal must additionally
-// join PrepareDecisionFence before commit; this method grants no host effect.
+// retain the captured consumer runtime through commit; this method grants no host effect.
 func (repository *InputRepository) PrepareDetachDecision(ctx context.Context, view workqueue.View,
 	at time.Time,
 ) (workqueue.Change, error) {
@@ -65,6 +65,7 @@ func (repository *InputRepository) PrepareDetachDecision(ctx context.Context, vi
 	var resource workqueue.Change
 	if outcome == workexecution.Succeeded {
 		resource, err = repository.prepareDetachRemoval(ctx, view, input)
+		guards = append(guards, input.Snapshot.RuntimeConditions()...)
 	} else {
 		resource, err = repository.PrepareDetachFailed(ctx, view)
 	}
