@@ -49,8 +49,12 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	defer clear(value)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(candidate.Locator)
+	if err != nil {
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
+	}
 	result, err := repository.store.Transact(ctx,
-		[]etcdstore.Condition{{Key: key}},
+		[]etcdstore.Condition{{Key: key}, {Key: markerKey}},
 		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: value}},
 	)
 	if err != nil {

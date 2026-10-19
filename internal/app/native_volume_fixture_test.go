@@ -43,7 +43,7 @@ type nativeVolumeFixture struct {
 	created       api.VolumeMutationResponse
 }
 
-type nativeVolumeRepository struct {
+type nativeDesiredRepository struct {
 	*etcd.EnvironmentBlueprintRepository
 	*desiredrevision.Repository
 }
@@ -186,7 +186,7 @@ func newNativeVolumeFixture(t *testing.T) *nativeVolumeFixture {
 		t.Fatal(err)
 	}
 	f.mutations, err = volume.NewMutationService(
-		nativeVolumeRepository{f.blueprint, desired},
+		nativeDesiredRepository{f.blueprint, desired},
 		coordinator,
 		replay,
 		f.reads,

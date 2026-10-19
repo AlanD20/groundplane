@@ -185,26 +185,6 @@ func (service *CreationService) CreateBackingService(
 		ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
 		Method: http.MethodPost, Route: backingServiceCreateRoute, Key: idempotencyKey,
 	}
-	createdAt := service.now().UTC()
-	stage, err := service.repository.ClaimBackingServiceCreationStage(ctx, etcd.BackingServiceCreationStage{
-		Locator: locator, RequestSHA256: requestSHA256,
-		ProjectID: ids.New(ids.KindProject), EnvironmentID: ids.New(ids.KindEnvironment),
-		TaskID: ids.New(ids.KindTask), CreatedAt: createdAt,
-	})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	return service.createBackingServiceFromStage(ctx, input, requestBytes, stage, adapter, spec)
-}
-
-func (service *CreationService) createBackingServiceFromStage(
-	ctx context.Context,
-	input apiTypes.BackingServiceCreate,
-	requestBytes []byte,
-	stage etcdstore.Versioned[etcd.BackingServiceCreationStage],
-	adapter adapters.Adapter,
-	spec adapters.CreationSpec,
-) (response idempotencyrecord.IdempotencyResponse, resultErr error) {
 	bundle := core.BlueprintBundle{
 		RootPath: "backing-service.yaml", ComposeSources: []string{"backing-service.yaml"},
 		Files: []core.BlueprintFile{{Path: "backing-service.yaml", Content: append([]byte(nil), requestBytes...)}},
@@ -217,20 +197,55 @@ func (service *CreationService) createBackingServiceFromStage(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.Durable.Ciphertext)
-	resolution, existing, err := service.idempotency.ResolveExisting(ctx, stage.Record.Locator, evidence)
+	if response, existing, err := service.replayCreation(ctx, locator, evidence); existing || err != nil {
+		return response, err
+	}
+	createdAt := service.now().UTC()
+	stage, err := service.repository.ClaimBackingServiceCreationStage(ctx, etcd.BackingServiceCreationStage{
+		Locator: locator, RequestSHA256: requestSHA256,
+		ProjectID: ids.New(ids.KindProject), EnvironmentID: ids.New(ids.KindEnvironment),
+		TaskID: ids.New(ids.KindTask), CreatedAt: createdAt,
+	})
 	if err != nil {
+		// A concurrent acceptance can win after our initial replay read. Stage
+		// admission compares marker absence, so resolve that outcome without
+		// creating another inert staging record or choosing fresh image bytes.
+		if response, existing, replayErr := service.replayCreation(ctx, locator, evidence); existing ||
+			replayErr != nil {
+			return response, replayErr
+		}
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if existing {
-		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Backing-service replay resolution is invalid",
-			)
-		}
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	}
+	return service.createBackingServiceFromStage(ctx, input, bundle, stage, adapter, spec, evidence)
+}
 
+func (service *CreationService) replayCreation(
+	ctx context.Context,
+	locator idempotencyrecord.IdempotencyLocator,
+	evidence desiredrevision.Evidence,
+) (idempotencyrecord.IdempotencyResponse, bool, error) {
+	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	if err != nil || !existing {
+		return idempotencyrecord.IdempotencyResponse{}, existing, err
+	}
+	if resolution.Kind != requestidempotency.ResolutionReplay {
+		return idempotencyrecord.IdempotencyResponse{}, true, errs.New(
+			errs.KindInternal,
+			"backing-service replay resolution is invalid",
+		)
+	}
+	return requestidempotency.CloneResponse(resolution.Response), true, nil
+}
+
+func (service *CreationService) createBackingServiceFromStage(
+	ctx context.Context,
+	input apiTypes.BackingServiceCreate,
+	bundle core.BlueprintBundle,
+	stage etcdstore.Versioned[etcd.BackingServiceCreationStage],
+	adapter adapters.Adapter,
+	spec adapters.CreationSpec,
+	evidence desiredrevision.Evidence,
+) (response idempotencyrecord.IdempotencyResponse, resultErr error) {
 	authentication := core.BackingAuthentication(input.Authentication)
 	blueprintLocator := stage.Record.Locator
 	blueprintLocator.ScopeKind = idempotencyrecord.IdempotencyScopeEnvironment
