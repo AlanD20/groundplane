@@ -9,15 +9,15 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
-	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/core/blueprintreconcile"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
+// TASK-103: select changed desired resources without depending on a materialized
+// runtime. Applied fingerprints below are supplied, not execution receipts.
 func TestAuthoredServiceSelectionDetectsNativeComposeChanges(t *testing.T) {
 	for _, test := range []struct {
 		name, fields string
@@ -125,7 +125,7 @@ func TestAuthoredServiceSelectionIncludesReleaseGroupConfiguration(t *testing.T)
 	}
 }
 
-func TestAuthoredServicePlannerRejectsRuntimeOmission(t *testing.T) {
+func TestAuthoredServicePlannerRejectsMissingAuthoredService(t *testing.T) {
 	planAuthoredServiceFixture(t, authoredServiceDocument(""), map[string]bool{"worker": true})
 }
 
@@ -147,7 +147,7 @@ type authoredServiceFixturePlan struct {
 func planAuthoredServiceFixture(
 	t *testing.T,
 	document string,
-	omitRuntimeService map[string]bool,
+	omitDesiredService map[string]bool,
 ) authoredServiceFixturePlan {
 	t.Helper()
 	ctx := context.Background()
@@ -175,38 +175,36 @@ func planAuthoredServiceFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	identities, snapshot := authoredServiceFixtureIdentities(t, environmentID, parentID, parsed)
+	identities, _ := authoredServiceFixtureIdentities(t, environmentID, parentID, parsed)
 	targets, err := selectAuthoredOwnedUnitTargets(identities)
 	if err != nil {
 		t.Fatal(err)
 	}
-	projected, err := testtaskplanning.ProjectServiceProjection(parsed.Project, snapshot, parsed.ServiceExtensions)
-	if err != nil {
-		t.Fatal(err)
+	for name := range omitDesiredService {
+		delete(parsed.Project.Services, name)
 	}
-	runtime := testenvironmentprojection.EnvironmentComposeProjection{
-		EnvironmentID: environmentID, RevisionID: parentID, RenderGeneration: 1,
-	}
-	for _, service := range projected {
-		if !omitRuntimeService[service.Name] {
-			runtime.DesiredServices = append(runtime.DesiredServices, testservices.EnvironmentServiceProjection{
-				EnvironmentID: environmentID, Desired: service,
-			})
+	if omitDesiredService != nil {
+		desired.Input.NormalizedCompose, err = testcomposerender.MarshalNormalizedEnvironmentProject(parsed.Project)
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 	planner, err := newAuthoredUnitPlanner(ctx, authoredParentInput{
 		desired: desired, identities: identities,
-	}, targets, &runtime, nil, blueprintunits.Snapshot{EnvironmentID: environmentID})
-	if omitRuntimeService != nil {
-		if err == nil {
-			t.Fatal("runtime omission was accepted")
-		}
-		return authoredServiceFixturePlan{}
-	}
+	}, targets, nil, blueprintunits.Snapshot{EnvironmentID: environmentID})
 	if err != nil {
+		if omitDesiredService != nil {
+			return authoredServiceFixturePlan{}
+		}
 		t.Fatal(err)
 	}
 	units, complete, err := planner.plan()
+	if omitDesiredService != nil {
+		if err == nil {
+			t.Fatal("owned Service identity without its authored definition was accepted")
+		}
+		return authoredServiceFixturePlan{}
+	}
 	if err != nil || !complete {
 		t.Fatalf("authored unit plan: complete=%t error=%v", complete, err)
 	}

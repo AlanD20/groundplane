@@ -216,35 +216,6 @@ func (s *blueprintTestStore) TransactEnvironmentBlueprint(
 	return s.transact(ctx, conditions, mutations, false)
 }
 
-func (*blueprintTestStore) ValidateBlueprintTaskTerminal(
-	_ context.Context,
-	envelope etcd.BlueprintTaskTerminalTransaction,
-) error {
-	return envelope.ValidateBudget("")
-}
-
-func (s *blueprintTestStore) TransactBlueprintChild(
-	ctx context.Context,
-	envelope etcd.BlueprintChildTransaction,
-) (testkeyvalue.TransactionResult, error) {
-	conditions, mutations, err := envelope.Operations()
-	if err != nil {
-		return testkeyvalue.TransactionResult{}, err
-	}
-	return s.transact(ctx, conditions, mutations, false)
-}
-
-func (s *blueprintTestStore) TransactBlueprintTaskTerminal(
-	ctx context.Context,
-	envelope etcd.BlueprintTaskTerminalTransaction,
-) (testkeyvalue.TransactionResult, error) {
-	conditions, mutations, err := envelope.Operations()
-	if err != nil {
-		return testkeyvalue.TransactionResult{}, err
-	}
-	return s.transact(ctx, conditions, mutations, true)
-}
-
 func (*blueprintTestStore) Watch(context.Context, string, int64) (*testkeyvalue.WatchStream, error) {
 	return nil, errors.New("unexpected watch")
 }
