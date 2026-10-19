@@ -107,8 +107,8 @@ func specializedZoneRemovalLockFixture(t *testing.T) specializedRemovalLockFixtu
 		t.Fatal(err)
 	}
 	project, environment := createEnvironmentBlueprintOwners(t, repository)
-	baseTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 14200)
-	base := environmentBlueprintTestProjection(environment.Record.ID, baseTask, 1)
+	base := routeRepositoryTestProjection(t, environment.Record.ID, ids.New(ids.KindService), ids.New(ids.KindTask))
+	base.NormalizedCompose = declaredComposeFixture(base)
 	seedServiceRepositoryTestDesiredProjection(t, store, base)
 	current, found, err := repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
 	if err != nil || !found {

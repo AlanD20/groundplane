@@ -13,7 +13,6 @@ import (
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -25,12 +24,12 @@ import (
 func TestResolveEnvironmentLogTargetsFiltersBeforeMaximum(t *testing.T) {
 	t.Parallel()
 
-	_, memory, environment, project := serviceRepositoryTestHierarchy(t)
+	_, memory, environment, _ := serviceRepositoryTestHierarchy(t)
 	names := make([]string, 129)
 	for index := range 129 {
 		names[index] = "service-" + strconv.FormatInt(int64(index), 10)
 	}
-	stageReleaseLogDesiredProjection(t, memory, environment, project, names)
+	stageReleaseLogDesiredProjection(t, memory, environment, names)
 	ledger := testReleaseLogLedger(t, &releaseLogMemoryStore{memoryHierarchyStore: memory})
 	targets, err := ledger.ResolveEnvironmentLogTargets(context.Background(), environment.Record.ID, 128)
 	if err != nil || len(targets) != 0 {
@@ -45,7 +44,7 @@ func TestResolveEnvironmentLogTargetsReturnsOnlyEffectiveAppliedServices(t *test
 	t.Parallel()
 
 	_, memory, environment, project := serviceRepositoryTestHierarchy(t)
-	fixtures := stageReleaseLogDesiredProjection(t, memory, environment, project, []string{
+	fixtures := stageReleaseLogDesiredProjection(t, memory, environment, []string{
 		"disabled", "effective", "suppressed",
 	})
 	installServingRelease(t, memory, environment.Record.ID, project.Record, fixtures[1].ID, 2201)
@@ -66,7 +65,7 @@ func TestResolveEnvironmentLogTargetsUsesOneFixedRevisionThroughDeletion(t *test
 	t.Parallel()
 
 	_, memory, environment, project := serviceRepositoryTestHierarchy(t)
-	fixtures := stageReleaseLogDesiredProjection(t, memory, environment, project, []string{
+	fixtures := stageReleaseLogDesiredProjection(t, memory, environment, []string{
 		"worker", "api", "scheduler",
 	})
 	for index, fixture := range fixtures {
@@ -124,17 +123,15 @@ func stageReleaseLogDesiredProjection(
 	t *testing.T,
 	store *memoryHierarchyStore,
 	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
-	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
 	names []string,
 ) []releaseLogServiceFixture {
 	t.Helper()
 	now := serviceRecordTestTime()
 	sortedNames := append([]string(nil), names...)
 	sort.Strings(sortedNames)
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 4000)
 	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:    environment.Record.ID,
-		RevisionID:       task.ID,
+		RevisionID:       ids.NewAt(ids.KindTask, now, 4000),
 		RenderGeneration: 1,
 		DesiredServices:  make([]testservices.EnvironmentServiceProjection, len(sortedNames)),
 	}
@@ -153,25 +150,8 @@ func stageReleaseLogDesiredProjection(
 		}
 	}
 	projection = withTestEnvironmentComposeArtifact(projection)
-	hierarchy, err := newHierarchyRepository(store)
-	if err != nil {
-		t.Fatalf("newHierarchyRepository() error = %v", err)
-	}
-	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
-	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
-	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
-	headValue, err := testidempotency.EncodeTaskReference(task.ID)
-	if err != nil {
-		t.Fatalf("encodeTaskReference() error = %v", err)
-	}
-	if _, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
-		Type:  testkeyvalue.MutationPut,
-		Key:   testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
-		Value: headValue,
-	}}); err != nil {
-		t.Fatalf("Put(Environment blueprint head) error = %v", err)
-	}
-	seedEffectiveBlueprintFixture(t, store, projection)
+	projection.NormalizedCompose = declaredComposeFixture(projection)
+	seedServiceRepositoryTestDesiredProjection(t, store, projection)
 	return fixtures
 }
 

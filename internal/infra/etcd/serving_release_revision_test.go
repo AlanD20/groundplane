@@ -14,7 +14,7 @@ import (
 func TestResolveServingPreservesServingAuthorityAndCASRevisions(t *testing.T) {
 	ctx := context.Background()
 	_, memory, environment, project := serviceRepositoryTestHierarchy(t)
-	fixtures := stageReleaseLogDesiredProjection(t, memory, environment, project, []string{"api"})
+	fixtures := stageReleaseLogDesiredProjection(t, memory, environment, []string{"api"})
 	serviceID := fixtures[0].ID
 	installServingRelease(t, memory, environment.Record.ID, project.Record, serviceID, 2401)
 	store := &releaseLogMemoryStore{memoryHierarchyStore: memory}
