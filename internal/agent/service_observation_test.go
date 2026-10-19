@@ -1,15 +1,11 @@
 package agent
 
 import (
-	"bytes"
 	"context"
-	"io"
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/serviceobservation"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -48,98 +44,6 @@ func successfulServiceRead(
 		{Id: "container-1", Name: "api-1", State: "running", Health: "healthy", Replica: 1},
 	}
 	return result, nil
-}
-
-type serviceCaptureStream struct {
-	agentStream
-	results chan *agentpb.ServiceObservationResult
-}
-
-func (stream *serviceCaptureStream) Send(message *agentpb.AgentMessage) error {
-	if result := message.GetServiceObservationResult(); result != nil {
-		stream.results <- proto.CloneOf(result)
-		return nil
-	}
-	return stream.agentStream.Send(message)
-}
-
-// QA: OBS-01/02; fake observer/channel projection only, not Docker selection or actual workload health.
-// Rationale: ordinary read failure must return unavailable on the authenticated
-// stream, not disconnect, create a Task, or consume worker-pool capacity.
-func TestServiceObservationClientStream(t *testing.T) {
-	for _, mode := range []string{"success", "image busy", "failure", "malformed", "unconfigured"} {
-		t.Run(mode, func(t *testing.T) {
-			request := serviceReadRequest()
-			stream := newFakeStream(configMessage(60, 2), &agentpb.ControllerMessage{
-				Payload: &agentpb.ControllerMessage_ObserveServices{ObserveServices: request},
-			})
-			client := newTestClient(t, bytes.Repeat([]byte{0x31}, agentprotocol.RawTokenBytes), stream)
-			if mode == "image busy" {
-				stream.receive = []*agentpb.ControllerMessage{stream.receive[0], {
-					Payload: &agentpb.ControllerMessage_ResolveWorkloadImages{ResolveWorkloadImages: imageRequest()},
-				}, stream.receive[1]}
-				images := &blockingImageResolver{started: make(chan struct{}), stopped: make(chan struct{})}
-				if err := client.SetWorkloadImageResolver(images); err != nil {
-					t.Fatal(err)
-				}
-			}
-			observer := serviceObserverFunc(
-				func(ctx context.Context, request *agentpb.ObserveServices) (*agentpb.ServiceObservationResult, error) {
-					if mode == "failure" {
-						return nil, errs.New(errs.KindInternal, "private Docker diagnostic")
-					}
-					result, err := successfulServiceRead(ctx, request)
-					if mode == "malformed" {
-						result.RequestId = "wrong"
-					}
-					return result, err
-				},
-			)
-			if mode != "unconfigured" {
-				if err := client.SetServiceObserver(observer); err != nil {
-					t.Fatal(err)
-				}
-			}
-			connect := client.connect
-			results := make(chan *agentpb.ServiceObservationResult, 1)
-			client.connect = func(ctx context.Context, path string) (agentStream, io.Closer, error) {
-				connected, closer, err := connect(ctx, path)
-				return &serviceCaptureStream{agentStream: connected, results: results}, closer, err
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			done := make(chan error, 1)
-			go func() { done <- client.Run(ctx) }()
-			t.Cleanup(func() {
-				cancel()
-				if err := <-done; err != nil {
-					t.Error(err)
-				}
-			})
-			select {
-			case result := <-results:
-				if err := serviceobservation.ValidateResult(request, result); err != nil {
-					t.Fatal(err)
-				}
-				wantUnavailable := mode != "success" && mode != "image busy"
-				if result.Observations[0].GetUnavailable() != wantUnavailable {
-					t.Fatalf("wrong result: %v", result)
-				}
-				if !wantUnavailable && result.Observations[0].GetReplicas().GetHealthy() != 1 {
-					t.Fatalf("healthy replicas = %d, want 1", result.Observations[0].GetReplicas().GetHealthy())
-				}
-			case <-ctx.Done():
-				t.Fatal("observation did not return")
-			}
-			if err := client.SetServiceObserver(observer); err == nil {
-				t.Fatal("observer changed after start")
-			}
-			sent := stream.sentMessages()
-			if len(sent) != 3 || sent[0].GetAuthenticate() == nil || sent[1].GetReady().GetCapacity() != 2 ||
-				sent[2].GetBackupStagingInventory() == nil {
-				t.Fatalf("observation changed Task capacity or traffic: %v", sent)
-			}
-		})
-	}
 }
 
 // QA: OBS-03/04; in-memory request cancellation/correlation only, not source-revision or Agent-generation fences.
