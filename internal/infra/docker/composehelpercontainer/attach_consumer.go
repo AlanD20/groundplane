@@ -11,7 +11,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (executor *Executor) ExecuteAttachConsumer(ctx context.Context, request *agentpb.AttachConsumerHelperRequest) (*agentpb.AttachConsumerHelperResponse, error) {
+func (executor *Executor) ExecuteAttachConsumer(
+	ctx context.Context,
+	request *agentpb.AttachConsumerHelperRequest,
+) (*agentpb.AttachConsumerHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Detach consumer helper container is not configured")
 	}
@@ -49,9 +52,8 @@ func (executor *Executor) ExecuteAttachConsumer(ctx context.Context, request *ag
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, nil)
+	options := createOptions(executor.image, "attach-consumer-helper", nil)
 	options.Name, options.Config.Labels = name, labels
-	options.Config.Cmd = []string{"attach-consumer-helper"}
 	raw, err := executor.executeFrame(bounded, options, framed)
 	if err != nil {
 		return nil, err

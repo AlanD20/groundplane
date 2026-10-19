@@ -128,13 +128,6 @@ func main() {
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == hostcommands.ComposeHelperArgument {
-		if err := hostcommands.RunComposeHelper(ctx, os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "agent compose helper:", err)
-			os.Exit(1)
-		}
-		return
-	}
 	if len(os.Args) == 2 && os.Args[1] == hostcommands.ManagedConfigHelperArgument {
 		if err := hostcommands.RunManagedConfigHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent managed-config helper:", err)

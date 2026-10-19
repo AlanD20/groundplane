@@ -33,7 +33,11 @@ func provisionHelperLabels(attempt workexecution.Attempt) map[string]string {
 // ExecuteEnvironmentProvision runs a bounded helper with only the configured
 // volume root mounted. Inspection first stops the exact captured orphan; no
 // application container, data Volume or unrelated helper is addressed.
-func (executor *Executor) ExecuteEnvironmentProvision(ctx context.Context, volumeRoot string, request *agentpb.EnvironmentProvisionHelperRequest) (*agentpb.EnvironmentProvisionHelperResponse, error) {
+func (executor *Executor) ExecuteEnvironmentProvision(
+	ctx context.Context,
+	volumeRoot string,
+	request *agentpb.EnvironmentProvisionHelperRequest,
+) (*agentpb.EnvironmentProvisionHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "environment provisioning helper is unavailable")
 	}
@@ -65,8 +69,7 @@ func (executor *Executor) ExecuteEnvironmentProvision(ctx context.Context, volum
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, nil)
-	options.Config.Cmd = []string{"environment-provision-helper"}
+	options := createOptions(executor.image, "environment-provision-helper", nil)
 	options.Name, options.Config.Labels = provisionHelperName(input.Attempt), provisionHelperLabels(input.Attempt)
 	options.Config.Env = []string{environmentdirectoryhelper.VolumeRootEnv + "=" + volumeRoot}
 	// Directory provisioning does not require Docker access inside its helper.

@@ -48249,108 +48249,6 @@ func (x *ManagedConfigHelperResponse) GetLiveInode() uint64 {
 	return 0
 }
 
-// ComposeHelperRequest is the single length-framed stdin message accepted by
-// the static compose-helper Agent-binary mode.
-type ComposeHelperRequest struct {
-	state                protoimpl.MessageState       `protogen:"open.v1"`
-	Schema               uint32                       `protobuf:"varint,1,opt,name=schema,proto3" json:"schema,omitempty"` // exactly 1
-	TaskId               string                       `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	OperationId          string                       `protobuf:"bytes,3,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
-	Plan                 *ExecutionPlan               `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`
-	StepId               string                       `protobuf:"bytes,5,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	TimeoutSeconds       uint32                       `protobuf:"varint,6,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"` // remaining bounded execution time
-	AssignmentId         string                       `protobuf:"bytes,7,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
-	RestorationAuthority *ReleaseRestorationAuthority `protobuf:"bytes,9,opt,name=restoration_authority,json=restorationAuthority,proto3" json:"restoration_authority,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
-}
-
-func (x *ComposeHelperRequest) Reset() {
-	*x = ComposeHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[528]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ComposeHelperRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ComposeHelperRequest) ProtoMessage() {}
-
-func (x *ComposeHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[528]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ComposeHelperRequest.ProtoReflect.Descriptor instead.
-func (*ComposeHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{528}
-}
-
-func (x *ComposeHelperRequest) GetSchema() uint32 {
-	if x != nil {
-		return x.Schema
-	}
-	return 0
-}
-
-func (x *ComposeHelperRequest) GetTaskId() string {
-	if x != nil {
-		return x.TaskId
-	}
-	return ""
-}
-
-func (x *ComposeHelperRequest) GetOperationId() string {
-	if x != nil {
-		return x.OperationId
-	}
-	return ""
-}
-
-func (x *ComposeHelperRequest) GetPlan() *ExecutionPlan {
-	if x != nil {
-		return x.Plan
-	}
-	return nil
-}
-
-func (x *ComposeHelperRequest) GetStepId() string {
-	if x != nil {
-		return x.StepId
-	}
-	return ""
-}
-
-func (x *ComposeHelperRequest) GetTimeoutSeconds() uint32 {
-	if x != nil {
-		return x.TimeoutSeconds
-	}
-	return 0
-}
-
-func (x *ComposeHelperRequest) GetAssignmentId() string {
-	if x != nil {
-		return x.AssignmentId
-	}
-	return ""
-}
-
-func (x *ComposeHelperRequest) GetRestorationAuthority() *ReleaseRestorationAuthority {
-	if x != nil {
-		return x.RestorationAuthority
-	}
-	return nil
-}
-
 type ComposeHelperResponse struct {
 	state                    protoimpl.MessageState    `protogen:"open.v1"`
 	Schema                   uint32                    `protobuf:"varint,1,opt,name=schema,proto3" json:"schema,omitempty"` // exactly 1
@@ -48368,7 +48266,7 @@ type ComposeHelperResponse struct {
 
 func (x *ComposeHelperResponse) Reset() {
 	*x = ComposeHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[529]
+	mi := &file_proto_agent_proto_msgTypes[528]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48380,7 +48278,7 @@ func (x *ComposeHelperResponse) String() string {
 func (*ComposeHelperResponse) ProtoMessage() {}
 
 func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[529]
+	mi := &file_proto_agent_proto_msgTypes[528]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48393,7 +48291,7 @@ func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeHelperResponse.ProtoReflect.Descriptor instead.
 func (*ComposeHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{529}
+	return file_proto_agent_proto_rawDescGZIP(), []int{528}
 }
 
 func (x *ComposeHelperResponse) GetSchema() uint32 {
@@ -48471,7 +48369,7 @@ type RollingProxyEvidence struct {
 
 func (x *RollingProxyEvidence) Reset() {
 	*x = RollingProxyEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[530]
+	mi := &file_proto_agent_proto_msgTypes[529]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48483,7 +48381,7 @@ func (x *RollingProxyEvidence) String() string {
 func (*RollingProxyEvidence) ProtoMessage() {}
 
 func (x *RollingProxyEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[530]
+	mi := &file_proto_agent_proto_msgTypes[529]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48496,7 +48394,7 @@ func (x *RollingProxyEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollingProxyEvidence.ProtoReflect.Descriptor instead.
 func (*RollingProxyEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{530}
+	return file_proto_agent_proto_rawDescGZIP(), []int{529}
 }
 
 func (x *RollingProxyEvidence) GetServiceId() string {
@@ -48536,7 +48434,7 @@ type ConfigUpdate struct {
 
 func (x *ConfigUpdate) Reset() {
 	*x = ConfigUpdate{}
-	mi := &file_proto_agent_proto_msgTypes[531]
+	mi := &file_proto_agent_proto_msgTypes[530]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48548,7 +48446,7 @@ func (x *ConfigUpdate) String() string {
 func (*ConfigUpdate) ProtoMessage() {}
 
 func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[531]
+	mi := &file_proto_agent_proto_msgTypes[530]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48561,7 +48459,7 @@ func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigUpdate.ProtoReflect.Descriptor instead.
 func (*ConfigUpdate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{531}
+	return file_proto_agent_proto_rawDescGZIP(), []int{530}
 }
 
 func (x *ConfigUpdate) GetAgentConfig() *AgentConfig {
@@ -48579,7 +48477,7 @@ type Shutdown struct {
 
 func (x *Shutdown) Reset() {
 	*x = Shutdown{}
-	mi := &file_proto_agent_proto_msgTypes[532]
+	mi := &file_proto_agent_proto_msgTypes[531]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48591,7 +48489,7 @@ func (x *Shutdown) String() string {
 func (*Shutdown) ProtoMessage() {}
 
 func (x *Shutdown) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[532]
+	mi := &file_proto_agent_proto_msgTypes[531]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48604,7 +48502,7 @@ func (x *Shutdown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Shutdown.ProtoReflect.Descriptor instead.
 func (*Shutdown) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{532}
+	return file_proto_agent_proto_rawDescGZIP(), []int{531}
 }
 
 // A captured consumer access check owned by a native Controller Task. This is
@@ -48625,7 +48523,7 @@ type CheckBackingAccess struct {
 
 func (x *CheckBackingAccess) Reset() {
 	*x = CheckBackingAccess{}
-	mi := &file_proto_agent_proto_msgTypes[533]
+	mi := &file_proto_agent_proto_msgTypes[532]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48637,7 +48535,7 @@ func (x *CheckBackingAccess) String() string {
 func (*CheckBackingAccess) ProtoMessage() {}
 
 func (x *CheckBackingAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[533]
+	mi := &file_proto_agent_proto_msgTypes[532]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48650,7 +48548,7 @@ func (x *CheckBackingAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckBackingAccess.ProtoReflect.Descriptor instead.
 func (*CheckBackingAccess) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{533}
+	return file_proto_agent_proto_rawDescGZIP(), []int{532}
 }
 
 func (x *CheckBackingAccess) GetRequestId() string {
@@ -48722,7 +48620,7 @@ type BackingAccessParameters struct {
 
 func (x *BackingAccessParameters) Reset() {
 	*x = BackingAccessParameters{}
-	mi := &file_proto_agent_proto_msgTypes[534]
+	mi := &file_proto_agent_proto_msgTypes[533]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48734,7 +48632,7 @@ func (x *BackingAccessParameters) String() string {
 func (*BackingAccessParameters) ProtoMessage() {}
 
 func (x *BackingAccessParameters) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[534]
+	mi := &file_proto_agent_proto_msgTypes[533]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48747,7 +48645,7 @@ func (x *BackingAccessParameters) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingAccessParameters.ProtoReflect.Descriptor instead.
 func (*BackingAccessParameters) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{534}
+	return file_proto_agent_proto_rawDescGZIP(), []int{533}
 }
 
 func (x *BackingAccessParameters) GetAttachId() string {
@@ -48843,7 +48741,7 @@ type CancelBackingAccess struct {
 
 func (x *CancelBackingAccess) Reset() {
 	*x = CancelBackingAccess{}
-	mi := &file_proto_agent_proto_msgTypes[535]
+	mi := &file_proto_agent_proto_msgTypes[534]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48855,7 +48753,7 @@ func (x *CancelBackingAccess) String() string {
 func (*CancelBackingAccess) ProtoMessage() {}
 
 func (x *CancelBackingAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[535]
+	mi := &file_proto_agent_proto_msgTypes[534]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48868,7 +48766,7 @@ func (x *CancelBackingAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelBackingAccess.ProtoReflect.Descriptor instead.
 func (*CancelBackingAccess) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{535}
+	return file_proto_agent_proto_rawDescGZIP(), []int{534}
 }
 
 func (x *CancelBackingAccess) GetRequestId() string {
@@ -48892,7 +48790,7 @@ type BackingAccessResult struct {
 
 func (x *BackingAccessResult) Reset() {
 	*x = BackingAccessResult{}
-	mi := &file_proto_agent_proto_msgTypes[536]
+	mi := &file_proto_agent_proto_msgTypes[535]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48904,7 +48802,7 @@ func (x *BackingAccessResult) String() string {
 func (*BackingAccessResult) ProtoMessage() {}
 
 func (x *BackingAccessResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[536]
+	mi := &file_proto_agent_proto_msgTypes[535]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48917,7 +48815,7 @@ func (x *BackingAccessResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingAccessResult.ProtoReflect.Descriptor instead.
 func (*BackingAccessResult) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{536}
+	return file_proto_agent_proto_rawDescGZIP(), []int{535}
 }
 
 func (x *BackingAccessResult) GetRequestId() string {
@@ -48973,7 +48871,7 @@ type BackingAccessObservation struct {
 
 func (x *BackingAccessObservation) Reset() {
 	*x = BackingAccessObservation{}
-	mi := &file_proto_agent_proto_msgTypes[537]
+	mi := &file_proto_agent_proto_msgTypes[536]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48985,7 +48883,7 @@ func (x *BackingAccessObservation) String() string {
 func (*BackingAccessObservation) ProtoMessage() {}
 
 func (x *BackingAccessObservation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[537]
+	mi := &file_proto_agent_proto_msgTypes[536]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48998,7 +48896,7 @@ func (x *BackingAccessObservation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingAccessObservation.ProtoReflect.Descriptor instead.
 func (*BackingAccessObservation) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{537}
+	return file_proto_agent_proto_rawDescGZIP(), []int{536}
 }
 
 func (x *BackingAccessObservation) GetStartedAt() *timestamppb.Timestamp {
@@ -49034,7 +48932,7 @@ type BackingAccessStage struct {
 
 func (x *BackingAccessStage) Reset() {
 	*x = BackingAccessStage{}
-	mi := &file_proto_agent_proto_msgTypes[538]
+	mi := &file_proto_agent_proto_msgTypes[537]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -49046,7 +48944,7 @@ func (x *BackingAccessStage) String() string {
 func (*BackingAccessStage) ProtoMessage() {}
 
 func (x *BackingAccessStage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[538]
+	mi := &file_proto_agent_proto_msgTypes[537]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -49059,7 +48957,7 @@ func (x *BackingAccessStage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingAccessStage.ProtoReflect.Descriptor instead.
 func (*BackingAccessStage) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{538}
+	return file_proto_agent_proto_rawDescGZIP(), []int{537}
 }
 
 func (x *BackingAccessStage) GetName() string {
@@ -53021,17 +52919,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\vlive_device\x18\a \x01(\x04R\n" +
 	"liveDevice\x12\x1d\n" +
 	"\n" +
-	"live_inode\x18\b \x01(\x04R\tliveInode\"\x8a\x03\n" +
-	"\x14ComposeHelperRequest\x12\x16\n" +
-	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x17\n" +
-	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12!\n" +
-	"\foperation_id\x18\x03 \x01(\tR\voperationId\x127\n" +
-	"\x04plan\x18\x04 \x01(\v2#.groundplane.agent.v1.ExecutionPlanR\x04plan\x12\x17\n" +
-	"\astep_id\x18\x05 \x01(\tR\x06stepId\x12'\n" +
-	"\x0ftimeout_seconds\x18\x06 \x01(\rR\x0etimeoutSeconds\x12#\n" +
-	"\rassignment_id\x18\a \x01(\tR\fassignmentId\x12f\n" +
-	"\x15restoration_authority\x18\t \x01(\v21.groundplane.agent.v1.ReleaseRestorationAuthorityR\x14restorationAuthorityJ\x04\b\b\x10\tJ\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\r\"\xbf\x05\n" +
+	"live_inode\x18\b \x01(\x04R\tliveInode\"\xbf\x05\n" +
 	"\x15ComposeHelperResponse\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12D\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2*.groundplane.agent.v1.ComposeHelperOutcomeR\aoutcome\x12\x1b\n" +
@@ -53427,7 +53315,7 @@ func file_proto_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 53)
-var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 539)
+var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 538)
 var file_proto_agent_proto_goTypes = []any{
 	(WorkDirection)(0),                                  // 0: groundplane.agent.v1.WorkDirection
 	(AttachNetworkAction)(0),                            // 1: groundplane.agent.v1.AttachNetworkAction
@@ -54010,41 +53898,40 @@ var file_proto_agent_proto_goTypes = []any{
 	(*HostResolutionRestore)(nil),                       // 578: groundplane.agent.v1.HostResolutionRestore
 	(*ManagedConfigHelperRequest)(nil),                  // 579: groundplane.agent.v1.ManagedConfigHelperRequest
 	(*ManagedConfigHelperResponse)(nil),                 // 580: groundplane.agent.v1.ManagedConfigHelperResponse
-	(*ComposeHelperRequest)(nil),                        // 581: groundplane.agent.v1.ComposeHelperRequest
-	(*ComposeHelperResponse)(nil),                       // 582: groundplane.agent.v1.ComposeHelperResponse
-	(*RollingProxyEvidence)(nil),                        // 583: groundplane.agent.v1.RollingProxyEvidence
-	(*ConfigUpdate)(nil),                                // 584: groundplane.agent.v1.ConfigUpdate
-	(*Shutdown)(nil),                                    // 585: groundplane.agent.v1.Shutdown
-	(*CheckBackingAccess)(nil),                          // 586: groundplane.agent.v1.CheckBackingAccess
-	(*BackingAccessParameters)(nil),                     // 587: groundplane.agent.v1.BackingAccessParameters
-	(*CancelBackingAccess)(nil),                         // 588: groundplane.agent.v1.CancelBackingAccess
-	(*BackingAccessResult)(nil),                         // 589: groundplane.agent.v1.BackingAccessResult
-	(*BackingAccessObservation)(nil),                    // 590: groundplane.agent.v1.BackingAccessObservation
-	(*BackingAccessStage)(nil),                          // 591: groundplane.agent.v1.BackingAccessStage
-	(*timestamppb.Timestamp)(nil),                       // 592: google.protobuf.Timestamp
+	(*ComposeHelperResponse)(nil),                       // 581: groundplane.agent.v1.ComposeHelperResponse
+	(*RollingProxyEvidence)(nil),                        // 582: groundplane.agent.v1.RollingProxyEvidence
+	(*ConfigUpdate)(nil),                                // 583: groundplane.agent.v1.ConfigUpdate
+	(*Shutdown)(nil),                                    // 584: groundplane.agent.v1.Shutdown
+	(*CheckBackingAccess)(nil),                          // 585: groundplane.agent.v1.CheckBackingAccess
+	(*BackingAccessParameters)(nil),                     // 586: groundplane.agent.v1.BackingAccessParameters
+	(*CancelBackingAccess)(nil),                         // 587: groundplane.agent.v1.CancelBackingAccess
+	(*BackingAccessResult)(nil),                         // 588: groundplane.agent.v1.BackingAccessResult
+	(*BackingAccessObservation)(nil),                    // 589: groundplane.agent.v1.BackingAccessObservation
+	(*BackingAccessStage)(nil),                          // 590: groundplane.agent.v1.BackingAccessStage
+	(*timestamppb.Timestamp)(nil),                       // 591: google.protobuf.Timestamp
 }
 var file_proto_agent_proto_depIdxs = []int32{
 	58,   // 0: groundplane.agent.v1.WorkJournalReplayRequest.unreported_attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 1: groundplane.agent.v1.WorkReportRejection.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	0,    // 2: groundplane.agent.v1.WorkAttemptIdentity.direction:type_name -> groundplane.agent.v1.WorkDirection
 	53,   // 3: groundplane.agent.v1.WorkAttemptIdentity.input:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 4: groundplane.agent.v1.WorkAttemptIdentity.assigned_at:type_name -> google.protobuf.Timestamp
-	592,  // 5: groundplane.agent.v1.WorkAttemptIdentity.deadline:type_name -> google.protobuf.Timestamp
+	591,  // 4: groundplane.agent.v1.WorkAttemptIdentity.assigned_at:type_name -> google.protobuf.Timestamp
+	591,  // 5: groundplane.agent.v1.WorkAttemptIdentity.deadline:type_name -> google.protobuf.Timestamp
 	58,   // 6: groundplane.agent.v1.WorkStartRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 7: groundplane.agent.v1.WorkCancel.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 8: groundplane.agent.v1.WorkStartAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	592,  // 9: groundplane.agent.v1.WorkStartAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 9: groundplane.agent.v1.WorkStartAck.started_at:type_name -> google.protobuf.Timestamp
 	58,   // 10: groundplane.agent.v1.EnvironmentRemovalAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	63,   // 11: groundplane.agent.v1.EnvironmentRemovalAssignment.removal:type_name -> groundplane.agent.v1.EnvironmentRemovalInput
 	53,   // 12: groundplane.agent.v1.EnvironmentRemovalInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
 	351,  // 13: groundplane.agent.v1.EnvironmentRemovalInput.compose:type_name -> groundplane.agent.v1.ComposeArtifact
-	592,  // 14: groundplane.agent.v1.EnvironmentProvisionInput.created_at:type_name -> google.protobuf.Timestamp
+	591,  // 14: groundplane.agent.v1.EnvironmentProvisionInput.created_at:type_name -> google.protobuf.Timestamp
 	351,  // 15: groundplane.agent.v1.BackingProvisionInput.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
 	167,  // 16: groundplane.agent.v1.BackingProvisionInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
 	542,  // 17: groundplane.agent.v1.BackingProvisionInput.files:type_name -> groundplane.agent.v1.MaterializeFile
 	66,   // 18: groundplane.agent.v1.BackingProvisionInput.after_start:type_name -> groundplane.agent.v1.BackingProvisionAfterStart
-	592,  // 19: groundplane.agent.v1.BackingProvisionInput.created_at:type_name -> google.protobuf.Timestamp
-	592,  // 20: groundplane.agent.v1.BackingProvisionInput.deadline:type_name -> google.protobuf.Timestamp
+	591,  // 19: groundplane.agent.v1.BackingProvisionInput.created_at:type_name -> google.protobuf.Timestamp
+	591,  // 20: groundplane.agent.v1.BackingProvisionInput.deadline:type_name -> google.protobuf.Timestamp
 	53,   // 21: groundplane.agent.v1.BackingProvisionAfterStart.encrypted_inputs:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 22: groundplane.agent.v1.BackingProvisionAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	65,   // 23: groundplane.agent.v1.BackingProvisionAssignment.input:type_name -> groundplane.agent.v1.BackingProvisionInput
@@ -54055,13 +53942,13 @@ var file_proto_agent_proto_depIdxs = []int32{
 	53,   // 28: groundplane.agent.v1.BackingProvisionCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 29: groundplane.agent.v1.BackingProvisionCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 30: groundplane.agent.v1.BackingProvisionCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 31: groundplane.agent.v1.BackingProvisionCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 32: groundplane.agent.v1.BackingProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 31: groundplane.agent.v1.BackingProvisionCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 32: groundplane.agent.v1.BackingProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 33: groundplane.agent.v1.BackingProvisionFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 34: groundplane.agent.v1.BackingProvisionFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 35: groundplane.agent.v1.BackingProvisionFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 36: groundplane.agent.v1.BackingProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 37: groundplane.agent.v1.BackingProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 36: groundplane.agent.v1.BackingProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 37: groundplane.agent.v1.BackingProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 38: groundplane.agent.v1.BackingProvisionConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 39: groundplane.agent.v1.BackingProvisionConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	167,  // 40: groundplane.agent.v1.BackingProvisionConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
@@ -54076,8 +53963,8 @@ var file_proto_agent_proto_depIdxs = []int32{
 	58,   // 49: groundplane.agent.v1.BackingProvisionRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 50: groundplane.agent.v1.BackingProvisionRecoveryAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 51: groundplane.agent.v1.BackingProvisionRecoveryAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 52: groundplane.agent.v1.BackingProvisionRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 53: groundplane.agent.v1.BackingProvisionRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 52: groundplane.agent.v1.BackingProvisionRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 53: groundplane.agent.v1.BackingProvisionRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
 	67,   // 54: groundplane.agent.v1.BackingProvisionHelperRequest.assignment:type_name -> groundplane.agent.v1.BackingProvisionAssignment
 	61,   // 55: groundplane.agent.v1.BackingProvisionHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	68,   // 56: groundplane.agent.v1.BackingProvisionHelperRequest.report:type_name -> groundplane.agent.v1.BackingProvisionCheckpointRequest
@@ -54086,19 +53973,19 @@ var file_proto_agent_proto_depIdxs = []int32{
 	64,   // 59: groundplane.agent.v1.EnvironmentProvisionAssignment.input:type_name -> groundplane.agent.v1.EnvironmentProvisionInput
 	85,   // 60: groundplane.agent.v1.EnvironmentProvisionAssignment.recovery_source:type_name -> groundplane.agent.v1.EnvironmentProvisionRecoverySource
 	58,   // 61: groundplane.agent.v1.EnvironmentProvisionRecoverySource.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	592,  // 62: groundplane.agent.v1.EnvironmentProvisionRecoverySource.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 63: groundplane.agent.v1.EnvironmentProvisionRecoverySource.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 62: groundplane.agent.v1.EnvironmentProvisionRecoverySource.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 63: groundplane.agent.v1.EnvironmentProvisionRecoverySource.finished_at:type_name -> google.protobuf.Timestamp
 	53,   // 64: groundplane.agent.v1.EnvironmentProvisionRecoverySource.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 65: groundplane.agent.v1.EnvironmentProvisionResultRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	592,  // 66: groundplane.agent.v1.EnvironmentProvisionResultRequest.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 66: groundplane.agent.v1.EnvironmentProvisionResultRequest.observed_at:type_name -> google.protobuf.Timestamp
 	58,   // 67: groundplane.agent.v1.EnvironmentProvisionResultAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 68: groundplane.agent.v1.EnvironmentProvisionResultAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 69: groundplane.agent.v1.EnvironmentProvisionResultAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 70: groundplane.agent.v1.EnvironmentProvisionResultAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 69: groundplane.agent.v1.EnvironmentProvisionResultAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 70: groundplane.agent.v1.EnvironmentProvisionResultAck.finished_at:type_name -> google.protobuf.Timestamp
 	84,   // 71: groundplane.agent.v1.EnvironmentProvisionHelperRequest.assignment:type_name -> groundplane.agent.v1.EnvironmentProvisionAssignment
 	61,   // 72: groundplane.agent.v1.EnvironmentProvisionHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	53,   // 73: groundplane.agent.v1.EnvironmentProvisionHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 74: groundplane.agent.v1.EnvironmentProvisionHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 74: groundplane.agent.v1.EnvironmentProvisionHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	58,   // 75: groundplane.agent.v1.AttachRemovalAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	109,  // 76: groundplane.agent.v1.AttachRemovalAssignment.removal:type_name -> groundplane.agent.v1.AttachRemovalInput
 	58,   // 77: groundplane.agent.v1.AttachRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
@@ -54107,8 +53994,8 @@ var file_proto_agent_proto_depIdxs = []int32{
 	53,   // 80: groundplane.agent.v1.AttachRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 81: groundplane.agent.v1.AttachRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 82: groundplane.agent.v1.AttachRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 83: groundplane.agent.v1.AttachRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	592,  // 84: groundplane.agent.v1.AttachRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 83: groundplane.agent.v1.AttachRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 84: groundplane.agent.v1.AttachRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
 	58,   // 85: groundplane.agent.v1.AttachProvisionFactsRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	230,  // 86: groundplane.agent.v1.AttachProvisionFactsRequest.facts:type_name -> groundplane.agent.v1.BackingHookValue
 	58,   // 87: groundplane.agent.v1.AttachProvisionFactsAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
@@ -54120,21 +54007,21 @@ var file_proto_agent_proto_depIdxs = []int32{
 	53,   // 93: groundplane.agent.v1.AttachProvisionRecoveryReportRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 94: groundplane.agent.v1.AttachProvisionRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 95: groundplane.agent.v1.AttachProvisionRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 96: groundplane.agent.v1.AttachProvisionRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	592,  // 97: groundplane.agent.v1.AttachProvisionRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 96: groundplane.agent.v1.AttachProvisionRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 97: groundplane.agent.v1.AttachProvisionRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
 	58,   // 98: groundplane.agent.v1.AttachProvisionCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 99: groundplane.agent.v1.AttachProvisionCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 100: groundplane.agent.v1.AttachProvisionCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 101: groundplane.agent.v1.AttachProvisionCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 102: groundplane.agent.v1.AttachProvisionCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 103: groundplane.agent.v1.AttachProvisionCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 104: groundplane.agent.v1.AttachProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 104: groundplane.agent.v1.AttachProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	53,   // 105: groundplane.agent.v1.AttachProvisionCompletionAck.binding_result:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 106: groundplane.agent.v1.AttachProvisionFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 107: groundplane.agent.v1.AttachProvisionFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 108: groundplane.agent.v1.AttachProvisionFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 109: groundplane.agent.v1.AttachProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	592,  // 110: groundplane.agent.v1.AttachProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 109: groundplane.agent.v1.AttachProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 110: groundplane.agent.v1.AttachProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	53,   // 111: groundplane.agent.v1.AttachProvisionInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
 	110,  // 112: groundplane.agent.v1.AttachProvisionInput.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
 	107,  // 113: groundplane.agent.v1.AttachProvisionInput.credential:type_name -> groundplane.agent.v1.AttachCredentialProvision
@@ -54154,7 +54041,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	116,  // 127: groundplane.agent.v1.AttachConsumerHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.AttachRemovalCheckpointAck
 	101,  // 128: groundplane.agent.v1.AttachConsumerHelperRequest.provision_acknowledgement:type_name -> groundplane.agent.v1.AttachProvisionCheckpointAck
 	53,   // 129: groundplane.agent.v1.AttachConsumerHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 130: groundplane.agent.v1.AttachConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 130: groundplane.agent.v1.AttachConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	46,   // 131: groundplane.agent.v1.AttachCredentialRemoval.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
 	114,  // 132: groundplane.agent.v1.AttachCredentialRemoval.grants:type_name -> groundplane.agent.v1.AttachGrantRemoval
 	58,   // 133: groundplane.agent.v1.AttachRemovalCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
@@ -54163,30 +54050,30 @@ var file_proto_agent_proto_depIdxs = []int32{
 	53,   // 136: groundplane.agent.v1.AttachRemovalCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 137: groundplane.agent.v1.AttachRemovalCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 138: groundplane.agent.v1.AttachRemovalCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 139: groundplane.agent.v1.AttachRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 139: groundplane.agent.v1.AttachRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 140: groundplane.agent.v1.AttachRemovalFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 141: groundplane.agent.v1.AttachRemovalFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 142: groundplane.agent.v1.AttachRemovalFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 143: groundplane.agent.v1.AttachRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	592,  // 144: groundplane.agent.v1.AttachRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 143: groundplane.agent.v1.AttachRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 144: groundplane.agent.v1.AttachRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	58,   // 145: groundplane.agent.v1.EnvironmentRemovalCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 146: groundplane.agent.v1.EnvironmentRemovalCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 147: groundplane.agent.v1.EnvironmentRemovalCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 148: groundplane.agent.v1.EnvironmentRemovalCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 149: groundplane.agent.v1.EnvironmentRemovalCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 150: groundplane.agent.v1.EnvironmentRemovalCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 151: groundplane.agent.v1.EnvironmentRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 151: groundplane.agent.v1.EnvironmentRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 152: groundplane.agent.v1.EnvironmentRemovalFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 153: groundplane.agent.v1.EnvironmentRemovalFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 154: groundplane.agent.v1.EnvironmentRemovalFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 155: groundplane.agent.v1.EnvironmentRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	592,  // 156: groundplane.agent.v1.EnvironmentRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 155: groundplane.agent.v1.EnvironmentRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 156: groundplane.agent.v1.EnvironmentRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	62,   // 157: groundplane.agent.v1.EnvironmentRemovalHelperRequest.assignment:type_name -> groundplane.agent.v1.EnvironmentRemovalAssignment
 	61,   // 158: groundplane.agent.v1.EnvironmentRemovalHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	121,  // 159: groundplane.agent.v1.EnvironmentRemovalHelperRequest.report:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointRequest
 	122,  // 160: groundplane.agent.v1.EnvironmentRemovalHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointAck
 	53,   // 161: groundplane.agent.v1.EnvironmentRemovalHelperResponse.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 162: groundplane.agent.v1.EnvironmentRemovalHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 162: groundplane.agent.v1.EnvironmentRemovalHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	58,   // 163: groundplane.agent.v1.ReleaseWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	165,  // 164: groundplane.agent.v1.ReleaseWorkAssignment.release:type_name -> groundplane.agent.v1.ReleaseWorkInput
 	129,  // 165: groundplane.agent.v1.ReleaseRecoveryAssignment.work:type_name -> groundplane.agent.v1.ReleaseWorkAssignment
@@ -54199,12 +54086,12 @@ var file_proto_agent_proto_depIdxs = []int32{
 	53,   // 172: groundplane.agent.v1.ReleaseWorkCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 173: groundplane.agent.v1.ReleaseWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 174: groundplane.agent.v1.ReleaseWorkCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 175: groundplane.agent.v1.ReleaseWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 175: groundplane.agent.v1.ReleaseWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 176: groundplane.agent.v1.ReleaseWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 177: groundplane.agent.v1.ReleaseWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 178: groundplane.agent.v1.ReleaseWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 179: groundplane.agent.v1.ReleaseWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	592,  // 180: groundplane.agent.v1.ReleaseWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 179: groundplane.agent.v1.ReleaseWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 180: groundplane.agent.v1.ReleaseWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	58,   // 181: groundplane.agent.v1.ReleaseEffectEvidenceRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 182: groundplane.agent.v1.ReleaseEffectEvidenceRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 183: groundplane.agent.v1.ReleaseEffectEvidenceAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
@@ -54224,7 +54111,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	53,   // 197: groundplane.agent.v1.ScriptWorkCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 198: groundplane.agent.v1.ScriptWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 199: groundplane.agent.v1.ScriptWorkCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 200: groundplane.agent.v1.ScriptWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 200: groundplane.agent.v1.ScriptWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 201: groundplane.agent.v1.ScriptRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	375,  // 202: groundplane.agent.v1.ScriptRecoveryAssignment.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
 	171,  // 203: groundplane.agent.v1.ScriptRecoveryAssignment.artifacts:type_name -> groundplane.agent.v1.ScriptCleanupArtifacts
@@ -54232,11 +54119,11 @@ var file_proto_agent_proto_depIdxs = []int32{
 	53,   // 205: groundplane.agent.v1.ScriptRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 206: groundplane.agent.v1.ScriptRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 207: groundplane.agent.v1.ScriptRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 208: groundplane.agent.v1.ScriptRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 208: groundplane.agent.v1.ScriptRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 209: groundplane.agent.v1.ScriptWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 210: groundplane.agent.v1.ScriptWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 211: groundplane.agent.v1.ScriptWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 212: groundplane.agent.v1.ScriptWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 212: groundplane.agent.v1.ScriptWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 213: groundplane.agent.v1.ReleaseConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 214: groundplane.agent.v1.ComponentConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 215: groundplane.agent.v1.ComponentConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
@@ -54297,7 +54184,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	214,  // 270: groundplane.agent.v1.AgentMessage.log_ready:type_name -> groundplane.agent.v1.LogReady
 	184,  // 271: groundplane.agent.v1.AgentMessage.workload_image_resolution_result:type_name -> groundplane.agent.v1.WorkloadImageResolutionResult
 	194,  // 272: groundplane.agent.v1.AgentMessage.service_observation_result:type_name -> groundplane.agent.v1.ServiceObservationResult
-	589,  // 273: groundplane.agent.v1.AgentMessage.backing_access_result:type_name -> groundplane.agent.v1.BackingAccessResult
+	588,  // 273: groundplane.agent.v1.AgentMessage.backing_access_result:type_name -> groundplane.agent.v1.BackingAccessResult
 	571,  // 274: groundplane.agent.v1.AgentMessage.dns_connection_result:type_name -> groundplane.agent.v1.DNSConnectionResult
 	574,  // 275: groundplane.agent.v1.AgentMessage.edge_connection_result:type_name -> groundplane.agent.v1.EdgeConnectionResult
 	448,  // 276: groundplane.agent.v1.AgentMessage.backup_config_transfer:type_name -> groundplane.agent.v1.BackupConfigTransfer
@@ -54401,7 +54288,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	192,  // 374: groundplane.agent.v1.ServiceObservationResult.observations:type_name -> groundplane.agent.v1.ServiceObservationRow
 	52,   // 375: groundplane.agent.v1.HealthWaitProgress.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
 	198,  // 376: groundplane.agent.v1.ObservedState.projects:type_name -> groundplane.agent.v1.ObservedProject
-	592,  // 377: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 377: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
 	199,  // 378: groundplane.agent.v1.ObservedProject.containers:type_name -> groundplane.agent.v1.ObservedContainer
 	200,  // 379: groundplane.agent.v1.ObservedProject.networks:type_name -> groundplane.agent.v1.ObservedNetwork
 	201,  // 380: groundplane.agent.v1.ObservedProject.volumes:type_name -> groundplane.agent.v1.ObservedVolume
@@ -54414,7 +54301,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	355,  // 387: groundplane.agent.v1.ObservedVolume.labels:type_name -> groundplane.agent.v1.LabelPair
 	9,    // 388: groundplane.agent.v1.ObservedCollision.kind:type_name -> groundplane.agent.v1.ObservedCollisionKind
 	254,  // 389: groundplane.agent.v1.CandidateAbsenceEvidence.candidates:type_name -> groundplane.agent.v1.CandidateReleaseService
-	592,  // 390: groundplane.agent.v1.DNSResolverObservationEvidence.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 390: groundplane.agent.v1.DNSResolverObservationEvidence.observed_at:type_name -> google.protobuf.Timestamp
 	208,  // 391: groundplane.agent.v1.DNSResolverObservationEvidence.static_query:type_name -> groundplane.agent.v1.DNSQueryProof
 	208,  // 392: groundplane.agent.v1.DNSResolverObservationEvidence.catch_all_query:type_name -> groundplane.agent.v1.DNSQueryProof
 	208,  // 393: groundplane.agent.v1.DNSResolverObservationEvidence.forwarder_queries:type_name -> groundplane.agent.v1.DNSQueryProof
@@ -54422,16 +54309,16 @@ var file_proto_agent_proto_depIdxs = []int32{
 	10,   // 395: groundplane.agent.v1.DNSQueryProof.type:type_name -> groundplane.agent.v1.DNSQueryType
 	206,  // 396: groundplane.agent.v1.DNSQueryProof.answers:type_name -> groundplane.agent.v1.DNSAnswerRecord
 	207,  // 397: groundplane.agent.v1.DNSQueryProof.counters:type_name -> groundplane.agent.v1.DNSForwardCounter
-	584,  // 398: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
-	585,  // 399: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
+	583,  // 398: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
+	584,  // 399: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
 	211,  // 400: groundplane.agent.v1.ControllerMessage.log_subscribe:type_name -> groundplane.agent.v1.LogSubscribe
 	212,  // 401: groundplane.agent.v1.ControllerMessage.log_cancel:type_name -> groundplane.agent.v1.LogCancel
 	180,  // 402: groundplane.agent.v1.ControllerMessage.resolve_workload_images:type_name -> groundplane.agent.v1.ResolveWorkloadImages
 	189,  // 403: groundplane.agent.v1.ControllerMessage.observe_services:type_name -> groundplane.agent.v1.ObserveServices
 	190,  // 404: groundplane.agent.v1.ControllerMessage.cancel_service_observation:type_name -> groundplane.agent.v1.CancelServiceObservation
 	213,  // 405: groundplane.agent.v1.ControllerMessage.log_credit:type_name -> groundplane.agent.v1.LogCredit
-	586,  // 406: groundplane.agent.v1.ControllerMessage.check_backing_access:type_name -> groundplane.agent.v1.CheckBackingAccess
-	588,  // 407: groundplane.agent.v1.ControllerMessage.cancel_backing_access:type_name -> groundplane.agent.v1.CancelBackingAccess
+	585,  // 406: groundplane.agent.v1.ControllerMessage.check_backing_access:type_name -> groundplane.agent.v1.CheckBackingAccess
+	587,  // 407: groundplane.agent.v1.ControllerMessage.cancel_backing_access:type_name -> groundplane.agent.v1.CancelBackingAccess
 	567,  // 408: groundplane.agent.v1.ControllerMessage.check_dns_connections:type_name -> groundplane.agent.v1.CheckDNSConnections
 	569,  // 409: groundplane.agent.v1.ControllerMessage.cancel_dns_connections:type_name -> groundplane.agent.v1.CancelDNSConnections
 	572,  // 410: groundplane.agent.v1.ControllerMessage.check_edge_connections:type_name -> groundplane.agent.v1.CheckEdgeConnections
@@ -54541,7 +54428,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	210,  // 514: groundplane.agent.v1.LogSubscribe.targets:type_name -> groundplane.agent.v1.LogTarget
 	12,   // 515: groundplane.agent.v1.LogEvent.slot:type_name -> groundplane.agent.v1.LogSlot
 	11,   // 516: groundplane.agent.v1.LogEvent.stream:type_name -> groundplane.agent.v1.LogStream
-	592,  // 517: groundplane.agent.v1.LogEvent.timestamp:type_name -> google.protobuf.Timestamp
+	591,  // 517: groundplane.agent.v1.LogEvent.timestamp:type_name -> google.protobuf.Timestamp
 	13,   // 518: groundplane.agent.v1.LogEnd.reason:type_name -> groundplane.agent.v1.LogEndReason
 	14,   // 519: groundplane.agent.v1.ReleaseRecoveryDirective.phase:type_name -> groundplane.agent.v1.ReleaseRecoveryPhase
 	15,   // 520: groundplane.agent.v1.ReleaseRestorationCandidate.target:type_name -> groundplane.agent.v1.ReleaseRestorationTarget
@@ -54549,7 +54436,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	219,  // 522: groundplane.agent.v1.ReleaseRestorationAuthority.applied_predecessor:type_name -> groundplane.agent.v1.ReleaseAppliedPredecessorAuthority
 	221,  // 523: groundplane.agent.v1.ReleaseRestorationAuthority.native_predecessors:type_name -> groundplane.agent.v1.ReleaseNativePredecessorAuthority
 	17,   // 524: groundplane.agent.v1.ScriptOutcomeCheckpoint.reason:type_name -> groundplane.agent.v1.ScriptOutcomeReason
-	592,  // 525: groundplane.agent.v1.ScriptOutcomeCheckpoint.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 525: groundplane.agent.v1.ScriptOutcomeCheckpoint.observed_at:type_name -> google.protobuf.Timestamp
 	16,   // 526: groundplane.agent.v1.ScriptExecutionCheckpoint.state:type_name -> groundplane.agent.v1.ScriptExecutionState
 	223,  // 527: groundplane.agent.v1.ScriptExecutionCheckpoint.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
 	224,  // 528: groundplane.agent.v1.ScriptExecutionCheckpoint.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
@@ -54562,7 +54449,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	224,  // 535: groundplane.agent.v1.ScriptCheckpointRequest.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
 	225,  // 536: groundplane.agent.v1.ScriptCheckpointRequest.outcome:type_name -> groundplane.agent.v1.ScriptOutcomeCheckpoint
 	226,  // 537: groundplane.agent.v1.ScriptCheckpointRequest.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupCheckpoint
-	592,  // 538: groundplane.agent.v1.ScriptCheckpointRequest.recorded_at:type_name -> google.protobuf.Timestamp
+	591,  // 538: groundplane.agent.v1.ScriptCheckpointRequest.recorded_at:type_name -> google.protobuf.Timestamp
 	16,   // 539: groundplane.agent.v1.ScriptCheckpointAck.state:type_name -> groundplane.agent.v1.ScriptExecutionState
 	18,   // 540: groundplane.agent.v1.BackingHookProcedure.event:type_name -> groundplane.agent.v1.BackingHookEvent
 	230,  // 541: groundplane.agent.v1.BackingHookProcedure.inputs:type_name -> groundplane.agent.v1.BackingHookValue
@@ -54620,8 +54507,8 @@ var file_proto_agent_proto_depIdxs = []int32{
 	58,   // 593: groundplane.agent.v1.ResolverWorkRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 594: groundplane.agent.v1.ResolverWorkResultAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 595: groundplane.agent.v1.ResolverWorkResultAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 596: groundplane.agent.v1.ResolverWorkResultAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 597: groundplane.agent.v1.ResolverWorkResultAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 596: groundplane.agent.v1.ResolverWorkResultAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 597: groundplane.agent.v1.ResolverWorkResultAck.finished_at:type_name -> google.protobuf.Timestamp
 	258,  // 598: groundplane.agent.v1.ResolverWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.ResolverWorkAssignment
 	61,   // 599: groundplane.agent.v1.ResolverWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	260,  // 600: groundplane.agent.v1.ResolverWorkHelperRequest.checkpoint:type_name -> groundplane.agent.v1.ResolverWorkCheckpointAck
@@ -54646,46 +54533,46 @@ var file_proto_agent_proto_depIdxs = []int32{
 	58,   // 619: groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 620: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 621: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 622: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	591,  // 622: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
 	58,   // 623: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 624: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 625: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 626: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 627: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 628: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 627: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 628: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 629: groundplane.agent.v1.EntryConfigurationWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 630: groundplane.agent.v1.EntryConfigurationWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 631: groundplane.agent.v1.EntryConfigurationWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 632: groundplane.agent.v1.EntryConfigurationWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	592,  // 633: groundplane.agent.v1.EntryConfigurationWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 632: groundplane.agent.v1.EntryConfigurationWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 633: groundplane.agent.v1.EntryConfigurationWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	58,   // 634: groundplane.agent.v1.EntryConfigurationWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	257,  // 635: groundplane.agent.v1.EntryConfigurationWorkAssignment.input:type_name -> groundplane.agent.v1.EntryConfigurationWorkInput
 	58,   // 636: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 637: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 638: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 639: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 640: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 639: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 640: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 641: groundplane.agent.v1.ComponentWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	267,  // 642: groundplane.agent.v1.ComponentWorkAssignment.input:type_name -> groundplane.agent.v1.ComponentWorkInput
 	58,   // 643: groundplane.agent.v1.ComponentWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 644: groundplane.agent.v1.ComponentWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 645: groundplane.agent.v1.ComponentWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 646: groundplane.agent.v1.ComponentWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	591,  // 646: groundplane.agent.v1.ComponentWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
 	58,   // 647: groundplane.agent.v1.ComponentWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 648: groundplane.agent.v1.ComponentWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 649: groundplane.agent.v1.ComponentWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 650: groundplane.agent.v1.ComponentWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 651: groundplane.agent.v1.ComponentWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 652: groundplane.agent.v1.ComponentWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 651: groundplane.agent.v1.ComponentWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 652: groundplane.agent.v1.ComponentWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 653: groundplane.agent.v1.ComponentWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 654: groundplane.agent.v1.ComponentWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 655: groundplane.agent.v1.ComponentWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 656: groundplane.agent.v1.ComponentWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	592,  // 657: groundplane.agent.v1.ComponentWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 656: groundplane.agent.v1.ComponentWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 657: groundplane.agent.v1.ComponentWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	58,   // 658: groundplane.agent.v1.ComponentWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 659: groundplane.agent.v1.ComponentWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 660: groundplane.agent.v1.ComponentWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 661: groundplane.agent.v1.ComponentWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 661: groundplane.agent.v1.ComponentWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
 	22,   // 662: groundplane.agent.v1.NetworkWorkInput.action:type_name -> groundplane.agent.v1.NetworkWorkAction
 	351,  // 663: groundplane.agent.v1.NetworkWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
 	58,   // 664: groundplane.agent.v1.NetworkWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
@@ -54693,22 +54580,22 @@ var file_proto_agent_proto_depIdxs = []int32{
 	58,   // 666: groundplane.agent.v1.NetworkWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 667: groundplane.agent.v1.NetworkWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 668: groundplane.agent.v1.NetworkWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 669: groundplane.agent.v1.NetworkWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	591,  // 669: groundplane.agent.v1.NetworkWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
 	58,   // 670: groundplane.agent.v1.NetworkWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 671: groundplane.agent.v1.NetworkWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 672: groundplane.agent.v1.NetworkWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 673: groundplane.agent.v1.NetworkWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 674: groundplane.agent.v1.NetworkWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 675: groundplane.agent.v1.NetworkWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 674: groundplane.agent.v1.NetworkWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 675: groundplane.agent.v1.NetworkWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 676: groundplane.agent.v1.NetworkWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 677: groundplane.agent.v1.NetworkWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 678: groundplane.agent.v1.NetworkWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 679: groundplane.agent.v1.NetworkWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	592,  // 680: groundplane.agent.v1.NetworkWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 679: groundplane.agent.v1.NetworkWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 680: groundplane.agent.v1.NetworkWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	58,   // 681: groundplane.agent.v1.NetworkWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 682: groundplane.agent.v1.NetworkWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 683: groundplane.agent.v1.NetworkWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 684: groundplane.agent.v1.NetworkWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 684: groundplane.agent.v1.NetworkWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
 	284,  // 685: groundplane.agent.v1.ComponentWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.ComponentWorkAssignment
 	61,   // 686: groundplane.agent.v1.ComponentWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	285,  // 687: groundplane.agent.v1.ComponentWorkHelperRequest.report:type_name -> groundplane.agent.v1.ComponentWorkCheckpointRequest
@@ -54722,7 +54609,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	295,  // 695: groundplane.agent.v1.NetworkWorkHelperRequest.report:type_name -> groundplane.agent.v1.NetworkWorkCheckpointRequest
 	296,  // 696: groundplane.agent.v1.NetworkWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.NetworkWorkCheckpointAck
 	53,   // 697: groundplane.agent.v1.NetworkWorkHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 698: groundplane.agent.v1.NetworkWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 698: groundplane.agent.v1.NetworkWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	58,   // 699: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	324,  // 700: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.removal:type_name -> groundplane.agent.v1.ServiceLifecycleWorkInput
 	167,  // 701: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
@@ -54737,23 +54624,23 @@ var file_proto_agent_proto_depIdxs = []int32{
 	58,   // 710: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 711: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 712: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 713: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	591,  // 713: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
 	58,   // 714: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 715: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 716: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 717: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 718: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 719: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 718: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 719: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 720: groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 721: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 722: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 723: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 723: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.finished_at:type_name -> google.protobuf.Timestamp
 	309,  // 724: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.assignment:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryAssignment
 	61,   // 725: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	315,  // 726: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.report:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
 	316,  // 727: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
 	53,   // 728: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 729: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 729: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	58,   // 730: groundplane.agent.v1.ServiceLifecycleAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	324,  // 731: groundplane.agent.v1.ServiceLifecycleAssignment.input:type_name -> groundplane.agent.v1.ServiceLifecycleWorkInput
 	53,   // 732: groundplane.agent.v1.ServiceLifecycleWorkInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
@@ -54769,29 +54656,29 @@ var file_proto_agent_proto_depIdxs = []int32{
 	58,   // 742: groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 743: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 744: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 745: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 746: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 745: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 746: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 747: groundplane.agent.v1.ServiceLifecycleCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 748: groundplane.agent.v1.ServiceLifecycleCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 749: groundplane.agent.v1.ServiceLifecycleCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 750: groundplane.agent.v1.ServiceLifecycleCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	591,  // 750: groundplane.agent.v1.ServiceLifecycleCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
 	58,   // 751: groundplane.agent.v1.ServiceLifecycleCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 752: groundplane.agent.v1.ServiceLifecycleCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 753: groundplane.agent.v1.ServiceLifecycleCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 754: groundplane.agent.v1.ServiceLifecycleCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 755: groundplane.agent.v1.ServiceLifecycleCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 756: groundplane.agent.v1.ServiceLifecycleCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 755: groundplane.agent.v1.ServiceLifecycleCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 756: groundplane.agent.v1.ServiceLifecycleCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	336,  // 757: groundplane.agent.v1.ServiceLifecycleCompletionAck.stopped:type_name -> groundplane.agent.v1.ServiceLifecycleFailureAck
 	58,   // 758: groundplane.agent.v1.ServiceLifecycleFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 759: groundplane.agent.v1.ServiceLifecycleFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 760: groundplane.agent.v1.ServiceLifecycleFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 761: groundplane.agent.v1.ServiceLifecycleFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 761: groundplane.agent.v1.ServiceLifecycleFailureAck.finished_at:type_name -> google.protobuf.Timestamp
 	323,  // 762: groundplane.agent.v1.ServiceLifecycleHelperRequest.assignment:type_name -> groundplane.agent.v1.ServiceLifecycleAssignment
 	61,   // 763: groundplane.agent.v1.ServiceLifecycleHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	331,  // 764: groundplane.agent.v1.ServiceLifecycleHelperRequest.report:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointRequest
 	332,  // 765: groundplane.agent.v1.ServiceLifecycleHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointAck
 	53,   // 766: groundplane.agent.v1.ServiceLifecycleHelperResponse.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 767: groundplane.agent.v1.ServiceLifecycleHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 767: groundplane.agent.v1.ServiceLifecycleHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	24,   // 768: groundplane.agent.v1.VolumeWorkInput.action:type_name -> groundplane.agent.v1.VolumeWorkAction
 	351,  // 769: groundplane.agent.v1.VolumeWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
 	351,  // 770: groundplane.agent.v1.VolumeWorkInput.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
@@ -54800,28 +54687,28 @@ var file_proto_agent_proto_depIdxs = []int32{
 	58,   // 773: groundplane.agent.v1.VolumeWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 774: groundplane.agent.v1.VolumeWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 775: groundplane.agent.v1.VolumeWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 776: groundplane.agent.v1.VolumeWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	591,  // 776: groundplane.agent.v1.VolumeWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
 	58,   // 777: groundplane.agent.v1.VolumeWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 778: groundplane.agent.v1.VolumeWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	58,   // 779: groundplane.agent.v1.VolumeWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 780: groundplane.agent.v1.VolumeWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 781: groundplane.agent.v1.VolumeWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 782: groundplane.agent.v1.VolumeWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 781: groundplane.agent.v1.VolumeWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 782: groundplane.agent.v1.VolumeWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 783: groundplane.agent.v1.VolumeWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 784: groundplane.agent.v1.VolumeWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 785: groundplane.agent.v1.VolumeWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 786: groundplane.agent.v1.VolumeWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	592,  // 787: groundplane.agent.v1.VolumeWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 786: groundplane.agent.v1.VolumeWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 787: groundplane.agent.v1.VolumeWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	58,   // 788: groundplane.agent.v1.VolumeWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 789: groundplane.agent.v1.VolumeWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 790: groundplane.agent.v1.VolumeWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 791: groundplane.agent.v1.VolumeWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 791: groundplane.agent.v1.VolumeWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
 	340,  // 792: groundplane.agent.v1.VolumeWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.VolumeWorkAssignment
 	61,   // 793: groundplane.agent.v1.VolumeWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	341,  // 794: groundplane.agent.v1.VolumeWorkHelperRequest.report:type_name -> groundplane.agent.v1.VolumeWorkCheckpointRequest
 	342,  // 795: groundplane.agent.v1.VolumeWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.VolumeWorkCheckpointAck
 	53,   // 796: groundplane.agent.v1.VolumeWorkHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 797: groundplane.agent.v1.VolumeWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 797: groundplane.agent.v1.VolumeWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	25,   // 798: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
 	352,  // 799: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
 	353,  // 800: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
@@ -54941,7 +54828,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	402,  // 914: groundplane.agent.v1.BackupConsumerHelperRequest.recovery:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
 	58,   // 915: groundplane.agent.v1.BackupConsumerHelperResponse.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	198,  // 916: groundplane.agent.v1.BackupConsumerHelperResponse.observed:type_name -> groundplane.agent.v1.ObservedProject
-	592,  // 917: groundplane.agent.v1.BackupConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 917: groundplane.agent.v1.BackupConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	58,   // 918: groundplane.agent.v1.BackupRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	398,  // 919: groundplane.agent.v1.BackupRecoveryAssignment.input:type_name -> groundplane.agent.v1.BackupWorkInput
 	416,  // 920: groundplane.agent.v1.BackupRecoveryAssignment.sources:type_name -> groundplane.agent.v1.BackupStepResume
@@ -54952,8 +54839,8 @@ var file_proto_agent_proto_depIdxs = []int32{
 	471,  // 925: groundplane.agent.v1.BackupConfigRecoveryPrepareAck.completed:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
 	58,   // 926: groundplane.agent.v1.BackupRecoveryAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 927: groundplane.agent.v1.BackupRecoveryAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 928: groundplane.agent.v1.BackupRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 929: groundplane.agent.v1.BackupRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 928: groundplane.agent.v1.BackupRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 929: groundplane.agent.v1.BackupRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 930: groundplane.agent.v1.BackupWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	386,  // 931: groundplane.agent.v1.BackupWorkCheckpointRequest.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
 	462,  // 932: groundplane.agent.v1.BackupWorkCheckpointRequest.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPrepared
@@ -54980,12 +54867,12 @@ var file_proto_agent_proto_depIdxs = []int32{
 	58,   // 953: groundplane.agent.v1.BackupWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	58,   // 954: groundplane.agent.v1.BackupWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 955: groundplane.agent.v1.BackupWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 956: groundplane.agent.v1.BackupWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 957: groundplane.agent.v1.BackupWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 956: groundplane.agent.v1.BackupWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 957: groundplane.agent.v1.BackupWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 958: groundplane.agent.v1.BackupWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	53,   // 959: groundplane.agent.v1.BackupWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	592,  // 960: groundplane.agent.v1.BackupWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 961: groundplane.agent.v1.BackupWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	591,  // 960: groundplane.agent.v1.BackupWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 961: groundplane.agent.v1.BackupWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	58,   // 962: groundplane.agent.v1.BackupWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	386,  // 963: groundplane.agent.v1.BackupWorkCheckpointAck.committed:type_name -> groundplane.agent.v1.CheckpointFence
 	416,  // 964: groundplane.agent.v1.BackupWorkCheckpointAck.source:type_name -> groundplane.agent.v1.BackupStepResume
@@ -55226,7 +55113,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	10,   // 1199: groundplane.agent.v1.DNSConnectionQuery.type:type_name -> groundplane.agent.v1.DNSQueryType
 	10,   // 1200: groundplane.agent.v1.DNSConnectionAnswer.type:type_name -> groundplane.agent.v1.DNSQueryType
 	206,  // 1201: groundplane.agent.v1.DNSConnectionAnswer.answers:type_name -> groundplane.agent.v1.DNSAnswerRecord
-	592,  // 1202: groundplane.agent.v1.DNSConnectionResult.observed_at:type_name -> google.protobuf.Timestamp
+	591,  // 1202: groundplane.agent.v1.DNSConnectionResult.observed_at:type_name -> google.protobuf.Timestamp
 	570,  // 1203: groundplane.agent.v1.DNSConnectionResult.answers:type_name -> groundplane.agent.v1.DNSConnectionAnswer
 	575,  // 1204: groundplane.agent.v1.CheckEdgeConnections.action:type_name -> groundplane.agent.v1.ComponentApply
 	351,  // 1205: groundplane.agent.v1.CheckEdgeConnections.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
@@ -55234,29 +55121,27 @@ var file_proto_agent_proto_depIdxs = []int32{
 	48,   // 1207: groundplane.agent.v1.ManagedConfigHelperRequest.operation:type_name -> groundplane.agent.v1.ManagedConfigOperation
 	48,   // 1208: groundplane.agent.v1.ManagedConfigHelperResponse.operation:type_name -> groundplane.agent.v1.ManagedConfigOperation
 	49,   // 1209: groundplane.agent.v1.ManagedConfigHelperResponse.disposition:type_name -> groundplane.agent.v1.ManagedConfigReplayDisposition
-	235,  // 1210: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	220,  // 1211: groundplane.agent.v1.ComposeHelperRequest.restoration_authority:type_name -> groundplane.agent.v1.ReleaseRestorationAuthority
-	51,   // 1212: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
-	52,   // 1213: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	556,  // 1214: groundplane.agent.v1.ComposeHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
-	560,  // 1215: groundplane.agent.v1.ComposeHelperResponse.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
-	204,  // 1216: groundplane.agent.v1.ComposeHelperResponse.candidate_absence_evidence:type_name -> groundplane.agent.v1.CandidateAbsenceEvidence
-	583,  // 1217: groundplane.agent.v1.ComposeHelperResponse.rolling_proxy_evidence:type_name -> groundplane.agent.v1.RollingProxyEvidence
-	203,  // 1218: groundplane.agent.v1.ComposeHelperResponse.rolling_evidence:type_name -> groundplane.agent.v1.RollingReleaseEvidence
-	174,  // 1219: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
-	185,  // 1220: groundplane.agent.v1.CheckBackingAccess.consumer_runtime:type_name -> groundplane.agent.v1.ServiceObservationTarget
-	587,  // 1221: groundplane.agent.v1.CheckBackingAccess.parameters:type_name -> groundplane.agent.v1.BackingAccessParameters
-	590,  // 1222: groundplane.agent.v1.BackingAccessResult.observation:type_name -> groundplane.agent.v1.BackingAccessObservation
-	592,  // 1223: groundplane.agent.v1.BackingAccessObservation.started_at:type_name -> google.protobuf.Timestamp
-	592,  // 1224: groundplane.agent.v1.BackingAccessObservation.finished_at:type_name -> google.protobuf.Timestamp
-	591,  // 1225: groundplane.agent.v1.BackingAccessObservation.stages:type_name -> groundplane.agent.v1.BackingAccessStage
-	176,  // 1226: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
-	209,  // 1227: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
-	1227, // [1227:1228] is the sub-list for method output_type
-	1226, // [1226:1227] is the sub-list for method input_type
-	1226, // [1226:1226] is the sub-list for extension type_name
-	1226, // [1226:1226] is the sub-list for extension extendee
-	0,    // [0:1226] is the sub-list for field type_name
+	51,   // 1210: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
+	52,   // 1211: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	556,  // 1212: groundplane.agent.v1.ComposeHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
+	560,  // 1213: groundplane.agent.v1.ComposeHelperResponse.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
+	204,  // 1214: groundplane.agent.v1.ComposeHelperResponse.candidate_absence_evidence:type_name -> groundplane.agent.v1.CandidateAbsenceEvidence
+	582,  // 1215: groundplane.agent.v1.ComposeHelperResponse.rolling_proxy_evidence:type_name -> groundplane.agent.v1.RollingProxyEvidence
+	203,  // 1216: groundplane.agent.v1.ComposeHelperResponse.rolling_evidence:type_name -> groundplane.agent.v1.RollingReleaseEvidence
+	174,  // 1217: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
+	185,  // 1218: groundplane.agent.v1.CheckBackingAccess.consumer_runtime:type_name -> groundplane.agent.v1.ServiceObservationTarget
+	586,  // 1219: groundplane.agent.v1.CheckBackingAccess.parameters:type_name -> groundplane.agent.v1.BackingAccessParameters
+	589,  // 1220: groundplane.agent.v1.BackingAccessResult.observation:type_name -> groundplane.agent.v1.BackingAccessObservation
+	591,  // 1221: groundplane.agent.v1.BackingAccessObservation.started_at:type_name -> google.protobuf.Timestamp
+	591,  // 1222: groundplane.agent.v1.BackingAccessObservation.finished_at:type_name -> google.protobuf.Timestamp
+	590,  // 1223: groundplane.agent.v1.BackingAccessObservation.stages:type_name -> groundplane.agent.v1.BackingAccessStage
+	176,  // 1224: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
+	209,  // 1225: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
+	1225, // [1225:1226] is the sub-list for method output_type
+	1224, // [1224:1225] is the sub-list for method input_type
+	1224, // [1224:1224] is the sub-list for extension type_name
+	1224, // [1224:1224] is the sub-list for extension extendee
+	0,    // [0:1224] is the sub-list for field type_name
 }
 
 func init() { file_proto_agent_proto_init() }
@@ -55746,7 +55631,7 @@ func file_proto_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)),
 			NumEnums:      53,
-			NumMessages:   539,
+			NumMessages:   538,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -30,7 +30,10 @@ func (executor *Executor) ExecuteEnvironmentRemoval(ctx context.Context, volumeR
 		return nil, err
 	}
 	if scope.EnvironmentID != input.Removal.EnvironmentId {
-		return nil, errs.New(errs.KindValidationFailed, "Environment removal helper directory belongs to another Environment")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Environment removal helper directory belongs to another Environment",
+		)
 	}
 	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
 	if !request.InspectOnly {
@@ -46,8 +49,7 @@ func (executor *Executor) ExecuteEnvironmentRemoval(ctx context.Context, volumeR
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, nil)
-	options.Config.Cmd = []string{"environment-removal-helper"}
+	options := createOptions(executor.image, "environment-removal-helper", nil)
 	options.Name = environmentRemovalHelperName(input.Attempt)
 	options.Config.Labels = environmentRemovalHelperLabels(input.Attempt)
 	options.Config.Env = []string{environmentdirectoryhelper.VolumeRootEnv + "=" + volumeRoot}
@@ -92,12 +94,20 @@ func (executor *Executor) StopEnvironmentHelpers(ctx context.Context, forward, r
 	if executor == nil || executor.engine == nil || ctx == nil || forward.Validate() != nil || recovery.Validate() != nil ||
 		forward.Direction != workexecution.Forward || forward.FinishedAt == nil || forward.Outcome == workexecution.Succeeded ||
 		recovery.Direction != workexecution.Recovery || recovery.FinishedAt != nil || forward.TaskID != recovery.TaskID ||
-		forward.WorkItemID != recovery.WorkItemID || forward.Input != recovery.Input || forward.Number >= recovery.Number ||
+		forward.WorkItemID != recovery.WorkItemID || forward.Input != recovery.Input ||
+		forward.Number >= recovery.Number ||
 		forward.Executor.HostID != recovery.Executor.HostID {
-		return errs.New(errs.KindValidationFailed, "Environment helper cleanup requires its captured failed execution and recovery")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Environment helper cleanup requires its captured failed execution and recovery",
+		)
 	}
 	if err := executor.stopNamedHelper(ctx, environmentRemovalHelperName(forward), environmentRemovalHelperLabels(forward)); err != nil {
 		return err
 	}
-	return executor.stopNamedHelper(ctx, environmentRemovalHelperName(recovery), environmentRemovalHelperLabels(recovery))
+	return executor.stopNamedHelper(
+		ctx,
+		environmentRemovalHelperName(recovery),
+		environmentRemovalHelperLabels(recovery),
+	)
 }

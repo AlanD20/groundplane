@@ -25,7 +25,6 @@ import (
 
 const (
 	dockerSocketPath    = "/var/run/docker.sock"
-	helperArgument      = "compose-helper"
 	helperWorkTmpfs     = "rw,noexec,nosuid,nodev,size=16m,mode=0700"
 	cleanupTimeout      = 30 * time.Second
 	maximumHelperStdout = 64 * 1024
@@ -94,55 +93,13 @@ func (executor *Executor) Close() error {
 	return nil
 }
 
-// Execute runs exactly one helper request and removes its container on every
-// path. Cleanup failure takes precedence because leaked Docker authority is an
-// invariant failure.
-func (executor *Executor) Execute(
-	ctx context.Context,
-	request *agentpb.ComposeHelperRequest,
-) (response *agentpb.ComposeHelperResponse, resultErr error) {
-	if executor == nil || executor.engine == nil {
-		return nil, errs.New(errs.KindInternal, "Compose helper container Executor is not configured")
-	}
-	if ctx == nil {
-		return nil, errs.New(errs.KindInternal, "Compose helper container context is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	framed, err := composehelper.MarshalRequest(request)
-	if err != nil {
-		return nil, err
-	}
-	artifact, err := composehelper.ArtifactForRequest(request)
-	if err != nil {
-		return nil, err
-	}
-	services, err := composehelper.StartupServices(request)
-	if err != nil {
-		return nil, err
-	}
-	for _, service := range services {
-		if err := validatePreparedServiceImage(service); err != nil {
-			return nil, err
-		}
-	}
-	for _, service := range services {
-		if err := executor.prepareServiceImage(ctx, service); err != nil {
-			return nil, err
-		}
-	}
-	raw, err := executor.executeFrame(ctx, createOptions(executor.image, artifact), framed)
-	if err != nil {
-		return nil, err
-	}
-	defer clear(raw)
-	return composehelper.ReadResponse(context.Background(), bytes.NewReader(raw))
-}
-
 // executeFrame owns helper-container isolation and cleanup independently of the
 // operation protocol. Native Release input never passes through an old plan.
-func (executor *Executor) executeFrame(ctx context.Context, options client.ContainerCreateOptions, framed []byte) (response []byte, resultErr error) {
+func (executor *Executor) executeFrame(
+	ctx context.Context,
+	options client.ContainerCreateOptions,
+	framed []byte,
+) (response []byte, resultErr error) {
 	created, err := executor.engine.ContainerCreate(ctx, options)
 	if err != nil {
 		return nil, operationError(ctx, "create", err)
@@ -255,7 +212,7 @@ func (executor *Executor) executeFrame(ctx context.Context, options client.Conta
 	return output.stdout, nil
 }
 
-func createOptions(image string, artifact *agentpb.ComposeArtifact) client.ContainerCreateOptions {
+func createOptions(image, command string, artifact *agentpb.ComposeArtifact) client.ContainerCreateOptions {
 	mounts := []mount.Mount{{
 		Type: mount.TypeBind, Source: dockerSocketPath, Target: dockerSocketPath,
 	}}
@@ -267,7 +224,7 @@ func createOptions(image string, artifact *agentpb.ComposeArtifact) client.Conta
 	}
 	return client.ContainerCreateOptions{
 		Config: &container.Config{
-			Image: image, User: "0", Cmd: []string{helperArgument},
+			Image: image, User: "0", Cmd: []string{command},
 			AttachStdin: true, AttachStdout: true, AttachStderr: true,
 			OpenStdin: true, StdinOnce: true, WorkingDir: composehelper.WorkDirectory,
 			NetworkDisabled: true,

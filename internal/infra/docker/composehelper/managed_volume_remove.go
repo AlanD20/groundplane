@@ -4,45 +4,11 @@ import (
 	"context"
 	"math"
 	"strings"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
-
-func executeManagedRemove(
-	ctx context.Context,
-	taskRunner runner.Runner,
-	request *agentpb.ComposeHelperRequest,
-	step *agentpb.ExecutionStep,
-) (*agentpb.ComposeHelperResponse, bool, error) {
-	if remove := step.GetManagedNetworkRemove(); remove != nil {
-		response, err := executeManagedNetworkRemove(ctx, taskRunner, request.TimeoutSeconds, remove)
-		return response, true, err
-	}
-	if remove := step.GetManagedVolumeRemove(); remove != nil {
-		response, err := executeManagedVolumeRemove(ctx, taskRunner, request.TimeoutSeconds, remove, request.Plan)
-		return response, true, err
-	}
-	return nil, false, nil
-}
-
-func executeManagedVolumeRemove(
-	ctx context.Context,
-	taskRunner runner.Runner,
-	timeoutSeconds uint32,
-	remove *agentpb.ManagedVolumeRemove,
-	plan *agentpb.ExecutionPlan,
-) (*agentpb.ComposeHelperResponse, error) {
-	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
-	defer cancel()
-	artifact, volume, err := volumeRemovalArtifact(plan, remove)
-	if err != nil {
-		return nil, err
-	}
-	return removeCapturedVolume(executionCtx, taskRunner, artifact, volume)
-}
 
 func removeCapturedVolume(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact,
 	volume *agentpb.ComposeVolume,

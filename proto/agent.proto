@@ -5141,22 +5141,6 @@ message ManagedConfigHelperResponse {
   uint64 live_inode = 8;
 }
 
-// ComposeHelperRequest is the single length-framed stdin message accepted by
-// the static compose-helper Agent-binary mode.
-message ComposeHelperRequest {
-  reserved 8;
-  uint32 schema = 1; // exactly 1
-  string task_id = 2;
-  string operation_id = 3;
-  ExecutionPlan plan = 4;
-  string step_id = 5;
-  uint32 timeout_seconds = 6; // remaining bounded execution time
-  string assignment_id = 7;
-  ReleaseRestorationAuthority restoration_authority = 9;
-  reserved 10;
-  reserved 11, 12;
-}
-
 enum BackupConsumerOperation {
   BACKUP_CONSUMER_OPERATION_UNSPECIFIED = 0;
   BACKUP_CONSUMER_OPERATION_STOP = 1;

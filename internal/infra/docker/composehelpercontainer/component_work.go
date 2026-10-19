@@ -14,7 +14,10 @@ import (
 // The Agent holds exclusive attempt ownership across this call. Inspection
 // stops the exact previous helper first; neither timeout nor lost transport
 // alone is evidence that a Docker mutation has stopped.
-func (executor *Executor) ExecuteComponentWork(ctx context.Context, request *agentpb.ComponentWorkHelperRequest) (*agentpb.ComponentWorkHelperResponse, error) {
+func (executor *Executor) ExecuteComponentWork(
+	ctx context.Context,
+	request *agentpb.ComponentWorkHelperRequest,
+) (*agentpb.ComponentWorkHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Component helper container is not configured")
 	}
@@ -52,9 +55,8 @@ func (executor *Executor) ExecuteComponentWork(ctx context.Context, request *age
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, nil)
+	options := createOptions(executor.image, "component-work-helper", nil)
 	options.Name, options.Config.Labels = name, labels
-	options.Config.Cmd = []string{"component-work-helper"}
 	raw, err := executor.executeFrame(bounded, options, framed)
 	if err != nil {
 		return nil, err

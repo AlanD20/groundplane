@@ -11,7 +11,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (executor *Executor) ExecuteBackupConsumer(ctx context.Context, request *agentpb.BackupConsumerHelperRequest) (*agentpb.BackupConsumerHelperResponse, error) {
+func (executor *Executor) ExecuteBackupConsumer(
+	ctx context.Context,
+	request *agentpb.BackupConsumerHelperRequest,
+) (*agentpb.BackupConsumerHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Backup Volume helper container is not configured")
 	}
@@ -20,7 +23,9 @@ func (executor *Executor) ExecuteBackupConsumer(ctx context.Context, request *ag
 		return nil, err
 	}
 	deadline := input.Consumer.Attempt.Deadline
-	if sourceDeadline := time.Unix(0, int64(input.Consumer.Source.StepDeadlineUnixNano)); sourceDeadline.Before(deadline) {
+	if sourceDeadline := time.Unix(0, int64(input.Consumer.Source.StepDeadlineUnixNano)); sourceDeadline.Before(
+		deadline,
+	) {
 		deadline = sourceDeadline
 	}
 	bounded, cancel := context.WithDeadline(ctx, deadline)
@@ -43,9 +48,8 @@ func (executor *Executor) ExecuteBackupConsumer(ctx context.Context, request *ag
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, nil)
+	options := createOptions(executor.image, "backup-consumer-helper", nil)
 	options.Name, options.Config.Labels = name, labels
-	options.Config.Cmd = []string{"backup-consumer-helper"}
 	raw, err := executor.executeFrame(bounded, options, framed)
 	if err != nil {
 		return nil, err

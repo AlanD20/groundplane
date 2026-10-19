@@ -1,116 +1,14 @@
 package composehelper
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
-
-func executeCandidateAbsence(
-	ctx context.Context,
-	taskRunner runner.Runner,
-	timeoutSeconds uint32,
-	request *agentpb.ComposeHelperRequest,
-	artifact *agentpb.ComposeArtifact,
-	step *agentpb.ExecutionStep,
-) (*agentpb.ComposeHelperResponse, error) {
-	authority := request.GetRestorationAuthority()
-	projectName, err := validateCandidateAbsenceRequest(request, artifact, step, authority)
-	if err != nil {
-		return nil, err
-	}
-	var selected *agentpb.ReleaseRestorationCandidate
-	for _, member := range authority.GetCandidates() {
-		if member.GetServiceId() == restorationStepServiceID(step) {
-			selected = member
-		}
-	}
-	if selected == nil {
-		return nil, errs.New(errs.KindValidationFailed, "candidate absence member is missing")
-	}
-	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
-	defer cancel()
-	containers, err := exactCandidateContainers(executionCtx, taskRunner, artifact, selected, projectName)
-	if err != nil {
-		return failedResponse(1), nil
-	}
-	if step.GetCandidateRestorationCompensate() != nil && len(containers) != 0 {
-		result, runErr := taskRunner.Run(executionCtx, runner.RunCmdOpts{
-			Name: DockerExecutable, Args: append([]string{"container", "rm", "--force", "--"}, containers...),
-			Dir: WorkDirectory, Env: append([]string(nil), fixedEnvironment...), ReplaceEnv: true,
-		})
-		if runErr != nil || result.ExitCode != 0 {
-			return failedResponse(1), nil
-		}
-		containers, err = exactCandidateContainers(executionCtx, taskRunner, artifact, selected, projectName)
-		if err != nil || len(containers) != 0 {
-			return failedResponse(1), nil
-		}
-	}
-	evidence := &agentpb.CandidateAbsenceEvidence{
-		AssignmentId: request.GetAssignmentId(), PlanHash: append([]byte(nil), request.GetPlan().GetPlanHash()...),
-		AuthoritySha256: append([]byte(nil), authority.GetAuthoritySha256()...), ComposeProjectName: projectName,
-		CandidateArtifactId: authority.GetCandidateArtifactId(), AbsenceProven: len(containers) == 0,
-		Candidates: []*agentpb.CandidateReleaseService{
-			{ServiceId: selected.GetServiceId(), ReleaseId: selected.GetReleaseId()},
-		},
-	}
-	return &agentpb.ComposeHelperResponse{
-		Schema: SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
-		Diagnostic:               agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
-		CandidateAbsenceEvidence: evidence,
-	}, nil
-}
-
-func validateCandidateAbsenceRequest(
-	request *agentpb.ComposeHelperRequest,
-	artifact *agentpb.ComposeArtifact,
-	step *agentpb.ExecutionStep,
-	authority *agentpb.ReleaseRestorationAuthority,
-) (string, error) {
-	if artifact == nil || authority == nil ||
-		executionplan.RestorationTargetForService(
-			authority,
-			restorationStepServiceID(step),
-		) != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE ||
-		authority.GetTaskId() != request.GetTaskId() || authority.GetOperationId() != request.GetOperationId() ||
-		authority.GetCandidateArtifactId() != artifact.GetArtifactId() ||
-		len(authority.GetPlanHash()) != 32 || !bytes.Equal(authority.GetPlanHash(), request.GetPlan().GetPlanHash()) ||
-		len(authority.GetAuthoritySha256()) != 32 || len(authority.GetCandidates()) == 0 {
-		return "", errs.New(errs.KindValidationFailed, "candidate absence authority is invalid")
-	}
-	serviceID, releaseID := "", ""
-	if probe := step.GetCandidateRestorationProbe(); probe != nil {
-		serviceID, releaseID = probe.GetServiceId(), probe.GetCandidateReleaseId()
-	} else if compensate := step.GetCandidateRestorationCompensate(); compensate != nil {
-		serviceID, releaseID = compensate.GetServiceId(), compensate.GetCandidateReleaseId()
-	}
-	for _, member := range authority.GetCandidates() {
-		if member.GetServiceId() == serviceID && member.GetReleaseId() != releaseID {
-			return "", errs.New(errs.KindValidationFailed, "candidate absence member release diverges")
-		}
-	}
-	projectName := ""
-	for _, member := range request.GetPlan().GetCandidateReleaseProcedure().GetMembers() {
-		if member.GetServiceId() == serviceID && member.GetCandidateReleaseId() == releaseID &&
-			member.GetCandidateArtifactId() == artifact.GetArtifactId() && member.GetCandidateAbsence() != nil {
-			projectName = member.GetCandidateAbsence().GetComposeProjectName()
-			break
-		}
-	}
-	if projectName == "" || projectName != artifact.GetProjectName() {
-		return "", errs.New(errs.KindValidationFailed, "candidate absence project authority is invalid")
-	}
-	return projectName, nil
-}
 
 func exactCandidateContainers(
 	ctx context.Context,

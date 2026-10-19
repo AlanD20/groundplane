@@ -15,7 +15,11 @@ import (
 	"github.com/moby/moby/api/types/mount"
 )
 
-func (executor *Executor) ExecuteRemovalRecovery(ctx context.Context, root string, request *agentpb.ServiceRemovalRecoveryHelperRequest) (*agentpb.ServiceRemovalRecoveryHelperResponse, error) {
+func (executor *Executor) ExecuteRemovalRecovery(
+	ctx context.Context,
+	root string,
+	request *agentpb.ServiceRemovalRecoveryHelperRequest,
+) (*agentpb.ServiceRemovalRecoveryHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Service removal recovery helper is not configured")
 	}
@@ -23,13 +27,21 @@ func (executor *Executor) ExecuteRemovalRecovery(ctx context.Context, root strin
 	if err != nil {
 		return nil, err
 	}
-	if input.Progress.Phase != removalexecution.InspectRuntime && input.Progress.Phase != removalexecution.RestoreRuntime && input.Progress.Phase != removalexecution.VerifyRestoration {
-		return nil, errs.New(errs.KindValidationFailed, "Service removal runtime helper cannot execute this recovery phase")
+	if input.Progress.Phase != removalexecution.InspectRuntime &&
+		input.Progress.Phase != removalexecution.RestoreRuntime &&
+		input.Progress.Phase != removalexecution.VerifyRestoration {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Service removal runtime helper cannot execute this recovery phase",
+		)
 	}
 	for _, member := range input.Procedure.Members {
 		scope, err := environmentpath.Parse(root, member.Artifact.AuthorizedVolumeDir)
 		if err != nil || scope.EnvironmentID != input.Procedure.EnvironmentId {
-			return nil, errs.New(errs.KindValidationFailed, "Service removal recovery directory belongs to another Environment")
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Service removal recovery directory belongs to another Environment",
+			)
 		}
 	}
 	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -59,11 +71,13 @@ func (executor *Executor) ExecuteRemovalRecovery(ctx context.Context, root strin
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, nil)
+	options := createOptions(executor.image, "service-removal-recovery-helper", nil)
 	options.Name, options.Config.Labels = name, labels
-	options.Config.Cmd = []string{"service-removal-recovery-helper"}
 	options.Config.Env = []string{environmentdirectoryhelper.VolumeRootEnv + "=" + root}
-	options.HostConfig.Mounts = append(options.HostConfig.Mounts, mount.Mount{Type: mount.TypeBind, Source: root, Target: root})
+	options.HostConfig.Mounts = append(
+		options.HostConfig.Mounts,
+		mount.Mount{Type: mount.TypeBind, Source: root, Target: root},
+	)
 	raw, err := executor.executeFrame(bounded, options, framed)
 	if err != nil {
 		return nil, err

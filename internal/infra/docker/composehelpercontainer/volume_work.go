@@ -16,7 +16,11 @@ import (
 
 // ExecuteVolumeWork requires the caller's exclusive attempt/process ownership.
 // Reconnection stops only this exact helper before read-only effect inspection.
-func (executor *Executor) ExecuteVolumeWork(ctx context.Context, volumeRoot string, request *agentpb.VolumeWorkHelperRequest) (*agentpb.VolumeWorkHelperResponse, error) {
+func (executor *Executor) ExecuteVolumeWork(
+	ctx context.Context,
+	volumeRoot string,
+	request *agentpb.VolumeWorkHelperRequest,
+) (*agentpb.VolumeWorkHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Volume helper container is not configured")
 	}
@@ -58,9 +62,8 @@ func (executor *Executor) ExecuteVolumeWork(ctx context.Context, volumeRoot stri
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, nil)
+	options := createOptions(executor.image, "volume-work-helper", nil)
 	options.Name, options.Config.Labels = name, labels
-	options.Config.Cmd = []string{"volume-work-helper"}
 	options.Config.Env = []string{environmentdirectoryhelper.VolumeRootEnv + "=" + volumeRoot}
 	options.HostConfig.Mounts = append(options.HostConfig.Mounts, mount.Mount{
 		Type: mount.TypeBind, Source: volumeRoot, Target: volumeRoot,

@@ -16,7 +16,11 @@ import (
 
 // ExecuteLifecycleWork requires the caller's exclusive attempt/process ownership.
 // Reconnection stops only this exact helper before read-only effect inspection.
-func (executor *Executor) ExecuteLifecycleWork(ctx context.Context, volumeRoot string, request *agentpb.ServiceLifecycleHelperRequest) (*agentpb.ServiceLifecycleHelperResponse, error) {
+func (executor *Executor) ExecuteLifecycleWork(
+	ctx context.Context,
+	volumeRoot string,
+	request *agentpb.ServiceLifecycleHelperRequest,
+) (*agentpb.ServiceLifecycleHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle helper container is not configured")
 	}
@@ -58,9 +62,8 @@ func (executor *Executor) ExecuteLifecycleWork(ctx context.Context, volumeRoot s
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, nil)
+	options := createOptions(executor.image, "lifecycle-work-helper", nil)
 	options.Name, options.Config.Labels = name, labels
-	options.Config.Cmd = []string{"lifecycle-work-helper"}
 	options.Config.Env = []string{environmentdirectoryhelper.VolumeRootEnv + "=" + volumeRoot}
 	options.HostConfig.Mounts = append(options.HostConfig.Mounts, mount.Mount{
 		Type: mount.TypeBind, Source: volumeRoot, Target: volumeRoot,

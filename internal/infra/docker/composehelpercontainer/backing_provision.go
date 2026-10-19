@@ -68,14 +68,13 @@ func (executor *Executor) ExecuteBackingProvision(ctx context.Context, volumeRoo
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, input.Assignment.Procedure.Runtime)
+	options := createOptions(executor.image, "backing-provision-helper", input.Assignment.Procedure.Runtime)
 	if input.Assignment.Recovery != nil {
 		// Cleanup needs only Docker inspection/termination. The directory
 		// may never have been created; never mount or create it for cleanup.
-		options = createOptions(executor.image, nil)
+		options = createOptions(executor.image, "backing-provision-helper", nil)
 	}
 	options.Name, options.Config.Labels = name, labels
-	options.Config.Cmd = []string{"backing-provision-helper"}
 	options.Config.Env = []string{environmentdirectoryhelper.VolumeRootEnv + "=" + volumeRoot}
 	if input.Progress != nil && input.Progress.Stage == backingprovision.PrepareDirectories {
 		// Directory-only helpers receive no Docker socket.
@@ -90,7 +89,10 @@ func (executor *Executor) ExecuteBackingProvision(ctx context.Context, volumeRoo
 }
 
 // StopBackingProvision joins only helpers named by the captured attempt/source.
-func (executor *Executor) StopBackingProvision(ctx context.Context, request *agentpb.BackingProvisionHelperRequest) error {
+func (executor *Executor) StopBackingProvision(
+	ctx context.Context,
+	request *agentpb.BackingProvisionHelperRequest,
+) error {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return errs.New(errs.KindInternal, "backing creation helper cleanup is not configured")
 	}

@@ -19,7 +19,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -75,70 +74,6 @@ func (observer *Observer) Close() error {
 		return errs.Wrap(errs.KindInternal, err)
 	}
 	return nil
-}
-
-func (observer *Observer) Observe(
-	ctx context.Context,
-	plan *agentpb.ExecutionPlan,
-	artifactID string,
-) (*agentpb.ObservedProject, error) {
-	if observer == nil || observer.engine == nil || observer.now == nil {
-		return nil, errs.New(errs.KindInternal, "Compose observer is not configured")
-	}
-	if ctx == nil {
-		return nil, errs.New(errs.KindInternal, "Compose observer context is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	ownedPlan, err := executionplan.Validate(plan)
-	if err != nil {
-		return nil, err
-	}
-	artifact := findArtifact(ownedPlan, artifactID)
-	if artifact == nil {
-		return nil, errs.New(errs.KindValidationFailed, "Compose observation artifact is not in the plan")
-	}
-	var companions []*agentpb.ComposeService
-	if ownedPlan.GetServiceLifecycleProcedure() != nil &&
-		ownedPlan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_REMOVE {
-		for _, captured := range ownedPlan.GetArtifacts() {
-			if captured.GetArtifactId() != artifactID {
-				companions = append(companions, captured.GetServices()...)
-			}
-		}
-	}
-	return observer.observeArtifact(ctx, artifact, companions, ownedPlan.BackupScope != nil)
-}
-
-// ObserveReleaseRestoration opens the original plan's declared recovery pair.
-func (observer *Observer) ObserveReleaseRestoration(
-	ctx context.Context, plan *agentpb.ExecutionPlan, stepID, artifactID string,
-) (*agentpb.ObservedProject, error) {
-	observation, err := executionplan.NewPlanRestorationObservation(plan, stepID, artifactID)
-	if err != nil {
-		return nil, err
-	}
-	return observer.ObserveRestoration(ctx, observation)
-}
-
-// ObserveRestoration accepts only the immutable read-only witness descriptor,
-// never a manufactured execution plan with rewritten historical ownership.
-func (observer *Observer) ObserveRestoration(
-	ctx context.Context,
-	observation *executionplan.RestorationObservation,
-) (*agentpb.ObservedProject, error) {
-	if observer == nil || observer.engine == nil || observer.now == nil || ctx == nil {
-		return nil, errs.New(errs.KindInternal, "Compose restoration observer is not configured")
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	artifact := observation.Artifact()
-	if artifact == nil {
-		return nil, errs.New(errs.KindValidationFailed, "Compose restoration observation is empty")
-	}
-	return observer.observeArtifact(ctx, artifact, observation.CandidateWorkloads(), false)
 }
 
 func (observer *Observer) observeArtifact(
@@ -370,15 +305,6 @@ func (observer *Observer) observeVolumes(
 			Name: item.Name, MountpointSha256: append([]byte(nil), digest[:]...),
 			Labels: cloneLabels(expected.ExpectedLabels),
 		})
-	}
-	return nil
-}
-
-func findArtifact(plan *agentpb.ExecutionPlan, artifactID string) *agentpb.ComposeArtifact {
-	for _, artifact := range plan.Artifacts {
-		if artifact.ArtifactId == artifactID {
-			return artifact
-		}
 	}
 	return nil
 }

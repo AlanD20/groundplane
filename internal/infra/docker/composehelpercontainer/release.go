@@ -14,7 +14,10 @@ import (
 // ExecuteRelease transports the native operation into the same restricted
 // helper sandbox. It does not adapt the input to Execute or ExecutionPlan.
 // Any transport/helper/cleanup error leaves the effect outcome unknown.
-func (executor *Executor) ExecuteRelease(ctx context.Context, request *agentpb.ReleaseHelperRequest) (*agentpb.ReleaseHelperResponse, error) {
+func (executor *Executor) ExecuteRelease(
+	ctx context.Context,
+	request *agentpb.ReleaseHelperRequest,
+) (*agentpb.ReleaseHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Release helper container is not configured")
 	}
@@ -22,10 +25,15 @@ func (executor *Executor) ExecuteRelease(ctx context.Context, request *agentpb.R
 	if err != nil {
 		return nil, err
 	}
-	startup := report.Progress.Action == releaseexecution.StartCandidate || report.Progress.Rolling != nil && report.Progress.Rolling.Phase == rollingrelease.StartCandidate
-	removal := report.Progress.Action == releaseexecution.RemovePrevious || report.Progress.Action == releaseexecution.RetireSwitchedPrevious
-	removal = removal || report.Progress.Rolling != nil && (report.Progress.Rolling.Phase == rollingrelease.RemovePredecessor || report.Progress.Rolling.Phase == rollingrelease.RemoveRetained)
-	switching := report.Progress.Action == releaseexecution.SwitchTraffic || report.Progress.Rolling != nil && report.Progress.Rolling.Phase == rollingrelease.SwitchTraffic
+	startup := report.Progress.Action == releaseexecution.StartCandidate ||
+		report.Progress.Rolling != nil && report.Progress.Rolling.Phase == rollingrelease.StartCandidate
+	removal := report.Progress.Action == releaseexecution.RemovePrevious ||
+		report.Progress.Action == releaseexecution.RetireSwitchedPrevious
+	removal = removal ||
+		report.Progress.Rolling != nil &&
+			(report.Progress.Rolling.Phase == rollingrelease.RemovePredecessor || report.Progress.Rolling.Phase == rollingrelease.RemoveRetained)
+	switching := report.Progress.Action == releaseexecution.SwitchTraffic ||
+		report.Progress.Rolling != nil && report.Progress.Rolling.Phase == rollingrelease.SwitchTraffic
 	verifying := report.Progress.Action == releaseexecution.VerifyServing
 	if !startup && !removal && !switching && !verifying {
 		return nil, errs.New(errs.KindValidationFailed, "Release helper action is unsupported")
@@ -84,8 +92,7 @@ func (executor *Executor) ExecuteRelease(ctx context.Context, request *agentpb.R
 			}
 		}
 	}
-	options := createOptions(executor.image, input.Artifacts.Candidate)
-	options.Config.Cmd = []string{"release-helper"}
+	options := createOptions(executor.image, "release-helper", input.Artifacts.Candidate)
 	options.Name = releaseHelperName(input.Attempt)
 	options.Config.Labels = releaseHelperLabels(input.Attempt)
 	raw, err := executor.executeFrame(bounded, options, framed)

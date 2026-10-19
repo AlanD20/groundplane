@@ -10,7 +10,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (executor *Executor) ExecuteRecovery(ctx context.Context, request *agentpb.ReleaseRecoveryHelperRequest) (*agentpb.ReleaseRecoveryHelperResponse, error) {
+func (executor *Executor) ExecuteRecovery(
+	ctx context.Context,
+	request *agentpb.ReleaseRecoveryHelperRequest,
+) (*agentpb.ReleaseRecoveryHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Release recovery helper container is not configured")
 	}
@@ -27,7 +30,10 @@ func (executor *Executor) ExecuteRecovery(ctx context.Context, request *agentpb.
 	if prior := artifacts.Prior; prior != nil {
 		if prior.Artifact.AuthorizedVolumeDir != artifacts.Candidate.AuthorizedVolumeDir ||
 			prior.Retained != nil && prior.Retained.AuthorizedVolumeDir != artifacts.Candidate.AuthorizedVolumeDir {
-			return nil, errs.New(errs.KindStateConflict, "Release recovery artifacts name different Environment volume roots")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Release recovery artifacts name different Environment volume roots",
+			)
 		}
 		var services []*agentpb.ComposeService
 		if !request.InspectOnly {
@@ -61,8 +67,7 @@ func (executor *Executor) ExecuteRecovery(ctx context.Context, request *agentpb.
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, artifacts.Candidate)
-	options.Config.Cmd = []string{"release-recovery-helper"}
+	options := createOptions(executor.image, "release-recovery-helper", artifacts.Candidate)
 	options.Name = releaseHelperName(input.Input.Attempt)
 	options.Config.Labels = releaseHelperLabels(input.Input.Attempt)
 	raw, err := executor.executeFrame(bounded, options, framed)

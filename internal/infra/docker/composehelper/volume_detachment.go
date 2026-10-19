@@ -11,30 +11,6 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func volumeRemovalArtifact(
-	plan *agentpb.ExecutionPlan,
-	remove *agentpb.ManagedVolumeRemove,
-) (*agentpb.ComposeArtifact, *agentpb.ComposeVolume, error) {
-	var source *agentpb.ComposeArtifact
-	var target *agentpb.ComposeVolume
-	for _, artifact := range plan.GetArtifacts() {
-		for _, volume := range artifact.GetVolumes() {
-			if volume.GetVolumeId() != remove.GetVolumeId() {
-				continue
-			}
-			if source != nil || volume.DockerName != remove.DockerName || artifact.AuthorizedVolumeDir == "" ||
-				artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT {
-				return nil, nil, errs.New(errs.KindValidationFailed, "managed Volume removal artifact is ambiguous")
-			}
-			source, target = artifact, volume
-		}
-	}
-	if source == nil {
-		return nil, nil, errs.New(errs.KindValidationFailed, "managed Volume removal artifact is absent")
-	}
-	return source, target, nil
-}
-
 // Check every retained managed container in the Environment, including stopped
 // containers and old deployment slots. Docker volume absence alone says nothing
 // about a container retaining the same filesystem source as a direct bind.

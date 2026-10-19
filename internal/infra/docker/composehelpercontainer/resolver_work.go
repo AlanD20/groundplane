@@ -33,7 +33,10 @@ func resolverHelperLabels(attempt workexecution.Attempt) map[string]string {
 	return labels
 }
 
-func (executor *Executor) ExecuteResolver(ctx context.Context, request *agentpb.ResolverWorkHelperRequest) (*agentpb.ResolverWorkHelperResponse, error) {
+func (executor *Executor) ExecuteResolver(
+	ctx context.Context,
+	request *agentpb.ResolverWorkHelperRequest,
+) (*agentpb.ResolverWorkHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "DNS resolver helper container is not configured")
 	}
@@ -62,21 +65,36 @@ func (executor *Executor) ExecuteResolver(ctx context.Context, request *agentpb.
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, nil)
+	options := createOptions(executor.image, "resolver-helper", nil)
 	options.Name, options.Config.Labels = resolverHelperName(attempt), resolverHelperLabels(attempt)
-	options.Config.Cmd = []string{"resolver-helper"}
 	recovery := input.Assignment.Recovery != nil
-	writeConfig := recovery || !input.InspectOnly && (input.Progress.Stage == resolverexecution.WriteConfiguration || input.Progress.Stage == resolverexecution.ApplyHostResolver)
+	writeConfig := recovery ||
+		!input.InspectOnly &&
+			(input.Progress.Stage == resolverexecution.WriteConfiguration || input.Progress.Stage == resolverexecution.ApplyHostResolver)
 	options.HostConfig.Mounts = append(options.HostConfig.Mounts, mount.Mount{Type: mount.TypeBind,
 		Source: managedconfighelper.ManagedRoot, Target: managedconfighelper.ManagedRoot, ReadOnly: !writeConfig})
-	hostDNS := recovery || input.Progress.Stage == resolverexecution.ApplyHostResolver || input.Progress.Stage == resolverexecution.RestoreHostResolver
+	hostDNS := recovery || input.Progress.Stage == resolverexecution.ApplyHostResolver ||
+		input.Progress.Stage == resolverexecution.RestoreHostResolver
 	if hostDNS {
-		options.HostConfig.Mounts = append(options.HostConfig.Mounts,
-			mount.Mount{Type: mount.TypeBind, Source: hostresolutionhelper.ResolverSourcePath, Target: hostresolutionhelper.ResolverMountPath, ReadOnly: input.InspectOnly},
-			mount.Mount{Type: mount.TypeBind, Source: agentprotocol.StatePath, Target: agentprotocol.StatePath, ReadOnly: input.InspectOnly})
+		options.HostConfig.Mounts = append(
+			options.HostConfig.Mounts,
+			mount.Mount{
+				Type:     mount.TypeBind,
+				Source:   hostresolutionhelper.ResolverSourcePath,
+				Target:   hostresolutionhelper.ResolverMountPath,
+				ReadOnly: input.InspectOnly,
+			},
+			mount.Mount{
+				Type:     mount.TypeBind,
+				Source:   agentprotocol.StatePath,
+				Target:   agentprotocol.StatePath,
+				ReadOnly: input.InspectOnly,
+			},
+		)
 		options.HostConfig.CapAdd = []string{"DAC_OVERRIDE"}
 	}
-	if recovery || input.Progress.Stage == resolverexecution.VerifyDNS || input.Progress.Stage == resolverexecution.ApplyHostResolver {
+	if recovery || input.Progress.Stage == resolverexecution.VerifyDNS ||
+		input.Progress.Stage == resolverexecution.ApplyHostResolver {
 		options.Config.NetworkDisabled = false
 		options.HostConfig.NetworkMode = container.NetworkMode("host")
 	}

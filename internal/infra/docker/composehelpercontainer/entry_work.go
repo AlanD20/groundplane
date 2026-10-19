@@ -14,7 +14,10 @@ import (
 // The Agent holds exclusive attempt ownership across this call. Inspection
 // stops the exact previous helper first; neither timeout nor lost transport
 // alone is evidence that a Docker mutation has stopped.
-func (executor *Executor) ExecuteEntryConfigurationWork(ctx context.Context, request *agentpb.EntryConfigurationWorkHelperRequest) (*agentpb.EntryConfigurationWorkHelperResponse, error) {
+func (executor *Executor) ExecuteEntryConfigurationWork(
+	ctx context.Context,
+	request *agentpb.EntryConfigurationWorkHelperRequest,
+) (*agentpb.EntryConfigurationWorkHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Entry helper container is not configured")
 	}
@@ -49,9 +52,8 @@ func (executor *Executor) ExecuteEntryConfigurationWork(ctx context.Context, req
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, nil)
+	options := createOptions(executor.image, "entry-work-helper", nil)
 	options.Name, options.Config.Labels = name, labels
-	options.Config.Cmd = []string{"entry-work-helper"}
 	raw, err := executor.executeFrame(bounded, options, framed)
 	if err != nil {
 		return nil, err
