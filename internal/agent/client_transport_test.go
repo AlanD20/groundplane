@@ -54,7 +54,7 @@ func TestAgentChannelReconnectWaitHonorsCancellation(t *testing.T) {
 	}
 }
 
-// QA: TASK-07; local Unix-socket gRPC receive boundary, not Controller enqueue fairness or durable event bounds.
+// QA: TASK-121; local Unix-socket gRPC receive boundary, not Controller enqueue fairness or durable event bounds.
 // Rationale: the Agent must receive the complete 5 MiB Controller envelope
 // while rejecting the first byte beyond that transport boundary.
 func TestConnectGRPCEnforcesExactReceiveMessageLimit(t *testing.T) {
@@ -92,7 +92,7 @@ func TestConnectGRPCEnforcesExactReceiveMessageLimit(t *testing.T) {
 	}
 }
 
-// QA: TASK-07; local Unix-socket gRPC send boundary, not Controller validation or durable storage bounds.
+// QA: TASK-121; local Unix-socket gRPC send boundary, not Controller validation or durable storage bounds.
 // Rationale: the Agent must send the complete 16 MiB envelope while rejecting
 // the first byte beyond that transport boundary.
 func TestConnectGRPCEnforcesExactSendMessageLimit(t *testing.T) {
