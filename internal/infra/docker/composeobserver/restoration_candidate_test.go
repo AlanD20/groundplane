@@ -14,8 +14,8 @@ import (
 // recovery. Exact candidate evidence must survive observation; incomplete or
 // wrong ownership must still collide, and ordinary observation stays strict.
 func TestRestorationObservationRecognizesOnlySealedCandidate(t *testing.T) {
-	plan := observerPlan(t)
-	prior := plan.Artifacts[0]
+	artifact := observerArtifact(t)
+	prior := artifact
 	candidate := proto.CloneOf(prior.Services[0])
 	candidate.ComposeName = "api--green"
 	candidate.ExpectedLabels = append(candidate.ExpectedLabels,
@@ -53,7 +53,7 @@ func TestRestorationObservationRecognizesOnlySealedCandidate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ordinary, err := observer.Observe(context.Background(), plan, prior.ArtifactId)
+			ordinary, err := observer.observeArtifact(context.Background(), artifact, nil, false)
 			if err != nil || len(ordinary.GetCollisions()) != 1 {
 				t.Fatalf("ordinary observation lost collision: %v %v", ordinary, err)
 			}

@@ -9,7 +9,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -22,8 +21,8 @@ const (
 // Rationale: observation returns only typed, sorted, ownership-validated
 // evidence and excludes ambient Docker labels from the Agent contract.
 func TestObserveReturnsOwnedContainerEvidence(t *testing.T) {
-	plan := observerPlan(t)
-	labels := dockerLabels(plan)
+	artifact := observerArtifact(t)
+	labels := dockerLabels(artifact)
 	engine := &fakeEngine{
 		containers: []container.Summary{{ID: "container-b", Labels: labels}},
 		inspects: map[string]client.ContainerInspectResult{
@@ -40,7 +39,7 @@ func TestObserveReturnsOwnedContainerEvidence(t *testing.T) {
 	}
 	wantTime := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
 	observer.now = func() time.Time { return wantTime }
-	result, err := observer.Observe(context.Background(), plan, observerArtifactID)
+	result, err := observer.observeArtifact(context.Background(), artifact, nil, false)
 	if err != nil {
 		t.Fatalf("Observe() error = %v", err)
 	}
@@ -61,8 +60,8 @@ func TestObserveReturnsOwnedContainerEvidence(t *testing.T) {
 // Rationale: a resource in the generated Compose project without the complete
 // expected ownership tuple is collision evidence, never mutation authority.
 func TestObserveReportsProjectContainerWithIncompleteOwnershipAsCollision(t *testing.T) {
-	plan := observerPlan(t)
-	labels := dockerLabels(plan)
+	artifact := observerArtifact(t)
+	labels := dockerLabels(artifact)
 	delete(labels, "com.groundplane.managed")
 	engine := &fakeEngine{
 		containers: []container.Summary{{ID: "foreign", Labels: labels}},
@@ -78,7 +77,7 @@ func TestObserveReportsProjectContainerWithIncompleteOwnershipAsCollision(t *tes
 	if err != nil {
 		t.Fatalf("NewWithEngine() error = %v", err)
 	}
-	result, err := observer.Observe(context.Background(), plan, observerArtifactID)
+	result, err := observer.observeArtifact(context.Background(), artifact, nil, false)
 	if err != nil {
 		t.Fatalf("Observe() error = %v", err)
 	}
@@ -130,47 +129,32 @@ func TestContainerHealthAcceptsExplicitNoHealthcheck(t *testing.T) {
 	}
 }
 
-func observerPlan(t *testing.T) *agentpb.ExecutionPlan {
+func observerArtifact(t *testing.T) *agentpb.ComposeArtifact {
 	t.Helper()
-	yaml := []byte("services:\n  api:\n    image: registry.example/api@sha256:digest\n")
-	digest := sha256.Sum256(yaml)
-	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
-		Schema: executionplan.SchemaVersion, PlanId: observerPlanID, RenderGeneration: 1,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, TargetId: observerServiceID,
-		Artifacts: []*agentpb.ComposeArtifact{{
-			ArtifactId:  observerArtifactID,
-			OwnerKind:   agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
-			ProjectName: "groundplane-infra", CanonicalYaml: yaml, YamlSha256: digest[:],
-			Services: []*agentpb.ComposeService{{
-				ServiceId: observerServiceID, ComposeName: "api", ExpectedReplicas: 1, HasHealthcheck: true,
-				ExpectedLabels: []*agentpb.LabelPair{
-					{Key: "com.groundplane.kind", Value: "service"},
-					{Key: "com.groundplane.managed", Value: "true"},
-					{Key: "com.groundplane.plan-id", Value: observerPlanID},
-					{Key: "com.groundplane.render-generation", Value: "1"},
-					{Key: "com.groundplane.service-id", Value: observerServiceID},
-				},
-			}},
+	content := []byte("services:\n  api:\n    image: registry.example/api@sha256:digest\n")
+	digest := sha256.Sum256(content)
+	return &agentpb.ComposeArtifact{
+		ArtifactId: observerArtifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
+		ProjectName: "groundplane-infra", CanonicalYaml: content, YamlSha256: digest[:],
+		Services: []*agentpb.ComposeService{{
+			ServiceId: observerServiceID, ComposeName: "api", ExpectedReplicas: 1, HasHealthcheck: true,
+			ExpectedLabels: []*agentpb.LabelPair{
+				{Key: "com.groundplane.kind", Value: "service"},
+				{Key: "com.groundplane.managed", Value: "true"},
+				{Key: "com.groundplane.plan-id", Value: observerPlanID},
+				{Key: "com.groundplane.render-generation", Value: "1"},
+				{Key: "com.groundplane.service-id", Value: observerServiceID},
+			},
 		}},
-		Steps: []*agentpb.ExecutionStep{{
-			StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-				ArtifactId: observerArtifactID, ServiceIds: []string{observerServiceID},
-			}},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("seal observation plan: %v", err)
 	}
-	return plan
 }
 
-func dockerLabels(plan *agentpb.ExecutionPlan) map[string]string {
+func dockerLabels(artifact *agentpb.ComposeArtifact) map[string]string {
 	labels := map[string]string{
 		composeProjectLabel: "groundplane-infra",
 		composeServiceLabel: "api",
 	}
-	for _, pair := range plan.Artifacts[0].Services[0].ExpectedLabels {
+	for _, pair := range artifact.Services[0].ExpectedLabels {
 		labels[pair.Key] = pair.Value
 	}
 	return labels

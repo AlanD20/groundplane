@@ -15,9 +15,9 @@ import (
 // selected manifest. Observation must verify and retain that actual local ID,
 // not replace it with the manifest's different compiled configuration digest.
 func TestObserveManagedContainerdChildIdentity(t *testing.T) {
-	plan := managedObserverPlan(t, "docker.io/library/caddy")
-	artifact, service := plan.Artifacts[0], plan.Artifacts[0].Services[0]
-	labels := dockerLabels(plan)
+	artifact := managedObserverArtifact(t, "docker.io/library/caddy")
+	service := artifact.Services[0]
+	labels := dockerLabels(artifact)
 	labels[composeProjectLabel] = artifact.ProjectName
 	id := strings.Repeat("a", 64)
 	child := "sha256:" + strings.Repeat("02", 32)
@@ -36,7 +36,7 @@ func TestObserveManagedContainerdChildIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	observed, err := observer.Observe(context.Background(), plan, artifact.ArtifactId)
+	observed, err := observer.observeArtifact(context.Background(), artifact, nil, false)
 	if err != nil || len(observed.GetContainers()) != 1 || observed.Containers[0].ImageId != child {
 		t.Fatalf("containerd managed image observation: %v, %v", observed, err)
 	}

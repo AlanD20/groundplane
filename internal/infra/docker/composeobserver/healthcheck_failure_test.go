@@ -30,8 +30,8 @@ func TestObserveClassifiesHealthcheckExecutionFailure(t *testing.T) {
 		{"healthy ignores stale failure", "operator-check", 127, container.Healthy, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			plan := observerPlan(t)
-			labels := dockerLabels(plan)
+			artifact := observerArtifact(t)
+			labels := dockerLabels(artifact)
 			engine := &fakeEngine{containers: []container.Summary{{ID: "candidate", Labels: labels}},
 				inspects: map[string]client.ContainerInspectResult{"candidate": {Container: container.InspectResponse{
 					ID: "candidate", Name: "/candidate", Image: "sha256:image-id",
@@ -50,7 +50,7 @@ func TestObserveClassifiesHealthcheckExecutionFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			observed, err := observer.Observe(context.Background(), plan, observerArtifactID)
+			observed, err := observer.observeArtifact(context.Background(), artifact, nil, false)
 			if err != nil {
 				t.Fatal(err)
 			}

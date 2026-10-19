@@ -26,7 +26,7 @@ func TestObserveDefaultNetworkPreservesOwnershipBoundary(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := observer.Observe(context.Background(), observerPlan(t), observerArtifactID)
+			result, err := observer.observeArtifact(context.Background(), observerArtifact(t), nil, false)
 			if err != nil {
 				t.Fatal(err)
 			}
