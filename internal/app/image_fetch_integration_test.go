@@ -4,33 +4,177 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
+	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// RUN-13: real publication, execution and Retry must preserve the first selected
-// content when a tag moves, and reject a host image different from that selection.
+// RUN-13: actual native publication, scheduling, journal, settlement and public
+// Retry, with a simulated registry. No Docker/process-ownership claim is made.
 func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
-	ctx := context.Background()
-	store := newMemoryHierarchyStore()
-	store.revision = 1 // An empty real etcd still has a positive read revision.
-	tasks, err := etcd.NewTaskRepository(store)
+	f, ctx := newNativeImageFixture(t), t.Context()
+	original := f.registry.selected
+	response, accepted := f.accept(t, "image-fetch-pinned-content")
+	f.registry.selected = imageTestPlan("d", "e")
+	if _, err := f.service.FetchImage(ctx, original.Requested, "image-fetch-pinned-content"); err == nil ||
+		f.registry.resolutions != 1 {
+		t.Fatalf("pending replay resolved a moved tag: resolves=%d, error=%v", f.registry.resolutions, err)
+	}
+	f.registry.returnedID = "sha256:" + strings.Repeat("c", 64)
+	failed, err := f.execute(t, accepted.TaskID)
+	if err == nil || len(f.registry.tagged) != 0 {
+		t.Fatal("mismatched image was accepted or tagged")
+	}
+	replay, err := f.service.FetchImage(ctx, original.Requested, "image-fetch-pinned-content")
+	if err != nil || !bytes.Equal(replay.Body, response.Body) || f.registry.resolutions != 1 {
+		t.Fatalf("terminal replay selected new content: %v", err)
+	}
+	request := api.TaskRetryRequest{WorkItemID: failed.Item.Item.ID, Attempt: 1}
+	retry, err := f.retry.RetryTask(ctx, accepted.TaskID, "image-fetch-retry", request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := etcd.NewIdempotencyRepository(store)
+	var retried api.TaskAccepted
+	if err := json.Unmarshal(retry.Body, &retried); err != nil || retried.TaskID != accepted.TaskID {
+		t.Fatalf("Retry replaced its Task: %#v %v", retried, err)
+	}
+	repeated, err := f.retry.RetryTask(ctx, accepted.TaskID, "image-fetch-retry", request)
+	if err != nil || !bytes.Equal(retry.Body, repeated.Body) {
+		t.Fatalf("Retry request replay: %v", err)
+	}
+	f.registry.returnedID = original.ConfigDigest
+	succeeded, err := f.execute(t, accepted.TaskID)
+	if err != nil || succeeded.Attempt.Attempt.Number != 2 || succeeded.Item.Item.ID != failed.Item.Item.ID ||
+		succeeded.Attempt.Attempt.Input != failed.Attempt.Attempt.Input || f.registry.resolutions != 1 ||
+		len(f.registry.fetched) != 2 || f.registry.fetched[0] != original || f.registry.fetched[1] != original ||
+		len(f.registry.tagged) != 1 || f.registry.tagged[0] != original {
+		t.Fatalf("Retry changed captured identity/content: %#v %v", f.registry, err)
+	}
+	// A lost settlement ACK permits reconciliation, not another Docker call.
+	if err := f.service.Reconcile(ctx, succeeded); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.service.Settle(ctx, f.queue, succeeded, time.Now().UTC()); err != nil || len(f.registry.tagged) != 1 {
+		t.Fatalf("settlement replay repeated tag write: %v", err)
+	}
+	current, previous, err := f.queue.ReadAttempt(ctx, accepted.TaskID, failed.Item.Item.ID, 1, 0)
+	if err != nil || previous.Attempt.Outcome != workexecution.Failed ||
+		current.Item.Item.Outcome != workexecution.Succeeded {
+		t.Fatalf("Retry replaced prior failure evidence: %#v %v", previous, err)
+	}
+	if _, err := f.retry.RetryTask(ctx, accepted.TaskID, "image-fetch-completed-retry", api.TaskRetryRequest{
+		WorkItemID: succeeded.Item.Item.ID, Attempt: 2,
+	}); err == nil {
+		t.Fatal("successful Fetch accepted Retry")
+	}
+
+	// Newer selections may move a tag; an older captured Retry cannot undo it.
+	f.registry.selected, f.registry.returnedID = imageTestPlan("1", "2"), "wrong-image"
+	_, stale := f.accept(t, "image-fetch-stale-selection")
+	staleDelivery, err := f.execute(t, stale.TaskID)
+	if err == nil {
+		t.Fatal("stale mismatched content accepted")
+	}
+	f.registry.selected = imageTestPlan("4", "5")
+	_, latest := f.accept(t, "image-fetch-latest-selection")
+	if _, err := f.retry.RetryTask(ctx, stale.TaskID, "image-fetch-stale-retry", api.TaskRetryRequest{
+		WorkItemID: staleDelivery.Item.Item.ID, Attempt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.registry.returnedID = f.registry.selected.ConfigDigest
+	if _, err := f.execute(t, latest.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	tagged := len(f.registry.tagged)
+	f.registry.returnedID = stale.ConfigDigest
+	if _, err := f.execute(t, stale.TaskID); err == nil || len(f.registry.tagged) != tagged {
+		t.Fatalf("stale Retry moved current tag: %v", err)
+	}
+	f.registry.selected = imageTestPlan("6", "7")
+	f.registry.selected.Requested = "nginx@" + f.registry.selected.ManifestDigest
+	f.registry.returnedID = f.registry.selected.ConfigDigest
+	_, digest := f.accept(t, "image-fetch-digest-only")
+	if _, err := f.execute(t, digest.TaskID); err != nil || len(f.registry.tagged) != tagged {
+		t.Fatalf("digest-only Fetch assigned a tag: %v", err)
+	}
+}
+
+// Unknown writes retain their resource claim, not unrelated worker capacity.
+func TestNativeImageUnknownTagDoesNotGrantRetryOrBlockUnrelatedWork(t *testing.T) {
+	f := newNativeImageFixture(t)
+	f.registry.tagOutcome = imagefetch.TagAssignmentUnknown
+	_, accepted := f.accept(t, "image-fetch-unknown-write")
+	delivery, _ := f.execute(t, accepted.TaskID)
+	view, _, err := f.queue.ReadAttempt(t.Context(), accepted.TaskID, delivery.Item.Item.ID, 1, 0)
+	if err != nil || view.Item.Item.Phase != workexecution.Attention {
+		t.Fatalf("unknown tag lost unresolved effect: %#v %v", view.Item.Item, err)
+	}
+	if _, err := f.retry.RetryTask(t.Context(), accepted.TaskID, "image-fetch-unknown-retry", api.TaskRetryRequest{
+		WorkItemID: delivery.Item.Item.ID, Attempt: 1,
+	}); err == nil {
+		t.Fatal("unknown write authorized another execution")
+	}
+	if _, err := f.service.FetchImage(t.Context(), f.registry.selected.Requested, "image-fetch-conflicting-selection"); err == nil {
+		t.Fatal("unresolved tag write allowed conflicting selection")
+	}
+	f.registry.selected = imageTestPlan("8", "9")
+	f.registry.selected.Requested = "nginx@" + f.registry.selected.ManifestDigest
+	f.registry.returnedID = f.registry.selected.ConfigDigest
+	_, unrelated := f.accept(t, "image-fetch-unrelated-digest")
+	if _, err := f.execute(t, unrelated.TaskID); err != nil {
+		t.Fatalf("unrelated work blocked: %v", err)
+	}
+	ops, err := imageoperations.NewRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown, err := ops.Load(t.Context(), accepted.TaskID)
+	if err != nil || unknown.Record.Phase != imageoperations.Uncertain {
+		t.Fatalf("unknown tag released: %v", err)
+	}
+}
+
+type nativeImageFixture struct {
+	store    *memoryHierarchyStore
+	queue    *workqueue.Repository
+	service  *imagedelivery.Service
+	registry *imageFetchRegistry
+	identity workexecution.Identity
+	retry    interface {
+		RetryTask(context.Context, string, string, api.TaskRetryRequest) (idempotency.IdempotencyResponse, error)
+	}
+}
+
+func newNativeImageFixture(t *testing.T) *nativeImageFixture {
+	t.Helper()
+	f := &nativeImageFixture{store: newMemoryHierarchyStore()}
+	f.store.revision = 1
+	var err error
+	f.queue, err = workqueue.NewRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := etcd.NewTaskRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipts, err := etcd.NewIdempotencyRepository(f.store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,21 +184,75 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	original := imagefetch.Plan{
-		Requested: "nginx:latest", Repository: "docker.io/library/nginx",
-		ManifestDigest: "sha256:" + strings.Repeat("a", 64), ConfigDigest: "sha256:" + strings.Repeat("b", 64),
-		Architecture: "amd64",
-	}
-	registry := &imageFetchRegistry{
-		selected: original, returnedID: "sha256:" + strings.Repeat("c", 64),
-		tagOutcome: imagefetch.TagAssignmentApplied,
-	}
-	service, err := imagedelivery.New(registry, store, tasks, idempotency, coordinator)
+	diagnostics, err := executiondiagnostics.New(f.store, f.queue)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const key = "image-fetch-pinned-content"
-	response, err := service.FetchImage(ctx, original.Requested, key)
+	releases, err := etcd.NewReleaseLedger(f.store, tasks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.registry = &imageFetchRegistry{selected: imageTestPlan("a", "b"), tagOutcome: imagefetch.TagAssignmentApplied}
+	f.registry.returnedID = f.registry.selected.ConfigDigest
+	f.service, err = imagedelivery.New(f.registry, f.store, tasks, receipts, coordinator, diagnostics, releases)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retries, err := workdispatch.NewRetries(
+		f.queue,
+		[]workdispatch.RetryRegistration{{Operation: workexecution.Image, Owner: f.service}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.retry, err = taskoperations.NewRetryService(f.queue, retries, receipts, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registration, record, err := workqueue.PrepareRegistration(workqueue.ExecutorSnapshot{}, workqueue.ExecutorRecord{
+		Identity: workexecution.Identity{
+			Executor: workexecution.Controller,
+		}, Capacity: 2, Operations: []workexecution.Operation{workexecution.Image},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.commit(t, registration)
+	f.identity = record.Identity
+	executor, err := f.queue.ReadExecutor(t.Context(), workexecution.Placement{Executor: workexecution.Controller})
+	if err != nil {
+		t.Fatal(err)
+	}
+	available, err := workqueue.PrepareAvailability(executor, f.identity, true, 2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.commit(t, available)
+	return f
+}
+
+func imageTestPlan(manifest, config string) imagefetch.Plan {
+	return imagefetch.Plan{Requested: "nginx:latest", Repository: "docker.io/library/nginx",
+		ManifestDigest: "sha256:" + strings.Repeat(
+			manifest,
+			64,
+		), ConfigDigest: "sha256:" + strings.Repeat(config, 64), Architecture: "amd64"}
+}
+
+func (f *nativeImageFixture) commit(t *testing.T, changes ...workqueue.Change) {
+	t.Helper()
+	result, err := f.queue.Commit(t.Context(), changes...)
+	if err != nil || !result.Succeeded {
+		t.Fatalf("native image commit: %t %v", result.Succeeded, err)
+	}
+}
+
+func (f *nativeImageFixture) accept(
+	t *testing.T,
+	key string,
+) (idempotency.IdempotencyResponse, api.ImageFetchAccepted) {
+	t.Helper()
+	response, err := f.service.FetchImage(t.Context(), f.registry.selected.Requested, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,255 +260,88 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatal(err)
 	}
-	if accepted.Image != original.Reference() || accepted.ConfigDigest != original.ConfigDigest ||
-		len(registry.fetched) != 0 {
-		t.Fatalf("acceptance changed identity or fetched before execution: %#v", accepted)
+	if accepted.Image != f.registry.selected.Reference() || accepted.ConfigDigest != f.registry.selected.ConfigDigest {
+		t.Fatal("accepted content changed")
 	}
-	registry.selected.ManifestDigest = "sha256:" + strings.Repeat("d", 64)
-	registry.selected.ConfigDigest = "sha256:" + strings.Repeat("e", 64)
-	if _, err := service.FetchImage(ctx, original.Requested, key); err == nil || registry.resolutions != 1 {
-		t.Fatalf("pending replay resolved a moved tag: resolves=%d, error=%v", registry.resolutions, err)
-	}
-	claim, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
-	if err != nil || !found || claim.Task.Record.ID != accepted.TaskID {
-		t.Fatalf("claim accepted fetch: found=%t, error=%v", found, err)
-	}
-	if err := service.Execute(ctx, claim.Task.Record); err == nil {
-		t.Fatal("wrong host image was accepted as successful delivery")
-	}
-	failedProgress, err := tasks.GetTask(ctx, accepted.TaskID)
-	if err != nil || failedProgress.Record.ImageFetchProgress.ErrorCode != "state.conflict" ||
-		failedProgress.Record.ImageFetchProgress.Phase != "verifying" {
-		t.Fatalf("fetch failure diagnostic was not persisted: %#v, %v", failedProgress.Record.ImageFetchProgress, err)
-	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, accepted.TaskID, taskjournal.TaskStatusFailed, nil, time.Now().UTC()); err != nil {
-		t.Fatal(err)
-	}
-	replay, err := service.FetchImage(ctx, original.Requested, key)
-	if err != nil || !bytes.Equal(replay.Body, response.Body) || registry.resolutions != 1 {
-		t.Fatalf("terminal replay selected new bytes: resolves=%d, error=%v", registry.resolutions, err)
-	}
-	retryIntents, err := taskoperations.NewRetryIdempotency(coordinator, idempotency)
-	if err != nil {
-		t.Fatal(err)
-	}
-	retries, err := taskoperations.NewRetryService(
-		tasks,
-		retryIntents,
-		imageFetchUnexpectedBackup{},
-		imageFetchUnexpectedBackup{},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	retryResponse, err := retries.RetryTask(ctx, accepted.TaskID, "image-fetch-retry")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var retry api.TaskAccepted
-	if err := json.Unmarshal(retryResponse.Body, &retry); err != nil {
-		t.Fatal(err)
-	}
-	claim, found, err = tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
-	if err != nil || !found || claim.Task.Record.ID != retry.TaskID {
-		t.Fatalf("claim retry: found=%t, error=%v", found, err)
-	}
-	registry.returnedID = original.ConfigDigest
-	if claim.Task.Record.ImageFetchProgress.Phase != "" {
-		t.Fatal("retry inherited failed attempt progress")
-	}
-	if err := service.Execute(ctx, claim.Task.Record); err != nil {
-		t.Fatal(err)
-	}
-	if tagged := len(registry.tagged); tagged != 1 {
-		t.Fatalf("successful retry assigned tag %d times", tagged)
-	} else if err := service.Execute(ctx, claim.Task.Record); err != nil {
-		t.Fatalf("resume after tag commit before Task acknowledgement: %v", err)
-	} else if len(registry.tagged) != tagged {
-		t.Fatal("resume repeated an already receipted tag effect")
-	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, retry.TaskID, taskjournal.TaskStatusCompleted, nil, time.Now().UTC()); err != nil {
-		t.Fatal(err)
-	}
-	verified, err := tasks.GetTask(ctx, retry.TaskID)
-	if err != nil || verified.Record.ImageFetchProgress.Phase != "verified" ||
-		verified.Record.ImageFetchProgress.ErrorCode != "" {
-		t.Fatalf("retry progress did not record verified content: %#v, %v", verified.Record.ImageFetchProgress, err)
-	}
-	if err := service.Execute(ctx, claim.Task.Record); err == nil {
-		t.Fatal("late progress overwrote a completed Task")
-	}
-	if registry.resolutions != 1 || len(registry.fetched) != 2 || registry.fetched[0] != original ||
-		registry.fetched[1] != original || len(registry.tagged) != 1 || registry.tagged[0] != original {
-		t.Fatalf("retry changed selected content: %#v", registry)
-	}
-	if _, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC()); err != nil || found {
-		t.Fatalf("replay published duplicate work: found=%t, error=%v", found, err)
-	}
-	newResponse, err := service.FetchImage(ctx, original.Requested, "image-fetch-new-selection")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var newSelection api.ImageFetchAccepted
-	if err := json.Unmarshal(newResponse.Body, &newSelection); err != nil {
-		t.Fatal(err)
-	}
-	if newSelection.Image != registry.selected.Reference() || newSelection.TaskID == accepted.TaskID ||
-		registry.resolutions != 2 {
-		t.Fatal("a fresh request did not select the new tag content")
-	}
-	// IMG-01: inventory must join attempts and their status to immutable manifests,
-	// including Docker's familiar repository spelling, not today's mutable tag.
-	registry.images = []imagefetch.LocalImage{
-		{ID: original.ConfigDigest, Digests: []string{"nginx@" + original.ManifestDigest}},
-		{ID: registry.selected.ConfigDigest, Digests: []string{registry.selected.Reference()}},
-		{ID: original.ConfigDigest, Digests: []string{"nginx@sha256:" + strings.Repeat("f", 64)}},
-	}
-	inventory, err := service.ListImages(ctx)
-	if err != nil || len(inventory.Images) != 3 {
-		t.Fatalf("inventory: %#v %v", inventory, err)
-	}
-	if history := inventory.Images[0].Fetches; len(history) != 2 || history[0].TaskID != retry.TaskID ||
-		history[0].Requested != "nginx:latest" || history[0].Image != original.Reference() ||
-		history[0].Status != "completed" || history[1].Status != "failed" || history[1].TaskID != accepted.TaskID {
-		t.Fatalf("original fetch history lost or reassigned: %#v", history)
-	}
-	if len(inventory.Images[1].Fetches) != 1 || inventory.Images[1].Fetches[0].Status != "pending" ||
-		len(inventory.Images[2].Fetches) != 0 {
-		t.Fatal("pending attempt lost its status or another manifest gained the wrong history")
-	}
-	claim, found, err = tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
-	if err != nil || !found || claim.Task.Record.ID != newSelection.TaskID {
-		t.Fatalf("claim new selection: %t %v", found, err)
-	}
-	registry.returnedID = registry.selected.ConfigDigest
-	if err := service.Execute(ctx, claim.Task.Record); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, newSelection.TaskID, taskjournal.TaskStatusCompleted, nil, time.Now().UTC()); err != nil {
-		t.Fatal(err)
-	}
-	inventory, err = service.ListImages(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(inventory.Images[0].Fetches) != 2 || inventory.Images[0].Fetches[0].Image != original.Reference() ||
-		len(inventory.Images[1].Fetches) != 1 || inventory.Images[1].Fetches[0].Image != newSelection.Image ||
-		inventory.Images[1].Fetches[0].Requested != "nginx:latest" || inventory.Images[1].Fetches[0].Status != "completed" {
-		t.Fatalf("moved tag history: %#v", inventory.Images)
-	}
-	if len(registry.tagged) != 2 || registry.tagged[1] != registry.selected {
-		t.Fatalf("fresh Fetch did not move its explicit tag: %#v", registry.tagged)
-	}
+	return response, accepted
+}
 
-	// A failed accepted selection has no tag receipt. Once a newer Fetch is
-	// accepted and committed, retrying that older plan may still verify its
-	// pinned bytes, but it must not move the tag backward.
-	stale := imagefetch.Plan{
-		Requested: "nginx:latest", Repository: "docker.io/library/nginx",
-		ManifestDigest: "sha256:" + strings.Repeat("1", 64),
-		ConfigDigest:   "sha256:" + strings.Repeat("2", 64), Architecture: "amd64",
+func (f *nativeImageFixture) execute(t *testing.T, taskID string) (workqueue.Delivery, error) {
+	t.Helper()
+	ctx := t.Context()
+	page, err := f.queue.ListWork(ctx, taskID, "", 10, 0)
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("image membership: %v", err)
 	}
-	registry.selected, registry.returnedID = stale, "sha256:"+strings.Repeat("3", 64)
-	staleResponse, err := service.FetchImage(ctx, stale.Requested, "image-fetch-stale-selection")
+	item := page.Items[0]
+	queued, err := f.store.Get(ctx, workqueue.QueueKey(item.Item))
+	if err != nil || queued.Entry == nil {
+		t.Fatalf("image not queued: %v", err)
+	}
+	at := time.Now().UTC()
+	candidate, err := f.queue.ReadCandidate(ctx, workqueue.QueueEntry{TaskID: taskID, WorkItemID: item.Item.ID,
+		Revision: queued.Entry.ModRevision}, f.identity, at, nil)
+	if err != nil || candidate.Wait != nil || candidate.Stopped {
+		t.Fatalf("image candidate: %#v %v", candidate.Wait, err)
+	}
+	decision, err := f.service.Admit(ctx, candidate.Assignment, at)
+	if err != nil || decision.Disposition != workdispatch.Dispatch {
+		t.Fatalf("image admission: %#v %v", decision, err)
+	}
+	request := candidate.Assignment
+	request.At, request.Deadline, request.AttemptID = at, decision.Deadline, ids.New(ids.KindAttempt)
+	assigned, attempt, err := workqueue.PrepareAssignment(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var staleAccepted api.ImageFetchAccepted
-	if err := json.Unmarshal(staleResponse.Body, &staleAccepted); err != nil {
-		t.Fatal(err)
-	}
-	staleClaim, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
-	if err != nil || !found || staleClaim.Task.Record.ID != staleAccepted.TaskID {
-		t.Fatalf("claim stale selection: found=%t, error=%v", found, err)
-	}
-	if err := service.Execute(ctx, staleClaim.Task.Record); err == nil {
-		t.Fatal("mismatched stale content was accepted")
-	}
-	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, staleAccepted.TaskID, taskjournal.TaskStatusFailed, nil, time.Now().UTC(),
-	); err != nil {
-		t.Fatal(err)
-	}
-	latest := imagefetch.Plan{
-		Requested: "nginx:latest", Repository: "docker.io/library/nginx",
-		ManifestDigest: "sha256:" + strings.Repeat("4", 64),
-		ConfigDigest:   "sha256:" + strings.Repeat("5", 64), Architecture: "amd64",
-	}
-	registry.selected = latest
-	latestResponse, err := service.FetchImage(ctx, latest.Requested, "image-fetch-latest-selection")
+	f.commit(t, assigned, decision.Change)
+	resume, err := f.queue.ReadResume(ctx, taskID, item.Item.ID, attempt.ID, f.identity)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var latestAccepted api.ImageFetchAccepted
-	if err := json.Unmarshal(latestResponse.Body, &latestAccepted); err != nil {
-		t.Fatal(err)
-	}
-	staleRetryResponse, err := retries.RetryTask(ctx, staleAccepted.TaskID, "image-fetch-stale-retry")
+	delivery := workqueue.Delivery{Item: resume.Work.Item, Attempt: resume.Attempt}
+	permission, err := f.service.AuthorizeStart(ctx, delivery)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var staleRetry api.TaskAccepted
-	if err := json.Unmarshal(staleRetryResponse.Body, &staleRetry); err != nil {
-		t.Fatal(err)
-	}
-	latestClaim, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
-	if err != nil || !found || latestClaim.Task.Record.ID != latestAccepted.TaskID {
-		t.Fatalf("claim latest selection: found=%t, error=%v", found, err)
-	}
-	registry.returnedID = latest.ConfigDigest
-	if err := service.Execute(ctx, latestClaim.Task.Record); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, latestAccepted.TaskID, taskjournal.TaskStatusCompleted, nil, time.Now().UTC(),
-	); err != nil {
-		t.Fatal(err)
-	}
-	taggedBeforeStaleRetry := len(registry.tagged)
-	staleRetryClaim, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
-	if err != nil || !found || staleRetryClaim.Task.Record.ID != staleRetry.TaskID {
-		t.Fatalf("claim stale retry: found=%t, error=%v", found, err)
-	}
-	registry.returnedID = stale.ConfigDigest
-	if err := service.Execute(ctx, staleRetryClaim.Task.Record); !errors.Is(
-		err,
-		errs.New(errs.KindStateConflict, ""),
-	) {
-		t.Fatalf("stale retry = %v, want state conflict", err)
-	}
-	if len(registry.tagged) != taggedBeforeStaleRetry || registry.tagged[len(registry.tagged)-1] != latest {
-		t.Fatalf("stale retry moved the newer tag: %#v", registry.tagged)
-	}
-	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, staleRetry.TaskID, taskjournal.TaskStatusFailed, nil, time.Now().UTC(),
-	); err != nil {
-		t.Fatal(err)
-	}
-	digestOnly := imagefetch.Plan{
-		Requested: "nginx@sha256:" + strings.Repeat("6", 64), Repository: "docker.io/library/nginx",
-		ManifestDigest: "sha256:" + strings.Repeat("6", 64),
-		ConfigDigest:   "sha256:" + strings.Repeat("7", 64), Architecture: "amd64",
-	}
-	registry.selected, registry.returnedID = digestOnly, digestOnly.ConfigDigest
-	digestResponse, err := service.FetchImage(ctx, digestOnly.Requested, "image-fetch-digest-only")
+	executor, err := f.queue.ReadExecutor(ctx, item.Item.Placement)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var digestAccepted api.ImageFetchAccepted
-	if err := json.Unmarshal(digestResponse.Body, &digestAccepted); err != nil {
+	start, err := workqueue.PrepareStart(resume.Work.Task, resume.Work.Item, resume.Attempt, executor, time.Now().UTC())
+	if err != nil {
 		t.Fatal(err)
 	}
-	digestClaim, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
-	if err != nil || !found || digestClaim.Task.Record.ID != digestAccepted.TaskID {
-		t.Fatalf("claim digest-only Fetch: found=%t, error=%v", found, err)
-	}
-	if err := service.Execute(ctx, digestClaim.Task.Record); err != nil {
+	f.commit(t, start, permission)
+	resume, err = f.queue.ReadResume(ctx, taskID, item.Item.ID, attempt.ID, f.identity)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.tagged) != taggedBeforeStaleRetry {
-		t.Fatalf("digest-only Fetch invented a tag assignment: %#v", registry.tagged)
+	delivery = workqueue.Delivery{Item: resume.Work.Item, Attempt: resume.Attempt}
+	executionErr := f.service.Execute(ctx, delivery)
+	if err := f.service.Settle(ctx, f.queue, delivery, time.Now().UTC()); err != nil {
+		t.Fatal(err)
 	}
+	settled, err := f.queue.ReadWork(ctx, taskID, item.Item.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settled.Item.Item.Phase == workexecution.Settled {
+		completion, err := workdispatch.NewCompletions(f.queue, []workdispatch.CompletionRegistration{
+			{
+				Action:    settled.Task.Task.Action,
+				Operation: workexecution.Image,
+				Owner:     workdispatch.CheckImageCompletion{},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := completion.Finish(ctx, taskID, time.Now().UTC(), time.Hour); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return delivery, executionErr
 }
 
 type imageFetchRegistry struct {
@@ -330,7 +361,6 @@ func (registry *imageFetchRegistry) List(context.Context) ([]imagefetch.LocalIma
 func (*imageFetchRegistry) Remove(context.Context, string) error {
 	return errs.New(errs.KindInternal, "unexpected image removal")
 }
-
 func (registry *imageFetchRegistry) Resolve(context.Context, string) (imagefetch.Plan, error) {
 	registry.resolutions++
 	return registry.selected, nil
@@ -354,21 +384,4 @@ func (registry *imageFetchRegistry) AssignTag(
 ) (imagefetch.TagAssignmentOutcome, error) {
 	registry.tagged = append(registry.tagged, plan)
 	return registry.tagOutcome, registry.tagErr
-}
-
-type imageFetchUnexpectedBackup struct{}
-
-func (imageFetchUnexpectedBackup) RetryBackupTask(
-	context.Context,
-	string,
-	string,
-	idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return etcd.IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "image fetch dispatched as backup")
-}
-
-func (imageFetchUnexpectedBackup) RetryRestoreTask(
-	context.Context, string, string, idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return etcd.IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "image fetch dispatched as Restore")
 }

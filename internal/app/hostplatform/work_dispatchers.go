@@ -209,6 +209,7 @@ func (owners *workOwners) newDispatchers(
 		append(
 			append(append(softwareWork.retry, owners.provisioning.retry...), owners.resolver.retry...),
 			[]workdispatch.RetryRegistration{
+				{Operation: workexecution.Image, Owner: dependencies.Images},
 				{Operation: workexecution.ReleaseRestoration, Owner: owners.directReleases.restoration},
 				{Operation: workexecution.AgentLifecycle, Owner: owners.agentWork},
 				{Operation: workexecution.AgentSoftware, Owner: owners.agentWork},

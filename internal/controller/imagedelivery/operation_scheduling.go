@@ -12,11 +12,18 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (service *Service) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
 	if item.Operation != workexecution.Image || item.Placement.Executor != workexecution.Controller ||
-		item.Input == nil || request.Direction != workexecution.Forward || item.AttemptNumber != 0 {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "image work requires its captured first execution")
+		item.Input == nil || request.Direction != workexecution.Forward {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"image work requires its captured forward execution",
+		)
 	}
 	loaded, err := service.operations.Load(ctx, item.TaskID)
 	if err != nil {
@@ -33,14 +40,21 @@ func (service *Service) Admit(ctx context.Context, request workqueue.Assignment,
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
 	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: item.Deadline,
-		Change: workqueue.Change{Conditions: []keyvalue.Condition{{Key: imageoperations.Key(item.TaskID), ModRevision: loaded.Revision}}}}, nil
+		Change: workqueue.Change{
+			Conditions: []keyvalue.Condition{{Key: imageoperations.Key(item.TaskID), ModRevision: loaded.Revision}},
+		}}, nil
 }
 
-func (service *Service) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (service *Service) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "image Task has no stop request")
 	}
-	if item.Item.AttemptNumber == 0 && item.Item.ActiveAttemptID == "" && item.Item.Phase != workexecution.Settled {
+	if item.Item.ActiveAttemptID == "" && item.Item.Phase != workexecution.Settled {
 		loaded, err := service.operations.Load(ctx, task.Task.ID)
 		if err != nil {
 			return workqueue.Change{}, err
