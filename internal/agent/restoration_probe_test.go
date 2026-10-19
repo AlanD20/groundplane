@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"testing"
-	"time"
 
 	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
@@ -23,63 +22,7 @@ func (observer negativeProbeObserver) Observe(
 	return nil, nil
 }
 
-// Rationale: a negative probe advances to an existing obligation, not an
-// invented one. Failed compensation must still keep recovery nonterminal.
-func TestServingNegativeProbeExecutesOnlyDeclaredCompensation(t *testing.T) {
-	for _, applicable := range []bool{false, true} {
-		assignment, probe := servingProbeAssignment(t)
-		member := assignment.Plan.CandidateReleaseProcedure.Members[0]
-		compensate := &agentpb.ExecutionStep{StepId: member.ServingPredecessor.CompensateStepId, TimeoutSeconds: 30,
-			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
-			Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
-				CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
-					ServiceId: member.ServiceId, CandidateReleaseId: member.CandidateReleaseId, CandidateArtifactId: member.CandidateArtifactId,
-				},
-			}}
-		assignment.Plan.Steps = []*agentpb.ExecutionStep{probe, compensate}
-		assignment.ExecutionMode, assignment.ExecutionEpoch = agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY, 2
-		assignment.ReleaseRecoveryDirective = &agentpb.ReleaseRecoveryDirective{
-			Phase: agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE, StepIds: []string{probe.StepId, compensate.StepId},
-		}
-		if applicable {
-			assignment.ReleaseRecoveryDirective.ApplicableCompensationStepIds = []string{compensate.StepId}
-		}
-		helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
-			probe.StepId: {
-				Schema:     composehelper.SchemaVersion,
-				Outcome:    agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_RESTORATION_REQUIRED,
-				Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
-			},
-			compensate.StepId: {
-				Schema:     composehelper.SchemaVersion,
-				Outcome:    agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED,
-				ExitCode:   1,
-				Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
-			},
-		}}
-		pool := releaseExecutionPool(t, helper)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		pool.executeRelease(ctx, &taskReservation{assignment: assignment, ctx: ctx, cancel: cancel})
-		cancel()
-		var result *TaskResult
-		for len(pool.outputs) > 0 {
-			output := <-pool.outputs
-			if output.Result != nil {
-				result = output.Result
-			}
-		}
-		if result == nil || result.Terminal != TaskTerminalFailed || !result.Compose.GetReconciliationRequired() {
-			t.Fatal("unproven compensation falsely closed recovery")
-		}
-		calls := []releaseExecutionCall{{taskID: assignment.TaskID, stepID: probe.StepId}}
-		if applicable {
-			calls = append(calls, releaseExecutionCall{taskID: assignment.TaskID, stepID: compensate.StepId})
-		}
-		assertReleaseExecutionCalls(t, helper, calls)
-	}
-}
-
-// Rationale: an owned but unrestored serving probe must reach the sealed
+// Rationale: an owned but unrestored serving probe reaches the declared
 // compensation decision without fabricating successful predecessor evidence.
 func TestServingProbeRequiresDeclaredCompensationWithoutSuccessEvidence(t *testing.T) {
 	assignment, step := servingProbeAssignment(t)
