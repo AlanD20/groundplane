@@ -1,7 +1,6 @@
 package etcd
 
 import (
-	"bytes"
 	"context"
 	"slices"
 
@@ -28,9 +27,8 @@ func (initiation TaskInitiation) Owner() taskjournal.TaskOwner { return initiati
 func (initiation TaskInitiation) Actor() taskjournal.TaskActor { return initiation.actor }
 
 func (initiation TaskInitiation) RetryScope() (TaskRetryScope, error) {
-	record := TaskRecord{Owner: initiation.owner, Actor: initiation.actor}
-	if err := validateTaskInitiation(record, initiation, false); err != nil {
-		return TaskRetryScope{}, err
+	if err := taskjournal.ValidateOwner(initiation.owner); err != nil || !taskjournal.ValidActor(initiation.actor) {
+		return TaskRetryScope{}, errs.New(errs.KindInternal, "task initiation is invalid")
 	}
 	return taskOwnerRetryScope(initiation.owner)
 }
@@ -207,33 +205,6 @@ func taskInitiationTenantFence(
 	}
 }
 
-func newInheritedTaskInitiation(
-	parent etcdstore.Versioned[TaskRecord],
-	actor taskjournal.TaskActor,
-) (TaskInitiation, error) {
-	if err := ValidateTaskRecord(parent.Record); err != nil {
-		return TaskInitiation{}, err
-	}
-	if parent.Revision <= 0 {
-		return TaskInitiation{}, errs.New(errs.KindValidationFailed, "task initiation parent revision is invalid")
-	}
-	return newTaskInitiation(
-		parent.Record.Owner,
-		actor,
-		etcdstore.Condition{Key: taskjournal.TaskStorageKey(parent.Record.ID), ModRevision: parent.Revision},
-	)
-}
-
-func validateTaskInitiation(record TaskRecord, initiation TaskInitiation, requireRecord bool) error {
-	if err := taskjournal.ValidateOwner(initiation.owner); err != nil || !taskjournal.ValidActor(initiation.actor) {
-		return errs.New(errs.KindInternal, "task initiation is invalid")
-	}
-	if requireRecord && (record.Owner != initiation.owner || record.Actor != initiation.actor) {
-		return errs.New(errs.KindValidationFailed, "task owner or actor does not match its initiation")
-	}
-	return nil
-}
-
 func prepareTaskInitiationFences(
 	initiation TaskInitiation,
 	conditions []etcdstore.Condition,
@@ -274,94 +245,4 @@ func prepareTaskInitiationFences(
 		return classify(revision, values[:baseConditionCount])
 	}
 	return conditions, wrapped, nil
-}
-
-func taskOwnerIndexKeys(owner taskjournal.TaskOwner, taskID string) ([]string, error) {
-	if err := taskjournal.ValidateOwner(owner); err != nil {
-		return nil, err
-	}
-	if ids.Validate(ids.KindTask, taskID) != nil {
-		return nil, errs.New(errs.KindValidationFailed, "task owner index task id is invalid")
-	}
-	workspaceKey := taskjournal.TaskWorkspacePlatformIndexKey(taskID)
-	if owner.WorkspaceType == taskjournal.TaskWorkspaceTenant {
-		workspaceKey = taskjournal.TaskWorkspaceTenantIndexKey(owner.TenantID, taskID)
-	}
-	keys := []string{workspaceKey}
-	if owner.EnvironmentID != "" {
-		keys = append(keys, taskjournal.TaskEnvironmentIndexKey(owner.EnvironmentID, taskID))
-	}
-	return keys, nil
-}
-
-func prepareTaskOwnerIndexPlan(
-	record TaskRecord,
-	conditions []etcdstore.Condition,
-	mutations []etcdstore.Mutation,
-	classify idempotencyPlanClassifier,
-) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
-	if err := ValidateTaskRecord(record); err != nil {
-		return nil, nil, nil, err
-	}
-	if classify == nil {
-		return nil, nil, nil, errs.New(errs.KindInternal, "task owner index classifier is required")
-	}
-	taskConditionIndex := -1
-	for index, condition := range conditions {
-		if condition.Key == taskjournal.TaskStorageKey(record.ID) {
-			if taskConditionIndex >= 0 || condition.ModRevision != 0 {
-				return nil, nil, nil, errs.New(errs.KindInternal, "task publication compare is invalid")
-			}
-			taskConditionIndex = index
-		}
-	}
-	if taskConditionIndex < 0 {
-		return nil, nil, nil, errs.New(errs.KindInternal, "task publication compare is missing")
-	}
-	encoded, err := EncodeTaskRecord(record)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	defer clear(encoded)
-	matchedMutation := false
-	for _, mutation := range mutations {
-		if mutation.Key != taskjournal.TaskStorageKey(record.ID) {
-			continue
-		}
-		if matchedMutation || mutation.Type != etcdstore.MutationPut || mutation.Prefix ||
-			!bytes.Equal(mutation.Value, encoded) {
-			return nil, nil, nil, errs.New(errs.KindInternal, "task publication mutation is invalid")
-		}
-		matchedMutation = true
-	}
-	if !matchedMutation {
-		return nil, nil, nil, errs.New(errs.KindInternal, "task publication mutation is missing")
-	}
-	indexKeys, err := taskOwnerIndexKeys(record.Owner, record.ID)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	baseConditionCount := len(conditions)
-	indexValue := []byte(record.ID)
-	for _, key := range indexKeys {
-		conditions = append(conditions, etcdstore.Condition{Key: key})
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: indexValue})
-	}
-	wrapped := func(revision int64, values []*etcdstore.KeyValue) error {
-		if len(values) != baseConditionCount+len(indexKeys) {
-			return errs.New(errs.KindInternal, "task owner index compare evidence is incomplete")
-		}
-		taskExists := values[taskConditionIndex] != nil
-		for index := range indexKeys {
-			value := values[baseConditionCount+index]
-			if (value != nil) != taskExists {
-				return errs.New(errs.KindInternal, "task owner index membership is corrupt")
-			}
-			if value != nil && (value.Key != indexKeys[index] || string(value.Value) != record.ID) {
-				return errs.New(errs.KindInternal, "task owner index membership is corrupt")
-			}
-		}
-		return classify(revision, values[:baseConditionCount])
-	}
-	return conditions, mutations, wrapped, nil
 }

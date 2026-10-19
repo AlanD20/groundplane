@@ -77,32 +77,6 @@ func NewIdempotencyMutationPlan(
 	)
 }
 
-func newTaskIdempotencyMutationPlan(
-	record TaskRecord,
-	initiation TaskInitiation,
-	conditions []etcdstore.Condition,
-	mutations []etcdstore.Mutation,
-	classify idempotencyPlanClassifier,
-) (*idempotencyMutationPlan, error) {
-	if err := validateTaskInitiation(record, initiation, true); err != nil {
-		return nil, err
-	}
-	conditions, classify, err := prepareTaskInitiationFences(initiation, conditions, classify)
-	if err != nil {
-		return nil, err
-	}
-	conditions, mutations, classify, err = prepareTaskOwnerIndexPlan(record, conditions, mutations, classify)
-	if err != nil {
-		return nil, err
-	}
-	return newIdempotencyMutationPlanForMarker(
-		idempotencyrecord.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		classify,
-	)
-}
-
 func newIdempotencyMutationPlanForMarker(
 	markerKind idempotencyrecord.IdempotencyMarkerKind,
 	conditions []etcdstore.Condition,

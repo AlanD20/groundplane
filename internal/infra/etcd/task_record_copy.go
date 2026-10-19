@@ -3,6 +3,11 @@ package etcd
 import (
 	"time"
 
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 )
@@ -59,4 +64,25 @@ func cloneTimePointer(value *time.Time) *time.Time {
 	}
 	cloned := *value
 	return &cloned
+}
+
+func cloneTaskRecord(record TaskRecord) TaskRecord {
+	cloned := record
+	cloned.EventCheckpoints = taskjournal.CloneEventCheckpoints(record.EventCheckpoints)
+	cloned.ComponentActionStepIDs = append([]string(nil), record.ComponentActionStepIDs...)
+	cloned.ManagedComponentTeardownSources = projectionrecord.CloneManagedComponentRuntimeSources(
+		record.ManagedComponentTeardownSources,
+	)
+	cloned.Params = cloneStringMap(record.Params)
+	cloned.Steps = taskjournal.CloneTaskSteps(record.Steps)
+	cloned.Materializations = materializationrecord.Clone(record.Materializations)
+	cloned.Configuration = taskconfiguration.CloneTaskConfiguration(record.Configuration)
+	cloned.StartedAt = cloneTimePointer(record.StartedAt)
+	cloned.FinishedAt = cloneTimePointer(record.FinishedAt)
+	cloned.RetainUntil = cloneTimePointer(record.RetainUntil)
+	cloned.Result = taskjournal.CloneTaskResult(record.Result)
+	cloned.BlueprintFailure = taskjournal.CloneBlueprintFailure(record.BlueprintFailure)
+	cloned.TerminalAssignment = taskjournal.CloneTaskTerminalAssignment(record.TerminalAssignment)
+	cloned.idempotencyMarker = cloneIdempotencyLocator(record.idempotencyMarker)
+	return cloned
 }
