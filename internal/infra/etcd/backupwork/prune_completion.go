@@ -11,15 +11,30 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+// PruneSettlementFits reserves the final joined resource/execution decision,
+// not just admission. Each object needs seven absence comparisons and two
+// deletes. The fixed reserve covers input/progress, dispatch, ancestry/epoch,
+// native attempt/item/slot/claims/host ownership and the four authentication
+// guards. Selection may span multiple dispatches; no Point is dropped.
+func PruneSettlementFits(input *agentpb.BackupWorkInput) bool {
+	const fixedOperations, operationsPerObject = 32, 9
+	return input != nil && input.Operation == agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_PRUNE &&
+		len(input.Steps) > 0 && fixedOperations+operationsPerObject*len(input.Steps) <= keyvalue.MaximumOperations
+}
+
 // PreparePruneCompletion releases resource authority only alongside native
 // terminal settlement. Checkpoint receipts and captured input remain retained
 // for acknowledgement replay; credential grants no longer serve a live source.
-func (repository *InputRepository) PreparePruneCompletion(ctx context.Context, view workqueue.ResumeView) (workqueue.Change, error) {
+func (repository *InputRepository) PreparePruneCompletion(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (workqueue.Change, error) {
 	assignment, change, err := repository.LoadAssignment(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if view.Attempt.Attempt.StartedAt == nil || assignment.Input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_PRUNE {
+	if view.Attempt.Attempt.StartedAt == nil ||
+		assignment.Input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_PRUNE {
 		return workqueue.Change{}, conflict("Backup prune completion requires a started prune attempt")
 	}
 	dispatchKey := backupruntime.BackupRecoveryPointPruneDispatchKey(view.Work.Task.Task.ID)
@@ -48,7 +63,10 @@ func (repository *InputRepository) PreparePruneCompletion(ctx context.Context, v
 		return workqueue.Change{}, err
 	}
 	defer keyvalue.ClearValues(points.Values)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: dispatchKey, ModRevision: read.Values[0].ModRevision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: dispatchKey, ModRevision: read.Values[0].ModRevision},
+	)
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: dispatchKey})
 	for index, value := range points.Values {
 		if value == nil {
@@ -63,7 +81,12 @@ func (repository *InputRepository) PreparePruneCompletion(ctx context.Context, v
 			prune.OperationID != dispatch.OperationID || prune.Point.EnvironmentID != dispatch.EnvironmentID ||
 			prune.Point.ID != dispatch.RecoveryPointIDs[index] || resume == nil || resume.CheckpointSequence != 1 ||
 			resume.PrecedingCheckpoint == nil || resume.PrecedingCheckpoint.DedupeKeyModRevision != value.ModRevision ||
-			!backupruntime.BackupPruneDeletedMatchesObject(resume.GetObjectDeleted(), uint32(index), prune.Point.ID, prune.Point.Object) {
+			!backupruntime.BackupPruneDeletedMatchesObject(
+				resume.GetObjectDeleted(),
+				uint32(index),
+				prune.Point.ID,
+				prune.Point.Object,
+			) {
 			return workqueue.Change{}, conflict("Backup prune has not durably proved every captured object absent")
 		}
 		authority, err := backupruntime.BackupPruneAuthorityKeys(prune.Point)
@@ -86,13 +109,30 @@ func (repository *InputRepository) PreparePruneCompletion(ctx context.Context, v
 		for _, key := range absentKeys {
 			change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: keys[index], ModRevision: value.ModRevision})
-		change.Mutations = append(change.Mutations,
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: keys[index], ModRevision: value.ModRevision},
+		)
+		change.Mutations = append(
+			change.Mutations,
 			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[index]},
-			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: credentialGrantKey(view.Work.Item.Item.ID, uint32(index))})
+			keyvalue.Mutation{
+				Type: keyvalue.MutationDelete,
+				Key:  credentialGrantKey(view.Work.Item.Item.ID, uint32(index)),
+			},
+		)
 	}
-	fence, err := environmentfence.LoadOwned(ctx, repository.store, dispatch.EnvironmentID, view.Work.ReadRevision,
-		environmentfence.Owner{Kind: backupruntime.BackupOperationPrune, OperationID: dispatch.OperationID, TaskID: dispatch.TaskID})
+	fence, err := environmentfence.LoadOwned(
+		ctx,
+		repository.store,
+		dispatch.EnvironmentID,
+		view.Work.ReadRevision,
+		environmentfence.Owner{
+			Kind:        backupruntime.BackupOperationPrune,
+			OperationID: dispatch.OperationID,
+			TaskID:      dispatch.TaskID,
+		},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
