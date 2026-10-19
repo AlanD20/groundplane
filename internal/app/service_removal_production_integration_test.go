@@ -7,51 +7,47 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
-
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/serviceremoval"
 	serviceoperations "github.com/AlanD20/groundplane/internal/controller/services"
-	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/serviceremovalwork"
 	api "github.com/AlanD20/groundplane/pkg/api"
 )
 
 // A Service created but never deployed must be removable through the actual
 // mutation and storage path, without inventing an acknowledged runtime.
 func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
-	fixture := newVolumeRemovalProductionFixture(t)
-	records, err := etcd.NewServiceRepository(fixture.Store)
+	fixture := newNativeVolumeFixture(t)
+	records, err := etcd.NewServiceRepository(fixture.store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	zones, err := etcd.NewZoneRepository(fixture.Store)
+	zones, err := etcd.NewZoneRepository(fixture.store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	releases, err := etcd.NewReleaseLedger(fixture.Store, fixture.Tasks)
+	tasks, err := etcd.NewTaskRepository(fixture.store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	desired, err := desiredrevision.NewRepository(fixture.Store)
+	releases, err := etcd.NewReleaseLedger(fixture.store, tasks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	desired, err := desiredrevision.NewRepository(fixture.store)
 	if err != nil {
 		t.Fatal(err)
 	}
 	repository, err := serviceoperations.NewMutationRepository(
-		fixture.Blueprint.HierarchyRepository,
+		fixture.blueprint.HierarchyRepository,
 		records,
 		zones,
 		desired,
 		releases,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolver, err := testtaskplanning.NewTaskPlanResolverWithBlueprints(
-		"/var/lib/groundplane/vol",
-		fixture.Blueprint,
-		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +58,11 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mutations, err := newControllerServiceMutations(repository, resolver, nil, coordinator, fixture.Idempotency)
+	replays, err := etcd.NewIdempotencyRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations, err := newControllerServiceMutations(repository, nil, nil, coordinator, replays)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 	created, err := mutations.CreateService(
 		ctx,
 		api.ServiceCreate{
-			EnvironmentID: fixture.EnvironmentID,
+			EnvironmentID: fixture.environmentID,
 			Name:          "routing",
 			Image:         "nginx:latest",
 			Strategy:      "recreate",
@@ -89,7 +89,7 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 	// Direct dependency edits must survive the complete storage publication,
 	// not just the mutation service's in-memory projection.
 	prerequisite, err := mutations.CreateService(ctx, api.ServiceCreate{
-		EnvironmentID: fixture.EnvironmentID, Name: "prerequisite", Image: "nginx:latest",
+		EnvironmentID: fixture.environmentID, Name: "prerequisite", Image: "nginx:latest",
 		Strategy: "recreate", OnFailure: "switch_back", Replicas: 1,
 	}, "018f3111-0000-7000-8000-000000000023")
 	if err != nil || prerequisite.Status != http.StatusCreated {
@@ -132,25 +132,50 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 	if err := json.Unmarshal(removed.Body, &accepted); err != nil {
 		t.Fatal(err)
 	}
-	task, err := fixture.Tasks.GetTask(ctx, accepted.TaskID)
+	page, err := fixture.queue.ListWork(ctx, accepted.TaskID, "", 10, 0)
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("Service removal work: %v", err)
+	}
+	view, err := fixture.queue.ReadWork(ctx, accepted.TaskID, page.Items[0].Item.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	agentID := ids.New(ids.KindAgent)
-	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.Record.CreatedAt.Add(time.Millisecond), 32)
-	if err != nil || !found || claim.Task.Record.ID != task.Record.ID {
-		t.Fatalf("claim removal: %v", err)
+	if view.Item.Item.Placement.Executor != workexecution.Controller || view.Item.Item.AttemptNumber != 0 {
+		t.Fatal("never-deployed Service removal invented host execution")
 	}
-	_, err = fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.Record.ID, claim.Assignment.Record.AssignmentID,
-		testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose,
-			ExecutionEpoch: 1, Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, task.Record.CreatedAt.Add(time.Second))
+	change, err := records.PrepareServiceRemovalDecision(ctx, view, time.Now().UTC())
 	if err != nil {
-		t.Fatalf("acknowledge Service removal: %v", err)
+		t.Fatalf("prepare native Service removal: %v", err)
 	}
+	defer keyvalue.ClearMutationValues(change.Mutations)
+	fixture.commit(t, change)
+	inputs, err := serviceremovalwork.NewRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := serviceremoval.NewAgentWork(inputs, fixture.queue, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished, err := fixture.queue.ReadFinishedWork(ctx, accepted.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().UTC()
+	proof, err := owner.PrepareFinish(ctx, finished, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finish, err := fixture.queue.PrepareTaskFinish(ctx, finished.Task, at, at.Add(workexecution.TaskHistoryRetention))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer keyvalue.ClearMutationValues(finish.Mutations)
+	fixture.commit(t, proof, finish)
 	if _, err := records.GetService(ctx, service.ID); err == nil {
 		t.Fatal("removed Service still visible")
 	}
-	if _, found, err := fixture.Blueprint.GetEnvironmentAppliedComposeProjection(ctx, fixture.EnvironmentID); err != nil ||
+	if _, found, err := fixture.blueprint.GetEnvironmentAppliedComposeProjection(ctx, fixture.environmentID); err != nil ||
 		found {
 		t.Fatalf("removal invented applied runtime: found=%t error=%v", found, err)
 	}
