@@ -2,6 +2,7 @@ package releasequeries
 
 import (
 	"context"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 
@@ -35,6 +36,11 @@ func (ledger *Reader) GetIntent(
 	}
 	intent, err := releases.DecodeReleaseRecord[domain.Intent](result.Values[0].Value, "release-intent")
 	if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != releaseID {
+		return etcdstore.Versioned[domain.Intent]{}, releases.CorruptReleaseRecord()
+	}
+	publication, err := releases.DecodeWorkPublication(result.Values[1].Value)
+	if err != nil || publication.PublicationID != publicationID || publication.OperationID != intent.OperationID ||
+		publication.EnvironmentID != intent.EnvironmentID || publication.ServiceID != intent.ServiceID {
 		return etcdstore.Versioned[domain.Intent]{}, releases.CorruptReleaseRecord()
 	}
 	return etcdstore.Versioned[domain.Intent]{

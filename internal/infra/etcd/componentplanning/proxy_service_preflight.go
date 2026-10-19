@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/core/serviceports"
@@ -18,6 +19,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -152,24 +154,24 @@ func (repository *Planner) PrepareFrozenProxyServicePreflight(
 	slices.SortFunc(preflight.Services, func(a, b ProxyServiceSource) int {
 		return cmp.Compare(a.ServiceID, b.ServiceID)
 	})
-	fenceKey := releases.ReleaseFenceSetKey(authority.environmentID)
-	fence, err := repository.store.GetMany(
+	claimKey := workqueue.ClaimKey(workexecution.Claim{ScopeID: authority.environmentID})
+	claim, err := repository.store.GetMany(
 		ctx,
-		keyvalue.GetManyRequest{Keys: []string{fenceKey}, Revision: authority.readRevision},
+		keyvalue.GetManyRequest{Keys: []string{claimKey}, Revision: authority.readRevision},
 	)
 	if err != nil {
 		return FrozenProjectionAuthority{}, err
 	}
-	if fence == nil || fence.ReadRevision != authority.readRevision || len(fence.Values) != 1 {
-		return FrozenProjectionAuthority{}, errs.New(errs.KindInternal, "router release fence read is incomplete")
+	if claim == nil || claim.ReadRevision != authority.readRevision || len(claim.Values) != 1 {
+		return FrozenProjectionAuthority{}, errs.New(errs.KindInternal, "router Environment claim read is incomplete")
 	}
-	activeRelease := fence.Values[0] != nil
-	keyvalue.ClearValues(fence.Values)
-	if activeRelease {
+	activeOperation := claim.Values[0] != nil
+	keyvalue.ClearValues(claim.Values)
+	if activeOperation {
 		return FrozenProjectionAuthority{}, errs.New(errs.KindResourceInUse,
-			"finish the active Environment release before preparing its router")
+			"finish the active Environment operation before preparing its router")
 	}
-	conditions = append(conditions, keyvalue.Condition{Key: fenceKey})
+	conditions = append(conditions, keyvalue.Condition{Key: claimKey})
 	for index := range preflight.Services {
 		source := &preflight.Services[index]
 		keys := proxyServiceSourceKeys(source.ServiceID)

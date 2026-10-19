@@ -3,6 +3,9 @@ package releasequeries
 import (
 	"bytes"
 	"context"
+	"slices"
+	"strings"
+
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -14,10 +17,10 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"slices"
-	"strings"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -173,7 +176,9 @@ func (ledger *Reader) loadPlanningHierarchy(
 			environmentID,
 		), hierarchyrecord.ProjectKey(project.ID), hierarchyrecord.TenantKey(project.TenantID),
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
-		hierarchyrecord.EnvironmentOperationLockKey(environmentID), releases.ReleaseFenceSetKey(environmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(
+			environmentID,
+		), workqueue.ClaimKey(workexecution.Claim{ScopeID: environmentID}),
 		deletions.TombstoneKey("environment", environmentID), deletions.TombstoneKey("project", project.ID),
 		deletions.TombstoneKey("tenant", project.TenantID),
 	}

@@ -7,11 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
+	"strings"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
-	"slices"
-	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -349,11 +350,9 @@ func (ledger *Reader) ReadViewAt(
 	if err != nil || checkpoint.ReleaseID != releaseID || domain.ValidateCheckpoint(checkpoint) != nil {
 		return ReleaseView{}, releases.CorruptReleaseRecord()
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
-		read.Values[2].Value,
-		"release-publication",
-	)
-	if err != nil || marker.PublicationID != publicationID || marker.OperationID != intent.OperationID {
+	marker, err := releases.DecodeWorkPublication(read.Values[2].Value)
+	if err != nil || marker.PublicationID != publicationID || marker.OperationID != intent.OperationID ||
+		marker.EnvironmentID != intent.EnvironmentID || marker.ServiceID != intent.ServiceID {
 		return ReleaseView{}, releases.CorruptReleaseRecord()
 	}
 	view := ReleaseView{Intent: intent, Checkpoint: checkpoint, Revision: read.ReadRevision}

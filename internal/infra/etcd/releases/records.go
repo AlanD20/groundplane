@@ -3,12 +3,12 @@ package releases
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,7 +22,6 @@ const (
 	releaseManifestStagingPrefix     = "/v1/staging/release-manifests/"
 	releasePublicationPrefix         = "/v1/records/release-publications/"
 	releaseOperationPrefix           = "/v1/records/release-operations/"
-	releaseFenceSetPrefix            = "/v1/runtime/release-fence-sets/"
 	releaseEnvironmentIndexPrefix    = "/v1/indexes/releases/by-environment/"
 	releaseServiceIndexPrefix        = "/v1/indexes/releases/by-service/"
 	releaseTerminalPrefix            = "/v1/records/release-terminal-summaries/"
@@ -66,34 +65,6 @@ type ReleaseStagedMemberRef struct {
 	IntentDigest     string `json:"intent_digest"`
 	RenderDigest     string `json:"render_digest"`
 	CheckpointDigest string `json:"checkpoint_digest"`
-}
-
-type ReleasePublicationMarker struct {
-	PublicationID              string                                   `json:"publication_id"`
-	OperationID                string                                   `json:"operation_id"`
-	ManifestDigest             string                                   `json:"manifest_digest"`
-	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor `json:"candidate_release_descriptor"`
-	ExecutedComposeArtifact    []byte                                   `json:"executed_compose_artifact,omitempty"`
-	PreparedRuntimes           []executionplan.CandidateRuntime         `json:"prepared_runtimes,omitempty"`
-	BlueprintRuntimes          []executionplan.BlueprintRuntimeInput    `json:"blueprint_runtimes,omitempty"`
-	NativePredecessors         []BlueprintNativePredecessorReference    `json:"native_predecessors,omitempty"`
-	NetworkPreparationTaskID   string                                   `json:"network_preparation_task_id,omitempty"`
-	PublishedAt                time.Time                                `json:"published_at"`
-}
-
-type ReleaseFenceMember struct {
-	ServiceID          string `json:"service_id"`
-	CandidateReleaseID string `json:"candidate_release_id"`
-	RenderInputDigest  string `json:"render_input_digest"`
-}
-
-type ReleaseFenceSet struct {
-	EnvironmentID string               `json:"environment_id"`
-	Generation    uint64               `json:"generation"`
-	OperationID   string               `json:"operation_id"`
-	AttemptTaskID string               `json:"attempt_task_id"`
-	Group         bool                 `json:"group"`
-	Members       []ReleaseFenceMember `json:"members"`
 }
 
 type ReleaseOperationHead struct {
@@ -149,10 +120,7 @@ func ReleasePublicationKey(publicationID string) string {
 	return releasePublicationPrefix + publicationID
 }
 
-func ReleaseOperationKey(operationID string) string  { return releaseOperationPrefix + operationID }
-func ReleaseFenceSetKey(environmentID string) string { return releaseFenceSetPrefix + environmentID }
-
-func ReleaseFenceSetScopePrefix() string { return releaseFenceSetPrefix }
+func ReleaseOperationKey(operationID string) string { return releaseOperationPrefix + operationID }
 
 func ReleaseEnvironmentIndexKey(environmentID, releaseID string) string {
 	return releaseEnvironmentIndexPrefix + environmentID + "/" + releaseID
@@ -248,35 +216,6 @@ func ValidateReleaseStage(value ReleaseStage) error {
 		}
 		services[member.Intent.ServiceID] = struct{}{}
 		releases[member.Intent.ID] = struct{}{}
-	}
-	return nil
-}
-
-func ValidateReleaseFenceSet(value ReleaseFenceSet, head ReleaseOperationHead, manifest ReleaseStagedManifest) error {
-	if value.EnvironmentID != head.EnvironmentID || value.Generation == 0 || value.OperationID != head.OperationID ||
-		value.AttemptTaskID != head.LatestTaskID || value.Group != (head.ReleaseGroupID != "") || len(value.Members) != len(manifest.Members) {
-		return errs.New(errs.KindValidationFailed, "release fence set is invalid")
-	}
-	sorted := slices.Clone(value.Members)
-	slices.SortFunc(
-		sorted,
-		func(left, right ReleaseFenceMember) int { return strings.Compare(left.ServiceID, right.ServiceID) },
-	)
-	for index := range sorted {
-		if index > 0 && sorted[index-1].ServiceID == sorted[index].ServiceID {
-			return errs.New(errs.KindValidationFailed, "release fence member is duplicated")
-		}
-		found := false
-		for _, staged := range manifest.Members {
-			if staged.ServiceID == sorted[index].ServiceID && staged.ReleaseID == sorted[index].CandidateReleaseID &&
-				staged.RenderDigest == sorted[index].RenderInputDigest {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return errs.New(errs.KindValidationFailed, "release fence member does not match staging")
-		}
 	}
 	return nil
 }
