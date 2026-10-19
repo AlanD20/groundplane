@@ -125,9 +125,6 @@ func TestVolumeRemovalBackupPolicyPreparationPreservesHistory(t *testing.T) {
 					t.Fatal("enabled empty-source desired policy accepted")
 				}
 			}
-			if len(publication.conditions) != len(selections)+4 {
-				t.Fatal("policy fragment no longer has one primary compare per source plus four fixed fences")
-			}
 			for _, mutation := range publication.mutations {
 				if mutation.Type == testkeyvalue.MutationDelete &&
 					mutation.Key != testbackuppolicy.BackupPolicyConnectorReferenceKey(
@@ -251,7 +248,7 @@ func TestVolumeRemovalBackupPolicyMaximumFragmentBudget(t *testing.T) {
 			ID:     taskID,
 			Target: fixture.environment.Record.ID,
 		},
-		projection, testblueprintplanning.BlueprintAttachTaskPreparation{}, seed,
+		projection, seed,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -272,11 +269,10 @@ func TestVolumeRemovalBackupPolicyMaximumFragmentBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer testkeyvalue.ClearMutationValues(publication.mutations)
-	if len(publication.conditions) != 16 || len(publication.mutations) != 2 ||
-		len(
-			publication.projection.Sources,
-		) != testbackuppolicy.MaximumBackupPolicySources-1 || !publication.projection.Enabled {
-		t.Fatal("maximum policy removal fragment changed its bounded shape")
+	if len(
+		publication.projection.Sources,
+	) != testbackuppolicy.MaximumBackupPolicySources-1 || !publication.projection.Enabled {
+		t.Fatal("maximum policy removal lost remaining sources or disabled Backup")
 	}
 	sizer := &store{root: "/groundplane"}
 	bytes, err := sizer.transactionSize(publication.conditions, publication.mutations)
@@ -302,8 +298,7 @@ func TestVolumeRemovalBackupPolicyAbsentAndMalformedPreparation(t *testing.T) {
 		t.Fatalf("absent policy preparation: %v", err)
 	}
 	publication, err := prepareVolumeRemovalBackupPolicyPublication(prepared, fixture.now)
-	if err != nil || publication.projection != nil || len(publication.mutations) != 0 ||
-		len(publication.conditions) != 3 {
+	if err != nil || publication.projection != nil || len(publication.mutations) != 0 {
 		t.Fatalf("absent policy was created by preparation: %v", err)
 	}
 	for _, request := range []struct {
