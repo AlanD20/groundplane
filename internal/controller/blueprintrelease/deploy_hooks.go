@@ -138,7 +138,8 @@ func deployScriptsByService(
 ) map[string][]scriptrecord.Record {
 	result := make(map[string][]scriptrecord.Record)
 	for _, script := range scripts {
-		if script.Desired.When != core.ScriptPostDeploy && script.Desired.When != core.ScriptPreDeploy {
+		if script.Desired.When != core.ScriptPostDeploy && script.Desired.When != core.ScriptPreDeploy &&
+			script.Desired.When != core.ScriptOnFailure {
 			continue
 		}
 		result[script.ServiceID] = append(result[script.ServiceID], script)

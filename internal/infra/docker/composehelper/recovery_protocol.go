@@ -12,9 +12,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func OpenRecoveryRequest(request *agentpb.ReleaseRecoveryHelperRequest) (releaseexecution.RecoveryInput, releaseexecution.RecoveryReport, error) {
+func OpenRecoveryRequest(
+	request *agentpb.ReleaseRecoveryHelperRequest,
+) (releaseexecution.RecoveryInput, releaseexecution.RecoveryReport, error) {
 	empty, noReport := releaseexecution.RecoveryInput{}, releaseexecution.RecoveryReport{}
-	if request == nil || executionplan.RejectUnknown(request) != nil || request.Assignment.GetWork().GetAttempt() == nil {
+	if request == nil || executionplan.RejectUnknown(request) != nil ||
+		request.Assignment.GetWork().GetAttempt() == nil {
 		return empty, noReport, invalidReleaseHelper()
 	}
 	identity := request.Assignment.Work.Attempt
@@ -37,6 +40,9 @@ func OpenRecoveryRequest(request *agentpb.ReleaseRecoveryHelperRequest) (release
 	}
 	report.Ack = &ack
 	if !report.Progress.InFlight {
+		return empty, noReport, invalidReleaseHelper()
+	}
+	if input.PreservesServing() && !request.InspectOnly {
 		return empty, noReport, invalidReleaseHelper()
 	}
 	switch report.Progress.Phase {
@@ -75,7 +81,13 @@ func ReadRecoveryRequest(ctx context.Context, input io.Reader) (*agentpb.Release
 	return request, nil
 }
 
-func WriteRecoveryResponse(ctx context.Context, output io.Writer, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport, response *agentpb.ReleaseRecoveryHelperResponse) error {
+func WriteRecoveryResponse(
+	ctx context.Context,
+	output io.Writer,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+	response *agentpb.ReleaseRecoveryHelperResponse,
+) error {
 	if ctx == nil || output == nil {
 		return invalidReleaseHelper()
 	}
@@ -106,7 +118,12 @@ func WriteRecoveryResponse(ctx context.Context, output io.Writer, input releasee
 	return nil
 }
 
-func ReadRecoveryResponse(ctx context.Context, reader io.Reader, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport) (*agentpb.ReleaseRecoveryHelperResponse, error) {
+func ReadRecoveryResponse(
+	ctx context.Context,
+	reader io.Reader,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+) (*agentpb.ReleaseRecoveryHelperResponse, error) {
 	raw, err := readFrame(ctx, reader)
 	if err != nil {
 		return nil, err

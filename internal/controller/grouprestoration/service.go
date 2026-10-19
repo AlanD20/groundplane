@@ -17,6 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type Service struct {
@@ -68,10 +69,17 @@ func (service *Service) Prepare(ctx context.Context, taskID, workID string) erro
 
 // LoadRecoveryInput uses the actual restoration attempt and the genuinely
 // successful source receipt. No fake failed source or active assignment is made.
-func (service *Service) LoadRecoveryInput(ctx context.Context, view workqueue.ResumeView) (releaseexecution.RecoveryInput, error) {
-	if !view.ActiveAttempt || view.ExecutorRevision <= 0 || workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil ||
+func (service *Service) LoadRecoveryInput(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (releaseexecution.RecoveryInput, error) {
+	if !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
+		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil ||
 		view.Work.Item.Item.Operation != workexecution.ReleaseRestoration {
-		return releaseexecution.RecoveryInput{}, errs.New(errs.KindStateConflict, "Group restoration input requires its retained active assignment")
+		return releaseexecution.RecoveryInput{}, errs.New(
+			errs.KindStateConflict,
+			"Group restoration input requires its retained active assignment",
+		)
 	}
 	sources, err := service.ledger.LoadGroupRestorationSources(ctx, view.Work)
 	if err != nil {
@@ -87,11 +95,18 @@ func (service *Service) LoadRecoveryInput(ctx context.Context, view workqueue.Re
 		return releaseexecution.RecoveryInput{}, err
 	}
 	stored := sources.Restoration.Input
-	input := releaseexecution.RecoveryInput{Input: releaseexecution.Input{Attempt: view.Attempt.Attempt, Release: payload, Artifacts: artifacts},
-		Forward: stored.Source, Group: releaseexecution.CloneGroupRestoration(&stored.Authority)}
+	input := releaseexecution.RecoveryInput{
+		Input:       releaseexecution.Input{Attempt: view.Attempt.Attempt, Release: payload, Artifacts: artifacts},
+		Disposition: agentpb.WorkReleaseRecoveryDisposition_WORK_RELEASE_RECOVERY_DISPOSITION_RESTORE_CAPTURED,
+		Forward:     stored.Source,
+		Group:       releaseexecution.CloneGroupRestoration(&stored.Authority),
+	}
 	if view.Attempt.Attempt.Direction == workexecution.Recovery {
 		if view.Attempt.Attempt.Number < 2 {
-			return releaseexecution.RecoveryInput{}, errs.New(errs.KindStateConflict, "Group restoration Retry has no previous attempt")
+			return releaseexecution.RecoveryInput{}, errs.New(
+				errs.KindStateConflict,
+				"Group restoration Retry has no previous attempt",
+			)
 		}
 		previous, err := service.groups.LoadRestorationFailure(ctx, view.Work, view.Attempt.Attempt.Number-1)
 		if err != nil {

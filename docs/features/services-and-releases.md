@@ -144,10 +144,13 @@ decision. Neither policy undoes a migration or other Script side effect.
 ## Failure and recovery
 
 Recovery belongs to the original Task and preserves its primary failure. Its
-targets are each Service's captured serving predecessor or proved first-candidate
-absence, never a later desired revision. The accepted configuration recovery
-contract also restores that Task's pinned pre-operation files, not databases or
-a machine snapshot. Secret values needed by a recoverable Task cannot be deleted.
+targets follow the captured failure policy, never a later desired revision.
+`switch_back` restores the captured serving predecessor or first-candidate absence,
+including that Task's pinned pre-operation files. `leave_active` keeps a completed,
+proved switch and its configuration; an incomplete rollout still needs cleanup.
+Neither restores databases or a machine snapshot. A failure hook's own failure
+does not replace the original deployment failure; its cleanup must still be proved.
+Secret values needed by a recoverable Task cannot be deleted.
 
 Unknown ownership or missing proof can prevent safe completion even when the
 Agent is connected. GP must report the conflict instead of declaring success or

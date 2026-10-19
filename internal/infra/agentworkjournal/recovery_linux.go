@@ -5,6 +5,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type RecoveryRecord struct {
@@ -15,14 +16,27 @@ type RecoveryRecord struct {
 	Report       releaseexecution.RecoveryReport             `json:"report"`
 	Effect       *RecoveryEffectRecord                       `json:"effect,omitempty"`
 	Completion   *releaseexecution.CompletionReceipt         `json:"completion,omitempty"`
+	Disposition  agentpb.WorkReleaseRecoveryDisposition      `json:"disposition"`
 }
 
 func (record RecoveryRecord) input(attempt workexecution.Attempt) releaseexecution.RecoveryInput {
-	return releaseexecution.RecoveryInput{Input: releaseexecution.Input{Attempt: attempt}, Forward: record.Forward, Failure: record.Failure,
-		Group: releaseexecution.CloneGroupRestoration(record.Group), Interruption: releaseexecution.CloneRestorationInterruption(record.Interruption)}
+	return releaseexecution.RecoveryInput{
+		Input:   releaseexecution.Input{Attempt: attempt},
+		Forward: record.Forward,
+		Failure: record.Failure,
+		Group: releaseexecution.CloneGroupRestoration(
+			record.Group,
+		),
+		Interruption: releaseexecution.CloneRestorationInterruption(record.Interruption),
+		Disposition:  record.Disposition,
+	}
 }
 
-func (journal *Journal) PrepareRecovery(ctx context.Context, input releaseexecution.RecoveryInput, next releaseexecution.RecoveryProgress) (*releaseexecution.RecoveryReport, error) {
+func (journal *Journal) PrepareRecovery(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	next releaseexecution.RecoveryProgress,
+) (*releaseexecution.RecoveryReport, error) {
 	if input.Validate() != nil || input.Input.Attempt.StartedAt == nil {
 		return nil, invalid()
 	}
@@ -45,12 +59,14 @@ func (journal *Journal) PrepareRecovery(ctx context.Context, input releaseexecut
 		}
 		state = &attemptRecord{Attempt: input.Input.Attempt}
 	}
-	if !workexecution.SameAssignment(state.Attempt, input.Input.Attempt) || state.Attempt.StartedAt == nil || !state.Attempt.StartedAt.Equal(*input.Input.Attempt.StartedAt) {
+	if !workexecution.SameAssignment(state.Attempt, input.Input.Attempt) || state.Attempt.StartedAt == nil ||
+		!state.Attempt.StartedAt.Equal(*input.Input.Attempt.StartedAt) {
 		return nil, conflict()
 	}
 	var prior *releaseexecution.RecoveryProgress
 	if state.Recovery != nil {
 		if state.Recovery.Forward.ID != input.Forward.ID || *state.Recovery.Forward.Result != *input.Forward.Result ||
+			state.Recovery.Disposition != input.Disposition ||
 			!releaseexecution.EqualGroupRestoration(state.Recovery.Group, input.Group) ||
 			!releaseexecution.EqualRestorationInterruption(state.Recovery.Interruption, input.Interruption) {
 			return nil, conflict()
@@ -67,12 +83,15 @@ func (journal *Journal) PrepareRecovery(ctx context.Context, input releaseexecut
 	if err != nil {
 		return nil, err
 	}
-	if pending || next.Sequence != state.Sequence+1 || next.UpdatedAt.Before(state.UpdatedAt) {
+	if pending || state.Sequence == ^uint64(0) || next.UpdatedAt.Before(state.UpdatedAt) {
 		return nil, conflict()
 	}
 	if !next.InFlight {
-		if state.Recovery == nil || state.Recovery.Effect == nil || !state.Recovery.Effect.Acknowledged || next.Evidence == nil ||
-			state.Recovery.Effect.Boundary.Progress.Sequence != state.Sequence || state.Recovery.Effect.Reference != *next.Evidence {
+		if state.Recovery == nil || state.Recovery.Effect == nil || !state.Recovery.Effect.Acknowledged ||
+			next.Evidence == nil ||
+			prior == nil ||
+			state.Recovery.Effect.Boundary.Progress.Sequence != prior.Sequence ||
+			state.Recovery.Effect.Reference != *next.Evidence {
 			return nil, conflict()
 		}
 	}
@@ -84,13 +103,22 @@ func (journal *Journal) PrepareRecovery(ctx context.Context, input releaseexecut
 	if err != nil {
 		return nil, err
 	}
-	state.Sequence, state.UpdatedAt = next.Sequence, next.UpdatedAt
+	state.Sequence, state.UpdatedAt = state.Sequence+1, next.UpdatedAt
 	var effect *RecoveryEffectRecord
 	if state.Recovery != nil {
 		effect = state.Recovery.Effect
 	}
-	state.Recovery = &RecoveryRecord{Forward: input.Forward, Failure: input.Failure, Group: releaseexecution.CloneGroupRestoration(input.Group),
-		Interruption: releaseexecution.CloneRestorationInterruption(input.Interruption), Report: releaseexecution.RecoveryReport{StageID: stageID, Progress: next}, Effect: effect}
+	state.Recovery = &RecoveryRecord{
+		Forward: input.Forward,
+		Failure: input.Failure,
+		Group:   releaseexecution.CloneGroupRestoration(input.Group),
+		Interruption: releaseexecution.CloneRestorationInterruption(
+			input.Interruption,
+		),
+		Report:      releaseexecution.RecoveryReport{Sequence: state.Sequence, StageID: stageID, Progress: next},
+		Disposition: input.Disposition,
+		Effect:      effect,
+	}
 	if err := journal.writeRecord(ctx, *state); err != nil {
 		return nil, err
 	}
@@ -118,14 +146,20 @@ func (journal *Journal) AcknowledgeRecovery(ctx context.Context, ack workexecuti
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) Recovery(ctx context.Context, input releaseexecution.RecoveryInput) (*releaseexecution.RecoveryReport, error) {
+func (journal *Journal) Recovery(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+) (*releaseexecution.RecoveryReport, error) {
 	_, report, err := journal.LoadRecovery(ctx, input)
 	return report, err
 }
 
 // LoadRecovery restores the persisted start identity as well as its cursor.
 // A redelivered assignment need not carry the start receipt already on disk.
-func (journal *Journal) LoadRecovery(ctx context.Context, input releaseexecution.RecoveryInput) (releaseexecution.RecoveryInput, *releaseexecution.RecoveryReport, error) {
+func (journal *Journal) LoadRecovery(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+) (releaseexecution.RecoveryInput, *releaseexecution.RecoveryReport, error) {
 	if input.Validate() != nil {
 		return input, nil, invalid()
 	}
@@ -140,6 +174,7 @@ func (journal *Journal) LoadRecovery(ctx context.Context, input releaseexecution
 	}
 	if !workexecution.SameAssignment(state.Attempt, input.Input.Attempt) || state.Recovery == nil ||
 		state.Recovery.Forward.ID != input.Forward.ID || *state.Recovery.Forward.Result != *input.Forward.Result ||
+		state.Recovery.Disposition != input.Disposition ||
 		!releaseexecution.EqualGroupRestoration(state.Recovery.Group, input.Group) ||
 		!releaseexecution.EqualRestorationInterruption(state.Recovery.Interruption, input.Interruption) {
 		return input, nil, conflict()

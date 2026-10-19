@@ -16,8 +16,13 @@ type RecoveryHook struct {
 	Artifacts  *agentpb.ScriptCleanupArtifacts
 }
 
-func (loader *ChannelHookLoader) LoadRecoveryHook(ctx context.Context, input releaseexecution.RecoveryInput, hook *agentpb.ReleaseWorkHook) (*RecoveryHook, error) {
-	if loader == nil || loader.exchange == nil || ctx == nil || input.Validate() != nil || hook == nil || hook.Input == nil {
+func (loader *ChannelHookLoader) LoadRecoveryHook(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	hook *agentpb.ReleaseWorkHook,
+) (*RecoveryHook, error) {
+	if loader == nil || loader.exchange == nil || ctx == nil || input.Validate() != nil || hook == nil ||
+		hook.Input == nil {
 		return nil, errs.New(errs.KindStateConflict, "recovery hook ownership request is invalid")
 	}
 	identity, err := workexecution.EncodeAgentAttempt(input.Input.Attempt)
@@ -37,10 +42,13 @@ func (loader *ChannelHookLoader) LoadRecoveryHook(ctx context.Context, input rel
 		delivery.OperationId != input.Input.Release.OperationId || !proto.Equal(delivery.Input, hook.Input) ||
 		delivery.Run == nil || delivery.Run.ScriptExecutionId != hook.ExecutionId || delivery.Run.ScriptId != hook.ScriptId ||
 		delivery.Run.EnvironmentId != input.Input.Release.EnvironmentId || delivery.Run.ServiceId != input.Input.Release.ServiceId ||
-		delivery.Projection == nil || delivery.Body != nil || len(delivery.Entries) != 0 || delivery.Snapshot != nil || delivery.Checkpoint != nil ||
+		delivery.Projection == nil || delivery.Body != nil || len(delivery.Entries) != 0 || delivery.Snapshot != nil || delivery.Checkpoint != nil || delivery.InterruptedCleanup != nil ||
 		delivery.Cleanup == nil || delivery.Cleanup.BodyMetadata == nil ||
 		delivery.Cleanup.BodyMetadata.ScriptExecutionId != hook.ExecutionId || delivery.Cleanup.BodyMetadata.ScriptId != hook.ScriptId {
 		return nil, errs.New(errs.KindStateConflict, "recovery hook ownership differs from the captured Release")
 	}
-	return &RecoveryHook{Projection: proto.CloneOf(delivery.Projection), Artifacts: proto.CloneOf(delivery.Cleanup)}, nil
+	return &RecoveryHook{
+		Projection: proto.CloneOf(delivery.Projection),
+		Artifacts:  proto.CloneOf(delivery.Cleanup),
+	}, nil
 }

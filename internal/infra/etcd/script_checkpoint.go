@@ -81,7 +81,10 @@ func (repository *ScriptRepository) CheckpointScriptExecution(
 		return etcdstore.Versioned[scriptexecutions.ScriptExecutionRecord]{}, err
 	}
 	if authorization.Identity() != input.Executor {
-		return etcdstore.Versioned[scriptexecutions.ScriptExecutionRecord]{}, errs.New(errs.KindStateConflict, "Script checkpoint executor does not match the authenticated Agent")
+		return etcdstore.Versioned[scriptexecutions.ScriptExecutionRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Script checkpoint executor does not match the authenticated Agent",
+		)
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		anchor, err := repository.loadScriptCheckpointAnchor(ctx, input)
@@ -144,16 +147,25 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		defer etcdstore.ClearValues(read.Values)
 	}
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) {
-		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script checkpoint ownership read is incomplete")
+		return scriptCheckpointAnchor{}, errs.New(
+			errs.KindStateConflict,
+			"Script checkpoint ownership read is incomplete",
+		)
 	}
 	conditions := make([]etcdstore.Condition, len(keys))
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision {
-			return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script work, attempt or retained sources are unavailable")
+			return scriptCheckpointAnchor{}, errs.New(
+				errs.KindStateConflict,
+				"Script work, attempt or retained sources are unavailable",
+			)
 		}
 		conditions[index] = etcdstore.Condition{Key: keys[index], ModRevision: value.ModRevision}
 	}
-	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](read.Values[0].Value, "script-execution")
+	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](
+		read.Values[0].Value,
+		"script-execution",
+	)
 	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil {
 		return scriptCheckpointAnchor{}, errs.New(errs.KindInternal, "Script execution state is corrupt")
 	}
@@ -176,7 +188,8 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	if execution.ID != input.ExecutionID || execution.CurrentTaskID != input.TaskID ||
 		execution.WorkItemID != input.WorkItemID || execution.OperationID != input.OperationID ||
 		execution.Input != input.Input || execution.WorkInput == nil ||
-		execution.AttemptID != "" && (execution.AttemptID != input.AttemptID || execution.Executor == nil || *execution.Executor != input.Executor) ||
+		execution.AttemptID != "" &&
+			(execution.AttemptID != input.AttemptID || execution.Executor == nil || *execution.Executor != input.Executor) ||
 		task.ID != input.TaskID || task.Scope.EnvironmentID != execution.EnvironmentID ||
 		!task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
 		item.ID != input.WorkItemID || item.TaskID != task.ID || item.Phase != workexecution.Running ||
@@ -186,26 +199,34 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		attempt.Number != item.AttemptNumber || attempt.Input != *item.Input ||
 		attempt.Executor != input.Executor || attempt.StartedAt == nil || attempt.FinishedAt != nil ||
 		executor.Identity != input.Executor || input.At.Before(*attempt.StartedAt) {
-		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script checkpoint does not own the active work attempt")
+		return scriptCheckpointAnchor{}, errs.New(
+			errs.KindStateConflict,
+			"Script checkpoint does not own the active work attempt",
+		)
 	}
 	switch item.Operation {
 	case workexecution.Script:
-		if task.Action != workexecution.ActionScript || item.TargetID != execution.ScriptID || *item.Input != execution.Input {
+		if task.Action != workexecution.ActionScript || item.TargetID != execution.ScriptID ||
+			*item.Input != execution.Input {
 			return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script work input changed")
 		}
 	case workexecution.Release:
 		if item.TargetID != execution.ServiceID ||
 			(task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback && task.Action != workexecution.ActionApply) {
-			return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Release hook belongs to another Service action")
+			return scriptCheckpointAnchor{}, errs.New(
+				errs.KindStateConflict,
+				"Release hook belongs to another Service action",
+			)
 		}
 	default:
 		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "work operation cannot own a Script")
 	}
 	// Only a start checkpoint grants a new effect. Cancellation/deadline never
 	// prevents reporting an already-authorized effect, failure or cleanup.
+	recoveryHook := attempt.Direction == workexecution.Recovery && item.Operation == workexecution.Release
 	if input.Evidence.Kind == scriptexecutions.ScriptCheckpointEvidenceStartAuthorized &&
-		(attempt.Direction != workexecution.Forward || task.Stop != nil || item.ForwardRevoked ||
-			!executor.Ready || !time.Now().UTC().Before(attempt.Deadline) || !time.Now().UTC().Before(task.Deadline)) {
+		(!executor.Ready || !time.Now().UTC().Before(attempt.Deadline) ||
+			!recoveryHook && (attempt.Direction != workexecution.Forward || task.Stop != nil || item.ForwardRevoked || !time.Now().UTC().Before(task.Deadline))) {
 		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script start is no longer authorized")
 	}
 	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(read.Values[5].Value)
@@ -215,7 +236,10 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	if execution.Recovery != nil || !execution.ActiveReference || !manualScriptRootMatches(execution, root) ||
 		root.Phase != scriptsourceevidence.ScriptOperationSourceActive ||
 		root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent {
-		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script retained sources are closed to execution")
+		return scriptCheckpointAnchor{}, errs.New(
+			errs.KindStateConflict,
+			"Script retained sources are closed to execution",
+		)
 	}
 	claimKeys := make([]string, len(item.Claims))
 	for index, claim := range item.Claims {
@@ -229,7 +253,10 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		defer etcdstore.ClearValues(claims.Values)
 	}
 	if claims == nil || claims.ReadRevision != read.ReadRevision || len(claims.Values) != len(claimKeys) {
-		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script resource ownership read is incomplete")
+		return scriptCheckpointAnchor{}, errs.New(
+			errs.KindStateConflict,
+			"Script resource ownership read is incomplete",
+		)
 	}
 	for index, value := range claims.Values {
 		if value == nil || value.Key != claimKeys[index] || value.ModRevision <= 0 {
@@ -237,7 +264,10 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		}
 		owner, err := recordcodec.Decode[workqueue.ClaimOwner](value.Value, "execution_claim")
 		if err != nil || owner.TaskID != task.ID || owner.WorkItemID != item.ID {
-			return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "another work item owns the Script resource")
+			return scriptCheckpointAnchor{}, errs.New(
+				errs.KindStateConflict,
+				"another work item owns the Script resource",
+			)
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision})
 	}
@@ -264,13 +294,23 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	defer clear(evidence)
 	if existing := checkpoint.Values[1]; existing != nil {
 		if existing.Key != evidenceKey || !bytes.Equal(existing.Value, evidence) {
-			return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script checkpoint sequence already has different evidence")
+			return scriptCheckpointAnchor{}, errs.New(
+				errs.KindStateConflict,
+				"Script checkpoint sequence already has different evidence",
+			)
 		}
 		anchor.replayed = true
 		return anchor, nil
 	}
 	if item.Operation == workexecution.Release {
-		hookConditions, err := releasework.HookCheckpointConditions(ctx, repository.store, attempt, execution.ID, read.ReadRevision)
+		hookConditions, err := releasework.HookCheckpointConditions(
+			ctx,
+			repository.store,
+			attempt,
+			input,
+			execution.ReleaseID,
+			read.ReadRevision,
+		)
 		if err != nil {
 			return scriptCheckpointAnchor{}, err
 		}
@@ -287,7 +327,12 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		}
 		previous = workqueue.CheckpointSnapshot{Record: &cursor, Revision: value.ModRevision}
 	}
-	evidenceID, err := scriptexecutions.CheckpointEvidenceID(task.ID, input.ExecutionID, input.AttemptID, input.Sequence)
+	evidenceID, err := scriptexecutions.CheckpointEvidenceID(
+		task.ID,
+		input.ExecutionID,
+		input.AttemptID,
+		input.Sequence,
+	)
 	if err != nil {
 		return scriptCheckpointAnchor{}, err
 	}

@@ -1,6 +1,7 @@
 package releaseexecution
 
 import (
+	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 )
@@ -41,15 +42,41 @@ func ValidateRecoveryTransition(input RecoveryInput, previous *RecoveryProgress,
 }
 
 func EqualRecoveryProgress(a, b RecoveryProgress) bool {
-	return a.AttemptID == b.AttemptID && a.Phase == b.Phase && a.Sequence == b.Sequence && a.InFlight == b.InFlight &&
-		a.UpdatedAt.Equal(b.UpdatedAt) && (a.Evidence == nil && b.Evidence == nil || a.Evidence != nil && b.Evidence != nil && *a.Evidence == *b.Evidence)
+	return a.AttemptID == b.AttemptID && a.Phase == b.Phase && a.Sequence == b.Sequence && a.Hook == b.Hook &&
+		a.HookCount == b.HookCount &&
+		a.InFlight == b.InFlight &&
+		a.UpdatedAt.Equal(b.UpdatedAt) &&
+		(a.Evidence == nil && b.Evidence == nil || a.Evidence != nil && b.Evidence != nil && *a.Evidence == *b.Evidence)
 }
 
 func (progress RecoveryProgress) StageID(input RecoveryInput) (string, error) {
 	if err := progress.Validate(input); err != nil {
 		return "", err
 	}
-	return RecoveryStageID(input.Input.Attempt.Input, progress.Phase)
+	return recoveryActionID(input.Input.Attempt.Input, progress.Sequence/2)
+}
+
+func recoveryActionID(reference workexecution.Input, index uint64) (string, error) {
+	for _, phase := range []RecoveryPhase{QuiesceForward, InspectFailedRuntime, RestoreConfiguration,
+		RestoreServingRuntime, RemoveFailedCandidate, VerifyRestoration} {
+		position, _ := recoveryPhaseIndex(phase)
+		if position == index {
+			return RecoveryStageID(reference, phase)
+		}
+	}
+	if reference.Validate() != nil || index < 6 || index >= 22 {
+		return "", invalidProgress()
+	}
+	at, err := ids.Timestamp(ids.KindPlan, reference.ID)
+	if err != nil {
+		return "", err
+	}
+	return ids.DeriveAt(
+		ids.KindStep,
+		at,
+		reference.SHA256,
+		fmt.Sprintf("release/recovery/failure-hook/%d", index-6),
+	), nil
 }
 
 // RecoveryStageID names a captured boundary even when reconciling an orphan.

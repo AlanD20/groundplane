@@ -118,7 +118,10 @@ func (journal *Journal) PrepareScript(ctx context.Context, attempt workexecution
 			return ScriptRecord{}, err
 		}
 		if _, reserved := attempts[attempt.ID]; !reserved && len(attempts) >= MaximumAttempts {
-			return ScriptRecord{}, errs.New(errs.KindStateConflict, "Agent work journal is full; settle retained attempts before accepting more work")
+			return ScriptRecord{}, errs.New(
+				errs.KindStateConflict,
+				"Agent work journal is full; settle retained attempts before accepting more work",
+			)
 		}
 		state = &attemptRecord{Attempt: attempt}
 	}
@@ -148,6 +151,10 @@ func (journal *Journal) PrepareScript(ctx context.Context, attempt workexecution
 	}
 	if state.Release != nil && (!state.Release.Progress.InFlight ||
 		state.Release.Progress.Phase != releaseexecution.PreHooks && state.Release.Progress.Phase != releaseexecution.PostHooks) {
+		return ScriptRecord{}, conflict()
+	}
+	if state.Recovery != nil && (!state.Recovery.Report.Progress.InFlight ||
+		state.Recovery.Report.Progress.Phase != releaseexecution.FailureHooks || state.Recovery.Report.Ack == nil) {
 		return ScriptRecord{}, conflict()
 	}
 	state.Script, err = encodeScript(next)

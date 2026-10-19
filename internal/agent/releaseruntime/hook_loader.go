@@ -25,9 +25,14 @@ func NewHookLoader(exchange HookExchange) (*ChannelHookLoader, error) {
 	return &ChannelHookLoader{exchange: exchange}, nil
 }
 
-func (loader *ChannelHookLoader) LoadHook(ctx context.Context, input releaseexecution.Input, hook *agentpb.ReleaseWorkHook) (scriptruntime.Invocation, error) {
-	var empty scriptruntime.Invocation
-	if ctx == nil || loader == nil || loader.exchange == nil || hook == nil || hook.Input == nil {
+func (loader *ChannelHookLoader) loadHookDelivery(
+	ctx context.Context,
+	input releaseexecution.Input,
+	hook *agentpb.ReleaseWorkHook,
+) (*agentpb.ReleaseHookDelivery, error) {
+	var empty *agentpb.ReleaseHookDelivery
+	if ctx == nil || loader == nil || loader.exchange == nil || input.Release == nil || hook == nil ||
+		hook.Input == nil {
 		return empty, errs.New(errs.KindValidationFailed, "Release hook delivery input is invalid")
 	}
 	identity, err := workexecution.EncodeAgentAttempt(input.Attempt)
@@ -39,18 +44,54 @@ func (loader *ChannelHookLoader) LoadHook(ctx context.Context, input releaseexec
 		releaseexecution.ClearHookDelivery(delivery)
 		return empty, err
 	}
-	invalid := func() (scriptruntime.Invocation, error) {
+	invalid := func() (*agentpb.ReleaseHookDelivery, error) {
 		releaseexecution.ClearHookDelivery(delivery)
-		return empty, errs.New(errs.KindStateConflict, "Controller hook delivery differs from the assigned Release input")
+		return empty, errs.New(
+			errs.KindStateConflict,
+			"Controller hook delivery differs from the assigned Release input",
+		)
 	}
 	if delivery == nil || executionplan.RejectUnknown(delivery) != nil {
 		return invalid()
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(delivery.Attempt, input.Attempt.Executor)
 	if err != nil || !workexecution.SameAssignment(attempt, input.Attempt) || delivery.OperationId != input.Release.OperationId ||
-		!proto.Equal(delivery.Input, hook.Input) || delivery.Run == nil || delivery.Run.ScriptExecutionId != hook.ExecutionId ||
-		delivery.Run.ScriptId != hook.ScriptId || delivery.Checkpoint == nil || delivery.Checkpoint.ScriptExecutionId != hook.ExecutionId || delivery.Cleanup != nil {
+		!proto.Equal(delivery.Input, hook.Input) ||
+		delivery.Run == nil ||
+		delivery.Run.ScriptExecutionId != hook.ExecutionId ||
+		delivery.Run.ScriptId != hook.ScriptId ||
+		delivery.Run.EnvironmentId != input.Release.EnvironmentId ||
+		delivery.Run.ServiceId != input.Release.ServiceId {
 		return invalid()
+	}
+	return delivery, nil
+}
+
+func (loader *ChannelHookLoader) LoadHook(
+	ctx context.Context,
+	input releaseexecution.Input,
+	hook *agentpb.ReleaseWorkHook,
+) (scriptruntime.Invocation, error) {
+	delivery, err := loader.loadHookDelivery(ctx, input, hook)
+	if err != nil {
+		return scriptruntime.Invocation{}, err
+	}
+	return decodeHookInvocation(input, hook, delivery)
+}
+
+func decodeHookInvocation(
+	input releaseexecution.Input,
+	hook *agentpb.ReleaseWorkHook,
+	delivery *agentpb.ReleaseHookDelivery,
+) (scriptruntime.Invocation, error) {
+	if delivery.Checkpoint == nil || delivery.Checkpoint.ScriptExecutionId != hook.ExecutionId ||
+		delivery.Cleanup != nil ||
+		delivery.InterruptedCleanup != nil {
+		releaseexecution.ClearHookDelivery(delivery)
+		return scriptruntime.Invocation{}, errs.New(
+			errs.KindStateConflict,
+			"Release hook execution delivery has invalid checkpoint or cleanup metadata",
+		)
 	}
 	return scriptruntime.Invocation{Attempt: input.Attempt, OperationID: delivery.OperationId,
 		Input: workexecution.Input{ID: hook.Input.InputId, SHA256: hex.EncodeToString(hook.Input.Sha256)},

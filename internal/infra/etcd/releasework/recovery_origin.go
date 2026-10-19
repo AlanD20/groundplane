@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type RecoveryOrigin struct {
@@ -30,7 +31,12 @@ func LoadRecoveryOrigin(ctx context.Context, store Reader, view workqueue.Resume
 	if err != nil {
 		return RecoveryOrigin{}, err
 	}
-	binding := releaseexecution.RecoveryInput{Input: releaseexecution.Input{Attempt: recovery}, Forward: origin.Forward, Failure: origin.Failure}
+	binding := releaseexecution.RecoveryInput{
+		Input:       releaseexecution.Input{Attempt: recovery},
+		Forward:     origin.Forward,
+		Failure:     origin.Failure,
+		Disposition: agentpb.WorkReleaseRecoveryDisposition_WORK_RELEASE_RECOVERY_DISPOSITION_RESTORE_CAPTURED,
+	}
 	if err := binding.ValidateIdentity(); err != nil {
 		return RecoveryOrigin{}, err
 	}
@@ -47,7 +53,13 @@ func LoadRecoverySource(ctx context.Context, store Reader, work workqueue.View) 
 		(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped && item.Cleanup != workexecution.CleanupRunning) {
 		return RecoveryOrigin{}, invalid()
 	}
-	failureValue, err := readRecoveryValue(ctx, store, FailureKey(item.Result.ID), work.ReadRevision, releaseexecution.MaximumCheckpointBytes)
+	failureValue, err := readRecoveryValue(
+		ctx,
+		store,
+		FailureKey(item.Result.ID),
+		work.ReadRevision,
+		releaseexecution.MaximumCheckpointBytes,
+	)
 	if err != nil {
 		return RecoveryOrigin{}, err
 	}
@@ -56,7 +68,13 @@ func LoadRecoverySource(ctx context.Context, store Reader, work workqueue.View) 
 	if err != nil || ids.Validate(ids.KindAttempt, hint.AttemptID) != nil {
 		return RecoveryOrigin{}, invalid()
 	}
-	attemptValue, err := readRecoveryValue(ctx, store, workqueue.AttemptKey(hint.AttemptID), work.ReadRevision, maximumProgressBytes)
+	attemptValue, err := readRecoveryValue(
+		ctx,
+		store,
+		workqueue.AttemptKey(hint.AttemptID),
+		work.ReadRevision,
+		maximumProgressBytes,
+	)
 	if err != nil {
 		return RecoveryOrigin{}, err
 	}
@@ -85,7 +103,13 @@ func LoadRecoverySource(ctx context.Context, store Reader, work workqueue.View) 
 	}}, nil
 }
 
-func readRecoveryValue(ctx context.Context, store Reader, key string, revision int64, limit int) (*keyvalue.KeyValue, error) {
+func readRecoveryValue(
+	ctx context.Context,
+	store Reader,
+	key string,
+	revision int64,
+	limit int,
+) (*keyvalue.KeyValue, error) {
 	read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return nil, err
@@ -98,7 +122,8 @@ func readRecoveryValue(ctx context.Context, store Reader, key string, revision i
 		return nil, invalid()
 	}
 	value := read.Values[0]
-	if value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision || len(value.Value) == 0 || len(value.Value) > limit {
+	if value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision || len(value.Value) == 0 ||
+		len(value.Value) > limit {
 		return nil, invalid()
 	}
 	owned := *value

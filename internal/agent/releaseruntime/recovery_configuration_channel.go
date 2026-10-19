@@ -16,9 +16,14 @@ import (
 )
 
 // Recovery uses the same bounded authenticated file transport as forward work,
-// but the actual recovery assignment selects only its captured prior snapshot.
-func (source *ChannelConfigurationSource) DescribeRecovery(ctx context.Context, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error) {
-	if source == nil || input.Validate() != nil || report.Validate(input) != nil || report.Ack == nil || !report.Progress.InFlight ||
+// with the snapshot selected by the captured recovery disposition.
+func (source *ChannelConfigurationSource) DescribeRecovery(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error) {
+	if source == nil || input.Validate() != nil || report.Validate(input) != nil || report.Ack == nil ||
+		!report.Progress.InFlight ||
 		(report.Progress.Phase != releaseexecution.RestoreConfiguration && report.Progress.Phase != releaseexecution.VerifyRestoration) {
 		return nil, nil, invalidConfigurationDelivery()
 	}
@@ -26,12 +31,18 @@ func (source *ChannelConfigurationSource) DescribeRecovery(ctx context.Context, 
 	if err != nil {
 		return nil, nil, err
 	}
-	manifest, err := source.exchange.Configuration(ctx, &agentpb.ReleaseConfigurationRequest{Attempt: identity, StageId: report.StageID})
+	manifest, err := source.exchange.Configuration(
+		ctx,
+		&agentpb.ReleaseConfigurationRequest{Attempt: identity, StageId: report.StageID},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
-	if manifest == nil || executionplan.RejectUnknown(manifest) != nil || !proto.Equal(manifest.Attempt, identity) || manifest.StageId != report.StageID ||
-		!proto.Equal(manifest.Configuration, input.Input.Release.PriorConfiguration) || len(manifest.Files) > 512 || len(manifest.Files) != len(input.Input.Release.ConfigurationDestinations) {
+	if manifest == nil || executionplan.RejectUnknown(manifest) != nil || !proto.Equal(manifest.Attempt, identity) ||
+		manifest.StageId != report.StageID ||
+		!proto.Equal(manifest.Configuration, input.RecoveryConfigurationReference()) ||
+		len(manifest.Files) > 512 ||
+		len(manifest.Files) != len(input.Input.Release.ConfigurationDestinations) {
 		return nil, nil, invalidConfigurationDelivery()
 	}
 	files := make([]entrymaterialization.Header, len(manifest.Files))
@@ -48,15 +59,21 @@ func (source *ChannelConfigurationSource) DescribeRecovery(ctx context.Context, 
 	return proto.CloneOf(manifest.Configuration), files, nil
 }
 
-func (source *ChannelConfigurationSource) OpenRecoveryFile(ctx context.Context, input releaseexecution.RecoveryInput, header entrymaterialization.Header) (io.ReadCloser, error) {
-	if source == nil || input.Validate() != nil || input.Input.Release.Configuration == nil || header.TaskID() != input.Input.Attempt.TaskID ||
-		header.EnvironmentID() != input.Input.Release.EnvironmentId || header.Length() > entrymaterialization.MaximumContentBytes ||
+func (source *ChannelConfigurationSource) OpenRecoveryFile(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	header entrymaterialization.Header,
+) (io.ReadCloser, error) {
+	if source == nil || input.Validate() != nil || input.Input.Release.Configuration == nil ||
+		header.TaskID() != input.Input.Attempt.TaskID ||
+		header.EnvironmentID() != input.Input.Release.EnvironmentId ||
+		header.Length() > entrymaterialization.MaximumContentBytes ||
 		!slices.Contains(input.Input.Release.ConfigurationDestinations, header.Destination()) {
 		return nil, invalidConfigurationDelivery()
 	}
 	generation := input.Input.Release.Configuration.Generation
-	if prior := input.Input.Release.PriorConfiguration; prior != nil {
-		generation = prior.Generation
+	if selected := input.RecoveryConfigurationReference(); selected != nil {
+		generation = selected.Generation
 	}
 	if header.Generation() != generation {
 		return nil, invalidConfigurationDelivery()
@@ -65,13 +82,22 @@ func (source *ChannelConfigurationSource) OpenRecoveryFile(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	delivery, err := source.exchange.ConfigurationFile(ctx, &agentpb.ReleaseConfigurationFileRequest{Attempt: identity, StageId: header.StepID(), Destination: header.Destination()})
+	delivery, err := source.exchange.ConfigurationFile(
+		ctx,
+		&agentpb.ReleaseConfigurationFileRequest{
+			Attempt:     identity,
+			StageId:     header.StepID(),
+			Destination: header.Destination(),
+		},
+	)
 	defer releaseexecution.ClearConfigurationDelivery(delivery)
 	if err != nil {
 		return nil, err
 	}
-	if delivery == nil || executionplan.RejectUnknown(delivery) != nil || !proto.Equal(delivery.Attempt, identity) || delivery.StageId != header.StepID() ||
-		!proto.Equal(delivery.Configuration, input.Input.Release.PriorConfiguration) || !proto.Equal(delivery.File, releaseexecution.EncodeConfigurationFile(header)) ||
+	if delivery == nil || executionplan.RejectUnknown(delivery) != nil || !proto.Equal(delivery.Attempt, identity) ||
+		delivery.StageId != header.StepID() ||
+		!proto.Equal(delivery.Configuration, input.RecoveryConfigurationReference()) ||
+		!proto.Equal(delivery.File, releaseexecution.EncodeConfigurationFile(header)) ||
 		uint64(len(delivery.Content)) != header.Length() {
 		return nil, invalidConfigurationDelivery()
 	}

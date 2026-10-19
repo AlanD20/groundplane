@@ -30,7 +30,8 @@ func TestNativeReleaseDeliveryBoundsHookSelectionAndOwnsCapture(t *testing.T) {
 	input := &agentpb.ReleaseWorkInput{
 		OperationId: ids.New(ids.KindOperation), EnvironmentId: environmentID, ServiceId: item.TargetID,
 		ReleaseId: ids.New(ids.KindDeployment), RenderGeneration: 1,
-		Strategy: agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE,
+		Strategy:      agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE,
+		FailurePolicy: agentpb.WorkReleaseFailurePolicy_WORK_RELEASE_FAILURE_POLICY_SWITCH_BACK,
 		Configuration: &agentpb.WorkConfigurationReference{ConfigurationId: ids.New(ids.KindConfig),
 			EnvironmentId: environmentID, Generation: 1, Sha256: digest[:]},
 		Candidate: &agentpb.ComposeArtifact{ArtifactId: ids.New(ids.KindConfig),
@@ -59,6 +60,7 @@ func TestNativeReleaseDeliveryBoundsHookSelectionAndOwnsCapture(t *testing.T) {
 		name   string
 		change func(*agentpb.ReleaseWorkInput)
 	}{
+		{"missing failure policy", func(in *agentpb.ReleaseWorkInput) { in.FailurePolicy = 0 }},
 		{"overflow", func(in *agentpb.ReleaseWorkInput) {
 			extra := proto.CloneOf(in.Hooks[0])
 			extra.ExecutionId, extra.ScriptId = ids.NewULID(), ids.New(ids.KindScript)

@@ -14,11 +14,19 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// RecoveryConfigurationSource authenticates the captured prior snapshot and
-// supplies explicit removal descriptors for destinations absent in that snapshot.
+// RecoveryConfigurationSource authenticates the policy-selected snapshot and
+// supplies explicit removals for destinations absent from a restored snapshot.
 type RecoveryConfigurationSource interface {
-	DescribeRecovery(context.Context, releaseexecution.RecoveryInput, releaseexecution.RecoveryReport) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error)
-	OpenRecoveryFile(context.Context, releaseexecution.RecoveryInput, entrymaterialization.Header) (io.ReadCloser, error)
+	DescribeRecovery(
+		context.Context,
+		releaseexecution.RecoveryInput,
+		releaseexecution.RecoveryReport,
+	) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error)
+	OpenRecoveryFile(
+		context.Context,
+		releaseexecution.RecoveryInput,
+		entrymaterialization.Header,
+	) (io.ReadCloser, error)
 }
 
 type RecoveryConfiguration struct {
@@ -27,9 +35,16 @@ type RecoveryConfiguration struct {
 	ownership *agentownership.Lease
 }
 
-func NewRecoveryConfiguration(runtime *materialization.Runtime, source RecoveryConfigurationSource, ownership *agentownership.Lease) (*RecoveryConfiguration, error) {
+func NewRecoveryConfiguration(
+	runtime *materialization.Runtime,
+	source RecoveryConfigurationSource,
+	ownership *agentownership.Lease,
+) (*RecoveryConfiguration, error) {
 	if runtime == nil || source == nil {
-		return nil, errs.New(errs.KindInternal, "Release recovery configuration requires materializer and captured sources")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Release recovery configuration requires materializer and captured sources",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
@@ -37,20 +52,33 @@ func NewRecoveryConfiguration(runtime *materialization.Runtime, source RecoveryC
 	return &RecoveryConfiguration{runtime: runtime, source: source, ownership: ownership}, nil
 }
 
-func (configuration *RecoveryConfiguration) Run(ctx context.Context, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport, inspectOnly bool) (releaseexecution.RecoveryConfigurationProof, error) {
-	if configuration == nil || ctx == nil || report.Validate(input) != nil || report.Ack == nil || !report.Progress.InFlight ||
+func (configuration *RecoveryConfiguration) Run(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+	inspectOnly bool,
+) (releaseexecution.RecoveryConfigurationProof, error) {
+	if configuration == nil || ctx == nil || report.Validate(input) != nil || report.Ack == nil ||
+		!report.Progress.InFlight ||
 		(report.Progress.Phase != releaseexecution.RestoreConfiguration && report.Progress.Phase != releaseexecution.VerifyRestoration) ||
 		report.Progress.Phase == releaseexecution.VerifyRestoration && !inspectOnly {
-		return releaseexecution.RecoveryConfigurationProof{}, errs.New(errs.KindStateConflict, "Release recovery configuration has no acknowledged file boundary")
+		return releaseexecution.RecoveryConfigurationProof{}, errs.New(
+			errs.KindStateConflict,
+			"Release recovery configuration has no acknowledged file boundary",
+		)
 	}
 	bounded, cancel := context.WithDeadline(ctx, input.Input.Attempt.Deadline)
 	defer cancel()
+	inspectOnly = inspectOnly || input.PreservesServing()
 	reference, files, err := configuration.source.DescribeRecovery(bounded, input, report)
 	if err != nil {
 		return releaseexecution.RecoveryConfigurationProof{}, err
 	}
-	if !proto.Equal(reference, input.Input.Release.PriorConfiguration) {
-		return releaseexecution.RecoveryConfigurationProof{}, errs.New(errs.KindStateConflict, "Release recovery source differs from the captured prior configuration")
+	if !proto.Equal(reference, input.RecoveryConfigurationReference()) {
+		return releaseexecution.RecoveryConfigurationProof{}, errs.New(
+			errs.KindStateConflict,
+			"Release recovery source differs from its captured configuration selection",
+		)
 	}
 	// Validate the complete selection before changing the first file.
 	proof, err := releaseexecution.RecoveryConfigurationResult(input, report, files)
@@ -81,7 +109,13 @@ func (configuration *RecoveryConfiguration) Run(ctx context.Context, input relea
 	return proof, nil
 }
 
-func (configuration *RecoveryConfiguration) file(ctx context.Context, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport, header entrymaterialization.Header, verifyOnly bool) error {
+func (configuration *RecoveryConfiguration) file(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+	header entrymaterialization.Header,
+	verifyOnly bool,
+) error {
 	source, err := configuration.source.OpenRecoveryFile(ctx, input, header)
 	if err != nil {
 		if source != nil {

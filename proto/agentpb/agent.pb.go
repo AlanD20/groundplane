@@ -181,6 +181,104 @@ func (WorkReleaseStrategy) EnumDescriptor() ([]byte, []int) {
 	return file_proto_agent_proto_rawDescGZIP(), []int{2}
 }
 
+type WorkReleaseFailurePolicy int32
+
+const (
+	WorkReleaseFailurePolicy_WORK_RELEASE_FAILURE_POLICY_UNSPECIFIED  WorkReleaseFailurePolicy = 0
+	WorkReleaseFailurePolicy_WORK_RELEASE_FAILURE_POLICY_SWITCH_BACK  WorkReleaseFailurePolicy = 1
+	WorkReleaseFailurePolicy_WORK_RELEASE_FAILURE_POLICY_LEAVE_ACTIVE WorkReleaseFailurePolicy = 2
+)
+
+// Enum value maps for WorkReleaseFailurePolicy.
+var (
+	WorkReleaseFailurePolicy_name = map[int32]string{
+		0: "WORK_RELEASE_FAILURE_POLICY_UNSPECIFIED",
+		1: "WORK_RELEASE_FAILURE_POLICY_SWITCH_BACK",
+		2: "WORK_RELEASE_FAILURE_POLICY_LEAVE_ACTIVE",
+	}
+	WorkReleaseFailurePolicy_value = map[string]int32{
+		"WORK_RELEASE_FAILURE_POLICY_UNSPECIFIED":  0,
+		"WORK_RELEASE_FAILURE_POLICY_SWITCH_BACK":  1,
+		"WORK_RELEASE_FAILURE_POLICY_LEAVE_ACTIVE": 2,
+	}
+)
+
+func (x WorkReleaseFailurePolicy) Enum() *WorkReleaseFailurePolicy {
+	p := new(WorkReleaseFailurePolicy)
+	*p = x
+	return p
+}
+
+func (x WorkReleaseFailurePolicy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WorkReleaseFailurePolicy) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_agent_proto_enumTypes[3].Descriptor()
+}
+
+func (WorkReleaseFailurePolicy) Type() protoreflect.EnumType {
+	return &file_proto_agent_proto_enumTypes[3]
+}
+
+func (x WorkReleaseFailurePolicy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WorkReleaseFailurePolicy.Descriptor instead.
+func (WorkReleaseFailurePolicy) EnumDescriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{3}
+}
+
+type WorkReleaseRecoveryDisposition int32
+
+const (
+	WorkReleaseRecoveryDisposition_WORK_RELEASE_RECOVERY_DISPOSITION_UNSPECIFIED      WorkReleaseRecoveryDisposition = 0
+	WorkReleaseRecoveryDisposition_WORK_RELEASE_RECOVERY_DISPOSITION_RESTORE_CAPTURED WorkReleaseRecoveryDisposition = 1
+	WorkReleaseRecoveryDisposition_WORK_RELEASE_RECOVERY_DISPOSITION_PRESERVE_SERVING WorkReleaseRecoveryDisposition = 2
+)
+
+// Enum value maps for WorkReleaseRecoveryDisposition.
+var (
+	WorkReleaseRecoveryDisposition_name = map[int32]string{
+		0: "WORK_RELEASE_RECOVERY_DISPOSITION_UNSPECIFIED",
+		1: "WORK_RELEASE_RECOVERY_DISPOSITION_RESTORE_CAPTURED",
+		2: "WORK_RELEASE_RECOVERY_DISPOSITION_PRESERVE_SERVING",
+	}
+	WorkReleaseRecoveryDisposition_value = map[string]int32{
+		"WORK_RELEASE_RECOVERY_DISPOSITION_UNSPECIFIED":      0,
+		"WORK_RELEASE_RECOVERY_DISPOSITION_RESTORE_CAPTURED": 1,
+		"WORK_RELEASE_RECOVERY_DISPOSITION_PRESERVE_SERVING": 2,
+	}
+)
+
+func (x WorkReleaseRecoveryDisposition) Enum() *WorkReleaseRecoveryDisposition {
+	p := new(WorkReleaseRecoveryDisposition)
+	*p = x
+	return p
+}
+
+func (x WorkReleaseRecoveryDisposition) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WorkReleaseRecoveryDisposition) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_agent_proto_enumTypes[4].Descriptor()
+}
+
+func (WorkReleaseRecoveryDisposition) Type() protoreflect.EnumType {
+	return &file_proto_agent_proto_enumTypes[4]
+}
+
+func (x WorkReleaseRecoveryDisposition) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WorkReleaseRecoveryDisposition.Descriptor instead.
+func (WorkReleaseRecoveryDisposition) EnumDescriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{4}
+}
+
 type WorkloadImageResolutionFailureKind int32
 
 const (
@@ -217,11 +315,11 @@ func (x WorkloadImageResolutionFailureKind) String() string {
 }
 
 func (WorkloadImageResolutionFailureKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[3].Descriptor()
+	return file_proto_agent_proto_enumTypes[5].Descriptor()
 }
 
 func (WorkloadImageResolutionFailureKind) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[3]
+	return &file_proto_agent_proto_enumTypes[5]
 }
 
 func (x WorkloadImageResolutionFailureKind) Number() protoreflect.EnumNumber {
@@ -230,7 +328,7 @@ func (x WorkloadImageResolutionFailureKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WorkloadImageResolutionFailureKind.Descriptor instead.
 func (WorkloadImageResolutionFailureKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{3}
+	return file_proto_agent_proto_rawDescGZIP(), []int{5}
 }
 
 type ServiceProxyObservationState int32
@@ -272,11 +370,11 @@ func (x ServiceProxyObservationState) String() string {
 }
 
 func (ServiceProxyObservationState) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[4].Descriptor()
+	return file_proto_agent_proto_enumTypes[6].Descriptor()
 }
 
 func (ServiceProxyObservationState) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[4]
+	return &file_proto_agent_proto_enumTypes[6]
 }
 
 func (x ServiceProxyObservationState) Number() protoreflect.EnumNumber {
@@ -285,7 +383,7 @@ func (x ServiceProxyObservationState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ServiceProxyObservationState.Descriptor instead.
 func (ServiceProxyObservationState) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{4}
+	return file_proto_agent_proto_rawDescGZIP(), []int{6}
 }
 
 type StepStartDecision int32
@@ -324,11 +422,11 @@ func (x StepStartDecision) String() string {
 }
 
 func (StepStartDecision) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[5].Descriptor()
+	return file_proto_agent_proto_enumTypes[7].Descriptor()
 }
 
 func (StepStartDecision) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[5]
+	return &file_proto_agent_proto_enumTypes[7]
 }
 
 func (x StepStartDecision) Number() protoreflect.EnumNumber {
@@ -337,7 +435,7 @@ func (x StepStartDecision) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StepStartDecision.Descriptor instead.
 func (StepStartDecision) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{5}
+	return file_proto_agent_proto_rawDescGZIP(), []int{7}
 }
 
 type TaskState int32
@@ -385,11 +483,11 @@ func (x TaskState) String() string {
 }
 
 func (TaskState) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[6].Descriptor()
+	return file_proto_agent_proto_enumTypes[8].Descriptor()
 }
 
 func (TaskState) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[6]
+	return &file_proto_agent_proto_enumTypes[8]
 }
 
 func (x TaskState) Number() protoreflect.EnumNumber {
@@ -398,7 +496,7 @@ func (x TaskState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TaskState.Descriptor instead.
 func (TaskState) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{6}
+	return file_proto_agent_proto_rawDescGZIP(), []int{8}
 }
 
 type ObservedContainerState int32
@@ -440,11 +538,11 @@ func (x ObservedContainerState) String() string {
 }
 
 func (ObservedContainerState) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[7].Descriptor()
+	return file_proto_agent_proto_enumTypes[9].Descriptor()
 }
 
 func (ObservedContainerState) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[7]
+	return &file_proto_agent_proto_enumTypes[9]
 }
 
 func (x ObservedContainerState) Number() protoreflect.EnumNumber {
@@ -453,7 +551,7 @@ func (x ObservedContainerState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ObservedContainerState.Descriptor instead.
 func (ObservedContainerState) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{7}
+	return file_proto_agent_proto_rawDescGZIP(), []int{9}
 }
 
 type ObservedContainerHealth int32
@@ -495,11 +593,11 @@ func (x ObservedContainerHealth) String() string {
 }
 
 func (ObservedContainerHealth) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[8].Descriptor()
+	return file_proto_agent_proto_enumTypes[10].Descriptor()
 }
 
 func (ObservedContainerHealth) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[8]
+	return &file_proto_agent_proto_enumTypes[10]
 }
 
 func (x ObservedContainerHealth) Number() protoreflect.EnumNumber {
@@ -508,7 +606,7 @@ func (x ObservedContainerHealth) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ObservedContainerHealth.Descriptor instead.
 func (ObservedContainerHealth) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{8}
+	return file_proto_agent_proto_rawDescGZIP(), []int{10}
 }
 
 type ObservedCollisionKind int32
@@ -547,11 +645,11 @@ func (x ObservedCollisionKind) String() string {
 }
 
 func (ObservedCollisionKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[9].Descriptor()
+	return file_proto_agent_proto_enumTypes[11].Descriptor()
 }
 
 func (ObservedCollisionKind) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[9]
+	return &file_proto_agent_proto_enumTypes[11]
 }
 
 func (x ObservedCollisionKind) Number() protoreflect.EnumNumber {
@@ -560,7 +658,7 @@ func (x ObservedCollisionKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ObservedCollisionKind.Descriptor instead.
 func (ObservedCollisionKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{9}
+	return file_proto_agent_proto_rawDescGZIP(), []int{11}
 }
 
 type DNSQueryType int32
@@ -596,11 +694,11 @@ func (x DNSQueryType) String() string {
 }
 
 func (DNSQueryType) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[10].Descriptor()
+	return file_proto_agent_proto_enumTypes[12].Descriptor()
 }
 
 func (DNSQueryType) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[10]
+	return &file_proto_agent_proto_enumTypes[12]
 }
 
 func (x DNSQueryType) Number() protoreflect.EnumNumber {
@@ -609,7 +707,7 @@ func (x DNSQueryType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DNSQueryType.Descriptor instead.
 func (DNSQueryType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{10}
+	return file_proto_agent_proto_rawDescGZIP(), []int{12}
 }
 
 type TaskTerminal int32
@@ -651,11 +749,11 @@ func (x TaskTerminal) String() string {
 }
 
 func (TaskTerminal) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[11].Descriptor()
+	return file_proto_agent_proto_enumTypes[13].Descriptor()
 }
 
 func (TaskTerminal) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[11]
+	return &file_proto_agent_proto_enumTypes[13]
 }
 
 func (x TaskTerminal) Number() protoreflect.EnumNumber {
@@ -664,7 +762,7 @@ func (x TaskTerminal) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TaskTerminal.Descriptor instead.
 func (TaskTerminal) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{11}
+	return file_proto_agent_proto_rawDescGZIP(), []int{13}
 }
 
 type LogStream int32
@@ -700,11 +798,11 @@ func (x LogStream) String() string {
 }
 
 func (LogStream) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[12].Descriptor()
+	return file_proto_agent_proto_enumTypes[14].Descriptor()
 }
 
 func (LogStream) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[12]
+	return &file_proto_agent_proto_enumTypes[14]
 }
 
 func (x LogStream) Number() protoreflect.EnumNumber {
@@ -713,7 +811,7 @@ func (x LogStream) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LogStream.Descriptor instead.
 func (LogStream) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{12}
+	return file_proto_agent_proto_rawDescGZIP(), []int{14}
 }
 
 type LogSlot int32
@@ -755,11 +853,11 @@ func (x LogSlot) String() string {
 }
 
 func (LogSlot) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[13].Descriptor()
+	return file_proto_agent_proto_enumTypes[15].Descriptor()
 }
 
 func (LogSlot) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[13]
+	return &file_proto_agent_proto_enumTypes[15]
 }
 
 func (x LogSlot) Number() protoreflect.EnumNumber {
@@ -768,7 +866,7 @@ func (x LogSlot) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LogSlot.Descriptor instead.
 func (LogSlot) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{13}
+	return file_proto_agent_proto_rawDescGZIP(), []int{15}
 }
 
 type LogEndReason int32
@@ -810,11 +908,11 @@ func (x LogEndReason) String() string {
 }
 
 func (LogEndReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[14].Descriptor()
+	return file_proto_agent_proto_enumTypes[16].Descriptor()
 }
 
 func (LogEndReason) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[14]
+	return &file_proto_agent_proto_enumTypes[16]
 }
 
 func (x LogEndReason) Number() protoreflect.EnumNumber {
@@ -823,7 +921,7 @@ func (x LogEndReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LogEndReason.Descriptor instead.
 func (LogEndReason) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{14}
+	return file_proto_agent_proto_rawDescGZIP(), []int{16}
 }
 
 type ReleaseRecoveryPhase int32
@@ -862,11 +960,11 @@ func (x ReleaseRecoveryPhase) String() string {
 }
 
 func (ReleaseRecoveryPhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[15].Descriptor()
+	return file_proto_agent_proto_enumTypes[17].Descriptor()
 }
 
 func (ReleaseRecoveryPhase) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[15]
+	return &file_proto_agent_proto_enumTypes[17]
 }
 
 func (x ReleaseRecoveryPhase) Number() protoreflect.EnumNumber {
@@ -875,7 +973,7 @@ func (x ReleaseRecoveryPhase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReleaseRecoveryPhase.Descriptor instead.
 func (ReleaseRecoveryPhase) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{15}
+	return file_proto_agent_proto_rawDescGZIP(), []int{17}
 }
 
 type TaskExecutionMode int32
@@ -911,11 +1009,11 @@ func (x TaskExecutionMode) String() string {
 }
 
 func (TaskExecutionMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[16].Descriptor()
+	return file_proto_agent_proto_enumTypes[18].Descriptor()
 }
 
 func (TaskExecutionMode) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[16]
+	return &file_proto_agent_proto_enumTypes[18]
 }
 
 func (x TaskExecutionMode) Number() protoreflect.EnumNumber {
@@ -924,7 +1022,7 @@ func (x TaskExecutionMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TaskExecutionMode.Descriptor instead.
 func (TaskExecutionMode) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{16}
+	return file_proto_agent_proto_rawDescGZIP(), []int{18}
 }
 
 type ReleaseRestorationTarget int32
@@ -960,11 +1058,11 @@ func (x ReleaseRestorationTarget) String() string {
 }
 
 func (ReleaseRestorationTarget) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[17].Descriptor()
+	return file_proto_agent_proto_enumTypes[19].Descriptor()
 }
 
 func (ReleaseRestorationTarget) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[17]
+	return &file_proto_agent_proto_enumTypes[19]
 }
 
 func (x ReleaseRestorationTarget) Number() protoreflect.EnumNumber {
@@ -973,7 +1071,7 @@ func (x ReleaseRestorationTarget) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReleaseRestorationTarget.Descriptor instead.
 func (ReleaseRestorationTarget) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{17}
+	return file_proto_agent_proto_rawDescGZIP(), []int{19}
 }
 
 type ScriptExecutionState int32
@@ -1021,11 +1119,11 @@ func (x ScriptExecutionState) String() string {
 }
 
 func (ScriptExecutionState) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[18].Descriptor()
+	return file_proto_agent_proto_enumTypes[20].Descriptor()
 }
 
 func (ScriptExecutionState) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[18]
+	return &file_proto_agent_proto_enumTypes[20]
 }
 
 func (x ScriptExecutionState) Number() protoreflect.EnumNumber {
@@ -1034,7 +1132,7 @@ func (x ScriptExecutionState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ScriptExecutionState.Descriptor instead.
 func (ScriptExecutionState) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{18}
+	return file_proto_agent_proto_rawDescGZIP(), []int{20}
 }
 
 type ScriptOutcomeReason int32
@@ -1091,11 +1189,11 @@ func (x ScriptOutcomeReason) String() string {
 }
 
 func (ScriptOutcomeReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[19].Descriptor()
+	return file_proto_agent_proto_enumTypes[21].Descriptor()
 }
 
 func (ScriptOutcomeReason) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[19]
+	return &file_proto_agent_proto_enumTypes[21]
 }
 
 func (x ScriptOutcomeReason) Number() protoreflect.EnumNumber {
@@ -1104,7 +1202,7 @@ func (x ScriptOutcomeReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ScriptOutcomeReason.Descriptor instead.
 func (ScriptOutcomeReason) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{19}
+	return file_proto_agent_proto_rawDescGZIP(), []int{21}
 }
 
 type BackingHookEvent int32
@@ -1146,11 +1244,11 @@ func (x BackingHookEvent) String() string {
 }
 
 func (BackingHookEvent) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[20].Descriptor()
+	return file_proto_agent_proto_enumTypes[22].Descriptor()
 }
 
 func (BackingHookEvent) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[20]
+	return &file_proto_agent_proto_enumTypes[22]
 }
 
 func (x BackingHookEvent) Number() protoreflect.EnumNumber {
@@ -1159,7 +1257,7 @@ func (x BackingHookEvent) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackingHookEvent.Descriptor instead.
 func (BackingHookEvent) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{20}
+	return file_proto_agent_proto_rawDescGZIP(), []int{22}
 }
 
 type BackingHookCheckpointState int32
@@ -1195,11 +1293,11 @@ func (x BackingHookCheckpointState) String() string {
 }
 
 func (BackingHookCheckpointState) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[21].Descriptor()
+	return file_proto_agent_proto_enumTypes[23].Descriptor()
 }
 
 func (BackingHookCheckpointState) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[21]
+	return &file_proto_agent_proto_enumTypes[23]
 }
 
 func (x BackingHookCheckpointState) Number() protoreflect.EnumNumber {
@@ -1208,7 +1306,7 @@ func (x BackingHookCheckpointState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackingHookCheckpointState.Descriptor instead.
 func (BackingHookCheckpointState) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{21}
+	return file_proto_agent_proto_rawDescGZIP(), []int{23}
 }
 
 type ComponentLifecycleMode int32
@@ -1247,11 +1345,11 @@ func (x ComponentLifecycleMode) String() string {
 }
 
 func (ComponentLifecycleMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[22].Descriptor()
+	return file_proto_agent_proto_enumTypes[24].Descriptor()
 }
 
 func (ComponentLifecycleMode) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[22]
+	return &file_proto_agent_proto_enumTypes[24]
 }
 
 func (x ComponentLifecycleMode) Number() protoreflect.EnumNumber {
@@ -1260,7 +1358,7 @@ func (x ComponentLifecycleMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComponentLifecycleMode.Descriptor instead.
 func (ComponentLifecycleMode) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{22}
+	return file_proto_agent_proto_rawDescGZIP(), []int{24}
 }
 
 type PlanOperation int32
@@ -1338,11 +1436,11 @@ func (x PlanOperation) String() string {
 }
 
 func (PlanOperation) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[23].Descriptor()
+	return file_proto_agent_proto_enumTypes[25].Descriptor()
 }
 
 func (PlanOperation) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[23]
+	return &file_proto_agent_proto_enumTypes[25]
 }
 
 func (x PlanOperation) Number() protoreflect.EnumNumber {
@@ -1351,7 +1449,7 @@ func (x PlanOperation) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PlanOperation.Descriptor instead.
 func (PlanOperation) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{23}
+	return file_proto_agent_proto_rawDescGZIP(), []int{25}
 }
 
 type NetworkWorkAction int32
@@ -1387,11 +1485,11 @@ func (x NetworkWorkAction) String() string {
 }
 
 func (NetworkWorkAction) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[24].Descriptor()
+	return file_proto_agent_proto_enumTypes[26].Descriptor()
 }
 
 func (NetworkWorkAction) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[24]
+	return &file_proto_agent_proto_enumTypes[26]
 }
 
 func (x NetworkWorkAction) Number() protoreflect.EnumNumber {
@@ -1400,7 +1498,7 @@ func (x NetworkWorkAction) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use NetworkWorkAction.Descriptor instead.
 func (NetworkWorkAction) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{24}
+	return file_proto_agent_proto_rawDescGZIP(), []int{26}
 }
 
 type ServiceLifecycleAction int32
@@ -1439,11 +1537,11 @@ func (x ServiceLifecycleAction) String() string {
 }
 
 func (ServiceLifecycleAction) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[25].Descriptor()
+	return file_proto_agent_proto_enumTypes[27].Descriptor()
 }
 
 func (ServiceLifecycleAction) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[25]
+	return &file_proto_agent_proto_enumTypes[27]
 }
 
 func (x ServiceLifecycleAction) Number() protoreflect.EnumNumber {
@@ -1452,7 +1550,7 @@ func (x ServiceLifecycleAction) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ServiceLifecycleAction.Descriptor instead.
 func (ServiceLifecycleAction) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{25}
+	return file_proto_agent_proto_rawDescGZIP(), []int{27}
 }
 
 type VolumeWorkAction int32
@@ -1491,11 +1589,11 @@ func (x VolumeWorkAction) String() string {
 }
 
 func (VolumeWorkAction) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[26].Descriptor()
+	return file_proto_agent_proto_enumTypes[28].Descriptor()
 }
 
 func (VolumeWorkAction) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[26]
+	return &file_proto_agent_proto_enumTypes[28]
 }
 
 func (x VolumeWorkAction) Number() protoreflect.EnumNumber {
@@ -1504,7 +1602,7 @@ func (x VolumeWorkAction) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use VolumeWorkAction.Descriptor instead.
 func (VolumeWorkAction) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{26}
+	return file_proto_agent_proto_rawDescGZIP(), []int{28}
 }
 
 type ComposeOwnerKind int32
@@ -1540,11 +1638,11 @@ func (x ComposeOwnerKind) String() string {
 }
 
 func (ComposeOwnerKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[27].Descriptor()
+	return file_proto_agent_proto_enumTypes[29].Descriptor()
 }
 
 func (ComposeOwnerKind) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[27]
+	return &file_proto_agent_proto_enumTypes[29]
 }
 
 func (x ComposeOwnerKind) Number() protoreflect.EnumNumber {
@@ -1553,7 +1651,7 @@ func (x ComposeOwnerKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComposeOwnerKind.Descriptor instead.
 func (ComposeOwnerKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{27}
+	return file_proto_agent_proto_rawDescGZIP(), []int{29}
 }
 
 type ServiceProxyImplementation int32
@@ -1589,11 +1687,11 @@ func (x ServiceProxyImplementation) String() string {
 }
 
 func (ServiceProxyImplementation) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[28].Descriptor()
+	return file_proto_agent_proto_enumTypes[30].Descriptor()
 }
 
 func (ServiceProxyImplementation) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[28]
+	return &file_proto_agent_proto_enumTypes[30]
 }
 
 func (x ServiceProxyImplementation) Number() protoreflect.EnumNumber {
@@ -1602,7 +1700,7 @@ func (x ServiceProxyImplementation) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ServiceProxyImplementation.Descriptor instead.
 func (ServiceProxyImplementation) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{28}
+	return file_proto_agent_proto_rawDescGZIP(), []int{30}
 }
 
 type ComposeServiceRole int32
@@ -1644,11 +1742,11 @@ func (x ComposeServiceRole) String() string {
 }
 
 func (ComposeServiceRole) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[29].Descriptor()
+	return file_proto_agent_proto_enumTypes[31].Descriptor()
 }
 
 func (ComposeServiceRole) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[29]
+	return &file_proto_agent_proto_enumTypes[31]
 }
 
 func (x ComposeServiceRole) Number() protoreflect.EnumNumber {
@@ -1657,7 +1755,7 @@ func (x ComposeServiceRole) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComposeServiceRole.Descriptor instead.
 func (ComposeServiceRole) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{29}
+	return file_proto_agent_proto_rawDescGZIP(), []int{31}
 }
 
 type ScriptEntryBindingKind int32
@@ -1693,11 +1791,11 @@ func (x ScriptEntryBindingKind) String() string {
 }
 
 func (ScriptEntryBindingKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[30].Descriptor()
+	return file_proto_agent_proto_enumTypes[32].Descriptor()
 }
 
 func (ScriptEntryBindingKind) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[30]
+	return &file_proto_agent_proto_enumTypes[32]
 }
 
 func (x ScriptEntryBindingKind) Number() protoreflect.EnumNumber {
@@ -1706,7 +1804,7 @@ func (x ScriptEntryBindingKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ScriptEntryBindingKind.Descriptor instead.
 func (ScriptEntryBindingKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{30}
+	return file_proto_agent_proto_rawDescGZIP(), []int{32}
 }
 
 type ExecutionStepPolicy int32
@@ -1757,11 +1855,11 @@ func (x ExecutionStepPolicy) String() string {
 }
 
 func (ExecutionStepPolicy) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[31].Descriptor()
+	return file_proto_agent_proto_enumTypes[33].Descriptor()
 }
 
 func (ExecutionStepPolicy) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[31]
+	return &file_proto_agent_proto_enumTypes[33]
 }
 
 func (x ExecutionStepPolicy) Number() protoreflect.EnumNumber {
@@ -1770,7 +1868,7 @@ func (x ExecutionStepPolicy) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ExecutionStepPolicy.Descriptor instead.
 func (ExecutionStepPolicy) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{31}
+	return file_proto_agent_proto_rawDescGZIP(), []int{33}
 }
 
 type BackupResourceKind int32
@@ -1809,11 +1907,11 @@ func (x BackupResourceKind) String() string {
 }
 
 func (BackupResourceKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[32].Descriptor()
+	return file_proto_agent_proto_enumTypes[34].Descriptor()
 }
 
 func (BackupResourceKind) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[32]
+	return &file_proto_agent_proto_enumTypes[34]
 }
 
 func (x BackupResourceKind) Number() protoreflect.EnumNumber {
@@ -1822,7 +1920,7 @@ func (x BackupResourceKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupResourceKind.Descriptor instead.
 func (BackupResourceKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{32}
+	return file_proto_agent_proto_rawDescGZIP(), []int{34}
 }
 
 type BackupEncryption int32
@@ -1858,11 +1956,11 @@ func (x BackupEncryption) String() string {
 }
 
 func (BackupEncryption) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[33].Descriptor()
+	return file_proto_agent_proto_enumTypes[35].Descriptor()
 }
 
 func (BackupEncryption) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[33]
+	return &file_proto_agent_proto_enumTypes[35]
 }
 
 func (x BackupEncryption) Number() protoreflect.EnumNumber {
@@ -1871,7 +1969,7 @@ func (x BackupEncryption) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupEncryption.Descriptor instead.
 func (BackupEncryption) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{33}
+	return file_proto_agent_proto_rawDescGZIP(), []int{35}
 }
 
 type BackupServiceRuntimeIntent int32
@@ -1910,11 +2008,11 @@ func (x BackupServiceRuntimeIntent) String() string {
 }
 
 func (BackupServiceRuntimeIntent) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[34].Descriptor()
+	return file_proto_agent_proto_enumTypes[36].Descriptor()
 }
 
 func (BackupServiceRuntimeIntent) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[34]
+	return &file_proto_agent_proto_enumTypes[36]
 }
 
 func (x BackupServiceRuntimeIntent) Number() protoreflect.EnumNumber {
@@ -1923,7 +2021,7 @@ func (x BackupServiceRuntimeIntent) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupServiceRuntimeIntent.Descriptor instead.
 func (BackupServiceRuntimeIntent) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{34}
+	return file_proto_agent_proto_rawDescGZIP(), []int{36}
 }
 
 type BackupWorkOperation int32
@@ -1962,11 +2060,11 @@ func (x BackupWorkOperation) String() string {
 }
 
 func (BackupWorkOperation) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[35].Descriptor()
+	return file_proto_agent_proto_enumTypes[37].Descriptor()
 }
 
 func (BackupWorkOperation) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[35]
+	return &file_proto_agent_proto_enumTypes[37]
 }
 
 func (x BackupWorkOperation) Number() protoreflect.EnumNumber {
@@ -1975,7 +2073,7 @@ func (x BackupWorkOperation) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupWorkOperation.Descriptor instead.
 func (BackupWorkOperation) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{35}
+	return file_proto_agent_proto_rawDescGZIP(), []int{37}
 }
 
 // Recovery uses captured progress; it never grants forward execution again.
@@ -2012,11 +2110,11 @@ func (x BackupRestoreRecoveryMode) String() string {
 }
 
 func (BackupRestoreRecoveryMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[36].Descriptor()
+	return file_proto_agent_proto_enumTypes[38].Descriptor()
 }
 
 func (BackupRestoreRecoveryMode) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[36]
+	return &file_proto_agent_proto_enumTypes[38]
 }
 
 func (x BackupRestoreRecoveryMode) Number() protoreflect.EnumNumber {
@@ -2025,7 +2123,7 @@ func (x BackupRestoreRecoveryMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupRestoreRecoveryMode.Descriptor instead.
 func (BackupRestoreRecoveryMode) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{36}
+	return file_proto_agent_proto_rawDescGZIP(), []int{38}
 }
 
 type BackupCapturePhase int32
@@ -2079,11 +2177,11 @@ func (x BackupCapturePhase) String() string {
 }
 
 func (BackupCapturePhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[37].Descriptor()
+	return file_proto_agent_proto_enumTypes[39].Descriptor()
 }
 
 func (BackupCapturePhase) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[37]
+	return &file_proto_agent_proto_enumTypes[39]
 }
 
 func (x BackupCapturePhase) Number() protoreflect.EnumNumber {
@@ -2092,7 +2190,7 @@ func (x BackupCapturePhase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupCapturePhase.Descriptor instead.
 func (BackupCapturePhase) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{37}
+	return file_proto_agent_proto_rawDescGZIP(), []int{39}
 }
 
 type BackupRestorePhase int32
@@ -2143,11 +2241,11 @@ func (x BackupRestorePhase) String() string {
 }
 
 func (BackupRestorePhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[38].Descriptor()
+	return file_proto_agent_proto_enumTypes[40].Descriptor()
 }
 
 func (BackupRestorePhase) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[38]
+	return &file_proto_agent_proto_enumTypes[40]
 }
 
 func (x BackupRestorePhase) Number() protoreflect.EnumNumber {
@@ -2156,7 +2254,7 @@ func (x BackupRestorePhase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupRestorePhase.Descriptor instead.
 func (BackupRestorePhase) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{38}
+	return file_proto_agent_proto_rawDescGZIP(), []int{40}
 }
 
 type BackupRecoveredFileRole int32
@@ -2192,11 +2290,11 @@ func (x BackupRecoveredFileRole) String() string {
 }
 
 func (BackupRecoveredFileRole) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[39].Descriptor()
+	return file_proto_agent_proto_enumTypes[41].Descriptor()
 }
 
 func (BackupRecoveredFileRole) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[39]
+	return &file_proto_agent_proto_enumTypes[41]
 }
 
 func (x BackupRecoveredFileRole) Number() protoreflect.EnumNumber {
@@ -2205,7 +2303,7 @@ func (x BackupRecoveredFileRole) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupRecoveredFileRole.Descriptor instead.
 func (BackupRecoveredFileRole) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{39}
+	return file_proto_agent_proto_rawDescGZIP(), []int{41}
 }
 
 type BackupRemainingGrowth int32
@@ -2244,11 +2342,11 @@ func (x BackupRemainingGrowth) String() string {
 }
 
 func (BackupRemainingGrowth) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[40].Descriptor()
+	return file_proto_agent_proto_enumTypes[42].Descriptor()
 }
 
 func (BackupRemainingGrowth) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[40]
+	return &file_proto_agent_proto_enumTypes[42]
 }
 
 func (x BackupRemainingGrowth) Number() protoreflect.EnumNumber {
@@ -2257,7 +2355,7 @@ func (x BackupRemainingGrowth) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupRemainingGrowth.Descriptor instead.
 func (BackupRemainingGrowth) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{40}
+	return file_proto_agent_proto_rawDescGZIP(), []int{42}
 }
 
 type BackupConfigDirection int32
@@ -2293,11 +2391,11 @@ func (x BackupConfigDirection) String() string {
 }
 
 func (BackupConfigDirection) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[41].Descriptor()
+	return file_proto_agent_proto_enumTypes[43].Descriptor()
 }
 
 func (BackupConfigDirection) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[41]
+	return &file_proto_agent_proto_enumTypes[43]
 }
 
 func (x BackupConfigDirection) Number() protoreflect.EnumNumber {
@@ -2306,7 +2404,7 @@ func (x BackupConfigDirection) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupConfigDirection.Descriptor instead.
 func (BackupConfigDirection) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{41}
+	return file_proto_agent_proto_rawDescGZIP(), []int{43}
 }
 
 type BackupVolumeManifestDirection int32
@@ -2345,11 +2443,11 @@ func (x BackupVolumeManifestDirection) String() string {
 }
 
 func (BackupVolumeManifestDirection) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[42].Descriptor()
+	return file_proto_agent_proto_enumTypes[44].Descriptor()
 }
 
 func (BackupVolumeManifestDirection) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[42]
+	return &file_proto_agent_proto_enumTypes[44]
 }
 
 func (x BackupVolumeManifestDirection) Number() protoreflect.EnumNumber {
@@ -2358,7 +2456,7 @@ func (x BackupVolumeManifestDirection) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupVolumeManifestDirection.Descriptor instead.
 func (BackupVolumeManifestDirection) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{42}
+	return file_proto_agent_proto_rawDescGZIP(), []int{44}
 }
 
 type BackupVolumeManifestRole int32
@@ -2397,11 +2495,11 @@ func (x BackupVolumeManifestRole) String() string {
 }
 
 func (BackupVolumeManifestRole) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[43].Descriptor()
+	return file_proto_agent_proto_enumTypes[45].Descriptor()
 }
 
 func (BackupVolumeManifestRole) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[43]
+	return &file_proto_agent_proto_enumTypes[45]
 }
 
 func (x BackupVolumeManifestRole) Number() protoreflect.EnumNumber {
@@ -2410,7 +2508,7 @@ func (x BackupVolumeManifestRole) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupVolumeManifestRole.Descriptor instead.
 func (BackupVolumeManifestRole) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{43}
+	return file_proto_agent_proto_rawDescGZIP(), []int{45}
 }
 
 type BackupServicePhase int32
@@ -2461,11 +2559,11 @@ func (x BackupServicePhase) String() string {
 }
 
 func (BackupServicePhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[44].Descriptor()
+	return file_proto_agent_proto_enumTypes[46].Descriptor()
 }
 
 func (BackupServicePhase) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[44]
+	return &file_proto_agent_proto_enumTypes[46]
 }
 
 func (x BackupServicePhase) Number() protoreflect.EnumNumber {
@@ -2474,7 +2572,7 @@ func (x BackupServicePhase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupServicePhase.Descriptor instead.
 func (BackupServicePhase) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{44}
+	return file_proto_agent_proto_rawDescGZIP(), []int{46}
 }
 
 type BackupVolumeEntryKind int32
@@ -2510,11 +2608,11 @@ func (x BackupVolumeEntryKind) String() string {
 }
 
 func (BackupVolumeEntryKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[45].Descriptor()
+	return file_proto_agent_proto_enumTypes[47].Descriptor()
 }
 
 func (BackupVolumeEntryKind) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[45]
+	return &file_proto_agent_proto_enumTypes[47]
 }
 
 func (x BackupVolumeEntryKind) Number() protoreflect.EnumNumber {
@@ -2523,7 +2621,7 @@ func (x BackupVolumeEntryKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupVolumeEntryKind.Descriptor instead.
 func (BackupVolumeEntryKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{45}
+	return file_proto_agent_proto_rawDescGZIP(), []int{47}
 }
 
 type BackupSecretSlotPurpose int32
@@ -2565,11 +2663,11 @@ func (x BackupSecretSlotPurpose) String() string {
 }
 
 func (BackupSecretSlotPurpose) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[46].Descriptor()
+	return file_proto_agent_proto_enumTypes[48].Descriptor()
 }
 
 func (BackupSecretSlotPurpose) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[46]
+	return &file_proto_agent_proto_enumTypes[48]
 }
 
 func (x BackupSecretSlotPurpose) Number() protoreflect.EnumNumber {
@@ -2578,7 +2676,7 @@ func (x BackupSecretSlotPurpose) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupSecretSlotPurpose.Descriptor instead.
 func (BackupSecretSlotPurpose) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{46}
+	return file_proto_agent_proto_rawDescGZIP(), []int{48}
 }
 
 type AdapterProcedurePhase int32
@@ -2620,11 +2718,11 @@ func (x AdapterProcedurePhase) String() string {
 }
 
 func (AdapterProcedurePhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[47].Descriptor()
+	return file_proto_agent_proto_enumTypes[49].Descriptor()
 }
 
 func (AdapterProcedurePhase) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[47]
+	return &file_proto_agent_proto_enumTypes[49]
 }
 
 func (x AdapterProcedurePhase) Number() protoreflect.EnumNumber {
@@ -2633,7 +2731,7 @@ func (x AdapterProcedurePhase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AdapterProcedurePhase.Descriptor instead.
 func (AdapterProcedurePhase) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{47}
+	return file_proto_agent_proto_rawDescGZIP(), []int{49}
 }
 
 // BackingAuthentication is immutable backing-instance policy. UNSPECIFIED is
@@ -2674,11 +2772,11 @@ func (x BackingAuthentication) String() string {
 }
 
 func (BackingAuthentication) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[48].Descriptor()
+	return file_proto_agent_proto_enumTypes[50].Descriptor()
 }
 
 func (BackingAuthentication) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[48]
+	return &file_proto_agent_proto_enumTypes[50]
 }
 
 func (x BackingAuthentication) Number() protoreflect.EnumNumber {
@@ -2687,7 +2785,7 @@ func (x BackingAuthentication) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackingAuthentication.Descriptor instead.
 func (BackingAuthentication) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{48}
+	return file_proto_agent_proto_rawDescGZIP(), []int{50}
 }
 
 type MaterializationOutputKind int32
@@ -2735,11 +2833,11 @@ func (x MaterializationOutputKind) String() string {
 }
 
 func (MaterializationOutputKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[49].Descriptor()
+	return file_proto_agent_proto_enumTypes[51].Descriptor()
 }
 
 func (MaterializationOutputKind) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[49]
+	return &file_proto_agent_proto_enumTypes[51]
 }
 
 func (x MaterializationOutputKind) Number() protoreflect.EnumNumber {
@@ -2748,7 +2846,7 @@ func (x MaterializationOutputKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MaterializationOutputKind.Descriptor instead.
 func (MaterializationOutputKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{49}
+	return file_proto_agent_proto_rawDescGZIP(), []int{51}
 }
 
 type ManagedConfigOperation int32
@@ -2787,11 +2885,11 @@ func (x ManagedConfigOperation) String() string {
 }
 
 func (ManagedConfigOperation) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[50].Descriptor()
+	return file_proto_agent_proto_enumTypes[52].Descriptor()
 }
 
 func (ManagedConfigOperation) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[50]
+	return &file_proto_agent_proto_enumTypes[52]
 }
 
 func (x ManagedConfigOperation) Number() protoreflect.EnumNumber {
@@ -2800,7 +2898,7 @@ func (x ManagedConfigOperation) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ManagedConfigOperation.Descriptor instead.
 func (ManagedConfigOperation) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{50}
+	return file_proto_agent_proto_rawDescGZIP(), []int{52}
 }
 
 type ManagedConfigReplayDisposition int32
@@ -2839,11 +2937,11 @@ func (x ManagedConfigReplayDisposition) String() string {
 }
 
 func (ManagedConfigReplayDisposition) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[51].Descriptor()
+	return file_proto_agent_proto_enumTypes[53].Descriptor()
 }
 
 func (ManagedConfigReplayDisposition) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[51]
+	return &file_proto_agent_proto_enumTypes[53]
 }
 
 func (x ManagedConfigReplayDisposition) Number() protoreflect.EnumNumber {
@@ -2852,7 +2950,7 @@ func (x ManagedConfigReplayDisposition) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ManagedConfigReplayDisposition.Descriptor instead.
 func (ManagedConfigReplayDisposition) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{51}
+	return file_proto_agent_proto_rawDescGZIP(), []int{53}
 }
 
 type BackupConsumerOperation int32
@@ -2888,11 +2986,11 @@ func (x BackupConsumerOperation) String() string {
 }
 
 func (BackupConsumerOperation) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[52].Descriptor()
+	return file_proto_agent_proto_enumTypes[54].Descriptor()
 }
 
 func (BackupConsumerOperation) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[52]
+	return &file_proto_agent_proto_enumTypes[54]
 }
 
 func (x BackupConsumerOperation) Number() protoreflect.EnumNumber {
@@ -2901,7 +2999,7 @@ func (x BackupConsumerOperation) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupConsumerOperation.Descriptor instead.
 func (BackupConsumerOperation) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{52}
+	return file_proto_agent_proto_rawDescGZIP(), []int{54}
 }
 
 type ComposeHelperOutcome int32
@@ -2942,11 +3040,11 @@ func (x ComposeHelperOutcome) String() string {
 }
 
 func (ComposeHelperOutcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[53].Descriptor()
+	return file_proto_agent_proto_enumTypes[55].Descriptor()
 }
 
 func (ComposeHelperOutcome) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[53]
+	return &file_proto_agent_proto_enumTypes[55]
 }
 
 func (x ComposeHelperOutcome) Number() protoreflect.EnumNumber {
@@ -2955,7 +3053,7 @@ func (x ComposeHelperOutcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComposeHelperOutcome.Descriptor instead.
 func (ComposeHelperOutcome) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{53}
+	return file_proto_agent_proto_rawDescGZIP(), []int{55}
 }
 
 type ComposeHelperDiagnostic int32
@@ -3015,11 +3113,11 @@ func (x ComposeHelperDiagnostic) String() string {
 }
 
 func (ComposeHelperDiagnostic) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[54].Descriptor()
+	return file_proto_agent_proto_enumTypes[56].Descriptor()
 }
 
 func (ComposeHelperDiagnostic) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[54]
+	return &file_proto_agent_proto_enumTypes[56]
 }
 
 func (x ComposeHelperDiagnostic) Number() protoreflect.EnumNumber {
@@ -3028,7 +3126,7 @@ func (x ComposeHelperDiagnostic) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComposeHelperDiagnostic.Descriptor instead.
 func (ComposeHelperDiagnostic) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{54}
+	return file_proto_agent_proto_rawDescGZIP(), []int{56}
 }
 
 // Native work identity is shared by typed operation delivery, checkpoint and
@@ -8433,7 +8531,8 @@ type ReleaseRecoveryAssignment struct {
 	GroupRestoration []byte `protobuf:"bytes,4,opt,name=group_restoration,json=groupRestoration,proto3" json:"group_restoration,omitempty"`
 	// Group Retry also carries the actual failed restoration attempt and its
 	// failure receipt. It never replaces the successful source attempt above.
-	RestorationInterruption []byte `protobuf:"bytes,5,opt,name=restoration_interruption,json=restorationInterruption,proto3" json:"restoration_interruption,omitempty"`
+	RestorationInterruption []byte                         `protobuf:"bytes,5,opt,name=restoration_interruption,json=restorationInterruption,proto3" json:"restoration_interruption,omitempty"`
+	Disposition             WorkReleaseRecoveryDisposition `protobuf:"varint,6,opt,name=disposition,proto3,enum=groundplane.agent.v1.WorkReleaseRecoveryDisposition" json:"disposition,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -8501,6 +8600,13 @@ func (x *ReleaseRecoveryAssignment) GetRestorationInterruption() []byte {
 		return x.RestorationInterruption
 	}
 	return nil
+}
+
+func (x *ReleaseRecoveryAssignment) GetDisposition() WorkReleaseRecoveryDisposition {
+	if x != nil {
+		return x.Disposition
+	}
+	return WorkReleaseRecoveryDisposition_WORK_RELEASE_RECOVERY_DISPOSITION_UNSPECIFIED
 }
 
 // Canonical bounded Release cursor; its closed schema is owned by the Release
@@ -10788,7 +10894,8 @@ type ReleaseWorkInput struct {
 	Hooks                     []*ReleaseWorkHook          `protobuf:"bytes,11,rep,name=hooks,proto3" json:"hooks,omitempty"`
 	Rolling                   *ReleaseWorkRolling         `protobuf:"bytes,12,opt,name=rolling,proto3" json:"rolling,omitempty"`
 	RenderGeneration          uint64                      `protobuf:"varint,13,opt,name=render_generation,json=renderGeneration,proto3" json:"render_generation,omitempty"`
-	TrafficConfigurations     [][]byte                    `protobuf:"bytes,14,rep,name=traffic_configurations,json=trafficConfigurations,proto3" json:"traffic_configurations,omitempty"` // one complete routing manifest per cutover, in captured order
+	TrafficConfigurations     [][]byte                    `protobuf:"bytes,14,rep,name=traffic_configurations,json=trafficConfigurations,proto3" json:"traffic_configurations,omitempty"`                             // one complete routing manifest per cutover, in captured order
+	FailurePolicy             WorkReleaseFailurePolicy    `protobuf:"varint,15,opt,name=failure_policy,json=failurePolicy,proto3,enum=groundplane.agent.v1.WorkReleaseFailurePolicy" json:"failure_policy,omitempty"` // captured operator decision; never inferred by the Agent
 	unknownFields             protoimpl.UnknownFields
 	sizeCache                 protoimpl.SizeCache
 }
@@ -10919,6 +11026,13 @@ func (x *ReleaseWorkInput) GetTrafficConfigurations() [][]byte {
 		return x.TrafficConfigurations
 	}
 	return nil
+}
+
+func (x *ReleaseWorkInput) GetFailurePolicy() WorkReleaseFailurePolicy {
+	if x != nil {
+		return x.FailurePolicy
+	}
+	return WorkReleaseFailurePolicy_WORK_RELEASE_FAILURE_POLICY_UNSPECIFIED
 }
 
 type ReleaseWorkPredecessor struct {
@@ -11194,19 +11308,20 @@ func (x *ReleaseHookRequest) GetExecutionId() string {
 }
 
 type ReleaseHookDelivery struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Attempt       *WorkAttemptIdentity       `protobuf:"bytes,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	OperationId   string                     `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
-	Input         *WorkInputReference        `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
-	Run           *RunScript                 `protobuf:"bytes,4,opt,name=run,proto3" json:"run,omitempty"`
-	Snapshot      *ResolvedRunnerSnapshot    `protobuf:"bytes,5,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
-	Projection    *ScriptRunnerProjection    `protobuf:"bytes,6,opt,name=projection,proto3" json:"projection,omitempty"`
-	Body          *ScriptBodyArtifact        `protobuf:"bytes,7,opt,name=body,proto3" json:"body,omitempty"`
-	Entries       []*ScriptEntryArtifact     `protobuf:"bytes,8,rep,name=entries,proto3" json:"entries,omitempty"`
-	Checkpoint    *ScriptExecutionCheckpoint `protobuf:"bytes,9,opt,name=checkpoint,proto3" json:"checkpoint,omitempty"`
-	Cleanup       *ScriptCleanupArtifacts    `protobuf:"bytes,10,opt,name=cleanup,proto3" json:"cleanup,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState     `protogen:"open.v1"`
+	Attempt            *WorkAttemptIdentity       `protobuf:"bytes,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	OperationId        string                     `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	Input              *WorkInputReference        `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	Run                *RunScript                 `protobuf:"bytes,4,opt,name=run,proto3" json:"run,omitempty"`
+	Snapshot           *ResolvedRunnerSnapshot    `protobuf:"bytes,5,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	Projection         *ScriptRunnerProjection    `protobuf:"bytes,6,opt,name=projection,proto3" json:"projection,omitempty"`
+	Body               *ScriptBodyArtifact        `protobuf:"bytes,7,opt,name=body,proto3" json:"body,omitempty"`
+	Entries            []*ScriptEntryArtifact     `protobuf:"bytes,8,rep,name=entries,proto3" json:"entries,omitempty"`
+	Checkpoint         *ScriptExecutionCheckpoint `protobuf:"bytes,9,opt,name=checkpoint,proto3" json:"checkpoint,omitempty"`
+	Cleanup            *ScriptCleanupArtifacts    `protobuf:"bytes,10,opt,name=cleanup,proto3" json:"cleanup,omitempty"`
+	InterruptedCleanup *WorkInputReference        `protobuf:"bytes,11,opt,name=interrupted_cleanup,json=interruptedCleanup,proto3" json:"interrupted_cleanup,omitempty"` // proved cleanup of an earlier hook attempt; no new start
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ReleaseHookDelivery) Reset() {
@@ -11305,6 +11420,13 @@ func (x *ReleaseHookDelivery) GetCheckpoint() *ScriptExecutionCheckpoint {
 func (x *ReleaseHookDelivery) GetCleanup() *ScriptCleanupArtifacts {
 	if x != nil {
 		return x.Cleanup
+	}
+	return nil
+}
+
+func (x *ReleaseHookDelivery) GetInterruptedCleanup() *WorkInputReference {
+	if x != nil {
+		return x.InterruptedCleanup
 	}
 	return nil
 }
@@ -52265,13 +52387,14 @@ const file_proto_agent_proto_rawDesc = "" +
 	"inspection\"\x9e\x01\n" +
 	"\x15ReleaseWorkAssignment\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12@\n" +
-	"\arelease\x18\x02 \x01(\v2&.groundplane.agent.v1.ReleaseWorkInputR\arelease\"\x87\x02\n" +
+	"\arelease\x18\x02 \x01(\v2&.groundplane.agent.v1.ReleaseWorkInputR\arelease\"\xdf\x02\n" +
 	"\x19ReleaseRecoveryAssignment\x12?\n" +
 	"\x04work\x18\x01 \x01(\v2+.groundplane.agent.v1.ReleaseWorkAssignmentR\x04work\x12'\n" +
 	"\x0fforward_attempt\x18\x02 \x01(\fR\x0eforwardAttempt\x12\x18\n" +
 	"\afailure\x18\x03 \x01(\fR\afailure\x12+\n" +
 	"\x11group_restoration\x18\x04 \x01(\fR\x10groupRestoration\x129\n" +
-	"\x18restoration_interruption\x18\x05 \x01(\fR\x17restorationInterruption\"\x7f\n" +
+	"\x18restoration_interruption\x18\x05 \x01(\fR\x17restorationInterruption\x12V\n" +
+	"\vdisposition\x18\x06 \x01(\x0e24.groundplane.agent.v1.WorkReleaseRecoveryDispositionR\vdisposition\"\x7f\n" +
 	" ReleaseRecoveryCheckpointRequest\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12\x16\n" +
 	"\x06report\x18\x02 \x01(\fR\x06report\"\x83\x01\n" +
@@ -52464,7 +52587,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x0facknowledgement\x18\x04 \x01(\v22.groundplane.agent.v1.ReleaseRecoveryCheckpointAckR\x0facknowledgement\x12!\n" +
 	"\finspect_only\x18\x05 \x01(\bR\vinspectOnly\"5\n" +
 	"\x1dReleaseRecoveryHelperResponse\x12\x14\n" +
-	"\x05proof\x18\x01 \x01(\fR\x05proof\"\xd5\x06\n" +
+	"\x05proof\x18\x01 \x01(\fR\x05proof\"\xac\a\n" +
 	"\x10ReleaseWorkInput\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x1d\n" +
@@ -52482,7 +52605,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x05hooks\x18\v \x03(\v2%.groundplane.agent.v1.ReleaseWorkHookR\x05hooks\x12B\n" +
 	"\arolling\x18\f \x01(\v2(.groundplane.agent.v1.ReleaseWorkRollingR\arolling\x12+\n" +
 	"\x11render_generation\x18\r \x01(\x04R\x10renderGeneration\x125\n" +
-	"\x16traffic_configurations\x18\x0e \x03(\fR\x15trafficConfigurations\"\xbf\x01\n" +
+	"\x16traffic_configurations\x18\x0e \x03(\fR\x15trafficConfigurations\x12U\n" +
+	"\x0efailure_policy\x18\x0f \x01(\x0e2..groundplane.agent.v1.WorkReleaseFailurePolicyR\rfailurePolicy\"\xbf\x01\n" +
 	"\x16ReleaseWorkPredecessor\x12\x16\n" +
 	"\x06absent\x18\x01 \x01(\bR\x06absent\x12\x1d\n" +
 	"\n" +
@@ -52505,7 +52629,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x05order\x18\x05 \x01(\rR\x05order\"|\n" +
 	"\x12ReleaseHookRequest\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12!\n" +
-	"\fexecution_id\x18\x02 \x01(\tR\vexecutionId\"\xa4\x05\n" +
+	"\fexecution_id\x18\x02 \x01(\tR\vexecutionId\"\xff\x05\n" +
 	"\x13ReleaseHookDelivery\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12!\n" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12>\n" +
@@ -52521,7 +52645,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"checkpoint\x18\t \x01(\v2/.groundplane.agent.v1.ScriptExecutionCheckpointR\n" +
 	"checkpoint\x12F\n" +
 	"\acleanup\x18\n" +
-	" \x01(\v2,.groundplane.agent.v1.ScriptCleanupArtifactsR\acleanup\"\xad\x02\n" +
+	" \x01(\v2,.groundplane.agent.v1.ScriptCleanupArtifactsR\acleanup\x12Y\n" +
+	"\x13interrupted_cleanup\x18\v \x01(\v2(.groundplane.agent.v1.WorkInputReferenceR\x12interruptedCleanup\"\xad\x02\n" +
 	"\x16ScriptCleanupArtifacts\x12U\n" +
 	"\rbody_metadata\x18\x01 \x01(\v20.groundplane.agent.v1.ScriptBodyArtifactMetadataR\fbodyMetadata\x12W\n" +
 	"\rbody_prepared\x18\x02 \x01(\v22.groundplane.agent.v1.ScriptBodyPreparedCheckpointR\fbodyPrepared\x12c\n" +
@@ -56054,7 +56179,15 @@ const file_proto_agent_proto_rawDesc = "" +
 	"!WORK_RELEASE_STRATEGY_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eWORK_RELEASE_STRATEGY_RECREATE\x10\x01\x12$\n" +
 	" WORK_RELEASE_STRATEGY_BLUE_GREEN\x10\x02\x12!\n" +
-	"\x1dWORK_RELEASE_STRATEGY_ROLLING\x10\x03*\x8f\x02\n" +
+	"\x1dWORK_RELEASE_STRATEGY_ROLLING\x10\x03*\xa2\x01\n" +
+	"\x18WorkReleaseFailurePolicy\x12+\n" +
+	"'WORK_RELEASE_FAILURE_POLICY_UNSPECIFIED\x10\x00\x12+\n" +
+	"'WORK_RELEASE_FAILURE_POLICY_SWITCH_BACK\x10\x01\x12,\n" +
+	"(WORK_RELEASE_FAILURE_POLICY_LEAVE_ACTIVE\x10\x02*\xc3\x01\n" +
+	"\x1eWorkReleaseRecoveryDisposition\x121\n" +
+	"-WORK_RELEASE_RECOVERY_DISPOSITION_UNSPECIFIED\x10\x00\x126\n" +
+	"2WORK_RELEASE_RECOVERY_DISPOSITION_RESTORE_CAPTURED\x10\x01\x126\n" +
+	"2WORK_RELEASE_RECOVERY_DISPOSITION_PRESERVE_SERVING\x10\x02*\x8f\x02\n" +
 	"\"WorkloadImageResolutionFailureKind\x126\n" +
 	"2WORKLOAD_IMAGE_RESOLUTION_FAILURE_KIND_UNSPECIFIED\x10\x00\x124\n" +
 	"0WORKLOAD_IMAGE_RESOLUTION_FAILURE_KIND_NOT_FOUND\x10\x01\x12<\n" +
@@ -56379,1915 +56512,1920 @@ func file_proto_agent_proto_rawDescGZIP() []byte {
 	return file_proto_agent_proto_rawDescData
 }
 
-var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 55)
+var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 57)
 var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 566)
 var file_proto_agent_proto_goTypes = []any{
 	(WorkDirection)(0),                                  // 0: groundplane.agent.v1.WorkDirection
 	(AttachNetworkAction)(0),                            // 1: groundplane.agent.v1.AttachNetworkAction
 	(WorkReleaseStrategy)(0),                            // 2: groundplane.agent.v1.WorkReleaseStrategy
-	(WorkloadImageResolutionFailureKind)(0),             // 3: groundplane.agent.v1.WorkloadImageResolutionFailureKind
-	(ServiceProxyObservationState)(0),                   // 4: groundplane.agent.v1.ServiceProxyObservationState
-	(StepStartDecision)(0),                              // 5: groundplane.agent.v1.StepStartDecision
-	(TaskState)(0),                                      // 6: groundplane.agent.v1.TaskState
-	(ObservedContainerState)(0),                         // 7: groundplane.agent.v1.ObservedContainerState
-	(ObservedContainerHealth)(0),                        // 8: groundplane.agent.v1.ObservedContainerHealth
-	(ObservedCollisionKind)(0),                          // 9: groundplane.agent.v1.ObservedCollisionKind
-	(DNSQueryType)(0),                                   // 10: groundplane.agent.v1.DNSQueryType
-	(TaskTerminal)(0),                                   // 11: groundplane.agent.v1.TaskTerminal
-	(LogStream)(0),                                      // 12: groundplane.agent.v1.LogStream
-	(LogSlot)(0),                                        // 13: groundplane.agent.v1.LogSlot
-	(LogEndReason)(0),                                   // 14: groundplane.agent.v1.LogEndReason
-	(ReleaseRecoveryPhase)(0),                           // 15: groundplane.agent.v1.ReleaseRecoveryPhase
-	(TaskExecutionMode)(0),                              // 16: groundplane.agent.v1.TaskExecutionMode
-	(ReleaseRestorationTarget)(0),                       // 17: groundplane.agent.v1.ReleaseRestorationTarget
-	(ScriptExecutionState)(0),                           // 18: groundplane.agent.v1.ScriptExecutionState
-	(ScriptOutcomeReason)(0),                            // 19: groundplane.agent.v1.ScriptOutcomeReason
-	(BackingHookEvent)(0),                               // 20: groundplane.agent.v1.BackingHookEvent
-	(BackingHookCheckpointState)(0),                     // 21: groundplane.agent.v1.BackingHookCheckpointState
-	(ComponentLifecycleMode)(0),                         // 22: groundplane.agent.v1.ComponentLifecycleMode
-	(PlanOperation)(0),                                  // 23: groundplane.agent.v1.PlanOperation
-	(NetworkWorkAction)(0),                              // 24: groundplane.agent.v1.NetworkWorkAction
-	(ServiceLifecycleAction)(0),                         // 25: groundplane.agent.v1.ServiceLifecycleAction
-	(VolumeWorkAction)(0),                               // 26: groundplane.agent.v1.VolumeWorkAction
-	(ComposeOwnerKind)(0),                               // 27: groundplane.agent.v1.ComposeOwnerKind
-	(ServiceProxyImplementation)(0),                     // 28: groundplane.agent.v1.ServiceProxyImplementation
-	(ComposeServiceRole)(0),                             // 29: groundplane.agent.v1.ComposeServiceRole
-	(ScriptEntryBindingKind)(0),                         // 30: groundplane.agent.v1.ScriptEntryBindingKind
-	(ExecutionStepPolicy)(0),                            // 31: groundplane.agent.v1.ExecutionStepPolicy
-	(BackupResourceKind)(0),                             // 32: groundplane.agent.v1.BackupResourceKind
-	(BackupEncryption)(0),                               // 33: groundplane.agent.v1.BackupEncryption
-	(BackupServiceRuntimeIntent)(0),                     // 34: groundplane.agent.v1.BackupServiceRuntimeIntent
-	(BackupWorkOperation)(0),                            // 35: groundplane.agent.v1.BackupWorkOperation
-	(BackupRestoreRecoveryMode)(0),                      // 36: groundplane.agent.v1.BackupRestoreRecoveryMode
-	(BackupCapturePhase)(0),                             // 37: groundplane.agent.v1.BackupCapturePhase
-	(BackupRestorePhase)(0),                             // 38: groundplane.agent.v1.BackupRestorePhase
-	(BackupRecoveredFileRole)(0),                        // 39: groundplane.agent.v1.BackupRecoveredFileRole
-	(BackupRemainingGrowth)(0),                          // 40: groundplane.agent.v1.BackupRemainingGrowth
-	(BackupConfigDirection)(0),                          // 41: groundplane.agent.v1.BackupConfigDirection
-	(BackupVolumeManifestDirection)(0),                  // 42: groundplane.agent.v1.BackupVolumeManifestDirection
-	(BackupVolumeManifestRole)(0),                       // 43: groundplane.agent.v1.BackupVolumeManifestRole
-	(BackupServicePhase)(0),                             // 44: groundplane.agent.v1.BackupServicePhase
-	(BackupVolumeEntryKind)(0),                          // 45: groundplane.agent.v1.BackupVolumeEntryKind
-	(BackupSecretSlotPurpose)(0),                        // 46: groundplane.agent.v1.BackupSecretSlotPurpose
-	(AdapterProcedurePhase)(0),                          // 47: groundplane.agent.v1.AdapterProcedurePhase
-	(BackingAuthentication)(0),                          // 48: groundplane.agent.v1.BackingAuthentication
-	(MaterializationOutputKind)(0),                      // 49: groundplane.agent.v1.MaterializationOutputKind
-	(ManagedConfigOperation)(0),                         // 50: groundplane.agent.v1.ManagedConfigOperation
-	(ManagedConfigReplayDisposition)(0),                 // 51: groundplane.agent.v1.ManagedConfigReplayDisposition
-	(BackupConsumerOperation)(0),                        // 52: groundplane.agent.v1.BackupConsumerOperation
-	(ComposeHelperOutcome)(0),                           // 53: groundplane.agent.v1.ComposeHelperOutcome
-	(ComposeHelperDiagnostic)(0),                        // 54: groundplane.agent.v1.ComposeHelperDiagnostic
-	(*WorkInputReference)(nil),                          // 55: groundplane.agent.v1.WorkInputReference
-	(*WorkExecutorRegistration)(nil),                    // 56: groundplane.agent.v1.WorkExecutorRegistration
-	(*WorkJournalReplayRequest)(nil),                    // 57: groundplane.agent.v1.WorkJournalReplayRequest
-	(*WorkJournalReplayAck)(nil),                        // 58: groundplane.agent.v1.WorkJournalReplayAck
-	(*WorkAttemptIdentity)(nil),                         // 59: groundplane.agent.v1.WorkAttemptIdentity
-	(*WorkStartRequest)(nil),                            // 60: groundplane.agent.v1.WorkStartRequest
-	(*WorkCancel)(nil),                                  // 61: groundplane.agent.v1.WorkCancel
-	(*WorkStartAck)(nil),                                // 62: groundplane.agent.v1.WorkStartAck
-	(*EnvironmentRemovalAssignment)(nil),                // 63: groundplane.agent.v1.EnvironmentRemovalAssignment
-	(*EnvironmentRemovalInput)(nil),                     // 64: groundplane.agent.v1.EnvironmentRemovalInput
-	(*EnvironmentProvisionInput)(nil),                   // 65: groundplane.agent.v1.EnvironmentProvisionInput
-	(*BackingProvisionInput)(nil),                       // 66: groundplane.agent.v1.BackingProvisionInput
-	(*BackingProvisionAfterStart)(nil),                  // 67: groundplane.agent.v1.BackingProvisionAfterStart
-	(*BackingProvisionAssignment)(nil),                  // 68: groundplane.agent.v1.BackingProvisionAssignment
-	(*BackingProvisionCheckpointRequest)(nil),           // 69: groundplane.agent.v1.BackingProvisionCheckpointRequest
-	(*BackingProvisionCheckpointAck)(nil),               // 70: groundplane.agent.v1.BackingProvisionCheckpointAck
-	(*BackingProvisionCompletionRequest)(nil),           // 71: groundplane.agent.v1.BackingProvisionCompletionRequest
-	(*BackingProvisionCompletionAck)(nil),               // 72: groundplane.agent.v1.BackingProvisionCompletionAck
-	(*BackingProvisionFailureRequest)(nil),              // 73: groundplane.agent.v1.BackingProvisionFailureRequest
-	(*BackingProvisionFailureAck)(nil),                  // 74: groundplane.agent.v1.BackingProvisionFailureAck
-	(*BackingProvisionConfigurationRequest)(nil),        // 75: groundplane.agent.v1.BackingProvisionConfigurationRequest
-	(*BackingProvisionConfigurationManifest)(nil),       // 76: groundplane.agent.v1.BackingProvisionConfigurationManifest
-	(*BackingProvisionFileRequest)(nil),                 // 77: groundplane.agent.v1.BackingProvisionFileRequest
-	(*BackingProvisionFileDelivery)(nil),                // 78: groundplane.agent.v1.BackingProvisionFileDelivery
-	(*BackingProvisionHookRequest)(nil),                 // 79: groundplane.agent.v1.BackingProvisionHookRequest
-	(*BackingProvisionHookDelivery)(nil),                // 80: groundplane.agent.v1.BackingProvisionHookDelivery
-	(*BackingProvisionRecoveryRequest)(nil),             // 81: groundplane.agent.v1.BackingProvisionRecoveryRequest
-	(*BackingProvisionRecoveryAck)(nil),                 // 82: groundplane.agent.v1.BackingProvisionRecoveryAck
-	(*BackingProvisionHelperRequest)(nil),               // 83: groundplane.agent.v1.BackingProvisionHelperRequest
-	(*BackingProvisionHelperResponse)(nil),              // 84: groundplane.agent.v1.BackingProvisionHelperResponse
-	(*EnvironmentProvisionAssignment)(nil),              // 85: groundplane.agent.v1.EnvironmentProvisionAssignment
-	(*EnvironmentProvisionRecoverySource)(nil),          // 86: groundplane.agent.v1.EnvironmentProvisionRecoverySource
-	(*EnvironmentProvisionResultRequest)(nil),           // 87: groundplane.agent.v1.EnvironmentProvisionResultRequest
-	(*EnvironmentProvisionResultAck)(nil),               // 88: groundplane.agent.v1.EnvironmentProvisionResultAck
-	(*EnvironmentProvisionHelperRequest)(nil),           // 89: groundplane.agent.v1.EnvironmentProvisionHelperRequest
-	(*EnvironmentProvisionHelperResponse)(nil),          // 90: groundplane.agent.v1.EnvironmentProvisionHelperResponse
-	(*AttachRemovalAssignment)(nil),                     // 91: groundplane.agent.v1.AttachRemovalAssignment
-	(*AttachRecoveryAssignment)(nil),                    // 92: groundplane.agent.v1.AttachRecoveryAssignment
-	(*AttachRecoveryCompletionRequest)(nil),             // 93: groundplane.agent.v1.AttachRecoveryCompletionRequest
-	(*AttachRecoveryCompletionAck)(nil),                 // 94: groundplane.agent.v1.AttachRecoveryCompletionAck
-	(*AttachProvisionFactsRequest)(nil),                 // 95: groundplane.agent.v1.AttachProvisionFactsRequest
-	(*AttachProvisionFactsAck)(nil),                     // 96: groundplane.agent.v1.AttachProvisionFactsAck
-	(*AttachProvisionAssignment)(nil),                   // 97: groundplane.agent.v1.AttachProvisionAssignment
-	(*AttachProvisionRecoveryAssignment)(nil),           // 98: groundplane.agent.v1.AttachProvisionRecoveryAssignment
-	(*AttachProvisionRecoveryReportRequest)(nil),        // 99: groundplane.agent.v1.AttachProvisionRecoveryReportRequest
-	(*AttachProvisionRecoveryReportAck)(nil),            // 100: groundplane.agent.v1.AttachProvisionRecoveryReportAck
-	(*AttachProvisionCheckpointRequest)(nil),            // 101: groundplane.agent.v1.AttachProvisionCheckpointRequest
-	(*AttachProvisionCheckpointAck)(nil),                // 102: groundplane.agent.v1.AttachProvisionCheckpointAck
-	(*AttachProvisionCompletionRequest)(nil),            // 103: groundplane.agent.v1.AttachProvisionCompletionRequest
-	(*AttachProvisionCompletionAck)(nil),                // 104: groundplane.agent.v1.AttachProvisionCompletionAck
-	(*AttachProvisionFailureRequest)(nil),               // 105: groundplane.agent.v1.AttachProvisionFailureRequest
-	(*AttachProvisionFailureAck)(nil),                   // 106: groundplane.agent.v1.AttachProvisionFailureAck
-	(*AttachProvisionInput)(nil),                        // 107: groundplane.agent.v1.AttachProvisionInput
-	(*AttachCredentialProvision)(nil),                   // 108: groundplane.agent.v1.AttachCredentialProvision
-	(*AttachGrantProvision)(nil),                        // 109: groundplane.agent.v1.AttachGrantProvision
-	(*AttachRemovalInput)(nil),                          // 110: groundplane.agent.v1.AttachRemovalInput
-	(*AttachConsumerTransition)(nil),                    // 111: groundplane.agent.v1.AttachConsumerTransition
-	(*AttachConsumerHelperRequest)(nil),                 // 112: groundplane.agent.v1.AttachConsumerHelperRequest
-	(*AttachConsumerHelperResponse)(nil),                // 113: groundplane.agent.v1.AttachConsumerHelperResponse
-	(*AttachCredentialRemoval)(nil),                     // 114: groundplane.agent.v1.AttachCredentialRemoval
-	(*AttachGrantRemoval)(nil),                          // 115: groundplane.agent.v1.AttachGrantRemoval
-	(*AttachRemovalCheckpointRequest)(nil),              // 116: groundplane.agent.v1.AttachRemovalCheckpointRequest
-	(*AttachRemovalCheckpointAck)(nil),                  // 117: groundplane.agent.v1.AttachRemovalCheckpointAck
-	(*AttachRemovalCompletionRequest)(nil),              // 118: groundplane.agent.v1.AttachRemovalCompletionRequest
-	(*AttachRemovalCompletionAck)(nil),                  // 119: groundplane.agent.v1.AttachRemovalCompletionAck
-	(*AttachRemovalFailureRequest)(nil),                 // 120: groundplane.agent.v1.AttachRemovalFailureRequest
-	(*AttachRemovalFailureAck)(nil),                     // 121: groundplane.agent.v1.AttachRemovalFailureAck
-	(*EnvironmentRemovalCheckpointRequest)(nil),         // 122: groundplane.agent.v1.EnvironmentRemovalCheckpointRequest
-	(*EnvironmentRemovalCheckpointAck)(nil),             // 123: groundplane.agent.v1.EnvironmentRemovalCheckpointAck
-	(*EnvironmentRemovalCompletionRequest)(nil),         // 124: groundplane.agent.v1.EnvironmentRemovalCompletionRequest
-	(*EnvironmentRemovalCompletionAck)(nil),             // 125: groundplane.agent.v1.EnvironmentRemovalCompletionAck
-	(*EnvironmentRemovalFailureRequest)(nil),            // 126: groundplane.agent.v1.EnvironmentRemovalFailureRequest
-	(*EnvironmentRemovalFailureAck)(nil),                // 127: groundplane.agent.v1.EnvironmentRemovalFailureAck
-	(*EnvironmentRemovalHelperRequest)(nil),             // 128: groundplane.agent.v1.EnvironmentRemovalHelperRequest
-	(*EnvironmentRemovalHelperResponse)(nil),            // 129: groundplane.agent.v1.EnvironmentRemovalHelperResponse
-	(*ReleaseWorkAssignment)(nil),                       // 130: groundplane.agent.v1.ReleaseWorkAssignment
-	(*ReleaseRecoveryAssignment)(nil),                   // 131: groundplane.agent.v1.ReleaseRecoveryAssignment
-	(*ReleaseRecoveryCheckpointRequest)(nil),            // 132: groundplane.agent.v1.ReleaseRecoveryCheckpointRequest
-	(*ReleaseRecoveryCheckpointAck)(nil),                // 133: groundplane.agent.v1.ReleaseRecoveryCheckpointAck
-	(*ReleaseWorkCheckpointRequest)(nil),                // 134: groundplane.agent.v1.ReleaseWorkCheckpointRequest
-	(*ReleaseWorkCheckpointAck)(nil),                    // 135: groundplane.agent.v1.ReleaseWorkCheckpointAck
-	(*ReleaseWorkCompletionRequest)(nil),                // 136: groundplane.agent.v1.ReleaseWorkCompletionRequest
-	(*ReleaseWorkCompletionAck)(nil),                    // 137: groundplane.agent.v1.ReleaseWorkCompletionAck
-	(*ReleaseWorkFailureRequest)(nil),                   // 138: groundplane.agent.v1.ReleaseWorkFailureRequest
-	(*ReleaseWorkFailureAck)(nil),                       // 139: groundplane.agent.v1.ReleaseWorkFailureAck
-	(*ReleaseEffectEvidenceRequest)(nil),                // 140: groundplane.agent.v1.ReleaseEffectEvidenceRequest
-	(*ReleaseEffectEvidenceAck)(nil),                    // 141: groundplane.agent.v1.ReleaseEffectEvidenceAck
-	(*ScriptWorkAssignment)(nil),                        // 142: groundplane.agent.v1.ScriptWorkAssignment
-	(*ScriptWorkCheckpointRequest)(nil),                 // 143: groundplane.agent.v1.ScriptWorkCheckpointRequest
-	(*ScriptWorkCheckpointAck)(nil),                     // 144: groundplane.agent.v1.ScriptWorkCheckpointAck
-	(*ScriptWorkCompletionRequest)(nil),                 // 145: groundplane.agent.v1.ScriptWorkCompletionRequest
-	(*ScriptWorkCompletionAck)(nil),                     // 146: groundplane.agent.v1.ScriptWorkCompletionAck
-	(*ScriptRecoveryAssignment)(nil),                    // 147: groundplane.agent.v1.ScriptRecoveryAssignment
-	(*ScriptRecoveryCompletionRequest)(nil),             // 148: groundplane.agent.v1.ScriptRecoveryCompletionRequest
-	(*ScriptRecoveryCompletionAck)(nil),                 // 149: groundplane.agent.v1.ScriptRecoveryCompletionAck
-	(*ScriptWorkFailureRequest)(nil),                    // 150: groundplane.agent.v1.ScriptWorkFailureRequest
-	(*ScriptWorkFailureAck)(nil),                        // 151: groundplane.agent.v1.ScriptWorkFailureAck
-	(*ReleaseConfigurationRequest)(nil),                 // 152: groundplane.agent.v1.ReleaseConfigurationRequest
-	(*ComponentConfigurationRequest)(nil),               // 153: groundplane.agent.v1.ComponentConfigurationRequest
-	(*ComponentConfigurationFile)(nil),                  // 154: groundplane.agent.v1.ComponentConfigurationFile
-	(*ComponentConfigurationManifest)(nil),              // 155: groundplane.agent.v1.ComponentConfigurationManifest
-	(*ComponentConfigurationFileRequest)(nil),           // 156: groundplane.agent.v1.ComponentConfigurationFileRequest
-	(*ComponentConfigurationFileDelivery)(nil),          // 157: groundplane.agent.v1.ComponentConfigurationFileDelivery
-	(*ReleaseConfigurationFile)(nil),                    // 158: groundplane.agent.v1.ReleaseConfigurationFile
-	(*ReleaseConfigurationManifest)(nil),                // 159: groundplane.agent.v1.ReleaseConfigurationManifest
-	(*ReleaseConfigurationFileRequest)(nil),             // 160: groundplane.agent.v1.ReleaseConfigurationFileRequest
-	(*ReleaseConfigurationFileDelivery)(nil),            // 161: groundplane.agent.v1.ReleaseConfigurationFileDelivery
-	(*ReleaseHelperRequest)(nil),                        // 162: groundplane.agent.v1.ReleaseHelperRequest
-	(*ReleaseHelperResponse)(nil),                       // 163: groundplane.agent.v1.ReleaseHelperResponse
-	(*ReleaseRecoveryHelperRequest)(nil),                // 164: groundplane.agent.v1.ReleaseRecoveryHelperRequest
-	(*ReleaseRecoveryHelperResponse)(nil),               // 165: groundplane.agent.v1.ReleaseRecoveryHelperResponse
-	(*ReleaseWorkInput)(nil),                            // 166: groundplane.agent.v1.ReleaseWorkInput
-	(*ReleaseWorkPredecessor)(nil),                      // 167: groundplane.agent.v1.ReleaseWorkPredecessor
-	(*WorkConfigurationReference)(nil),                  // 168: groundplane.agent.v1.WorkConfigurationReference
-	(*ReleaseWorkHook)(nil),                             // 169: groundplane.agent.v1.ReleaseWorkHook
-	(*ReleaseHookRequest)(nil),                          // 170: groundplane.agent.v1.ReleaseHookRequest
-	(*ReleaseHookDelivery)(nil),                         // 171: groundplane.agent.v1.ReleaseHookDelivery
-	(*ScriptCleanupArtifacts)(nil),                      // 172: groundplane.agent.v1.ScriptCleanupArtifacts
-	(*ReleaseWorkRolling)(nil),                          // 173: groundplane.agent.v1.ReleaseWorkRolling
-	(*Authenticate)(nil),                                // 174: groundplane.agent.v1.Authenticate
-	(*AgentConfig)(nil),                                 // 175: groundplane.agent.v1.AgentConfig
-	(*AgentLabel)(nil),                                  // 176: groundplane.agent.v1.AgentLabel
-	(*AgentMessage)(nil),                                // 177: groundplane.agent.v1.AgentMessage
-	(*Ready)(nil),                                       // 178: groundplane.agent.v1.Ready
-	(*BuildProvenance)(nil),                             // 179: groundplane.agent.v1.BuildProvenance
-	(*WorkloadImageSelector)(nil),                       // 180: groundplane.agent.v1.WorkloadImageSelector
-	(*ResolveWorkloadImages)(nil),                       // 181: groundplane.agent.v1.ResolveWorkloadImages
-	(*WorkloadImageResolution)(nil),                     // 182: groundplane.agent.v1.WorkloadImageResolution
-	(*WorkloadImageResolutions)(nil),                    // 183: groundplane.agent.v1.WorkloadImageResolutions
-	(*WorkloadImageResolutionFailure)(nil),              // 184: groundplane.agent.v1.WorkloadImageResolutionFailure
-	(*WorkloadImageResolutionResult)(nil),               // 185: groundplane.agent.v1.WorkloadImageResolutionResult
-	(*ServiceObservationTarget)(nil),                    // 186: groundplane.agent.v1.ServiceObservationTarget
-	(*ServiceWorkloadObservation)(nil),                  // 187: groundplane.agent.v1.ServiceWorkloadObservation
-	(*DatabaseVersionProbe)(nil),                        // 188: groundplane.agent.v1.DatabaseVersionProbe
-	(*DatabaseVersionObservation)(nil),                  // 189: groundplane.agent.v1.DatabaseVersionObservation
-	(*ObserveServices)(nil),                             // 190: groundplane.agent.v1.ObserveServices
-	(*CancelServiceObservation)(nil),                    // 191: groundplane.agent.v1.CancelServiceObservation
-	(*ServiceReplicaCounts)(nil),                        // 192: groundplane.agent.v1.ServiceReplicaCounts
-	(*ServiceObservationRow)(nil),                       // 193: groundplane.agent.v1.ServiceObservationRow
-	(*ServiceContainerObservation)(nil),                 // 194: groundplane.agent.v1.ServiceContainerObservation
-	(*ServiceObservationResult)(nil),                    // 195: groundplane.agent.v1.ServiceObservationResult
-	(*TaskEvent)(nil),                                   // 196: groundplane.agent.v1.TaskEvent
-	(*StepFailure)(nil),                                 // 197: groundplane.agent.v1.StepFailure
-	(*HealthWaitProgress)(nil),                          // 198: groundplane.agent.v1.HealthWaitProgress
-	(*TaskEventAck)(nil),                                // 199: groundplane.agent.v1.TaskEventAck
-	(*RollingStepBudget)(nil),                           // 200: groundplane.agent.v1.RollingStepBudget
-	(*ObservedState)(nil),                               // 201: groundplane.agent.v1.ObservedState
-	(*ObservedProject)(nil),                             // 202: groundplane.agent.v1.ObservedProject
-	(*ObservedContainer)(nil),                           // 203: groundplane.agent.v1.ObservedContainer
-	(*ObservedNetwork)(nil),                             // 204: groundplane.agent.v1.ObservedNetwork
-	(*ObservedVolume)(nil),                              // 205: groundplane.agent.v1.ObservedVolume
-	(*ObservedCollision)(nil),                           // 206: groundplane.agent.v1.ObservedCollision
-	(*TaskAck)(nil),                                     // 207: groundplane.agent.v1.TaskAck
-	(*BackupTaskResult)(nil),                            // 208: groundplane.agent.v1.BackupTaskResult
-	(*ComposeTaskResult)(nil),                           // 209: groundplane.agent.v1.ComposeTaskResult
-	(*RollingReleaseEvidence)(nil),                      // 210: groundplane.agent.v1.RollingReleaseEvidence
-	(*ServiceAbsenceEvidence)(nil),                      // 211: groundplane.agent.v1.ServiceAbsenceEvidence
-	(*CandidateAbsenceEvidence)(nil),                    // 212: groundplane.agent.v1.CandidateAbsenceEvidence
-	(*DNSResolverObservationEvidence)(nil),              // 213: groundplane.agent.v1.DNSResolverObservationEvidence
-	(*DNSAnswerRecord)(nil),                             // 214: groundplane.agent.v1.DNSAnswerRecord
-	(*DNSForwardCounter)(nil),                           // 215: groundplane.agent.v1.DNSForwardCounter
-	(*DNSQueryProof)(nil),                               // 216: groundplane.agent.v1.DNSQueryProof
-	(*EnvironmentDirectoryTaskResult)(nil),              // 217: groundplane.agent.v1.EnvironmentDirectoryTaskResult
-	(*ControllerMessage)(nil),                           // 218: groundplane.agent.v1.ControllerMessage
-	(*LogTarget)(nil),                                   // 219: groundplane.agent.v1.LogTarget
-	(*LogSubscribe)(nil),                                // 220: groundplane.agent.v1.LogSubscribe
-	(*LogCancel)(nil),                                   // 221: groundplane.agent.v1.LogCancel
-	(*LogCredit)(nil),                                   // 222: groundplane.agent.v1.LogCredit
-	(*LogReady)(nil),                                    // 223: groundplane.agent.v1.LogReady
-	(*LogEvent)(nil),                                    // 224: groundplane.agent.v1.LogEvent
-	(*LogEnd)(nil),                                      // 225: groundplane.agent.v1.LogEnd
-	(*MaterializationTransfer)(nil),                     // 226: groundplane.agent.v1.MaterializationTransfer
-	(*MaterializationTransferHeader)(nil),               // 227: groundplane.agent.v1.MaterializationTransferHeader
-	(*MaterializationTransferChunk)(nil),                // 228: groundplane.agent.v1.MaterializationTransferChunk
-	(*MaterializationTransferEnd)(nil),                  // 229: groundplane.agent.v1.MaterializationTransferEnd
-	(*ManagedConfigTransfer)(nil),                       // 230: groundplane.agent.v1.ManagedConfigTransfer
-	(*ManagedConfigTransferHeader)(nil),                 // 231: groundplane.agent.v1.ManagedConfigTransferHeader
-	(*ManagedConfigTransferChunk)(nil),                  // 232: groundplane.agent.v1.ManagedConfigTransferChunk
-	(*ManagedConfigTransferEnd)(nil),                    // 233: groundplane.agent.v1.ManagedConfigTransferEnd
-	(*TaskAssignment)(nil),                              // 234: groundplane.agent.v1.TaskAssignment
-	(*ReleaseRecoveryDirective)(nil),                    // 235: groundplane.agent.v1.ReleaseRecoveryDirective
-	(*ReleaseRestorationCandidate)(nil),                 // 236: groundplane.agent.v1.ReleaseRestorationCandidate
-	(*ReleaseAppliedPredecessorAuthority)(nil),          // 237: groundplane.agent.v1.ReleaseAppliedPredecessorAuthority
-	(*ReleaseRestorationAuthority)(nil),                 // 238: groundplane.agent.v1.ReleaseRestorationAuthority
-	(*ReleaseNativePredecessorAuthority)(nil),           // 239: groundplane.agent.v1.ReleaseNativePredecessorAuthority
-	(*ScriptStartAuthorizedCheckpoint)(nil),             // 240: groundplane.agent.v1.ScriptStartAuthorizedCheckpoint
-	(*ScriptBodyPreparedCheckpoint)(nil),                // 241: groundplane.agent.v1.ScriptBodyPreparedCheckpoint
-	(*ScriptContainerCreatedCheckpoint)(nil),            // 242: groundplane.agent.v1.ScriptContainerCreatedCheckpoint
-	(*ScriptOutcomeCheckpoint)(nil),                     // 243: groundplane.agent.v1.ScriptOutcomeCheckpoint
-	(*ScriptCleanupCheckpoint)(nil),                     // 244: groundplane.agent.v1.ScriptCleanupCheckpoint
-	(*ScriptExecutionCheckpoint)(nil),                   // 245: groundplane.agent.v1.ScriptExecutionCheckpoint
-	(*ScriptCheckpointRequest)(nil),                     // 246: groundplane.agent.v1.ScriptCheckpointRequest
-	(*ScriptCheckpointAck)(nil),                         // 247: groundplane.agent.v1.ScriptCheckpointAck
-	(*BackingHookValue)(nil),                            // 248: groundplane.agent.v1.BackingHookValue
-	(*BackingHookFactDefinition)(nil),                   // 249: groundplane.agent.v1.BackingHookFactDefinition
-	(*BackingHookProcedure)(nil),                        // 250: groundplane.agent.v1.BackingHookProcedure
-	(*BackingHookCheckpointRequest)(nil),                // 251: groundplane.agent.v1.BackingHookCheckpointRequest
-	(*BackingHookCheckpointAck)(nil),                    // 252: groundplane.agent.v1.BackingHookCheckpointAck
-	(*ExecutionPlan)(nil),                               // 253: groundplane.agent.v1.ExecutionPlan
-	(*ManagedNetworkRecoveryProcedure)(nil),             // 254: groundplane.agent.v1.ManagedNetworkRecoveryProcedure
-	(*ManagedNetworkRemovalRecovery)(nil),               // 255: groundplane.agent.v1.ManagedNetworkRemovalRecovery
-	(*ManagedNetworkPreparationRecovery)(nil),           // 256: groundplane.agent.v1.ManagedNetworkPreparationRecovery
-	(*ManagedNetworkPreparationMember)(nil),             // 257: groundplane.agent.v1.ManagedNetworkPreparationMember
-	(*ServiceAbsenceRecoveryProcedure)(nil),             // 258: groundplane.agent.v1.ServiceAbsenceRecoveryProcedure
-	(*ServiceLifecycleProcedure)(nil),                   // 259: groundplane.agent.v1.ServiceLifecycleProcedure
-	(*ServiceLifecycleSource)(nil),                      // 260: groundplane.agent.v1.ServiceLifecycleSource
-	(*ManagedComponentProcedure)(nil),                   // 261: groundplane.agent.v1.ManagedComponentProcedure
-	(*ManagedComponentService)(nil),                     // 262: groundplane.agent.v1.ManagedComponentService
-	(*CandidateReleaseProcedure)(nil),                   // 263: groundplane.agent.v1.CandidateReleaseProcedure
-	(*ConfigurationRestoration)(nil),                    // 264: groundplane.agent.v1.ConfigurationRestoration
-	(*ConfigurationFileRestoration)(nil),                // 265: groundplane.agent.v1.ConfigurationFileRestoration
-	(*CandidateReleaseMember)(nil),                      // 266: groundplane.agent.v1.CandidateReleaseMember
-	(*RollingReleaseProcedure)(nil),                     // 267: groundplane.agent.v1.RollingReleaseProcedure
-	(*RollingReplica)(nil),                              // 268: groundplane.agent.v1.RollingReplica
-	(*RollingReplicaChange)(nil),                        // 269: groundplane.agent.v1.RollingReplicaChange
-	(*ServingPredecessorRestoration)(nil),               // 270: groundplane.agent.v1.ServingPredecessorRestoration
-	(*CandidateAbsenceRestoration)(nil),                 // 271: groundplane.agent.v1.CandidateAbsenceRestoration
-	(*CandidateReleaseService)(nil),                     // 272: groundplane.agent.v1.CandidateReleaseService
-	(*CandidateRestorationProbe)(nil),                   // 273: groundplane.agent.v1.CandidateRestorationProbe
-	(*CandidateRestorationCompensate)(nil),              // 274: groundplane.agent.v1.CandidateRestorationCompensate
-	(*EntryConfigurationWorkInput)(nil),                 // 275: groundplane.agent.v1.EntryConfigurationWorkInput
-	(*ResolverWorkAssignment)(nil),                      // 276: groundplane.agent.v1.ResolverWorkAssignment
-	(*ResolverWorkCheckpointRequest)(nil),               // 277: groundplane.agent.v1.ResolverWorkCheckpointRequest
-	(*ResolverWorkCheckpointAck)(nil),                   // 278: groundplane.agent.v1.ResolverWorkCheckpointAck
-	(*ResolverWorkCompletionRequest)(nil),               // 279: groundplane.agent.v1.ResolverWorkCompletionRequest
-	(*ResolverWorkFailureRequest)(nil),                  // 280: groundplane.agent.v1.ResolverWorkFailureRequest
-	(*ResolverWorkRecoveryRequest)(nil),                 // 281: groundplane.agent.v1.ResolverWorkRecoveryRequest
-	(*ResolverWorkResultAck)(nil),                       // 282: groundplane.agent.v1.ResolverWorkResultAck
-	(*ResolverWorkHelperRequest)(nil),                   // 283: groundplane.agent.v1.ResolverWorkHelperRequest
-	(*ResolverWorkHelperResponse)(nil),                  // 284: groundplane.agent.v1.ResolverWorkHelperResponse
-	(*ComponentWorkInput)(nil),                          // 285: groundplane.agent.v1.ComponentWorkInput
-	(*ComponentWorkPredecessor)(nil),                    // 286: groundplane.agent.v1.ComponentWorkPredecessor
-	(*ComponentWorkRetainedConfiguration)(nil),          // 287: groundplane.agent.v1.ComponentWorkRetainedConfiguration
-	(*EntryConfigurationRequest)(nil),                   // 288: groundplane.agent.v1.EntryConfigurationRequest
-	(*EntryConfigurationFile)(nil),                      // 289: groundplane.agent.v1.EntryConfigurationFile
-	(*EntryConfigurationManifest)(nil),                  // 290: groundplane.agent.v1.EntryConfigurationManifest
-	(*EntryConfigurationFileRequest)(nil),               // 291: groundplane.agent.v1.EntryConfigurationFileRequest
-	(*EntryConfigurationFileDelivery)(nil),              // 292: groundplane.agent.v1.EntryConfigurationFileDelivery
-	(*EntryConfigurationWorkCheckpointRequest)(nil),     // 293: groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
-	(*EntryConfigurationWorkCheckpointAck)(nil),         // 294: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
-	(*EntryConfigurationWorkCompletionRequest)(nil),     // 295: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest
-	(*EntryConfigurationWorkCompletionAck)(nil),         // 296: groundplane.agent.v1.EntryConfigurationWorkCompletionAck
-	(*EntryConfigurationWorkFailureRequest)(nil),        // 297: groundplane.agent.v1.EntryConfigurationWorkFailureRequest
-	(*EntryConfigurationWorkFailureAck)(nil),            // 298: groundplane.agent.v1.EntryConfigurationWorkFailureAck
-	(*EntryConfigurationWorkAssignment)(nil),            // 299: groundplane.agent.v1.EntryConfigurationWorkAssignment
-	(*EntryConfigurationWorkRecoveryReportRequest)(nil), // 300: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest
-	(*EntryConfigurationWorkRecoveryReportAck)(nil),     // 301: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck
-	(*ComponentWorkAssignment)(nil),                     // 302: groundplane.agent.v1.ComponentWorkAssignment
-	(*ComponentWorkCheckpointRequest)(nil),              // 303: groundplane.agent.v1.ComponentWorkCheckpointRequest
-	(*ComponentWorkCheckpointAck)(nil),                  // 304: groundplane.agent.v1.ComponentWorkCheckpointAck
-	(*ComponentWorkCompletionRequest)(nil),              // 305: groundplane.agent.v1.ComponentWorkCompletionRequest
-	(*ComponentWorkCompletionAck)(nil),                  // 306: groundplane.agent.v1.ComponentWorkCompletionAck
-	(*ComponentWorkFailureRequest)(nil),                 // 307: groundplane.agent.v1.ComponentWorkFailureRequest
-	(*ComponentWorkFailureAck)(nil),                     // 308: groundplane.agent.v1.ComponentWorkFailureAck
-	(*ComponentWorkRecoveryReportRequest)(nil),          // 309: groundplane.agent.v1.ComponentWorkRecoveryReportRequest
-	(*ComponentWorkRecoveryReportAck)(nil),              // 310: groundplane.agent.v1.ComponentWorkRecoveryReportAck
-	(*NetworkWorkInput)(nil),                            // 311: groundplane.agent.v1.NetworkWorkInput
-	(*NetworkWorkAssignment)(nil),                       // 312: groundplane.agent.v1.NetworkWorkAssignment
-	(*NetworkWorkCheckpointRequest)(nil),                // 313: groundplane.agent.v1.NetworkWorkCheckpointRequest
-	(*NetworkWorkCheckpointAck)(nil),                    // 314: groundplane.agent.v1.NetworkWorkCheckpointAck
-	(*NetworkWorkCompletionRequest)(nil),                // 315: groundplane.agent.v1.NetworkWorkCompletionRequest
-	(*NetworkWorkCompletionAck)(nil),                    // 316: groundplane.agent.v1.NetworkWorkCompletionAck
-	(*NetworkWorkFailureRequest)(nil),                   // 317: groundplane.agent.v1.NetworkWorkFailureRequest
-	(*NetworkWorkFailureAck)(nil),                       // 318: groundplane.agent.v1.NetworkWorkFailureAck
-	(*NetworkWorkRecoveryReportRequest)(nil),            // 319: groundplane.agent.v1.NetworkWorkRecoveryReportRequest
-	(*NetworkWorkRecoveryReportAck)(nil),                // 320: groundplane.agent.v1.NetworkWorkRecoveryReportAck
-	(*ComponentWorkHelperRequest)(nil),                  // 321: groundplane.agent.v1.ComponentWorkHelperRequest
-	(*EntryConfigurationWorkHelperRequest)(nil),         // 322: groundplane.agent.v1.EntryConfigurationWorkHelperRequest
-	(*EntryConfigurationWorkHelperResponse)(nil),        // 323: groundplane.agent.v1.EntryConfigurationWorkHelperResponse
-	(*ComponentWorkHelperResponse)(nil),                 // 324: groundplane.agent.v1.ComponentWorkHelperResponse
-	(*NetworkWorkHelperRequest)(nil),                    // 325: groundplane.agent.v1.NetworkWorkHelperRequest
-	(*NetworkWorkHelperResponse)(nil),                   // 326: groundplane.agent.v1.NetworkWorkHelperResponse
-	(*ServiceRemovalRecoveryAssignment)(nil),            // 327: groundplane.agent.v1.ServiceRemovalRecoveryAssignment
-	(*ServiceRemovalConfigurationRequest)(nil),          // 328: groundplane.agent.v1.ServiceRemovalConfigurationRequest
-	(*ServiceRemovalConfigurationFile)(nil),             // 329: groundplane.agent.v1.ServiceRemovalConfigurationFile
-	(*ServiceRemovalConfigurationManifest)(nil),         // 330: groundplane.agent.v1.ServiceRemovalConfigurationManifest
-	(*ServiceRemovalConfigurationFileRequest)(nil),      // 331: groundplane.agent.v1.ServiceRemovalConfigurationFileRequest
-	(*ServiceRemovalConfigurationFileDelivery)(nil),     // 332: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery
-	(*ServiceRemovalRecoveryCheckpointRequest)(nil),     // 333: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
-	(*ServiceRemovalRecoveryCheckpointAck)(nil),         // 334: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
-	(*ServiceRemovalRecoveryCompletionRequest)(nil),     // 335: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest
-	(*ServiceRemovalRecoveryCompletionAck)(nil),         // 336: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck
-	(*ServiceRemovalRecoveryFailureRequest)(nil),        // 337: groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest
-	(*ServiceRemovalRecoveryFailureAck)(nil),            // 338: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck
-	(*ServiceRemovalRecoveryHelperRequest)(nil),         // 339: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest
-	(*ServiceRemovalRecoveryHelperResponse)(nil),        // 340: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse
-	(*ServiceLifecycleAssignment)(nil),                  // 341: groundplane.agent.v1.ServiceLifecycleAssignment
-	(*ServiceLifecycleWorkInput)(nil),                   // 342: groundplane.agent.v1.ServiceLifecycleWorkInput
-	(*ServiceLifecycleMember)(nil),                      // 343: groundplane.agent.v1.ServiceLifecycleMember
-	(*ServiceLifecycleHook)(nil),                        // 344: groundplane.agent.v1.ServiceLifecycleHook
-	(*ServiceLifecycleHookRequest)(nil),                 // 345: groundplane.agent.v1.ServiceLifecycleHookRequest
-	(*ServiceLifecycleHookDelivery)(nil),                // 346: groundplane.agent.v1.ServiceLifecycleHookDelivery
-	(*ServiceLifecycleRecoveryReportRequest)(nil),       // 347: groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest
-	(*ServiceLifecycleRecoveryReportAck)(nil),           // 348: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck
-	(*ServiceLifecycleCheckpointRequest)(nil),           // 349: groundplane.agent.v1.ServiceLifecycleCheckpointRequest
-	(*ServiceLifecycleCheckpointAck)(nil),               // 350: groundplane.agent.v1.ServiceLifecycleCheckpointAck
-	(*ServiceLifecycleCompletionRequest)(nil),           // 351: groundplane.agent.v1.ServiceLifecycleCompletionRequest
-	(*ServiceLifecycleCompletionAck)(nil),               // 352: groundplane.agent.v1.ServiceLifecycleCompletionAck
-	(*ServiceLifecycleFailureRequest)(nil),              // 353: groundplane.agent.v1.ServiceLifecycleFailureRequest
-	(*ServiceLifecycleFailureAck)(nil),                  // 354: groundplane.agent.v1.ServiceLifecycleFailureAck
-	(*ServiceLifecycleHelperRequest)(nil),               // 355: groundplane.agent.v1.ServiceLifecycleHelperRequest
-	(*ServiceLifecycleHelperResponse)(nil),              // 356: groundplane.agent.v1.ServiceLifecycleHelperResponse
-	(*VolumeWorkInput)(nil),                             // 357: groundplane.agent.v1.VolumeWorkInput
-	(*VolumeWorkAssignment)(nil),                        // 358: groundplane.agent.v1.VolumeWorkAssignment
-	(*VolumeWorkCheckpointRequest)(nil),                 // 359: groundplane.agent.v1.VolumeWorkCheckpointRequest
-	(*VolumeWorkCheckpointAck)(nil),                     // 360: groundplane.agent.v1.VolumeWorkCheckpointAck
-	(*VolumeWorkCompletionRequest)(nil),                 // 361: groundplane.agent.v1.VolumeWorkCompletionRequest
-	(*VolumeWorkCompletionAck)(nil),                     // 362: groundplane.agent.v1.VolumeWorkCompletionAck
-	(*VolumeWorkFailureRequest)(nil),                    // 363: groundplane.agent.v1.VolumeWorkFailureRequest
-	(*VolumeWorkFailureAck)(nil),                        // 364: groundplane.agent.v1.VolumeWorkFailureAck
-	(*VolumeWorkRecoveryReportRequest)(nil),             // 365: groundplane.agent.v1.VolumeWorkRecoveryReportRequest
-	(*VolumeWorkRecoveryReportAck)(nil),                 // 366: groundplane.agent.v1.VolumeWorkRecoveryReportAck
-	(*VolumeWorkHelperRequest)(nil),                     // 367: groundplane.agent.v1.VolumeWorkHelperRequest
-	(*VolumeWorkHelperResponse)(nil),                    // 368: groundplane.agent.v1.VolumeWorkHelperResponse
-	(*ComposeArtifact)(nil),                             // 369: groundplane.agent.v1.ComposeArtifact
-	(*ComposeService)(nil),                              // 370: groundplane.agent.v1.ComposeService
-	(*ComposeNetwork)(nil),                              // 371: groundplane.agent.v1.ComposeNetwork
-	(*ComposeVolume)(nil),                               // 372: groundplane.agent.v1.ComposeVolume
-	(*LabelPair)(nil),                                   // 373: groundplane.agent.v1.LabelPair
-	(*ExecutionStep)(nil),                               // 374: groundplane.agent.v1.ExecutionStep
-	(*ServiceAbsenceProbe)(nil),                         // 375: groundplane.agent.v1.ServiceAbsenceProbe
-	(*ManagedNetworkEnsure)(nil),                        // 376: groundplane.agent.v1.ManagedNetworkEnsure
-	(*ManagedNetworkPreparationProbe)(nil),              // 377: groundplane.agent.v1.ManagedNetworkPreparationProbe
-	(*ManagedVolumeEnsure)(nil),                         // 378: groundplane.agent.v1.ManagedVolumeEnsure
-	(*RunScript)(nil),                                   // 379: groundplane.agent.v1.RunScript
-	(*ResolvedRunnerSnapshot)(nil),                      // 380: groundplane.agent.v1.ResolvedRunnerSnapshot
-	(*ScriptExplicitExecutionAuthority)(nil),            // 381: groundplane.agent.v1.ScriptExplicitExecutionAuthority
-	(*ScriptExplicitExecutionContext)(nil),              // 382: groundplane.agent.v1.ScriptExplicitExecutionContext
-	(*ScriptExplicitVolumeGrant)(nil),                   // 383: groundplane.agent.v1.ScriptExplicitVolumeGrant
-	(*ScriptRunnerNetwork)(nil),                         // 384: groundplane.agent.v1.ScriptRunnerNetwork
-	(*ScriptNetworkAttachment)(nil),                     // 385: groundplane.agent.v1.ScriptNetworkAttachment
-	(*ScriptRunnerMount)(nil),                           // 386: groundplane.agent.v1.ScriptRunnerMount
-	(*ScriptSourceAuthority)(nil),                       // 387: groundplane.agent.v1.ScriptSourceAuthority
-	(*ScriptExistingSourceAuthority)(nil),               // 388: groundplane.agent.v1.ScriptExistingSourceAuthority
-	(*ScriptStagedSourceAuthority)(nil),                 // 389: groundplane.agent.v1.ScriptStagedSourceAuthority
-	(*ScriptMount)(nil),                                 // 390: groundplane.agent.v1.ScriptMount
-	(*ScriptRunnerEntryBinding)(nil),                    // 391: groundplane.agent.v1.ScriptRunnerEntryBinding
-	(*ScriptRunnerSecretValue)(nil),                     // 392: groundplane.agent.v1.ScriptRunnerSecretValue
-	(*ScriptRunnerProjection)(nil),                      // 393: groundplane.agent.v1.ScriptRunnerProjection
-	(*ScriptStringPair)(nil),                            // 394: groundplane.agent.v1.ScriptStringPair
-	(*ScriptUlimit)(nil),                                // 395: groundplane.agent.v1.ScriptUlimit
-	(*ScriptBlkio)(nil),                                 // 396: groundplane.agent.v1.ScriptBlkio
-	(*ScriptWeightDevice)(nil),                          // 397: groundplane.agent.v1.ScriptWeightDevice
-	(*ScriptThrottleDevice)(nil),                        // 398: groundplane.agent.v1.ScriptThrottleDevice
-	(*ScriptResource)(nil),                              // 399: groundplane.agent.v1.ScriptResource
-	(*ScriptBodyArtifactMetadata)(nil),                  // 400: groundplane.agent.v1.ScriptBodyArtifactMetadata
-	(*ScriptAssignmentArtifacts)(nil),                   // 401: groundplane.agent.v1.ScriptAssignmentArtifacts
-	(*ScriptBodyArtifact)(nil),                          // 402: groundplane.agent.v1.ScriptBodyArtifact
-	(*ScriptSecretArtifact)(nil),                        // 403: groundplane.agent.v1.ScriptSecretArtifact
-	(*ScriptEntryArtifact)(nil),                         // 404: groundplane.agent.v1.ScriptEntryArtifact
-	(*RevisionDigest)(nil),                              // 405: groundplane.agent.v1.RevisionDigest
-	(*CheckpointFence)(nil),                             // 406: groundplane.agent.v1.CheckpointFence
-	(*BackupResourceIdentity)(nil),                      // 407: groundplane.agent.v1.BackupResourceIdentity
-	(*BackupEncryptionAuthority)(nil),                   // 408: groundplane.agent.v1.BackupEncryptionAuthority
-	(*BackupPriorRuntimeIntent)(nil),                    // 409: groundplane.agent.v1.BackupPriorRuntimeIntent
-	(*BackupServiceFact)(nil),                           // 410: groundplane.agent.v1.BackupServiceFact
-	(*BackupConnectorAuthority)(nil),                    // 411: groundplane.agent.v1.BackupConnectorAuthority
-	(*BackupObjectTarget)(nil),                          // 412: groundplane.agent.v1.BackupObjectTarget
-	(*BackupS3VersionId)(nil),                           // 413: groundplane.agent.v1.BackupS3VersionId
-	(*BackupS3ETag)(nil),                                // 414: groundplane.agent.v1.BackupS3ETag
-	(*BackupObjectIdentity)(nil),                        // 415: groundplane.agent.v1.BackupObjectIdentity
-	(*BackupArtifactEvidence)(nil),                      // 416: groundplane.agent.v1.BackupArtifactEvidence
-	(*BackupTaskAuthority)(nil),                         // 417: groundplane.agent.v1.BackupTaskAuthority
-	(*BackupWorkInput)(nil),                             // 418: groundplane.agent.v1.BackupWorkInput
-	(*BackupWorkAssignment)(nil),                        // 419: groundplane.agent.v1.BackupWorkAssignment
-	(*BackupConsumerHelperRequest)(nil),                 // 420: groundplane.agent.v1.BackupConsumerHelperRequest
-	(*BackupConsumerHelperResponse)(nil),                // 421: groundplane.agent.v1.BackupConsumerHelperResponse
-	(*BackupRecoveryAssignment)(nil),                    // 422: groundplane.agent.v1.BackupRecoveryAssignment
-	(*BackupRecoveryRequest)(nil),                       // 423: groundplane.agent.v1.BackupRecoveryRequest
-	(*BackupConfigRecoveryPrepareRequest)(nil),          // 424: groundplane.agent.v1.BackupConfigRecoveryPrepareRequest
-	(*BackupConfigRecoveryPrepareAck)(nil),              // 425: groundplane.agent.v1.BackupConfigRecoveryPrepareAck
-	(*BackupRecoveryAck)(nil),                           // 426: groundplane.agent.v1.BackupRecoveryAck
-	(*BackupWorkCheckpointRequest)(nil),                 // 427: groundplane.agent.v1.BackupWorkCheckpointRequest
-	(*BackupWorkCompletionRequest)(nil),                 // 428: groundplane.agent.v1.BackupWorkCompletionRequest
-	(*BackupWorkFailureRequest)(nil),                    // 429: groundplane.agent.v1.BackupWorkFailureRequest
-	(*BackupWorkFailureAck)(nil),                        // 430: groundplane.agent.v1.BackupWorkFailureAck
-	(*BackupWorkCompletionAck)(nil),                     // 431: groundplane.agent.v1.BackupWorkCompletionAck
-	(*BackupWorkCheckpointAck)(nil),                     // 432: groundplane.agent.v1.BackupWorkCheckpointAck
-	(*BackupPlanScope)(nil),                             // 433: groundplane.agent.v1.BackupPlanScope
-	(*BackupStepAuthority)(nil),                         // 434: groundplane.agent.v1.BackupStepAuthority
-	(*BackupTaskResume)(nil),                            // 435: groundplane.agent.v1.BackupTaskResume
-	(*BackupStepResume)(nil),                            // 436: groundplane.agent.v1.BackupStepResume
-	(*BackupCaptureResume)(nil),                         // 437: groundplane.agent.v1.BackupCaptureResume
-	(*BackupPruneResume)(nil),                           // 438: groundplane.agent.v1.BackupPruneResume
-	(*BackupRestoreResume)(nil),                         // 439: groundplane.agent.v1.BackupRestoreResume
-	(*BackupDatabaseRestoreProgress)(nil),               // 440: groundplane.agent.v1.BackupDatabaseRestoreProgress
-	(*BackupDatabaseConsumerRecovery)(nil),              // 441: groundplane.agent.v1.BackupDatabaseConsumerRecovery
-	(*BackupCaptureCursor)(nil),                         // 442: groundplane.agent.v1.BackupCaptureCursor
-	(*BackupRestoreCursor)(nil),                         // 443: groundplane.agent.v1.BackupRestoreCursor
-	(*BackupCaptureAuthority)(nil),                      // 444: groundplane.agent.v1.BackupCaptureAuthority
-	(*BackupRestoreAuthority)(nil),                      // 445: groundplane.agent.v1.BackupRestoreAuthority
-	(*BackupPruneAuthority)(nil),                        // 446: groundplane.agent.v1.BackupPruneAuthority
-	(*BackupOriginalIdentity)(nil),                      // 447: groundplane.agent.v1.BackupOriginalIdentity
-	(*BackupAdoptedIdentity)(nil),                       // 448: groundplane.agent.v1.BackupAdoptedIdentity
-	(*BackupPruneObject)(nil),                           // 449: groundplane.agent.v1.BackupPruneObject
-	(*BackupPruneObjectDeleted)(nil),                    // 450: groundplane.agent.v1.BackupPruneObjectDeleted
-	(*BackupStagingInventory)(nil),                      // 451: groundplane.agent.v1.BackupStagingInventory
-	(*BackupRecoveredVolumeRestore)(nil),                // 452: groundplane.agent.v1.BackupRecoveredVolumeRestore
-	(*BackupRecoveredStage)(nil),                        // 453: groundplane.agent.v1.BackupRecoveredStage
-	(*BackupRecoveredFile)(nil),                         // 454: groundplane.agent.v1.BackupRecoveredFile
-	(*BackupStagingRecoveryPlan)(nil),                   // 455: groundplane.agent.v1.BackupStagingRecoveryPlan
-	(*BackupVolumeRestoreRecoveryDisposition)(nil),      // 456: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition
-	(*BackupVolumeRestoreResume)(nil),                   // 457: groundplane.agent.v1.BackupVolumeRestoreResume
-	(*BackupVolumeRestoreHold)(nil),                     // 458: groundplane.agent.v1.BackupVolumeRestoreHold
-	(*BackupVolumeRestoreCleanup)(nil),                  // 459: groundplane.agent.v1.BackupVolumeRestoreCleanup
-	(*BackupStagingDisposition)(nil),                    // 460: groundplane.agent.v1.BackupStagingDisposition
-	(*BackupDatabaseStagingGuard)(nil),                  // 461: groundplane.agent.v1.BackupDatabaseStagingGuard
-	(*BackupResumePrepared)(nil),                        // 462: groundplane.agent.v1.BackupResumePrepared
-	(*BackupRestartConfigEncryption)(nil),               // 463: groundplane.agent.v1.BackupRestartConfigEncryption
-	(*BackupRestartDatabaseEncryption)(nil),             // 464: groundplane.agent.v1.BackupRestartDatabaseEncryption
-	(*BackupDiscardRecovered)(nil),                      // 465: groundplane.agent.v1.BackupDiscardRecovered
-	(*BackupRecoveryRequired)(nil),                      // 466: groundplane.agent.v1.BackupRecoveryRequired
-	(*BackupStagingRecoveryAck)(nil),                    // 467: groundplane.agent.v1.BackupStagingRecoveryAck
-	(*BackupConfigTransfer)(nil),                        // 468: groundplane.agent.v1.BackupConfigTransfer
-	(*BackupConfigTransferStart)(nil),                   // 469: groundplane.agent.v1.BackupConfigTransferStart
-	(*BackupConfigEntryHeader)(nil),                     // 470: groundplane.agent.v1.BackupConfigEntryHeader
-	(*BackupConfigValueChunk)(nil),                      // 471: groundplane.agent.v1.BackupConfigValueChunk
-	(*BackupConfigEntryEnd)(nil),                        // 472: groundplane.agent.v1.BackupConfigEntryEnd
-	(*BackupConfigTransferEnd)(nil),                     // 473: groundplane.agent.v1.BackupConfigTransferEnd
-	(*BackupConfigTransferResume)(nil),                  // 474: groundplane.agent.v1.BackupConfigTransferResume
-	(*BackupConfigCredit)(nil),                          // 475: groundplane.agent.v1.BackupConfigCredit
-	(*BackupVolumeManifestTransfer)(nil),                // 476: groundplane.agent.v1.BackupVolumeManifestTransfer
-	(*BackupVolumeManifestStart)(nil),                   // 477: groundplane.agent.v1.BackupVolumeManifestStart
-	(*BackupVolumeManifestBatch)(nil),                   // 478: groundplane.agent.v1.BackupVolumeManifestBatch
-	(*BackupVolumeManifestEnd)(nil),                     // 479: groundplane.agent.v1.BackupVolumeManifestEnd
-	(*BackupVolumeManifestResume)(nil),                  // 480: groundplane.agent.v1.BackupVolumeManifestResume
-	(*BackupVolumeManifestAckCredit)(nil),               // 481: groundplane.agent.v1.BackupVolumeManifestAckCredit
-	(*BackupArtifactPrepared)(nil),                      // 482: groundplane.agent.v1.BackupArtifactPrepared
-	(*BackupUploadCompleted)(nil),                       // 483: groundplane.agent.v1.BackupUploadCompleted
-	(*BackupPutOutcomeUnknown)(nil),                     // 484: groundplane.agent.v1.BackupPutOutcomeUnknown
-	(*BackupUploadVerified)(nil),                        // 485: groundplane.agent.v1.BackupUploadVerified
-	(*BackupSourceCleanupCompleted)(nil),                // 486: groundplane.agent.v1.BackupSourceCleanupCompleted
-	(*BackupRestoreArtifactValidated)(nil),              // 487: groundplane.agent.v1.BackupRestoreArtifactValidated
-	(*BackupConfigCheckpoint)(nil),                      // 488: groundplane.agent.v1.BackupConfigCheckpoint
-	(*BackupConfigProgress)(nil),                        // 489: groundplane.agent.v1.BackupConfigProgress
-	(*BackupConfigValueProgress)(nil),                   // 490: groundplane.agent.v1.BackupConfigValueProgress
-	(*BackupConfigTransferCompleted)(nil),               // 491: groundplane.agent.v1.BackupConfigTransferCompleted
-	(*BackupConfigMaterializationVerified)(nil),         // 492: groundplane.agent.v1.BackupConfigMaterializationVerified
-	(*BackupVolumeCheckpoint)(nil),                      // 493: groundplane.agent.v1.BackupVolumeCheckpoint
-	(*BackupVolumeProgress)(nil),                        // 494: groundplane.agent.v1.BackupVolumeProgress
-	(*BackupStagingFinals)(nil),                         // 495: groundplane.agent.v1.BackupStagingFinals
-	(*BackupConfigEntry)(nil),                           // 496: groundplane.agent.v1.BackupConfigEntry
-	(*BackupConfigEnvironment)(nil),                     // 497: groundplane.agent.v1.BackupConfigEnvironment
-	(*BackupConfigFile)(nil),                            // 498: groundplane.agent.v1.BackupConfigFile
-	(*BackupConfigExposureAll)(nil),                     // 499: groundplane.agent.v1.BackupConfigExposureAll
-	(*BackupConfigExposureServices)(nil),                // 500: groundplane.agent.v1.BackupConfigExposureServices
-	(*BackupConfigLiteral)(nil),                         // 501: groundplane.agent.v1.BackupConfigLiteral
-	(*BackupConfigSecretRef)(nil),                       // 502: groundplane.agent.v1.BackupConfigSecretRef
-	(*BackupConfigFactRef)(nil),                         // 503: groundplane.agent.v1.BackupConfigFactRef
-	(*BackupConfigRestoreEntry)(nil),                    // 504: groundplane.agent.v1.BackupConfigRestoreEntry
-	(*BackupConfigEntryMetadata)(nil),                   // 505: groundplane.agent.v1.BackupConfigEntryMetadata
-	(*BackupConfigEntryExposure)(nil),                   // 506: groundplane.agent.v1.BackupConfigEntryExposure
-	(*BackupConfigArtifactDesiredSource)(nil),           // 507: groundplane.agent.v1.BackupConfigArtifactDesiredSource
-	(*BackupConfigLiteralSource)(nil),                   // 508: groundplane.agent.v1.BackupConfigLiteralSource
-	(*BackupConfigArtifactSecretRefSource)(nil),         // 509: groundplane.agent.v1.BackupConfigArtifactSecretRefSource
-	(*BackupConfigArtifactFactSource)(nil),              // 510: groundplane.agent.v1.BackupConfigArtifactFactSource
-	(*BackupConfigSelectedValue)(nil),                   // 511: groundplane.agent.v1.BackupConfigSelectedValue
-	(*BackupConfigContentAuthority)(nil),                // 512: groundplane.agent.v1.BackupConfigContentAuthority
-	(*BackupConfigArchiveEvidence)(nil),                 // 513: groundplane.agent.v1.BackupConfigArchiveEvidence
-	(*BackupConfigCaptureAuthority)(nil),                // 514: groundplane.agent.v1.BackupConfigCaptureAuthority
-	(*BackupConfigRestoreAuthority)(nil),                // 515: groundplane.agent.v1.BackupConfigRestoreAuthority
-	(*BackupConfigFileContext)(nil),                     // 516: groundplane.agent.v1.BackupConfigFileContext
-	(*BackupConfigFileService)(nil),                     // 517: groundplane.agent.v1.BackupConfigFileService
-	(*BackupConfigPriorFile)(nil),                       // 518: groundplane.agent.v1.BackupConfigPriorFile
-	(*BackupConfigMetadataRow)(nil),                     // 519: groundplane.agent.v1.BackupConfigMetadataRow
-	(*BackupConfigMetadataAccepted)(nil),                // 520: groundplane.agent.v1.BackupConfigMetadataAccepted
-	(*BackupConfigValueCredit)(nil),                     // 521: groundplane.agent.v1.BackupConfigValueCredit
-	(*BackupConfigMetadataCredit)(nil),                  // 522: groundplane.agent.v1.BackupConfigMetadataCredit
-	(*BackupPostgresCaptureAuthority)(nil),              // 523: groundplane.agent.v1.BackupPostgresCaptureAuthority
-	(*BackupPostgresRestoreAuthority)(nil),              // 524: groundplane.agent.v1.BackupPostgresRestoreAuthority
-	(*BackupPostgresContainerObserved)(nil),             // 525: groundplane.agent.v1.BackupPostgresContainerObserved
-	(*BackupPostgresDumpStart)(nil),                     // 526: groundplane.agent.v1.BackupPostgresDumpStart
-	(*BackupPostgresRestoreApplyStartCheckpoint)(nil),   // 527: groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
-	(*BackupPostgresRestoreVerified)(nil),               // 528: groundplane.agent.v1.BackupPostgresRestoreVerified
-	(*BackupPostgresServiceProgress)(nil),               // 529: groundplane.agent.v1.BackupPostgresServiceProgress
-	(*BackupPostgresArchiveEvidence)(nil),               // 530: groundplane.agent.v1.BackupPostgresArchiveEvidence
-	(*BackupMySQLCaptureAuthority)(nil),                 // 531: groundplane.agent.v1.BackupMySQLCaptureAuthority
-	(*BackupMySQLRestoreAuthority)(nil),                 // 532: groundplane.agent.v1.BackupMySQLRestoreAuthority
-	(*BackupMySQLContainerObserved)(nil),                // 533: groundplane.agent.v1.BackupMySQLContainerObserved
-	(*BackupMySQLDumpStart)(nil),                        // 534: groundplane.agent.v1.BackupMySQLDumpStart
-	(*BackupMySQLRestoreApplyStartCheckpoint)(nil),      // 535: groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
-	(*BackupMySQLRestoreVerified)(nil),                  // 536: groundplane.agent.v1.BackupMySQLRestoreVerified
-	(*BackupMySQLServiceProgress)(nil),                  // 537: groundplane.agent.v1.BackupMySQLServiceProgress
-	(*BackupMySQLArchiveEvidence)(nil),                  // 538: groundplane.agent.v1.BackupMySQLArchiveEvidence
-	(*BackupVolumeManifestEntry)(nil),                   // 539: groundplane.agent.v1.BackupVolumeManifestEntry
-	(*BackupVolumeArchiveEvidence)(nil),                 // 540: groundplane.agent.v1.BackupVolumeArchiveEvidence
-	(*BackupVolumeProjectionAuthority)(nil),             // 541: groundplane.agent.v1.BackupVolumeProjectionAuthority
-	(*BackupVolumeCaptureAuthority)(nil),                // 542: groundplane.agent.v1.BackupVolumeCaptureAuthority
-	(*BackupVolumeRestoreAuthority)(nil),                // 543: groundplane.agent.v1.BackupVolumeRestoreAuthority
-	(*BackupVolumeSourceArchiveEvidence)(nil),           // 544: groundplane.agent.v1.BackupVolumeSourceArchiveEvidence
-	(*BackupVolumeNoSourceArchiveEvidence)(nil),         // 545: groundplane.agent.v1.BackupVolumeNoSourceArchiveEvidence
-	(*BackupConsumersStopped)(nil),                      // 546: groundplane.agent.v1.BackupConsumersStopped
-	(*BackupVolumeConstructionIntent)(nil),              // 547: groundplane.agent.v1.BackupVolumeConstructionIntent
-	(*BackupVolumeConstructionCompleted)(nil),           // 548: groundplane.agent.v1.BackupVolumeConstructionCompleted
-	(*BackupVolumeFinalizationIntent)(nil),              // 549: groundplane.agent.v1.BackupVolumeFinalizationIntent
-	(*BackupVolumeFinalizationCompleted)(nil),           // 550: groundplane.agent.v1.BackupVolumeFinalizationCompleted
-	(*BackupVolumeExchangeIntent)(nil),                  // 551: groundplane.agent.v1.BackupVolumeExchangeIntent
-	(*BackupVolumeTreeExchanged)(nil),                   // 552: groundplane.agent.v1.BackupVolumeTreeExchanged
-	(*BackupVolumeDeleteIntent)(nil),                    // 553: groundplane.agent.v1.BackupVolumeDeleteIntent
-	(*BackupVolumeReplacedPathCleaned)(nil),             // 554: groundplane.agent.v1.BackupVolumeReplacedPathCleaned
-	(*BackupVolumeServiceProgress)(nil),                 // 555: groundplane.agent.v1.BackupVolumeServiceProgress
-	(*BackupWorkSecretRequest)(nil),                     // 556: groundplane.agent.v1.BackupWorkSecretRequest
-	(*BackupWorkSecretTransfer)(nil),                    // 557: groundplane.agent.v1.BackupWorkSecretTransfer
-	(*BackupSecretSlotHeader)(nil),                      // 558: groundplane.agent.v1.BackupSecretSlotHeader
-	(*BackupSecretSlotChunk)(nil),                       // 559: groundplane.agent.v1.BackupSecretSlotChunk
-	(*BackupSecretSlotEnd)(nil),                         // 560: groundplane.agent.v1.BackupSecretSlotEnd
-	(*TaskTerminalReceiptAck)(nil),                      // 561: groundplane.agent.v1.TaskTerminalReceiptAck
-	(*TaskTerminalReceiptApplied)(nil),                  // 562: groundplane.agent.v1.TaskTerminalReceiptApplied
-	(*TaskTerminalReceiptAppliedAck)(nil),               // 563: groundplane.agent.v1.TaskTerminalReceiptAppliedAck
-	(*TaskTerminalAssignmentRetired)(nil),               // 564: groundplane.agent.v1.TaskTerminalAssignmentRetired
-	(*TaskTerminalAssignmentRetiredAck)(nil),            // 565: groundplane.agent.v1.TaskTerminalAssignmentRetiredAck
-	(*BackupStagingRecoveryAckReceipt)(nil),             // 566: groundplane.agent.v1.BackupStagingRecoveryAckReceipt
-	(*AdapterProcedure)(nil),                            // 567: groundplane.agent.v1.AdapterProcedure
-	(*MaterializeFile)(nil),                             // 568: groundplane.agent.v1.MaterializeFile
-	(*ComposeApply)(nil),                                // 569: groundplane.agent.v1.ComposeApply
-	(*ComposeStop)(nil),                                 // 570: groundplane.agent.v1.ComposeStop
-	(*ComposeRemove)(nil),                               // 571: groundplane.agent.v1.ComposeRemove
-	(*WaitHealthy)(nil),                                 // 572: groundplane.agent.v1.WaitHealthy
-	(*ComposeWorkloadApply)(nil),                        // 573: groundplane.agent.v1.ComposeWorkloadApply
-	(*WaitWorkloadHealthy)(nil),                         // 574: groundplane.agent.v1.WaitWorkloadHealthy
-	(*ComposeWorkloadRemove)(nil),                       // 575: groundplane.agent.v1.ComposeWorkloadRemove
-	(*RollingTrafficSwitch)(nil),                        // 576: groundplane.agent.v1.RollingTrafficSwitch
-	(*RollingReplicaDrain)(nil),                         // 577: groundplane.agent.v1.RollingReplicaDrain
-	(*RollingReleaseAcknowledge)(nil),                   // 578: groundplane.agent.v1.RollingReleaseAcknowledge
-	(*ServiceProxySwitch)(nil),                          // 579: groundplane.agent.v1.ServiceProxySwitch
-	(*ServiceProxyProbe)(nil),                           // 580: groundplane.agent.v1.ServiceProxyProbe
-	(*ServiceProxyCompensate)(nil),                      // 581: groundplane.agent.v1.ServiceProxyCompensate
-	(*ServiceProxyEvidence)(nil),                        // 582: groundplane.agent.v1.ServiceProxyEvidence
-	(*ServiceRecreateAcknowledge)(nil),                  // 583: groundplane.agent.v1.ServiceRecreateAcknowledge
-	(*ServiceRecreateProbe)(nil),                        // 584: groundplane.agent.v1.ServiceRecreateProbe
-	(*ServiceRecreateCompensate)(nil),                   // 585: groundplane.agent.v1.ServiceRecreateCompensate
-	(*ServiceRecreateEvidence)(nil),                     // 586: groundplane.agent.v1.ServiceRecreateEvidence
-	(*EnvironmentDirectoryCreate)(nil),                  // 587: groundplane.agent.v1.EnvironmentDirectoryCreate
-	(*EnvironmentDirectoryRemove)(nil),                  // 588: groundplane.agent.v1.EnvironmentDirectoryRemove
-	(*ManagedVolumeDirectoriesEnsure)(nil),              // 589: groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
-	(*ManagedVolumeRemove)(nil),                         // 590: groundplane.agent.v1.ManagedVolumeRemove
-	(*ManagedVolumeDirectoryRemove)(nil),                // 591: groundplane.agent.v1.ManagedVolumeDirectoryRemove
-	(*ManagedNetworkRemove)(nil),                        // 592: groundplane.agent.v1.ManagedNetworkRemove
-	(*CheckDNSConnections)(nil),                         // 593: groundplane.agent.v1.CheckDNSConnections
-	(*DNSConnectionQuery)(nil),                          // 594: groundplane.agent.v1.DNSConnectionQuery
-	(*CancelDNSConnections)(nil),                        // 595: groundplane.agent.v1.CancelDNSConnections
-	(*DNSConnectionAnswer)(nil),                         // 596: groundplane.agent.v1.DNSConnectionAnswer
-	(*DNSConnectionResult)(nil),                         // 597: groundplane.agent.v1.DNSConnectionResult
-	(*CheckEdgeConnections)(nil),                        // 598: groundplane.agent.v1.CheckEdgeConnections
-	(*CancelEdgeConnections)(nil),                       // 599: groundplane.agent.v1.CancelEdgeConnections
-	(*EdgeConnectionResult)(nil),                        // 600: groundplane.agent.v1.EdgeConnectionResult
-	(*ComponentApply)(nil),                              // 601: groundplane.agent.v1.ComponentApply
-	(*ContainerConfigTransition)(nil),                   // 602: groundplane.agent.v1.ContainerConfigTransition
-	(*HostResolutionApply)(nil),                         // 603: groundplane.agent.v1.HostResolutionApply
-	(*HostResolutionRestore)(nil),                       // 604: groundplane.agent.v1.HostResolutionRestore
-	(*ManagedConfigHelperRequest)(nil),                  // 605: groundplane.agent.v1.ManagedConfigHelperRequest
-	(*ManagedConfigHelperResponse)(nil),                 // 606: groundplane.agent.v1.ManagedConfigHelperResponse
-	(*EnvironmentDirectoryHelperRequest)(nil),           // 607: groundplane.agent.v1.EnvironmentDirectoryHelperRequest
-	(*EnvironmentDirectoryHelperResponse)(nil),          // 608: groundplane.agent.v1.EnvironmentDirectoryHelperResponse
-	(*ComposeHelperRequest)(nil),                        // 609: groundplane.agent.v1.ComposeHelperRequest
-	(*ComposeHelperResponse)(nil),                       // 610: groundplane.agent.v1.ComposeHelperResponse
-	(*RollingProxyEvidence)(nil),                        // 611: groundplane.agent.v1.RollingProxyEvidence
-	(*TaskAbort)(nil),                                   // 612: groundplane.agent.v1.TaskAbort
-	(*ConfigUpdate)(nil),                                // 613: groundplane.agent.v1.ConfigUpdate
-	(*Shutdown)(nil),                                    // 614: groundplane.agent.v1.Shutdown
-	(*CheckBackingAccess)(nil),                          // 615: groundplane.agent.v1.CheckBackingAccess
-	(*BackingAccessParameters)(nil),                     // 616: groundplane.agent.v1.BackingAccessParameters
-	(*CancelBackingAccess)(nil),                         // 617: groundplane.agent.v1.CancelBackingAccess
-	(*BackingAccessResult)(nil),                         // 618: groundplane.agent.v1.BackingAccessResult
-	(*BackingAccessObservation)(nil),                    // 619: groundplane.agent.v1.BackingAccessObservation
-	(*BackingAccessStage)(nil),                          // 620: groundplane.agent.v1.BackingAccessStage
-	(*timestamppb.Timestamp)(nil),                       // 621: google.protobuf.Timestamp
+	(WorkReleaseFailurePolicy)(0),                       // 3: groundplane.agent.v1.WorkReleaseFailurePolicy
+	(WorkReleaseRecoveryDisposition)(0),                 // 4: groundplane.agent.v1.WorkReleaseRecoveryDisposition
+	(WorkloadImageResolutionFailureKind)(0),             // 5: groundplane.agent.v1.WorkloadImageResolutionFailureKind
+	(ServiceProxyObservationState)(0),                   // 6: groundplane.agent.v1.ServiceProxyObservationState
+	(StepStartDecision)(0),                              // 7: groundplane.agent.v1.StepStartDecision
+	(TaskState)(0),                                      // 8: groundplane.agent.v1.TaskState
+	(ObservedContainerState)(0),                         // 9: groundplane.agent.v1.ObservedContainerState
+	(ObservedContainerHealth)(0),                        // 10: groundplane.agent.v1.ObservedContainerHealth
+	(ObservedCollisionKind)(0),                          // 11: groundplane.agent.v1.ObservedCollisionKind
+	(DNSQueryType)(0),                                   // 12: groundplane.agent.v1.DNSQueryType
+	(TaskTerminal)(0),                                   // 13: groundplane.agent.v1.TaskTerminal
+	(LogStream)(0),                                      // 14: groundplane.agent.v1.LogStream
+	(LogSlot)(0),                                        // 15: groundplane.agent.v1.LogSlot
+	(LogEndReason)(0),                                   // 16: groundplane.agent.v1.LogEndReason
+	(ReleaseRecoveryPhase)(0),                           // 17: groundplane.agent.v1.ReleaseRecoveryPhase
+	(TaskExecutionMode)(0),                              // 18: groundplane.agent.v1.TaskExecutionMode
+	(ReleaseRestorationTarget)(0),                       // 19: groundplane.agent.v1.ReleaseRestorationTarget
+	(ScriptExecutionState)(0),                           // 20: groundplane.agent.v1.ScriptExecutionState
+	(ScriptOutcomeReason)(0),                            // 21: groundplane.agent.v1.ScriptOutcomeReason
+	(BackingHookEvent)(0),                               // 22: groundplane.agent.v1.BackingHookEvent
+	(BackingHookCheckpointState)(0),                     // 23: groundplane.agent.v1.BackingHookCheckpointState
+	(ComponentLifecycleMode)(0),                         // 24: groundplane.agent.v1.ComponentLifecycleMode
+	(PlanOperation)(0),                                  // 25: groundplane.agent.v1.PlanOperation
+	(NetworkWorkAction)(0),                              // 26: groundplane.agent.v1.NetworkWorkAction
+	(ServiceLifecycleAction)(0),                         // 27: groundplane.agent.v1.ServiceLifecycleAction
+	(VolumeWorkAction)(0),                               // 28: groundplane.agent.v1.VolumeWorkAction
+	(ComposeOwnerKind)(0),                               // 29: groundplane.agent.v1.ComposeOwnerKind
+	(ServiceProxyImplementation)(0),                     // 30: groundplane.agent.v1.ServiceProxyImplementation
+	(ComposeServiceRole)(0),                             // 31: groundplane.agent.v1.ComposeServiceRole
+	(ScriptEntryBindingKind)(0),                         // 32: groundplane.agent.v1.ScriptEntryBindingKind
+	(ExecutionStepPolicy)(0),                            // 33: groundplane.agent.v1.ExecutionStepPolicy
+	(BackupResourceKind)(0),                             // 34: groundplane.agent.v1.BackupResourceKind
+	(BackupEncryption)(0),                               // 35: groundplane.agent.v1.BackupEncryption
+	(BackupServiceRuntimeIntent)(0),                     // 36: groundplane.agent.v1.BackupServiceRuntimeIntent
+	(BackupWorkOperation)(0),                            // 37: groundplane.agent.v1.BackupWorkOperation
+	(BackupRestoreRecoveryMode)(0),                      // 38: groundplane.agent.v1.BackupRestoreRecoveryMode
+	(BackupCapturePhase)(0),                             // 39: groundplane.agent.v1.BackupCapturePhase
+	(BackupRestorePhase)(0),                             // 40: groundplane.agent.v1.BackupRestorePhase
+	(BackupRecoveredFileRole)(0),                        // 41: groundplane.agent.v1.BackupRecoveredFileRole
+	(BackupRemainingGrowth)(0),                          // 42: groundplane.agent.v1.BackupRemainingGrowth
+	(BackupConfigDirection)(0),                          // 43: groundplane.agent.v1.BackupConfigDirection
+	(BackupVolumeManifestDirection)(0),                  // 44: groundplane.agent.v1.BackupVolumeManifestDirection
+	(BackupVolumeManifestRole)(0),                       // 45: groundplane.agent.v1.BackupVolumeManifestRole
+	(BackupServicePhase)(0),                             // 46: groundplane.agent.v1.BackupServicePhase
+	(BackupVolumeEntryKind)(0),                          // 47: groundplane.agent.v1.BackupVolumeEntryKind
+	(BackupSecretSlotPurpose)(0),                        // 48: groundplane.agent.v1.BackupSecretSlotPurpose
+	(AdapterProcedurePhase)(0),                          // 49: groundplane.agent.v1.AdapterProcedurePhase
+	(BackingAuthentication)(0),                          // 50: groundplane.agent.v1.BackingAuthentication
+	(MaterializationOutputKind)(0),                      // 51: groundplane.agent.v1.MaterializationOutputKind
+	(ManagedConfigOperation)(0),                         // 52: groundplane.agent.v1.ManagedConfigOperation
+	(ManagedConfigReplayDisposition)(0),                 // 53: groundplane.agent.v1.ManagedConfigReplayDisposition
+	(BackupConsumerOperation)(0),                        // 54: groundplane.agent.v1.BackupConsumerOperation
+	(ComposeHelperOutcome)(0),                           // 55: groundplane.agent.v1.ComposeHelperOutcome
+	(ComposeHelperDiagnostic)(0),                        // 56: groundplane.agent.v1.ComposeHelperDiagnostic
+	(*WorkInputReference)(nil),                          // 57: groundplane.agent.v1.WorkInputReference
+	(*WorkExecutorRegistration)(nil),                    // 58: groundplane.agent.v1.WorkExecutorRegistration
+	(*WorkJournalReplayRequest)(nil),                    // 59: groundplane.agent.v1.WorkJournalReplayRequest
+	(*WorkJournalReplayAck)(nil),                        // 60: groundplane.agent.v1.WorkJournalReplayAck
+	(*WorkAttemptIdentity)(nil),                         // 61: groundplane.agent.v1.WorkAttemptIdentity
+	(*WorkStartRequest)(nil),                            // 62: groundplane.agent.v1.WorkStartRequest
+	(*WorkCancel)(nil),                                  // 63: groundplane.agent.v1.WorkCancel
+	(*WorkStartAck)(nil),                                // 64: groundplane.agent.v1.WorkStartAck
+	(*EnvironmentRemovalAssignment)(nil),                // 65: groundplane.agent.v1.EnvironmentRemovalAssignment
+	(*EnvironmentRemovalInput)(nil),                     // 66: groundplane.agent.v1.EnvironmentRemovalInput
+	(*EnvironmentProvisionInput)(nil),                   // 67: groundplane.agent.v1.EnvironmentProvisionInput
+	(*BackingProvisionInput)(nil),                       // 68: groundplane.agent.v1.BackingProvisionInput
+	(*BackingProvisionAfterStart)(nil),                  // 69: groundplane.agent.v1.BackingProvisionAfterStart
+	(*BackingProvisionAssignment)(nil),                  // 70: groundplane.agent.v1.BackingProvisionAssignment
+	(*BackingProvisionCheckpointRequest)(nil),           // 71: groundplane.agent.v1.BackingProvisionCheckpointRequest
+	(*BackingProvisionCheckpointAck)(nil),               // 72: groundplane.agent.v1.BackingProvisionCheckpointAck
+	(*BackingProvisionCompletionRequest)(nil),           // 73: groundplane.agent.v1.BackingProvisionCompletionRequest
+	(*BackingProvisionCompletionAck)(nil),               // 74: groundplane.agent.v1.BackingProvisionCompletionAck
+	(*BackingProvisionFailureRequest)(nil),              // 75: groundplane.agent.v1.BackingProvisionFailureRequest
+	(*BackingProvisionFailureAck)(nil),                  // 76: groundplane.agent.v1.BackingProvisionFailureAck
+	(*BackingProvisionConfigurationRequest)(nil),        // 77: groundplane.agent.v1.BackingProvisionConfigurationRequest
+	(*BackingProvisionConfigurationManifest)(nil),       // 78: groundplane.agent.v1.BackingProvisionConfigurationManifest
+	(*BackingProvisionFileRequest)(nil),                 // 79: groundplane.agent.v1.BackingProvisionFileRequest
+	(*BackingProvisionFileDelivery)(nil),                // 80: groundplane.agent.v1.BackingProvisionFileDelivery
+	(*BackingProvisionHookRequest)(nil),                 // 81: groundplane.agent.v1.BackingProvisionHookRequest
+	(*BackingProvisionHookDelivery)(nil),                // 82: groundplane.agent.v1.BackingProvisionHookDelivery
+	(*BackingProvisionRecoveryRequest)(nil),             // 83: groundplane.agent.v1.BackingProvisionRecoveryRequest
+	(*BackingProvisionRecoveryAck)(nil),                 // 84: groundplane.agent.v1.BackingProvisionRecoveryAck
+	(*BackingProvisionHelperRequest)(nil),               // 85: groundplane.agent.v1.BackingProvisionHelperRequest
+	(*BackingProvisionHelperResponse)(nil),              // 86: groundplane.agent.v1.BackingProvisionHelperResponse
+	(*EnvironmentProvisionAssignment)(nil),              // 87: groundplane.agent.v1.EnvironmentProvisionAssignment
+	(*EnvironmentProvisionRecoverySource)(nil),          // 88: groundplane.agent.v1.EnvironmentProvisionRecoverySource
+	(*EnvironmentProvisionResultRequest)(nil),           // 89: groundplane.agent.v1.EnvironmentProvisionResultRequest
+	(*EnvironmentProvisionResultAck)(nil),               // 90: groundplane.agent.v1.EnvironmentProvisionResultAck
+	(*EnvironmentProvisionHelperRequest)(nil),           // 91: groundplane.agent.v1.EnvironmentProvisionHelperRequest
+	(*EnvironmentProvisionHelperResponse)(nil),          // 92: groundplane.agent.v1.EnvironmentProvisionHelperResponse
+	(*AttachRemovalAssignment)(nil),                     // 93: groundplane.agent.v1.AttachRemovalAssignment
+	(*AttachRecoveryAssignment)(nil),                    // 94: groundplane.agent.v1.AttachRecoveryAssignment
+	(*AttachRecoveryCompletionRequest)(nil),             // 95: groundplane.agent.v1.AttachRecoveryCompletionRequest
+	(*AttachRecoveryCompletionAck)(nil),                 // 96: groundplane.agent.v1.AttachRecoveryCompletionAck
+	(*AttachProvisionFactsRequest)(nil),                 // 97: groundplane.agent.v1.AttachProvisionFactsRequest
+	(*AttachProvisionFactsAck)(nil),                     // 98: groundplane.agent.v1.AttachProvisionFactsAck
+	(*AttachProvisionAssignment)(nil),                   // 99: groundplane.agent.v1.AttachProvisionAssignment
+	(*AttachProvisionRecoveryAssignment)(nil),           // 100: groundplane.agent.v1.AttachProvisionRecoveryAssignment
+	(*AttachProvisionRecoveryReportRequest)(nil),        // 101: groundplane.agent.v1.AttachProvisionRecoveryReportRequest
+	(*AttachProvisionRecoveryReportAck)(nil),            // 102: groundplane.agent.v1.AttachProvisionRecoveryReportAck
+	(*AttachProvisionCheckpointRequest)(nil),            // 103: groundplane.agent.v1.AttachProvisionCheckpointRequest
+	(*AttachProvisionCheckpointAck)(nil),                // 104: groundplane.agent.v1.AttachProvisionCheckpointAck
+	(*AttachProvisionCompletionRequest)(nil),            // 105: groundplane.agent.v1.AttachProvisionCompletionRequest
+	(*AttachProvisionCompletionAck)(nil),                // 106: groundplane.agent.v1.AttachProvisionCompletionAck
+	(*AttachProvisionFailureRequest)(nil),               // 107: groundplane.agent.v1.AttachProvisionFailureRequest
+	(*AttachProvisionFailureAck)(nil),                   // 108: groundplane.agent.v1.AttachProvisionFailureAck
+	(*AttachProvisionInput)(nil),                        // 109: groundplane.agent.v1.AttachProvisionInput
+	(*AttachCredentialProvision)(nil),                   // 110: groundplane.agent.v1.AttachCredentialProvision
+	(*AttachGrantProvision)(nil),                        // 111: groundplane.agent.v1.AttachGrantProvision
+	(*AttachRemovalInput)(nil),                          // 112: groundplane.agent.v1.AttachRemovalInput
+	(*AttachConsumerTransition)(nil),                    // 113: groundplane.agent.v1.AttachConsumerTransition
+	(*AttachConsumerHelperRequest)(nil),                 // 114: groundplane.agent.v1.AttachConsumerHelperRequest
+	(*AttachConsumerHelperResponse)(nil),                // 115: groundplane.agent.v1.AttachConsumerHelperResponse
+	(*AttachCredentialRemoval)(nil),                     // 116: groundplane.agent.v1.AttachCredentialRemoval
+	(*AttachGrantRemoval)(nil),                          // 117: groundplane.agent.v1.AttachGrantRemoval
+	(*AttachRemovalCheckpointRequest)(nil),              // 118: groundplane.agent.v1.AttachRemovalCheckpointRequest
+	(*AttachRemovalCheckpointAck)(nil),                  // 119: groundplane.agent.v1.AttachRemovalCheckpointAck
+	(*AttachRemovalCompletionRequest)(nil),              // 120: groundplane.agent.v1.AttachRemovalCompletionRequest
+	(*AttachRemovalCompletionAck)(nil),                  // 121: groundplane.agent.v1.AttachRemovalCompletionAck
+	(*AttachRemovalFailureRequest)(nil),                 // 122: groundplane.agent.v1.AttachRemovalFailureRequest
+	(*AttachRemovalFailureAck)(nil),                     // 123: groundplane.agent.v1.AttachRemovalFailureAck
+	(*EnvironmentRemovalCheckpointRequest)(nil),         // 124: groundplane.agent.v1.EnvironmentRemovalCheckpointRequest
+	(*EnvironmentRemovalCheckpointAck)(nil),             // 125: groundplane.agent.v1.EnvironmentRemovalCheckpointAck
+	(*EnvironmentRemovalCompletionRequest)(nil),         // 126: groundplane.agent.v1.EnvironmentRemovalCompletionRequest
+	(*EnvironmentRemovalCompletionAck)(nil),             // 127: groundplane.agent.v1.EnvironmentRemovalCompletionAck
+	(*EnvironmentRemovalFailureRequest)(nil),            // 128: groundplane.agent.v1.EnvironmentRemovalFailureRequest
+	(*EnvironmentRemovalFailureAck)(nil),                // 129: groundplane.agent.v1.EnvironmentRemovalFailureAck
+	(*EnvironmentRemovalHelperRequest)(nil),             // 130: groundplane.agent.v1.EnvironmentRemovalHelperRequest
+	(*EnvironmentRemovalHelperResponse)(nil),            // 131: groundplane.agent.v1.EnvironmentRemovalHelperResponse
+	(*ReleaseWorkAssignment)(nil),                       // 132: groundplane.agent.v1.ReleaseWorkAssignment
+	(*ReleaseRecoveryAssignment)(nil),                   // 133: groundplane.agent.v1.ReleaseRecoveryAssignment
+	(*ReleaseRecoveryCheckpointRequest)(nil),            // 134: groundplane.agent.v1.ReleaseRecoveryCheckpointRequest
+	(*ReleaseRecoveryCheckpointAck)(nil),                // 135: groundplane.agent.v1.ReleaseRecoveryCheckpointAck
+	(*ReleaseWorkCheckpointRequest)(nil),                // 136: groundplane.agent.v1.ReleaseWorkCheckpointRequest
+	(*ReleaseWorkCheckpointAck)(nil),                    // 137: groundplane.agent.v1.ReleaseWorkCheckpointAck
+	(*ReleaseWorkCompletionRequest)(nil),                // 138: groundplane.agent.v1.ReleaseWorkCompletionRequest
+	(*ReleaseWorkCompletionAck)(nil),                    // 139: groundplane.agent.v1.ReleaseWorkCompletionAck
+	(*ReleaseWorkFailureRequest)(nil),                   // 140: groundplane.agent.v1.ReleaseWorkFailureRequest
+	(*ReleaseWorkFailureAck)(nil),                       // 141: groundplane.agent.v1.ReleaseWorkFailureAck
+	(*ReleaseEffectEvidenceRequest)(nil),                // 142: groundplane.agent.v1.ReleaseEffectEvidenceRequest
+	(*ReleaseEffectEvidenceAck)(nil),                    // 143: groundplane.agent.v1.ReleaseEffectEvidenceAck
+	(*ScriptWorkAssignment)(nil),                        // 144: groundplane.agent.v1.ScriptWorkAssignment
+	(*ScriptWorkCheckpointRequest)(nil),                 // 145: groundplane.agent.v1.ScriptWorkCheckpointRequest
+	(*ScriptWorkCheckpointAck)(nil),                     // 146: groundplane.agent.v1.ScriptWorkCheckpointAck
+	(*ScriptWorkCompletionRequest)(nil),                 // 147: groundplane.agent.v1.ScriptWorkCompletionRequest
+	(*ScriptWorkCompletionAck)(nil),                     // 148: groundplane.agent.v1.ScriptWorkCompletionAck
+	(*ScriptRecoveryAssignment)(nil),                    // 149: groundplane.agent.v1.ScriptRecoveryAssignment
+	(*ScriptRecoveryCompletionRequest)(nil),             // 150: groundplane.agent.v1.ScriptRecoveryCompletionRequest
+	(*ScriptRecoveryCompletionAck)(nil),                 // 151: groundplane.agent.v1.ScriptRecoveryCompletionAck
+	(*ScriptWorkFailureRequest)(nil),                    // 152: groundplane.agent.v1.ScriptWorkFailureRequest
+	(*ScriptWorkFailureAck)(nil),                        // 153: groundplane.agent.v1.ScriptWorkFailureAck
+	(*ReleaseConfigurationRequest)(nil),                 // 154: groundplane.agent.v1.ReleaseConfigurationRequest
+	(*ComponentConfigurationRequest)(nil),               // 155: groundplane.agent.v1.ComponentConfigurationRequest
+	(*ComponentConfigurationFile)(nil),                  // 156: groundplane.agent.v1.ComponentConfigurationFile
+	(*ComponentConfigurationManifest)(nil),              // 157: groundplane.agent.v1.ComponentConfigurationManifest
+	(*ComponentConfigurationFileRequest)(nil),           // 158: groundplane.agent.v1.ComponentConfigurationFileRequest
+	(*ComponentConfigurationFileDelivery)(nil),          // 159: groundplane.agent.v1.ComponentConfigurationFileDelivery
+	(*ReleaseConfigurationFile)(nil),                    // 160: groundplane.agent.v1.ReleaseConfigurationFile
+	(*ReleaseConfigurationManifest)(nil),                // 161: groundplane.agent.v1.ReleaseConfigurationManifest
+	(*ReleaseConfigurationFileRequest)(nil),             // 162: groundplane.agent.v1.ReleaseConfigurationFileRequest
+	(*ReleaseConfigurationFileDelivery)(nil),            // 163: groundplane.agent.v1.ReleaseConfigurationFileDelivery
+	(*ReleaseHelperRequest)(nil),                        // 164: groundplane.agent.v1.ReleaseHelperRequest
+	(*ReleaseHelperResponse)(nil),                       // 165: groundplane.agent.v1.ReleaseHelperResponse
+	(*ReleaseRecoveryHelperRequest)(nil),                // 166: groundplane.agent.v1.ReleaseRecoveryHelperRequest
+	(*ReleaseRecoveryHelperResponse)(nil),               // 167: groundplane.agent.v1.ReleaseRecoveryHelperResponse
+	(*ReleaseWorkInput)(nil),                            // 168: groundplane.agent.v1.ReleaseWorkInput
+	(*ReleaseWorkPredecessor)(nil),                      // 169: groundplane.agent.v1.ReleaseWorkPredecessor
+	(*WorkConfigurationReference)(nil),                  // 170: groundplane.agent.v1.WorkConfigurationReference
+	(*ReleaseWorkHook)(nil),                             // 171: groundplane.agent.v1.ReleaseWorkHook
+	(*ReleaseHookRequest)(nil),                          // 172: groundplane.agent.v1.ReleaseHookRequest
+	(*ReleaseHookDelivery)(nil),                         // 173: groundplane.agent.v1.ReleaseHookDelivery
+	(*ScriptCleanupArtifacts)(nil),                      // 174: groundplane.agent.v1.ScriptCleanupArtifacts
+	(*ReleaseWorkRolling)(nil),                          // 175: groundplane.agent.v1.ReleaseWorkRolling
+	(*Authenticate)(nil),                                // 176: groundplane.agent.v1.Authenticate
+	(*AgentConfig)(nil),                                 // 177: groundplane.agent.v1.AgentConfig
+	(*AgentLabel)(nil),                                  // 178: groundplane.agent.v1.AgentLabel
+	(*AgentMessage)(nil),                                // 179: groundplane.agent.v1.AgentMessage
+	(*Ready)(nil),                                       // 180: groundplane.agent.v1.Ready
+	(*BuildProvenance)(nil),                             // 181: groundplane.agent.v1.BuildProvenance
+	(*WorkloadImageSelector)(nil),                       // 182: groundplane.agent.v1.WorkloadImageSelector
+	(*ResolveWorkloadImages)(nil),                       // 183: groundplane.agent.v1.ResolveWorkloadImages
+	(*WorkloadImageResolution)(nil),                     // 184: groundplane.agent.v1.WorkloadImageResolution
+	(*WorkloadImageResolutions)(nil),                    // 185: groundplane.agent.v1.WorkloadImageResolutions
+	(*WorkloadImageResolutionFailure)(nil),              // 186: groundplane.agent.v1.WorkloadImageResolutionFailure
+	(*WorkloadImageResolutionResult)(nil),               // 187: groundplane.agent.v1.WorkloadImageResolutionResult
+	(*ServiceObservationTarget)(nil),                    // 188: groundplane.agent.v1.ServiceObservationTarget
+	(*ServiceWorkloadObservation)(nil),                  // 189: groundplane.agent.v1.ServiceWorkloadObservation
+	(*DatabaseVersionProbe)(nil),                        // 190: groundplane.agent.v1.DatabaseVersionProbe
+	(*DatabaseVersionObservation)(nil),                  // 191: groundplane.agent.v1.DatabaseVersionObservation
+	(*ObserveServices)(nil),                             // 192: groundplane.agent.v1.ObserveServices
+	(*CancelServiceObservation)(nil),                    // 193: groundplane.agent.v1.CancelServiceObservation
+	(*ServiceReplicaCounts)(nil),                        // 194: groundplane.agent.v1.ServiceReplicaCounts
+	(*ServiceObservationRow)(nil),                       // 195: groundplane.agent.v1.ServiceObservationRow
+	(*ServiceContainerObservation)(nil),                 // 196: groundplane.agent.v1.ServiceContainerObservation
+	(*ServiceObservationResult)(nil),                    // 197: groundplane.agent.v1.ServiceObservationResult
+	(*TaskEvent)(nil),                                   // 198: groundplane.agent.v1.TaskEvent
+	(*StepFailure)(nil),                                 // 199: groundplane.agent.v1.StepFailure
+	(*HealthWaitProgress)(nil),                          // 200: groundplane.agent.v1.HealthWaitProgress
+	(*TaskEventAck)(nil),                                // 201: groundplane.agent.v1.TaskEventAck
+	(*RollingStepBudget)(nil),                           // 202: groundplane.agent.v1.RollingStepBudget
+	(*ObservedState)(nil),                               // 203: groundplane.agent.v1.ObservedState
+	(*ObservedProject)(nil),                             // 204: groundplane.agent.v1.ObservedProject
+	(*ObservedContainer)(nil),                           // 205: groundplane.agent.v1.ObservedContainer
+	(*ObservedNetwork)(nil),                             // 206: groundplane.agent.v1.ObservedNetwork
+	(*ObservedVolume)(nil),                              // 207: groundplane.agent.v1.ObservedVolume
+	(*ObservedCollision)(nil),                           // 208: groundplane.agent.v1.ObservedCollision
+	(*TaskAck)(nil),                                     // 209: groundplane.agent.v1.TaskAck
+	(*BackupTaskResult)(nil),                            // 210: groundplane.agent.v1.BackupTaskResult
+	(*ComposeTaskResult)(nil),                           // 211: groundplane.agent.v1.ComposeTaskResult
+	(*RollingReleaseEvidence)(nil),                      // 212: groundplane.agent.v1.RollingReleaseEvidence
+	(*ServiceAbsenceEvidence)(nil),                      // 213: groundplane.agent.v1.ServiceAbsenceEvidence
+	(*CandidateAbsenceEvidence)(nil),                    // 214: groundplane.agent.v1.CandidateAbsenceEvidence
+	(*DNSResolverObservationEvidence)(nil),              // 215: groundplane.agent.v1.DNSResolverObservationEvidence
+	(*DNSAnswerRecord)(nil),                             // 216: groundplane.agent.v1.DNSAnswerRecord
+	(*DNSForwardCounter)(nil),                           // 217: groundplane.agent.v1.DNSForwardCounter
+	(*DNSQueryProof)(nil),                               // 218: groundplane.agent.v1.DNSQueryProof
+	(*EnvironmentDirectoryTaskResult)(nil),              // 219: groundplane.agent.v1.EnvironmentDirectoryTaskResult
+	(*ControllerMessage)(nil),                           // 220: groundplane.agent.v1.ControllerMessage
+	(*LogTarget)(nil),                                   // 221: groundplane.agent.v1.LogTarget
+	(*LogSubscribe)(nil),                                // 222: groundplane.agent.v1.LogSubscribe
+	(*LogCancel)(nil),                                   // 223: groundplane.agent.v1.LogCancel
+	(*LogCredit)(nil),                                   // 224: groundplane.agent.v1.LogCredit
+	(*LogReady)(nil),                                    // 225: groundplane.agent.v1.LogReady
+	(*LogEvent)(nil),                                    // 226: groundplane.agent.v1.LogEvent
+	(*LogEnd)(nil),                                      // 227: groundplane.agent.v1.LogEnd
+	(*MaterializationTransfer)(nil),                     // 228: groundplane.agent.v1.MaterializationTransfer
+	(*MaterializationTransferHeader)(nil),               // 229: groundplane.agent.v1.MaterializationTransferHeader
+	(*MaterializationTransferChunk)(nil),                // 230: groundplane.agent.v1.MaterializationTransferChunk
+	(*MaterializationTransferEnd)(nil),                  // 231: groundplane.agent.v1.MaterializationTransferEnd
+	(*ManagedConfigTransfer)(nil),                       // 232: groundplane.agent.v1.ManagedConfigTransfer
+	(*ManagedConfigTransferHeader)(nil),                 // 233: groundplane.agent.v1.ManagedConfigTransferHeader
+	(*ManagedConfigTransferChunk)(nil),                  // 234: groundplane.agent.v1.ManagedConfigTransferChunk
+	(*ManagedConfigTransferEnd)(nil),                    // 235: groundplane.agent.v1.ManagedConfigTransferEnd
+	(*TaskAssignment)(nil),                              // 236: groundplane.agent.v1.TaskAssignment
+	(*ReleaseRecoveryDirective)(nil),                    // 237: groundplane.agent.v1.ReleaseRecoveryDirective
+	(*ReleaseRestorationCandidate)(nil),                 // 238: groundplane.agent.v1.ReleaseRestorationCandidate
+	(*ReleaseAppliedPredecessorAuthority)(nil),          // 239: groundplane.agent.v1.ReleaseAppliedPredecessorAuthority
+	(*ReleaseRestorationAuthority)(nil),                 // 240: groundplane.agent.v1.ReleaseRestorationAuthority
+	(*ReleaseNativePredecessorAuthority)(nil),           // 241: groundplane.agent.v1.ReleaseNativePredecessorAuthority
+	(*ScriptStartAuthorizedCheckpoint)(nil),             // 242: groundplane.agent.v1.ScriptStartAuthorizedCheckpoint
+	(*ScriptBodyPreparedCheckpoint)(nil),                // 243: groundplane.agent.v1.ScriptBodyPreparedCheckpoint
+	(*ScriptContainerCreatedCheckpoint)(nil),            // 244: groundplane.agent.v1.ScriptContainerCreatedCheckpoint
+	(*ScriptOutcomeCheckpoint)(nil),                     // 245: groundplane.agent.v1.ScriptOutcomeCheckpoint
+	(*ScriptCleanupCheckpoint)(nil),                     // 246: groundplane.agent.v1.ScriptCleanupCheckpoint
+	(*ScriptExecutionCheckpoint)(nil),                   // 247: groundplane.agent.v1.ScriptExecutionCheckpoint
+	(*ScriptCheckpointRequest)(nil),                     // 248: groundplane.agent.v1.ScriptCheckpointRequest
+	(*ScriptCheckpointAck)(nil),                         // 249: groundplane.agent.v1.ScriptCheckpointAck
+	(*BackingHookValue)(nil),                            // 250: groundplane.agent.v1.BackingHookValue
+	(*BackingHookFactDefinition)(nil),                   // 251: groundplane.agent.v1.BackingHookFactDefinition
+	(*BackingHookProcedure)(nil),                        // 252: groundplane.agent.v1.BackingHookProcedure
+	(*BackingHookCheckpointRequest)(nil),                // 253: groundplane.agent.v1.BackingHookCheckpointRequest
+	(*BackingHookCheckpointAck)(nil),                    // 254: groundplane.agent.v1.BackingHookCheckpointAck
+	(*ExecutionPlan)(nil),                               // 255: groundplane.agent.v1.ExecutionPlan
+	(*ManagedNetworkRecoveryProcedure)(nil),             // 256: groundplane.agent.v1.ManagedNetworkRecoveryProcedure
+	(*ManagedNetworkRemovalRecovery)(nil),               // 257: groundplane.agent.v1.ManagedNetworkRemovalRecovery
+	(*ManagedNetworkPreparationRecovery)(nil),           // 258: groundplane.agent.v1.ManagedNetworkPreparationRecovery
+	(*ManagedNetworkPreparationMember)(nil),             // 259: groundplane.agent.v1.ManagedNetworkPreparationMember
+	(*ServiceAbsenceRecoveryProcedure)(nil),             // 260: groundplane.agent.v1.ServiceAbsenceRecoveryProcedure
+	(*ServiceLifecycleProcedure)(nil),                   // 261: groundplane.agent.v1.ServiceLifecycleProcedure
+	(*ServiceLifecycleSource)(nil),                      // 262: groundplane.agent.v1.ServiceLifecycleSource
+	(*ManagedComponentProcedure)(nil),                   // 263: groundplane.agent.v1.ManagedComponentProcedure
+	(*ManagedComponentService)(nil),                     // 264: groundplane.agent.v1.ManagedComponentService
+	(*CandidateReleaseProcedure)(nil),                   // 265: groundplane.agent.v1.CandidateReleaseProcedure
+	(*ConfigurationRestoration)(nil),                    // 266: groundplane.agent.v1.ConfigurationRestoration
+	(*ConfigurationFileRestoration)(nil),                // 267: groundplane.agent.v1.ConfigurationFileRestoration
+	(*CandidateReleaseMember)(nil),                      // 268: groundplane.agent.v1.CandidateReleaseMember
+	(*RollingReleaseProcedure)(nil),                     // 269: groundplane.agent.v1.RollingReleaseProcedure
+	(*RollingReplica)(nil),                              // 270: groundplane.agent.v1.RollingReplica
+	(*RollingReplicaChange)(nil),                        // 271: groundplane.agent.v1.RollingReplicaChange
+	(*ServingPredecessorRestoration)(nil),               // 272: groundplane.agent.v1.ServingPredecessorRestoration
+	(*CandidateAbsenceRestoration)(nil),                 // 273: groundplane.agent.v1.CandidateAbsenceRestoration
+	(*CandidateReleaseService)(nil),                     // 274: groundplane.agent.v1.CandidateReleaseService
+	(*CandidateRestorationProbe)(nil),                   // 275: groundplane.agent.v1.CandidateRestorationProbe
+	(*CandidateRestorationCompensate)(nil),              // 276: groundplane.agent.v1.CandidateRestorationCompensate
+	(*EntryConfigurationWorkInput)(nil),                 // 277: groundplane.agent.v1.EntryConfigurationWorkInput
+	(*ResolverWorkAssignment)(nil),                      // 278: groundplane.agent.v1.ResolverWorkAssignment
+	(*ResolverWorkCheckpointRequest)(nil),               // 279: groundplane.agent.v1.ResolverWorkCheckpointRequest
+	(*ResolverWorkCheckpointAck)(nil),                   // 280: groundplane.agent.v1.ResolverWorkCheckpointAck
+	(*ResolverWorkCompletionRequest)(nil),               // 281: groundplane.agent.v1.ResolverWorkCompletionRequest
+	(*ResolverWorkFailureRequest)(nil),                  // 282: groundplane.agent.v1.ResolverWorkFailureRequest
+	(*ResolverWorkRecoveryRequest)(nil),                 // 283: groundplane.agent.v1.ResolverWorkRecoveryRequest
+	(*ResolverWorkResultAck)(nil),                       // 284: groundplane.agent.v1.ResolverWorkResultAck
+	(*ResolverWorkHelperRequest)(nil),                   // 285: groundplane.agent.v1.ResolverWorkHelperRequest
+	(*ResolverWorkHelperResponse)(nil),                  // 286: groundplane.agent.v1.ResolverWorkHelperResponse
+	(*ComponentWorkInput)(nil),                          // 287: groundplane.agent.v1.ComponentWorkInput
+	(*ComponentWorkPredecessor)(nil),                    // 288: groundplane.agent.v1.ComponentWorkPredecessor
+	(*ComponentWorkRetainedConfiguration)(nil),          // 289: groundplane.agent.v1.ComponentWorkRetainedConfiguration
+	(*EntryConfigurationRequest)(nil),                   // 290: groundplane.agent.v1.EntryConfigurationRequest
+	(*EntryConfigurationFile)(nil),                      // 291: groundplane.agent.v1.EntryConfigurationFile
+	(*EntryConfigurationManifest)(nil),                  // 292: groundplane.agent.v1.EntryConfigurationManifest
+	(*EntryConfigurationFileRequest)(nil),               // 293: groundplane.agent.v1.EntryConfigurationFileRequest
+	(*EntryConfigurationFileDelivery)(nil),              // 294: groundplane.agent.v1.EntryConfigurationFileDelivery
+	(*EntryConfigurationWorkCheckpointRequest)(nil),     // 295: groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
+	(*EntryConfigurationWorkCheckpointAck)(nil),         // 296: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
+	(*EntryConfigurationWorkCompletionRequest)(nil),     // 297: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest
+	(*EntryConfigurationWorkCompletionAck)(nil),         // 298: groundplane.agent.v1.EntryConfigurationWorkCompletionAck
+	(*EntryConfigurationWorkFailureRequest)(nil),        // 299: groundplane.agent.v1.EntryConfigurationWorkFailureRequest
+	(*EntryConfigurationWorkFailureAck)(nil),            // 300: groundplane.agent.v1.EntryConfigurationWorkFailureAck
+	(*EntryConfigurationWorkAssignment)(nil),            // 301: groundplane.agent.v1.EntryConfigurationWorkAssignment
+	(*EntryConfigurationWorkRecoveryReportRequest)(nil), // 302: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest
+	(*EntryConfigurationWorkRecoveryReportAck)(nil),     // 303: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck
+	(*ComponentWorkAssignment)(nil),                     // 304: groundplane.agent.v1.ComponentWorkAssignment
+	(*ComponentWorkCheckpointRequest)(nil),              // 305: groundplane.agent.v1.ComponentWorkCheckpointRequest
+	(*ComponentWorkCheckpointAck)(nil),                  // 306: groundplane.agent.v1.ComponentWorkCheckpointAck
+	(*ComponentWorkCompletionRequest)(nil),              // 307: groundplane.agent.v1.ComponentWorkCompletionRequest
+	(*ComponentWorkCompletionAck)(nil),                  // 308: groundplane.agent.v1.ComponentWorkCompletionAck
+	(*ComponentWorkFailureRequest)(nil),                 // 309: groundplane.agent.v1.ComponentWorkFailureRequest
+	(*ComponentWorkFailureAck)(nil),                     // 310: groundplane.agent.v1.ComponentWorkFailureAck
+	(*ComponentWorkRecoveryReportRequest)(nil),          // 311: groundplane.agent.v1.ComponentWorkRecoveryReportRequest
+	(*ComponentWorkRecoveryReportAck)(nil),              // 312: groundplane.agent.v1.ComponentWorkRecoveryReportAck
+	(*NetworkWorkInput)(nil),                            // 313: groundplane.agent.v1.NetworkWorkInput
+	(*NetworkWorkAssignment)(nil),                       // 314: groundplane.agent.v1.NetworkWorkAssignment
+	(*NetworkWorkCheckpointRequest)(nil),                // 315: groundplane.agent.v1.NetworkWorkCheckpointRequest
+	(*NetworkWorkCheckpointAck)(nil),                    // 316: groundplane.agent.v1.NetworkWorkCheckpointAck
+	(*NetworkWorkCompletionRequest)(nil),                // 317: groundplane.agent.v1.NetworkWorkCompletionRequest
+	(*NetworkWorkCompletionAck)(nil),                    // 318: groundplane.agent.v1.NetworkWorkCompletionAck
+	(*NetworkWorkFailureRequest)(nil),                   // 319: groundplane.agent.v1.NetworkWorkFailureRequest
+	(*NetworkWorkFailureAck)(nil),                       // 320: groundplane.agent.v1.NetworkWorkFailureAck
+	(*NetworkWorkRecoveryReportRequest)(nil),            // 321: groundplane.agent.v1.NetworkWorkRecoveryReportRequest
+	(*NetworkWorkRecoveryReportAck)(nil),                // 322: groundplane.agent.v1.NetworkWorkRecoveryReportAck
+	(*ComponentWorkHelperRequest)(nil),                  // 323: groundplane.agent.v1.ComponentWorkHelperRequest
+	(*EntryConfigurationWorkHelperRequest)(nil),         // 324: groundplane.agent.v1.EntryConfigurationWorkHelperRequest
+	(*EntryConfigurationWorkHelperResponse)(nil),        // 325: groundplane.agent.v1.EntryConfigurationWorkHelperResponse
+	(*ComponentWorkHelperResponse)(nil),                 // 326: groundplane.agent.v1.ComponentWorkHelperResponse
+	(*NetworkWorkHelperRequest)(nil),                    // 327: groundplane.agent.v1.NetworkWorkHelperRequest
+	(*NetworkWorkHelperResponse)(nil),                   // 328: groundplane.agent.v1.NetworkWorkHelperResponse
+	(*ServiceRemovalRecoveryAssignment)(nil),            // 329: groundplane.agent.v1.ServiceRemovalRecoveryAssignment
+	(*ServiceRemovalConfigurationRequest)(nil),          // 330: groundplane.agent.v1.ServiceRemovalConfigurationRequest
+	(*ServiceRemovalConfigurationFile)(nil),             // 331: groundplane.agent.v1.ServiceRemovalConfigurationFile
+	(*ServiceRemovalConfigurationManifest)(nil),         // 332: groundplane.agent.v1.ServiceRemovalConfigurationManifest
+	(*ServiceRemovalConfigurationFileRequest)(nil),      // 333: groundplane.agent.v1.ServiceRemovalConfigurationFileRequest
+	(*ServiceRemovalConfigurationFileDelivery)(nil),     // 334: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery
+	(*ServiceRemovalRecoveryCheckpointRequest)(nil),     // 335: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
+	(*ServiceRemovalRecoveryCheckpointAck)(nil),         // 336: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
+	(*ServiceRemovalRecoveryCompletionRequest)(nil),     // 337: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest
+	(*ServiceRemovalRecoveryCompletionAck)(nil),         // 338: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck
+	(*ServiceRemovalRecoveryFailureRequest)(nil),        // 339: groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest
+	(*ServiceRemovalRecoveryFailureAck)(nil),            // 340: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck
+	(*ServiceRemovalRecoveryHelperRequest)(nil),         // 341: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest
+	(*ServiceRemovalRecoveryHelperResponse)(nil),        // 342: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse
+	(*ServiceLifecycleAssignment)(nil),                  // 343: groundplane.agent.v1.ServiceLifecycleAssignment
+	(*ServiceLifecycleWorkInput)(nil),                   // 344: groundplane.agent.v1.ServiceLifecycleWorkInput
+	(*ServiceLifecycleMember)(nil),                      // 345: groundplane.agent.v1.ServiceLifecycleMember
+	(*ServiceLifecycleHook)(nil),                        // 346: groundplane.agent.v1.ServiceLifecycleHook
+	(*ServiceLifecycleHookRequest)(nil),                 // 347: groundplane.agent.v1.ServiceLifecycleHookRequest
+	(*ServiceLifecycleHookDelivery)(nil),                // 348: groundplane.agent.v1.ServiceLifecycleHookDelivery
+	(*ServiceLifecycleRecoveryReportRequest)(nil),       // 349: groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest
+	(*ServiceLifecycleRecoveryReportAck)(nil),           // 350: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck
+	(*ServiceLifecycleCheckpointRequest)(nil),           // 351: groundplane.agent.v1.ServiceLifecycleCheckpointRequest
+	(*ServiceLifecycleCheckpointAck)(nil),               // 352: groundplane.agent.v1.ServiceLifecycleCheckpointAck
+	(*ServiceLifecycleCompletionRequest)(nil),           // 353: groundplane.agent.v1.ServiceLifecycleCompletionRequest
+	(*ServiceLifecycleCompletionAck)(nil),               // 354: groundplane.agent.v1.ServiceLifecycleCompletionAck
+	(*ServiceLifecycleFailureRequest)(nil),              // 355: groundplane.agent.v1.ServiceLifecycleFailureRequest
+	(*ServiceLifecycleFailureAck)(nil),                  // 356: groundplane.agent.v1.ServiceLifecycleFailureAck
+	(*ServiceLifecycleHelperRequest)(nil),               // 357: groundplane.agent.v1.ServiceLifecycleHelperRequest
+	(*ServiceLifecycleHelperResponse)(nil),              // 358: groundplane.agent.v1.ServiceLifecycleHelperResponse
+	(*VolumeWorkInput)(nil),                             // 359: groundplane.agent.v1.VolumeWorkInput
+	(*VolumeWorkAssignment)(nil),                        // 360: groundplane.agent.v1.VolumeWorkAssignment
+	(*VolumeWorkCheckpointRequest)(nil),                 // 361: groundplane.agent.v1.VolumeWorkCheckpointRequest
+	(*VolumeWorkCheckpointAck)(nil),                     // 362: groundplane.agent.v1.VolumeWorkCheckpointAck
+	(*VolumeWorkCompletionRequest)(nil),                 // 363: groundplane.agent.v1.VolumeWorkCompletionRequest
+	(*VolumeWorkCompletionAck)(nil),                     // 364: groundplane.agent.v1.VolumeWorkCompletionAck
+	(*VolumeWorkFailureRequest)(nil),                    // 365: groundplane.agent.v1.VolumeWorkFailureRequest
+	(*VolumeWorkFailureAck)(nil),                        // 366: groundplane.agent.v1.VolumeWorkFailureAck
+	(*VolumeWorkRecoveryReportRequest)(nil),             // 367: groundplane.agent.v1.VolumeWorkRecoveryReportRequest
+	(*VolumeWorkRecoveryReportAck)(nil),                 // 368: groundplane.agent.v1.VolumeWorkRecoveryReportAck
+	(*VolumeWorkHelperRequest)(nil),                     // 369: groundplane.agent.v1.VolumeWorkHelperRequest
+	(*VolumeWorkHelperResponse)(nil),                    // 370: groundplane.agent.v1.VolumeWorkHelperResponse
+	(*ComposeArtifact)(nil),                             // 371: groundplane.agent.v1.ComposeArtifact
+	(*ComposeService)(nil),                              // 372: groundplane.agent.v1.ComposeService
+	(*ComposeNetwork)(nil),                              // 373: groundplane.agent.v1.ComposeNetwork
+	(*ComposeVolume)(nil),                               // 374: groundplane.agent.v1.ComposeVolume
+	(*LabelPair)(nil),                                   // 375: groundplane.agent.v1.LabelPair
+	(*ExecutionStep)(nil),                               // 376: groundplane.agent.v1.ExecutionStep
+	(*ServiceAbsenceProbe)(nil),                         // 377: groundplane.agent.v1.ServiceAbsenceProbe
+	(*ManagedNetworkEnsure)(nil),                        // 378: groundplane.agent.v1.ManagedNetworkEnsure
+	(*ManagedNetworkPreparationProbe)(nil),              // 379: groundplane.agent.v1.ManagedNetworkPreparationProbe
+	(*ManagedVolumeEnsure)(nil),                         // 380: groundplane.agent.v1.ManagedVolumeEnsure
+	(*RunScript)(nil),                                   // 381: groundplane.agent.v1.RunScript
+	(*ResolvedRunnerSnapshot)(nil),                      // 382: groundplane.agent.v1.ResolvedRunnerSnapshot
+	(*ScriptExplicitExecutionAuthority)(nil),            // 383: groundplane.agent.v1.ScriptExplicitExecutionAuthority
+	(*ScriptExplicitExecutionContext)(nil),              // 384: groundplane.agent.v1.ScriptExplicitExecutionContext
+	(*ScriptExplicitVolumeGrant)(nil),                   // 385: groundplane.agent.v1.ScriptExplicitVolumeGrant
+	(*ScriptRunnerNetwork)(nil),                         // 386: groundplane.agent.v1.ScriptRunnerNetwork
+	(*ScriptNetworkAttachment)(nil),                     // 387: groundplane.agent.v1.ScriptNetworkAttachment
+	(*ScriptRunnerMount)(nil),                           // 388: groundplane.agent.v1.ScriptRunnerMount
+	(*ScriptSourceAuthority)(nil),                       // 389: groundplane.agent.v1.ScriptSourceAuthority
+	(*ScriptExistingSourceAuthority)(nil),               // 390: groundplane.agent.v1.ScriptExistingSourceAuthority
+	(*ScriptStagedSourceAuthority)(nil),                 // 391: groundplane.agent.v1.ScriptStagedSourceAuthority
+	(*ScriptMount)(nil),                                 // 392: groundplane.agent.v1.ScriptMount
+	(*ScriptRunnerEntryBinding)(nil),                    // 393: groundplane.agent.v1.ScriptRunnerEntryBinding
+	(*ScriptRunnerSecretValue)(nil),                     // 394: groundplane.agent.v1.ScriptRunnerSecretValue
+	(*ScriptRunnerProjection)(nil),                      // 395: groundplane.agent.v1.ScriptRunnerProjection
+	(*ScriptStringPair)(nil),                            // 396: groundplane.agent.v1.ScriptStringPair
+	(*ScriptUlimit)(nil),                                // 397: groundplane.agent.v1.ScriptUlimit
+	(*ScriptBlkio)(nil),                                 // 398: groundplane.agent.v1.ScriptBlkio
+	(*ScriptWeightDevice)(nil),                          // 399: groundplane.agent.v1.ScriptWeightDevice
+	(*ScriptThrottleDevice)(nil),                        // 400: groundplane.agent.v1.ScriptThrottleDevice
+	(*ScriptResource)(nil),                              // 401: groundplane.agent.v1.ScriptResource
+	(*ScriptBodyArtifactMetadata)(nil),                  // 402: groundplane.agent.v1.ScriptBodyArtifactMetadata
+	(*ScriptAssignmentArtifacts)(nil),                   // 403: groundplane.agent.v1.ScriptAssignmentArtifacts
+	(*ScriptBodyArtifact)(nil),                          // 404: groundplane.agent.v1.ScriptBodyArtifact
+	(*ScriptSecretArtifact)(nil),                        // 405: groundplane.agent.v1.ScriptSecretArtifact
+	(*ScriptEntryArtifact)(nil),                         // 406: groundplane.agent.v1.ScriptEntryArtifact
+	(*RevisionDigest)(nil),                              // 407: groundplane.agent.v1.RevisionDigest
+	(*CheckpointFence)(nil),                             // 408: groundplane.agent.v1.CheckpointFence
+	(*BackupResourceIdentity)(nil),                      // 409: groundplane.agent.v1.BackupResourceIdentity
+	(*BackupEncryptionAuthority)(nil),                   // 410: groundplane.agent.v1.BackupEncryptionAuthority
+	(*BackupPriorRuntimeIntent)(nil),                    // 411: groundplane.agent.v1.BackupPriorRuntimeIntent
+	(*BackupServiceFact)(nil),                           // 412: groundplane.agent.v1.BackupServiceFact
+	(*BackupConnectorAuthority)(nil),                    // 413: groundplane.agent.v1.BackupConnectorAuthority
+	(*BackupObjectTarget)(nil),                          // 414: groundplane.agent.v1.BackupObjectTarget
+	(*BackupS3VersionId)(nil),                           // 415: groundplane.agent.v1.BackupS3VersionId
+	(*BackupS3ETag)(nil),                                // 416: groundplane.agent.v1.BackupS3ETag
+	(*BackupObjectIdentity)(nil),                        // 417: groundplane.agent.v1.BackupObjectIdentity
+	(*BackupArtifactEvidence)(nil),                      // 418: groundplane.agent.v1.BackupArtifactEvidence
+	(*BackupTaskAuthority)(nil),                         // 419: groundplane.agent.v1.BackupTaskAuthority
+	(*BackupWorkInput)(nil),                             // 420: groundplane.agent.v1.BackupWorkInput
+	(*BackupWorkAssignment)(nil),                        // 421: groundplane.agent.v1.BackupWorkAssignment
+	(*BackupConsumerHelperRequest)(nil),                 // 422: groundplane.agent.v1.BackupConsumerHelperRequest
+	(*BackupConsumerHelperResponse)(nil),                // 423: groundplane.agent.v1.BackupConsumerHelperResponse
+	(*BackupRecoveryAssignment)(nil),                    // 424: groundplane.agent.v1.BackupRecoveryAssignment
+	(*BackupRecoveryRequest)(nil),                       // 425: groundplane.agent.v1.BackupRecoveryRequest
+	(*BackupConfigRecoveryPrepareRequest)(nil),          // 426: groundplane.agent.v1.BackupConfigRecoveryPrepareRequest
+	(*BackupConfigRecoveryPrepareAck)(nil),              // 427: groundplane.agent.v1.BackupConfigRecoveryPrepareAck
+	(*BackupRecoveryAck)(nil),                           // 428: groundplane.agent.v1.BackupRecoveryAck
+	(*BackupWorkCheckpointRequest)(nil),                 // 429: groundplane.agent.v1.BackupWorkCheckpointRequest
+	(*BackupWorkCompletionRequest)(nil),                 // 430: groundplane.agent.v1.BackupWorkCompletionRequest
+	(*BackupWorkFailureRequest)(nil),                    // 431: groundplane.agent.v1.BackupWorkFailureRequest
+	(*BackupWorkFailureAck)(nil),                        // 432: groundplane.agent.v1.BackupWorkFailureAck
+	(*BackupWorkCompletionAck)(nil),                     // 433: groundplane.agent.v1.BackupWorkCompletionAck
+	(*BackupWorkCheckpointAck)(nil),                     // 434: groundplane.agent.v1.BackupWorkCheckpointAck
+	(*BackupPlanScope)(nil),                             // 435: groundplane.agent.v1.BackupPlanScope
+	(*BackupStepAuthority)(nil),                         // 436: groundplane.agent.v1.BackupStepAuthority
+	(*BackupTaskResume)(nil),                            // 437: groundplane.agent.v1.BackupTaskResume
+	(*BackupStepResume)(nil),                            // 438: groundplane.agent.v1.BackupStepResume
+	(*BackupCaptureResume)(nil),                         // 439: groundplane.agent.v1.BackupCaptureResume
+	(*BackupPruneResume)(nil),                           // 440: groundplane.agent.v1.BackupPruneResume
+	(*BackupRestoreResume)(nil),                         // 441: groundplane.agent.v1.BackupRestoreResume
+	(*BackupDatabaseRestoreProgress)(nil),               // 442: groundplane.agent.v1.BackupDatabaseRestoreProgress
+	(*BackupDatabaseConsumerRecovery)(nil),              // 443: groundplane.agent.v1.BackupDatabaseConsumerRecovery
+	(*BackupCaptureCursor)(nil),                         // 444: groundplane.agent.v1.BackupCaptureCursor
+	(*BackupRestoreCursor)(nil),                         // 445: groundplane.agent.v1.BackupRestoreCursor
+	(*BackupCaptureAuthority)(nil),                      // 446: groundplane.agent.v1.BackupCaptureAuthority
+	(*BackupRestoreAuthority)(nil),                      // 447: groundplane.agent.v1.BackupRestoreAuthority
+	(*BackupPruneAuthority)(nil),                        // 448: groundplane.agent.v1.BackupPruneAuthority
+	(*BackupOriginalIdentity)(nil),                      // 449: groundplane.agent.v1.BackupOriginalIdentity
+	(*BackupAdoptedIdentity)(nil),                       // 450: groundplane.agent.v1.BackupAdoptedIdentity
+	(*BackupPruneObject)(nil),                           // 451: groundplane.agent.v1.BackupPruneObject
+	(*BackupPruneObjectDeleted)(nil),                    // 452: groundplane.agent.v1.BackupPruneObjectDeleted
+	(*BackupStagingInventory)(nil),                      // 453: groundplane.agent.v1.BackupStagingInventory
+	(*BackupRecoveredVolumeRestore)(nil),                // 454: groundplane.agent.v1.BackupRecoveredVolumeRestore
+	(*BackupRecoveredStage)(nil),                        // 455: groundplane.agent.v1.BackupRecoveredStage
+	(*BackupRecoveredFile)(nil),                         // 456: groundplane.agent.v1.BackupRecoveredFile
+	(*BackupStagingRecoveryPlan)(nil),                   // 457: groundplane.agent.v1.BackupStagingRecoveryPlan
+	(*BackupVolumeRestoreRecoveryDisposition)(nil),      // 458: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition
+	(*BackupVolumeRestoreResume)(nil),                   // 459: groundplane.agent.v1.BackupVolumeRestoreResume
+	(*BackupVolumeRestoreHold)(nil),                     // 460: groundplane.agent.v1.BackupVolumeRestoreHold
+	(*BackupVolumeRestoreCleanup)(nil),                  // 461: groundplane.agent.v1.BackupVolumeRestoreCleanup
+	(*BackupStagingDisposition)(nil),                    // 462: groundplane.agent.v1.BackupStagingDisposition
+	(*BackupDatabaseStagingGuard)(nil),                  // 463: groundplane.agent.v1.BackupDatabaseStagingGuard
+	(*BackupResumePrepared)(nil),                        // 464: groundplane.agent.v1.BackupResumePrepared
+	(*BackupRestartConfigEncryption)(nil),               // 465: groundplane.agent.v1.BackupRestartConfigEncryption
+	(*BackupRestartDatabaseEncryption)(nil),             // 466: groundplane.agent.v1.BackupRestartDatabaseEncryption
+	(*BackupDiscardRecovered)(nil),                      // 467: groundplane.agent.v1.BackupDiscardRecovered
+	(*BackupRecoveryRequired)(nil),                      // 468: groundplane.agent.v1.BackupRecoveryRequired
+	(*BackupStagingRecoveryAck)(nil),                    // 469: groundplane.agent.v1.BackupStagingRecoveryAck
+	(*BackupConfigTransfer)(nil),                        // 470: groundplane.agent.v1.BackupConfigTransfer
+	(*BackupConfigTransferStart)(nil),                   // 471: groundplane.agent.v1.BackupConfigTransferStart
+	(*BackupConfigEntryHeader)(nil),                     // 472: groundplane.agent.v1.BackupConfigEntryHeader
+	(*BackupConfigValueChunk)(nil),                      // 473: groundplane.agent.v1.BackupConfigValueChunk
+	(*BackupConfigEntryEnd)(nil),                        // 474: groundplane.agent.v1.BackupConfigEntryEnd
+	(*BackupConfigTransferEnd)(nil),                     // 475: groundplane.agent.v1.BackupConfigTransferEnd
+	(*BackupConfigTransferResume)(nil),                  // 476: groundplane.agent.v1.BackupConfigTransferResume
+	(*BackupConfigCredit)(nil),                          // 477: groundplane.agent.v1.BackupConfigCredit
+	(*BackupVolumeManifestTransfer)(nil),                // 478: groundplane.agent.v1.BackupVolumeManifestTransfer
+	(*BackupVolumeManifestStart)(nil),                   // 479: groundplane.agent.v1.BackupVolumeManifestStart
+	(*BackupVolumeManifestBatch)(nil),                   // 480: groundplane.agent.v1.BackupVolumeManifestBatch
+	(*BackupVolumeManifestEnd)(nil),                     // 481: groundplane.agent.v1.BackupVolumeManifestEnd
+	(*BackupVolumeManifestResume)(nil),                  // 482: groundplane.agent.v1.BackupVolumeManifestResume
+	(*BackupVolumeManifestAckCredit)(nil),               // 483: groundplane.agent.v1.BackupVolumeManifestAckCredit
+	(*BackupArtifactPrepared)(nil),                      // 484: groundplane.agent.v1.BackupArtifactPrepared
+	(*BackupUploadCompleted)(nil),                       // 485: groundplane.agent.v1.BackupUploadCompleted
+	(*BackupPutOutcomeUnknown)(nil),                     // 486: groundplane.agent.v1.BackupPutOutcomeUnknown
+	(*BackupUploadVerified)(nil),                        // 487: groundplane.agent.v1.BackupUploadVerified
+	(*BackupSourceCleanupCompleted)(nil),                // 488: groundplane.agent.v1.BackupSourceCleanupCompleted
+	(*BackupRestoreArtifactValidated)(nil),              // 489: groundplane.agent.v1.BackupRestoreArtifactValidated
+	(*BackupConfigCheckpoint)(nil),                      // 490: groundplane.agent.v1.BackupConfigCheckpoint
+	(*BackupConfigProgress)(nil),                        // 491: groundplane.agent.v1.BackupConfigProgress
+	(*BackupConfigValueProgress)(nil),                   // 492: groundplane.agent.v1.BackupConfigValueProgress
+	(*BackupConfigTransferCompleted)(nil),               // 493: groundplane.agent.v1.BackupConfigTransferCompleted
+	(*BackupConfigMaterializationVerified)(nil),         // 494: groundplane.agent.v1.BackupConfigMaterializationVerified
+	(*BackupVolumeCheckpoint)(nil),                      // 495: groundplane.agent.v1.BackupVolumeCheckpoint
+	(*BackupVolumeProgress)(nil),                        // 496: groundplane.agent.v1.BackupVolumeProgress
+	(*BackupStagingFinals)(nil),                         // 497: groundplane.agent.v1.BackupStagingFinals
+	(*BackupConfigEntry)(nil),                           // 498: groundplane.agent.v1.BackupConfigEntry
+	(*BackupConfigEnvironment)(nil),                     // 499: groundplane.agent.v1.BackupConfigEnvironment
+	(*BackupConfigFile)(nil),                            // 500: groundplane.agent.v1.BackupConfigFile
+	(*BackupConfigExposureAll)(nil),                     // 501: groundplane.agent.v1.BackupConfigExposureAll
+	(*BackupConfigExposureServices)(nil),                // 502: groundplane.agent.v1.BackupConfigExposureServices
+	(*BackupConfigLiteral)(nil),                         // 503: groundplane.agent.v1.BackupConfigLiteral
+	(*BackupConfigSecretRef)(nil),                       // 504: groundplane.agent.v1.BackupConfigSecretRef
+	(*BackupConfigFactRef)(nil),                         // 505: groundplane.agent.v1.BackupConfigFactRef
+	(*BackupConfigRestoreEntry)(nil),                    // 506: groundplane.agent.v1.BackupConfigRestoreEntry
+	(*BackupConfigEntryMetadata)(nil),                   // 507: groundplane.agent.v1.BackupConfigEntryMetadata
+	(*BackupConfigEntryExposure)(nil),                   // 508: groundplane.agent.v1.BackupConfigEntryExposure
+	(*BackupConfigArtifactDesiredSource)(nil),           // 509: groundplane.agent.v1.BackupConfigArtifactDesiredSource
+	(*BackupConfigLiteralSource)(nil),                   // 510: groundplane.agent.v1.BackupConfigLiteralSource
+	(*BackupConfigArtifactSecretRefSource)(nil),         // 511: groundplane.agent.v1.BackupConfigArtifactSecretRefSource
+	(*BackupConfigArtifactFactSource)(nil),              // 512: groundplane.agent.v1.BackupConfigArtifactFactSource
+	(*BackupConfigSelectedValue)(nil),                   // 513: groundplane.agent.v1.BackupConfigSelectedValue
+	(*BackupConfigContentAuthority)(nil),                // 514: groundplane.agent.v1.BackupConfigContentAuthority
+	(*BackupConfigArchiveEvidence)(nil),                 // 515: groundplane.agent.v1.BackupConfigArchiveEvidence
+	(*BackupConfigCaptureAuthority)(nil),                // 516: groundplane.agent.v1.BackupConfigCaptureAuthority
+	(*BackupConfigRestoreAuthority)(nil),                // 517: groundplane.agent.v1.BackupConfigRestoreAuthority
+	(*BackupConfigFileContext)(nil),                     // 518: groundplane.agent.v1.BackupConfigFileContext
+	(*BackupConfigFileService)(nil),                     // 519: groundplane.agent.v1.BackupConfigFileService
+	(*BackupConfigPriorFile)(nil),                       // 520: groundplane.agent.v1.BackupConfigPriorFile
+	(*BackupConfigMetadataRow)(nil),                     // 521: groundplane.agent.v1.BackupConfigMetadataRow
+	(*BackupConfigMetadataAccepted)(nil),                // 522: groundplane.agent.v1.BackupConfigMetadataAccepted
+	(*BackupConfigValueCredit)(nil),                     // 523: groundplane.agent.v1.BackupConfigValueCredit
+	(*BackupConfigMetadataCredit)(nil),                  // 524: groundplane.agent.v1.BackupConfigMetadataCredit
+	(*BackupPostgresCaptureAuthority)(nil),              // 525: groundplane.agent.v1.BackupPostgresCaptureAuthority
+	(*BackupPostgresRestoreAuthority)(nil),              // 526: groundplane.agent.v1.BackupPostgresRestoreAuthority
+	(*BackupPostgresContainerObserved)(nil),             // 527: groundplane.agent.v1.BackupPostgresContainerObserved
+	(*BackupPostgresDumpStart)(nil),                     // 528: groundplane.agent.v1.BackupPostgresDumpStart
+	(*BackupPostgresRestoreApplyStartCheckpoint)(nil),   // 529: groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
+	(*BackupPostgresRestoreVerified)(nil),               // 530: groundplane.agent.v1.BackupPostgresRestoreVerified
+	(*BackupPostgresServiceProgress)(nil),               // 531: groundplane.agent.v1.BackupPostgresServiceProgress
+	(*BackupPostgresArchiveEvidence)(nil),               // 532: groundplane.agent.v1.BackupPostgresArchiveEvidence
+	(*BackupMySQLCaptureAuthority)(nil),                 // 533: groundplane.agent.v1.BackupMySQLCaptureAuthority
+	(*BackupMySQLRestoreAuthority)(nil),                 // 534: groundplane.agent.v1.BackupMySQLRestoreAuthority
+	(*BackupMySQLContainerObserved)(nil),                // 535: groundplane.agent.v1.BackupMySQLContainerObserved
+	(*BackupMySQLDumpStart)(nil),                        // 536: groundplane.agent.v1.BackupMySQLDumpStart
+	(*BackupMySQLRestoreApplyStartCheckpoint)(nil),      // 537: groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
+	(*BackupMySQLRestoreVerified)(nil),                  // 538: groundplane.agent.v1.BackupMySQLRestoreVerified
+	(*BackupMySQLServiceProgress)(nil),                  // 539: groundplane.agent.v1.BackupMySQLServiceProgress
+	(*BackupMySQLArchiveEvidence)(nil),                  // 540: groundplane.agent.v1.BackupMySQLArchiveEvidence
+	(*BackupVolumeManifestEntry)(nil),                   // 541: groundplane.agent.v1.BackupVolumeManifestEntry
+	(*BackupVolumeArchiveEvidence)(nil),                 // 542: groundplane.agent.v1.BackupVolumeArchiveEvidence
+	(*BackupVolumeProjectionAuthority)(nil),             // 543: groundplane.agent.v1.BackupVolumeProjectionAuthority
+	(*BackupVolumeCaptureAuthority)(nil),                // 544: groundplane.agent.v1.BackupVolumeCaptureAuthority
+	(*BackupVolumeRestoreAuthority)(nil),                // 545: groundplane.agent.v1.BackupVolumeRestoreAuthority
+	(*BackupVolumeSourceArchiveEvidence)(nil),           // 546: groundplane.agent.v1.BackupVolumeSourceArchiveEvidence
+	(*BackupVolumeNoSourceArchiveEvidence)(nil),         // 547: groundplane.agent.v1.BackupVolumeNoSourceArchiveEvidence
+	(*BackupConsumersStopped)(nil),                      // 548: groundplane.agent.v1.BackupConsumersStopped
+	(*BackupVolumeConstructionIntent)(nil),              // 549: groundplane.agent.v1.BackupVolumeConstructionIntent
+	(*BackupVolumeConstructionCompleted)(nil),           // 550: groundplane.agent.v1.BackupVolumeConstructionCompleted
+	(*BackupVolumeFinalizationIntent)(nil),              // 551: groundplane.agent.v1.BackupVolumeFinalizationIntent
+	(*BackupVolumeFinalizationCompleted)(nil),           // 552: groundplane.agent.v1.BackupVolumeFinalizationCompleted
+	(*BackupVolumeExchangeIntent)(nil),                  // 553: groundplane.agent.v1.BackupVolumeExchangeIntent
+	(*BackupVolumeTreeExchanged)(nil),                   // 554: groundplane.agent.v1.BackupVolumeTreeExchanged
+	(*BackupVolumeDeleteIntent)(nil),                    // 555: groundplane.agent.v1.BackupVolumeDeleteIntent
+	(*BackupVolumeReplacedPathCleaned)(nil),             // 556: groundplane.agent.v1.BackupVolumeReplacedPathCleaned
+	(*BackupVolumeServiceProgress)(nil),                 // 557: groundplane.agent.v1.BackupVolumeServiceProgress
+	(*BackupWorkSecretRequest)(nil),                     // 558: groundplane.agent.v1.BackupWorkSecretRequest
+	(*BackupWorkSecretTransfer)(nil),                    // 559: groundplane.agent.v1.BackupWorkSecretTransfer
+	(*BackupSecretSlotHeader)(nil),                      // 560: groundplane.agent.v1.BackupSecretSlotHeader
+	(*BackupSecretSlotChunk)(nil),                       // 561: groundplane.agent.v1.BackupSecretSlotChunk
+	(*BackupSecretSlotEnd)(nil),                         // 562: groundplane.agent.v1.BackupSecretSlotEnd
+	(*TaskTerminalReceiptAck)(nil),                      // 563: groundplane.agent.v1.TaskTerminalReceiptAck
+	(*TaskTerminalReceiptApplied)(nil),                  // 564: groundplane.agent.v1.TaskTerminalReceiptApplied
+	(*TaskTerminalReceiptAppliedAck)(nil),               // 565: groundplane.agent.v1.TaskTerminalReceiptAppliedAck
+	(*TaskTerminalAssignmentRetired)(nil),               // 566: groundplane.agent.v1.TaskTerminalAssignmentRetired
+	(*TaskTerminalAssignmentRetiredAck)(nil),            // 567: groundplane.agent.v1.TaskTerminalAssignmentRetiredAck
+	(*BackupStagingRecoveryAckReceipt)(nil),             // 568: groundplane.agent.v1.BackupStagingRecoveryAckReceipt
+	(*AdapterProcedure)(nil),                            // 569: groundplane.agent.v1.AdapterProcedure
+	(*MaterializeFile)(nil),                             // 570: groundplane.agent.v1.MaterializeFile
+	(*ComposeApply)(nil),                                // 571: groundplane.agent.v1.ComposeApply
+	(*ComposeStop)(nil),                                 // 572: groundplane.agent.v1.ComposeStop
+	(*ComposeRemove)(nil),                               // 573: groundplane.agent.v1.ComposeRemove
+	(*WaitHealthy)(nil),                                 // 574: groundplane.agent.v1.WaitHealthy
+	(*ComposeWorkloadApply)(nil),                        // 575: groundplane.agent.v1.ComposeWorkloadApply
+	(*WaitWorkloadHealthy)(nil),                         // 576: groundplane.agent.v1.WaitWorkloadHealthy
+	(*ComposeWorkloadRemove)(nil),                       // 577: groundplane.agent.v1.ComposeWorkloadRemove
+	(*RollingTrafficSwitch)(nil),                        // 578: groundplane.agent.v1.RollingTrafficSwitch
+	(*RollingReplicaDrain)(nil),                         // 579: groundplane.agent.v1.RollingReplicaDrain
+	(*RollingReleaseAcknowledge)(nil),                   // 580: groundplane.agent.v1.RollingReleaseAcknowledge
+	(*ServiceProxySwitch)(nil),                          // 581: groundplane.agent.v1.ServiceProxySwitch
+	(*ServiceProxyProbe)(nil),                           // 582: groundplane.agent.v1.ServiceProxyProbe
+	(*ServiceProxyCompensate)(nil),                      // 583: groundplane.agent.v1.ServiceProxyCompensate
+	(*ServiceProxyEvidence)(nil),                        // 584: groundplane.agent.v1.ServiceProxyEvidence
+	(*ServiceRecreateAcknowledge)(nil),                  // 585: groundplane.agent.v1.ServiceRecreateAcknowledge
+	(*ServiceRecreateProbe)(nil),                        // 586: groundplane.agent.v1.ServiceRecreateProbe
+	(*ServiceRecreateCompensate)(nil),                   // 587: groundplane.agent.v1.ServiceRecreateCompensate
+	(*ServiceRecreateEvidence)(nil),                     // 588: groundplane.agent.v1.ServiceRecreateEvidence
+	(*EnvironmentDirectoryCreate)(nil),                  // 589: groundplane.agent.v1.EnvironmentDirectoryCreate
+	(*EnvironmentDirectoryRemove)(nil),                  // 590: groundplane.agent.v1.EnvironmentDirectoryRemove
+	(*ManagedVolumeDirectoriesEnsure)(nil),              // 591: groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
+	(*ManagedVolumeRemove)(nil),                         // 592: groundplane.agent.v1.ManagedVolumeRemove
+	(*ManagedVolumeDirectoryRemove)(nil),                // 593: groundplane.agent.v1.ManagedVolumeDirectoryRemove
+	(*ManagedNetworkRemove)(nil),                        // 594: groundplane.agent.v1.ManagedNetworkRemove
+	(*CheckDNSConnections)(nil),                         // 595: groundplane.agent.v1.CheckDNSConnections
+	(*DNSConnectionQuery)(nil),                          // 596: groundplane.agent.v1.DNSConnectionQuery
+	(*CancelDNSConnections)(nil),                        // 597: groundplane.agent.v1.CancelDNSConnections
+	(*DNSConnectionAnswer)(nil),                         // 598: groundplane.agent.v1.DNSConnectionAnswer
+	(*DNSConnectionResult)(nil),                         // 599: groundplane.agent.v1.DNSConnectionResult
+	(*CheckEdgeConnections)(nil),                        // 600: groundplane.agent.v1.CheckEdgeConnections
+	(*CancelEdgeConnections)(nil),                       // 601: groundplane.agent.v1.CancelEdgeConnections
+	(*EdgeConnectionResult)(nil),                        // 602: groundplane.agent.v1.EdgeConnectionResult
+	(*ComponentApply)(nil),                              // 603: groundplane.agent.v1.ComponentApply
+	(*ContainerConfigTransition)(nil),                   // 604: groundplane.agent.v1.ContainerConfigTransition
+	(*HostResolutionApply)(nil),                         // 605: groundplane.agent.v1.HostResolutionApply
+	(*HostResolutionRestore)(nil),                       // 606: groundplane.agent.v1.HostResolutionRestore
+	(*ManagedConfigHelperRequest)(nil),                  // 607: groundplane.agent.v1.ManagedConfigHelperRequest
+	(*ManagedConfigHelperResponse)(nil),                 // 608: groundplane.agent.v1.ManagedConfigHelperResponse
+	(*EnvironmentDirectoryHelperRequest)(nil),           // 609: groundplane.agent.v1.EnvironmentDirectoryHelperRequest
+	(*EnvironmentDirectoryHelperResponse)(nil),          // 610: groundplane.agent.v1.EnvironmentDirectoryHelperResponse
+	(*ComposeHelperRequest)(nil),                        // 611: groundplane.agent.v1.ComposeHelperRequest
+	(*ComposeHelperResponse)(nil),                       // 612: groundplane.agent.v1.ComposeHelperResponse
+	(*RollingProxyEvidence)(nil),                        // 613: groundplane.agent.v1.RollingProxyEvidence
+	(*TaskAbort)(nil),                                   // 614: groundplane.agent.v1.TaskAbort
+	(*ConfigUpdate)(nil),                                // 615: groundplane.agent.v1.ConfigUpdate
+	(*Shutdown)(nil),                                    // 616: groundplane.agent.v1.Shutdown
+	(*CheckBackingAccess)(nil),                          // 617: groundplane.agent.v1.CheckBackingAccess
+	(*BackingAccessParameters)(nil),                     // 618: groundplane.agent.v1.BackingAccessParameters
+	(*CancelBackingAccess)(nil),                         // 619: groundplane.agent.v1.CancelBackingAccess
+	(*BackingAccessResult)(nil),                         // 620: groundplane.agent.v1.BackingAccessResult
+	(*BackingAccessObservation)(nil),                    // 621: groundplane.agent.v1.BackingAccessObservation
+	(*BackingAccessStage)(nil),                          // 622: groundplane.agent.v1.BackingAccessStage
+	(*timestamppb.Timestamp)(nil),                       // 623: google.protobuf.Timestamp
 }
 var file_proto_agent_proto_depIdxs = []int32{
-	59,   // 0: groundplane.agent.v1.WorkJournalReplayRequest.unreported_attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 0: groundplane.agent.v1.WorkJournalReplayRequest.unreported_attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	0,    // 1: groundplane.agent.v1.WorkAttemptIdentity.direction:type_name -> groundplane.agent.v1.WorkDirection
-	55,   // 2: groundplane.agent.v1.WorkAttemptIdentity.input:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 3: groundplane.agent.v1.WorkAttemptIdentity.assigned_at:type_name -> google.protobuf.Timestamp
-	621,  // 4: groundplane.agent.v1.WorkAttemptIdentity.deadline:type_name -> google.protobuf.Timestamp
-	59,   // 5: groundplane.agent.v1.WorkStartRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 6: groundplane.agent.v1.WorkCancel.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 7: groundplane.agent.v1.WorkStartAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	621,  // 8: groundplane.agent.v1.WorkStartAck.started_at:type_name -> google.protobuf.Timestamp
-	59,   // 9: groundplane.agent.v1.EnvironmentRemovalAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	64,   // 10: groundplane.agent.v1.EnvironmentRemovalAssignment.removal:type_name -> groundplane.agent.v1.EnvironmentRemovalInput
-	55,   // 11: groundplane.agent.v1.EnvironmentRemovalInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
-	369,  // 12: groundplane.agent.v1.EnvironmentRemovalInput.compose:type_name -> groundplane.agent.v1.ComposeArtifact
-	621,  // 13: groundplane.agent.v1.EnvironmentProvisionInput.created_at:type_name -> google.protobuf.Timestamp
-	369,  // 14: groundplane.agent.v1.BackingProvisionInput.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
-	168,  // 15: groundplane.agent.v1.BackingProvisionInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	568,  // 16: groundplane.agent.v1.BackingProvisionInput.files:type_name -> groundplane.agent.v1.MaterializeFile
-	67,   // 17: groundplane.agent.v1.BackingProvisionInput.after_start:type_name -> groundplane.agent.v1.BackingProvisionAfterStart
-	621,  // 18: groundplane.agent.v1.BackingProvisionInput.created_at:type_name -> google.protobuf.Timestamp
-	621,  // 19: groundplane.agent.v1.BackingProvisionInput.deadline:type_name -> google.protobuf.Timestamp
-	55,   // 20: groundplane.agent.v1.BackingProvisionAfterStart.encrypted_inputs:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 21: groundplane.agent.v1.BackingProvisionAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	66,   // 22: groundplane.agent.v1.BackingProvisionAssignment.input:type_name -> groundplane.agent.v1.BackingProvisionInput
-	59,   // 23: groundplane.agent.v1.BackingProvisionCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 24: groundplane.agent.v1.BackingProvisionCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 25: groundplane.agent.v1.BackingProvisionCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 26: groundplane.agent.v1.BackingProvisionCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 27: groundplane.agent.v1.BackingProvisionCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 28: groundplane.agent.v1.BackingProvisionCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 29: groundplane.agent.v1.BackingProvisionCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 30: groundplane.agent.v1.BackingProvisionCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 31: groundplane.agent.v1.BackingProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 32: groundplane.agent.v1.BackingProvisionFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 33: groundplane.agent.v1.BackingProvisionFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 34: groundplane.agent.v1.BackingProvisionFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 35: groundplane.agent.v1.BackingProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 36: groundplane.agent.v1.BackingProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 37: groundplane.agent.v1.BackingProvisionConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 38: groundplane.agent.v1.BackingProvisionConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	168,  // 39: groundplane.agent.v1.BackingProvisionConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	568,  // 40: groundplane.agent.v1.BackingProvisionConfigurationManifest.files:type_name -> groundplane.agent.v1.MaterializeFile
-	59,   // 41: groundplane.agent.v1.BackingProvisionFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 42: groundplane.agent.v1.BackingProvisionFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	168,  // 43: groundplane.agent.v1.BackingProvisionFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	568,  // 44: groundplane.agent.v1.BackingProvisionFileDelivery.file:type_name -> groundplane.agent.v1.MaterializeFile
-	59,   // 45: groundplane.agent.v1.BackingProvisionHookRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 46: groundplane.agent.v1.BackingProvisionHookDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	250,  // 47: groundplane.agent.v1.BackingProvisionHookDelivery.hook:type_name -> groundplane.agent.v1.BackingHookProcedure
-	59,   // 48: groundplane.agent.v1.BackingProvisionRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 49: groundplane.agent.v1.BackingProvisionRecoveryAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 50: groundplane.agent.v1.BackingProvisionRecoveryAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 51: groundplane.agent.v1.BackingProvisionRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 52: groundplane.agent.v1.BackingProvisionRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
-	68,   // 53: groundplane.agent.v1.BackingProvisionHelperRequest.assignment:type_name -> groundplane.agent.v1.BackingProvisionAssignment
-	62,   // 54: groundplane.agent.v1.BackingProvisionHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	69,   // 55: groundplane.agent.v1.BackingProvisionHelperRequest.report:type_name -> groundplane.agent.v1.BackingProvisionCheckpointRequest
-	70,   // 56: groundplane.agent.v1.BackingProvisionHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.BackingProvisionCheckpointAck
-	59,   // 57: groundplane.agent.v1.EnvironmentProvisionAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	65,   // 58: groundplane.agent.v1.EnvironmentProvisionAssignment.input:type_name -> groundplane.agent.v1.EnvironmentProvisionInput
-	86,   // 59: groundplane.agent.v1.EnvironmentProvisionAssignment.recovery_source:type_name -> groundplane.agent.v1.EnvironmentProvisionRecoverySource
-	59,   // 60: groundplane.agent.v1.EnvironmentProvisionRecoverySource.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	621,  // 61: groundplane.agent.v1.EnvironmentProvisionRecoverySource.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 62: groundplane.agent.v1.EnvironmentProvisionRecoverySource.finished_at:type_name -> google.protobuf.Timestamp
-	55,   // 63: groundplane.agent.v1.EnvironmentProvisionRecoverySource.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 64: groundplane.agent.v1.EnvironmentProvisionResultRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	621,  // 65: groundplane.agent.v1.EnvironmentProvisionResultRequest.observed_at:type_name -> google.protobuf.Timestamp
-	59,   // 66: groundplane.agent.v1.EnvironmentProvisionResultAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 67: groundplane.agent.v1.EnvironmentProvisionResultAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 68: groundplane.agent.v1.EnvironmentProvisionResultAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 69: groundplane.agent.v1.EnvironmentProvisionResultAck.finished_at:type_name -> google.protobuf.Timestamp
-	85,   // 70: groundplane.agent.v1.EnvironmentProvisionHelperRequest.assignment:type_name -> groundplane.agent.v1.EnvironmentProvisionAssignment
-	62,   // 71: groundplane.agent.v1.EnvironmentProvisionHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	55,   // 72: groundplane.agent.v1.EnvironmentProvisionHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 73: groundplane.agent.v1.EnvironmentProvisionHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	59,   // 74: groundplane.agent.v1.AttachRemovalAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	110,  // 75: groundplane.agent.v1.AttachRemovalAssignment.removal:type_name -> groundplane.agent.v1.AttachRemovalInput
-	59,   // 76: groundplane.agent.v1.AttachRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	111,  // 77: groundplane.agent.v1.AttachRecoveryAssignment.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
-	59,   // 78: groundplane.agent.v1.AttachRecoveryCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 79: groundplane.agent.v1.AttachRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 80: groundplane.agent.v1.AttachRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 81: groundplane.agent.v1.AttachRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 82: groundplane.agent.v1.AttachRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	621,  // 83: groundplane.agent.v1.AttachRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	59,   // 84: groundplane.agent.v1.AttachProvisionFactsRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	248,  // 85: groundplane.agent.v1.AttachProvisionFactsRequest.facts:type_name -> groundplane.agent.v1.BackingHookValue
-	59,   // 86: groundplane.agent.v1.AttachProvisionFactsAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 87: groundplane.agent.v1.AttachProvisionAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	107,  // 88: groundplane.agent.v1.AttachProvisionAssignment.provision:type_name -> groundplane.agent.v1.AttachProvisionInput
-	59,   // 89: groundplane.agent.v1.AttachProvisionRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	111,  // 90: groundplane.agent.v1.AttachProvisionRecoveryAssignment.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
-	59,   // 91: groundplane.agent.v1.AttachProvisionRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 92: groundplane.agent.v1.AttachProvisionRecoveryReportRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 93: groundplane.agent.v1.AttachProvisionRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 94: groundplane.agent.v1.AttachProvisionRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 95: groundplane.agent.v1.AttachProvisionRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	621,  // 96: groundplane.agent.v1.AttachProvisionRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
-	59,   // 97: groundplane.agent.v1.AttachProvisionCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 98: groundplane.agent.v1.AttachProvisionCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 99: groundplane.agent.v1.AttachProvisionCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 100: groundplane.agent.v1.AttachProvisionCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 101: groundplane.agent.v1.AttachProvisionCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 102: groundplane.agent.v1.AttachProvisionCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 103: groundplane.agent.v1.AttachProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	55,   // 104: groundplane.agent.v1.AttachProvisionCompletionAck.binding_result:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 105: groundplane.agent.v1.AttachProvisionFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 106: groundplane.agent.v1.AttachProvisionFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 107: groundplane.agent.v1.AttachProvisionFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 108: groundplane.agent.v1.AttachProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	621,  // 109: groundplane.agent.v1.AttachProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	55,   // 110: groundplane.agent.v1.AttachProvisionInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
-	111,  // 111: groundplane.agent.v1.AttachProvisionInput.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
-	108,  // 112: groundplane.agent.v1.AttachProvisionInput.credential:type_name -> groundplane.agent.v1.AttachCredentialProvision
-	250,  // 113: groundplane.agent.v1.AttachProvisionInput.custom_attach:type_name -> groundplane.agent.v1.BackingHookProcedure
-	48,   // 114: groundplane.agent.v1.AttachCredentialProvision.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
-	109,  // 115: groundplane.agent.v1.AttachCredentialProvision.grants:type_name -> groundplane.agent.v1.AttachGrantProvision
-	55,   // 116: groundplane.agent.v1.AttachRemovalInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
-	111,  // 117: groundplane.agent.v1.AttachRemovalInput.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
-	114,  // 118: groundplane.agent.v1.AttachRemovalInput.credential:type_name -> groundplane.agent.v1.AttachCredentialRemoval
-	250,  // 119: groundplane.agent.v1.AttachRemovalInput.custom_detach:type_name -> groundplane.agent.v1.BackingHookProcedure
-	369,  // 120: groundplane.agent.v1.AttachConsumerTransition.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
-	369,  // 121: groundplane.agent.v1.AttachConsumerTransition.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	57,   // 2: groundplane.agent.v1.WorkAttemptIdentity.input:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 3: groundplane.agent.v1.WorkAttemptIdentity.assigned_at:type_name -> google.protobuf.Timestamp
+	623,  // 4: groundplane.agent.v1.WorkAttemptIdentity.deadline:type_name -> google.protobuf.Timestamp
+	61,   // 5: groundplane.agent.v1.WorkStartRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 6: groundplane.agent.v1.WorkCancel.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 7: groundplane.agent.v1.WorkStartAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	623,  // 8: groundplane.agent.v1.WorkStartAck.started_at:type_name -> google.protobuf.Timestamp
+	61,   // 9: groundplane.agent.v1.EnvironmentRemovalAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	66,   // 10: groundplane.agent.v1.EnvironmentRemovalAssignment.removal:type_name -> groundplane.agent.v1.EnvironmentRemovalInput
+	57,   // 11: groundplane.agent.v1.EnvironmentRemovalInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
+	371,  // 12: groundplane.agent.v1.EnvironmentRemovalInput.compose:type_name -> groundplane.agent.v1.ComposeArtifact
+	623,  // 13: groundplane.agent.v1.EnvironmentProvisionInput.created_at:type_name -> google.protobuf.Timestamp
+	371,  // 14: groundplane.agent.v1.BackingProvisionInput.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
+	170,  // 15: groundplane.agent.v1.BackingProvisionInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	570,  // 16: groundplane.agent.v1.BackingProvisionInput.files:type_name -> groundplane.agent.v1.MaterializeFile
+	69,   // 17: groundplane.agent.v1.BackingProvisionInput.after_start:type_name -> groundplane.agent.v1.BackingProvisionAfterStart
+	623,  // 18: groundplane.agent.v1.BackingProvisionInput.created_at:type_name -> google.protobuf.Timestamp
+	623,  // 19: groundplane.agent.v1.BackingProvisionInput.deadline:type_name -> google.protobuf.Timestamp
+	57,   // 20: groundplane.agent.v1.BackingProvisionAfterStart.encrypted_inputs:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 21: groundplane.agent.v1.BackingProvisionAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	68,   // 22: groundplane.agent.v1.BackingProvisionAssignment.input:type_name -> groundplane.agent.v1.BackingProvisionInput
+	61,   // 23: groundplane.agent.v1.BackingProvisionCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 24: groundplane.agent.v1.BackingProvisionCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 25: groundplane.agent.v1.BackingProvisionCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 26: groundplane.agent.v1.BackingProvisionCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 27: groundplane.agent.v1.BackingProvisionCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 28: groundplane.agent.v1.BackingProvisionCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 29: groundplane.agent.v1.BackingProvisionCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 30: groundplane.agent.v1.BackingProvisionCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 31: groundplane.agent.v1.BackingProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 32: groundplane.agent.v1.BackingProvisionFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 33: groundplane.agent.v1.BackingProvisionFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 34: groundplane.agent.v1.BackingProvisionFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 35: groundplane.agent.v1.BackingProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 36: groundplane.agent.v1.BackingProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 37: groundplane.agent.v1.BackingProvisionConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 38: groundplane.agent.v1.BackingProvisionConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	170,  // 39: groundplane.agent.v1.BackingProvisionConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	570,  // 40: groundplane.agent.v1.BackingProvisionConfigurationManifest.files:type_name -> groundplane.agent.v1.MaterializeFile
+	61,   // 41: groundplane.agent.v1.BackingProvisionFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 42: groundplane.agent.v1.BackingProvisionFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	170,  // 43: groundplane.agent.v1.BackingProvisionFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	570,  // 44: groundplane.agent.v1.BackingProvisionFileDelivery.file:type_name -> groundplane.agent.v1.MaterializeFile
+	61,   // 45: groundplane.agent.v1.BackingProvisionHookRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 46: groundplane.agent.v1.BackingProvisionHookDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	252,  // 47: groundplane.agent.v1.BackingProvisionHookDelivery.hook:type_name -> groundplane.agent.v1.BackingHookProcedure
+	61,   // 48: groundplane.agent.v1.BackingProvisionRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 49: groundplane.agent.v1.BackingProvisionRecoveryAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 50: groundplane.agent.v1.BackingProvisionRecoveryAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 51: groundplane.agent.v1.BackingProvisionRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 52: groundplane.agent.v1.BackingProvisionRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
+	70,   // 53: groundplane.agent.v1.BackingProvisionHelperRequest.assignment:type_name -> groundplane.agent.v1.BackingProvisionAssignment
+	64,   // 54: groundplane.agent.v1.BackingProvisionHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	71,   // 55: groundplane.agent.v1.BackingProvisionHelperRequest.report:type_name -> groundplane.agent.v1.BackingProvisionCheckpointRequest
+	72,   // 56: groundplane.agent.v1.BackingProvisionHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.BackingProvisionCheckpointAck
+	61,   // 57: groundplane.agent.v1.EnvironmentProvisionAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	67,   // 58: groundplane.agent.v1.EnvironmentProvisionAssignment.input:type_name -> groundplane.agent.v1.EnvironmentProvisionInput
+	88,   // 59: groundplane.agent.v1.EnvironmentProvisionAssignment.recovery_source:type_name -> groundplane.agent.v1.EnvironmentProvisionRecoverySource
+	61,   // 60: groundplane.agent.v1.EnvironmentProvisionRecoverySource.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	623,  // 61: groundplane.agent.v1.EnvironmentProvisionRecoverySource.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 62: groundplane.agent.v1.EnvironmentProvisionRecoverySource.finished_at:type_name -> google.protobuf.Timestamp
+	57,   // 63: groundplane.agent.v1.EnvironmentProvisionRecoverySource.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 64: groundplane.agent.v1.EnvironmentProvisionResultRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	623,  // 65: groundplane.agent.v1.EnvironmentProvisionResultRequest.observed_at:type_name -> google.protobuf.Timestamp
+	61,   // 66: groundplane.agent.v1.EnvironmentProvisionResultAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 67: groundplane.agent.v1.EnvironmentProvisionResultAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 68: groundplane.agent.v1.EnvironmentProvisionResultAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 69: groundplane.agent.v1.EnvironmentProvisionResultAck.finished_at:type_name -> google.protobuf.Timestamp
+	87,   // 70: groundplane.agent.v1.EnvironmentProvisionHelperRequest.assignment:type_name -> groundplane.agent.v1.EnvironmentProvisionAssignment
+	64,   // 71: groundplane.agent.v1.EnvironmentProvisionHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	57,   // 72: groundplane.agent.v1.EnvironmentProvisionHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 73: groundplane.agent.v1.EnvironmentProvisionHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	61,   // 74: groundplane.agent.v1.AttachRemovalAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	112,  // 75: groundplane.agent.v1.AttachRemovalAssignment.removal:type_name -> groundplane.agent.v1.AttachRemovalInput
+	61,   // 76: groundplane.agent.v1.AttachRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	113,  // 77: groundplane.agent.v1.AttachRecoveryAssignment.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
+	61,   // 78: groundplane.agent.v1.AttachRecoveryCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 79: groundplane.agent.v1.AttachRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 80: groundplane.agent.v1.AttachRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 81: groundplane.agent.v1.AttachRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 82: groundplane.agent.v1.AttachRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	623,  // 83: groundplane.agent.v1.AttachRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	61,   // 84: groundplane.agent.v1.AttachProvisionFactsRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	250,  // 85: groundplane.agent.v1.AttachProvisionFactsRequest.facts:type_name -> groundplane.agent.v1.BackingHookValue
+	61,   // 86: groundplane.agent.v1.AttachProvisionFactsAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 87: groundplane.agent.v1.AttachProvisionAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	109,  // 88: groundplane.agent.v1.AttachProvisionAssignment.provision:type_name -> groundplane.agent.v1.AttachProvisionInput
+	61,   // 89: groundplane.agent.v1.AttachProvisionRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	113,  // 90: groundplane.agent.v1.AttachProvisionRecoveryAssignment.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
+	61,   // 91: groundplane.agent.v1.AttachProvisionRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 92: groundplane.agent.v1.AttachProvisionRecoveryReportRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 93: groundplane.agent.v1.AttachProvisionRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 94: groundplane.agent.v1.AttachProvisionRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 95: groundplane.agent.v1.AttachProvisionRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	623,  // 96: groundplane.agent.v1.AttachProvisionRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
+	61,   // 97: groundplane.agent.v1.AttachProvisionCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 98: groundplane.agent.v1.AttachProvisionCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 99: groundplane.agent.v1.AttachProvisionCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 100: groundplane.agent.v1.AttachProvisionCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 101: groundplane.agent.v1.AttachProvisionCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 102: groundplane.agent.v1.AttachProvisionCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 103: groundplane.agent.v1.AttachProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	57,   // 104: groundplane.agent.v1.AttachProvisionCompletionAck.binding_result:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 105: groundplane.agent.v1.AttachProvisionFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 106: groundplane.agent.v1.AttachProvisionFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 107: groundplane.agent.v1.AttachProvisionFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 108: groundplane.agent.v1.AttachProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	623,  // 109: groundplane.agent.v1.AttachProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	57,   // 110: groundplane.agent.v1.AttachProvisionInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
+	113,  // 111: groundplane.agent.v1.AttachProvisionInput.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
+	110,  // 112: groundplane.agent.v1.AttachProvisionInput.credential:type_name -> groundplane.agent.v1.AttachCredentialProvision
+	252,  // 113: groundplane.agent.v1.AttachProvisionInput.custom_attach:type_name -> groundplane.agent.v1.BackingHookProcedure
+	50,   // 114: groundplane.agent.v1.AttachCredentialProvision.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
+	111,  // 115: groundplane.agent.v1.AttachCredentialProvision.grants:type_name -> groundplane.agent.v1.AttachGrantProvision
+	57,   // 116: groundplane.agent.v1.AttachRemovalInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
+	113,  // 117: groundplane.agent.v1.AttachRemovalInput.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
+	116,  // 118: groundplane.agent.v1.AttachRemovalInput.credential:type_name -> groundplane.agent.v1.AttachCredentialRemoval
+	252,  // 119: groundplane.agent.v1.AttachRemovalInput.custom_detach:type_name -> groundplane.agent.v1.BackingHookProcedure
+	371,  // 120: groundplane.agent.v1.AttachConsumerTransition.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
+	371,  // 121: groundplane.agent.v1.AttachConsumerTransition.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
 	1,    // 122: groundplane.agent.v1.AttachConsumerTransition.action:type_name -> groundplane.agent.v1.AttachNetworkAction
-	59,   // 123: groundplane.agent.v1.AttachConsumerHelperRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	111,  // 124: groundplane.agent.v1.AttachConsumerHelperRequest.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
-	62,   // 125: groundplane.agent.v1.AttachConsumerHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	117,  // 126: groundplane.agent.v1.AttachConsumerHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.AttachRemovalCheckpointAck
-	102,  // 127: groundplane.agent.v1.AttachConsumerHelperRequest.provision_acknowledgement:type_name -> groundplane.agent.v1.AttachProvisionCheckpointAck
-	55,   // 128: groundplane.agent.v1.AttachConsumerHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 129: groundplane.agent.v1.AttachConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	48,   // 130: groundplane.agent.v1.AttachCredentialRemoval.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
-	115,  // 131: groundplane.agent.v1.AttachCredentialRemoval.grants:type_name -> groundplane.agent.v1.AttachGrantRemoval
-	59,   // 132: groundplane.agent.v1.AttachRemovalCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 133: groundplane.agent.v1.AttachRemovalCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 134: groundplane.agent.v1.AttachRemovalCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 135: groundplane.agent.v1.AttachRemovalCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 136: groundplane.agent.v1.AttachRemovalCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 137: groundplane.agent.v1.AttachRemovalCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 138: groundplane.agent.v1.AttachRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 139: groundplane.agent.v1.AttachRemovalFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 140: groundplane.agent.v1.AttachRemovalFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 141: groundplane.agent.v1.AttachRemovalFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 142: groundplane.agent.v1.AttachRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	621,  // 143: groundplane.agent.v1.AttachRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	59,   // 144: groundplane.agent.v1.EnvironmentRemovalCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 145: groundplane.agent.v1.EnvironmentRemovalCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 146: groundplane.agent.v1.EnvironmentRemovalCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 147: groundplane.agent.v1.EnvironmentRemovalCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 148: groundplane.agent.v1.EnvironmentRemovalCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 149: groundplane.agent.v1.EnvironmentRemovalCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 150: groundplane.agent.v1.EnvironmentRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 151: groundplane.agent.v1.EnvironmentRemovalFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 152: groundplane.agent.v1.EnvironmentRemovalFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 153: groundplane.agent.v1.EnvironmentRemovalFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 154: groundplane.agent.v1.EnvironmentRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	621,  // 155: groundplane.agent.v1.EnvironmentRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	63,   // 156: groundplane.agent.v1.EnvironmentRemovalHelperRequest.assignment:type_name -> groundplane.agent.v1.EnvironmentRemovalAssignment
-	62,   // 157: groundplane.agent.v1.EnvironmentRemovalHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	122,  // 158: groundplane.agent.v1.EnvironmentRemovalHelperRequest.report:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointRequest
-	123,  // 159: groundplane.agent.v1.EnvironmentRemovalHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointAck
-	55,   // 160: groundplane.agent.v1.EnvironmentRemovalHelperResponse.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 161: groundplane.agent.v1.EnvironmentRemovalHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	59,   // 162: groundplane.agent.v1.ReleaseWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	166,  // 163: groundplane.agent.v1.ReleaseWorkAssignment.release:type_name -> groundplane.agent.v1.ReleaseWorkInput
-	130,  // 164: groundplane.agent.v1.ReleaseRecoveryAssignment.work:type_name -> groundplane.agent.v1.ReleaseWorkAssignment
-	59,   // 165: groundplane.agent.v1.ReleaseRecoveryCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 166: groundplane.agent.v1.ReleaseRecoveryCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 167: groundplane.agent.v1.ReleaseWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 168: groundplane.agent.v1.ReleaseWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 169: groundplane.agent.v1.ReleaseWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 170: groundplane.agent.v1.ReleaseWorkCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 171: groundplane.agent.v1.ReleaseWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 172: groundplane.agent.v1.ReleaseWorkCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 173: groundplane.agent.v1.ReleaseWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 174: groundplane.agent.v1.ReleaseWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 175: groundplane.agent.v1.ReleaseWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 176: groundplane.agent.v1.ReleaseWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 177: groundplane.agent.v1.ReleaseWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	621,  // 178: groundplane.agent.v1.ReleaseWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	59,   // 179: groundplane.agent.v1.ReleaseEffectEvidenceRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 180: groundplane.agent.v1.ReleaseEffectEvidenceRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 181: groundplane.agent.v1.ReleaseEffectEvidenceAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 182: groundplane.agent.v1.ReleaseEffectEvidenceAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 183: groundplane.agent.v1.ScriptWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	379,  // 184: groundplane.agent.v1.ScriptWorkAssignment.run:type_name -> groundplane.agent.v1.RunScript
-	380,  // 185: groundplane.agent.v1.ScriptWorkAssignment.snapshot:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
-	393,  // 186: groundplane.agent.v1.ScriptWorkAssignment.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
-	402,  // 187: groundplane.agent.v1.ScriptWorkAssignment.body:type_name -> groundplane.agent.v1.ScriptBodyArtifact
-	404,  // 188: groundplane.agent.v1.ScriptWorkAssignment.entries:type_name -> groundplane.agent.v1.ScriptEntryArtifact
-	245,  // 189: groundplane.agent.v1.ScriptWorkAssignment.checkpoint:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
-	59,   // 190: groundplane.agent.v1.ScriptWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	246,  // 191: groundplane.agent.v1.ScriptWorkCheckpointRequest.checkpoint:type_name -> groundplane.agent.v1.ScriptCheckpointRequest
-	59,   // 192: groundplane.agent.v1.ScriptWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	247,  // 193: groundplane.agent.v1.ScriptWorkCheckpointAck.checkpoint:type_name -> groundplane.agent.v1.ScriptCheckpointAck
-	59,   // 194: groundplane.agent.v1.ScriptWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 195: groundplane.agent.v1.ScriptWorkCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 196: groundplane.agent.v1.ScriptWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 197: groundplane.agent.v1.ScriptWorkCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 198: groundplane.agent.v1.ScriptWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 199: groundplane.agent.v1.ScriptRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	393,  // 200: groundplane.agent.v1.ScriptRecoveryAssignment.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
-	172,  // 201: groundplane.agent.v1.ScriptRecoveryAssignment.artifacts:type_name -> groundplane.agent.v1.ScriptCleanupArtifacts
-	59,   // 202: groundplane.agent.v1.ScriptRecoveryCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 203: groundplane.agent.v1.ScriptRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 204: groundplane.agent.v1.ScriptRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 205: groundplane.agent.v1.ScriptRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 206: groundplane.agent.v1.ScriptRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 207: groundplane.agent.v1.ScriptWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 208: groundplane.agent.v1.ScriptWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 209: groundplane.agent.v1.ScriptWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 210: groundplane.agent.v1.ScriptWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 211: groundplane.agent.v1.ReleaseConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 212: groundplane.agent.v1.ComponentConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 213: groundplane.agent.v1.ComponentConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	168,  // 214: groundplane.agent.v1.ComponentConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	154,  // 215: groundplane.agent.v1.ComponentConfigurationManifest.files:type_name -> groundplane.agent.v1.ComponentConfigurationFile
-	59,   // 216: groundplane.agent.v1.ComponentConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 217: groundplane.agent.v1.ComponentConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	168,  // 218: groundplane.agent.v1.ComponentConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	154,  // 219: groundplane.agent.v1.ComponentConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.ComponentConfigurationFile
-	59,   // 220: groundplane.agent.v1.ReleaseConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	168,  // 221: groundplane.agent.v1.ReleaseConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	158,  // 222: groundplane.agent.v1.ReleaseConfigurationManifest.files:type_name -> groundplane.agent.v1.ReleaseConfigurationFile
-	59,   // 223: groundplane.agent.v1.ReleaseConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 224: groundplane.agent.v1.ReleaseConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	168,  // 225: groundplane.agent.v1.ReleaseConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	158,  // 226: groundplane.agent.v1.ReleaseConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.ReleaseConfigurationFile
-	130,  // 227: groundplane.agent.v1.ReleaseHelperRequest.assignment:type_name -> groundplane.agent.v1.ReleaseWorkAssignment
-	62,   // 228: groundplane.agent.v1.ReleaseHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	134,  // 229: groundplane.agent.v1.ReleaseHelperRequest.report:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointRequest
-	135,  // 230: groundplane.agent.v1.ReleaseHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointAck
-	582,  // 231: groundplane.agent.v1.ReleaseHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
-	131,  // 232: groundplane.agent.v1.ReleaseRecoveryHelperRequest.assignment:type_name -> groundplane.agent.v1.ReleaseRecoveryAssignment
-	62,   // 233: groundplane.agent.v1.ReleaseRecoveryHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	132,  // 234: groundplane.agent.v1.ReleaseRecoveryHelperRequest.report:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointRequest
-	133,  // 235: groundplane.agent.v1.ReleaseRecoveryHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointAck
-	2,    // 236: groundplane.agent.v1.ReleaseWorkInput.strategy:type_name -> groundplane.agent.v1.WorkReleaseStrategy
-	369,  // 237: groundplane.agent.v1.ReleaseWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
-	167,  // 238: groundplane.agent.v1.ReleaseWorkInput.predecessor:type_name -> groundplane.agent.v1.ReleaseWorkPredecessor
-	168,  // 239: groundplane.agent.v1.ReleaseWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	168,  // 240: groundplane.agent.v1.ReleaseWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	169,  // 241: groundplane.agent.v1.ReleaseWorkInput.hooks:type_name -> groundplane.agent.v1.ReleaseWorkHook
-	173,  // 242: groundplane.agent.v1.ReleaseWorkInput.rolling:type_name -> groundplane.agent.v1.ReleaseWorkRolling
-	55,   // 243: groundplane.agent.v1.ReleaseWorkHook.input:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 244: groundplane.agent.v1.ReleaseHookRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 245: groundplane.agent.v1.ReleaseHookDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 246: groundplane.agent.v1.ReleaseHookDelivery.input:type_name -> groundplane.agent.v1.WorkInputReference
-	379,  // 247: groundplane.agent.v1.ReleaseHookDelivery.run:type_name -> groundplane.agent.v1.RunScript
-	380,  // 248: groundplane.agent.v1.ReleaseHookDelivery.snapshot:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
-	393,  // 249: groundplane.agent.v1.ReleaseHookDelivery.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
-	402,  // 250: groundplane.agent.v1.ReleaseHookDelivery.body:type_name -> groundplane.agent.v1.ScriptBodyArtifact
-	404,  // 251: groundplane.agent.v1.ReleaseHookDelivery.entries:type_name -> groundplane.agent.v1.ScriptEntryArtifact
-	245,  // 252: groundplane.agent.v1.ReleaseHookDelivery.checkpoint:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
-	172,  // 253: groundplane.agent.v1.ReleaseHookDelivery.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupArtifacts
-	400,  // 254: groundplane.agent.v1.ScriptCleanupArtifacts.body_metadata:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
-	241,  // 255: groundplane.agent.v1.ScriptCleanupArtifacts.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
-	242,  // 256: groundplane.agent.v1.ScriptCleanupArtifacts.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
-	268,  // 257: groundplane.agent.v1.ReleaseWorkRolling.prior:type_name -> groundplane.agent.v1.RollingReplica
-	268,  // 258: groundplane.agent.v1.ReleaseWorkRolling.candidate:type_name -> groundplane.agent.v1.RollingReplica
-	268,  // 259: groundplane.agent.v1.ReleaseWorkRolling.retained:type_name -> groundplane.agent.v1.RollingReplica
-	176,  // 260: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentLabel
-	174,  // 261: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
-	178,  // 262: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
-	201,  // 263: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
-	224,  // 264: groundplane.agent.v1.AgentMessage.log_event:type_name -> groundplane.agent.v1.LogEvent
-	225,  // 265: groundplane.agent.v1.AgentMessage.log_end:type_name -> groundplane.agent.v1.LogEnd
-	223,  // 266: groundplane.agent.v1.AgentMessage.log_ready:type_name -> groundplane.agent.v1.LogReady
-	185,  // 267: groundplane.agent.v1.AgentMessage.workload_image_resolution_result:type_name -> groundplane.agent.v1.WorkloadImageResolutionResult
-	195,  // 268: groundplane.agent.v1.AgentMessage.service_observation_result:type_name -> groundplane.agent.v1.ServiceObservationResult
-	618,  // 269: groundplane.agent.v1.AgentMessage.backing_access_result:type_name -> groundplane.agent.v1.BackingAccessResult
-	597,  // 270: groundplane.agent.v1.AgentMessage.dns_connection_result:type_name -> groundplane.agent.v1.DNSConnectionResult
-	600,  // 271: groundplane.agent.v1.AgentMessage.edge_connection_result:type_name -> groundplane.agent.v1.EdgeConnectionResult
-	468,  // 272: groundplane.agent.v1.AgentMessage.backup_config_transfer:type_name -> groundplane.agent.v1.BackupConfigTransfer
-	475,  // 273: groundplane.agent.v1.AgentMessage.backup_config_credit:type_name -> groundplane.agent.v1.BackupConfigCredit
-	451,  // 274: groundplane.agent.v1.AgentMessage.backup_staging_inventory:type_name -> groundplane.agent.v1.BackupStagingInventory
-	467,  // 275: groundplane.agent.v1.AgentMessage.backup_staging_recovery_ack:type_name -> groundplane.agent.v1.BackupStagingRecoveryAck
-	476,  // 276: groundplane.agent.v1.AgentMessage.backup_volume_manifest_transfer:type_name -> groundplane.agent.v1.BackupVolumeManifestTransfer
-	481,  // 277: groundplane.agent.v1.AgentMessage.backup_volume_manifest_ack_credit:type_name -> groundplane.agent.v1.BackupVolumeManifestAckCredit
-	60,   // 278: groundplane.agent.v1.AgentMessage.work_start_request:type_name -> groundplane.agent.v1.WorkStartRequest
-	134,  // 279: groundplane.agent.v1.AgentMessage.release_work_checkpoint_request:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointRequest
-	170,  // 280: groundplane.agent.v1.AgentMessage.release_hook_request:type_name -> groundplane.agent.v1.ReleaseHookRequest
-	140,  // 281: groundplane.agent.v1.AgentMessage.release_effect_evidence_request:type_name -> groundplane.agent.v1.ReleaseEffectEvidenceRequest
-	143,  // 282: groundplane.agent.v1.AgentMessage.script_work_checkpoint_request:type_name -> groundplane.agent.v1.ScriptWorkCheckpointRequest
-	152,  // 283: groundplane.agent.v1.AgentMessage.release_configuration_request:type_name -> groundplane.agent.v1.ReleaseConfigurationRequest
-	160,  // 284: groundplane.agent.v1.AgentMessage.release_configuration_file_request:type_name -> groundplane.agent.v1.ReleaseConfigurationFileRequest
-	136,  // 285: groundplane.agent.v1.AgentMessage.release_work_completion_request:type_name -> groundplane.agent.v1.ReleaseWorkCompletionRequest
-	138,  // 286: groundplane.agent.v1.AgentMessage.release_work_failure_request:type_name -> groundplane.agent.v1.ReleaseWorkFailureRequest
-	132,  // 287: groundplane.agent.v1.AgentMessage.release_recovery_checkpoint_request:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointRequest
-	145,  // 288: groundplane.agent.v1.AgentMessage.script_work_completion_request:type_name -> groundplane.agent.v1.ScriptWorkCompletionRequest
-	148,  // 289: groundplane.agent.v1.AgentMessage.script_recovery_completion_request:type_name -> groundplane.agent.v1.ScriptRecoveryCompletionRequest
-	150,  // 290: groundplane.agent.v1.AgentMessage.script_work_failure_request:type_name -> groundplane.agent.v1.ScriptWorkFailureRequest
-	122,  // 291: groundplane.agent.v1.AgentMessage.environment_removal_checkpoint_request:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointRequest
-	124,  // 292: groundplane.agent.v1.AgentMessage.environment_removal_completion_request:type_name -> groundplane.agent.v1.EnvironmentRemovalCompletionRequest
-	126,  // 293: groundplane.agent.v1.AgentMessage.environment_removal_failure_request:type_name -> groundplane.agent.v1.EnvironmentRemovalFailureRequest
-	116,  // 294: groundplane.agent.v1.AgentMessage.attach_removal_checkpoint_request:type_name -> groundplane.agent.v1.AttachRemovalCheckpointRequest
-	118,  // 295: groundplane.agent.v1.AgentMessage.attach_removal_completion_request:type_name -> groundplane.agent.v1.AttachRemovalCompletionRequest
-	120,  // 296: groundplane.agent.v1.AgentMessage.attach_removal_failure_request:type_name -> groundplane.agent.v1.AttachRemovalFailureRequest
-	93,   // 297: groundplane.agent.v1.AgentMessage.attach_recovery_completion_request:type_name -> groundplane.agent.v1.AttachRecoveryCompletionRequest
-	359,  // 298: groundplane.agent.v1.AgentMessage.volume_work_checkpoint_request:type_name -> groundplane.agent.v1.VolumeWorkCheckpointRequest
-	361,  // 299: groundplane.agent.v1.AgentMessage.volume_work_completion_request:type_name -> groundplane.agent.v1.VolumeWorkCompletionRequest
-	363,  // 300: groundplane.agent.v1.AgentMessage.volume_work_failure_request:type_name -> groundplane.agent.v1.VolumeWorkFailureRequest
-	365,  // 301: groundplane.agent.v1.AgentMessage.volume_work_recovery_report_request:type_name -> groundplane.agent.v1.VolumeWorkRecoveryReportRequest
-	313,  // 302: groundplane.agent.v1.AgentMessage.network_work_checkpoint_request:type_name -> groundplane.agent.v1.NetworkWorkCheckpointRequest
-	315,  // 303: groundplane.agent.v1.AgentMessage.network_work_completion_request:type_name -> groundplane.agent.v1.NetworkWorkCompletionRequest
-	317,  // 304: groundplane.agent.v1.AgentMessage.network_work_failure_request:type_name -> groundplane.agent.v1.NetworkWorkFailureRequest
-	319,  // 305: groundplane.agent.v1.AgentMessage.network_work_recovery_report_request:type_name -> groundplane.agent.v1.NetworkWorkRecoveryReportRequest
-	303,  // 306: groundplane.agent.v1.AgentMessage.component_work_checkpoint_request:type_name -> groundplane.agent.v1.ComponentWorkCheckpointRequest
-	305,  // 307: groundplane.agent.v1.AgentMessage.component_work_completion_request:type_name -> groundplane.agent.v1.ComponentWorkCompletionRequest
-	307,  // 308: groundplane.agent.v1.AgentMessage.component_work_failure_request:type_name -> groundplane.agent.v1.ComponentWorkFailureRequest
-	309,  // 309: groundplane.agent.v1.AgentMessage.component_work_recovery_report_request:type_name -> groundplane.agent.v1.ComponentWorkRecoveryReportRequest
-	153,  // 310: groundplane.agent.v1.AgentMessage.component_configuration_request:type_name -> groundplane.agent.v1.ComponentConfigurationRequest
-	156,  // 311: groundplane.agent.v1.AgentMessage.component_configuration_file_request:type_name -> groundplane.agent.v1.ComponentConfigurationFileRequest
-	293,  // 312: groundplane.agent.v1.AgentMessage.entry_configuration_work_checkpoint_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
-	295,  // 313: groundplane.agent.v1.AgentMessage.entry_configuration_work_completion_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkCompletionRequest
-	297,  // 314: groundplane.agent.v1.AgentMessage.entry_configuration_work_failure_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkFailureRequest
-	288,  // 315: groundplane.agent.v1.AgentMessage.entry_configuration_request:type_name -> groundplane.agent.v1.EntryConfigurationRequest
-	291,  // 316: groundplane.agent.v1.AgentMessage.entry_configuration_file_request:type_name -> groundplane.agent.v1.EntryConfigurationFileRequest
-	300,  // 317: groundplane.agent.v1.AgentMessage.entry_configuration_work_recovery_report_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest
-	101,  // 318: groundplane.agent.v1.AgentMessage.attach_provision_checkpoint_request:type_name -> groundplane.agent.v1.AttachProvisionCheckpointRequest
-	103,  // 319: groundplane.agent.v1.AgentMessage.attach_provision_completion_request:type_name -> groundplane.agent.v1.AttachProvisionCompletionRequest
-	105,  // 320: groundplane.agent.v1.AgentMessage.attach_provision_failure_request:type_name -> groundplane.agent.v1.AttachProvisionFailureRequest
-	95,   // 321: groundplane.agent.v1.AgentMessage.attach_provision_facts_request:type_name -> groundplane.agent.v1.AttachProvisionFactsRequest
-	99,   // 322: groundplane.agent.v1.AgentMessage.attach_provision_recovery_report_request:type_name -> groundplane.agent.v1.AttachProvisionRecoveryReportRequest
-	349,  // 323: groundplane.agent.v1.AgentMessage.service_lifecycle_checkpoint_request:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointRequest
-	351,  // 324: groundplane.agent.v1.AgentMessage.service_lifecycle_completion_request:type_name -> groundplane.agent.v1.ServiceLifecycleCompletionRequest
-	353,  // 325: groundplane.agent.v1.AgentMessage.service_lifecycle_failure_request:type_name -> groundplane.agent.v1.ServiceLifecycleFailureRequest
-	345,  // 326: groundplane.agent.v1.AgentMessage.service_lifecycle_hook_request:type_name -> groundplane.agent.v1.ServiceLifecycleHookRequest
-	347,  // 327: groundplane.agent.v1.AgentMessage.service_lifecycle_recovery_report_request:type_name -> groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest
-	333,  // 328: groundplane.agent.v1.AgentMessage.service_removal_recovery_checkpoint_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
-	335,  // 329: groundplane.agent.v1.AgentMessage.service_removal_recovery_completion_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest
-	337,  // 330: groundplane.agent.v1.AgentMessage.service_removal_recovery_failure_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest
-	328,  // 331: groundplane.agent.v1.AgentMessage.service_removal_configuration_request:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationRequest
-	331,  // 332: groundplane.agent.v1.AgentMessage.service_removal_configuration_file_request:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFileRequest
-	427,  // 333: groundplane.agent.v1.AgentMessage.backup_work_checkpoint_request:type_name -> groundplane.agent.v1.BackupWorkCheckpointRequest
-	428,  // 334: groundplane.agent.v1.AgentMessage.backup_work_completion_request:type_name -> groundplane.agent.v1.BackupWorkCompletionRequest
-	556,  // 335: groundplane.agent.v1.AgentMessage.backup_work_secret_request:type_name -> groundplane.agent.v1.BackupWorkSecretRequest
-	429,  // 336: groundplane.agent.v1.AgentMessage.backup_work_failure_request:type_name -> groundplane.agent.v1.BackupWorkFailureRequest
-	423,  // 337: groundplane.agent.v1.AgentMessage.backup_recovery_request:type_name -> groundplane.agent.v1.BackupRecoveryRequest
-	424,  // 338: groundplane.agent.v1.AgentMessage.backup_config_recovery_prepare_request:type_name -> groundplane.agent.v1.BackupConfigRecoveryPrepareRequest
-	87,   // 339: groundplane.agent.v1.AgentMessage.environment_provision_result_request:type_name -> groundplane.agent.v1.EnvironmentProvisionResultRequest
-	69,   // 340: groundplane.agent.v1.AgentMessage.backing_provision_checkpoint_request:type_name -> groundplane.agent.v1.BackingProvisionCheckpointRequest
-	71,   // 341: groundplane.agent.v1.AgentMessage.backing_provision_completion_request:type_name -> groundplane.agent.v1.BackingProvisionCompletionRequest
-	73,   // 342: groundplane.agent.v1.AgentMessage.backing_provision_failure_request:type_name -> groundplane.agent.v1.BackingProvisionFailureRequest
-	75,   // 343: groundplane.agent.v1.AgentMessage.backing_provision_configuration_request:type_name -> groundplane.agent.v1.BackingProvisionConfigurationRequest
-	77,   // 344: groundplane.agent.v1.AgentMessage.backing_provision_file_request:type_name -> groundplane.agent.v1.BackingProvisionFileRequest
-	79,   // 345: groundplane.agent.v1.AgentMessage.backing_provision_hook_request:type_name -> groundplane.agent.v1.BackingProvisionHookRequest
-	81,   // 346: groundplane.agent.v1.AgentMessage.backing_provision_recovery_request:type_name -> groundplane.agent.v1.BackingProvisionRecoveryRequest
-	277,  // 347: groundplane.agent.v1.AgentMessage.resolver_work_checkpoint_request:type_name -> groundplane.agent.v1.ResolverWorkCheckpointRequest
-	279,  // 348: groundplane.agent.v1.AgentMessage.resolver_work_completion_request:type_name -> groundplane.agent.v1.ResolverWorkCompletionRequest
-	280,  // 349: groundplane.agent.v1.AgentMessage.resolver_work_failure_request:type_name -> groundplane.agent.v1.ResolverWorkFailureRequest
-	281,  // 350: groundplane.agent.v1.AgentMessage.resolver_work_recovery_request:type_name -> groundplane.agent.v1.ResolverWorkRecoveryRequest
-	57,   // 351: groundplane.agent.v1.AgentMessage.work_journal_replay_request:type_name -> groundplane.agent.v1.WorkJournalReplayRequest
-	179,  // 352: groundplane.agent.v1.Ready.source:type_name -> groundplane.agent.v1.BuildProvenance
-	180,  // 353: groundplane.agent.v1.ResolveWorkloadImages.selectors:type_name -> groundplane.agent.v1.WorkloadImageSelector
-	180,  // 354: groundplane.agent.v1.WorkloadImageResolution.selector:type_name -> groundplane.agent.v1.WorkloadImageSelector
-	182,  // 355: groundplane.agent.v1.WorkloadImageResolutions.resolutions:type_name -> groundplane.agent.v1.WorkloadImageResolution
-	3,    // 356: groundplane.agent.v1.WorkloadImageResolutionFailure.kind:type_name -> groundplane.agent.v1.WorkloadImageResolutionFailureKind
-	183,  // 357: groundplane.agent.v1.WorkloadImageResolutionResult.success:type_name -> groundplane.agent.v1.WorkloadImageResolutions
-	184,  // 358: groundplane.agent.v1.WorkloadImageResolutionResult.failure:type_name -> groundplane.agent.v1.WorkloadImageResolutionFailure
-	187,  // 359: groundplane.agent.v1.ServiceObservationTarget.workloads:type_name -> groundplane.agent.v1.ServiceWorkloadObservation
-	188,  // 360: groundplane.agent.v1.ServiceObservationTarget.database_probe:type_name -> groundplane.agent.v1.DatabaseVersionProbe
-	28,   // 361: groundplane.agent.v1.ServiceObservationTarget.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
-	434,  // 362: groundplane.agent.v1.DatabaseVersionProbe.authority:type_name -> groundplane.agent.v1.BackupStepAuthority
-	410,  // 363: groundplane.agent.v1.DatabaseVersionProbe.services:type_name -> groundplane.agent.v1.BackupServiceFact
-	369,  // 364: groundplane.agent.v1.DatabaseVersionProbe.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
-	186,  // 365: groundplane.agent.v1.ObserveServices.targets:type_name -> groundplane.agent.v1.ServiceObservationTarget
-	192,  // 366: groundplane.agent.v1.ServiceObservationRow.replicas:type_name -> groundplane.agent.v1.ServiceReplicaCounts
-	4,    // 367: groundplane.agent.v1.ServiceObservationRow.proxy_state:type_name -> groundplane.agent.v1.ServiceProxyObservationState
-	194,  // 368: groundplane.agent.v1.ServiceObservationRow.containers:type_name -> groundplane.agent.v1.ServiceContainerObservation
-	189,  // 369: groundplane.agent.v1.ServiceObservationRow.database_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
-	193,  // 370: groundplane.agent.v1.ServiceObservationResult.observations:type_name -> groundplane.agent.v1.ServiceObservationRow
-	6,    // 371: groundplane.agent.v1.TaskEvent.state:type_name -> groundplane.agent.v1.TaskState
-	198,  // 372: groundplane.agent.v1.TaskEvent.health_wait:type_name -> groundplane.agent.v1.HealthWaitProgress
-	197,  // 373: groundplane.agent.v1.TaskEvent.failure:type_name -> groundplane.agent.v1.StepFailure
-	54,   // 374: groundplane.agent.v1.HealthWaitProgress.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	6,    // 375: groundplane.agent.v1.TaskEventAck.state:type_name -> groundplane.agent.v1.TaskState
-	200,  // 376: groundplane.agent.v1.TaskEventAck.rolling_budget:type_name -> groundplane.agent.v1.RollingStepBudget
-	5,    // 377: groundplane.agent.v1.TaskEventAck.start_decision:type_name -> groundplane.agent.v1.StepStartDecision
-	621,  // 378: groundplane.agent.v1.RollingStepBudget.deadline:type_name -> google.protobuf.Timestamp
-	621,  // 379: groundplane.agent.v1.RollingStepBudget.drain_until:type_name -> google.protobuf.Timestamp
-	202,  // 380: groundplane.agent.v1.ObservedState.projects:type_name -> groundplane.agent.v1.ObservedProject
-	621,  // 381: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
-	203,  // 382: groundplane.agent.v1.ObservedProject.containers:type_name -> groundplane.agent.v1.ObservedContainer
-	204,  // 383: groundplane.agent.v1.ObservedProject.networks:type_name -> groundplane.agent.v1.ObservedNetwork
-	205,  // 384: groundplane.agent.v1.ObservedProject.volumes:type_name -> groundplane.agent.v1.ObservedVolume
-	206,  // 385: groundplane.agent.v1.ObservedProject.collisions:type_name -> groundplane.agent.v1.ObservedCollision
-	7,    // 386: groundplane.agent.v1.ObservedContainer.state:type_name -> groundplane.agent.v1.ObservedContainerState
-	8,    // 387: groundplane.agent.v1.ObservedContainer.health:type_name -> groundplane.agent.v1.ObservedContainerHealth
-	373,  // 388: groundplane.agent.v1.ObservedContainer.labels:type_name -> groundplane.agent.v1.LabelPair
-	54,   // 389: groundplane.agent.v1.ObservedContainer.healthcheck_diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	373,  // 390: groundplane.agent.v1.ObservedNetwork.labels:type_name -> groundplane.agent.v1.LabelPair
-	373,  // 391: groundplane.agent.v1.ObservedVolume.labels:type_name -> groundplane.agent.v1.LabelPair
-	9,    // 392: groundplane.agent.v1.ObservedCollision.kind:type_name -> groundplane.agent.v1.ObservedCollisionKind
-	11,   // 393: groundplane.agent.v1.TaskAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
-	209,  // 394: groundplane.agent.v1.TaskAck.compose_result:type_name -> groundplane.agent.v1.ComposeTaskResult
-	217,  // 395: groundplane.agent.v1.TaskAck.environment_directory_result:type_name -> groundplane.agent.v1.EnvironmentDirectoryTaskResult
-	208,  // 396: groundplane.agent.v1.TaskAck.backup_result:type_name -> groundplane.agent.v1.BackupTaskResult
-	197,  // 397: groundplane.agent.v1.BackupTaskResult.failure:type_name -> groundplane.agent.v1.StepFailure
-	202,  // 398: groundplane.agent.v1.ComposeTaskResult.projects:type_name -> groundplane.agent.v1.ObservedProject
-	54,   // 399: groundplane.agent.v1.ComposeTaskResult.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	582,  // 400: groundplane.agent.v1.ComposeTaskResult.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
-	586,  // 401: groundplane.agent.v1.ComposeTaskResult.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
-	213,  // 402: groundplane.agent.v1.ComposeTaskResult.dns_resolver_candidate_observation:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
-	213,  // 403: groundplane.agent.v1.ComposeTaskResult.dns_resolver_rollback_observation:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
-	212,  // 404: groundplane.agent.v1.ComposeTaskResult.candidate_absence_evidence:type_name -> groundplane.agent.v1.CandidateAbsenceEvidence
-	211,  // 405: groundplane.agent.v1.ComposeTaskResult.service_absence_evidence:type_name -> groundplane.agent.v1.ServiceAbsenceEvidence
-	197,  // 406: groundplane.agent.v1.ComposeTaskResult.failure:type_name -> groundplane.agent.v1.StepFailure
-	210,  // 407: groundplane.agent.v1.ComposeTaskResult.rolling_evidence:type_name -> groundplane.agent.v1.RollingReleaseEvidence
-	272,  // 408: groundplane.agent.v1.CandidateAbsenceEvidence.candidates:type_name -> groundplane.agent.v1.CandidateReleaseService
-	621,  // 409: groundplane.agent.v1.DNSResolverObservationEvidence.observed_at:type_name -> google.protobuf.Timestamp
-	216,  // 410: groundplane.agent.v1.DNSResolverObservationEvidence.static_query:type_name -> groundplane.agent.v1.DNSQueryProof
-	216,  // 411: groundplane.agent.v1.DNSResolverObservationEvidence.catch_all_query:type_name -> groundplane.agent.v1.DNSQueryProof
-	216,  // 412: groundplane.agent.v1.DNSResolverObservationEvidence.forwarder_queries:type_name -> groundplane.agent.v1.DNSQueryProof
-	10,   // 413: groundplane.agent.v1.DNSAnswerRecord.type:type_name -> groundplane.agent.v1.DNSQueryType
-	10,   // 414: groundplane.agent.v1.DNSQueryProof.type:type_name -> groundplane.agent.v1.DNSQueryType
-	214,  // 415: groundplane.agent.v1.DNSQueryProof.answers:type_name -> groundplane.agent.v1.DNSAnswerRecord
-	215,  // 416: groundplane.agent.v1.DNSQueryProof.counters:type_name -> groundplane.agent.v1.DNSForwardCounter
-	197,  // 417: groundplane.agent.v1.EnvironmentDirectoryTaskResult.failure:type_name -> groundplane.agent.v1.StepFailure
-	613,  // 418: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
-	614,  // 419: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
-	220,  // 420: groundplane.agent.v1.ControllerMessage.log_subscribe:type_name -> groundplane.agent.v1.LogSubscribe
-	221,  // 421: groundplane.agent.v1.ControllerMessage.log_cancel:type_name -> groundplane.agent.v1.LogCancel
-	181,  // 422: groundplane.agent.v1.ControllerMessage.resolve_workload_images:type_name -> groundplane.agent.v1.ResolveWorkloadImages
-	190,  // 423: groundplane.agent.v1.ControllerMessage.observe_services:type_name -> groundplane.agent.v1.ObserveServices
-	191,  // 424: groundplane.agent.v1.ControllerMessage.cancel_service_observation:type_name -> groundplane.agent.v1.CancelServiceObservation
-	222,  // 425: groundplane.agent.v1.ControllerMessage.log_credit:type_name -> groundplane.agent.v1.LogCredit
-	615,  // 426: groundplane.agent.v1.ControllerMessage.check_backing_access:type_name -> groundplane.agent.v1.CheckBackingAccess
-	617,  // 427: groundplane.agent.v1.ControllerMessage.cancel_backing_access:type_name -> groundplane.agent.v1.CancelBackingAccess
-	593,  // 428: groundplane.agent.v1.ControllerMessage.check_dns_connections:type_name -> groundplane.agent.v1.CheckDNSConnections
-	595,  // 429: groundplane.agent.v1.ControllerMessage.cancel_dns_connections:type_name -> groundplane.agent.v1.CancelDNSConnections
-	598,  // 430: groundplane.agent.v1.ControllerMessage.check_edge_connections:type_name -> groundplane.agent.v1.CheckEdgeConnections
-	599,  // 431: groundplane.agent.v1.ControllerMessage.cancel_edge_connections:type_name -> groundplane.agent.v1.CancelEdgeConnections
-	468,  // 432: groundplane.agent.v1.ControllerMessage.backup_config_transfer:type_name -> groundplane.agent.v1.BackupConfigTransfer
-	475,  // 433: groundplane.agent.v1.ControllerMessage.backup_config_credit:type_name -> groundplane.agent.v1.BackupConfigCredit
-	455,  // 434: groundplane.agent.v1.ControllerMessage.backup_staging_recovery_plan:type_name -> groundplane.agent.v1.BackupStagingRecoveryPlan
-	476,  // 435: groundplane.agent.v1.ControllerMessage.backup_volume_manifest_transfer:type_name -> groundplane.agent.v1.BackupVolumeManifestTransfer
-	481,  // 436: groundplane.agent.v1.ControllerMessage.backup_volume_manifest_ack_credit:type_name -> groundplane.agent.v1.BackupVolumeManifestAckCredit
-	566,  // 437: groundplane.agent.v1.ControllerMessage.backup_staging_recovery_ack_receipt:type_name -> groundplane.agent.v1.BackupStagingRecoveryAckReceipt
-	62,   // 438: groundplane.agent.v1.ControllerMessage.work_start_ack:type_name -> groundplane.agent.v1.WorkStartAck
-	130,  // 439: groundplane.agent.v1.ControllerMessage.release_work_assignment:type_name -> groundplane.agent.v1.ReleaseWorkAssignment
-	135,  // 440: groundplane.agent.v1.ControllerMessage.release_work_checkpoint_ack:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointAck
-	171,  // 441: groundplane.agent.v1.ControllerMessage.release_hook_delivery:type_name -> groundplane.agent.v1.ReleaseHookDelivery
-	141,  // 442: groundplane.agent.v1.ControllerMessage.release_effect_evidence_ack:type_name -> groundplane.agent.v1.ReleaseEffectEvidenceAck
-	144,  // 443: groundplane.agent.v1.ControllerMessage.script_work_checkpoint_ack:type_name -> groundplane.agent.v1.ScriptWorkCheckpointAck
-	159,  // 444: groundplane.agent.v1.ControllerMessage.release_configuration_manifest:type_name -> groundplane.agent.v1.ReleaseConfigurationManifest
-	161,  // 445: groundplane.agent.v1.ControllerMessage.release_configuration_file_delivery:type_name -> groundplane.agent.v1.ReleaseConfigurationFileDelivery
-	56,   // 446: groundplane.agent.v1.ControllerMessage.work_executor_registration:type_name -> groundplane.agent.v1.WorkExecutorRegistration
-	137,  // 447: groundplane.agent.v1.ControllerMessage.release_work_completion_ack:type_name -> groundplane.agent.v1.ReleaseWorkCompletionAck
-	139,  // 448: groundplane.agent.v1.ControllerMessage.release_work_failure_ack:type_name -> groundplane.agent.v1.ReleaseWorkFailureAck
-	133,  // 449: groundplane.agent.v1.ControllerMessage.release_recovery_checkpoint_ack:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointAck
-	131,  // 450: groundplane.agent.v1.ControllerMessage.release_recovery_assignment:type_name -> groundplane.agent.v1.ReleaseRecoveryAssignment
-	142,  // 451: groundplane.agent.v1.ControllerMessage.script_work_assignment:type_name -> groundplane.agent.v1.ScriptWorkAssignment
-	146,  // 452: groundplane.agent.v1.ControllerMessage.script_work_completion_ack:type_name -> groundplane.agent.v1.ScriptWorkCompletionAck
-	147,  // 453: groundplane.agent.v1.ControllerMessage.script_recovery_assignment:type_name -> groundplane.agent.v1.ScriptRecoveryAssignment
-	149,  // 454: groundplane.agent.v1.ControllerMessage.script_recovery_completion_ack:type_name -> groundplane.agent.v1.ScriptRecoveryCompletionAck
-	151,  // 455: groundplane.agent.v1.ControllerMessage.script_work_failure_ack:type_name -> groundplane.agent.v1.ScriptWorkFailureAck
-	63,   // 456: groundplane.agent.v1.ControllerMessage.environment_removal_assignment:type_name -> groundplane.agent.v1.EnvironmentRemovalAssignment
-	123,  // 457: groundplane.agent.v1.ControllerMessage.environment_removal_checkpoint_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointAck
-	125,  // 458: groundplane.agent.v1.ControllerMessage.environment_removal_completion_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalCompletionAck
-	127,  // 459: groundplane.agent.v1.ControllerMessage.environment_removal_failure_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalFailureAck
-	91,   // 460: groundplane.agent.v1.ControllerMessage.attach_removal_assignment:type_name -> groundplane.agent.v1.AttachRemovalAssignment
-	117,  // 461: groundplane.agent.v1.ControllerMessage.attach_removal_checkpoint_ack:type_name -> groundplane.agent.v1.AttachRemovalCheckpointAck
-	119,  // 462: groundplane.agent.v1.ControllerMessage.attach_removal_completion_ack:type_name -> groundplane.agent.v1.AttachRemovalCompletionAck
-	121,  // 463: groundplane.agent.v1.ControllerMessage.attach_removal_failure_ack:type_name -> groundplane.agent.v1.AttachRemovalFailureAck
-	92,   // 464: groundplane.agent.v1.ControllerMessage.attach_recovery_assignment:type_name -> groundplane.agent.v1.AttachRecoveryAssignment
-	94,   // 465: groundplane.agent.v1.ControllerMessage.attach_recovery_completion_ack:type_name -> groundplane.agent.v1.AttachRecoveryCompletionAck
-	358,  // 466: groundplane.agent.v1.ControllerMessage.volume_work_assignment:type_name -> groundplane.agent.v1.VolumeWorkAssignment
-	360,  // 467: groundplane.agent.v1.ControllerMessage.volume_work_checkpoint_ack:type_name -> groundplane.agent.v1.VolumeWorkCheckpointAck
-	362,  // 468: groundplane.agent.v1.ControllerMessage.volume_work_completion_ack:type_name -> groundplane.agent.v1.VolumeWorkCompletionAck
-	364,  // 469: groundplane.agent.v1.ControllerMessage.volume_work_failure_ack:type_name -> groundplane.agent.v1.VolumeWorkFailureAck
-	366,  // 470: groundplane.agent.v1.ControllerMessage.volume_work_recovery_report_ack:type_name -> groundplane.agent.v1.VolumeWorkRecoveryReportAck
-	312,  // 471: groundplane.agent.v1.ControllerMessage.network_work_assignment:type_name -> groundplane.agent.v1.NetworkWorkAssignment
-	314,  // 472: groundplane.agent.v1.ControllerMessage.network_work_checkpoint_ack:type_name -> groundplane.agent.v1.NetworkWorkCheckpointAck
-	316,  // 473: groundplane.agent.v1.ControllerMessage.network_work_completion_ack:type_name -> groundplane.agent.v1.NetworkWorkCompletionAck
-	318,  // 474: groundplane.agent.v1.ControllerMessage.network_work_failure_ack:type_name -> groundplane.agent.v1.NetworkWorkFailureAck
-	320,  // 475: groundplane.agent.v1.ControllerMessage.network_work_recovery_report_ack:type_name -> groundplane.agent.v1.NetworkWorkRecoveryReportAck
-	302,  // 476: groundplane.agent.v1.ControllerMessage.component_work_assignment:type_name -> groundplane.agent.v1.ComponentWorkAssignment
-	304,  // 477: groundplane.agent.v1.ControllerMessage.component_work_checkpoint_ack:type_name -> groundplane.agent.v1.ComponentWorkCheckpointAck
-	306,  // 478: groundplane.agent.v1.ControllerMessage.component_work_completion_ack:type_name -> groundplane.agent.v1.ComponentWorkCompletionAck
-	308,  // 479: groundplane.agent.v1.ControllerMessage.component_work_failure_ack:type_name -> groundplane.agent.v1.ComponentWorkFailureAck
-	310,  // 480: groundplane.agent.v1.ControllerMessage.component_work_recovery_report_ack:type_name -> groundplane.agent.v1.ComponentWorkRecoveryReportAck
-	155,  // 481: groundplane.agent.v1.ControllerMessage.component_configuration_manifest:type_name -> groundplane.agent.v1.ComponentConfigurationManifest
-	157,  // 482: groundplane.agent.v1.ControllerMessage.component_configuration_file_delivery:type_name -> groundplane.agent.v1.ComponentConfigurationFileDelivery
-	299,  // 483: groundplane.agent.v1.ControllerMessage.entry_configuration_work_assignment:type_name -> groundplane.agent.v1.EntryConfigurationWorkAssignment
-	294,  // 484: groundplane.agent.v1.ControllerMessage.entry_configuration_work_checkpoint_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
-	296,  // 485: groundplane.agent.v1.ControllerMessage.entry_configuration_work_completion_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkCompletionAck
-	298,  // 486: groundplane.agent.v1.ControllerMessage.entry_configuration_work_failure_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkFailureAck
-	290,  // 487: groundplane.agent.v1.ControllerMessage.entry_configuration_manifest:type_name -> groundplane.agent.v1.EntryConfigurationManifest
-	292,  // 488: groundplane.agent.v1.ControllerMessage.entry_configuration_file_delivery:type_name -> groundplane.agent.v1.EntryConfigurationFileDelivery
-	301,  // 489: groundplane.agent.v1.ControllerMessage.entry_configuration_work_recovery_report_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck
-	97,   // 490: groundplane.agent.v1.ControllerMessage.attach_provision_assignment:type_name -> groundplane.agent.v1.AttachProvisionAssignment
-	102,  // 491: groundplane.agent.v1.ControllerMessage.attach_provision_checkpoint_ack:type_name -> groundplane.agent.v1.AttachProvisionCheckpointAck
-	104,  // 492: groundplane.agent.v1.ControllerMessage.attach_provision_completion_ack:type_name -> groundplane.agent.v1.AttachProvisionCompletionAck
-	106,  // 493: groundplane.agent.v1.ControllerMessage.attach_provision_failure_ack:type_name -> groundplane.agent.v1.AttachProvisionFailureAck
-	96,   // 494: groundplane.agent.v1.ControllerMessage.attach_provision_facts_ack:type_name -> groundplane.agent.v1.AttachProvisionFactsAck
-	98,   // 495: groundplane.agent.v1.ControllerMessage.attach_provision_recovery_assignment:type_name -> groundplane.agent.v1.AttachProvisionRecoveryAssignment
-	100,  // 496: groundplane.agent.v1.ControllerMessage.attach_provision_recovery_report_ack:type_name -> groundplane.agent.v1.AttachProvisionRecoveryReportAck
-	341,  // 497: groundplane.agent.v1.ControllerMessage.service_lifecycle_assignment:type_name -> groundplane.agent.v1.ServiceLifecycleAssignment
-	350,  // 498: groundplane.agent.v1.ControllerMessage.service_lifecycle_checkpoint_ack:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointAck
-	352,  // 499: groundplane.agent.v1.ControllerMessage.service_lifecycle_completion_ack:type_name -> groundplane.agent.v1.ServiceLifecycleCompletionAck
-	354,  // 500: groundplane.agent.v1.ControllerMessage.service_lifecycle_failure_ack:type_name -> groundplane.agent.v1.ServiceLifecycleFailureAck
-	346,  // 501: groundplane.agent.v1.ControllerMessage.service_lifecycle_hook_delivery:type_name -> groundplane.agent.v1.ServiceLifecycleHookDelivery
-	348,  // 502: groundplane.agent.v1.ControllerMessage.service_lifecycle_recovery_report_ack:type_name -> groundplane.agent.v1.ServiceLifecycleRecoveryReportAck
-	327,  // 503: groundplane.agent.v1.ControllerMessage.service_removal_recovery_assignment:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryAssignment
-	334,  // 504: groundplane.agent.v1.ControllerMessage.service_removal_recovery_checkpoint_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
-	336,  // 505: groundplane.agent.v1.ControllerMessage.service_removal_recovery_completion_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck
-	338,  // 506: groundplane.agent.v1.ControllerMessage.service_removal_recovery_failure_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryFailureAck
-	330,  // 507: groundplane.agent.v1.ControllerMessage.service_removal_configuration_manifest:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationManifest
-	332,  // 508: groundplane.agent.v1.ControllerMessage.service_removal_configuration_file_delivery:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery
-	419,  // 509: groundplane.agent.v1.ControllerMessage.backup_work_assignment:type_name -> groundplane.agent.v1.BackupWorkAssignment
-	432,  // 510: groundplane.agent.v1.ControllerMessage.backup_work_checkpoint_ack:type_name -> groundplane.agent.v1.BackupWorkCheckpointAck
-	557,  // 511: groundplane.agent.v1.ControllerMessage.backup_work_secret_transfer:type_name -> groundplane.agent.v1.BackupWorkSecretTransfer
-	431,  // 512: groundplane.agent.v1.ControllerMessage.backup_work_completion_ack:type_name -> groundplane.agent.v1.BackupWorkCompletionAck
-	430,  // 513: groundplane.agent.v1.ControllerMessage.backup_work_failure_ack:type_name -> groundplane.agent.v1.BackupWorkFailureAck
-	422,  // 514: groundplane.agent.v1.ControllerMessage.backup_recovery_assignment:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
-	426,  // 515: groundplane.agent.v1.ControllerMessage.backup_recovery_ack:type_name -> groundplane.agent.v1.BackupRecoveryAck
-	425,  // 516: groundplane.agent.v1.ControllerMessage.backup_config_recovery_prepare_ack:type_name -> groundplane.agent.v1.BackupConfigRecoveryPrepareAck
-	61,   // 517: groundplane.agent.v1.ControllerMessage.work_cancel:type_name -> groundplane.agent.v1.WorkCancel
-	85,   // 518: groundplane.agent.v1.ControllerMessage.environment_provision_assignment:type_name -> groundplane.agent.v1.EnvironmentProvisionAssignment
-	88,   // 519: groundplane.agent.v1.ControllerMessage.environment_provision_result_ack:type_name -> groundplane.agent.v1.EnvironmentProvisionResultAck
-	68,   // 520: groundplane.agent.v1.ControllerMessage.backing_provision_assignment:type_name -> groundplane.agent.v1.BackingProvisionAssignment
-	70,   // 521: groundplane.agent.v1.ControllerMessage.backing_provision_checkpoint_ack:type_name -> groundplane.agent.v1.BackingProvisionCheckpointAck
-	72,   // 522: groundplane.agent.v1.ControllerMessage.backing_provision_completion_ack:type_name -> groundplane.agent.v1.BackingProvisionCompletionAck
-	74,   // 523: groundplane.agent.v1.ControllerMessage.backing_provision_failure_ack:type_name -> groundplane.agent.v1.BackingProvisionFailureAck
-	76,   // 524: groundplane.agent.v1.ControllerMessage.backing_provision_configuration_manifest:type_name -> groundplane.agent.v1.BackingProvisionConfigurationManifest
-	78,   // 525: groundplane.agent.v1.ControllerMessage.backing_provision_file_delivery:type_name -> groundplane.agent.v1.BackingProvisionFileDelivery
-	80,   // 526: groundplane.agent.v1.ControllerMessage.backing_provision_hook_delivery:type_name -> groundplane.agent.v1.BackingProvisionHookDelivery
-	82,   // 527: groundplane.agent.v1.ControllerMessage.backing_provision_recovery_ack:type_name -> groundplane.agent.v1.BackingProvisionRecoveryAck
-	276,  // 528: groundplane.agent.v1.ControllerMessage.resolver_work_assignment:type_name -> groundplane.agent.v1.ResolverWorkAssignment
-	278,  // 529: groundplane.agent.v1.ControllerMessage.resolver_work_checkpoint_ack:type_name -> groundplane.agent.v1.ResolverWorkCheckpointAck
-	282,  // 530: groundplane.agent.v1.ControllerMessage.resolver_work_result_ack:type_name -> groundplane.agent.v1.ResolverWorkResultAck
-	58,   // 531: groundplane.agent.v1.ControllerMessage.work_journal_replay_ack:type_name -> groundplane.agent.v1.WorkJournalReplayAck
-	186,  // 532: groundplane.agent.v1.LogTarget.runtime:type_name -> groundplane.agent.v1.ServiceObservationTarget
-	219,  // 533: groundplane.agent.v1.LogSubscribe.targets:type_name -> groundplane.agent.v1.LogTarget
-	13,   // 534: groundplane.agent.v1.LogEvent.slot:type_name -> groundplane.agent.v1.LogSlot
-	12,   // 535: groundplane.agent.v1.LogEvent.stream:type_name -> groundplane.agent.v1.LogStream
-	621,  // 536: groundplane.agent.v1.LogEvent.timestamp:type_name -> google.protobuf.Timestamp
-	14,   // 537: groundplane.agent.v1.LogEnd.reason:type_name -> groundplane.agent.v1.LogEndReason
-	227,  // 538: groundplane.agent.v1.MaterializationTransfer.header:type_name -> groundplane.agent.v1.MaterializationTransferHeader
-	228,  // 539: groundplane.agent.v1.MaterializationTransfer.chunk:type_name -> groundplane.agent.v1.MaterializationTransferChunk
-	229,  // 540: groundplane.agent.v1.MaterializationTransfer.end:type_name -> groundplane.agent.v1.MaterializationTransferEnd
-	49,   // 541: groundplane.agent.v1.MaterializationTransferHeader.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
-	231,  // 542: groundplane.agent.v1.ManagedConfigTransfer.header:type_name -> groundplane.agent.v1.ManagedConfigTransferHeader
-	232,  // 543: groundplane.agent.v1.ManagedConfigTransfer.chunk:type_name -> groundplane.agent.v1.ManagedConfigTransferChunk
-	233,  // 544: groundplane.agent.v1.ManagedConfigTransfer.end:type_name -> groundplane.agent.v1.ManagedConfigTransferEnd
-	253,  // 545: groundplane.agent.v1.TaskAssignment.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	621,  // 546: groundplane.agent.v1.TaskAssignment.forward_deadline:type_name -> google.protobuf.Timestamp
-	401,  // 547: groundplane.agent.v1.TaskAssignment.script_artifacts:type_name -> groundplane.agent.v1.ScriptAssignmentArtifacts
-	245,  // 548: groundplane.agent.v1.TaskAssignment.script_checkpoints:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
-	417,  // 549: groundplane.agent.v1.TaskAssignment.backup_authority:type_name -> groundplane.agent.v1.BackupTaskAuthority
-	435,  // 550: groundplane.agent.v1.TaskAssignment.backup_resume:type_name -> groundplane.agent.v1.BackupTaskResume
-	16,   // 551: groundplane.agent.v1.TaskAssignment.execution_mode:type_name -> groundplane.agent.v1.TaskExecutionMode
-	621,  // 552: groundplane.agent.v1.TaskAssignment.recovery_deadline:type_name -> google.protobuf.Timestamp
-	238,  // 553: groundplane.agent.v1.TaskAssignment.restoration_authority:type_name -> groundplane.agent.v1.ReleaseRestorationAuthority
-	235,  // 554: groundplane.agent.v1.TaskAssignment.release_recovery_directive:type_name -> groundplane.agent.v1.ReleaseRecoveryDirective
-	621,  // 555: groundplane.agent.v1.TaskAssignment.execution_deadline:type_name -> google.protobuf.Timestamp
-	15,   // 556: groundplane.agent.v1.ReleaseRecoveryDirective.phase:type_name -> groundplane.agent.v1.ReleaseRecoveryPhase
-	17,   // 557: groundplane.agent.v1.ReleaseRestorationCandidate.target:type_name -> groundplane.agent.v1.ReleaseRestorationTarget
-	236,  // 558: groundplane.agent.v1.ReleaseRestorationAuthority.candidates:type_name -> groundplane.agent.v1.ReleaseRestorationCandidate
-	237,  // 559: groundplane.agent.v1.ReleaseRestorationAuthority.applied_predecessor:type_name -> groundplane.agent.v1.ReleaseAppliedPredecessorAuthority
-	239,  // 560: groundplane.agent.v1.ReleaseRestorationAuthority.native_predecessors:type_name -> groundplane.agent.v1.ReleaseNativePredecessorAuthority
-	19,   // 561: groundplane.agent.v1.ScriptOutcomeCheckpoint.reason:type_name -> groundplane.agent.v1.ScriptOutcomeReason
-	621,  // 562: groundplane.agent.v1.ScriptOutcomeCheckpoint.observed_at:type_name -> google.protobuf.Timestamp
-	18,   // 563: groundplane.agent.v1.ScriptExecutionCheckpoint.state:type_name -> groundplane.agent.v1.ScriptExecutionState
-	241,  // 564: groundplane.agent.v1.ScriptExecutionCheckpoint.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
-	242,  // 565: groundplane.agent.v1.ScriptExecutionCheckpoint.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
-	243,  // 566: groundplane.agent.v1.ScriptExecutionCheckpoint.outcome:type_name -> groundplane.agent.v1.ScriptOutcomeCheckpoint
-	244,  // 567: groundplane.agent.v1.ScriptExecutionCheckpoint.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupCheckpoint
-	18,   // 568: groundplane.agent.v1.ScriptCheckpointRequest.expected_state:type_name -> groundplane.agent.v1.ScriptExecutionState
-	18,   // 569: groundplane.agent.v1.ScriptCheckpointRequest.state:type_name -> groundplane.agent.v1.ScriptExecutionState
-	240,  // 570: groundplane.agent.v1.ScriptCheckpointRequest.start_authorized:type_name -> groundplane.agent.v1.ScriptStartAuthorizedCheckpoint
-	241,  // 571: groundplane.agent.v1.ScriptCheckpointRequest.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
-	242,  // 572: groundplane.agent.v1.ScriptCheckpointRequest.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
-	243,  // 573: groundplane.agent.v1.ScriptCheckpointRequest.outcome:type_name -> groundplane.agent.v1.ScriptOutcomeCheckpoint
-	244,  // 574: groundplane.agent.v1.ScriptCheckpointRequest.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupCheckpoint
-	621,  // 575: groundplane.agent.v1.ScriptCheckpointRequest.recorded_at:type_name -> google.protobuf.Timestamp
-	18,   // 576: groundplane.agent.v1.ScriptCheckpointAck.state:type_name -> groundplane.agent.v1.ScriptExecutionState
-	20,   // 577: groundplane.agent.v1.BackingHookProcedure.event:type_name -> groundplane.agent.v1.BackingHookEvent
-	248,  // 578: groundplane.agent.v1.BackingHookProcedure.inputs:type_name -> groundplane.agent.v1.BackingHookValue
-	248,  // 579: groundplane.agent.v1.BackingHookProcedure.facts:type_name -> groundplane.agent.v1.BackingHookValue
-	249,  // 580: groundplane.agent.v1.BackingHookProcedure.fact_schema:type_name -> groundplane.agent.v1.BackingHookFactDefinition
-	20,   // 581: groundplane.agent.v1.BackingHookCheckpointRequest.event:type_name -> groundplane.agent.v1.BackingHookEvent
-	21,   // 582: groundplane.agent.v1.BackingHookCheckpointRequest.state:type_name -> groundplane.agent.v1.BackingHookCheckpointState
-	248,  // 583: groundplane.agent.v1.BackingHookCheckpointRequest.facts:type_name -> groundplane.agent.v1.BackingHookValue
-	20,   // 584: groundplane.agent.v1.BackingHookCheckpointAck.event:type_name -> groundplane.agent.v1.BackingHookEvent
-	21,   // 585: groundplane.agent.v1.BackingHookCheckpointAck.state:type_name -> groundplane.agent.v1.BackingHookCheckpointState
-	23,   // 586: groundplane.agent.v1.ExecutionPlan.operation:type_name -> groundplane.agent.v1.PlanOperation
-	369,  // 587: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
-	374,  // 588: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
-	380,  // 589: groundplane.agent.v1.ExecutionPlan.script_runner_snapshots:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
-	393,  // 590: groundplane.agent.v1.ExecutionPlan.script_runner_projections:type_name -> groundplane.agent.v1.ScriptRunnerProjection
-	400,  // 591: groundplane.agent.v1.ExecutionPlan.script_body_artifacts:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
-	22,   // 592: groundplane.agent.v1.ExecutionPlan.component_lifecycle_mode:type_name -> groundplane.agent.v1.ComponentLifecycleMode
-	601,  // 593: groundplane.agent.v1.ExecutionPlan.component_rollback_observation:type_name -> groundplane.agent.v1.ComponentApply
-	263,  // 594: groundplane.agent.v1.ExecutionPlan.candidate_release_procedure:type_name -> groundplane.agent.v1.CandidateReleaseProcedure
-	261,  // 595: groundplane.agent.v1.ExecutionPlan.managed_component_procedure:type_name -> groundplane.agent.v1.ManagedComponentProcedure
-	259,  // 596: groundplane.agent.v1.ExecutionPlan.service_lifecycle_procedure:type_name -> groundplane.agent.v1.ServiceLifecycleProcedure
-	433,  // 597: groundplane.agent.v1.ExecutionPlan.backup_scope:type_name -> groundplane.agent.v1.BackupPlanScope
-	258,  // 598: groundplane.agent.v1.ExecutionPlan.service_absence_recovery_procedure:type_name -> groundplane.agent.v1.ServiceAbsenceRecoveryProcedure
-	254,  // 599: groundplane.agent.v1.ExecutionPlan.managed_network_recovery_procedure:type_name -> groundplane.agent.v1.ManagedNetworkRecoveryProcedure
-	255,  // 600: groundplane.agent.v1.ManagedNetworkRecoveryProcedure.removal:type_name -> groundplane.agent.v1.ManagedNetworkRemovalRecovery
-	256,  // 601: groundplane.agent.v1.ManagedNetworkRecoveryProcedure.preparation:type_name -> groundplane.agent.v1.ManagedNetworkPreparationRecovery
-	257,  // 602: groundplane.agent.v1.ManagedNetworkPreparationRecovery.members:type_name -> groundplane.agent.v1.ManagedNetworkPreparationMember
-	260,  // 603: groundplane.agent.v1.ServiceLifecycleProcedure.sources:type_name -> groundplane.agent.v1.ServiceLifecycleSource
-	262,  // 604: groundplane.agent.v1.ManagedComponentProcedure.services:type_name -> groundplane.agent.v1.ManagedComponentService
-	266,  // 605: groundplane.agent.v1.CandidateReleaseProcedure.members:type_name -> groundplane.agent.v1.CandidateReleaseMember
-	264,  // 606: groundplane.agent.v1.CandidateReleaseProcedure.configuration_restoration:type_name -> groundplane.agent.v1.ConfigurationRestoration
-	265,  // 607: groundplane.agent.v1.ConfigurationRestoration.files:type_name -> groundplane.agent.v1.ConfigurationFileRestoration
-	270,  // 608: groundplane.agent.v1.CandidateReleaseMember.serving_predecessor:type_name -> groundplane.agent.v1.ServingPredecessorRestoration
-	271,  // 609: groundplane.agent.v1.CandidateReleaseMember.candidate_absence:type_name -> groundplane.agent.v1.CandidateAbsenceRestoration
-	267,  // 610: groundplane.agent.v1.CandidateReleaseMember.rolling:type_name -> groundplane.agent.v1.RollingReleaseProcedure
-	268,  // 611: groundplane.agent.v1.RollingReleaseProcedure.prior:type_name -> groundplane.agent.v1.RollingReplica
-	268,  // 612: groundplane.agent.v1.RollingReleaseProcedure.candidate:type_name -> groundplane.agent.v1.RollingReplica
-	269,  // 613: groundplane.agent.v1.RollingReleaseProcedure.changes:type_name -> groundplane.agent.v1.RollingReplicaChange
-	268,  // 614: groundplane.agent.v1.RollingReleaseProcedure.retained:type_name -> groundplane.agent.v1.RollingReplica
-	28,   // 615: groundplane.agent.v1.RollingReleaseProcedure.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
-	272,  // 616: groundplane.agent.v1.CandidateAbsenceRestoration.services:type_name -> groundplane.agent.v1.CandidateReleaseService
-	369,  // 617: groundplane.agent.v1.EntryConfigurationWorkInput.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
-	369,  // 618: groundplane.agent.v1.EntryConfigurationWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
-	168,  // 619: groundplane.agent.v1.EntryConfigurationWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	168,  // 620: groundplane.agent.v1.EntryConfigurationWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	568,  // 621: groundplane.agent.v1.EntryConfigurationWorkInput.files:type_name -> groundplane.agent.v1.MaterializeFile
-	59,   // 622: groundplane.agent.v1.ResolverWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 623: groundplane.agent.v1.ResolverWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 624: groundplane.agent.v1.ResolverWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 625: groundplane.agent.v1.ResolverWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 626: groundplane.agent.v1.ResolverWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 627: groundplane.agent.v1.ResolverWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	213,  // 628: groundplane.agent.v1.ResolverWorkCompletionRequest.serving_proof:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
-	59,   // 629: groundplane.agent.v1.ResolverWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 630: groundplane.agent.v1.ResolverWorkRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 631: groundplane.agent.v1.ResolverWorkResultAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 632: groundplane.agent.v1.ResolverWorkResultAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 633: groundplane.agent.v1.ResolverWorkResultAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 634: groundplane.agent.v1.ResolverWorkResultAck.finished_at:type_name -> google.protobuf.Timestamp
-	276,  // 635: groundplane.agent.v1.ResolverWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.ResolverWorkAssignment
-	62,   // 636: groundplane.agent.v1.ResolverWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	278,  // 637: groundplane.agent.v1.ResolverWorkHelperRequest.checkpoint:type_name -> groundplane.agent.v1.ResolverWorkCheckpointAck
-	213,  // 638: groundplane.agent.v1.ResolverWorkHelperResponse.serving_proof:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
-	369,  // 639: groundplane.agent.v1.ComponentWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
-	286,  // 640: groundplane.agent.v1.ComponentWorkInput.predecessor:type_name -> groundplane.agent.v1.ComponentWorkPredecessor
-	601,  // 641: groundplane.agent.v1.ComponentWorkInput.configuration_action:type_name -> groundplane.agent.v1.ComponentApply
-	168,  // 642: groundplane.agent.v1.ComponentWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	168,  // 643: groundplane.agent.v1.ComponentWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	568,  // 644: groundplane.agent.v1.ComponentWorkInput.files:type_name -> groundplane.agent.v1.MaterializeFile
-	369,  // 645: groundplane.agent.v1.ComponentWorkPredecessor.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
-	287,  // 646: groundplane.agent.v1.ComponentWorkPredecessor.configuration:type_name -> groundplane.agent.v1.ComponentWorkRetainedConfiguration
-	568,  // 647: groundplane.agent.v1.ComponentWorkRetainedConfiguration.file:type_name -> groundplane.agent.v1.MaterializeFile
-	59,   // 648: groundplane.agent.v1.EntryConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 649: groundplane.agent.v1.EntryConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	168,  // 650: groundplane.agent.v1.EntryConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	289,  // 651: groundplane.agent.v1.EntryConfigurationManifest.files:type_name -> groundplane.agent.v1.EntryConfigurationFile
-	59,   // 652: groundplane.agent.v1.EntryConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 653: groundplane.agent.v1.EntryConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	168,  // 654: groundplane.agent.v1.EntryConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	289,  // 655: groundplane.agent.v1.EntryConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.EntryConfigurationFile
-	59,   // 656: groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 657: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 658: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 659: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	59,   // 660: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 661: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 662: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 663: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 664: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 665: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 666: groundplane.agent.v1.EntryConfigurationWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 667: groundplane.agent.v1.EntryConfigurationWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 668: groundplane.agent.v1.EntryConfigurationWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 669: groundplane.agent.v1.EntryConfigurationWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	621,  // 670: groundplane.agent.v1.EntryConfigurationWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	59,   // 671: groundplane.agent.v1.EntryConfigurationWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	275,  // 672: groundplane.agent.v1.EntryConfigurationWorkAssignment.input:type_name -> groundplane.agent.v1.EntryConfigurationWorkInput
-	59,   // 673: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 674: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 675: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 676: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 677: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 678: groundplane.agent.v1.ComponentWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	285,  // 679: groundplane.agent.v1.ComponentWorkAssignment.input:type_name -> groundplane.agent.v1.ComponentWorkInput
-	59,   // 680: groundplane.agent.v1.ComponentWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 681: groundplane.agent.v1.ComponentWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 682: groundplane.agent.v1.ComponentWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 683: groundplane.agent.v1.ComponentWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	59,   // 684: groundplane.agent.v1.ComponentWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 685: groundplane.agent.v1.ComponentWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 686: groundplane.agent.v1.ComponentWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 687: groundplane.agent.v1.ComponentWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 688: groundplane.agent.v1.ComponentWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 689: groundplane.agent.v1.ComponentWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 690: groundplane.agent.v1.ComponentWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 691: groundplane.agent.v1.ComponentWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 692: groundplane.agent.v1.ComponentWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 693: groundplane.agent.v1.ComponentWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	621,  // 694: groundplane.agent.v1.ComponentWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	59,   // 695: groundplane.agent.v1.ComponentWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 696: groundplane.agent.v1.ComponentWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 697: groundplane.agent.v1.ComponentWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 698: groundplane.agent.v1.ComponentWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	24,   // 699: groundplane.agent.v1.NetworkWorkInput.action:type_name -> groundplane.agent.v1.NetworkWorkAction
-	369,  // 700: groundplane.agent.v1.NetworkWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
-	59,   // 701: groundplane.agent.v1.NetworkWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	311,  // 702: groundplane.agent.v1.NetworkWorkAssignment.input:type_name -> groundplane.agent.v1.NetworkWorkInput
-	59,   // 703: groundplane.agent.v1.NetworkWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 704: groundplane.agent.v1.NetworkWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 705: groundplane.agent.v1.NetworkWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 706: groundplane.agent.v1.NetworkWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	59,   // 707: groundplane.agent.v1.NetworkWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 708: groundplane.agent.v1.NetworkWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 709: groundplane.agent.v1.NetworkWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 710: groundplane.agent.v1.NetworkWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 711: groundplane.agent.v1.NetworkWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 712: groundplane.agent.v1.NetworkWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 713: groundplane.agent.v1.NetworkWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 714: groundplane.agent.v1.NetworkWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 715: groundplane.agent.v1.NetworkWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 716: groundplane.agent.v1.NetworkWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	621,  // 717: groundplane.agent.v1.NetworkWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	59,   // 718: groundplane.agent.v1.NetworkWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 719: groundplane.agent.v1.NetworkWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 720: groundplane.agent.v1.NetworkWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 721: groundplane.agent.v1.NetworkWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	302,  // 722: groundplane.agent.v1.ComponentWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.ComponentWorkAssignment
-	62,   // 723: groundplane.agent.v1.ComponentWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	303,  // 724: groundplane.agent.v1.ComponentWorkHelperRequest.report:type_name -> groundplane.agent.v1.ComponentWorkCheckpointRequest
-	304,  // 725: groundplane.agent.v1.ComponentWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ComponentWorkCheckpointAck
-	299,  // 726: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.EntryConfigurationWorkAssignment
-	62,   // 727: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	293,  // 728: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.report:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
-	294,  // 729: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
-	312,  // 730: groundplane.agent.v1.NetworkWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.NetworkWorkAssignment
-	62,   // 731: groundplane.agent.v1.NetworkWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	313,  // 732: groundplane.agent.v1.NetworkWorkHelperRequest.report:type_name -> groundplane.agent.v1.NetworkWorkCheckpointRequest
-	314,  // 733: groundplane.agent.v1.NetworkWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.NetworkWorkCheckpointAck
-	55,   // 734: groundplane.agent.v1.NetworkWorkHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 735: groundplane.agent.v1.NetworkWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	59,   // 736: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	342,  // 737: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.removal:type_name -> groundplane.agent.v1.ServiceLifecycleWorkInput
-	168,  // 738: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	59,   // 739: groundplane.agent.v1.ServiceRemovalConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 740: groundplane.agent.v1.ServiceRemovalConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	168,  // 741: groundplane.agent.v1.ServiceRemovalConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	329,  // 742: groundplane.agent.v1.ServiceRemovalConfigurationManifest.files:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFile
-	59,   // 743: groundplane.agent.v1.ServiceRemovalConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 744: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	168,  // 745: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	329,  // 746: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFile
-	59,   // 747: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 748: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 749: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 750: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	59,   // 751: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 752: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 753: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 754: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 755: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 756: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 757: groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 758: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 759: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 760: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	327,  // 761: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.assignment:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryAssignment
-	62,   // 762: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	333,  // 763: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.report:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
-	334,  // 764: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
-	55,   // 765: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 766: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	59,   // 767: groundplane.agent.v1.ServiceLifecycleAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	342,  // 768: groundplane.agent.v1.ServiceLifecycleAssignment.input:type_name -> groundplane.agent.v1.ServiceLifecycleWorkInput
-	55,   // 769: groundplane.agent.v1.ServiceLifecycleWorkInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
-	25,   // 770: groundplane.agent.v1.ServiceLifecycleWorkInput.action:type_name -> groundplane.agent.v1.ServiceLifecycleAction
-	343,  // 771: groundplane.agent.v1.ServiceLifecycleWorkInput.members:type_name -> groundplane.agent.v1.ServiceLifecycleMember
-	344,  // 772: groundplane.agent.v1.ServiceLifecycleWorkInput.hook:type_name -> groundplane.agent.v1.ServiceLifecycleHook
-	369,  // 773: groundplane.agent.v1.ServiceLifecycleMember.artifact:type_name -> groundplane.agent.v1.ComposeArtifact
-	260,  // 774: groundplane.agent.v1.ServiceLifecycleMember.ownership:type_name -> groundplane.agent.v1.ServiceLifecycleSource
-	20,   // 775: groundplane.agent.v1.ServiceLifecycleHook.event:type_name -> groundplane.agent.v1.BackingHookEvent
-	59,   // 776: groundplane.agent.v1.ServiceLifecycleHookRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 777: groundplane.agent.v1.ServiceLifecycleHookDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	250,  // 778: groundplane.agent.v1.ServiceLifecycleHookDelivery.hook:type_name -> groundplane.agent.v1.BackingHookProcedure
-	59,   // 779: groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 780: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 781: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 782: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 783: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 784: groundplane.agent.v1.ServiceLifecycleCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 785: groundplane.agent.v1.ServiceLifecycleCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 786: groundplane.agent.v1.ServiceLifecycleCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 787: groundplane.agent.v1.ServiceLifecycleCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	59,   // 788: groundplane.agent.v1.ServiceLifecycleCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 789: groundplane.agent.v1.ServiceLifecycleCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 790: groundplane.agent.v1.ServiceLifecycleCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 791: groundplane.agent.v1.ServiceLifecycleCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 792: groundplane.agent.v1.ServiceLifecycleCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 793: groundplane.agent.v1.ServiceLifecycleCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	354,  // 794: groundplane.agent.v1.ServiceLifecycleCompletionAck.stopped:type_name -> groundplane.agent.v1.ServiceLifecycleFailureAck
-	59,   // 795: groundplane.agent.v1.ServiceLifecycleFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 796: groundplane.agent.v1.ServiceLifecycleFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 797: groundplane.agent.v1.ServiceLifecycleFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 798: groundplane.agent.v1.ServiceLifecycleFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	341,  // 799: groundplane.agent.v1.ServiceLifecycleHelperRequest.assignment:type_name -> groundplane.agent.v1.ServiceLifecycleAssignment
-	62,   // 800: groundplane.agent.v1.ServiceLifecycleHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	349,  // 801: groundplane.agent.v1.ServiceLifecycleHelperRequest.report:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointRequest
-	350,  // 802: groundplane.agent.v1.ServiceLifecycleHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointAck
-	55,   // 803: groundplane.agent.v1.ServiceLifecycleHelperResponse.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 804: groundplane.agent.v1.ServiceLifecycleHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	26,   // 805: groundplane.agent.v1.VolumeWorkInput.action:type_name -> groundplane.agent.v1.VolumeWorkAction
-	369,  // 806: groundplane.agent.v1.VolumeWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
-	369,  // 807: groundplane.agent.v1.VolumeWorkInput.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
-	59,   // 808: groundplane.agent.v1.VolumeWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	357,  // 809: groundplane.agent.v1.VolumeWorkAssignment.input:type_name -> groundplane.agent.v1.VolumeWorkInput
-	59,   // 810: groundplane.agent.v1.VolumeWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 811: groundplane.agent.v1.VolumeWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 812: groundplane.agent.v1.VolumeWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 813: groundplane.agent.v1.VolumeWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	59,   // 814: groundplane.agent.v1.VolumeWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 815: groundplane.agent.v1.VolumeWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 816: groundplane.agent.v1.VolumeWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 817: groundplane.agent.v1.VolumeWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 818: groundplane.agent.v1.VolumeWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 819: groundplane.agent.v1.VolumeWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 820: groundplane.agent.v1.VolumeWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 821: groundplane.agent.v1.VolumeWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 822: groundplane.agent.v1.VolumeWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 823: groundplane.agent.v1.VolumeWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	621,  // 824: groundplane.agent.v1.VolumeWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	59,   // 825: groundplane.agent.v1.VolumeWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 826: groundplane.agent.v1.VolumeWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 827: groundplane.agent.v1.VolumeWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 828: groundplane.agent.v1.VolumeWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	358,  // 829: groundplane.agent.v1.VolumeWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.VolumeWorkAssignment
-	62,   // 830: groundplane.agent.v1.VolumeWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	359,  // 831: groundplane.agent.v1.VolumeWorkHelperRequest.report:type_name -> groundplane.agent.v1.VolumeWorkCheckpointRequest
-	360,  // 832: groundplane.agent.v1.VolumeWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.VolumeWorkCheckpointAck
-	55,   // 833: groundplane.agent.v1.VolumeWorkHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 834: groundplane.agent.v1.VolumeWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	27,   // 835: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
-	370,  // 836: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
-	371,  // 837: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
-	372,  // 838: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
-	373,  // 839: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	29,   // 840: groundplane.agent.v1.ComposeService.role:type_name -> groundplane.agent.v1.ComposeServiceRole
-	28,   // 841: groundplane.agent.v1.ComposeService.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
-	373,  // 842: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	373,  // 843: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	569,  // 844: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
-	570,  // 845: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
-	571,  // 846: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
-	572,  // 847: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
-	587,  // 848: groundplane.agent.v1.ExecutionStep.environment_directory_create:type_name -> groundplane.agent.v1.EnvironmentDirectoryCreate
-	568,  // 849: groundplane.agent.v1.ExecutionStep.materialize_file:type_name -> groundplane.agent.v1.MaterializeFile
-	589,  // 850: groundplane.agent.v1.ExecutionStep.managed_volume_directories_ensure:type_name -> groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
-	588,  // 851: groundplane.agent.v1.ExecutionStep.environment_directory_remove:type_name -> groundplane.agent.v1.EnvironmentDirectoryRemove
-	567,  // 852: groundplane.agent.v1.ExecutionStep.adapter_procedure:type_name -> groundplane.agent.v1.AdapterProcedure
-	592,  // 853: groundplane.agent.v1.ExecutionStep.managed_network_remove:type_name -> groundplane.agent.v1.ManagedNetworkRemove
-	573,  // 854: groundplane.agent.v1.ExecutionStep.compose_workload_apply:type_name -> groundplane.agent.v1.ComposeWorkloadApply
-	574,  // 855: groundplane.agent.v1.ExecutionStep.wait_workload_healthy:type_name -> groundplane.agent.v1.WaitWorkloadHealthy
-	579,  // 856: groundplane.agent.v1.ExecutionStep.service_proxy_switch:type_name -> groundplane.agent.v1.ServiceProxySwitch
-	580,  // 857: groundplane.agent.v1.ExecutionStep.service_proxy_probe:type_name -> groundplane.agent.v1.ServiceProxyProbe
-	581,  // 858: groundplane.agent.v1.ExecutionStep.service_proxy_compensate:type_name -> groundplane.agent.v1.ServiceProxyCompensate
-	583,  // 859: groundplane.agent.v1.ExecutionStep.service_recreate_acknowledge:type_name -> groundplane.agent.v1.ServiceRecreateAcknowledge
-	584,  // 860: groundplane.agent.v1.ExecutionStep.service_recreate_probe:type_name -> groundplane.agent.v1.ServiceRecreateProbe
-	585,  // 861: groundplane.agent.v1.ExecutionStep.service_recreate_compensate:type_name -> groundplane.agent.v1.ServiceRecreateCompensate
-	590,  // 862: groundplane.agent.v1.ExecutionStep.managed_volume_remove:type_name -> groundplane.agent.v1.ManagedVolumeRemove
-	591,  // 863: groundplane.agent.v1.ExecutionStep.managed_volume_directory_remove:type_name -> groundplane.agent.v1.ManagedVolumeDirectoryRemove
-	601,  // 864: groundplane.agent.v1.ExecutionStep.component_apply:type_name -> groundplane.agent.v1.ComponentApply
-	603,  // 865: groundplane.agent.v1.ExecutionStep.host_resolution_apply:type_name -> groundplane.agent.v1.HostResolutionApply
-	604,  // 866: groundplane.agent.v1.ExecutionStep.host_resolution_restore:type_name -> groundplane.agent.v1.HostResolutionRestore
-	379,  // 867: groundplane.agent.v1.ExecutionStep.run_script:type_name -> groundplane.agent.v1.RunScript
-	273,  // 868: groundplane.agent.v1.ExecutionStep.candidate_restoration_probe:type_name -> groundplane.agent.v1.CandidateRestorationProbe
-	274,  // 869: groundplane.agent.v1.ExecutionStep.candidate_restoration_compensate:type_name -> groundplane.agent.v1.CandidateRestorationCompensate
-	376,  // 870: groundplane.agent.v1.ExecutionStep.managed_network_ensure:type_name -> groundplane.agent.v1.ManagedNetworkEnsure
-	378,  // 871: groundplane.agent.v1.ExecutionStep.managed_volume_ensure:type_name -> groundplane.agent.v1.ManagedVolumeEnsure
-	250,  // 872: groundplane.agent.v1.ExecutionStep.backing_hook_procedure:type_name -> groundplane.agent.v1.BackingHookProcedure
-	434,  // 873: groundplane.agent.v1.ExecutionStep.backup_step:type_name -> groundplane.agent.v1.BackupStepAuthority
-	375,  // 874: groundplane.agent.v1.ExecutionStep.service_absence_probe:type_name -> groundplane.agent.v1.ServiceAbsenceProbe
-	575,  // 875: groundplane.agent.v1.ExecutionStep.compose_workload_remove:type_name -> groundplane.agent.v1.ComposeWorkloadRemove
-	576,  // 876: groundplane.agent.v1.ExecutionStep.rolling_traffic_switch:type_name -> groundplane.agent.v1.RollingTrafficSwitch
-	577,  // 877: groundplane.agent.v1.ExecutionStep.rolling_replica_drain:type_name -> groundplane.agent.v1.RollingReplicaDrain
-	578,  // 878: groundplane.agent.v1.ExecutionStep.rolling_release_acknowledge:type_name -> groundplane.agent.v1.RollingReleaseAcknowledge
-	377,  // 879: groundplane.agent.v1.ExecutionStep.managed_network_preparation_probe:type_name -> groundplane.agent.v1.ManagedNetworkPreparationProbe
-	31,   // 880: groundplane.agent.v1.ExecutionStep.policy:type_name -> groundplane.agent.v1.ExecutionStepPolicy
-	384,  // 881: groundplane.agent.v1.ResolvedRunnerSnapshot.networks:type_name -> groundplane.agent.v1.ScriptRunnerNetwork
-	386,  // 882: groundplane.agent.v1.ResolvedRunnerSnapshot.mounts:type_name -> groundplane.agent.v1.ScriptRunnerMount
-	391,  // 883: groundplane.agent.v1.ResolvedRunnerSnapshot.entry_bindings:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
-	392,  // 884: groundplane.agent.v1.ResolvedRunnerSnapshot.secret_values:type_name -> groundplane.agent.v1.ScriptRunnerSecretValue
-	387,  // 885: groundplane.agent.v1.ResolvedRunnerSnapshot.service_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
-	387,  // 886: groundplane.agent.v1.ResolvedRunnerSnapshot.network_topology_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
-	387,  // 887: groundplane.agent.v1.ResolvedRunnerSnapshot.applied_environment_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
-	381,  // 888: groundplane.agent.v1.ResolvedRunnerSnapshot.explicit_execution:type_name -> groundplane.agent.v1.ScriptExplicitExecutionAuthority
-	382,  // 889: groundplane.agent.v1.ScriptExplicitExecutionAuthority.context:type_name -> groundplane.agent.v1.ScriptExplicitExecutionContext
-	383,  // 890: groundplane.agent.v1.ScriptExplicitExecutionContext.volumes:type_name -> groundplane.agent.v1.ScriptExplicitVolumeGrant
-	385,  // 891: groundplane.agent.v1.ScriptRunnerNetwork.rendered_attachment:type_name -> groundplane.agent.v1.ScriptNetworkAttachment
-	387,  // 892: groundplane.agent.v1.ScriptRunnerNetwork.source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
-	394,  // 893: groundplane.agent.v1.ScriptNetworkAttachment.driver_options:type_name -> groundplane.agent.v1.ScriptStringPair
-	390,  // 894: groundplane.agent.v1.ScriptRunnerMount.rendered_mount:type_name -> groundplane.agent.v1.ScriptMount
-	387,  // 895: groundplane.agent.v1.ScriptRunnerMount.source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
-	388,  // 896: groundplane.agent.v1.ScriptSourceAuthority.existing:type_name -> groundplane.agent.v1.ScriptExistingSourceAuthority
-	389,  // 897: groundplane.agent.v1.ScriptSourceAuthority.staged:type_name -> groundplane.agent.v1.ScriptStagedSourceAuthority
-	30,   // 898: groundplane.agent.v1.ScriptRunnerEntryBinding.kind:type_name -> groundplane.agent.v1.ScriptEntryBindingKind
-	394,  // 899: groundplane.agent.v1.ScriptRunnerProjection.environment:type_name -> groundplane.agent.v1.ScriptStringPair
-	394,  // 900: groundplane.agent.v1.ScriptRunnerProjection.sysctls:type_name -> groundplane.agent.v1.ScriptStringPair
-	395,  // 901: groundplane.agent.v1.ScriptRunnerProjection.ulimits:type_name -> groundplane.agent.v1.ScriptUlimit
-	396,  // 902: groundplane.agent.v1.ScriptRunnerProjection.blkio:type_name -> groundplane.agent.v1.ScriptBlkio
-	394,  // 903: groundplane.agent.v1.ScriptRunnerProjection.storage_opt:type_name -> groundplane.agent.v1.ScriptStringPair
-	399,  // 904: groundplane.agent.v1.ScriptRunnerProjection.limits:type_name -> groundplane.agent.v1.ScriptResource
-	399,  // 905: groundplane.agent.v1.ScriptRunnerProjection.reservations:type_name -> groundplane.agent.v1.ScriptResource
-	386,  // 906: groundplane.agent.v1.ScriptRunnerProjection.mounts:type_name -> groundplane.agent.v1.ScriptRunnerMount
-	384,  // 907: groundplane.agent.v1.ScriptRunnerProjection.networks:type_name -> groundplane.agent.v1.ScriptRunnerNetwork
-	394,  // 908: groundplane.agent.v1.ScriptRunnerProjection.labels:type_name -> groundplane.agent.v1.ScriptStringPair
-	391,  // 909: groundplane.agent.v1.ScriptRunnerProjection.entry_bindings:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
-	397,  // 910: groundplane.agent.v1.ScriptBlkio.weight_devices:type_name -> groundplane.agent.v1.ScriptWeightDevice
-	398,  // 911: groundplane.agent.v1.ScriptBlkio.device_read_bps:type_name -> groundplane.agent.v1.ScriptThrottleDevice
-	398,  // 912: groundplane.agent.v1.ScriptBlkio.device_read_iops:type_name -> groundplane.agent.v1.ScriptThrottleDevice
-	398,  // 913: groundplane.agent.v1.ScriptBlkio.device_write_bps:type_name -> groundplane.agent.v1.ScriptThrottleDevice
-	398,  // 914: groundplane.agent.v1.ScriptBlkio.device_write_iops:type_name -> groundplane.agent.v1.ScriptThrottleDevice
-	402,  // 915: groundplane.agent.v1.ScriptAssignmentArtifacts.bodies:type_name -> groundplane.agent.v1.ScriptBodyArtifact
-	403,  // 916: groundplane.agent.v1.ScriptAssignmentArtifacts.secrets:type_name -> groundplane.agent.v1.ScriptSecretArtifact
-	404,  // 917: groundplane.agent.v1.ScriptAssignmentArtifacts.entries:type_name -> groundplane.agent.v1.ScriptEntryArtifact
-	400,  // 918: groundplane.agent.v1.ScriptBodyArtifact.metadata:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
-	391,  // 919: groundplane.agent.v1.ScriptEntryArtifact.binding:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
-	32,   // 920: groundplane.agent.v1.BackupResourceIdentity.kind:type_name -> groundplane.agent.v1.BackupResourceKind
-	405,  // 921: groundplane.agent.v1.BackupResourceIdentity.resource:type_name -> groundplane.agent.v1.RevisionDigest
-	33,   // 922: groundplane.agent.v1.BackupEncryptionAuthority.kind:type_name -> groundplane.agent.v1.BackupEncryption
-	405,  // 923: groundplane.agent.v1.BackupEncryptionAuthority.secret_slot:type_name -> groundplane.agent.v1.RevisionDigest
-	34,   // 924: groundplane.agent.v1.BackupPriorRuntimeIntent.kind:type_name -> groundplane.agent.v1.BackupServiceRuntimeIntent
-	405,  // 925: groundplane.agent.v1.BackupPriorRuntimeIntent.intent:type_name -> groundplane.agent.v1.RevisionDigest
-	405,  // 926: groundplane.agent.v1.BackupServiceFact.service:type_name -> groundplane.agent.v1.RevisionDigest
-	405,  // 927: groundplane.agent.v1.BackupServiceFact.compose:type_name -> groundplane.agent.v1.RevisionDigest
-	409,  // 928: groundplane.agent.v1.BackupServiceFact.prior_runtime_intent:type_name -> groundplane.agent.v1.BackupPriorRuntimeIntent
-	405,  // 929: groundplane.agent.v1.BackupConnectorAuthority.connector:type_name -> groundplane.agent.v1.RevisionDigest
-	405,  // 930: groundplane.agent.v1.BackupConnectorAuthority.access_key_slot:type_name -> groundplane.agent.v1.RevisionDigest
-	405,  // 931: groundplane.agent.v1.BackupConnectorAuthority.secret_key_slot:type_name -> groundplane.agent.v1.RevisionDigest
-	411,  // 932: groundplane.agent.v1.BackupObjectTarget.connector:type_name -> groundplane.agent.v1.BackupConnectorAuthority
-	411,  // 933: groundplane.agent.v1.BackupObjectIdentity.connector:type_name -> groundplane.agent.v1.BackupConnectorAuthority
-	413,  // 934: groundplane.agent.v1.BackupObjectIdentity.version_id:type_name -> groundplane.agent.v1.BackupS3VersionId
-	414,  // 935: groundplane.agent.v1.BackupObjectIdentity.etag:type_name -> groundplane.agent.v1.BackupS3ETag
-	405,  // 936: groundplane.agent.v1.BackupTaskAuthority.project:type_name -> groundplane.agent.v1.RevisionDigest
-	405,  // 937: groundplane.agent.v1.BackupTaskAuthority.environment:type_name -> groundplane.agent.v1.RevisionDigest
-	410,  // 938: groundplane.agent.v1.BackupTaskAuthority.services:type_name -> groundplane.agent.v1.BackupServiceFact
-	434,  // 939: groundplane.agent.v1.BackupTaskAuthority.steps:type_name -> groundplane.agent.v1.BackupStepAuthority
-	35,   // 940: groundplane.agent.v1.BackupWorkInput.operation:type_name -> groundplane.agent.v1.BackupWorkOperation
-	405,  // 941: groundplane.agent.v1.BackupWorkInput.project:type_name -> groundplane.agent.v1.RevisionDigest
-	405,  // 942: groundplane.agent.v1.BackupWorkInput.environment:type_name -> groundplane.agent.v1.RevisionDigest
-	410,  // 943: groundplane.agent.v1.BackupWorkInput.services:type_name -> groundplane.agent.v1.BackupServiceFact
-	434,  // 944: groundplane.agent.v1.BackupWorkInput.steps:type_name -> groundplane.agent.v1.BackupStepAuthority
-	369,  // 945: groundplane.agent.v1.BackupWorkInput.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
-	59,   // 946: groundplane.agent.v1.BackupWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	418,  // 947: groundplane.agent.v1.BackupWorkAssignment.input:type_name -> groundplane.agent.v1.BackupWorkInput
-	436,  // 948: groundplane.agent.v1.BackupWorkAssignment.sources:type_name -> groundplane.agent.v1.BackupStepResume
-	419,  // 949: groundplane.agent.v1.BackupConsumerHelperRequest.assignment:type_name -> groundplane.agent.v1.BackupWorkAssignment
-	62,   // 950: groundplane.agent.v1.BackupConsumerHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	52,   // 951: groundplane.agent.v1.BackupConsumerHelperRequest.operation:type_name -> groundplane.agent.v1.BackupConsumerOperation
-	427,  // 952: groundplane.agent.v1.BackupConsumerHelperRequest.checkpoint:type_name -> groundplane.agent.v1.BackupWorkCheckpointRequest
-	432,  // 953: groundplane.agent.v1.BackupConsumerHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.BackupWorkCheckpointAck
-	422,  // 954: groundplane.agent.v1.BackupConsumerHelperRequest.recovery:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
-	59,   // 955: groundplane.agent.v1.BackupConsumerHelperResponse.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	202,  // 956: groundplane.agent.v1.BackupConsumerHelperResponse.observed:type_name -> groundplane.agent.v1.ObservedProject
-	621,  // 957: groundplane.agent.v1.BackupConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	59,   // 958: groundplane.agent.v1.BackupRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	418,  // 959: groundplane.agent.v1.BackupRecoveryAssignment.input:type_name -> groundplane.agent.v1.BackupWorkInput
-	436,  // 960: groundplane.agent.v1.BackupRecoveryAssignment.sources:type_name -> groundplane.agent.v1.BackupStepResume
-	36,   // 961: groundplane.agent.v1.BackupRecoveryAssignment.restore_mode:type_name -> groundplane.agent.v1.BackupRestoreRecoveryMode
-	59,   // 962: groundplane.agent.v1.BackupRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 963: groundplane.agent.v1.BackupConfigRecoveryPrepareRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	422,  // 964: groundplane.agent.v1.BackupConfigRecoveryPrepareAck.assignment:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
-	491,  // 965: groundplane.agent.v1.BackupConfigRecoveryPrepareAck.completed:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
-	59,   // 966: groundplane.agent.v1.BackupRecoveryAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 967: groundplane.agent.v1.BackupRecoveryAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 968: groundplane.agent.v1.BackupRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 969: groundplane.agent.v1.BackupRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 970: groundplane.agent.v1.BackupWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	406,  // 971: groundplane.agent.v1.BackupWorkCheckpointRequest.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
-	482,  // 972: groundplane.agent.v1.BackupWorkCheckpointRequest.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPrepared
-	485,  // 973: groundplane.agent.v1.BackupWorkCheckpointRequest.upload_verified:type_name -> groundplane.agent.v1.BackupUploadVerified
-	486,  // 974: groundplane.agent.v1.BackupWorkCheckpointRequest.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
-	525,  // 975: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
-	526,  // 976: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
-	527,  // 977: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_restore_apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
-	487,  // 978: groundplane.agent.v1.BackupWorkCheckpointRequest.restore_artifact_validated:type_name -> groundplane.agent.v1.BackupRestoreArtifactValidated
-	488,  // 979: groundplane.agent.v1.BackupWorkCheckpointRequest.config:type_name -> groundplane.agent.v1.BackupConfigCheckpoint
-	493,  // 980: groundplane.agent.v1.BackupWorkCheckpointRequest.volume:type_name -> groundplane.agent.v1.BackupVolumeCheckpoint
-	450,  // 981: groundplane.agent.v1.BackupWorkCheckpointRequest.prune_object_deleted:type_name -> groundplane.agent.v1.BackupPruneObjectDeleted
-	528,  // 982: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_restore_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
-	529,  // 983: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_service_progress:type_name -> groundplane.agent.v1.BackupPostgresServiceProgress
-	483,  // 984: groundplane.agent.v1.BackupWorkCheckpointRequest.upload_completed:type_name -> groundplane.agent.v1.BackupUploadCompleted
-	533,  // 985: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
-	534,  // 986: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_dump_start:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
-	535,  // 987: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_restore_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
-	536,  // 988: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_restore_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
-	537,  // 989: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_service_progress:type_name -> groundplane.agent.v1.BackupMySQLServiceProgress
-	441,  // 990: groundplane.agent.v1.BackupWorkCheckpointRequest.database_consumer_recovery:type_name -> groundplane.agent.v1.BackupDatabaseConsumerRecovery
-	59,   // 991: groundplane.agent.v1.BackupWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 992: groundplane.agent.v1.BackupWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	59,   // 993: groundplane.agent.v1.BackupWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 994: groundplane.agent.v1.BackupWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 995: groundplane.agent.v1.BackupWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 996: groundplane.agent.v1.BackupWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 997: groundplane.agent.v1.BackupWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 998: groundplane.agent.v1.BackupWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	55,   // 999: groundplane.agent.v1.BackupWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	621,  // 1000: groundplane.agent.v1.BackupWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 1001: groundplane.agent.v1.BackupWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	59,   // 1002: groundplane.agent.v1.BackupWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	406,  // 1003: groundplane.agent.v1.BackupWorkCheckpointAck.committed:type_name -> groundplane.agent.v1.CheckpointFence
-	436,  // 1004: groundplane.agent.v1.BackupWorkCheckpointAck.source:type_name -> groundplane.agent.v1.BackupStepResume
-	405,  // 1005: groundplane.agent.v1.BackupPlanScope.project:type_name -> groundplane.agent.v1.RevisionDigest
-	405,  // 1006: groundplane.agent.v1.BackupPlanScope.environment:type_name -> groundplane.agent.v1.RevisionDigest
-	410,  // 1007: groundplane.agent.v1.BackupPlanScope.services:type_name -> groundplane.agent.v1.BackupServiceFact
-	444,  // 1008: groundplane.agent.v1.BackupStepAuthority.capture:type_name -> groundplane.agent.v1.BackupCaptureAuthority
-	446,  // 1009: groundplane.agent.v1.BackupStepAuthority.prune:type_name -> groundplane.agent.v1.BackupPruneAuthority
-	445,  // 1010: groundplane.agent.v1.BackupStepAuthority.restore:type_name -> groundplane.agent.v1.BackupRestoreAuthority
-	436,  // 1011: groundplane.agent.v1.BackupTaskResume.steps:type_name -> groundplane.agent.v1.BackupStepResume
-	437,  // 1012: groundplane.agent.v1.BackupStepResume.capture:type_name -> groundplane.agent.v1.BackupCaptureResume
-	438,  // 1013: groundplane.agent.v1.BackupStepResume.prune:type_name -> groundplane.agent.v1.BackupPruneResume
-	439,  // 1014: groundplane.agent.v1.BackupStepResume.restore:type_name -> groundplane.agent.v1.BackupRestoreResume
-	406,  // 1015: groundplane.agent.v1.BackupCaptureResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
-	37,   // 1016: groundplane.agent.v1.BackupCaptureResume.phase:type_name -> groundplane.agent.v1.BackupCapturePhase
-	442,  // 1017: groundplane.agent.v1.BackupCaptureResume.cursor:type_name -> groundplane.agent.v1.BackupCaptureCursor
-	482,  // 1018: groundplane.agent.v1.BackupCaptureResume.prepared_artifact:type_name -> groundplane.agent.v1.BackupArtifactPrepared
-	526,  // 1019: groundplane.agent.v1.BackupCaptureResume.dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
-	534,  // 1020: groundplane.agent.v1.BackupCaptureResume.mysql_dump_start:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
-	482,  // 1021: groundplane.agent.v1.BackupCaptureResume.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPrepared
-	485,  // 1022: groundplane.agent.v1.BackupCaptureResume.upload_verified:type_name -> groundplane.agent.v1.BackupUploadVerified
-	486,  // 1023: groundplane.agent.v1.BackupCaptureResume.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
-	525,  // 1024: groundplane.agent.v1.BackupCaptureResume.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
-	526,  // 1025: groundplane.agent.v1.BackupCaptureResume.postgres_dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
-	494,  // 1026: groundplane.agent.v1.BackupCaptureResume.volume_progress:type_name -> groundplane.agent.v1.BackupVolumeProgress
-	489,  // 1027: groundplane.agent.v1.BackupCaptureResume.config_progress:type_name -> groundplane.agent.v1.BackupConfigProgress
-	483,  // 1028: groundplane.agent.v1.BackupCaptureResume.upload_completed:type_name -> groundplane.agent.v1.BackupUploadCompleted
-	533,  // 1029: groundplane.agent.v1.BackupCaptureResume.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
-	534,  // 1030: groundplane.agent.v1.BackupCaptureResume.mysql_dump_start_checkpoint:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
-	406,  // 1031: groundplane.agent.v1.BackupPruneResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
-	450,  // 1032: groundplane.agent.v1.BackupPruneResume.object_deleted:type_name -> groundplane.agent.v1.BackupPruneObjectDeleted
-	406,  // 1033: groundplane.agent.v1.BackupRestoreResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
-	38,   // 1034: groundplane.agent.v1.BackupRestoreResume.phase:type_name -> groundplane.agent.v1.BackupRestorePhase
-	443,  // 1035: groundplane.agent.v1.BackupRestoreResume.cursor:type_name -> groundplane.agent.v1.BackupRestoreCursor
-	527,  // 1036: groundplane.agent.v1.BackupRestoreResume.apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
-	535,  // 1037: groundplane.agent.v1.BackupRestoreResume.mysql_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
-	440,  // 1038: groundplane.agent.v1.BackupRestoreResume.database_progress:type_name -> groundplane.agent.v1.BackupDatabaseRestoreProgress
-	487,  // 1039: groundplane.agent.v1.BackupRestoreResume.artifact_validated:type_name -> groundplane.agent.v1.BackupRestoreArtifactValidated
-	525,  // 1040: groundplane.agent.v1.BackupRestoreResume.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
-	527,  // 1041: groundplane.agent.v1.BackupRestoreResume.postgres_restore_apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
-	489,  // 1042: groundplane.agent.v1.BackupRestoreResume.config_progress:type_name -> groundplane.agent.v1.BackupConfigProgress
-	494,  // 1043: groundplane.agent.v1.BackupRestoreResume.volume_progress:type_name -> groundplane.agent.v1.BackupVolumeProgress
-	528,  // 1044: groundplane.agent.v1.BackupRestoreResume.postgres_restore_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
-	529,  // 1045: groundplane.agent.v1.BackupRestoreResume.postgres_service_progress:type_name -> groundplane.agent.v1.BackupPostgresServiceProgress
-	486,  // 1046: groundplane.agent.v1.BackupRestoreResume.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
-	533,  // 1047: groundplane.agent.v1.BackupRestoreResume.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
-	535,  // 1048: groundplane.agent.v1.BackupRestoreResume.mysql_restore_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
-	536,  // 1049: groundplane.agent.v1.BackupRestoreResume.mysql_restore_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
-	537,  // 1050: groundplane.agent.v1.BackupRestoreResume.mysql_service_progress:type_name -> groundplane.agent.v1.BackupMySQLServiceProgress
-	44,   // 1051: groundplane.agent.v1.BackupDatabaseRestoreProgress.consumer_phase:type_name -> groundplane.agent.v1.BackupServicePhase
-	525,  // 1052: groundplane.agent.v1.BackupDatabaseRestoreProgress.postgres_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
-	533,  // 1053: groundplane.agent.v1.BackupDatabaseRestoreProgress.mysql_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
-	528,  // 1054: groundplane.agent.v1.BackupDatabaseRestoreProgress.postgres_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
-	536,  // 1055: groundplane.agent.v1.BackupDatabaseRestoreProgress.mysql_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
-	407,  // 1056: groundplane.agent.v1.BackupCaptureAuthority.resource:type_name -> groundplane.agent.v1.BackupResourceIdentity
-	412,  // 1057: groundplane.agent.v1.BackupCaptureAuthority.target:type_name -> groundplane.agent.v1.BackupObjectTarget
-	408,  // 1058: groundplane.agent.v1.BackupCaptureAuthority.encryption:type_name -> groundplane.agent.v1.BackupEncryptionAuthority
-	523,  // 1059: groundplane.agent.v1.BackupCaptureAuthority.postgres:type_name -> groundplane.agent.v1.BackupPostgresCaptureAuthority
-	514,  // 1060: groundplane.agent.v1.BackupCaptureAuthority.config:type_name -> groundplane.agent.v1.BackupConfigCaptureAuthority
-	542,  // 1061: groundplane.agent.v1.BackupCaptureAuthority.volume:type_name -> groundplane.agent.v1.BackupVolumeCaptureAuthority
-	531,  // 1062: groundplane.agent.v1.BackupCaptureAuthority.mysql:type_name -> groundplane.agent.v1.BackupMySQLCaptureAuthority
-	407,  // 1063: groundplane.agent.v1.BackupRestoreAuthority.destination:type_name -> groundplane.agent.v1.BackupResourceIdentity
-	415,  // 1064: groundplane.agent.v1.BackupRestoreAuthority.source_object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	416,  // 1065: groundplane.agent.v1.BackupRestoreAuthority.expected_evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	408,  // 1066: groundplane.agent.v1.BackupRestoreAuthority.encryption:type_name -> groundplane.agent.v1.BackupEncryptionAuthority
-	524,  // 1067: groundplane.agent.v1.BackupRestoreAuthority.postgres:type_name -> groundplane.agent.v1.BackupPostgresRestoreAuthority
-	515,  // 1068: groundplane.agent.v1.BackupRestoreAuthority.config:type_name -> groundplane.agent.v1.BackupConfigRestoreAuthority
-	543,  // 1069: groundplane.agent.v1.BackupRestoreAuthority.volume:type_name -> groundplane.agent.v1.BackupVolumeRestoreAuthority
-	532,  // 1070: groundplane.agent.v1.BackupRestoreAuthority.mysql:type_name -> groundplane.agent.v1.BackupMySQLRestoreAuthority
-	447,  // 1071: groundplane.agent.v1.BackupRestoreAuthority.original_identity:type_name -> groundplane.agent.v1.BackupOriginalIdentity
-	448,  // 1072: groundplane.agent.v1.BackupRestoreAuthority.adopted_identity:type_name -> groundplane.agent.v1.BackupAdoptedIdentity
-	405,  // 1073: groundplane.agent.v1.BackupPruneAuthority.retention_policy:type_name -> groundplane.agent.v1.RevisionDigest
-	449,  // 1074: groundplane.agent.v1.BackupPruneAuthority.objects:type_name -> groundplane.agent.v1.BackupPruneObject
-	407,  // 1075: groundplane.agent.v1.BackupOriginalIdentity.destination:type_name -> groundplane.agent.v1.BackupResourceIdentity
-	406,  // 1076: groundplane.agent.v1.BackupAdoptedIdentity.predecessor_fence:type_name -> groundplane.agent.v1.CheckpointFence
-	405,  // 1077: groundplane.agent.v1.BackupPruneObject.point:type_name -> groundplane.agent.v1.RevisionDigest
-	416,  // 1078: groundplane.agent.v1.BackupPruneObject.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	415,  // 1079: groundplane.agent.v1.BackupPruneObject.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	415,  // 1080: groundplane.agent.v1.BackupPruneObjectDeleted.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	453,  // 1081: groundplane.agent.v1.BackupStagingInventory.entries:type_name -> groundplane.agent.v1.BackupRecoveredStage
-	452,  // 1082: groundplane.agent.v1.BackupStagingInventory.volume_restores:type_name -> groundplane.agent.v1.BackupRecoveredVolumeRestore
-	59,   // 1083: groundplane.agent.v1.BackupRecoveredVolumeRestore.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	454,  // 1084: groundplane.agent.v1.BackupRecoveredStage.files:type_name -> groundplane.agent.v1.BackupRecoveredFile
-	39,   // 1085: groundplane.agent.v1.BackupRecoveredFile.role:type_name -> groundplane.agent.v1.BackupRecoveredFileRole
-	460,  // 1086: groundplane.agent.v1.BackupStagingRecoveryPlan.dispositions:type_name -> groundplane.agent.v1.BackupStagingDisposition
-	456,  // 1087: groundplane.agent.v1.BackupStagingRecoveryPlan.volume_dispositions:type_name -> groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition
-	457,  // 1088: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.resume:type_name -> groundplane.agent.v1.BackupVolumeRestoreResume
-	458,  // 1089: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.hold:type_name -> groundplane.agent.v1.BackupVolumeRestoreHold
-	459,  // 1090: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.cleanup:type_name -> groundplane.agent.v1.BackupVolumeRestoreCleanup
-	462,  // 1091: groundplane.agent.v1.BackupStagingDisposition.resume_prepared:type_name -> groundplane.agent.v1.BackupResumePrepared
-	465,  // 1092: groundplane.agent.v1.BackupStagingDisposition.discard_recovered:type_name -> groundplane.agent.v1.BackupDiscardRecovered
-	466,  // 1093: groundplane.agent.v1.BackupStagingDisposition.recovery_required:type_name -> groundplane.agent.v1.BackupRecoveryRequired
-	461,  // 1094: groundplane.agent.v1.BackupStagingDisposition.database_guard:type_name -> groundplane.agent.v1.BackupDatabaseStagingGuard
-	434,  // 1095: groundplane.agent.v1.BackupDatabaseStagingGuard.step:type_name -> groundplane.agent.v1.BackupStepAuthority
-	410,  // 1096: groundplane.agent.v1.BackupDatabaseStagingGuard.database_service:type_name -> groundplane.agent.v1.BackupServiceFact
-	369,  // 1097: groundplane.agent.v1.BackupDatabaseStagingGuard.database_artifact:type_name -> groundplane.agent.v1.ComposeArtifact
-	527,  // 1098: groundplane.agent.v1.BackupDatabaseStagingGuard.postgres_recovery_apply:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
-	535,  // 1099: groundplane.agent.v1.BackupDatabaseStagingGuard.mysql_recovery_apply:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
-	40,   // 1100: groundplane.agent.v1.BackupResumePrepared.remaining_growth:type_name -> groundplane.agent.v1.BackupRemainingGrowth
-	454,  // 1101: groundplane.agent.v1.BackupResumePrepared.expected_files:type_name -> groundplane.agent.v1.BackupRecoveredFile
-	463,  // 1102: groundplane.agent.v1.BackupResumePrepared.restart_config_encryption:type_name -> groundplane.agent.v1.BackupRestartConfigEncryption
-	464,  // 1103: groundplane.agent.v1.BackupResumePrepared.restart_database_encryption:type_name -> groundplane.agent.v1.BackupRestartDatabaseEncryption
-	454,  // 1104: groundplane.agent.v1.BackupRecoveryRequired.expected_files:type_name -> groundplane.agent.v1.BackupRecoveredFile
-	59,   // 1105: groundplane.agent.v1.BackupConfigTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	469,  // 1106: groundplane.agent.v1.BackupConfigTransfer.start:type_name -> groundplane.agent.v1.BackupConfigTransferStart
-	470,  // 1107: groundplane.agent.v1.BackupConfigTransfer.entry_header:type_name -> groundplane.agent.v1.BackupConfigEntryHeader
-	471,  // 1108: groundplane.agent.v1.BackupConfigTransfer.value_chunk:type_name -> groundplane.agent.v1.BackupConfigValueChunk
-	472,  // 1109: groundplane.agent.v1.BackupConfigTransfer.entry_end:type_name -> groundplane.agent.v1.BackupConfigEntryEnd
-	473,  // 1110: groundplane.agent.v1.BackupConfigTransfer.end:type_name -> groundplane.agent.v1.BackupConfigTransferEnd
-	474,  // 1111: groundplane.agent.v1.BackupConfigTransfer.resume:type_name -> groundplane.agent.v1.BackupConfigTransferResume
-	41,   // 1112: groundplane.agent.v1.BackupConfigTransferStart.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
-	512,  // 1113: groundplane.agent.v1.BackupConfigTransferStart.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
-	496,  // 1114: groundplane.agent.v1.BackupConfigEntryHeader.capture_entry:type_name -> groundplane.agent.v1.BackupConfigEntry
-	504,  // 1115: groundplane.agent.v1.BackupConfigEntryHeader.restore_entry:type_name -> groundplane.agent.v1.BackupConfigRestoreEntry
-	41,   // 1116: groundplane.agent.v1.BackupConfigTransferEnd.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
-	512,  // 1117: groundplane.agent.v1.BackupConfigTransferEnd.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
-	59,   // 1118: groundplane.agent.v1.BackupConfigCredit.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	41,   // 1119: groundplane.agent.v1.BackupConfigCredit.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
-	520,  // 1120: groundplane.agent.v1.BackupConfigCredit.metadata_accepted:type_name -> groundplane.agent.v1.BackupConfigMetadataAccepted
-	521,  // 1121: groundplane.agent.v1.BackupConfigCredit.value_credit:type_name -> groundplane.agent.v1.BackupConfigValueCredit
-	522,  // 1122: groundplane.agent.v1.BackupConfigCredit.metadata_credit:type_name -> groundplane.agent.v1.BackupConfigMetadataCredit
-	59,   // 1123: groundplane.agent.v1.BackupVolumeManifestTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	42,   // 1124: groundplane.agent.v1.BackupVolumeManifestTransfer.direction:type_name -> groundplane.agent.v1.BackupVolumeManifestDirection
-	477,  // 1125: groundplane.agent.v1.BackupVolumeManifestTransfer.start:type_name -> groundplane.agent.v1.BackupVolumeManifestStart
-	478,  // 1126: groundplane.agent.v1.BackupVolumeManifestTransfer.batch:type_name -> groundplane.agent.v1.BackupVolumeManifestBatch
-	479,  // 1127: groundplane.agent.v1.BackupVolumeManifestTransfer.end:type_name -> groundplane.agent.v1.BackupVolumeManifestEnd
-	480,  // 1128: groundplane.agent.v1.BackupVolumeManifestTransfer.resume:type_name -> groundplane.agent.v1.BackupVolumeManifestResume
-	43,   // 1129: groundplane.agent.v1.BackupVolumeManifestStart.role:type_name -> groundplane.agent.v1.BackupVolumeManifestRole
-	544,  // 1130: groundplane.agent.v1.BackupVolumeManifestStart.source_archive:type_name -> groundplane.agent.v1.BackupVolumeSourceArchiveEvidence
-	545,  // 1131: groundplane.agent.v1.BackupVolumeManifestStart.no_source_archive:type_name -> groundplane.agent.v1.BackupVolumeNoSourceArchiveEvidence
-	539,  // 1132: groundplane.agent.v1.BackupVolumeManifestBatch.entries:type_name -> groundplane.agent.v1.BackupVolumeManifestEntry
-	59,   // 1133: groundplane.agent.v1.BackupVolumeManifestAckCredit.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	416,  // 1134: groundplane.agent.v1.BackupArtifactPrepared.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	495,  // 1135: groundplane.agent.v1.BackupArtifactPrepared.finals:type_name -> groundplane.agent.v1.BackupStagingFinals
-	530,  // 1136: groundplane.agent.v1.BackupArtifactPrepared.postgres:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
-	513,  // 1137: groundplane.agent.v1.BackupArtifactPrepared.config:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
-	540,  // 1138: groundplane.agent.v1.BackupArtifactPrepared.volume:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
-	538,  // 1139: groundplane.agent.v1.BackupArtifactPrepared.mysql:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
-	416,  // 1140: groundplane.agent.v1.BackupUploadCompleted.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	412,  // 1141: groundplane.agent.v1.BackupUploadCompleted.target:type_name -> groundplane.agent.v1.BackupObjectTarget
-	415,  // 1142: groundplane.agent.v1.BackupUploadCompleted.returned_object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	484,  // 1143: groundplane.agent.v1.BackupUploadCompleted.unknown:type_name -> groundplane.agent.v1.BackupPutOutcomeUnknown
-	416,  // 1144: groundplane.agent.v1.BackupUploadVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	415,  // 1145: groundplane.agent.v1.BackupUploadVerified.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	416,  // 1146: groundplane.agent.v1.BackupSourceCleanupCompleted.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	415,  // 1147: groundplane.agent.v1.BackupRestoreArtifactValidated.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	416,  // 1148: groundplane.agent.v1.BackupRestoreArtifactValidated.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	495,  // 1149: groundplane.agent.v1.BackupRestoreArtifactValidated.finals:type_name -> groundplane.agent.v1.BackupStagingFinals
-	530,  // 1150: groundplane.agent.v1.BackupRestoreArtifactValidated.postgres:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
-	513,  // 1151: groundplane.agent.v1.BackupRestoreArtifactValidated.config:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
-	540,  // 1152: groundplane.agent.v1.BackupRestoreArtifactValidated.volume:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
-	538,  // 1153: groundplane.agent.v1.BackupRestoreArtifactValidated.mysql:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
-	490,  // 1154: groundplane.agent.v1.BackupConfigCheckpoint.value_progress:type_name -> groundplane.agent.v1.BackupConfigValueProgress
-	491,  // 1155: groundplane.agent.v1.BackupConfigCheckpoint.transfer_completed:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
-	492,  // 1156: groundplane.agent.v1.BackupConfigCheckpoint.materialization_verified:type_name -> groundplane.agent.v1.BackupConfigMaterializationVerified
-	486,  // 1157: groundplane.agent.v1.BackupConfigProgress.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
-	491,  // 1158: groundplane.agent.v1.BackupConfigProgress.transfer:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
-	492,  // 1159: groundplane.agent.v1.BackupConfigProgress.materialization:type_name -> groundplane.agent.v1.BackupConfigMaterializationVerified
-	512,  // 1160: groundplane.agent.v1.BackupConfigTransferCompleted.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
-	546,  // 1161: groundplane.agent.v1.BackupVolumeCheckpoint.consumers_stopped:type_name -> groundplane.agent.v1.BackupConsumersStopped
-	547,  // 1162: groundplane.agent.v1.BackupVolumeCheckpoint.construction_intent:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
-	548,  // 1163: groundplane.agent.v1.BackupVolumeCheckpoint.construction_completed:type_name -> groundplane.agent.v1.BackupVolumeConstructionCompleted
-	549,  // 1164: groundplane.agent.v1.BackupVolumeCheckpoint.finalization_intent:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
-	550,  // 1165: groundplane.agent.v1.BackupVolumeCheckpoint.finalization_completed:type_name -> groundplane.agent.v1.BackupVolumeFinalizationCompleted
-	551,  // 1166: groundplane.agent.v1.BackupVolumeCheckpoint.exchange_intent:type_name -> groundplane.agent.v1.BackupVolumeExchangeIntent
-	552,  // 1167: groundplane.agent.v1.BackupVolumeCheckpoint.tree_exchanged:type_name -> groundplane.agent.v1.BackupVolumeTreeExchanged
-	553,  // 1168: groundplane.agent.v1.BackupVolumeCheckpoint.replaced_path_delete_intent:type_name -> groundplane.agent.v1.BackupVolumeDeleteIntent
-	554,  // 1169: groundplane.agent.v1.BackupVolumeCheckpoint.volume_replaced_path_cleaned:type_name -> groundplane.agent.v1.BackupVolumeReplacedPathCleaned
-	555,  // 1170: groundplane.agent.v1.BackupVolumeCheckpoint.service_progress:type_name -> groundplane.agent.v1.BackupVolumeServiceProgress
-	547,  // 1171: groundplane.agent.v1.BackupVolumeProgress.pending_construction:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
-	549,  // 1172: groundplane.agent.v1.BackupVolumeProgress.pending_finalization:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
-	551,  // 1173: groundplane.agent.v1.BackupVolumeProgress.pending_exchange:type_name -> groundplane.agent.v1.BackupVolumeExchangeIntent
-	553,  // 1174: groundplane.agent.v1.BackupVolumeProgress.pending_delete:type_name -> groundplane.agent.v1.BackupVolumeDeleteIntent
-	44,   // 1175: groundplane.agent.v1.BackupVolumeProgress.service_phase:type_name -> groundplane.agent.v1.BackupServicePhase
-	405,  // 1176: groundplane.agent.v1.BackupConfigEntry.entry:type_name -> groundplane.agent.v1.RevisionDigest
-	497,  // 1177: groundplane.agent.v1.BackupConfigEntry.environment:type_name -> groundplane.agent.v1.BackupConfigEnvironment
-	498,  // 1178: groundplane.agent.v1.BackupConfigEntry.file:type_name -> groundplane.agent.v1.BackupConfigFile
-	499,  // 1179: groundplane.agent.v1.BackupConfigEntry.exposure_all:type_name -> groundplane.agent.v1.BackupConfigExposureAll
-	500,  // 1180: groundplane.agent.v1.BackupConfigEntry.exposure_services:type_name -> groundplane.agent.v1.BackupConfigExposureServices
-	501,  // 1181: groundplane.agent.v1.BackupConfigEntry.literal:type_name -> groundplane.agent.v1.BackupConfigLiteral
-	502,  // 1182: groundplane.agent.v1.BackupConfigEntry.secret_ref:type_name -> groundplane.agent.v1.BackupConfigSecretRef
-	503,  // 1183: groundplane.agent.v1.BackupConfigEntry.fact_ref:type_name -> groundplane.agent.v1.BackupConfigFactRef
-	405,  // 1184: groundplane.agent.v1.BackupConfigSecretRef.secret:type_name -> groundplane.agent.v1.RevisionDigest
-	405,  // 1185: groundplane.agent.v1.BackupConfigFactRef.attach:type_name -> groundplane.agent.v1.RevisionDigest
-	405,  // 1186: groundplane.agent.v1.BackupConfigFactRef.grant_attach:type_name -> groundplane.agent.v1.RevisionDigest
-	505,  // 1187: groundplane.agent.v1.BackupConfigRestoreEntry.metadata:type_name -> groundplane.agent.v1.BackupConfigEntryMetadata
-	506,  // 1188: groundplane.agent.v1.BackupConfigRestoreEntry.exposure:type_name -> groundplane.agent.v1.BackupConfigEntryExposure
-	507,  // 1189: groundplane.agent.v1.BackupConfigRestoreEntry.source:type_name -> groundplane.agent.v1.BackupConfigArtifactDesiredSource
-	511,  // 1190: groundplane.agent.v1.BackupConfigRestoreEntry.selected_value:type_name -> groundplane.agent.v1.BackupConfigSelectedValue
-	497,  // 1191: groundplane.agent.v1.BackupConfigEntryMetadata.environment:type_name -> groundplane.agent.v1.BackupConfigEnvironment
-	498,  // 1192: groundplane.agent.v1.BackupConfigEntryMetadata.file:type_name -> groundplane.agent.v1.BackupConfigFile
-	499,  // 1193: groundplane.agent.v1.BackupConfigEntryExposure.all:type_name -> groundplane.agent.v1.BackupConfigExposureAll
-	500,  // 1194: groundplane.agent.v1.BackupConfigEntryExposure.services:type_name -> groundplane.agent.v1.BackupConfigExposureServices
-	508,  // 1195: groundplane.agent.v1.BackupConfigArtifactDesiredSource.literal:type_name -> groundplane.agent.v1.BackupConfigLiteralSource
-	509,  // 1196: groundplane.agent.v1.BackupConfigArtifactDesiredSource.secret_ref:type_name -> groundplane.agent.v1.BackupConfigArtifactSecretRefSource
-	510,  // 1197: groundplane.agent.v1.BackupConfigArtifactDesiredSource.fact_ref:type_name -> groundplane.agent.v1.BackupConfigArtifactFactSource
-	512,  // 1198: groundplane.agent.v1.BackupConfigArchiveEvidence.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
-	512,  // 1199: groundplane.agent.v1.BackupConfigCaptureAuthority.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
-	513,  // 1200: groundplane.agent.v1.BackupConfigRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
-	516,  // 1201: groundplane.agent.v1.BackupConfigRestoreAuthority.files:type_name -> groundplane.agent.v1.BackupConfigFileContext
-	517,  // 1202: groundplane.agent.v1.BackupConfigFileContext.services:type_name -> groundplane.agent.v1.BackupConfigFileService
-	518,  // 1203: groundplane.agent.v1.BackupConfigFileContext.prior_files:type_name -> groundplane.agent.v1.BackupConfigPriorFile
-	496,  // 1204: groundplane.agent.v1.BackupConfigMetadataRow.capture_entry:type_name -> groundplane.agent.v1.BackupConfigEntry
-	504,  // 1205: groundplane.agent.v1.BackupConfigMetadataRow.restore_entry:type_name -> groundplane.agent.v1.BackupConfigRestoreEntry
-	530,  // 1206: groundplane.agent.v1.BackupPostgresRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
-	189,  // 1207: groundplane.agent.v1.BackupPostgresRestoreAuthority.expected_target_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
-	530,  // 1208: groundplane.agent.v1.BackupPostgresDumpStart.archive:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
-	416,  // 1209: groundplane.agent.v1.BackupPostgresRestoreVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	44,   // 1210: groundplane.agent.v1.BackupPostgresServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
-	538,  // 1211: groundplane.agent.v1.BackupMySQLRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
-	189,  // 1212: groundplane.agent.v1.BackupMySQLRestoreAuthority.expected_target_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
-	538,  // 1213: groundplane.agent.v1.BackupMySQLDumpStart.archive:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
-	416,  // 1214: groundplane.agent.v1.BackupMySQLRestoreVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	44,   // 1215: groundplane.agent.v1.BackupMySQLServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
-	45,   // 1216: groundplane.agent.v1.BackupVolumeManifestEntry.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
-	405,  // 1217: groundplane.agent.v1.BackupVolumeCaptureAuthority.volume:type_name -> groundplane.agent.v1.RevisionDigest
-	541,  // 1218: groundplane.agent.v1.BackupVolumeCaptureAuthority.projection:type_name -> groundplane.agent.v1.BackupVolumeProjectionAuthority
-	405,  // 1219: groundplane.agent.v1.BackupVolumeRestoreAuthority.volume:type_name -> groundplane.agent.v1.RevisionDigest
-	540,  // 1220: groundplane.agent.v1.BackupVolumeRestoreAuthority.archive:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
-	541,  // 1221: groundplane.agent.v1.BackupVolumeRestoreAuthority.projection:type_name -> groundplane.agent.v1.BackupVolumeProjectionAuthority
-	45,   // 1222: groundplane.agent.v1.BackupVolumeConstructionIntent.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
-	547,  // 1223: groundplane.agent.v1.BackupVolumeConstructionCompleted.intent:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
-	549,  // 1224: groundplane.agent.v1.BackupVolumeFinalizationCompleted.intent:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
-	45,   // 1225: groundplane.agent.v1.BackupVolumeDeleteIntent.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
-	45,   // 1226: groundplane.agent.v1.BackupVolumeReplacedPathCleaned.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
-	44,   // 1227: groundplane.agent.v1.BackupVolumeServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
-	59,   // 1228: groundplane.agent.v1.BackupWorkSecretRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	59,   // 1229: groundplane.agent.v1.BackupWorkSecretTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	46,   // 1230: groundplane.agent.v1.BackupWorkSecretTransfer.purpose:type_name -> groundplane.agent.v1.BackupSecretSlotPurpose
-	558,  // 1231: groundplane.agent.v1.BackupWorkSecretTransfer.header:type_name -> groundplane.agent.v1.BackupSecretSlotHeader
-	559,  // 1232: groundplane.agent.v1.BackupWorkSecretTransfer.chunk:type_name -> groundplane.agent.v1.BackupSecretSlotChunk
-	560,  // 1233: groundplane.agent.v1.BackupWorkSecretTransfer.end:type_name -> groundplane.agent.v1.BackupSecretSlotEnd
-	11,   // 1234: groundplane.agent.v1.TaskTerminalReceiptAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
-	11,   // 1235: groundplane.agent.v1.TaskTerminalReceiptApplied.terminal:type_name -> groundplane.agent.v1.TaskTerminal
-	11,   // 1236: groundplane.agent.v1.TaskTerminalReceiptAppliedAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
-	11,   // 1237: groundplane.agent.v1.TaskTerminalAssignmentRetired.terminal:type_name -> groundplane.agent.v1.TaskTerminal
-	11,   // 1238: groundplane.agent.v1.TaskTerminalAssignmentRetiredAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
-	47,   // 1239: groundplane.agent.v1.AdapterProcedure.phase:type_name -> groundplane.agent.v1.AdapterProcedurePhase
-	48,   // 1240: groundplane.agent.v1.AdapterProcedure.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
-	49,   // 1241: groundplane.agent.v1.MaterializeFile.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
-	601,  // 1242: groundplane.agent.v1.CheckDNSConnections.action:type_name -> groundplane.agent.v1.ComponentApply
-	369,  // 1243: groundplane.agent.v1.CheckDNSConnections.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
-	213,  // 1244: groundplane.agent.v1.CheckDNSConnections.prior_observation:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
-	594,  // 1245: groundplane.agent.v1.CheckDNSConnections.queries:type_name -> groundplane.agent.v1.DNSConnectionQuery
-	10,   // 1246: groundplane.agent.v1.DNSConnectionQuery.type:type_name -> groundplane.agent.v1.DNSQueryType
-	10,   // 1247: groundplane.agent.v1.DNSConnectionAnswer.type:type_name -> groundplane.agent.v1.DNSQueryType
-	214,  // 1248: groundplane.agent.v1.DNSConnectionAnswer.answers:type_name -> groundplane.agent.v1.DNSAnswerRecord
-	621,  // 1249: groundplane.agent.v1.DNSConnectionResult.observed_at:type_name -> google.protobuf.Timestamp
-	596,  // 1250: groundplane.agent.v1.DNSConnectionResult.answers:type_name -> groundplane.agent.v1.DNSConnectionAnswer
-	601,  // 1251: groundplane.agent.v1.CheckEdgeConnections.action:type_name -> groundplane.agent.v1.ComponentApply
-	369,  // 1252: groundplane.agent.v1.CheckEdgeConnections.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
-	602,  // 1253: groundplane.agent.v1.ComponentApply.container_config_transition:type_name -> groundplane.agent.v1.ContainerConfigTransition
-	50,   // 1254: groundplane.agent.v1.ManagedConfigHelperRequest.operation:type_name -> groundplane.agent.v1.ManagedConfigOperation
-	50,   // 1255: groundplane.agent.v1.ManagedConfigHelperResponse.operation:type_name -> groundplane.agent.v1.ManagedConfigOperation
-	51,   // 1256: groundplane.agent.v1.ManagedConfigHelperResponse.disposition:type_name -> groundplane.agent.v1.ManagedConfigReplayDisposition
-	253,  // 1257: groundplane.agent.v1.EnvironmentDirectoryHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	253,  // 1258: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	238,  // 1259: groundplane.agent.v1.ComposeHelperRequest.restoration_authority:type_name -> groundplane.agent.v1.ReleaseRestorationAuthority
-	53,   // 1260: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
-	54,   // 1261: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	582,  // 1262: groundplane.agent.v1.ComposeHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
-	586,  // 1263: groundplane.agent.v1.ComposeHelperResponse.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
-	212,  // 1264: groundplane.agent.v1.ComposeHelperResponse.candidate_absence_evidence:type_name -> groundplane.agent.v1.CandidateAbsenceEvidence
-	611,  // 1265: groundplane.agent.v1.ComposeHelperResponse.rolling_proxy_evidence:type_name -> groundplane.agent.v1.RollingProxyEvidence
-	210,  // 1266: groundplane.agent.v1.ComposeHelperResponse.rolling_evidence:type_name -> groundplane.agent.v1.RollingReleaseEvidence
-	11,   // 1267: groundplane.agent.v1.TaskAbort.terminal:type_name -> groundplane.agent.v1.TaskTerminal
-	175,  // 1268: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
-	186,  // 1269: groundplane.agent.v1.CheckBackingAccess.consumer_runtime:type_name -> groundplane.agent.v1.ServiceObservationTarget
-	616,  // 1270: groundplane.agent.v1.CheckBackingAccess.parameters:type_name -> groundplane.agent.v1.BackingAccessParameters
-	619,  // 1271: groundplane.agent.v1.BackingAccessResult.observation:type_name -> groundplane.agent.v1.BackingAccessObservation
-	621,  // 1272: groundplane.agent.v1.BackingAccessObservation.started_at:type_name -> google.protobuf.Timestamp
-	621,  // 1273: groundplane.agent.v1.BackingAccessObservation.finished_at:type_name -> google.protobuf.Timestamp
-	620,  // 1274: groundplane.agent.v1.BackingAccessObservation.stages:type_name -> groundplane.agent.v1.BackingAccessStage
-	177,  // 1275: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
-	218,  // 1276: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
-	1276, // [1276:1277] is the sub-list for method output_type
-	1275, // [1275:1276] is the sub-list for method input_type
-	1275, // [1275:1275] is the sub-list for extension type_name
-	1275, // [1275:1275] is the sub-list for extension extendee
-	0,    // [0:1275] is the sub-list for field type_name
+	61,   // 123: groundplane.agent.v1.AttachConsumerHelperRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	113,  // 124: groundplane.agent.v1.AttachConsumerHelperRequest.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
+	64,   // 125: groundplane.agent.v1.AttachConsumerHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	119,  // 126: groundplane.agent.v1.AttachConsumerHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.AttachRemovalCheckpointAck
+	104,  // 127: groundplane.agent.v1.AttachConsumerHelperRequest.provision_acknowledgement:type_name -> groundplane.agent.v1.AttachProvisionCheckpointAck
+	57,   // 128: groundplane.agent.v1.AttachConsumerHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 129: groundplane.agent.v1.AttachConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	50,   // 130: groundplane.agent.v1.AttachCredentialRemoval.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
+	117,  // 131: groundplane.agent.v1.AttachCredentialRemoval.grants:type_name -> groundplane.agent.v1.AttachGrantRemoval
+	61,   // 132: groundplane.agent.v1.AttachRemovalCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 133: groundplane.agent.v1.AttachRemovalCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 134: groundplane.agent.v1.AttachRemovalCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 135: groundplane.agent.v1.AttachRemovalCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 136: groundplane.agent.v1.AttachRemovalCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 137: groundplane.agent.v1.AttachRemovalCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 138: groundplane.agent.v1.AttachRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 139: groundplane.agent.v1.AttachRemovalFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 140: groundplane.agent.v1.AttachRemovalFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 141: groundplane.agent.v1.AttachRemovalFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 142: groundplane.agent.v1.AttachRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	623,  // 143: groundplane.agent.v1.AttachRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	61,   // 144: groundplane.agent.v1.EnvironmentRemovalCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 145: groundplane.agent.v1.EnvironmentRemovalCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 146: groundplane.agent.v1.EnvironmentRemovalCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 147: groundplane.agent.v1.EnvironmentRemovalCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 148: groundplane.agent.v1.EnvironmentRemovalCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 149: groundplane.agent.v1.EnvironmentRemovalCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 150: groundplane.agent.v1.EnvironmentRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 151: groundplane.agent.v1.EnvironmentRemovalFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 152: groundplane.agent.v1.EnvironmentRemovalFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 153: groundplane.agent.v1.EnvironmentRemovalFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 154: groundplane.agent.v1.EnvironmentRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	623,  // 155: groundplane.agent.v1.EnvironmentRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	65,   // 156: groundplane.agent.v1.EnvironmentRemovalHelperRequest.assignment:type_name -> groundplane.agent.v1.EnvironmentRemovalAssignment
+	64,   // 157: groundplane.agent.v1.EnvironmentRemovalHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	124,  // 158: groundplane.agent.v1.EnvironmentRemovalHelperRequest.report:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointRequest
+	125,  // 159: groundplane.agent.v1.EnvironmentRemovalHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointAck
+	57,   // 160: groundplane.agent.v1.EnvironmentRemovalHelperResponse.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 161: groundplane.agent.v1.EnvironmentRemovalHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	61,   // 162: groundplane.agent.v1.ReleaseWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	168,  // 163: groundplane.agent.v1.ReleaseWorkAssignment.release:type_name -> groundplane.agent.v1.ReleaseWorkInput
+	132,  // 164: groundplane.agent.v1.ReleaseRecoveryAssignment.work:type_name -> groundplane.agent.v1.ReleaseWorkAssignment
+	4,    // 165: groundplane.agent.v1.ReleaseRecoveryAssignment.disposition:type_name -> groundplane.agent.v1.WorkReleaseRecoveryDisposition
+	61,   // 166: groundplane.agent.v1.ReleaseRecoveryCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 167: groundplane.agent.v1.ReleaseRecoveryCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 168: groundplane.agent.v1.ReleaseWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 169: groundplane.agent.v1.ReleaseWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 170: groundplane.agent.v1.ReleaseWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 171: groundplane.agent.v1.ReleaseWorkCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 172: groundplane.agent.v1.ReleaseWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 173: groundplane.agent.v1.ReleaseWorkCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 174: groundplane.agent.v1.ReleaseWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 175: groundplane.agent.v1.ReleaseWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 176: groundplane.agent.v1.ReleaseWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 177: groundplane.agent.v1.ReleaseWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 178: groundplane.agent.v1.ReleaseWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	623,  // 179: groundplane.agent.v1.ReleaseWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	61,   // 180: groundplane.agent.v1.ReleaseEffectEvidenceRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 181: groundplane.agent.v1.ReleaseEffectEvidenceRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 182: groundplane.agent.v1.ReleaseEffectEvidenceAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 183: groundplane.agent.v1.ReleaseEffectEvidenceAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 184: groundplane.agent.v1.ScriptWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	381,  // 185: groundplane.agent.v1.ScriptWorkAssignment.run:type_name -> groundplane.agent.v1.RunScript
+	382,  // 186: groundplane.agent.v1.ScriptWorkAssignment.snapshot:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
+	395,  // 187: groundplane.agent.v1.ScriptWorkAssignment.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
+	404,  // 188: groundplane.agent.v1.ScriptWorkAssignment.body:type_name -> groundplane.agent.v1.ScriptBodyArtifact
+	406,  // 189: groundplane.agent.v1.ScriptWorkAssignment.entries:type_name -> groundplane.agent.v1.ScriptEntryArtifact
+	247,  // 190: groundplane.agent.v1.ScriptWorkAssignment.checkpoint:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
+	61,   // 191: groundplane.agent.v1.ScriptWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	248,  // 192: groundplane.agent.v1.ScriptWorkCheckpointRequest.checkpoint:type_name -> groundplane.agent.v1.ScriptCheckpointRequest
+	61,   // 193: groundplane.agent.v1.ScriptWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	249,  // 194: groundplane.agent.v1.ScriptWorkCheckpointAck.checkpoint:type_name -> groundplane.agent.v1.ScriptCheckpointAck
+	61,   // 195: groundplane.agent.v1.ScriptWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 196: groundplane.agent.v1.ScriptWorkCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 197: groundplane.agent.v1.ScriptWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 198: groundplane.agent.v1.ScriptWorkCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 199: groundplane.agent.v1.ScriptWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 200: groundplane.agent.v1.ScriptRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	395,  // 201: groundplane.agent.v1.ScriptRecoveryAssignment.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
+	174,  // 202: groundplane.agent.v1.ScriptRecoveryAssignment.artifacts:type_name -> groundplane.agent.v1.ScriptCleanupArtifacts
+	61,   // 203: groundplane.agent.v1.ScriptRecoveryCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 204: groundplane.agent.v1.ScriptRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 205: groundplane.agent.v1.ScriptRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 206: groundplane.agent.v1.ScriptRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 207: groundplane.agent.v1.ScriptRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 208: groundplane.agent.v1.ScriptWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 209: groundplane.agent.v1.ScriptWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 210: groundplane.agent.v1.ScriptWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 211: groundplane.agent.v1.ScriptWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 212: groundplane.agent.v1.ReleaseConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 213: groundplane.agent.v1.ComponentConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 214: groundplane.agent.v1.ComponentConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	170,  // 215: groundplane.agent.v1.ComponentConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	156,  // 216: groundplane.agent.v1.ComponentConfigurationManifest.files:type_name -> groundplane.agent.v1.ComponentConfigurationFile
+	61,   // 217: groundplane.agent.v1.ComponentConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 218: groundplane.agent.v1.ComponentConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	170,  // 219: groundplane.agent.v1.ComponentConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	156,  // 220: groundplane.agent.v1.ComponentConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.ComponentConfigurationFile
+	61,   // 221: groundplane.agent.v1.ReleaseConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	170,  // 222: groundplane.agent.v1.ReleaseConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	160,  // 223: groundplane.agent.v1.ReleaseConfigurationManifest.files:type_name -> groundplane.agent.v1.ReleaseConfigurationFile
+	61,   // 224: groundplane.agent.v1.ReleaseConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 225: groundplane.agent.v1.ReleaseConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	170,  // 226: groundplane.agent.v1.ReleaseConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	160,  // 227: groundplane.agent.v1.ReleaseConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.ReleaseConfigurationFile
+	132,  // 228: groundplane.agent.v1.ReleaseHelperRequest.assignment:type_name -> groundplane.agent.v1.ReleaseWorkAssignment
+	64,   // 229: groundplane.agent.v1.ReleaseHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	136,  // 230: groundplane.agent.v1.ReleaseHelperRequest.report:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointRequest
+	137,  // 231: groundplane.agent.v1.ReleaseHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointAck
+	584,  // 232: groundplane.agent.v1.ReleaseHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
+	133,  // 233: groundplane.agent.v1.ReleaseRecoveryHelperRequest.assignment:type_name -> groundplane.agent.v1.ReleaseRecoveryAssignment
+	64,   // 234: groundplane.agent.v1.ReleaseRecoveryHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	134,  // 235: groundplane.agent.v1.ReleaseRecoveryHelperRequest.report:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointRequest
+	135,  // 236: groundplane.agent.v1.ReleaseRecoveryHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointAck
+	2,    // 237: groundplane.agent.v1.ReleaseWorkInput.strategy:type_name -> groundplane.agent.v1.WorkReleaseStrategy
+	371,  // 238: groundplane.agent.v1.ReleaseWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	169,  // 239: groundplane.agent.v1.ReleaseWorkInput.predecessor:type_name -> groundplane.agent.v1.ReleaseWorkPredecessor
+	170,  // 240: groundplane.agent.v1.ReleaseWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	170,  // 241: groundplane.agent.v1.ReleaseWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	171,  // 242: groundplane.agent.v1.ReleaseWorkInput.hooks:type_name -> groundplane.agent.v1.ReleaseWorkHook
+	175,  // 243: groundplane.agent.v1.ReleaseWorkInput.rolling:type_name -> groundplane.agent.v1.ReleaseWorkRolling
+	3,    // 244: groundplane.agent.v1.ReleaseWorkInput.failure_policy:type_name -> groundplane.agent.v1.WorkReleaseFailurePolicy
+	57,   // 245: groundplane.agent.v1.ReleaseWorkHook.input:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 246: groundplane.agent.v1.ReleaseHookRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 247: groundplane.agent.v1.ReleaseHookDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 248: groundplane.agent.v1.ReleaseHookDelivery.input:type_name -> groundplane.agent.v1.WorkInputReference
+	381,  // 249: groundplane.agent.v1.ReleaseHookDelivery.run:type_name -> groundplane.agent.v1.RunScript
+	382,  // 250: groundplane.agent.v1.ReleaseHookDelivery.snapshot:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
+	395,  // 251: groundplane.agent.v1.ReleaseHookDelivery.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
+	404,  // 252: groundplane.agent.v1.ReleaseHookDelivery.body:type_name -> groundplane.agent.v1.ScriptBodyArtifact
+	406,  // 253: groundplane.agent.v1.ReleaseHookDelivery.entries:type_name -> groundplane.agent.v1.ScriptEntryArtifact
+	247,  // 254: groundplane.agent.v1.ReleaseHookDelivery.checkpoint:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
+	174,  // 255: groundplane.agent.v1.ReleaseHookDelivery.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupArtifacts
+	57,   // 256: groundplane.agent.v1.ReleaseHookDelivery.interrupted_cleanup:type_name -> groundplane.agent.v1.WorkInputReference
+	402,  // 257: groundplane.agent.v1.ScriptCleanupArtifacts.body_metadata:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
+	243,  // 258: groundplane.agent.v1.ScriptCleanupArtifacts.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
+	244,  // 259: groundplane.agent.v1.ScriptCleanupArtifacts.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
+	270,  // 260: groundplane.agent.v1.ReleaseWorkRolling.prior:type_name -> groundplane.agent.v1.RollingReplica
+	270,  // 261: groundplane.agent.v1.ReleaseWorkRolling.candidate:type_name -> groundplane.agent.v1.RollingReplica
+	270,  // 262: groundplane.agent.v1.ReleaseWorkRolling.retained:type_name -> groundplane.agent.v1.RollingReplica
+	178,  // 263: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentLabel
+	176,  // 264: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
+	180,  // 265: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
+	203,  // 266: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
+	226,  // 267: groundplane.agent.v1.AgentMessage.log_event:type_name -> groundplane.agent.v1.LogEvent
+	227,  // 268: groundplane.agent.v1.AgentMessage.log_end:type_name -> groundplane.agent.v1.LogEnd
+	225,  // 269: groundplane.agent.v1.AgentMessage.log_ready:type_name -> groundplane.agent.v1.LogReady
+	187,  // 270: groundplane.agent.v1.AgentMessage.workload_image_resolution_result:type_name -> groundplane.agent.v1.WorkloadImageResolutionResult
+	197,  // 271: groundplane.agent.v1.AgentMessage.service_observation_result:type_name -> groundplane.agent.v1.ServiceObservationResult
+	620,  // 272: groundplane.agent.v1.AgentMessage.backing_access_result:type_name -> groundplane.agent.v1.BackingAccessResult
+	599,  // 273: groundplane.agent.v1.AgentMessage.dns_connection_result:type_name -> groundplane.agent.v1.DNSConnectionResult
+	602,  // 274: groundplane.agent.v1.AgentMessage.edge_connection_result:type_name -> groundplane.agent.v1.EdgeConnectionResult
+	470,  // 275: groundplane.agent.v1.AgentMessage.backup_config_transfer:type_name -> groundplane.agent.v1.BackupConfigTransfer
+	477,  // 276: groundplane.agent.v1.AgentMessage.backup_config_credit:type_name -> groundplane.agent.v1.BackupConfigCredit
+	453,  // 277: groundplane.agent.v1.AgentMessage.backup_staging_inventory:type_name -> groundplane.agent.v1.BackupStagingInventory
+	469,  // 278: groundplane.agent.v1.AgentMessage.backup_staging_recovery_ack:type_name -> groundplane.agent.v1.BackupStagingRecoveryAck
+	478,  // 279: groundplane.agent.v1.AgentMessage.backup_volume_manifest_transfer:type_name -> groundplane.agent.v1.BackupVolumeManifestTransfer
+	483,  // 280: groundplane.agent.v1.AgentMessage.backup_volume_manifest_ack_credit:type_name -> groundplane.agent.v1.BackupVolumeManifestAckCredit
+	62,   // 281: groundplane.agent.v1.AgentMessage.work_start_request:type_name -> groundplane.agent.v1.WorkStartRequest
+	136,  // 282: groundplane.agent.v1.AgentMessage.release_work_checkpoint_request:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointRequest
+	172,  // 283: groundplane.agent.v1.AgentMessage.release_hook_request:type_name -> groundplane.agent.v1.ReleaseHookRequest
+	142,  // 284: groundplane.agent.v1.AgentMessage.release_effect_evidence_request:type_name -> groundplane.agent.v1.ReleaseEffectEvidenceRequest
+	145,  // 285: groundplane.agent.v1.AgentMessage.script_work_checkpoint_request:type_name -> groundplane.agent.v1.ScriptWorkCheckpointRequest
+	154,  // 286: groundplane.agent.v1.AgentMessage.release_configuration_request:type_name -> groundplane.agent.v1.ReleaseConfigurationRequest
+	162,  // 287: groundplane.agent.v1.AgentMessage.release_configuration_file_request:type_name -> groundplane.agent.v1.ReleaseConfigurationFileRequest
+	138,  // 288: groundplane.agent.v1.AgentMessage.release_work_completion_request:type_name -> groundplane.agent.v1.ReleaseWorkCompletionRequest
+	140,  // 289: groundplane.agent.v1.AgentMessage.release_work_failure_request:type_name -> groundplane.agent.v1.ReleaseWorkFailureRequest
+	134,  // 290: groundplane.agent.v1.AgentMessage.release_recovery_checkpoint_request:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointRequest
+	147,  // 291: groundplane.agent.v1.AgentMessage.script_work_completion_request:type_name -> groundplane.agent.v1.ScriptWorkCompletionRequest
+	150,  // 292: groundplane.agent.v1.AgentMessage.script_recovery_completion_request:type_name -> groundplane.agent.v1.ScriptRecoveryCompletionRequest
+	152,  // 293: groundplane.agent.v1.AgentMessage.script_work_failure_request:type_name -> groundplane.agent.v1.ScriptWorkFailureRequest
+	124,  // 294: groundplane.agent.v1.AgentMessage.environment_removal_checkpoint_request:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointRequest
+	126,  // 295: groundplane.agent.v1.AgentMessage.environment_removal_completion_request:type_name -> groundplane.agent.v1.EnvironmentRemovalCompletionRequest
+	128,  // 296: groundplane.agent.v1.AgentMessage.environment_removal_failure_request:type_name -> groundplane.agent.v1.EnvironmentRemovalFailureRequest
+	118,  // 297: groundplane.agent.v1.AgentMessage.attach_removal_checkpoint_request:type_name -> groundplane.agent.v1.AttachRemovalCheckpointRequest
+	120,  // 298: groundplane.agent.v1.AgentMessage.attach_removal_completion_request:type_name -> groundplane.agent.v1.AttachRemovalCompletionRequest
+	122,  // 299: groundplane.agent.v1.AgentMessage.attach_removal_failure_request:type_name -> groundplane.agent.v1.AttachRemovalFailureRequest
+	95,   // 300: groundplane.agent.v1.AgentMessage.attach_recovery_completion_request:type_name -> groundplane.agent.v1.AttachRecoveryCompletionRequest
+	361,  // 301: groundplane.agent.v1.AgentMessage.volume_work_checkpoint_request:type_name -> groundplane.agent.v1.VolumeWorkCheckpointRequest
+	363,  // 302: groundplane.agent.v1.AgentMessage.volume_work_completion_request:type_name -> groundplane.agent.v1.VolumeWorkCompletionRequest
+	365,  // 303: groundplane.agent.v1.AgentMessage.volume_work_failure_request:type_name -> groundplane.agent.v1.VolumeWorkFailureRequest
+	367,  // 304: groundplane.agent.v1.AgentMessage.volume_work_recovery_report_request:type_name -> groundplane.agent.v1.VolumeWorkRecoveryReportRequest
+	315,  // 305: groundplane.agent.v1.AgentMessage.network_work_checkpoint_request:type_name -> groundplane.agent.v1.NetworkWorkCheckpointRequest
+	317,  // 306: groundplane.agent.v1.AgentMessage.network_work_completion_request:type_name -> groundplane.agent.v1.NetworkWorkCompletionRequest
+	319,  // 307: groundplane.agent.v1.AgentMessage.network_work_failure_request:type_name -> groundplane.agent.v1.NetworkWorkFailureRequest
+	321,  // 308: groundplane.agent.v1.AgentMessage.network_work_recovery_report_request:type_name -> groundplane.agent.v1.NetworkWorkRecoveryReportRequest
+	305,  // 309: groundplane.agent.v1.AgentMessage.component_work_checkpoint_request:type_name -> groundplane.agent.v1.ComponentWorkCheckpointRequest
+	307,  // 310: groundplane.agent.v1.AgentMessage.component_work_completion_request:type_name -> groundplane.agent.v1.ComponentWorkCompletionRequest
+	309,  // 311: groundplane.agent.v1.AgentMessage.component_work_failure_request:type_name -> groundplane.agent.v1.ComponentWorkFailureRequest
+	311,  // 312: groundplane.agent.v1.AgentMessage.component_work_recovery_report_request:type_name -> groundplane.agent.v1.ComponentWorkRecoveryReportRequest
+	155,  // 313: groundplane.agent.v1.AgentMessage.component_configuration_request:type_name -> groundplane.agent.v1.ComponentConfigurationRequest
+	158,  // 314: groundplane.agent.v1.AgentMessage.component_configuration_file_request:type_name -> groundplane.agent.v1.ComponentConfigurationFileRequest
+	295,  // 315: groundplane.agent.v1.AgentMessage.entry_configuration_work_checkpoint_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
+	297,  // 316: groundplane.agent.v1.AgentMessage.entry_configuration_work_completion_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkCompletionRequest
+	299,  // 317: groundplane.agent.v1.AgentMessage.entry_configuration_work_failure_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkFailureRequest
+	290,  // 318: groundplane.agent.v1.AgentMessage.entry_configuration_request:type_name -> groundplane.agent.v1.EntryConfigurationRequest
+	293,  // 319: groundplane.agent.v1.AgentMessage.entry_configuration_file_request:type_name -> groundplane.agent.v1.EntryConfigurationFileRequest
+	302,  // 320: groundplane.agent.v1.AgentMessage.entry_configuration_work_recovery_report_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest
+	103,  // 321: groundplane.agent.v1.AgentMessage.attach_provision_checkpoint_request:type_name -> groundplane.agent.v1.AttachProvisionCheckpointRequest
+	105,  // 322: groundplane.agent.v1.AgentMessage.attach_provision_completion_request:type_name -> groundplane.agent.v1.AttachProvisionCompletionRequest
+	107,  // 323: groundplane.agent.v1.AgentMessage.attach_provision_failure_request:type_name -> groundplane.agent.v1.AttachProvisionFailureRequest
+	97,   // 324: groundplane.agent.v1.AgentMessage.attach_provision_facts_request:type_name -> groundplane.agent.v1.AttachProvisionFactsRequest
+	101,  // 325: groundplane.agent.v1.AgentMessage.attach_provision_recovery_report_request:type_name -> groundplane.agent.v1.AttachProvisionRecoveryReportRequest
+	351,  // 326: groundplane.agent.v1.AgentMessage.service_lifecycle_checkpoint_request:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointRequest
+	353,  // 327: groundplane.agent.v1.AgentMessage.service_lifecycle_completion_request:type_name -> groundplane.agent.v1.ServiceLifecycleCompletionRequest
+	355,  // 328: groundplane.agent.v1.AgentMessage.service_lifecycle_failure_request:type_name -> groundplane.agent.v1.ServiceLifecycleFailureRequest
+	347,  // 329: groundplane.agent.v1.AgentMessage.service_lifecycle_hook_request:type_name -> groundplane.agent.v1.ServiceLifecycleHookRequest
+	349,  // 330: groundplane.agent.v1.AgentMessage.service_lifecycle_recovery_report_request:type_name -> groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest
+	335,  // 331: groundplane.agent.v1.AgentMessage.service_removal_recovery_checkpoint_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
+	337,  // 332: groundplane.agent.v1.AgentMessage.service_removal_recovery_completion_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest
+	339,  // 333: groundplane.agent.v1.AgentMessage.service_removal_recovery_failure_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest
+	330,  // 334: groundplane.agent.v1.AgentMessage.service_removal_configuration_request:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationRequest
+	333,  // 335: groundplane.agent.v1.AgentMessage.service_removal_configuration_file_request:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFileRequest
+	429,  // 336: groundplane.agent.v1.AgentMessage.backup_work_checkpoint_request:type_name -> groundplane.agent.v1.BackupWorkCheckpointRequest
+	430,  // 337: groundplane.agent.v1.AgentMessage.backup_work_completion_request:type_name -> groundplane.agent.v1.BackupWorkCompletionRequest
+	558,  // 338: groundplane.agent.v1.AgentMessage.backup_work_secret_request:type_name -> groundplane.agent.v1.BackupWorkSecretRequest
+	431,  // 339: groundplane.agent.v1.AgentMessage.backup_work_failure_request:type_name -> groundplane.agent.v1.BackupWorkFailureRequest
+	425,  // 340: groundplane.agent.v1.AgentMessage.backup_recovery_request:type_name -> groundplane.agent.v1.BackupRecoveryRequest
+	426,  // 341: groundplane.agent.v1.AgentMessage.backup_config_recovery_prepare_request:type_name -> groundplane.agent.v1.BackupConfigRecoveryPrepareRequest
+	89,   // 342: groundplane.agent.v1.AgentMessage.environment_provision_result_request:type_name -> groundplane.agent.v1.EnvironmentProvisionResultRequest
+	71,   // 343: groundplane.agent.v1.AgentMessage.backing_provision_checkpoint_request:type_name -> groundplane.agent.v1.BackingProvisionCheckpointRequest
+	73,   // 344: groundplane.agent.v1.AgentMessage.backing_provision_completion_request:type_name -> groundplane.agent.v1.BackingProvisionCompletionRequest
+	75,   // 345: groundplane.agent.v1.AgentMessage.backing_provision_failure_request:type_name -> groundplane.agent.v1.BackingProvisionFailureRequest
+	77,   // 346: groundplane.agent.v1.AgentMessage.backing_provision_configuration_request:type_name -> groundplane.agent.v1.BackingProvisionConfigurationRequest
+	79,   // 347: groundplane.agent.v1.AgentMessage.backing_provision_file_request:type_name -> groundplane.agent.v1.BackingProvisionFileRequest
+	81,   // 348: groundplane.agent.v1.AgentMessage.backing_provision_hook_request:type_name -> groundplane.agent.v1.BackingProvisionHookRequest
+	83,   // 349: groundplane.agent.v1.AgentMessage.backing_provision_recovery_request:type_name -> groundplane.agent.v1.BackingProvisionRecoveryRequest
+	279,  // 350: groundplane.agent.v1.AgentMessage.resolver_work_checkpoint_request:type_name -> groundplane.agent.v1.ResolverWorkCheckpointRequest
+	281,  // 351: groundplane.agent.v1.AgentMessage.resolver_work_completion_request:type_name -> groundplane.agent.v1.ResolverWorkCompletionRequest
+	282,  // 352: groundplane.agent.v1.AgentMessage.resolver_work_failure_request:type_name -> groundplane.agent.v1.ResolverWorkFailureRequest
+	283,  // 353: groundplane.agent.v1.AgentMessage.resolver_work_recovery_request:type_name -> groundplane.agent.v1.ResolverWorkRecoveryRequest
+	59,   // 354: groundplane.agent.v1.AgentMessage.work_journal_replay_request:type_name -> groundplane.agent.v1.WorkJournalReplayRequest
+	181,  // 355: groundplane.agent.v1.Ready.source:type_name -> groundplane.agent.v1.BuildProvenance
+	182,  // 356: groundplane.agent.v1.ResolveWorkloadImages.selectors:type_name -> groundplane.agent.v1.WorkloadImageSelector
+	182,  // 357: groundplane.agent.v1.WorkloadImageResolution.selector:type_name -> groundplane.agent.v1.WorkloadImageSelector
+	184,  // 358: groundplane.agent.v1.WorkloadImageResolutions.resolutions:type_name -> groundplane.agent.v1.WorkloadImageResolution
+	5,    // 359: groundplane.agent.v1.WorkloadImageResolutionFailure.kind:type_name -> groundplane.agent.v1.WorkloadImageResolutionFailureKind
+	185,  // 360: groundplane.agent.v1.WorkloadImageResolutionResult.success:type_name -> groundplane.agent.v1.WorkloadImageResolutions
+	186,  // 361: groundplane.agent.v1.WorkloadImageResolutionResult.failure:type_name -> groundplane.agent.v1.WorkloadImageResolutionFailure
+	189,  // 362: groundplane.agent.v1.ServiceObservationTarget.workloads:type_name -> groundplane.agent.v1.ServiceWorkloadObservation
+	190,  // 363: groundplane.agent.v1.ServiceObservationTarget.database_probe:type_name -> groundplane.agent.v1.DatabaseVersionProbe
+	30,   // 364: groundplane.agent.v1.ServiceObservationTarget.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
+	436,  // 365: groundplane.agent.v1.DatabaseVersionProbe.authority:type_name -> groundplane.agent.v1.BackupStepAuthority
+	412,  // 366: groundplane.agent.v1.DatabaseVersionProbe.services:type_name -> groundplane.agent.v1.BackupServiceFact
+	371,  // 367: groundplane.agent.v1.DatabaseVersionProbe.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
+	188,  // 368: groundplane.agent.v1.ObserveServices.targets:type_name -> groundplane.agent.v1.ServiceObservationTarget
+	194,  // 369: groundplane.agent.v1.ServiceObservationRow.replicas:type_name -> groundplane.agent.v1.ServiceReplicaCounts
+	6,    // 370: groundplane.agent.v1.ServiceObservationRow.proxy_state:type_name -> groundplane.agent.v1.ServiceProxyObservationState
+	196,  // 371: groundplane.agent.v1.ServiceObservationRow.containers:type_name -> groundplane.agent.v1.ServiceContainerObservation
+	191,  // 372: groundplane.agent.v1.ServiceObservationRow.database_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
+	195,  // 373: groundplane.agent.v1.ServiceObservationResult.observations:type_name -> groundplane.agent.v1.ServiceObservationRow
+	8,    // 374: groundplane.agent.v1.TaskEvent.state:type_name -> groundplane.agent.v1.TaskState
+	200,  // 375: groundplane.agent.v1.TaskEvent.health_wait:type_name -> groundplane.agent.v1.HealthWaitProgress
+	199,  // 376: groundplane.agent.v1.TaskEvent.failure:type_name -> groundplane.agent.v1.StepFailure
+	56,   // 377: groundplane.agent.v1.HealthWaitProgress.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	8,    // 378: groundplane.agent.v1.TaskEventAck.state:type_name -> groundplane.agent.v1.TaskState
+	202,  // 379: groundplane.agent.v1.TaskEventAck.rolling_budget:type_name -> groundplane.agent.v1.RollingStepBudget
+	7,    // 380: groundplane.agent.v1.TaskEventAck.start_decision:type_name -> groundplane.agent.v1.StepStartDecision
+	623,  // 381: groundplane.agent.v1.RollingStepBudget.deadline:type_name -> google.protobuf.Timestamp
+	623,  // 382: groundplane.agent.v1.RollingStepBudget.drain_until:type_name -> google.protobuf.Timestamp
+	204,  // 383: groundplane.agent.v1.ObservedState.projects:type_name -> groundplane.agent.v1.ObservedProject
+	623,  // 384: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
+	205,  // 385: groundplane.agent.v1.ObservedProject.containers:type_name -> groundplane.agent.v1.ObservedContainer
+	206,  // 386: groundplane.agent.v1.ObservedProject.networks:type_name -> groundplane.agent.v1.ObservedNetwork
+	207,  // 387: groundplane.agent.v1.ObservedProject.volumes:type_name -> groundplane.agent.v1.ObservedVolume
+	208,  // 388: groundplane.agent.v1.ObservedProject.collisions:type_name -> groundplane.agent.v1.ObservedCollision
+	9,    // 389: groundplane.agent.v1.ObservedContainer.state:type_name -> groundplane.agent.v1.ObservedContainerState
+	10,   // 390: groundplane.agent.v1.ObservedContainer.health:type_name -> groundplane.agent.v1.ObservedContainerHealth
+	375,  // 391: groundplane.agent.v1.ObservedContainer.labels:type_name -> groundplane.agent.v1.LabelPair
+	56,   // 392: groundplane.agent.v1.ObservedContainer.healthcheck_diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	375,  // 393: groundplane.agent.v1.ObservedNetwork.labels:type_name -> groundplane.agent.v1.LabelPair
+	375,  // 394: groundplane.agent.v1.ObservedVolume.labels:type_name -> groundplane.agent.v1.LabelPair
+	11,   // 395: groundplane.agent.v1.ObservedCollision.kind:type_name -> groundplane.agent.v1.ObservedCollisionKind
+	13,   // 396: groundplane.agent.v1.TaskAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
+	211,  // 397: groundplane.agent.v1.TaskAck.compose_result:type_name -> groundplane.agent.v1.ComposeTaskResult
+	219,  // 398: groundplane.agent.v1.TaskAck.environment_directory_result:type_name -> groundplane.agent.v1.EnvironmentDirectoryTaskResult
+	210,  // 399: groundplane.agent.v1.TaskAck.backup_result:type_name -> groundplane.agent.v1.BackupTaskResult
+	199,  // 400: groundplane.agent.v1.BackupTaskResult.failure:type_name -> groundplane.agent.v1.StepFailure
+	204,  // 401: groundplane.agent.v1.ComposeTaskResult.projects:type_name -> groundplane.agent.v1.ObservedProject
+	56,   // 402: groundplane.agent.v1.ComposeTaskResult.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	584,  // 403: groundplane.agent.v1.ComposeTaskResult.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
+	588,  // 404: groundplane.agent.v1.ComposeTaskResult.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
+	215,  // 405: groundplane.agent.v1.ComposeTaskResult.dns_resolver_candidate_observation:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
+	215,  // 406: groundplane.agent.v1.ComposeTaskResult.dns_resolver_rollback_observation:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
+	214,  // 407: groundplane.agent.v1.ComposeTaskResult.candidate_absence_evidence:type_name -> groundplane.agent.v1.CandidateAbsenceEvidence
+	213,  // 408: groundplane.agent.v1.ComposeTaskResult.service_absence_evidence:type_name -> groundplane.agent.v1.ServiceAbsenceEvidence
+	199,  // 409: groundplane.agent.v1.ComposeTaskResult.failure:type_name -> groundplane.agent.v1.StepFailure
+	212,  // 410: groundplane.agent.v1.ComposeTaskResult.rolling_evidence:type_name -> groundplane.agent.v1.RollingReleaseEvidence
+	274,  // 411: groundplane.agent.v1.CandidateAbsenceEvidence.candidates:type_name -> groundplane.agent.v1.CandidateReleaseService
+	623,  // 412: groundplane.agent.v1.DNSResolverObservationEvidence.observed_at:type_name -> google.protobuf.Timestamp
+	218,  // 413: groundplane.agent.v1.DNSResolverObservationEvidence.static_query:type_name -> groundplane.agent.v1.DNSQueryProof
+	218,  // 414: groundplane.agent.v1.DNSResolverObservationEvidence.catch_all_query:type_name -> groundplane.agent.v1.DNSQueryProof
+	218,  // 415: groundplane.agent.v1.DNSResolverObservationEvidence.forwarder_queries:type_name -> groundplane.agent.v1.DNSQueryProof
+	12,   // 416: groundplane.agent.v1.DNSAnswerRecord.type:type_name -> groundplane.agent.v1.DNSQueryType
+	12,   // 417: groundplane.agent.v1.DNSQueryProof.type:type_name -> groundplane.agent.v1.DNSQueryType
+	216,  // 418: groundplane.agent.v1.DNSQueryProof.answers:type_name -> groundplane.agent.v1.DNSAnswerRecord
+	217,  // 419: groundplane.agent.v1.DNSQueryProof.counters:type_name -> groundplane.agent.v1.DNSForwardCounter
+	199,  // 420: groundplane.agent.v1.EnvironmentDirectoryTaskResult.failure:type_name -> groundplane.agent.v1.StepFailure
+	615,  // 421: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
+	616,  // 422: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
+	222,  // 423: groundplane.agent.v1.ControllerMessage.log_subscribe:type_name -> groundplane.agent.v1.LogSubscribe
+	223,  // 424: groundplane.agent.v1.ControllerMessage.log_cancel:type_name -> groundplane.agent.v1.LogCancel
+	183,  // 425: groundplane.agent.v1.ControllerMessage.resolve_workload_images:type_name -> groundplane.agent.v1.ResolveWorkloadImages
+	192,  // 426: groundplane.agent.v1.ControllerMessage.observe_services:type_name -> groundplane.agent.v1.ObserveServices
+	193,  // 427: groundplane.agent.v1.ControllerMessage.cancel_service_observation:type_name -> groundplane.agent.v1.CancelServiceObservation
+	224,  // 428: groundplane.agent.v1.ControllerMessage.log_credit:type_name -> groundplane.agent.v1.LogCredit
+	617,  // 429: groundplane.agent.v1.ControllerMessage.check_backing_access:type_name -> groundplane.agent.v1.CheckBackingAccess
+	619,  // 430: groundplane.agent.v1.ControllerMessage.cancel_backing_access:type_name -> groundplane.agent.v1.CancelBackingAccess
+	595,  // 431: groundplane.agent.v1.ControllerMessage.check_dns_connections:type_name -> groundplane.agent.v1.CheckDNSConnections
+	597,  // 432: groundplane.agent.v1.ControllerMessage.cancel_dns_connections:type_name -> groundplane.agent.v1.CancelDNSConnections
+	600,  // 433: groundplane.agent.v1.ControllerMessage.check_edge_connections:type_name -> groundplane.agent.v1.CheckEdgeConnections
+	601,  // 434: groundplane.agent.v1.ControllerMessage.cancel_edge_connections:type_name -> groundplane.agent.v1.CancelEdgeConnections
+	470,  // 435: groundplane.agent.v1.ControllerMessage.backup_config_transfer:type_name -> groundplane.agent.v1.BackupConfigTransfer
+	477,  // 436: groundplane.agent.v1.ControllerMessage.backup_config_credit:type_name -> groundplane.agent.v1.BackupConfigCredit
+	457,  // 437: groundplane.agent.v1.ControllerMessage.backup_staging_recovery_plan:type_name -> groundplane.agent.v1.BackupStagingRecoveryPlan
+	478,  // 438: groundplane.agent.v1.ControllerMessage.backup_volume_manifest_transfer:type_name -> groundplane.agent.v1.BackupVolumeManifestTransfer
+	483,  // 439: groundplane.agent.v1.ControllerMessage.backup_volume_manifest_ack_credit:type_name -> groundplane.agent.v1.BackupVolumeManifestAckCredit
+	568,  // 440: groundplane.agent.v1.ControllerMessage.backup_staging_recovery_ack_receipt:type_name -> groundplane.agent.v1.BackupStagingRecoveryAckReceipt
+	64,   // 441: groundplane.agent.v1.ControllerMessage.work_start_ack:type_name -> groundplane.agent.v1.WorkStartAck
+	132,  // 442: groundplane.agent.v1.ControllerMessage.release_work_assignment:type_name -> groundplane.agent.v1.ReleaseWorkAssignment
+	137,  // 443: groundplane.agent.v1.ControllerMessage.release_work_checkpoint_ack:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointAck
+	173,  // 444: groundplane.agent.v1.ControllerMessage.release_hook_delivery:type_name -> groundplane.agent.v1.ReleaseHookDelivery
+	143,  // 445: groundplane.agent.v1.ControllerMessage.release_effect_evidence_ack:type_name -> groundplane.agent.v1.ReleaseEffectEvidenceAck
+	146,  // 446: groundplane.agent.v1.ControllerMessage.script_work_checkpoint_ack:type_name -> groundplane.agent.v1.ScriptWorkCheckpointAck
+	161,  // 447: groundplane.agent.v1.ControllerMessage.release_configuration_manifest:type_name -> groundplane.agent.v1.ReleaseConfigurationManifest
+	163,  // 448: groundplane.agent.v1.ControllerMessage.release_configuration_file_delivery:type_name -> groundplane.agent.v1.ReleaseConfigurationFileDelivery
+	58,   // 449: groundplane.agent.v1.ControllerMessage.work_executor_registration:type_name -> groundplane.agent.v1.WorkExecutorRegistration
+	139,  // 450: groundplane.agent.v1.ControllerMessage.release_work_completion_ack:type_name -> groundplane.agent.v1.ReleaseWorkCompletionAck
+	141,  // 451: groundplane.agent.v1.ControllerMessage.release_work_failure_ack:type_name -> groundplane.agent.v1.ReleaseWorkFailureAck
+	135,  // 452: groundplane.agent.v1.ControllerMessage.release_recovery_checkpoint_ack:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointAck
+	133,  // 453: groundplane.agent.v1.ControllerMessage.release_recovery_assignment:type_name -> groundplane.agent.v1.ReleaseRecoveryAssignment
+	144,  // 454: groundplane.agent.v1.ControllerMessage.script_work_assignment:type_name -> groundplane.agent.v1.ScriptWorkAssignment
+	148,  // 455: groundplane.agent.v1.ControllerMessage.script_work_completion_ack:type_name -> groundplane.agent.v1.ScriptWorkCompletionAck
+	149,  // 456: groundplane.agent.v1.ControllerMessage.script_recovery_assignment:type_name -> groundplane.agent.v1.ScriptRecoveryAssignment
+	151,  // 457: groundplane.agent.v1.ControllerMessage.script_recovery_completion_ack:type_name -> groundplane.agent.v1.ScriptRecoveryCompletionAck
+	153,  // 458: groundplane.agent.v1.ControllerMessage.script_work_failure_ack:type_name -> groundplane.agent.v1.ScriptWorkFailureAck
+	65,   // 459: groundplane.agent.v1.ControllerMessage.environment_removal_assignment:type_name -> groundplane.agent.v1.EnvironmentRemovalAssignment
+	125,  // 460: groundplane.agent.v1.ControllerMessage.environment_removal_checkpoint_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointAck
+	127,  // 461: groundplane.agent.v1.ControllerMessage.environment_removal_completion_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalCompletionAck
+	129,  // 462: groundplane.agent.v1.ControllerMessage.environment_removal_failure_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalFailureAck
+	93,   // 463: groundplane.agent.v1.ControllerMessage.attach_removal_assignment:type_name -> groundplane.agent.v1.AttachRemovalAssignment
+	119,  // 464: groundplane.agent.v1.ControllerMessage.attach_removal_checkpoint_ack:type_name -> groundplane.agent.v1.AttachRemovalCheckpointAck
+	121,  // 465: groundplane.agent.v1.ControllerMessage.attach_removal_completion_ack:type_name -> groundplane.agent.v1.AttachRemovalCompletionAck
+	123,  // 466: groundplane.agent.v1.ControllerMessage.attach_removal_failure_ack:type_name -> groundplane.agent.v1.AttachRemovalFailureAck
+	94,   // 467: groundplane.agent.v1.ControllerMessage.attach_recovery_assignment:type_name -> groundplane.agent.v1.AttachRecoveryAssignment
+	96,   // 468: groundplane.agent.v1.ControllerMessage.attach_recovery_completion_ack:type_name -> groundplane.agent.v1.AttachRecoveryCompletionAck
+	360,  // 469: groundplane.agent.v1.ControllerMessage.volume_work_assignment:type_name -> groundplane.agent.v1.VolumeWorkAssignment
+	362,  // 470: groundplane.agent.v1.ControllerMessage.volume_work_checkpoint_ack:type_name -> groundplane.agent.v1.VolumeWorkCheckpointAck
+	364,  // 471: groundplane.agent.v1.ControllerMessage.volume_work_completion_ack:type_name -> groundplane.agent.v1.VolumeWorkCompletionAck
+	366,  // 472: groundplane.agent.v1.ControllerMessage.volume_work_failure_ack:type_name -> groundplane.agent.v1.VolumeWorkFailureAck
+	368,  // 473: groundplane.agent.v1.ControllerMessage.volume_work_recovery_report_ack:type_name -> groundplane.agent.v1.VolumeWorkRecoveryReportAck
+	314,  // 474: groundplane.agent.v1.ControllerMessage.network_work_assignment:type_name -> groundplane.agent.v1.NetworkWorkAssignment
+	316,  // 475: groundplane.agent.v1.ControllerMessage.network_work_checkpoint_ack:type_name -> groundplane.agent.v1.NetworkWorkCheckpointAck
+	318,  // 476: groundplane.agent.v1.ControllerMessage.network_work_completion_ack:type_name -> groundplane.agent.v1.NetworkWorkCompletionAck
+	320,  // 477: groundplane.agent.v1.ControllerMessage.network_work_failure_ack:type_name -> groundplane.agent.v1.NetworkWorkFailureAck
+	322,  // 478: groundplane.agent.v1.ControllerMessage.network_work_recovery_report_ack:type_name -> groundplane.agent.v1.NetworkWorkRecoveryReportAck
+	304,  // 479: groundplane.agent.v1.ControllerMessage.component_work_assignment:type_name -> groundplane.agent.v1.ComponentWorkAssignment
+	306,  // 480: groundplane.agent.v1.ControllerMessage.component_work_checkpoint_ack:type_name -> groundplane.agent.v1.ComponentWorkCheckpointAck
+	308,  // 481: groundplane.agent.v1.ControllerMessage.component_work_completion_ack:type_name -> groundplane.agent.v1.ComponentWorkCompletionAck
+	310,  // 482: groundplane.agent.v1.ControllerMessage.component_work_failure_ack:type_name -> groundplane.agent.v1.ComponentWorkFailureAck
+	312,  // 483: groundplane.agent.v1.ControllerMessage.component_work_recovery_report_ack:type_name -> groundplane.agent.v1.ComponentWorkRecoveryReportAck
+	157,  // 484: groundplane.agent.v1.ControllerMessage.component_configuration_manifest:type_name -> groundplane.agent.v1.ComponentConfigurationManifest
+	159,  // 485: groundplane.agent.v1.ControllerMessage.component_configuration_file_delivery:type_name -> groundplane.agent.v1.ComponentConfigurationFileDelivery
+	301,  // 486: groundplane.agent.v1.ControllerMessage.entry_configuration_work_assignment:type_name -> groundplane.agent.v1.EntryConfigurationWorkAssignment
+	296,  // 487: groundplane.agent.v1.ControllerMessage.entry_configuration_work_checkpoint_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
+	298,  // 488: groundplane.agent.v1.ControllerMessage.entry_configuration_work_completion_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkCompletionAck
+	300,  // 489: groundplane.agent.v1.ControllerMessage.entry_configuration_work_failure_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkFailureAck
+	292,  // 490: groundplane.agent.v1.ControllerMessage.entry_configuration_manifest:type_name -> groundplane.agent.v1.EntryConfigurationManifest
+	294,  // 491: groundplane.agent.v1.ControllerMessage.entry_configuration_file_delivery:type_name -> groundplane.agent.v1.EntryConfigurationFileDelivery
+	303,  // 492: groundplane.agent.v1.ControllerMessage.entry_configuration_work_recovery_report_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck
+	99,   // 493: groundplane.agent.v1.ControllerMessage.attach_provision_assignment:type_name -> groundplane.agent.v1.AttachProvisionAssignment
+	104,  // 494: groundplane.agent.v1.ControllerMessage.attach_provision_checkpoint_ack:type_name -> groundplane.agent.v1.AttachProvisionCheckpointAck
+	106,  // 495: groundplane.agent.v1.ControllerMessage.attach_provision_completion_ack:type_name -> groundplane.agent.v1.AttachProvisionCompletionAck
+	108,  // 496: groundplane.agent.v1.ControllerMessage.attach_provision_failure_ack:type_name -> groundplane.agent.v1.AttachProvisionFailureAck
+	98,   // 497: groundplane.agent.v1.ControllerMessage.attach_provision_facts_ack:type_name -> groundplane.agent.v1.AttachProvisionFactsAck
+	100,  // 498: groundplane.agent.v1.ControllerMessage.attach_provision_recovery_assignment:type_name -> groundplane.agent.v1.AttachProvisionRecoveryAssignment
+	102,  // 499: groundplane.agent.v1.ControllerMessage.attach_provision_recovery_report_ack:type_name -> groundplane.agent.v1.AttachProvisionRecoveryReportAck
+	343,  // 500: groundplane.agent.v1.ControllerMessage.service_lifecycle_assignment:type_name -> groundplane.agent.v1.ServiceLifecycleAssignment
+	352,  // 501: groundplane.agent.v1.ControllerMessage.service_lifecycle_checkpoint_ack:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointAck
+	354,  // 502: groundplane.agent.v1.ControllerMessage.service_lifecycle_completion_ack:type_name -> groundplane.agent.v1.ServiceLifecycleCompletionAck
+	356,  // 503: groundplane.agent.v1.ControllerMessage.service_lifecycle_failure_ack:type_name -> groundplane.agent.v1.ServiceLifecycleFailureAck
+	348,  // 504: groundplane.agent.v1.ControllerMessage.service_lifecycle_hook_delivery:type_name -> groundplane.agent.v1.ServiceLifecycleHookDelivery
+	350,  // 505: groundplane.agent.v1.ControllerMessage.service_lifecycle_recovery_report_ack:type_name -> groundplane.agent.v1.ServiceLifecycleRecoveryReportAck
+	329,  // 506: groundplane.agent.v1.ControllerMessage.service_removal_recovery_assignment:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryAssignment
+	336,  // 507: groundplane.agent.v1.ControllerMessage.service_removal_recovery_checkpoint_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
+	338,  // 508: groundplane.agent.v1.ControllerMessage.service_removal_recovery_completion_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck
+	340,  // 509: groundplane.agent.v1.ControllerMessage.service_removal_recovery_failure_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryFailureAck
+	332,  // 510: groundplane.agent.v1.ControllerMessage.service_removal_configuration_manifest:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationManifest
+	334,  // 511: groundplane.agent.v1.ControllerMessage.service_removal_configuration_file_delivery:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery
+	421,  // 512: groundplane.agent.v1.ControllerMessage.backup_work_assignment:type_name -> groundplane.agent.v1.BackupWorkAssignment
+	434,  // 513: groundplane.agent.v1.ControllerMessage.backup_work_checkpoint_ack:type_name -> groundplane.agent.v1.BackupWorkCheckpointAck
+	559,  // 514: groundplane.agent.v1.ControllerMessage.backup_work_secret_transfer:type_name -> groundplane.agent.v1.BackupWorkSecretTransfer
+	433,  // 515: groundplane.agent.v1.ControllerMessage.backup_work_completion_ack:type_name -> groundplane.agent.v1.BackupWorkCompletionAck
+	432,  // 516: groundplane.agent.v1.ControllerMessage.backup_work_failure_ack:type_name -> groundplane.agent.v1.BackupWorkFailureAck
+	424,  // 517: groundplane.agent.v1.ControllerMessage.backup_recovery_assignment:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
+	428,  // 518: groundplane.agent.v1.ControllerMessage.backup_recovery_ack:type_name -> groundplane.agent.v1.BackupRecoveryAck
+	427,  // 519: groundplane.agent.v1.ControllerMessage.backup_config_recovery_prepare_ack:type_name -> groundplane.agent.v1.BackupConfigRecoveryPrepareAck
+	63,   // 520: groundplane.agent.v1.ControllerMessage.work_cancel:type_name -> groundplane.agent.v1.WorkCancel
+	87,   // 521: groundplane.agent.v1.ControllerMessage.environment_provision_assignment:type_name -> groundplane.agent.v1.EnvironmentProvisionAssignment
+	90,   // 522: groundplane.agent.v1.ControllerMessage.environment_provision_result_ack:type_name -> groundplane.agent.v1.EnvironmentProvisionResultAck
+	70,   // 523: groundplane.agent.v1.ControllerMessage.backing_provision_assignment:type_name -> groundplane.agent.v1.BackingProvisionAssignment
+	72,   // 524: groundplane.agent.v1.ControllerMessage.backing_provision_checkpoint_ack:type_name -> groundplane.agent.v1.BackingProvisionCheckpointAck
+	74,   // 525: groundplane.agent.v1.ControllerMessage.backing_provision_completion_ack:type_name -> groundplane.agent.v1.BackingProvisionCompletionAck
+	76,   // 526: groundplane.agent.v1.ControllerMessage.backing_provision_failure_ack:type_name -> groundplane.agent.v1.BackingProvisionFailureAck
+	78,   // 527: groundplane.agent.v1.ControllerMessage.backing_provision_configuration_manifest:type_name -> groundplane.agent.v1.BackingProvisionConfigurationManifest
+	80,   // 528: groundplane.agent.v1.ControllerMessage.backing_provision_file_delivery:type_name -> groundplane.agent.v1.BackingProvisionFileDelivery
+	82,   // 529: groundplane.agent.v1.ControllerMessage.backing_provision_hook_delivery:type_name -> groundplane.agent.v1.BackingProvisionHookDelivery
+	84,   // 530: groundplane.agent.v1.ControllerMessage.backing_provision_recovery_ack:type_name -> groundplane.agent.v1.BackingProvisionRecoveryAck
+	278,  // 531: groundplane.agent.v1.ControllerMessage.resolver_work_assignment:type_name -> groundplane.agent.v1.ResolverWorkAssignment
+	280,  // 532: groundplane.agent.v1.ControllerMessage.resolver_work_checkpoint_ack:type_name -> groundplane.agent.v1.ResolverWorkCheckpointAck
+	284,  // 533: groundplane.agent.v1.ControllerMessage.resolver_work_result_ack:type_name -> groundplane.agent.v1.ResolverWorkResultAck
+	60,   // 534: groundplane.agent.v1.ControllerMessage.work_journal_replay_ack:type_name -> groundplane.agent.v1.WorkJournalReplayAck
+	188,  // 535: groundplane.agent.v1.LogTarget.runtime:type_name -> groundplane.agent.v1.ServiceObservationTarget
+	221,  // 536: groundplane.agent.v1.LogSubscribe.targets:type_name -> groundplane.agent.v1.LogTarget
+	15,   // 537: groundplane.agent.v1.LogEvent.slot:type_name -> groundplane.agent.v1.LogSlot
+	14,   // 538: groundplane.agent.v1.LogEvent.stream:type_name -> groundplane.agent.v1.LogStream
+	623,  // 539: groundplane.agent.v1.LogEvent.timestamp:type_name -> google.protobuf.Timestamp
+	16,   // 540: groundplane.agent.v1.LogEnd.reason:type_name -> groundplane.agent.v1.LogEndReason
+	229,  // 541: groundplane.agent.v1.MaterializationTransfer.header:type_name -> groundplane.agent.v1.MaterializationTransferHeader
+	230,  // 542: groundplane.agent.v1.MaterializationTransfer.chunk:type_name -> groundplane.agent.v1.MaterializationTransferChunk
+	231,  // 543: groundplane.agent.v1.MaterializationTransfer.end:type_name -> groundplane.agent.v1.MaterializationTransferEnd
+	51,   // 544: groundplane.agent.v1.MaterializationTransferHeader.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
+	233,  // 545: groundplane.agent.v1.ManagedConfigTransfer.header:type_name -> groundplane.agent.v1.ManagedConfigTransferHeader
+	234,  // 546: groundplane.agent.v1.ManagedConfigTransfer.chunk:type_name -> groundplane.agent.v1.ManagedConfigTransferChunk
+	235,  // 547: groundplane.agent.v1.ManagedConfigTransfer.end:type_name -> groundplane.agent.v1.ManagedConfigTransferEnd
+	255,  // 548: groundplane.agent.v1.TaskAssignment.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	623,  // 549: groundplane.agent.v1.TaskAssignment.forward_deadline:type_name -> google.protobuf.Timestamp
+	403,  // 550: groundplane.agent.v1.TaskAssignment.script_artifacts:type_name -> groundplane.agent.v1.ScriptAssignmentArtifacts
+	247,  // 551: groundplane.agent.v1.TaskAssignment.script_checkpoints:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
+	419,  // 552: groundplane.agent.v1.TaskAssignment.backup_authority:type_name -> groundplane.agent.v1.BackupTaskAuthority
+	437,  // 553: groundplane.agent.v1.TaskAssignment.backup_resume:type_name -> groundplane.agent.v1.BackupTaskResume
+	18,   // 554: groundplane.agent.v1.TaskAssignment.execution_mode:type_name -> groundplane.agent.v1.TaskExecutionMode
+	623,  // 555: groundplane.agent.v1.TaskAssignment.recovery_deadline:type_name -> google.protobuf.Timestamp
+	240,  // 556: groundplane.agent.v1.TaskAssignment.restoration_authority:type_name -> groundplane.agent.v1.ReleaseRestorationAuthority
+	237,  // 557: groundplane.agent.v1.TaskAssignment.release_recovery_directive:type_name -> groundplane.agent.v1.ReleaseRecoveryDirective
+	623,  // 558: groundplane.agent.v1.TaskAssignment.execution_deadline:type_name -> google.protobuf.Timestamp
+	17,   // 559: groundplane.agent.v1.ReleaseRecoveryDirective.phase:type_name -> groundplane.agent.v1.ReleaseRecoveryPhase
+	19,   // 560: groundplane.agent.v1.ReleaseRestorationCandidate.target:type_name -> groundplane.agent.v1.ReleaseRestorationTarget
+	238,  // 561: groundplane.agent.v1.ReleaseRestorationAuthority.candidates:type_name -> groundplane.agent.v1.ReleaseRestorationCandidate
+	239,  // 562: groundplane.agent.v1.ReleaseRestorationAuthority.applied_predecessor:type_name -> groundplane.agent.v1.ReleaseAppliedPredecessorAuthority
+	241,  // 563: groundplane.agent.v1.ReleaseRestorationAuthority.native_predecessors:type_name -> groundplane.agent.v1.ReleaseNativePredecessorAuthority
+	21,   // 564: groundplane.agent.v1.ScriptOutcomeCheckpoint.reason:type_name -> groundplane.agent.v1.ScriptOutcomeReason
+	623,  // 565: groundplane.agent.v1.ScriptOutcomeCheckpoint.observed_at:type_name -> google.protobuf.Timestamp
+	20,   // 566: groundplane.agent.v1.ScriptExecutionCheckpoint.state:type_name -> groundplane.agent.v1.ScriptExecutionState
+	243,  // 567: groundplane.agent.v1.ScriptExecutionCheckpoint.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
+	244,  // 568: groundplane.agent.v1.ScriptExecutionCheckpoint.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
+	245,  // 569: groundplane.agent.v1.ScriptExecutionCheckpoint.outcome:type_name -> groundplane.agent.v1.ScriptOutcomeCheckpoint
+	246,  // 570: groundplane.agent.v1.ScriptExecutionCheckpoint.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupCheckpoint
+	20,   // 571: groundplane.agent.v1.ScriptCheckpointRequest.expected_state:type_name -> groundplane.agent.v1.ScriptExecutionState
+	20,   // 572: groundplane.agent.v1.ScriptCheckpointRequest.state:type_name -> groundplane.agent.v1.ScriptExecutionState
+	242,  // 573: groundplane.agent.v1.ScriptCheckpointRequest.start_authorized:type_name -> groundplane.agent.v1.ScriptStartAuthorizedCheckpoint
+	243,  // 574: groundplane.agent.v1.ScriptCheckpointRequest.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
+	244,  // 575: groundplane.agent.v1.ScriptCheckpointRequest.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
+	245,  // 576: groundplane.agent.v1.ScriptCheckpointRequest.outcome:type_name -> groundplane.agent.v1.ScriptOutcomeCheckpoint
+	246,  // 577: groundplane.agent.v1.ScriptCheckpointRequest.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupCheckpoint
+	623,  // 578: groundplane.agent.v1.ScriptCheckpointRequest.recorded_at:type_name -> google.protobuf.Timestamp
+	20,   // 579: groundplane.agent.v1.ScriptCheckpointAck.state:type_name -> groundplane.agent.v1.ScriptExecutionState
+	22,   // 580: groundplane.agent.v1.BackingHookProcedure.event:type_name -> groundplane.agent.v1.BackingHookEvent
+	250,  // 581: groundplane.agent.v1.BackingHookProcedure.inputs:type_name -> groundplane.agent.v1.BackingHookValue
+	250,  // 582: groundplane.agent.v1.BackingHookProcedure.facts:type_name -> groundplane.agent.v1.BackingHookValue
+	251,  // 583: groundplane.agent.v1.BackingHookProcedure.fact_schema:type_name -> groundplane.agent.v1.BackingHookFactDefinition
+	22,   // 584: groundplane.agent.v1.BackingHookCheckpointRequest.event:type_name -> groundplane.agent.v1.BackingHookEvent
+	23,   // 585: groundplane.agent.v1.BackingHookCheckpointRequest.state:type_name -> groundplane.agent.v1.BackingHookCheckpointState
+	250,  // 586: groundplane.agent.v1.BackingHookCheckpointRequest.facts:type_name -> groundplane.agent.v1.BackingHookValue
+	22,   // 587: groundplane.agent.v1.BackingHookCheckpointAck.event:type_name -> groundplane.agent.v1.BackingHookEvent
+	23,   // 588: groundplane.agent.v1.BackingHookCheckpointAck.state:type_name -> groundplane.agent.v1.BackingHookCheckpointState
+	25,   // 589: groundplane.agent.v1.ExecutionPlan.operation:type_name -> groundplane.agent.v1.PlanOperation
+	371,  // 590: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
+	376,  // 591: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
+	382,  // 592: groundplane.agent.v1.ExecutionPlan.script_runner_snapshots:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
+	395,  // 593: groundplane.agent.v1.ExecutionPlan.script_runner_projections:type_name -> groundplane.agent.v1.ScriptRunnerProjection
+	402,  // 594: groundplane.agent.v1.ExecutionPlan.script_body_artifacts:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
+	24,   // 595: groundplane.agent.v1.ExecutionPlan.component_lifecycle_mode:type_name -> groundplane.agent.v1.ComponentLifecycleMode
+	603,  // 596: groundplane.agent.v1.ExecutionPlan.component_rollback_observation:type_name -> groundplane.agent.v1.ComponentApply
+	265,  // 597: groundplane.agent.v1.ExecutionPlan.candidate_release_procedure:type_name -> groundplane.agent.v1.CandidateReleaseProcedure
+	263,  // 598: groundplane.agent.v1.ExecutionPlan.managed_component_procedure:type_name -> groundplane.agent.v1.ManagedComponentProcedure
+	261,  // 599: groundplane.agent.v1.ExecutionPlan.service_lifecycle_procedure:type_name -> groundplane.agent.v1.ServiceLifecycleProcedure
+	435,  // 600: groundplane.agent.v1.ExecutionPlan.backup_scope:type_name -> groundplane.agent.v1.BackupPlanScope
+	260,  // 601: groundplane.agent.v1.ExecutionPlan.service_absence_recovery_procedure:type_name -> groundplane.agent.v1.ServiceAbsenceRecoveryProcedure
+	256,  // 602: groundplane.agent.v1.ExecutionPlan.managed_network_recovery_procedure:type_name -> groundplane.agent.v1.ManagedNetworkRecoveryProcedure
+	257,  // 603: groundplane.agent.v1.ManagedNetworkRecoveryProcedure.removal:type_name -> groundplane.agent.v1.ManagedNetworkRemovalRecovery
+	258,  // 604: groundplane.agent.v1.ManagedNetworkRecoveryProcedure.preparation:type_name -> groundplane.agent.v1.ManagedNetworkPreparationRecovery
+	259,  // 605: groundplane.agent.v1.ManagedNetworkPreparationRecovery.members:type_name -> groundplane.agent.v1.ManagedNetworkPreparationMember
+	262,  // 606: groundplane.agent.v1.ServiceLifecycleProcedure.sources:type_name -> groundplane.agent.v1.ServiceLifecycleSource
+	264,  // 607: groundplane.agent.v1.ManagedComponentProcedure.services:type_name -> groundplane.agent.v1.ManagedComponentService
+	268,  // 608: groundplane.agent.v1.CandidateReleaseProcedure.members:type_name -> groundplane.agent.v1.CandidateReleaseMember
+	266,  // 609: groundplane.agent.v1.CandidateReleaseProcedure.configuration_restoration:type_name -> groundplane.agent.v1.ConfigurationRestoration
+	267,  // 610: groundplane.agent.v1.ConfigurationRestoration.files:type_name -> groundplane.agent.v1.ConfigurationFileRestoration
+	272,  // 611: groundplane.agent.v1.CandidateReleaseMember.serving_predecessor:type_name -> groundplane.agent.v1.ServingPredecessorRestoration
+	273,  // 612: groundplane.agent.v1.CandidateReleaseMember.candidate_absence:type_name -> groundplane.agent.v1.CandidateAbsenceRestoration
+	269,  // 613: groundplane.agent.v1.CandidateReleaseMember.rolling:type_name -> groundplane.agent.v1.RollingReleaseProcedure
+	270,  // 614: groundplane.agent.v1.RollingReleaseProcedure.prior:type_name -> groundplane.agent.v1.RollingReplica
+	270,  // 615: groundplane.agent.v1.RollingReleaseProcedure.candidate:type_name -> groundplane.agent.v1.RollingReplica
+	271,  // 616: groundplane.agent.v1.RollingReleaseProcedure.changes:type_name -> groundplane.agent.v1.RollingReplicaChange
+	270,  // 617: groundplane.agent.v1.RollingReleaseProcedure.retained:type_name -> groundplane.agent.v1.RollingReplica
+	30,   // 618: groundplane.agent.v1.RollingReleaseProcedure.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
+	274,  // 619: groundplane.agent.v1.CandidateAbsenceRestoration.services:type_name -> groundplane.agent.v1.CandidateReleaseService
+	371,  // 620: groundplane.agent.v1.EntryConfigurationWorkInput.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
+	371,  // 621: groundplane.agent.v1.EntryConfigurationWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	170,  // 622: groundplane.agent.v1.EntryConfigurationWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	170,  // 623: groundplane.agent.v1.EntryConfigurationWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	570,  // 624: groundplane.agent.v1.EntryConfigurationWorkInput.files:type_name -> groundplane.agent.v1.MaterializeFile
+	61,   // 625: groundplane.agent.v1.ResolverWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 626: groundplane.agent.v1.ResolverWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 627: groundplane.agent.v1.ResolverWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 628: groundplane.agent.v1.ResolverWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 629: groundplane.agent.v1.ResolverWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 630: groundplane.agent.v1.ResolverWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	215,  // 631: groundplane.agent.v1.ResolverWorkCompletionRequest.serving_proof:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
+	61,   // 632: groundplane.agent.v1.ResolverWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 633: groundplane.agent.v1.ResolverWorkRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 634: groundplane.agent.v1.ResolverWorkResultAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 635: groundplane.agent.v1.ResolverWorkResultAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 636: groundplane.agent.v1.ResolverWorkResultAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 637: groundplane.agent.v1.ResolverWorkResultAck.finished_at:type_name -> google.protobuf.Timestamp
+	278,  // 638: groundplane.agent.v1.ResolverWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.ResolverWorkAssignment
+	64,   // 639: groundplane.agent.v1.ResolverWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	280,  // 640: groundplane.agent.v1.ResolverWorkHelperRequest.checkpoint:type_name -> groundplane.agent.v1.ResolverWorkCheckpointAck
+	215,  // 641: groundplane.agent.v1.ResolverWorkHelperResponse.serving_proof:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
+	371,  // 642: groundplane.agent.v1.ComponentWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	288,  // 643: groundplane.agent.v1.ComponentWorkInput.predecessor:type_name -> groundplane.agent.v1.ComponentWorkPredecessor
+	603,  // 644: groundplane.agent.v1.ComponentWorkInput.configuration_action:type_name -> groundplane.agent.v1.ComponentApply
+	170,  // 645: groundplane.agent.v1.ComponentWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	170,  // 646: groundplane.agent.v1.ComponentWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	570,  // 647: groundplane.agent.v1.ComponentWorkInput.files:type_name -> groundplane.agent.v1.MaterializeFile
+	371,  // 648: groundplane.agent.v1.ComponentWorkPredecessor.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
+	289,  // 649: groundplane.agent.v1.ComponentWorkPredecessor.configuration:type_name -> groundplane.agent.v1.ComponentWorkRetainedConfiguration
+	570,  // 650: groundplane.agent.v1.ComponentWorkRetainedConfiguration.file:type_name -> groundplane.agent.v1.MaterializeFile
+	61,   // 651: groundplane.agent.v1.EntryConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 652: groundplane.agent.v1.EntryConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	170,  // 653: groundplane.agent.v1.EntryConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	291,  // 654: groundplane.agent.v1.EntryConfigurationManifest.files:type_name -> groundplane.agent.v1.EntryConfigurationFile
+	61,   // 655: groundplane.agent.v1.EntryConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 656: groundplane.agent.v1.EntryConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	170,  // 657: groundplane.agent.v1.EntryConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	291,  // 658: groundplane.agent.v1.EntryConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.EntryConfigurationFile
+	61,   // 659: groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 660: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 661: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 662: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	61,   // 663: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 664: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 665: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 666: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 667: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 668: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 669: groundplane.agent.v1.EntryConfigurationWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 670: groundplane.agent.v1.EntryConfigurationWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 671: groundplane.agent.v1.EntryConfigurationWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 672: groundplane.agent.v1.EntryConfigurationWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	623,  // 673: groundplane.agent.v1.EntryConfigurationWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	61,   // 674: groundplane.agent.v1.EntryConfigurationWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	277,  // 675: groundplane.agent.v1.EntryConfigurationWorkAssignment.input:type_name -> groundplane.agent.v1.EntryConfigurationWorkInput
+	61,   // 676: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 677: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 678: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 679: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 680: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 681: groundplane.agent.v1.ComponentWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	287,  // 682: groundplane.agent.v1.ComponentWorkAssignment.input:type_name -> groundplane.agent.v1.ComponentWorkInput
+	61,   // 683: groundplane.agent.v1.ComponentWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 684: groundplane.agent.v1.ComponentWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 685: groundplane.agent.v1.ComponentWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 686: groundplane.agent.v1.ComponentWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	61,   // 687: groundplane.agent.v1.ComponentWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 688: groundplane.agent.v1.ComponentWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 689: groundplane.agent.v1.ComponentWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 690: groundplane.agent.v1.ComponentWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 691: groundplane.agent.v1.ComponentWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 692: groundplane.agent.v1.ComponentWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 693: groundplane.agent.v1.ComponentWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 694: groundplane.agent.v1.ComponentWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 695: groundplane.agent.v1.ComponentWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 696: groundplane.agent.v1.ComponentWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	623,  // 697: groundplane.agent.v1.ComponentWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	61,   // 698: groundplane.agent.v1.ComponentWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 699: groundplane.agent.v1.ComponentWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 700: groundplane.agent.v1.ComponentWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 701: groundplane.agent.v1.ComponentWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	26,   // 702: groundplane.agent.v1.NetworkWorkInput.action:type_name -> groundplane.agent.v1.NetworkWorkAction
+	371,  // 703: groundplane.agent.v1.NetworkWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	61,   // 704: groundplane.agent.v1.NetworkWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	313,  // 705: groundplane.agent.v1.NetworkWorkAssignment.input:type_name -> groundplane.agent.v1.NetworkWorkInput
+	61,   // 706: groundplane.agent.v1.NetworkWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 707: groundplane.agent.v1.NetworkWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 708: groundplane.agent.v1.NetworkWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 709: groundplane.agent.v1.NetworkWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	61,   // 710: groundplane.agent.v1.NetworkWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 711: groundplane.agent.v1.NetworkWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 712: groundplane.agent.v1.NetworkWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 713: groundplane.agent.v1.NetworkWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 714: groundplane.agent.v1.NetworkWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 715: groundplane.agent.v1.NetworkWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 716: groundplane.agent.v1.NetworkWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 717: groundplane.agent.v1.NetworkWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 718: groundplane.agent.v1.NetworkWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 719: groundplane.agent.v1.NetworkWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	623,  // 720: groundplane.agent.v1.NetworkWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	61,   // 721: groundplane.agent.v1.NetworkWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 722: groundplane.agent.v1.NetworkWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 723: groundplane.agent.v1.NetworkWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 724: groundplane.agent.v1.NetworkWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	304,  // 725: groundplane.agent.v1.ComponentWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.ComponentWorkAssignment
+	64,   // 726: groundplane.agent.v1.ComponentWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	305,  // 727: groundplane.agent.v1.ComponentWorkHelperRequest.report:type_name -> groundplane.agent.v1.ComponentWorkCheckpointRequest
+	306,  // 728: groundplane.agent.v1.ComponentWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ComponentWorkCheckpointAck
+	301,  // 729: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.EntryConfigurationWorkAssignment
+	64,   // 730: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	295,  // 731: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.report:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
+	296,  // 732: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
+	314,  // 733: groundplane.agent.v1.NetworkWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.NetworkWorkAssignment
+	64,   // 734: groundplane.agent.v1.NetworkWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	315,  // 735: groundplane.agent.v1.NetworkWorkHelperRequest.report:type_name -> groundplane.agent.v1.NetworkWorkCheckpointRequest
+	316,  // 736: groundplane.agent.v1.NetworkWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.NetworkWorkCheckpointAck
+	57,   // 737: groundplane.agent.v1.NetworkWorkHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 738: groundplane.agent.v1.NetworkWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	61,   // 739: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	344,  // 740: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.removal:type_name -> groundplane.agent.v1.ServiceLifecycleWorkInput
+	170,  // 741: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	61,   // 742: groundplane.agent.v1.ServiceRemovalConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 743: groundplane.agent.v1.ServiceRemovalConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	170,  // 744: groundplane.agent.v1.ServiceRemovalConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	331,  // 745: groundplane.agent.v1.ServiceRemovalConfigurationManifest.files:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFile
+	61,   // 746: groundplane.agent.v1.ServiceRemovalConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 747: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	170,  // 748: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	331,  // 749: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFile
+	61,   // 750: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 751: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 752: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 753: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	61,   // 754: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 755: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 756: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 757: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 758: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 759: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 760: groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 761: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 762: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 763: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	329,  // 764: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.assignment:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryAssignment
+	64,   // 765: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	335,  // 766: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.report:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
+	336,  // 767: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
+	57,   // 768: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 769: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	61,   // 770: groundplane.agent.v1.ServiceLifecycleAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	344,  // 771: groundplane.agent.v1.ServiceLifecycleAssignment.input:type_name -> groundplane.agent.v1.ServiceLifecycleWorkInput
+	57,   // 772: groundplane.agent.v1.ServiceLifecycleWorkInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
+	27,   // 773: groundplane.agent.v1.ServiceLifecycleWorkInput.action:type_name -> groundplane.agent.v1.ServiceLifecycleAction
+	345,  // 774: groundplane.agent.v1.ServiceLifecycleWorkInput.members:type_name -> groundplane.agent.v1.ServiceLifecycleMember
+	346,  // 775: groundplane.agent.v1.ServiceLifecycleWorkInput.hook:type_name -> groundplane.agent.v1.ServiceLifecycleHook
+	371,  // 776: groundplane.agent.v1.ServiceLifecycleMember.artifact:type_name -> groundplane.agent.v1.ComposeArtifact
+	262,  // 777: groundplane.agent.v1.ServiceLifecycleMember.ownership:type_name -> groundplane.agent.v1.ServiceLifecycleSource
+	22,   // 778: groundplane.agent.v1.ServiceLifecycleHook.event:type_name -> groundplane.agent.v1.BackingHookEvent
+	61,   // 779: groundplane.agent.v1.ServiceLifecycleHookRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 780: groundplane.agent.v1.ServiceLifecycleHookDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	252,  // 781: groundplane.agent.v1.ServiceLifecycleHookDelivery.hook:type_name -> groundplane.agent.v1.BackingHookProcedure
+	61,   // 782: groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 783: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 784: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 785: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 786: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 787: groundplane.agent.v1.ServiceLifecycleCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 788: groundplane.agent.v1.ServiceLifecycleCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 789: groundplane.agent.v1.ServiceLifecycleCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 790: groundplane.agent.v1.ServiceLifecycleCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	61,   // 791: groundplane.agent.v1.ServiceLifecycleCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 792: groundplane.agent.v1.ServiceLifecycleCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 793: groundplane.agent.v1.ServiceLifecycleCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 794: groundplane.agent.v1.ServiceLifecycleCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 795: groundplane.agent.v1.ServiceLifecycleCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 796: groundplane.agent.v1.ServiceLifecycleCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	356,  // 797: groundplane.agent.v1.ServiceLifecycleCompletionAck.stopped:type_name -> groundplane.agent.v1.ServiceLifecycleFailureAck
+	61,   // 798: groundplane.agent.v1.ServiceLifecycleFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 799: groundplane.agent.v1.ServiceLifecycleFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 800: groundplane.agent.v1.ServiceLifecycleFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 801: groundplane.agent.v1.ServiceLifecycleFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	343,  // 802: groundplane.agent.v1.ServiceLifecycleHelperRequest.assignment:type_name -> groundplane.agent.v1.ServiceLifecycleAssignment
+	64,   // 803: groundplane.agent.v1.ServiceLifecycleHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	351,  // 804: groundplane.agent.v1.ServiceLifecycleHelperRequest.report:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointRequest
+	352,  // 805: groundplane.agent.v1.ServiceLifecycleHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointAck
+	57,   // 806: groundplane.agent.v1.ServiceLifecycleHelperResponse.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 807: groundplane.agent.v1.ServiceLifecycleHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	28,   // 808: groundplane.agent.v1.VolumeWorkInput.action:type_name -> groundplane.agent.v1.VolumeWorkAction
+	371,  // 809: groundplane.agent.v1.VolumeWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	371,  // 810: groundplane.agent.v1.VolumeWorkInput.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
+	61,   // 811: groundplane.agent.v1.VolumeWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	359,  // 812: groundplane.agent.v1.VolumeWorkAssignment.input:type_name -> groundplane.agent.v1.VolumeWorkInput
+	61,   // 813: groundplane.agent.v1.VolumeWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 814: groundplane.agent.v1.VolumeWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 815: groundplane.agent.v1.VolumeWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 816: groundplane.agent.v1.VolumeWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	61,   // 817: groundplane.agent.v1.VolumeWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 818: groundplane.agent.v1.VolumeWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 819: groundplane.agent.v1.VolumeWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 820: groundplane.agent.v1.VolumeWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 821: groundplane.agent.v1.VolumeWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 822: groundplane.agent.v1.VolumeWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 823: groundplane.agent.v1.VolumeWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 824: groundplane.agent.v1.VolumeWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 825: groundplane.agent.v1.VolumeWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 826: groundplane.agent.v1.VolumeWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	623,  // 827: groundplane.agent.v1.VolumeWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	61,   // 828: groundplane.agent.v1.VolumeWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 829: groundplane.agent.v1.VolumeWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 830: groundplane.agent.v1.VolumeWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 831: groundplane.agent.v1.VolumeWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	360,  // 832: groundplane.agent.v1.VolumeWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.VolumeWorkAssignment
+	64,   // 833: groundplane.agent.v1.VolumeWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	361,  // 834: groundplane.agent.v1.VolumeWorkHelperRequest.report:type_name -> groundplane.agent.v1.VolumeWorkCheckpointRequest
+	362,  // 835: groundplane.agent.v1.VolumeWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.VolumeWorkCheckpointAck
+	57,   // 836: groundplane.agent.v1.VolumeWorkHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 837: groundplane.agent.v1.VolumeWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	29,   // 838: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
+	372,  // 839: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
+	373,  // 840: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
+	374,  // 841: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
+	375,  // 842: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	31,   // 843: groundplane.agent.v1.ComposeService.role:type_name -> groundplane.agent.v1.ComposeServiceRole
+	30,   // 844: groundplane.agent.v1.ComposeService.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
+	375,  // 845: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	375,  // 846: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	571,  // 847: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
+	572,  // 848: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
+	573,  // 849: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
+	574,  // 850: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
+	589,  // 851: groundplane.agent.v1.ExecutionStep.environment_directory_create:type_name -> groundplane.agent.v1.EnvironmentDirectoryCreate
+	570,  // 852: groundplane.agent.v1.ExecutionStep.materialize_file:type_name -> groundplane.agent.v1.MaterializeFile
+	591,  // 853: groundplane.agent.v1.ExecutionStep.managed_volume_directories_ensure:type_name -> groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
+	590,  // 854: groundplane.agent.v1.ExecutionStep.environment_directory_remove:type_name -> groundplane.agent.v1.EnvironmentDirectoryRemove
+	569,  // 855: groundplane.agent.v1.ExecutionStep.adapter_procedure:type_name -> groundplane.agent.v1.AdapterProcedure
+	594,  // 856: groundplane.agent.v1.ExecutionStep.managed_network_remove:type_name -> groundplane.agent.v1.ManagedNetworkRemove
+	575,  // 857: groundplane.agent.v1.ExecutionStep.compose_workload_apply:type_name -> groundplane.agent.v1.ComposeWorkloadApply
+	576,  // 858: groundplane.agent.v1.ExecutionStep.wait_workload_healthy:type_name -> groundplane.agent.v1.WaitWorkloadHealthy
+	581,  // 859: groundplane.agent.v1.ExecutionStep.service_proxy_switch:type_name -> groundplane.agent.v1.ServiceProxySwitch
+	582,  // 860: groundplane.agent.v1.ExecutionStep.service_proxy_probe:type_name -> groundplane.agent.v1.ServiceProxyProbe
+	583,  // 861: groundplane.agent.v1.ExecutionStep.service_proxy_compensate:type_name -> groundplane.agent.v1.ServiceProxyCompensate
+	585,  // 862: groundplane.agent.v1.ExecutionStep.service_recreate_acknowledge:type_name -> groundplane.agent.v1.ServiceRecreateAcknowledge
+	586,  // 863: groundplane.agent.v1.ExecutionStep.service_recreate_probe:type_name -> groundplane.agent.v1.ServiceRecreateProbe
+	587,  // 864: groundplane.agent.v1.ExecutionStep.service_recreate_compensate:type_name -> groundplane.agent.v1.ServiceRecreateCompensate
+	592,  // 865: groundplane.agent.v1.ExecutionStep.managed_volume_remove:type_name -> groundplane.agent.v1.ManagedVolumeRemove
+	593,  // 866: groundplane.agent.v1.ExecutionStep.managed_volume_directory_remove:type_name -> groundplane.agent.v1.ManagedVolumeDirectoryRemove
+	603,  // 867: groundplane.agent.v1.ExecutionStep.component_apply:type_name -> groundplane.agent.v1.ComponentApply
+	605,  // 868: groundplane.agent.v1.ExecutionStep.host_resolution_apply:type_name -> groundplane.agent.v1.HostResolutionApply
+	606,  // 869: groundplane.agent.v1.ExecutionStep.host_resolution_restore:type_name -> groundplane.agent.v1.HostResolutionRestore
+	381,  // 870: groundplane.agent.v1.ExecutionStep.run_script:type_name -> groundplane.agent.v1.RunScript
+	275,  // 871: groundplane.agent.v1.ExecutionStep.candidate_restoration_probe:type_name -> groundplane.agent.v1.CandidateRestorationProbe
+	276,  // 872: groundplane.agent.v1.ExecutionStep.candidate_restoration_compensate:type_name -> groundplane.agent.v1.CandidateRestorationCompensate
+	378,  // 873: groundplane.agent.v1.ExecutionStep.managed_network_ensure:type_name -> groundplane.agent.v1.ManagedNetworkEnsure
+	380,  // 874: groundplane.agent.v1.ExecutionStep.managed_volume_ensure:type_name -> groundplane.agent.v1.ManagedVolumeEnsure
+	252,  // 875: groundplane.agent.v1.ExecutionStep.backing_hook_procedure:type_name -> groundplane.agent.v1.BackingHookProcedure
+	436,  // 876: groundplane.agent.v1.ExecutionStep.backup_step:type_name -> groundplane.agent.v1.BackupStepAuthority
+	377,  // 877: groundplane.agent.v1.ExecutionStep.service_absence_probe:type_name -> groundplane.agent.v1.ServiceAbsenceProbe
+	577,  // 878: groundplane.agent.v1.ExecutionStep.compose_workload_remove:type_name -> groundplane.agent.v1.ComposeWorkloadRemove
+	578,  // 879: groundplane.agent.v1.ExecutionStep.rolling_traffic_switch:type_name -> groundplane.agent.v1.RollingTrafficSwitch
+	579,  // 880: groundplane.agent.v1.ExecutionStep.rolling_replica_drain:type_name -> groundplane.agent.v1.RollingReplicaDrain
+	580,  // 881: groundplane.agent.v1.ExecutionStep.rolling_release_acknowledge:type_name -> groundplane.agent.v1.RollingReleaseAcknowledge
+	379,  // 882: groundplane.agent.v1.ExecutionStep.managed_network_preparation_probe:type_name -> groundplane.agent.v1.ManagedNetworkPreparationProbe
+	33,   // 883: groundplane.agent.v1.ExecutionStep.policy:type_name -> groundplane.agent.v1.ExecutionStepPolicy
+	386,  // 884: groundplane.agent.v1.ResolvedRunnerSnapshot.networks:type_name -> groundplane.agent.v1.ScriptRunnerNetwork
+	388,  // 885: groundplane.agent.v1.ResolvedRunnerSnapshot.mounts:type_name -> groundplane.agent.v1.ScriptRunnerMount
+	393,  // 886: groundplane.agent.v1.ResolvedRunnerSnapshot.entry_bindings:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
+	394,  // 887: groundplane.agent.v1.ResolvedRunnerSnapshot.secret_values:type_name -> groundplane.agent.v1.ScriptRunnerSecretValue
+	389,  // 888: groundplane.agent.v1.ResolvedRunnerSnapshot.service_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
+	389,  // 889: groundplane.agent.v1.ResolvedRunnerSnapshot.network_topology_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
+	389,  // 890: groundplane.agent.v1.ResolvedRunnerSnapshot.applied_environment_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
+	383,  // 891: groundplane.agent.v1.ResolvedRunnerSnapshot.explicit_execution:type_name -> groundplane.agent.v1.ScriptExplicitExecutionAuthority
+	384,  // 892: groundplane.agent.v1.ScriptExplicitExecutionAuthority.context:type_name -> groundplane.agent.v1.ScriptExplicitExecutionContext
+	385,  // 893: groundplane.agent.v1.ScriptExplicitExecutionContext.volumes:type_name -> groundplane.agent.v1.ScriptExplicitVolumeGrant
+	387,  // 894: groundplane.agent.v1.ScriptRunnerNetwork.rendered_attachment:type_name -> groundplane.agent.v1.ScriptNetworkAttachment
+	389,  // 895: groundplane.agent.v1.ScriptRunnerNetwork.source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
+	396,  // 896: groundplane.agent.v1.ScriptNetworkAttachment.driver_options:type_name -> groundplane.agent.v1.ScriptStringPair
+	392,  // 897: groundplane.agent.v1.ScriptRunnerMount.rendered_mount:type_name -> groundplane.agent.v1.ScriptMount
+	389,  // 898: groundplane.agent.v1.ScriptRunnerMount.source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
+	390,  // 899: groundplane.agent.v1.ScriptSourceAuthority.existing:type_name -> groundplane.agent.v1.ScriptExistingSourceAuthority
+	391,  // 900: groundplane.agent.v1.ScriptSourceAuthority.staged:type_name -> groundplane.agent.v1.ScriptStagedSourceAuthority
+	32,   // 901: groundplane.agent.v1.ScriptRunnerEntryBinding.kind:type_name -> groundplane.agent.v1.ScriptEntryBindingKind
+	396,  // 902: groundplane.agent.v1.ScriptRunnerProjection.environment:type_name -> groundplane.agent.v1.ScriptStringPair
+	396,  // 903: groundplane.agent.v1.ScriptRunnerProjection.sysctls:type_name -> groundplane.agent.v1.ScriptStringPair
+	397,  // 904: groundplane.agent.v1.ScriptRunnerProjection.ulimits:type_name -> groundplane.agent.v1.ScriptUlimit
+	398,  // 905: groundplane.agent.v1.ScriptRunnerProjection.blkio:type_name -> groundplane.agent.v1.ScriptBlkio
+	396,  // 906: groundplane.agent.v1.ScriptRunnerProjection.storage_opt:type_name -> groundplane.agent.v1.ScriptStringPair
+	401,  // 907: groundplane.agent.v1.ScriptRunnerProjection.limits:type_name -> groundplane.agent.v1.ScriptResource
+	401,  // 908: groundplane.agent.v1.ScriptRunnerProjection.reservations:type_name -> groundplane.agent.v1.ScriptResource
+	388,  // 909: groundplane.agent.v1.ScriptRunnerProjection.mounts:type_name -> groundplane.agent.v1.ScriptRunnerMount
+	386,  // 910: groundplane.agent.v1.ScriptRunnerProjection.networks:type_name -> groundplane.agent.v1.ScriptRunnerNetwork
+	396,  // 911: groundplane.agent.v1.ScriptRunnerProjection.labels:type_name -> groundplane.agent.v1.ScriptStringPair
+	393,  // 912: groundplane.agent.v1.ScriptRunnerProjection.entry_bindings:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
+	399,  // 913: groundplane.agent.v1.ScriptBlkio.weight_devices:type_name -> groundplane.agent.v1.ScriptWeightDevice
+	400,  // 914: groundplane.agent.v1.ScriptBlkio.device_read_bps:type_name -> groundplane.agent.v1.ScriptThrottleDevice
+	400,  // 915: groundplane.agent.v1.ScriptBlkio.device_read_iops:type_name -> groundplane.agent.v1.ScriptThrottleDevice
+	400,  // 916: groundplane.agent.v1.ScriptBlkio.device_write_bps:type_name -> groundplane.agent.v1.ScriptThrottleDevice
+	400,  // 917: groundplane.agent.v1.ScriptBlkio.device_write_iops:type_name -> groundplane.agent.v1.ScriptThrottleDevice
+	404,  // 918: groundplane.agent.v1.ScriptAssignmentArtifacts.bodies:type_name -> groundplane.agent.v1.ScriptBodyArtifact
+	405,  // 919: groundplane.agent.v1.ScriptAssignmentArtifacts.secrets:type_name -> groundplane.agent.v1.ScriptSecretArtifact
+	406,  // 920: groundplane.agent.v1.ScriptAssignmentArtifacts.entries:type_name -> groundplane.agent.v1.ScriptEntryArtifact
+	402,  // 921: groundplane.agent.v1.ScriptBodyArtifact.metadata:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
+	393,  // 922: groundplane.agent.v1.ScriptEntryArtifact.binding:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
+	34,   // 923: groundplane.agent.v1.BackupResourceIdentity.kind:type_name -> groundplane.agent.v1.BackupResourceKind
+	407,  // 924: groundplane.agent.v1.BackupResourceIdentity.resource:type_name -> groundplane.agent.v1.RevisionDigest
+	35,   // 925: groundplane.agent.v1.BackupEncryptionAuthority.kind:type_name -> groundplane.agent.v1.BackupEncryption
+	407,  // 926: groundplane.agent.v1.BackupEncryptionAuthority.secret_slot:type_name -> groundplane.agent.v1.RevisionDigest
+	36,   // 927: groundplane.agent.v1.BackupPriorRuntimeIntent.kind:type_name -> groundplane.agent.v1.BackupServiceRuntimeIntent
+	407,  // 928: groundplane.agent.v1.BackupPriorRuntimeIntent.intent:type_name -> groundplane.agent.v1.RevisionDigest
+	407,  // 929: groundplane.agent.v1.BackupServiceFact.service:type_name -> groundplane.agent.v1.RevisionDigest
+	407,  // 930: groundplane.agent.v1.BackupServiceFact.compose:type_name -> groundplane.agent.v1.RevisionDigest
+	411,  // 931: groundplane.agent.v1.BackupServiceFact.prior_runtime_intent:type_name -> groundplane.agent.v1.BackupPriorRuntimeIntent
+	407,  // 932: groundplane.agent.v1.BackupConnectorAuthority.connector:type_name -> groundplane.agent.v1.RevisionDigest
+	407,  // 933: groundplane.agent.v1.BackupConnectorAuthority.access_key_slot:type_name -> groundplane.agent.v1.RevisionDigest
+	407,  // 934: groundplane.agent.v1.BackupConnectorAuthority.secret_key_slot:type_name -> groundplane.agent.v1.RevisionDigest
+	413,  // 935: groundplane.agent.v1.BackupObjectTarget.connector:type_name -> groundplane.agent.v1.BackupConnectorAuthority
+	413,  // 936: groundplane.agent.v1.BackupObjectIdentity.connector:type_name -> groundplane.agent.v1.BackupConnectorAuthority
+	415,  // 937: groundplane.agent.v1.BackupObjectIdentity.version_id:type_name -> groundplane.agent.v1.BackupS3VersionId
+	416,  // 938: groundplane.agent.v1.BackupObjectIdentity.etag:type_name -> groundplane.agent.v1.BackupS3ETag
+	407,  // 939: groundplane.agent.v1.BackupTaskAuthority.project:type_name -> groundplane.agent.v1.RevisionDigest
+	407,  // 940: groundplane.agent.v1.BackupTaskAuthority.environment:type_name -> groundplane.agent.v1.RevisionDigest
+	412,  // 941: groundplane.agent.v1.BackupTaskAuthority.services:type_name -> groundplane.agent.v1.BackupServiceFact
+	436,  // 942: groundplane.agent.v1.BackupTaskAuthority.steps:type_name -> groundplane.agent.v1.BackupStepAuthority
+	37,   // 943: groundplane.agent.v1.BackupWorkInput.operation:type_name -> groundplane.agent.v1.BackupWorkOperation
+	407,  // 944: groundplane.agent.v1.BackupWorkInput.project:type_name -> groundplane.agent.v1.RevisionDigest
+	407,  // 945: groundplane.agent.v1.BackupWorkInput.environment:type_name -> groundplane.agent.v1.RevisionDigest
+	412,  // 946: groundplane.agent.v1.BackupWorkInput.services:type_name -> groundplane.agent.v1.BackupServiceFact
+	436,  // 947: groundplane.agent.v1.BackupWorkInput.steps:type_name -> groundplane.agent.v1.BackupStepAuthority
+	371,  // 948: groundplane.agent.v1.BackupWorkInput.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
+	61,   // 949: groundplane.agent.v1.BackupWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	420,  // 950: groundplane.agent.v1.BackupWorkAssignment.input:type_name -> groundplane.agent.v1.BackupWorkInput
+	438,  // 951: groundplane.agent.v1.BackupWorkAssignment.sources:type_name -> groundplane.agent.v1.BackupStepResume
+	421,  // 952: groundplane.agent.v1.BackupConsumerHelperRequest.assignment:type_name -> groundplane.agent.v1.BackupWorkAssignment
+	64,   // 953: groundplane.agent.v1.BackupConsumerHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	54,   // 954: groundplane.agent.v1.BackupConsumerHelperRequest.operation:type_name -> groundplane.agent.v1.BackupConsumerOperation
+	429,  // 955: groundplane.agent.v1.BackupConsumerHelperRequest.checkpoint:type_name -> groundplane.agent.v1.BackupWorkCheckpointRequest
+	434,  // 956: groundplane.agent.v1.BackupConsumerHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.BackupWorkCheckpointAck
+	424,  // 957: groundplane.agent.v1.BackupConsumerHelperRequest.recovery:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
+	61,   // 958: groundplane.agent.v1.BackupConsumerHelperResponse.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	204,  // 959: groundplane.agent.v1.BackupConsumerHelperResponse.observed:type_name -> groundplane.agent.v1.ObservedProject
+	623,  // 960: groundplane.agent.v1.BackupConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	61,   // 961: groundplane.agent.v1.BackupRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	420,  // 962: groundplane.agent.v1.BackupRecoveryAssignment.input:type_name -> groundplane.agent.v1.BackupWorkInput
+	438,  // 963: groundplane.agent.v1.BackupRecoveryAssignment.sources:type_name -> groundplane.agent.v1.BackupStepResume
+	38,   // 964: groundplane.agent.v1.BackupRecoveryAssignment.restore_mode:type_name -> groundplane.agent.v1.BackupRestoreRecoveryMode
+	61,   // 965: groundplane.agent.v1.BackupRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 966: groundplane.agent.v1.BackupConfigRecoveryPrepareRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	424,  // 967: groundplane.agent.v1.BackupConfigRecoveryPrepareAck.assignment:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
+	493,  // 968: groundplane.agent.v1.BackupConfigRecoveryPrepareAck.completed:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
+	61,   // 969: groundplane.agent.v1.BackupRecoveryAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 970: groundplane.agent.v1.BackupRecoveryAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 971: groundplane.agent.v1.BackupRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 972: groundplane.agent.v1.BackupRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 973: groundplane.agent.v1.BackupWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	408,  // 974: groundplane.agent.v1.BackupWorkCheckpointRequest.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
+	484,  // 975: groundplane.agent.v1.BackupWorkCheckpointRequest.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPrepared
+	487,  // 976: groundplane.agent.v1.BackupWorkCheckpointRequest.upload_verified:type_name -> groundplane.agent.v1.BackupUploadVerified
+	488,  // 977: groundplane.agent.v1.BackupWorkCheckpointRequest.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
+	527,  // 978: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
+	528,  // 979: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
+	529,  // 980: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_restore_apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
+	489,  // 981: groundplane.agent.v1.BackupWorkCheckpointRequest.restore_artifact_validated:type_name -> groundplane.agent.v1.BackupRestoreArtifactValidated
+	490,  // 982: groundplane.agent.v1.BackupWorkCheckpointRequest.config:type_name -> groundplane.agent.v1.BackupConfigCheckpoint
+	495,  // 983: groundplane.agent.v1.BackupWorkCheckpointRequest.volume:type_name -> groundplane.agent.v1.BackupVolumeCheckpoint
+	452,  // 984: groundplane.agent.v1.BackupWorkCheckpointRequest.prune_object_deleted:type_name -> groundplane.agent.v1.BackupPruneObjectDeleted
+	530,  // 985: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_restore_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
+	531,  // 986: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_service_progress:type_name -> groundplane.agent.v1.BackupPostgresServiceProgress
+	485,  // 987: groundplane.agent.v1.BackupWorkCheckpointRequest.upload_completed:type_name -> groundplane.agent.v1.BackupUploadCompleted
+	535,  // 988: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
+	536,  // 989: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_dump_start:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
+	537,  // 990: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_restore_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
+	538,  // 991: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_restore_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
+	539,  // 992: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_service_progress:type_name -> groundplane.agent.v1.BackupMySQLServiceProgress
+	443,  // 993: groundplane.agent.v1.BackupWorkCheckpointRequest.database_consumer_recovery:type_name -> groundplane.agent.v1.BackupDatabaseConsumerRecovery
+	61,   // 994: groundplane.agent.v1.BackupWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 995: groundplane.agent.v1.BackupWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	61,   // 996: groundplane.agent.v1.BackupWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 997: groundplane.agent.v1.BackupWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 998: groundplane.agent.v1.BackupWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 999: groundplane.agent.v1.BackupWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 1000: groundplane.agent.v1.BackupWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 1001: groundplane.agent.v1.BackupWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	57,   // 1002: groundplane.agent.v1.BackupWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	623,  // 1003: groundplane.agent.v1.BackupWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 1004: groundplane.agent.v1.BackupWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	61,   // 1005: groundplane.agent.v1.BackupWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	408,  // 1006: groundplane.agent.v1.BackupWorkCheckpointAck.committed:type_name -> groundplane.agent.v1.CheckpointFence
+	438,  // 1007: groundplane.agent.v1.BackupWorkCheckpointAck.source:type_name -> groundplane.agent.v1.BackupStepResume
+	407,  // 1008: groundplane.agent.v1.BackupPlanScope.project:type_name -> groundplane.agent.v1.RevisionDigest
+	407,  // 1009: groundplane.agent.v1.BackupPlanScope.environment:type_name -> groundplane.agent.v1.RevisionDigest
+	412,  // 1010: groundplane.agent.v1.BackupPlanScope.services:type_name -> groundplane.agent.v1.BackupServiceFact
+	446,  // 1011: groundplane.agent.v1.BackupStepAuthority.capture:type_name -> groundplane.agent.v1.BackupCaptureAuthority
+	448,  // 1012: groundplane.agent.v1.BackupStepAuthority.prune:type_name -> groundplane.agent.v1.BackupPruneAuthority
+	447,  // 1013: groundplane.agent.v1.BackupStepAuthority.restore:type_name -> groundplane.agent.v1.BackupRestoreAuthority
+	438,  // 1014: groundplane.agent.v1.BackupTaskResume.steps:type_name -> groundplane.agent.v1.BackupStepResume
+	439,  // 1015: groundplane.agent.v1.BackupStepResume.capture:type_name -> groundplane.agent.v1.BackupCaptureResume
+	440,  // 1016: groundplane.agent.v1.BackupStepResume.prune:type_name -> groundplane.agent.v1.BackupPruneResume
+	441,  // 1017: groundplane.agent.v1.BackupStepResume.restore:type_name -> groundplane.agent.v1.BackupRestoreResume
+	408,  // 1018: groundplane.agent.v1.BackupCaptureResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
+	39,   // 1019: groundplane.agent.v1.BackupCaptureResume.phase:type_name -> groundplane.agent.v1.BackupCapturePhase
+	444,  // 1020: groundplane.agent.v1.BackupCaptureResume.cursor:type_name -> groundplane.agent.v1.BackupCaptureCursor
+	484,  // 1021: groundplane.agent.v1.BackupCaptureResume.prepared_artifact:type_name -> groundplane.agent.v1.BackupArtifactPrepared
+	528,  // 1022: groundplane.agent.v1.BackupCaptureResume.dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
+	536,  // 1023: groundplane.agent.v1.BackupCaptureResume.mysql_dump_start:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
+	484,  // 1024: groundplane.agent.v1.BackupCaptureResume.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPrepared
+	487,  // 1025: groundplane.agent.v1.BackupCaptureResume.upload_verified:type_name -> groundplane.agent.v1.BackupUploadVerified
+	488,  // 1026: groundplane.agent.v1.BackupCaptureResume.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
+	527,  // 1027: groundplane.agent.v1.BackupCaptureResume.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
+	528,  // 1028: groundplane.agent.v1.BackupCaptureResume.postgres_dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
+	496,  // 1029: groundplane.agent.v1.BackupCaptureResume.volume_progress:type_name -> groundplane.agent.v1.BackupVolumeProgress
+	491,  // 1030: groundplane.agent.v1.BackupCaptureResume.config_progress:type_name -> groundplane.agent.v1.BackupConfigProgress
+	485,  // 1031: groundplane.agent.v1.BackupCaptureResume.upload_completed:type_name -> groundplane.agent.v1.BackupUploadCompleted
+	535,  // 1032: groundplane.agent.v1.BackupCaptureResume.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
+	536,  // 1033: groundplane.agent.v1.BackupCaptureResume.mysql_dump_start_checkpoint:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
+	408,  // 1034: groundplane.agent.v1.BackupPruneResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
+	452,  // 1035: groundplane.agent.v1.BackupPruneResume.object_deleted:type_name -> groundplane.agent.v1.BackupPruneObjectDeleted
+	408,  // 1036: groundplane.agent.v1.BackupRestoreResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
+	40,   // 1037: groundplane.agent.v1.BackupRestoreResume.phase:type_name -> groundplane.agent.v1.BackupRestorePhase
+	445,  // 1038: groundplane.agent.v1.BackupRestoreResume.cursor:type_name -> groundplane.agent.v1.BackupRestoreCursor
+	529,  // 1039: groundplane.agent.v1.BackupRestoreResume.apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
+	537,  // 1040: groundplane.agent.v1.BackupRestoreResume.mysql_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
+	442,  // 1041: groundplane.agent.v1.BackupRestoreResume.database_progress:type_name -> groundplane.agent.v1.BackupDatabaseRestoreProgress
+	489,  // 1042: groundplane.agent.v1.BackupRestoreResume.artifact_validated:type_name -> groundplane.agent.v1.BackupRestoreArtifactValidated
+	527,  // 1043: groundplane.agent.v1.BackupRestoreResume.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
+	529,  // 1044: groundplane.agent.v1.BackupRestoreResume.postgres_restore_apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
+	491,  // 1045: groundplane.agent.v1.BackupRestoreResume.config_progress:type_name -> groundplane.agent.v1.BackupConfigProgress
+	496,  // 1046: groundplane.agent.v1.BackupRestoreResume.volume_progress:type_name -> groundplane.agent.v1.BackupVolumeProgress
+	530,  // 1047: groundplane.agent.v1.BackupRestoreResume.postgres_restore_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
+	531,  // 1048: groundplane.agent.v1.BackupRestoreResume.postgres_service_progress:type_name -> groundplane.agent.v1.BackupPostgresServiceProgress
+	488,  // 1049: groundplane.agent.v1.BackupRestoreResume.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
+	535,  // 1050: groundplane.agent.v1.BackupRestoreResume.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
+	537,  // 1051: groundplane.agent.v1.BackupRestoreResume.mysql_restore_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
+	538,  // 1052: groundplane.agent.v1.BackupRestoreResume.mysql_restore_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
+	539,  // 1053: groundplane.agent.v1.BackupRestoreResume.mysql_service_progress:type_name -> groundplane.agent.v1.BackupMySQLServiceProgress
+	46,   // 1054: groundplane.agent.v1.BackupDatabaseRestoreProgress.consumer_phase:type_name -> groundplane.agent.v1.BackupServicePhase
+	527,  // 1055: groundplane.agent.v1.BackupDatabaseRestoreProgress.postgres_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
+	535,  // 1056: groundplane.agent.v1.BackupDatabaseRestoreProgress.mysql_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
+	530,  // 1057: groundplane.agent.v1.BackupDatabaseRestoreProgress.postgres_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
+	538,  // 1058: groundplane.agent.v1.BackupDatabaseRestoreProgress.mysql_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
+	409,  // 1059: groundplane.agent.v1.BackupCaptureAuthority.resource:type_name -> groundplane.agent.v1.BackupResourceIdentity
+	414,  // 1060: groundplane.agent.v1.BackupCaptureAuthority.target:type_name -> groundplane.agent.v1.BackupObjectTarget
+	410,  // 1061: groundplane.agent.v1.BackupCaptureAuthority.encryption:type_name -> groundplane.agent.v1.BackupEncryptionAuthority
+	525,  // 1062: groundplane.agent.v1.BackupCaptureAuthority.postgres:type_name -> groundplane.agent.v1.BackupPostgresCaptureAuthority
+	516,  // 1063: groundplane.agent.v1.BackupCaptureAuthority.config:type_name -> groundplane.agent.v1.BackupConfigCaptureAuthority
+	544,  // 1064: groundplane.agent.v1.BackupCaptureAuthority.volume:type_name -> groundplane.agent.v1.BackupVolumeCaptureAuthority
+	533,  // 1065: groundplane.agent.v1.BackupCaptureAuthority.mysql:type_name -> groundplane.agent.v1.BackupMySQLCaptureAuthority
+	409,  // 1066: groundplane.agent.v1.BackupRestoreAuthority.destination:type_name -> groundplane.agent.v1.BackupResourceIdentity
+	417,  // 1067: groundplane.agent.v1.BackupRestoreAuthority.source_object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	418,  // 1068: groundplane.agent.v1.BackupRestoreAuthority.expected_evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	410,  // 1069: groundplane.agent.v1.BackupRestoreAuthority.encryption:type_name -> groundplane.agent.v1.BackupEncryptionAuthority
+	526,  // 1070: groundplane.agent.v1.BackupRestoreAuthority.postgres:type_name -> groundplane.agent.v1.BackupPostgresRestoreAuthority
+	517,  // 1071: groundplane.agent.v1.BackupRestoreAuthority.config:type_name -> groundplane.agent.v1.BackupConfigRestoreAuthority
+	545,  // 1072: groundplane.agent.v1.BackupRestoreAuthority.volume:type_name -> groundplane.agent.v1.BackupVolumeRestoreAuthority
+	534,  // 1073: groundplane.agent.v1.BackupRestoreAuthority.mysql:type_name -> groundplane.agent.v1.BackupMySQLRestoreAuthority
+	449,  // 1074: groundplane.agent.v1.BackupRestoreAuthority.original_identity:type_name -> groundplane.agent.v1.BackupOriginalIdentity
+	450,  // 1075: groundplane.agent.v1.BackupRestoreAuthority.adopted_identity:type_name -> groundplane.agent.v1.BackupAdoptedIdentity
+	407,  // 1076: groundplane.agent.v1.BackupPruneAuthority.retention_policy:type_name -> groundplane.agent.v1.RevisionDigest
+	451,  // 1077: groundplane.agent.v1.BackupPruneAuthority.objects:type_name -> groundplane.agent.v1.BackupPruneObject
+	409,  // 1078: groundplane.agent.v1.BackupOriginalIdentity.destination:type_name -> groundplane.agent.v1.BackupResourceIdentity
+	408,  // 1079: groundplane.agent.v1.BackupAdoptedIdentity.predecessor_fence:type_name -> groundplane.agent.v1.CheckpointFence
+	407,  // 1080: groundplane.agent.v1.BackupPruneObject.point:type_name -> groundplane.agent.v1.RevisionDigest
+	418,  // 1081: groundplane.agent.v1.BackupPruneObject.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	417,  // 1082: groundplane.agent.v1.BackupPruneObject.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	417,  // 1083: groundplane.agent.v1.BackupPruneObjectDeleted.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	455,  // 1084: groundplane.agent.v1.BackupStagingInventory.entries:type_name -> groundplane.agent.v1.BackupRecoveredStage
+	454,  // 1085: groundplane.agent.v1.BackupStagingInventory.volume_restores:type_name -> groundplane.agent.v1.BackupRecoveredVolumeRestore
+	61,   // 1086: groundplane.agent.v1.BackupRecoveredVolumeRestore.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	456,  // 1087: groundplane.agent.v1.BackupRecoveredStage.files:type_name -> groundplane.agent.v1.BackupRecoveredFile
+	41,   // 1088: groundplane.agent.v1.BackupRecoveredFile.role:type_name -> groundplane.agent.v1.BackupRecoveredFileRole
+	462,  // 1089: groundplane.agent.v1.BackupStagingRecoveryPlan.dispositions:type_name -> groundplane.agent.v1.BackupStagingDisposition
+	458,  // 1090: groundplane.agent.v1.BackupStagingRecoveryPlan.volume_dispositions:type_name -> groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition
+	459,  // 1091: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.resume:type_name -> groundplane.agent.v1.BackupVolumeRestoreResume
+	460,  // 1092: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.hold:type_name -> groundplane.agent.v1.BackupVolumeRestoreHold
+	461,  // 1093: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.cleanup:type_name -> groundplane.agent.v1.BackupVolumeRestoreCleanup
+	464,  // 1094: groundplane.agent.v1.BackupStagingDisposition.resume_prepared:type_name -> groundplane.agent.v1.BackupResumePrepared
+	467,  // 1095: groundplane.agent.v1.BackupStagingDisposition.discard_recovered:type_name -> groundplane.agent.v1.BackupDiscardRecovered
+	468,  // 1096: groundplane.agent.v1.BackupStagingDisposition.recovery_required:type_name -> groundplane.agent.v1.BackupRecoveryRequired
+	463,  // 1097: groundplane.agent.v1.BackupStagingDisposition.database_guard:type_name -> groundplane.agent.v1.BackupDatabaseStagingGuard
+	436,  // 1098: groundplane.agent.v1.BackupDatabaseStagingGuard.step:type_name -> groundplane.agent.v1.BackupStepAuthority
+	412,  // 1099: groundplane.agent.v1.BackupDatabaseStagingGuard.database_service:type_name -> groundplane.agent.v1.BackupServiceFact
+	371,  // 1100: groundplane.agent.v1.BackupDatabaseStagingGuard.database_artifact:type_name -> groundplane.agent.v1.ComposeArtifact
+	529,  // 1101: groundplane.agent.v1.BackupDatabaseStagingGuard.postgres_recovery_apply:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
+	537,  // 1102: groundplane.agent.v1.BackupDatabaseStagingGuard.mysql_recovery_apply:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
+	42,   // 1103: groundplane.agent.v1.BackupResumePrepared.remaining_growth:type_name -> groundplane.agent.v1.BackupRemainingGrowth
+	456,  // 1104: groundplane.agent.v1.BackupResumePrepared.expected_files:type_name -> groundplane.agent.v1.BackupRecoveredFile
+	465,  // 1105: groundplane.agent.v1.BackupResumePrepared.restart_config_encryption:type_name -> groundplane.agent.v1.BackupRestartConfigEncryption
+	466,  // 1106: groundplane.agent.v1.BackupResumePrepared.restart_database_encryption:type_name -> groundplane.agent.v1.BackupRestartDatabaseEncryption
+	456,  // 1107: groundplane.agent.v1.BackupRecoveryRequired.expected_files:type_name -> groundplane.agent.v1.BackupRecoveredFile
+	61,   // 1108: groundplane.agent.v1.BackupConfigTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	471,  // 1109: groundplane.agent.v1.BackupConfigTransfer.start:type_name -> groundplane.agent.v1.BackupConfigTransferStart
+	472,  // 1110: groundplane.agent.v1.BackupConfigTransfer.entry_header:type_name -> groundplane.agent.v1.BackupConfigEntryHeader
+	473,  // 1111: groundplane.agent.v1.BackupConfigTransfer.value_chunk:type_name -> groundplane.agent.v1.BackupConfigValueChunk
+	474,  // 1112: groundplane.agent.v1.BackupConfigTransfer.entry_end:type_name -> groundplane.agent.v1.BackupConfigEntryEnd
+	475,  // 1113: groundplane.agent.v1.BackupConfigTransfer.end:type_name -> groundplane.agent.v1.BackupConfigTransferEnd
+	476,  // 1114: groundplane.agent.v1.BackupConfigTransfer.resume:type_name -> groundplane.agent.v1.BackupConfigTransferResume
+	43,   // 1115: groundplane.agent.v1.BackupConfigTransferStart.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
+	514,  // 1116: groundplane.agent.v1.BackupConfigTransferStart.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
+	498,  // 1117: groundplane.agent.v1.BackupConfigEntryHeader.capture_entry:type_name -> groundplane.agent.v1.BackupConfigEntry
+	506,  // 1118: groundplane.agent.v1.BackupConfigEntryHeader.restore_entry:type_name -> groundplane.agent.v1.BackupConfigRestoreEntry
+	43,   // 1119: groundplane.agent.v1.BackupConfigTransferEnd.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
+	514,  // 1120: groundplane.agent.v1.BackupConfigTransferEnd.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
+	61,   // 1121: groundplane.agent.v1.BackupConfigCredit.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	43,   // 1122: groundplane.agent.v1.BackupConfigCredit.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
+	522,  // 1123: groundplane.agent.v1.BackupConfigCredit.metadata_accepted:type_name -> groundplane.agent.v1.BackupConfigMetadataAccepted
+	523,  // 1124: groundplane.agent.v1.BackupConfigCredit.value_credit:type_name -> groundplane.agent.v1.BackupConfigValueCredit
+	524,  // 1125: groundplane.agent.v1.BackupConfigCredit.metadata_credit:type_name -> groundplane.agent.v1.BackupConfigMetadataCredit
+	61,   // 1126: groundplane.agent.v1.BackupVolumeManifestTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	44,   // 1127: groundplane.agent.v1.BackupVolumeManifestTransfer.direction:type_name -> groundplane.agent.v1.BackupVolumeManifestDirection
+	479,  // 1128: groundplane.agent.v1.BackupVolumeManifestTransfer.start:type_name -> groundplane.agent.v1.BackupVolumeManifestStart
+	480,  // 1129: groundplane.agent.v1.BackupVolumeManifestTransfer.batch:type_name -> groundplane.agent.v1.BackupVolumeManifestBatch
+	481,  // 1130: groundplane.agent.v1.BackupVolumeManifestTransfer.end:type_name -> groundplane.agent.v1.BackupVolumeManifestEnd
+	482,  // 1131: groundplane.agent.v1.BackupVolumeManifestTransfer.resume:type_name -> groundplane.agent.v1.BackupVolumeManifestResume
+	45,   // 1132: groundplane.agent.v1.BackupVolumeManifestStart.role:type_name -> groundplane.agent.v1.BackupVolumeManifestRole
+	546,  // 1133: groundplane.agent.v1.BackupVolumeManifestStart.source_archive:type_name -> groundplane.agent.v1.BackupVolumeSourceArchiveEvidence
+	547,  // 1134: groundplane.agent.v1.BackupVolumeManifestStart.no_source_archive:type_name -> groundplane.agent.v1.BackupVolumeNoSourceArchiveEvidence
+	541,  // 1135: groundplane.agent.v1.BackupVolumeManifestBatch.entries:type_name -> groundplane.agent.v1.BackupVolumeManifestEntry
+	61,   // 1136: groundplane.agent.v1.BackupVolumeManifestAckCredit.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	418,  // 1137: groundplane.agent.v1.BackupArtifactPrepared.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	497,  // 1138: groundplane.agent.v1.BackupArtifactPrepared.finals:type_name -> groundplane.agent.v1.BackupStagingFinals
+	532,  // 1139: groundplane.agent.v1.BackupArtifactPrepared.postgres:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
+	515,  // 1140: groundplane.agent.v1.BackupArtifactPrepared.config:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
+	542,  // 1141: groundplane.agent.v1.BackupArtifactPrepared.volume:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
+	540,  // 1142: groundplane.agent.v1.BackupArtifactPrepared.mysql:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
+	418,  // 1143: groundplane.agent.v1.BackupUploadCompleted.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	414,  // 1144: groundplane.agent.v1.BackupUploadCompleted.target:type_name -> groundplane.agent.v1.BackupObjectTarget
+	417,  // 1145: groundplane.agent.v1.BackupUploadCompleted.returned_object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	486,  // 1146: groundplane.agent.v1.BackupUploadCompleted.unknown:type_name -> groundplane.agent.v1.BackupPutOutcomeUnknown
+	418,  // 1147: groundplane.agent.v1.BackupUploadVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	417,  // 1148: groundplane.agent.v1.BackupUploadVerified.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	418,  // 1149: groundplane.agent.v1.BackupSourceCleanupCompleted.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	417,  // 1150: groundplane.agent.v1.BackupRestoreArtifactValidated.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	418,  // 1151: groundplane.agent.v1.BackupRestoreArtifactValidated.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	497,  // 1152: groundplane.agent.v1.BackupRestoreArtifactValidated.finals:type_name -> groundplane.agent.v1.BackupStagingFinals
+	532,  // 1153: groundplane.agent.v1.BackupRestoreArtifactValidated.postgres:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
+	515,  // 1154: groundplane.agent.v1.BackupRestoreArtifactValidated.config:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
+	542,  // 1155: groundplane.agent.v1.BackupRestoreArtifactValidated.volume:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
+	540,  // 1156: groundplane.agent.v1.BackupRestoreArtifactValidated.mysql:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
+	492,  // 1157: groundplane.agent.v1.BackupConfigCheckpoint.value_progress:type_name -> groundplane.agent.v1.BackupConfigValueProgress
+	493,  // 1158: groundplane.agent.v1.BackupConfigCheckpoint.transfer_completed:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
+	494,  // 1159: groundplane.agent.v1.BackupConfigCheckpoint.materialization_verified:type_name -> groundplane.agent.v1.BackupConfigMaterializationVerified
+	488,  // 1160: groundplane.agent.v1.BackupConfigProgress.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
+	493,  // 1161: groundplane.agent.v1.BackupConfigProgress.transfer:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
+	494,  // 1162: groundplane.agent.v1.BackupConfigProgress.materialization:type_name -> groundplane.agent.v1.BackupConfigMaterializationVerified
+	514,  // 1163: groundplane.agent.v1.BackupConfigTransferCompleted.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
+	548,  // 1164: groundplane.agent.v1.BackupVolumeCheckpoint.consumers_stopped:type_name -> groundplane.agent.v1.BackupConsumersStopped
+	549,  // 1165: groundplane.agent.v1.BackupVolumeCheckpoint.construction_intent:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
+	550,  // 1166: groundplane.agent.v1.BackupVolumeCheckpoint.construction_completed:type_name -> groundplane.agent.v1.BackupVolumeConstructionCompleted
+	551,  // 1167: groundplane.agent.v1.BackupVolumeCheckpoint.finalization_intent:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
+	552,  // 1168: groundplane.agent.v1.BackupVolumeCheckpoint.finalization_completed:type_name -> groundplane.agent.v1.BackupVolumeFinalizationCompleted
+	553,  // 1169: groundplane.agent.v1.BackupVolumeCheckpoint.exchange_intent:type_name -> groundplane.agent.v1.BackupVolumeExchangeIntent
+	554,  // 1170: groundplane.agent.v1.BackupVolumeCheckpoint.tree_exchanged:type_name -> groundplane.agent.v1.BackupVolumeTreeExchanged
+	555,  // 1171: groundplane.agent.v1.BackupVolumeCheckpoint.replaced_path_delete_intent:type_name -> groundplane.agent.v1.BackupVolumeDeleteIntent
+	556,  // 1172: groundplane.agent.v1.BackupVolumeCheckpoint.volume_replaced_path_cleaned:type_name -> groundplane.agent.v1.BackupVolumeReplacedPathCleaned
+	557,  // 1173: groundplane.agent.v1.BackupVolumeCheckpoint.service_progress:type_name -> groundplane.agent.v1.BackupVolumeServiceProgress
+	549,  // 1174: groundplane.agent.v1.BackupVolumeProgress.pending_construction:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
+	551,  // 1175: groundplane.agent.v1.BackupVolumeProgress.pending_finalization:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
+	553,  // 1176: groundplane.agent.v1.BackupVolumeProgress.pending_exchange:type_name -> groundplane.agent.v1.BackupVolumeExchangeIntent
+	555,  // 1177: groundplane.agent.v1.BackupVolumeProgress.pending_delete:type_name -> groundplane.agent.v1.BackupVolumeDeleteIntent
+	46,   // 1178: groundplane.agent.v1.BackupVolumeProgress.service_phase:type_name -> groundplane.agent.v1.BackupServicePhase
+	407,  // 1179: groundplane.agent.v1.BackupConfigEntry.entry:type_name -> groundplane.agent.v1.RevisionDigest
+	499,  // 1180: groundplane.agent.v1.BackupConfigEntry.environment:type_name -> groundplane.agent.v1.BackupConfigEnvironment
+	500,  // 1181: groundplane.agent.v1.BackupConfigEntry.file:type_name -> groundplane.agent.v1.BackupConfigFile
+	501,  // 1182: groundplane.agent.v1.BackupConfigEntry.exposure_all:type_name -> groundplane.agent.v1.BackupConfigExposureAll
+	502,  // 1183: groundplane.agent.v1.BackupConfigEntry.exposure_services:type_name -> groundplane.agent.v1.BackupConfigExposureServices
+	503,  // 1184: groundplane.agent.v1.BackupConfigEntry.literal:type_name -> groundplane.agent.v1.BackupConfigLiteral
+	504,  // 1185: groundplane.agent.v1.BackupConfigEntry.secret_ref:type_name -> groundplane.agent.v1.BackupConfigSecretRef
+	505,  // 1186: groundplane.agent.v1.BackupConfigEntry.fact_ref:type_name -> groundplane.agent.v1.BackupConfigFactRef
+	407,  // 1187: groundplane.agent.v1.BackupConfigSecretRef.secret:type_name -> groundplane.agent.v1.RevisionDigest
+	407,  // 1188: groundplane.agent.v1.BackupConfigFactRef.attach:type_name -> groundplane.agent.v1.RevisionDigest
+	407,  // 1189: groundplane.agent.v1.BackupConfigFactRef.grant_attach:type_name -> groundplane.agent.v1.RevisionDigest
+	507,  // 1190: groundplane.agent.v1.BackupConfigRestoreEntry.metadata:type_name -> groundplane.agent.v1.BackupConfigEntryMetadata
+	508,  // 1191: groundplane.agent.v1.BackupConfigRestoreEntry.exposure:type_name -> groundplane.agent.v1.BackupConfigEntryExposure
+	509,  // 1192: groundplane.agent.v1.BackupConfigRestoreEntry.source:type_name -> groundplane.agent.v1.BackupConfigArtifactDesiredSource
+	513,  // 1193: groundplane.agent.v1.BackupConfigRestoreEntry.selected_value:type_name -> groundplane.agent.v1.BackupConfigSelectedValue
+	499,  // 1194: groundplane.agent.v1.BackupConfigEntryMetadata.environment:type_name -> groundplane.agent.v1.BackupConfigEnvironment
+	500,  // 1195: groundplane.agent.v1.BackupConfigEntryMetadata.file:type_name -> groundplane.agent.v1.BackupConfigFile
+	501,  // 1196: groundplane.agent.v1.BackupConfigEntryExposure.all:type_name -> groundplane.agent.v1.BackupConfigExposureAll
+	502,  // 1197: groundplane.agent.v1.BackupConfigEntryExposure.services:type_name -> groundplane.agent.v1.BackupConfigExposureServices
+	510,  // 1198: groundplane.agent.v1.BackupConfigArtifactDesiredSource.literal:type_name -> groundplane.agent.v1.BackupConfigLiteralSource
+	511,  // 1199: groundplane.agent.v1.BackupConfigArtifactDesiredSource.secret_ref:type_name -> groundplane.agent.v1.BackupConfigArtifactSecretRefSource
+	512,  // 1200: groundplane.agent.v1.BackupConfigArtifactDesiredSource.fact_ref:type_name -> groundplane.agent.v1.BackupConfigArtifactFactSource
+	514,  // 1201: groundplane.agent.v1.BackupConfigArchiveEvidence.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
+	514,  // 1202: groundplane.agent.v1.BackupConfigCaptureAuthority.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
+	515,  // 1203: groundplane.agent.v1.BackupConfigRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
+	518,  // 1204: groundplane.agent.v1.BackupConfigRestoreAuthority.files:type_name -> groundplane.agent.v1.BackupConfigFileContext
+	519,  // 1205: groundplane.agent.v1.BackupConfigFileContext.services:type_name -> groundplane.agent.v1.BackupConfigFileService
+	520,  // 1206: groundplane.agent.v1.BackupConfigFileContext.prior_files:type_name -> groundplane.agent.v1.BackupConfigPriorFile
+	498,  // 1207: groundplane.agent.v1.BackupConfigMetadataRow.capture_entry:type_name -> groundplane.agent.v1.BackupConfigEntry
+	506,  // 1208: groundplane.agent.v1.BackupConfigMetadataRow.restore_entry:type_name -> groundplane.agent.v1.BackupConfigRestoreEntry
+	532,  // 1209: groundplane.agent.v1.BackupPostgresRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
+	191,  // 1210: groundplane.agent.v1.BackupPostgresRestoreAuthority.expected_target_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
+	532,  // 1211: groundplane.agent.v1.BackupPostgresDumpStart.archive:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
+	418,  // 1212: groundplane.agent.v1.BackupPostgresRestoreVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	46,   // 1213: groundplane.agent.v1.BackupPostgresServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
+	540,  // 1214: groundplane.agent.v1.BackupMySQLRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
+	191,  // 1215: groundplane.agent.v1.BackupMySQLRestoreAuthority.expected_target_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
+	540,  // 1216: groundplane.agent.v1.BackupMySQLDumpStart.archive:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
+	418,  // 1217: groundplane.agent.v1.BackupMySQLRestoreVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	46,   // 1218: groundplane.agent.v1.BackupMySQLServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
+	47,   // 1219: groundplane.agent.v1.BackupVolumeManifestEntry.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
+	407,  // 1220: groundplane.agent.v1.BackupVolumeCaptureAuthority.volume:type_name -> groundplane.agent.v1.RevisionDigest
+	543,  // 1221: groundplane.agent.v1.BackupVolumeCaptureAuthority.projection:type_name -> groundplane.agent.v1.BackupVolumeProjectionAuthority
+	407,  // 1222: groundplane.agent.v1.BackupVolumeRestoreAuthority.volume:type_name -> groundplane.agent.v1.RevisionDigest
+	542,  // 1223: groundplane.agent.v1.BackupVolumeRestoreAuthority.archive:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
+	543,  // 1224: groundplane.agent.v1.BackupVolumeRestoreAuthority.projection:type_name -> groundplane.agent.v1.BackupVolumeProjectionAuthority
+	47,   // 1225: groundplane.agent.v1.BackupVolumeConstructionIntent.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
+	549,  // 1226: groundplane.agent.v1.BackupVolumeConstructionCompleted.intent:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
+	551,  // 1227: groundplane.agent.v1.BackupVolumeFinalizationCompleted.intent:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
+	47,   // 1228: groundplane.agent.v1.BackupVolumeDeleteIntent.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
+	47,   // 1229: groundplane.agent.v1.BackupVolumeReplacedPathCleaned.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
+	46,   // 1230: groundplane.agent.v1.BackupVolumeServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
+	61,   // 1231: groundplane.agent.v1.BackupWorkSecretRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	61,   // 1232: groundplane.agent.v1.BackupWorkSecretTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	48,   // 1233: groundplane.agent.v1.BackupWorkSecretTransfer.purpose:type_name -> groundplane.agent.v1.BackupSecretSlotPurpose
+	560,  // 1234: groundplane.agent.v1.BackupWorkSecretTransfer.header:type_name -> groundplane.agent.v1.BackupSecretSlotHeader
+	561,  // 1235: groundplane.agent.v1.BackupWorkSecretTransfer.chunk:type_name -> groundplane.agent.v1.BackupSecretSlotChunk
+	562,  // 1236: groundplane.agent.v1.BackupWorkSecretTransfer.end:type_name -> groundplane.agent.v1.BackupSecretSlotEnd
+	13,   // 1237: groundplane.agent.v1.TaskTerminalReceiptAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
+	13,   // 1238: groundplane.agent.v1.TaskTerminalReceiptApplied.terminal:type_name -> groundplane.agent.v1.TaskTerminal
+	13,   // 1239: groundplane.agent.v1.TaskTerminalReceiptAppliedAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
+	13,   // 1240: groundplane.agent.v1.TaskTerminalAssignmentRetired.terminal:type_name -> groundplane.agent.v1.TaskTerminal
+	13,   // 1241: groundplane.agent.v1.TaskTerminalAssignmentRetiredAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
+	49,   // 1242: groundplane.agent.v1.AdapterProcedure.phase:type_name -> groundplane.agent.v1.AdapterProcedurePhase
+	50,   // 1243: groundplane.agent.v1.AdapterProcedure.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
+	51,   // 1244: groundplane.agent.v1.MaterializeFile.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
+	603,  // 1245: groundplane.agent.v1.CheckDNSConnections.action:type_name -> groundplane.agent.v1.ComponentApply
+	371,  // 1246: groundplane.agent.v1.CheckDNSConnections.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
+	215,  // 1247: groundplane.agent.v1.CheckDNSConnections.prior_observation:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
+	596,  // 1248: groundplane.agent.v1.CheckDNSConnections.queries:type_name -> groundplane.agent.v1.DNSConnectionQuery
+	12,   // 1249: groundplane.agent.v1.DNSConnectionQuery.type:type_name -> groundplane.agent.v1.DNSQueryType
+	12,   // 1250: groundplane.agent.v1.DNSConnectionAnswer.type:type_name -> groundplane.agent.v1.DNSQueryType
+	216,  // 1251: groundplane.agent.v1.DNSConnectionAnswer.answers:type_name -> groundplane.agent.v1.DNSAnswerRecord
+	623,  // 1252: groundplane.agent.v1.DNSConnectionResult.observed_at:type_name -> google.protobuf.Timestamp
+	598,  // 1253: groundplane.agent.v1.DNSConnectionResult.answers:type_name -> groundplane.agent.v1.DNSConnectionAnswer
+	603,  // 1254: groundplane.agent.v1.CheckEdgeConnections.action:type_name -> groundplane.agent.v1.ComponentApply
+	371,  // 1255: groundplane.agent.v1.CheckEdgeConnections.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
+	604,  // 1256: groundplane.agent.v1.ComponentApply.container_config_transition:type_name -> groundplane.agent.v1.ContainerConfigTransition
+	52,   // 1257: groundplane.agent.v1.ManagedConfigHelperRequest.operation:type_name -> groundplane.agent.v1.ManagedConfigOperation
+	52,   // 1258: groundplane.agent.v1.ManagedConfigHelperResponse.operation:type_name -> groundplane.agent.v1.ManagedConfigOperation
+	53,   // 1259: groundplane.agent.v1.ManagedConfigHelperResponse.disposition:type_name -> groundplane.agent.v1.ManagedConfigReplayDisposition
+	255,  // 1260: groundplane.agent.v1.EnvironmentDirectoryHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	255,  // 1261: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	240,  // 1262: groundplane.agent.v1.ComposeHelperRequest.restoration_authority:type_name -> groundplane.agent.v1.ReleaseRestorationAuthority
+	55,   // 1263: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
+	56,   // 1264: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	584,  // 1265: groundplane.agent.v1.ComposeHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
+	588,  // 1266: groundplane.agent.v1.ComposeHelperResponse.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
+	214,  // 1267: groundplane.agent.v1.ComposeHelperResponse.candidate_absence_evidence:type_name -> groundplane.agent.v1.CandidateAbsenceEvidence
+	613,  // 1268: groundplane.agent.v1.ComposeHelperResponse.rolling_proxy_evidence:type_name -> groundplane.agent.v1.RollingProxyEvidence
+	212,  // 1269: groundplane.agent.v1.ComposeHelperResponse.rolling_evidence:type_name -> groundplane.agent.v1.RollingReleaseEvidence
+	13,   // 1270: groundplane.agent.v1.TaskAbort.terminal:type_name -> groundplane.agent.v1.TaskTerminal
+	177,  // 1271: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
+	188,  // 1272: groundplane.agent.v1.CheckBackingAccess.consumer_runtime:type_name -> groundplane.agent.v1.ServiceObservationTarget
+	618,  // 1273: groundplane.agent.v1.CheckBackingAccess.parameters:type_name -> groundplane.agent.v1.BackingAccessParameters
+	621,  // 1274: groundplane.agent.v1.BackingAccessResult.observation:type_name -> groundplane.agent.v1.BackingAccessObservation
+	623,  // 1275: groundplane.agent.v1.BackingAccessObservation.started_at:type_name -> google.protobuf.Timestamp
+	623,  // 1276: groundplane.agent.v1.BackingAccessObservation.finished_at:type_name -> google.protobuf.Timestamp
+	622,  // 1277: groundplane.agent.v1.BackingAccessObservation.stages:type_name -> groundplane.agent.v1.BackingAccessStage
+	179,  // 1278: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
+	220,  // 1279: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
+	1279, // [1279:1280] is the sub-list for method output_type
+	1278, // [1278:1279] is the sub-list for method input_type
+	1278, // [1278:1278] is the sub-list for extension type_name
+	1278, // [1278:1278] is the sub-list for extension extendee
+	0,    // [0:1278] is the sub-list for field type_name
 }
 
 func init() { file_proto_agent_proto_init() }
@@ -58796,7 +58934,7 @@ func file_proto_agent_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)),
-			NumEnums:      55,
+			NumEnums:      57,
 			NumMessages:   566,
 			NumExtensions: 0,
 			NumServices:   1,

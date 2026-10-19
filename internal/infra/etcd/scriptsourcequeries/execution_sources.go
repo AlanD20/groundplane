@@ -23,6 +23,7 @@ import (
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -79,6 +80,11 @@ func (repository *SourceReader) LoadBlueprintReleaseHookExecutionSources(
 		)
 	}
 	script.ScriptSetGeneration = projection.RevisionID
+	selectedReleaseID := member.Intent.ID
+	if script.Desired.When == core.ScriptOnFailure {
+		selectedReleaseID = domain.FailureHookTargetReleaseID(member.Intent)
+	}
+	candidateContext := selectedReleaseID == member.Intent.ID
 	keys := []string{
 		scriptrecord.ScriptSetScriptKey(script.EnvironmentID, script.ScriptSetGeneration, script.Desired.ID),
 		scriptrecord.ScriptSetBodyGenerationKey(
@@ -87,8 +93,8 @@ func (repository *SourceReader) LoadBlueprintReleaseHookExecutionSources(
 			script.Desired.ID,
 			script.ActiveGeneration,
 		),
-		releases.ReleaseIntentStagingKey(publicationID, member.Intent.ID),
-		releases.ReleaseRenderInputStagingKey(publicationID, member.Intent.ID),
+		releases.ReleaseIntentStagingKey(publicationID, selectedReleaseID),
+		releases.ReleaseRenderInputStagingKey(publicationID, selectedReleaseID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -111,7 +117,8 @@ func (repository *SourceReader) LoadBlueprintReleaseHookExecutionSources(
 	storedScript, err := scriptrecord.DecodeRecord(read.Values[0].Value)
 	if err != nil || storedScript.Desired.ID != script.Desired.ID ||
 		storedScript.ScriptSetGeneration != projection.RevisionID ||
-		storedScript.ActiveGeneration != script.ActiveGeneration {
+		storedScript.ActiveGeneration != script.ActiveGeneration || storedScript.ServiceID != service.Desired.ID ||
+		storedScript.Desired.When != script.Desired.When {
 		return ScriptExecutionSources{}, recordcodec.CorruptRecord()
 	}
 	body, err := scriptrecord.DecodeScriptBodyGeneration(read.Values[1].Value)
@@ -123,9 +130,9 @@ func (repository *SourceReader) LoadBlueprintReleaseHookExecutionSources(
 		read.Values[2].Value,
 		"release-intent",
 	)
-	if err != nil || intent.ID != member.Intent.ID ||
-		intent.OperationID != member.Intent.OperationID ||
-		intent.ServiceID != member.Intent.ServiceID {
+	if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != selectedReleaseID ||
+		candidateContext && intent.OperationID != member.Intent.OperationID ||
+		intent.ServiceID != member.Intent.ServiceID || intent.EnvironmentID != environment.Record.ID {
 		return ScriptExecutionSources{}, releases.CorruptReleaseRecord()
 	}
 	raw, err := releases.DecodeReleaseRecord[json.RawMessage](
@@ -136,9 +143,18 @@ func (repository *SourceReader) LoadBlueprintReleaseHookExecutionSources(
 		return ScriptExecutionSources{}, err
 	}
 	render, err := releaserender.DecodeReleaseRenderInput(raw)
-	if err != nil || render.ReleaseID != member.Render.ReleaseID ||
+	if err != nil || render.ReleaseID != selectedReleaseID ||
 		render.ServiceID != member.Render.ServiceID ||
-		render.Projection.RevisionID != projection.RevisionID {
+		candidateContext && render.Projection.RevisionID != projection.RevisionID {
+		return ScriptExecutionSources{}, releases.CorruptReleaseRecord()
+	}
+	sealed, err := releaserender.EncodeReleaseRenderInput(render)
+	if err != nil {
+		return ScriptExecutionSources{}, err
+	}
+	renderDigest, digestErr := domain.Digest(json.RawMessage(sealed))
+	clear(sealed)
+	if digestErr != nil || renderDigest != intent.RenderInputDigest {
 		return ScriptExecutionSources{}, releases.CorruptReleaseRecord()
 	}
 	attachNetworks, err := resolveScriptAttachNetworks(

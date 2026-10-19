@@ -8,9 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type RecoveryReport struct {
+	Sequence uint64                    `json:"sequence"`
 	StageID  string                    `json:"stage_id"`
 	Progress RecoveryProgress          `json:"progress"`
 	Ack      *workexecution.Checkpoint `json:"ack,omitempty"`
@@ -24,30 +26,17 @@ func (report RecoveryReport) Validate(input RecoveryInput) error {
 }
 
 func (report RecoveryReport) ValidateEnvelope(input RecoveryInput) error {
-	if report.Progress.validateEnvelope(input) != nil || report.Progress.Sequence == 0 || ids.Validate(ids.KindStep, report.StageID) != nil {
+	if report.Progress.validateEnvelope(input) != nil || report.Progress.Sequence == 0 ||
+		report.Sequence < report.Progress.Sequence ||
+		ids.Validate(ids.KindStep, report.StageID) != nil {
 		return invalidProgress()
 	}
-	phase := report.Progress.Phase
 	// A confirmation names the action just completed, not the next action.
+	index := report.Progress.Sequence / 2
 	if !report.Progress.InFlight {
-		switch phase {
-		case InspectFailedRuntime:
-			phase = QuiesceForward
-		case RestoreConfiguration:
-			phase = InspectFailedRuntime
-		case RestoreServingRuntime:
-			phase = RestoreConfiguration
-		case RemoveFailedCandidate:
-			phase = RestoreServingRuntime
-		case VerifyRestoration:
-			phase = RemoveFailedCandidate
-		case RecoveryComplete:
-			phase = VerifyRestoration
-		default:
-			return invalidProgress()
-		}
+		index--
 	}
-	expected, err := RecoveryStageID(input.Input.Attempt.Input, phase)
+	expected, err := recoveryActionID(input.Input.Attempt.Input, index)
 	if err != nil {
 		return err
 	}
@@ -69,13 +58,14 @@ func (report RecoveryReport) Checkpoint(input RecoveryInput) (workexecution.Chec
 		return workexecution.Checkpoint{}, err
 	}
 	raw, err := json.Marshal(struct {
-		Attempt          workexecution.Attempt      `json:"attempt"`
-		ForwardAttemptID string                     `json:"forward_attempt_id"`
-		SourceResult     workexecution.Input        `json:"source_result"`
-		Group            *GroupRestorationAuthority `json:"group,omitempty"`
-		Interruption     *RestorationInterruption   `json:"interruption,omitempty"`
-		Report           RecoveryReport             `json:"report"`
-	}{input.Input.Attempt, input.Forward.ID, *input.Forward.Result, input.Group, input.Interruption, report})
+		Attempt          workexecution.Attempt                  `json:"attempt"`
+		ForwardAttemptID string                                 `json:"forward_attempt_id"`
+		SourceResult     workexecution.Input                    `json:"source_result"`
+		Group            *GroupRestorationAuthority             `json:"group,omitempty"`
+		Interruption     *RestorationInterruption               `json:"interruption,omitempty"`
+		Report           RecoveryReport                         `json:"report"`
+		Disposition      agentpb.WorkReleaseRecoveryDisposition `json:"disposition"`
+	}{input.Input.Attempt, input.Forward.ID, *input.Forward.Result, input.Group, input.Interruption, report, input.Disposition})
 	if err != nil {
 		return workexecution.Checkpoint{}, invalidProgress()
 	}
@@ -84,6 +74,11 @@ func (report RecoveryReport) Checkpoint(input RecoveryInput) (workexecution.Chec
 		return workexecution.Checkpoint{}, err
 	}
 	digest := sha256.Sum256(canonical)
-	return workexecution.Checkpoint{AttemptID: input.Input.Attempt.ID, Sequence: report.Progress.Sequence, StageID: report.StageID,
-		RecordedAt: report.Progress.UpdatedAt, Evidence: workexecution.Input{ID: input.Input.Attempt.Input.ID, SHA256: hex.EncodeToString(digest[:])}}, nil
+	return workexecution.Checkpoint{
+		AttemptID:  input.Input.Attempt.ID,
+		Sequence:   report.Sequence,
+		StageID:    report.StageID,
+		RecordedAt: report.Progress.UpdatedAt,
+		Evidence:   workexecution.Input{ID: input.Input.Attempt.Input.ID, SHA256: hex.EncodeToString(digest[:])},
+	}, nil
 }

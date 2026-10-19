@@ -12,7 +12,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (service *Service) LoadActiveRecoveryConfiguration(ctx context.Context, view workqueue.ResumeView) (releaseexecution.RecoveryInput, releaseexecution.RecoveryReport, []taskmaterialization.Record, error) {
+func (service *Service) LoadActiveRecoveryConfiguration(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (releaseexecution.RecoveryInput, releaseexecution.RecoveryReport, []taskmaterialization.Record, error) {
 	empty, noReport := releaseexecution.RecoveryInput{}, releaseexecution.RecoveryReport{}
 	input, err := service.LoadRecoveryInput(ctx, view)
 	if err != nil {
@@ -22,19 +25,30 @@ func (service *Service) LoadActiveRecoveryConfiguration(ctx context.Context, vie
 	if err != nil {
 		return empty, noReport, nil, err
 	}
-	if saved.Record == nil || saved.Revision <= 0 || view.Checkpoint.Record == nil || view.Checkpoint.Revision != saved.Revision {
-		return empty, noReport, nil, errs.New(errs.KindStateConflict, "Release recovery has no saved configuration checkpoint")
+	if saved.Record == nil || saved.Revision <= 0 || view.Checkpoint.Record == nil ||
+		view.Checkpoint.Revision != saved.Revision {
+		return empty, noReport, nil, errs.New(
+			errs.KindStateConflict,
+			"Release recovery has no saved configuration checkpoint",
+		)
 	}
 	report := saved.Record.Report
-	if !report.Progress.InFlight || (report.Progress.Phase != releaseexecution.RestoreConfiguration && report.Progress.Phase != releaseexecution.VerifyRestoration) {
-		return empty, noReport, nil, errs.New(errs.KindStateConflict, "Release recovery is not at a captured-file boundary")
+	if !report.Progress.InFlight ||
+		(report.Progress.Phase != releaseexecution.RestoreConfiguration && report.Progress.Phase != releaseexecution.VerifyRestoration) {
+		return empty, noReport, nil, errs.New(
+			errs.KindStateConflict,
+			"Release recovery is not at a captured-file boundary",
+		)
 	}
 	ack, err := report.Checkpoint(input)
 	if err != nil || !releaseexecution.EqualCheckpoint(ack, *view.Checkpoint.Record) {
-		return empty, noReport, nil, errs.New(errs.KindStateConflict, "Release recovery file checkpoint differs from its saved receipt")
+		return empty, noReport, nil, errs.New(
+			errs.KindStateConflict,
+			"Release recovery file checkpoint differs from its saved receipt",
+		)
 	}
 	report.Ack = &ack
-	reference, files, err := service.ledger.LoadBlueprintReleaseRecoveryConfiguration(ctx, view)
+	reference, files, err := service.ledger.LoadBlueprintReleaseRecoveryConfiguration(ctx, view, input)
 	if err != nil {
 		return empty, noReport, nil, err
 	}
@@ -44,11 +58,18 @@ func (service *Service) LoadActiveRecoveryConfiguration(ctx context.Context, vie
 		if err != nil {
 			return empty, noReport, nil, err
 		}
-		expected = &agentpb.WorkConfigurationReference{ConfigurationId: reference.ID, EnvironmentId: reference.EnvironmentID,
-			Generation: reference.Generation, Sha256: digest}
+		expected = &agentpb.WorkConfigurationReference{
+			ConfigurationId: reference.ID,
+			EnvironmentId:   reference.EnvironmentID,
+			Generation:      reference.Generation,
+			Sha256:          digest,
+		}
 	}
-	if !proto.Equal(expected, input.Input.Release.PriorConfiguration) {
-		return empty, noReport, nil, errs.New(errs.KindStateConflict, "Release recovery source differs from its captured prior configuration")
+	if !proto.Equal(expected, input.RecoveryConfigurationReference()) {
+		return empty, noReport, nil, errs.New(
+			errs.KindStateConflict,
+			"Release recovery source differs from its captured configuration selection",
+		)
 	}
 	return input, report, files, nil
 }

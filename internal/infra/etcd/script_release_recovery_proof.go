@@ -17,11 +17,20 @@ import (
 // PrepareReleaseHookRecovery ties reported absence to durable receipts and
 // records cleanup separately from forward execution. The caller commits this
 // change with recovery completion; a changed receipt cannot release claims.
-func (repository *ScriptRepository) PrepareReleaseHookRecovery(ctx context.Context, view workqueue.View,
-	input releaseexecution.RecoveryInput, proof *releaseexecution.QuiescenceProof, evidence workexecution.Input, at time.Time,
+func (repository *ScriptRepository) PrepareReleaseHookRecovery(
+	ctx context.Context,
+	view workqueue.View,
+	input releaseexecution.RecoveryInput,
+	proof *releaseexecution.QuiescenceProof,
+	evidence workexecution.Input,
+	at time.Time,
 ) (workqueue.Change, error) {
-	if input.Validate() != nil || proof == nil || evidence.Validate() != nil || len(proof.Hooks) != len(input.Input.Release.Hooks) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release recovery is missing captured Script cleanup proof")
+	if input.Validate() != nil || proof == nil || evidence.Validate() != nil ||
+		len(proof.Hooks) != len(input.Input.Release.Hooks) {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Release recovery is missing captured Script cleanup proof",
+		)
 	}
 	var change workqueue.Change
 	ok := false
@@ -34,16 +43,39 @@ func (repository *ScriptRepository) PrepareReleaseHookRecovery(ctx context.Conte
 		reference := workexecution.Input{ID: hook.Input.InputId, SHA256: hex.EncodeToString(hook.Input.Sha256)}
 		observed := proof.Hooks[index]
 		if observed.ExecutionID != hook.ExecutionId || observed.Input != reference || !observed.Absent {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Script cleanup proof differs from the captured hook")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Script cleanup proof differs from the captured hook",
+			)
 		}
 		loaded, err := repository.loadCapturedReleaseScriptWork(ctx, view, hook.ExecutionId, reference)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
 		record := loaded.Execution
+		if hook.Phase == "on-failure" && record.AttemptID == input.Input.Attempt.ID {
+			if record.State != scriptexecutions.ScriptExecutionCleanupProven || record.Cleanup == nil ||
+				record.Outcome == nil ||
+				record.Executor == nil ||
+				*record.Executor != input.Input.Attempt.Executor ||
+				record.ReconciliationRequired {
+				loaded.Execution.Clear()
+				return workqueue.Change{}, errs.New(
+					errs.KindStateConflict,
+					"failure hook has no terminal cleanup proof for this recovery attempt",
+				)
+			}
+			// This hook ran after initial quiescence. Its own terminal cleanup
+			// receipt, already consumed by recovery, is the current authority.
+			change.Conditions = append(change.Conditions, loaded.Conditions...)
+			loaded.Execution.Clear()
+			continue
+		}
 		cleanup := observed.Cleanup
+		settledHere := record.Recovery != nil && record.Recovery.AttemptID == input.Input.Attempt.ID &&
+			record.Recovery.Evidence == evidence && record.Recovery.ObservedAt.Equal(observed.ObservedAt)
 		matches := cleanup.ContainerAbsent && cleanup.BodyAbsent && cleanup.ExecutionDirectoryAbsent &&
-			!observed.ObservedAt.Before(record.UpdatedAt)
+			(!observed.ObservedAt.Before(record.UpdatedAt) || settledHere)
 		if record.ContainerCreated == nil {
 			matches = matches && cleanup.ContainerID == "" && observed.ContainerID == ""
 		} else {
@@ -58,7 +90,15 @@ func (repository *ScriptRepository) PrepareReleaseHookRecovery(ctx context.Conte
 		}
 		if !matches {
 			loaded.Execution.Clear()
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Script cleanup proof does not match its saved container and file receipts")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Script cleanup proof does not match its saved container and file receipts",
+			)
+		}
+		if record.Recovery != nil {
+			change.Conditions = append(change.Conditions, loaded.Conditions...)
+			loaded.Execution.Clear()
+			continue
 		}
 		next, err := scriptexecutions.SettleRecovery(record, scriptexecutions.ScriptRecoverySettlement{
 			AttemptID: input.Input.Attempt.ID, Evidence: evidence, Cleanup: cleanup,

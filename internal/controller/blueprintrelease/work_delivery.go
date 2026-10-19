@@ -20,7 +20,10 @@ import (
 // LoadWorkAssignment delivers immutable operation input, not permission to run.
 // It deliberately does not use current desired state: an interrupted attempt
 // must still be able to receive its exact captured input for reconciliation.
-func (service *Service) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ReleaseWorkAssignment, error) {
+func (service *Service) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ReleaseWorkAssignment, error) {
 	if !view.CurrentExecutor {
 		return nil, errs.New(errs.KindStateConflict, "Release delivery requires the current assigned executor")
 	}
@@ -29,7 +32,10 @@ func (service *Service) LoadWorkAssignment(ctx context.Context, view workqueue.R
 
 // Reading retained input grants no permission to send it or execute effects.
 // Reconciliation uses the original identity even after its process is replaced.
-func (service *Service) loadCapturedAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ReleaseWorkAssignment, error) {
+func (service *Service) loadCapturedAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ReleaseWorkAssignment, error) {
 	if service == nil || service.ledger == nil || !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
 		return nil, errs.New(errs.KindStateConflict, "Release input requires its retained assignment")
@@ -57,11 +63,17 @@ func (service *Service) loadCapturedAssignment(ctx context.Context, view workque
 // machine payload. It performs no lookup, assignment or effect authorization.
 // Group restoration can use its real new attempt without fabricating an active
 // assignment for the already completed source member.
-func BuildCapturedReleaseInput(sources etcd.ReleaseWorkSources, attempt workexecution.Attempt) (*agentpb.ReleaseWorkInput, error) {
+func BuildCapturedReleaseInput(
+	sources etcd.ReleaseWorkSources,
+	attempt workexecution.Attempt,
+) (*agentpb.ReleaseWorkInput, error) {
 	capture, render := sources.Rollout.Record, sources.Rollout.Record.Render
 	if attempt.Validate() != nil || attempt.TaskID != capture.TaskID || len(sources.Predecessors) != 1 ||
 		sources.Predecessors[0].ServiceID != render.ServiceID {
-		return nil, errs.New(errs.KindStateConflict, "Captured Release payload has no matching Task or Service predecessor")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Captured Release payload has no matching Task or Service predecessor",
+		)
 	}
 	candidate, err := releaserender.OpenReleaseCandidateArtifact(capture)
 	if err != nil {
@@ -78,6 +90,14 @@ func BuildCapturedReleaseInput(sources etcd.ReleaseWorkSources, attempt workexec
 		Configuration:    configuration, ConfigurationDestinations: slices.Clone(sources.Input.Configuration.Destinations),
 		Predecessor: &agentpb.ReleaseWorkPredecessor{Absent: true},
 	}
+	switch sources.Intent.OnFailure {
+	case domain.OnFailureSwitchBack:
+		input.FailurePolicy = agentpb.WorkReleaseFailurePolicy_WORK_RELEASE_FAILURE_POLICY_SWITCH_BACK
+	case domain.OnFailureLeaveActive:
+		input.FailurePolicy = agentpb.WorkReleaseFailurePolicy_WORK_RELEASE_FAILURE_POLICY_LEAVE_ACTIVE
+	default:
+		return nil, errs.New(errs.KindStateConflict, "captured Release has no explicit failure policy")
+	}
 	if prior := sources.Input.Configuration.Prior; prior != nil {
 		input.PriorConfiguration, err = releaseConfigurationWire(*prior)
 		if err != nil {
@@ -91,11 +111,17 @@ func BuildCapturedReleaseInput(sources etcd.ReleaseWorkSources, attempt workexec
 		if err != nil {
 			return nil, err
 		}
-		if runtime.ReleaseID != predecessor.Serving.ServingReleaseID || runtime.Target != string(predecessor.Serving.Target) {
-			return nil, errs.New(errs.KindStateConflict, "Release predecessor bytes differ from the captured serving identity")
+		if runtime.ReleaseID != predecessor.Serving.ServingReleaseID ||
+			runtime.Target != string(predecessor.Serving.Target) {
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Release predecessor bytes differ from the captured serving identity",
+			)
 		}
 		input.Predecessor = &agentpb.ReleaseWorkPredecessor{ReleaseId: runtime.ReleaseID, Target: runtime.Target,
-			CurrentArtifact: slices.Clone(predecessor.CurrentArtifact), RetainedArtifact: slices.Clone(predecessor.RetainedPriorArtifact)}
+			CurrentArtifact: slices.Clone(
+				predecessor.CurrentArtifact,
+			), RetainedArtifact: slices.Clone(predecessor.RetainedPriorArtifact)}
 	} else if len(predecessor.CurrentArtifact) != 0 || len(predecessor.RetainedPriorArtifact) != 0 {
 		return nil, errs.New(errs.KindStateConflict, "Release predecessor absence contains a runtime")
 	}
@@ -135,11 +161,20 @@ func BuildCapturedReleaseInput(sources etcd.ReleaseWorkSources, attempt workexec
 				return nil, err
 			}
 			if render.ProxyGeneration < uint64(len(changes)) {
-				return nil, errs.New(errs.KindStateConflict, "Release proxy generation cannot cover its rolling changes")
+				return nil, errs.New(
+					errs.KindStateConflict,
+					"Release proxy generation cannot cover its rolling changes",
+				)
 			}
 			first := render.ProxyGeneration - uint64(len(changes)) + 1
 			for index := range changes {
-				configuration, err := domain.RenderRollingProxyConfig(render.ProxyImplementation, *render.Rolling, uint32(index+1), first+uint64(index), render.ProxyPorts)
+				configuration, err := domain.RenderRollingProxyConfig(
+					render.ProxyImplementation,
+					*render.Rolling,
+					uint32(index+1),
+					first+uint64(index),
+					render.ProxyPorts,
+				)
 				if err != nil {
 					return nil, err
 				}

@@ -11,13 +11,27 @@ import (
 )
 
 type RecoveryHelper interface {
-	ExecuteRecovery(context.Context, *agentpb.ReleaseRecoveryHelperRequest) (*agentpb.ReleaseRecoveryHelperResponse, error)
+	ExecuteRecovery(
+		context.Context,
+		*agentpb.ReleaseRecoveryHelperRequest,
+	) (*agentpb.ReleaseRecoveryHelperResponse, error)
 }
 
-func RunRecoveryHelper(ctx context.Context, helper RecoveryHelper, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport, inspectOnly bool) (releaseexecution.RecoveryRuntimeProof, error) {
-	if ctx == nil || helper == nil || report.Validate(input) != nil || report.Ack == nil || !report.Progress.InFlight || input.Input.Attempt.StartedAt == nil {
-		return releaseexecution.RecoveryRuntimeProof{}, errs.New(errs.KindStateConflict, "Release recovery helper has no acknowledged execution boundary")
+func RunRecoveryHelper(
+	ctx context.Context,
+	helper RecoveryHelper,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+	inspectOnly bool,
+) (releaseexecution.RecoveryRuntimeProof, error) {
+	if ctx == nil || helper == nil || report.Validate(input) != nil || report.Ack == nil || !report.Progress.InFlight ||
+		input.Input.Attempt.StartedAt == nil {
+		return releaseexecution.RecoveryRuntimeProof{}, errs.New(
+			errs.KindStateConflict,
+			"Release recovery helper has no acknowledged execution boundary",
+		)
 	}
+	inspectOnly = inspectOnly || input.PreservesServing()
 	assignment, err := releaseexecution.EncodeRecoveryAssignment(input)
 	if err != nil {
 		return releaseexecution.RecoveryRuntimeProof{}, err
@@ -49,7 +63,10 @@ func RunRecoveryHelper(ctx context.Context, helper RecoveryHelper, input release
 		return releaseexecution.RecoveryRuntimeProof{}, err
 	}
 	if proof.Inspection != inspectOnly {
-		return releaseexecution.RecoveryRuntimeProof{}, errs.New(errs.KindStateConflict, "Release recovery helper execution mode differs")
+		return releaseexecution.RecoveryRuntimeProof{}, errs.New(
+			errs.KindStateConflict,
+			"Release recovery helper execution mode differs",
+		)
 	}
 	return proof, nil
 }

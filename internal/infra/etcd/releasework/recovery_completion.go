@@ -11,14 +11,19 @@ import (
 
 type RecoveryCompletionProof struct {
 	Progress   RecoverySnapshot
-	Evidence   [6]releaseexecution.RecoveryEffectEvidence
+	Evidence   [22]releaseexecution.RecoveryEffectEvidence
 	Conditions []keyvalue.Condition
 }
 
 // LoadRecoveryCompletionProof rechecks every action proof, not merely the last
 // status. This retains the original failure and supplies atomic comparisons for
 // the operation owner to join with resource/claim settlement.
-func LoadRecoveryCompletionProof(ctx context.Context, store Reader, view workqueue.ResumeView, input releaseexecution.RecoveryInput) (RecoveryCompletionProof, error) {
+func LoadRecoveryCompletionProof(
+	ctx context.Context,
+	store Reader,
+	view workqueue.ResumeView,
+	input releaseexecution.RecoveryInput,
+) (RecoveryCompletionProof, error) {
 	if ctx == nil || store == nil || !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
 		!workexecution.SameAssignment(input.Input.Attempt, view.Attempt.Attempt) || view.Checkpoint.Record == nil {
 		return RecoveryCompletionProof{}, invalid()
@@ -35,8 +40,8 @@ func LoadRecoveryCompletionProof(ctx context.Context, store Reader, view workque
 	if err != nil || !releaseexecution.EqualCheckpoint(checkpoint, *view.Checkpoint.Record) {
 		return RecoveryCompletionProof{}, invalid()
 	}
-	keys := make([]string, len(saved.Record.Proofs))
-	for index, proof := range saved.Record.Proofs {
+	keys := make([]string, input.RecoveryActionCount())
+	for index, proof := range saved.Record.Proofs[:len(keys)] {
 		if proof == nil || saved.Record.Boundaries[index] == nil {
 			return RecoveryCompletionProof{}, invalid()
 		}
@@ -60,17 +65,26 @@ func LoadRecoveryCompletionProof(ctx context.Context, store Reader, view workque
 		{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision},
 	}}
 	for index, value := range read.Values {
-		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > view.Work.ReadRevision {
+		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 ||
+			value.ModRevision > view.Work.ReadRevision {
 			return RecoveryCompletionProof{}, invalid()
 		}
 		boundary := *saved.Record.Boundaries[index]
-		evidence, err := releaseexecution.DecodeRecoveryEffect(input, boundary, value.Value, *saved.Record.Proofs[index])
+		evidence, err := releaseexecution.DecodeRecoveryEffect(
+			input,
+			boundary,
+			value.Value,
+			*saved.Record.Proofs[index],
+		)
 		if err != nil || evidence.RecordedAt.After(saved.Record.Report.Progress.UpdatedAt) ||
 			index+1 < len(keys) && evidence.RecordedAt.After(saved.Record.Boundaries[index+1].Progress.UpdatedAt) {
 			return RecoveryCompletionProof{}, invalid()
 		}
 		result.Evidence[index] = evidence
-		result.Conditions = append(result.Conditions, keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision})
+		result.Conditions = append(
+			result.Conditions,
+			keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision},
+		)
 	}
 	return result, nil
 }

@@ -173,7 +173,12 @@ func (record attemptRecord) pending() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return record.Recovery != nil && (record.Recovery.Report.Ack == nil || record.Recovery.Effect != nil && !record.Recovery.Effect.Acknowledged) || record.Failure != nil || script != nil && script.Ack == nil || record.Release != nil && record.Release.Ack == nil || record.Effect != nil && !record.Effect.Acknowledged, nil
+	return record.Recovery != nil &&
+		(record.Recovery.Report.Ack == nil || record.Recovery.Effect != nil && !record.Recovery.Effect.Acknowledged) ||
+		record.Failure != nil ||
+		script != nil && script.Ack == nil ||
+		record.Release != nil && record.Release.Ack == nil ||
+		record.Effect != nil && !record.Effect.Acknowledged, nil
 }
 
 func (record attemptRecord) validate() error {
@@ -239,8 +244,10 @@ func (record attemptRecord) validate() error {
 			return err
 		}
 	}
-	if record.Attempt.Validate() != nil || record.Attempt.Executor.Executor != workexecution.Agent || record.Attempt.FinishedAt != nil ||
-		record.UpdatedAt.IsZero() || record.UpdatedAt.Before(record.Attempt.AssignedAt) {
+	if record.Attempt.Validate() != nil || record.Attempt.Executor.Executor != workexecution.Agent ||
+		record.Attempt.FinishedAt != nil ||
+		record.UpdatedAt.IsZero() ||
+		record.UpdatedAt.Before(record.Attempt.AssignedAt) {
 		return invalid()
 	}
 	if record.Network != nil {
@@ -277,42 +284,11 @@ func (record attemptRecord) validate() error {
 		return record.validateScriptRecovery()
 	}
 	if record.Recovery != nil {
-		if record.Release != nil || record.Completion != nil || record.Effect != nil || len(record.Script) != 0 ||
-			record.Recovery.Report.Progress.Sequence != record.Sequence || !record.Recovery.Report.Progress.UpdatedAt.Equal(record.UpdatedAt) {
-			return invalid()
-		}
-		input := record.Recovery.input(record.Attempt)
-		if err := record.Recovery.Report.ValidateEnvelope(input); err != nil {
-			return err
-		}
-		if failure := record.Failure; failure != nil {
-			if record.Recovery.Completion != nil || record.Recovery.Report.Progress.Phase == releaseexecution.RecoveryComplete ||
-				(failure.Reason != releaseexecution.ExecutionFailed && failure.Reason != releaseexecution.DeadlineExpired && failure.Reason != releaseexecution.ExecutionInterrupted) ||
-				failure.Receipt != nil && failure.Receipt.Validate(record.Attempt, failure.Reason) != nil {
-				return invalid()
-			}
-		}
-		if effect := record.Recovery.Effect; effect != nil {
-			if _, err := releaseexecution.DecodeRecoveryEffectEnvelope(input, effect.Boundary, effect.Raw, effect.Reference); err != nil {
-				return err
-			}
-			if effect.Boundary.Progress.Sequence > record.Sequence || !effect.Acknowledged &&
-				(effect.Boundary.Progress.Sequence != record.Sequence || record.Recovery.Report.Ack == nil) {
-				return invalid()
-			}
-		}
-		if receipt := record.Recovery.Completion; receipt != nil {
-			if record.Recovery.Report.Ack == nil || record.Recovery.Report.Progress.Phase != releaseexecution.RecoveryComplete ||
-				record.Recovery.Report.Progress.InFlight || record.Recovery.Effect == nil || !record.Recovery.Effect.Acknowledged ||
-				receipt.Outcome != workexecution.Succeeded || receipt.FinishedAt.IsZero() || receipt.FinishedAt.Location() != time.UTC ||
-				receipt.FinishedAt.Before(record.UpdatedAt) {
-				return invalid()
-			}
-		}
-		return nil
+		return record.validateReleaseRecovery()
 	}
 	if record.Failure != nil {
-		if receipt := record.Failure.Receipt; receipt != nil && receipt.Validate(record.Attempt, record.Failure.Reason) != nil {
+		if receipt := record.Failure.Receipt; receipt != nil &&
+			receipt.Validate(record.Attempt, record.Failure.Reason) != nil {
 			return invalid()
 		}
 		if record.Completion != nil || record.Attempt.Direction == workexecution.Recovery && record.Sequence != 0 ||
@@ -322,7 +298,8 @@ func (record attemptRecord) validate() error {
 		}
 	}
 	if record.Sequence == 0 {
-		if record.Failure == nil || record.Release != nil || record.Effect != nil || len(record.Script) != 0 || !record.UpdatedAt.Equal(record.Attempt.AssignedAt) {
+		if record.Failure == nil || record.Release != nil || record.Effect != nil || len(record.Script) != 0 ||
+			!record.UpdatedAt.Equal(record.Attempt.AssignedAt) {
 			return invalid()
 		}
 		return nil
@@ -349,7 +326,8 @@ func (record attemptRecord) validate() error {
 		}
 	}
 	if record.Release != nil {
-		if record.Release.ValidateEnvelope(record.Attempt) != nil || record.Release.Sequence > record.Sequence || record.Release.Progress.UpdatedAt.After(record.UpdatedAt) {
+		if record.Release.ValidateEnvelope(record.Attempt) != nil || record.Release.Sequence > record.Sequence ||
+			record.Release.Progress.UpdatedAt.After(record.UpdatedAt) {
 			return invalid()
 		}
 		if script != nil && script.Report.Sequence == record.Release.Sequence {
@@ -378,10 +356,15 @@ func (record attemptRecord) validate() error {
 		}
 	}
 	if receipt := record.Completion; receipt != nil {
-		if record.Release == nil || record.Release.Ack == nil || record.Release.Progress.Phase != releaseexecution.Complete ||
-			record.Release.Progress.InFlight || record.Release.Sequence != record.Sequence || pending != 0 ||
-			record.Effect != nil && !record.Effect.Acknowledged || receipt.FinishedAt.IsZero() ||
-			receipt.FinishedAt.Location() != time.UTC || receipt.FinishedAt.Before(record.UpdatedAt) ||
+		if record.Release == nil || record.Release.Ack == nil ||
+			record.Release.Progress.Phase != releaseexecution.Complete ||
+			record.Release.Progress.InFlight ||
+			record.Release.Sequence != record.Sequence ||
+			pending != 0 ||
+			record.Effect != nil && !record.Effect.Acknowledged ||
+			receipt.FinishedAt.IsZero() ||
+			receipt.FinishedAt.Location() != time.UTC ||
+			receipt.FinishedAt.Before(record.UpdatedAt) ||
 			(receipt.Outcome != workexecution.Succeeded && receipt.Outcome != workexecution.Cancelled && receipt.Outcome != workexecution.Superseded) {
 			return invalid()
 		}

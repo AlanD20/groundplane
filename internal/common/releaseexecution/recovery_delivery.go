@@ -37,16 +37,30 @@ func EncodeRecoveryAssignment(input RecoveryInput) (*agentpb.ReleaseRecoveryAssi
 			return nil, err
 		}
 	}
-	return &agentpb.ReleaseRecoveryAssignment{Work: &agentpb.ReleaseWorkAssignment{Attempt: attempt, Release: proto.CloneOf(input.Input.Release)},
-		ForwardAttempt: forward, Failure: failure, GroupRestoration: group, RestorationInterruption: interruption}, nil
+	return &agentpb.ReleaseRecoveryAssignment{
+		Work: &agentpb.ReleaseWorkAssignment{
+			Attempt: attempt,
+			Release: proto.CloneOf(input.Input.Release),
+		},
+		ForwardAttempt:          forward,
+		Failure:                 failure,
+		GroupRestoration:        group,
+		RestorationInterruption: interruption,
+		Disposition:             input.Disposition,
+	}, nil
 }
 
-func DecodeRecoveryAssignment(message *agentpb.ReleaseRecoveryAssignment, identity workexecution.Identity) (RecoveryInput, error) {
+func DecodeRecoveryAssignment(
+	message *agentpb.ReleaseRecoveryAssignment,
+	identity workexecution.Identity,
+) (RecoveryInput, error) {
 	if message == nil || executionplan.RejectUnknown(message) != nil || message.Work == nil ||
 		len(message.ForwardAttempt) == 0 || len(message.ForwardAttempt) > MaximumCheckpointBytes ||
 		(len(message.Failure) == 0) == (len(message.GroupRestoration) == 0) ||
 		len(message.Failure) > MaximumCheckpointBytes || len(message.GroupRestoration) > MaximumCheckpointBytes ||
-		len(message.RestorationInterruption) > MaximumCheckpointBytes || len(message.Failure) != 0 && len(message.RestorationInterruption) != 0 {
+		len(
+			message.RestorationInterruption,
+		) > MaximumCheckpointBytes || len(message.Failure) != 0 && len(message.RestorationInterruption) != 0 {
 		return RecoveryInput{}, invalidProgress()
 	}
 	attempt, release, err := workexecution.DecodeReleaseDelivery(message.Work, identity)
@@ -95,7 +109,14 @@ func DecodeRecoveryAssignment(message *agentpb.ReleaseRecoveryAssignment, identi
 		}
 		interruption = &decoded
 	}
-	input := RecoveryInput{Input: Input{Attempt: attempt, Release: release, Artifacts: artifacts}, Forward: forward, Failure: failure, Group: group, Interruption: interruption}
+	input := RecoveryInput{
+		Input:        Input{Attempt: attempt, Release: release, Artifacts: artifacts},
+		Forward:      forward,
+		Failure:      failure,
+		Group:        group,
+		Interruption: interruption,
+		Disposition:  message.Disposition,
+	}
 	if err := input.Validate(); err != nil {
 		return RecoveryInput{}, err
 	}

@@ -17,7 +17,8 @@ import (
 
 // SettleRecoveredBlueprintRelease releases claims only after all captured
 // restoration proofs and unchanged applied-state heads are compared atomically.
-// Recovery does not publish a Release or overwrite the original action outcome.
+// Recovery records the failed Release without overwriting the original action
+// outcome. A proved leave_active switch updates serving authority, not success.
 func (ledger *ReleaseLedger) SettleRecoveredBlueprintRelease(ctx context.Context, view workqueue.ResumeView,
 	input releaseexecution.RecoveryInput, authorization []keyvalue.Condition, at time.Time,
 ) error {
@@ -32,7 +33,10 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRecovery(ctx context.Context, 
 ) error {
 	if ledger == nil || ledger.store == nil || len(authorization) == 0 || input.Validate() != nil ||
 		!workexecution.SameAssignment(input.Input.Attempt, view.Attempt.Attempt) {
-		return errs.New(errs.KindStateConflict, "Release recovery completion requires its authenticated captured attempt")
+		return errs.New(
+			errs.KindStateConflict,
+			"Release recovery completion requires its authenticated captured attempt",
+		)
 	}
 	sources, err := ledger.LoadReleaseWorkInput(ctx, view.Work)
 	if err != nil {
@@ -77,10 +81,23 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRecovery(ctx context.Context, 
 	predecessor := sources.Predecessors[0]
 	conditions := append(sources.Conditions, proof.Conditions...)
 	conditions = append(conditions, files...)
-	conditions = append(conditions,
-		keyvalue.Condition{Key: releases.ReleaseProjectionKey(predecessor.ServiceID), ModRevision: predecessor.ProjectionRevision},
-		keyvalue.Condition{Key: serviceruntimerecord.Key(predecessor.ServiceID), ModRevision: predecessor.RuntimeRevision},
+	conditions = append(
+		conditions,
+		keyvalue.Condition{
+			Key:         releases.ReleaseProjectionKey(predecessor.ServiceID),
+			ModRevision: predecessor.ProjectionRevision,
+		},
+		keyvalue.Condition{
+			Key:         serviceruntimerecord.Key(predecessor.ServiceID),
+			ModRevision: predecessor.RuntimeRevision,
+		},
 	)
+	runtime, history, err := ledger.prepareRecoveredBlueprintRuntime(ctx, view, input, sources, at)
+	if err != nil {
+		return err
+	}
+	defer keyvalue.ZeroMutationBytes(runtime.Mutations)
+	defer keyvalue.ZeroMutationBytes(history.Mutations)
 	queue, err := workqueue.NewRepository(ledger.store)
 	if err != nil {
 		return err
@@ -103,7 +120,15 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRecovery(ctx context.Context, 
 		return err
 	}
 	defer keyvalue.ZeroMutationBytes(execution.Mutations)
-	committed, err := queue.Commit(ctx, workqueue.Change{Conditions: authorization}, workqueue.Change{Conditions: conditions}, hooks, execution)
+	committed, err := queue.Commit(
+		ctx,
+		workqueue.Change{Conditions: authorization},
+		workqueue.Change{Conditions: conditions},
+		hooks,
+		runtime,
+		history,
+		execution,
+	)
 	keyvalue.ClearValues(committed.FailureReads)
 	if err != nil {
 		return err

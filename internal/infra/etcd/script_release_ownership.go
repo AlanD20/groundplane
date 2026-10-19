@@ -16,6 +16,7 @@ import (
 // ScriptWorkOwnership excludes body and Entry values. The immutable execution
 // binding, not a current Script definition, owns this container projection.
 type ScriptWorkOwnership struct {
+	AttemptID   string
 	OperationID string
 	Input       workexecution.Input
 	Run         *agentpb.RunScript
@@ -23,7 +24,12 @@ type ScriptWorkOwnership struct {
 	Cleanup     *agentpb.ScriptCleanupArtifacts
 }
 
-func (repository *ScriptRepository) ResolveReleaseScriptOwnership(ctx context.Context, view workqueue.View, executionID string, reference workexecution.Input) (*ScriptWorkOwnership, error) {
+func (repository *ScriptRepository) ResolveReleaseScriptOwnership(
+	ctx context.Context,
+	view workqueue.View,
+	executionID string,
+	reference workexecution.Input,
+) (*ScriptWorkOwnership, error) {
 	input, err := repository.loadCapturedReleaseScriptWork(ctx, view, executionID, reference)
 	if err != nil {
 		return nil, err
@@ -32,7 +38,10 @@ func (repository *ScriptRepository) ResolveReleaseScriptOwnership(ctx context.Co
 	return capturedScriptOwnership(input.Execution)
 }
 
-func (repository *ScriptRepository) ResolveStandaloneScriptOwnership(ctx context.Context, view workqueue.View) (*ScriptWorkOwnership, error) {
+func (repository *ScriptRepository) ResolveStandaloneScriptOwnership(
+	ctx context.Context,
+	view workqueue.View,
+) (*ScriptWorkOwnership, error) {
 	input, err := repository.LoadScriptWork(ctx, view)
 	if err != nil {
 		return nil, err
@@ -45,11 +54,14 @@ func capturedScriptOwnership(execution scriptexecutions.ScriptExecutionRecord) (
 	executionID := execution.ID
 	run, projection := &agentpb.RunScript{}, &agentpb.ScriptRunnerProjection{}
 	if proto.Unmarshal(execution.Run, run) != nil || proto.Unmarshal(execution.RunnerProjection, projection) != nil ||
-		executionplan.RejectUnknown(run) != nil || executionplan.RejectUnknown(projection) != nil || run.ScriptExecutionId != executionID {
+		executionplan.RejectUnknown(
+			run,
+		) != nil || executionplan.RejectUnknown(projection) != nil || run.ScriptExecutionId != executionID {
 		return nil, errs.New(errs.KindStateConflict, "captured Script ownership is unavailable")
 	}
 	metadata := &agentpb.ScriptBodyArtifactMetadata{}
-	if proto.Unmarshal(execution.BodyMetadata, metadata) != nil || executionplan.RejectUnknown(metadata) != nil || metadata.ScriptExecutionId != executionID {
+	if proto.Unmarshal(execution.BodyMetadata, metadata) != nil || executionplan.RejectUnknown(metadata) != nil ||
+		metadata.ScriptExecutionId != executionID {
 		return nil, errs.New(errs.KindStateConflict, "captured Script cleanup metadata is unavailable")
 	}
 	cleanup := &agentpb.ScriptCleanupArtifacts{BodyMetadata: metadata}
@@ -69,5 +81,6 @@ func capturedScriptOwnership(execution scriptexecutions.ScriptExecutionRecord) (
 		cleanup.ContainerCreated = &agentpb.ScriptContainerCreatedCheckpoint{
 			ContainerId: receipt.ContainerID, OwnershipLabelsSha256: digest}
 	}
-	return &ScriptWorkOwnership{OperationID: execution.OperationID, Input: execution.Input, Run: run, Projection: projection, Cleanup: cleanup}, nil
+	return &ScriptWorkOwnership{AttemptID: execution.AttemptID, OperationID: execution.OperationID,
+		Input: execution.Input, Run: run, Projection: projection, Cleanup: cleanup}, nil
 }

@@ -14,26 +14,55 @@ type RecoveryDriver struct {
 	configuration *RecoveryConfiguration
 	helper        RecoveryHelper
 	evidence      *checkpointdelivery.RecoveryEffect
+	hooks         *Hooks
 }
 
-func NewRecoveryDriver(quiescence *RecoveryQuiescence, configuration *RecoveryConfiguration, helper RecoveryHelper, evidence *checkpointdelivery.RecoveryEffect) (*RecoveryDriver, error) {
-	if quiescence == nil || configuration == nil || helper == nil || evidence == nil {
+func NewRecoveryDriver(
+	quiescence *RecoveryQuiescence,
+	configuration *RecoveryConfiguration,
+	helper RecoveryHelper,
+	evidence *checkpointdelivery.RecoveryEffect,
+	hooks *Hooks,
+) (*RecoveryDriver, error) {
+	if quiescence == nil || configuration == nil || helper == nil || evidence == nil || hooks == nil {
 		return nil, errs.New(errs.KindInternal, "Release recovery driver dependencies are incomplete")
 	}
-	return &RecoveryDriver{quiescence: quiescence, configuration: configuration, helper: helper, evidence: evidence}, nil
+	return &RecoveryDriver{
+		quiescence:    quiescence,
+		configuration: configuration,
+		helper:        helper,
+		evidence:      evidence,
+		hooks:         hooks,
+	}, nil
 }
 
-func (driver *RecoveryDriver) ExecuteRecovery(ctx context.Context, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport) (workexecution.Input, error) {
+func (driver *RecoveryDriver) ExecuteRecovery(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+) (workexecution.Input, error) {
 	return driver.run(ctx, input, report, false)
 }
 
-func (driver *RecoveryDriver) InspectRecovery(ctx context.Context, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport) (workexecution.Input, error) {
+func (driver *RecoveryDriver) InspectRecovery(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+) (workexecution.Input, error) {
 	return driver.run(ctx, input, report, true)
 }
 
-func (driver *RecoveryDriver) run(ctx context.Context, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport, inspectOnly bool) (workexecution.Input, error) {
+func (driver *RecoveryDriver) run(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+	inspectOnly bool,
+) (workexecution.Input, error) {
 	if driver == nil || ctx == nil || report.Validate(input) != nil || report.Ack == nil || !report.Progress.InFlight {
-		return workexecution.Input{}, errs.New(errs.KindStateConflict, "Release recovery driver has no acknowledged boundary")
+		return workexecution.Input{}, errs.New(
+			errs.KindStateConflict,
+			"Release recovery driver has no acknowledged boundary",
+		)
 	}
 	if reference, found, err := driver.evidence.Resume(ctx, report); err != nil || found {
 		return reference, err
@@ -52,7 +81,9 @@ func (driver *RecoveryDriver) run(ctx context.Context, input releaseexecution.Re
 			return workexecution.Input{}, err
 		}
 		result.Configuration = &proof
-	case releaseexecution.InspectFailedRuntime, releaseexecution.RestoreServingRuntime, releaseexecution.RemoveFailedCandidate:
+	case releaseexecution.InspectFailedRuntime,
+		releaseexecution.RestoreServingRuntime,
+		releaseexecution.RemoveFailedCandidate:
 		proof, err := RunRecoveryHelper(ctx, driver.helper, input, report, inspectOnly)
 		if err != nil {
 			return workexecution.Input{}, err
@@ -68,6 +99,12 @@ func (driver *RecoveryDriver) run(ctx context.Context, input releaseexecution.Re
 			return workexecution.Input{}, err
 		}
 		result.Configuration, result.Runtime = &files, &runtime
+	case releaseexecution.FailureHooks:
+		proof, err := driver.hooks.RunRecovery(ctx, input, report)
+		if err != nil {
+			return workexecution.Input{}, err
+		}
+		result.Hook = &proof
 	default:
 		return workexecution.Input{}, errs.New(errs.KindStateConflict, "Release recovery phase has no host action")
 	}

@@ -11,7 +11,10 @@ import (
 
 // Recovery uses the shared completion transport with its actual direction and
 // checkpoint. It never manufactures a successful forward execution.
-func EncodeRecoveryCompletionRequest(input RecoveryInput, report RecoveryReport) (*agentpb.ReleaseWorkCompletionRequest, error) {
+func EncodeRecoveryCompletionRequest(
+	input RecoveryInput,
+	report RecoveryReport,
+) (*agentpb.ReleaseWorkCompletionRequest, error) {
 	if report.Ack == nil || report.Validate(input) != nil ||
 		report.Progress.Phase != RecoveryComplete || report.Progress.InFlight {
 		return nil, invalidProgress()
@@ -24,11 +27,15 @@ func EncodeRecoveryCompletionRequest(input RecoveryInput, report RecoveryReport)
 	if err != nil {
 		return nil, invalidProgress()
 	}
-	return &agentpb.ReleaseWorkCompletionRequest{Attempt: attempt, CheckpointSequence: report.Progress.Sequence,
+	return &agentpb.ReleaseWorkCompletionRequest{Attempt: attempt, CheckpointSequence: report.Sequence,
 		CheckpointEvidence: &agentpb.WorkInputReference{InputId: report.Ack.Evidence.ID, Sha256: digest}}, nil
 }
 
-func DecodeRecoveryCompletionAck(input RecoveryInput, report RecoveryReport, ack *agentpb.ReleaseWorkCompletionAck) (CompletionReceipt, error) {
+func DecodeRecoveryCompletionAck(
+	input RecoveryInput,
+	report RecoveryReport,
+	ack *agentpb.ReleaseWorkCompletionAck,
+) (CompletionReceipt, error) {
 	request, err := EncodeRecoveryCompletionRequest(input, report)
 	if err != nil {
 		return CompletionReceipt{}, err

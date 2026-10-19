@@ -15,7 +15,13 @@ type RecoveryEffectRecord struct {
 	Acknowledged bool                            `json:"acknowledged"`
 }
 
-func (journal *Journal) PrepareRecoveryEffect(ctx context.Context, input releaseexecution.RecoveryInput, boundary releaseexecution.RecoveryReport, result releaseexecution.RecoveryEffectResult, at time.Time) (*RecoveryEffectRecord, error) {
+func (journal *Journal) PrepareRecoveryEffect(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	boundary releaseexecution.RecoveryReport,
+	result releaseexecution.RecoveryEffectResult,
+	at time.Time,
+) (*RecoveryEffectRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -26,7 +32,7 @@ func (journal *Journal) PrepareRecoveryEffect(ctx context.Context, input release
 		return nil, err
 	}
 	if state == nil || state.Recovery == nil || state.Recovery.Report.Ack == nil ||
-		!workexecution.SameAssignment(state.Attempt, input.Input.Attempt) || state.Sequence != boundary.Progress.Sequence ||
+		!workexecution.SameAssignment(state.Attempt, input.Input.Attempt) || state.Sequence < boundary.Sequence ||
 		state.Recovery.Report.StageID != boundary.StageID || !releaseexecution.EqualRecoveryProgress(state.Recovery.Report.Progress, boundary.Progress) {
 		return nil, conflict()
 	}
@@ -52,7 +58,11 @@ func (journal *Journal) PrepareRecoveryEffect(ctx context.Context, input release
 	return state.Recovery.Effect, nil
 }
 
-func (journal *Journal) RecoveryEffect(ctx context.Context, input releaseexecution.RecoveryInput, boundary releaseexecution.RecoveryReport) (*RecoveryEffectRecord, error) {
+func (journal *Journal) RecoveryEffect(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	boundary releaseexecution.RecoveryReport,
+) (*RecoveryEffectRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -75,7 +85,12 @@ func (journal *Journal) RecoveryEffect(ctx context.Context, input releaseexecuti
 	return record, nil
 }
 
-func (journal *Journal) AcknowledgeRecoveryEffect(ctx context.Context, input releaseexecution.RecoveryInput, boundary releaseexecution.RecoveryReport, reference workexecution.Input) error {
+func (journal *Journal) AcknowledgeRecoveryEffect(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	boundary releaseexecution.RecoveryReport,
+	reference workexecution.Input,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -85,7 +100,8 @@ func (journal *Journal) AcknowledgeRecoveryEffect(ctx context.Context, input rel
 	if err != nil {
 		return err
 	}
-	if state == nil || state.Recovery == nil || state.Recovery.Effect == nil || !workexecution.SameAssignment(state.Attempt, input.Input.Attempt) {
+	if state == nil || state.Recovery == nil || state.Recovery.Effect == nil ||
+		!workexecution.SameAssignment(state.Attempt, input.Input.Attempt) {
 		return conflict()
 	}
 	record := state.Recovery.Effect

@@ -629,6 +629,7 @@ message ReleaseRecoveryAssignment {
   // Group Retry also carries the actual failed restoration attempt and its
   // failure receipt. It never replaces the successful source attempt above.
   bytes restoration_interruption = 5;
+  WorkReleaseRecoveryDisposition disposition = 6;
 }
 
 // Canonical bounded Release cursor; its closed schema is owned by the Release
@@ -883,6 +884,18 @@ enum WorkReleaseStrategy {
   WORK_RELEASE_STRATEGY_ROLLING = 3;
 }
 
+enum WorkReleaseFailurePolicy {
+  WORK_RELEASE_FAILURE_POLICY_UNSPECIFIED = 0;
+  WORK_RELEASE_FAILURE_POLICY_SWITCH_BACK = 1;
+  WORK_RELEASE_FAILURE_POLICY_LEAVE_ACTIVE = 2;
+}
+
+enum WorkReleaseRecoveryDisposition {
+  WORK_RELEASE_RECOVERY_DISPOSITION_UNSPECIFIED = 0;
+  WORK_RELEASE_RECOVERY_DISPOSITION_RESTORE_CAPTURED = 1;
+  WORK_RELEASE_RECOVERY_DISPOSITION_PRESERVE_SERVING = 2;
+}
+
 message ReleaseWorkInput {
   string operation_id = 1;
   string environment_id = 2;
@@ -898,6 +911,7 @@ message ReleaseWorkInput {
   ReleaseWorkRolling rolling = 12;
   uint64 render_generation = 13;
   repeated bytes traffic_configurations = 14; // one complete routing manifest per cutover, in captured order
+  WorkReleaseFailurePolicy failure_policy = 15; // captured operator decision; never inferred by the Agent
 }
 
 message ReleaseWorkPredecessor {
@@ -939,6 +953,7 @@ message ReleaseHookDelivery {
   repeated ScriptEntryArtifact entries = 8;
   ScriptExecutionCheckpoint checkpoint = 9;
   ScriptCleanupArtifacts cleanup = 10;
+  WorkInputReference interrupted_cleanup = 11; // proved cleanup of an earlier hook attempt; no new start
 }
 
 // Recovery-only metadata. No body bytes, Entry values, or start grant.

@@ -16,10 +16,23 @@ type RecoveryEffectResult struct {
 	Quiescence    *QuiescenceProof            `json:"quiescence,omitempty"`
 	Configuration *RecoveryConfigurationProof `json:"configuration,omitempty"`
 	Runtime       *RecoveryRuntimeProof       `json:"runtime,omitempty"`
+	Hook          *FailureHookProof           `json:"hook,omitempty"`
 }
 
 func (result RecoveryEffectResult) Validate(input RecoveryInput, boundary RecoveryReport) error {
 	if boundary.Validate(input) != nil || boundary.Ack == nil || !boundary.Progress.InFlight {
+		return invalidProgress()
+	}
+	if boundary.Progress.Phase == FailureHooks {
+		if result.Hook == nil || result.Quiescence != nil || result.Configuration != nil || result.Runtime != nil {
+			return invalidProgress()
+		}
+		return result.Hook.Validate(input, boundary)
+	}
+	if result.Hook != nil {
+		return invalidProgress()
+	}
+	if input.PreservesServing() && result.Runtime != nil && !result.Runtime.Inspection {
 		return invalidProgress()
 	}
 	switch boundary.Progress.Phase {
@@ -37,7 +50,8 @@ func (result RecoveryEffectResult) Validate(input RecoveryInput, boundary Recove
 		}
 	case VerifyRestoration:
 		// Runtime alone cannot prove that the captured files were restored.
-		if result.Quiescence != nil || result.Configuration == nil || result.Runtime == nil || !result.Runtime.Inspection {
+		if result.Quiescence != nil || result.Configuration == nil || result.Runtime == nil ||
+			!result.Runtime.Inspection {
 			return invalidProgress()
 		}
 	default:
@@ -60,9 +74,16 @@ type RecoveryEffectEvidence struct {
 	Result     RecoveryEffectResult `json:"result"`
 }
 
-func EncodeRecoveryEffect(input RecoveryInput, boundary RecoveryReport, result RecoveryEffectResult, at time.Time) ([]byte, workexecution.Input, error) {
-	if result.Validate(input, boundary) != nil || at.IsZero() || at.Before(boundary.Progress.UpdatedAt) || !at.Before(input.Input.Attempt.Deadline) ||
-		result.Quiescence != nil && at.Before(result.Quiescence.OwnerCheckedAt) || result.Runtime != nil && at.Before(result.Runtime.ObservedAt) {
+func EncodeRecoveryEffect(
+	input RecoveryInput,
+	boundary RecoveryReport,
+	result RecoveryEffectResult,
+	at time.Time,
+) ([]byte, workexecution.Input, error) {
+	if result.Validate(input, boundary) != nil || at.IsZero() || at.Before(boundary.Progress.UpdatedAt) ||
+		!at.Before(input.Input.Attempt.Deadline) ||
+		result.Quiescence != nil && at.Before(result.Quiescence.OwnerCheckedAt) ||
+		result.Runtime != nil && at.Before(result.Runtime.ObservedAt) {
 		return nil, workexecution.Input{}, invalidProgress()
 	}
 	evidence := RecoveryEffectEvidence{AttemptID: input.Input.Attempt.ID, Input: input.Input.Attempt.Input,
@@ -78,9 +99,16 @@ func EncodeRecoveryEffect(input RecoveryInput, boundary RecoveryReport, result R
 // DecodeRecoveryEffectEnvelope validates compact journal identity without a
 // duplicate copy of runtime artifacts. Consumers of proof must use the full
 // DecodeRecoveryEffect before authorizing or confirming an action.
-func DecodeRecoveryEffectEnvelope(input RecoveryInput, boundary RecoveryReport, raw []byte, reference workexecution.Input) (RecoveryEffectEvidence, error) {
-	if input.ValidateIdentity() != nil || boundary.ValidateEnvelope(input) != nil || boundary.Ack == nil || !boundary.Progress.InFlight ||
-		len(raw) == 0 || len(raw) > MaximumCheckpointBytes {
+func DecodeRecoveryEffectEnvelope(
+	input RecoveryInput,
+	boundary RecoveryReport,
+	raw []byte,
+	reference workexecution.Input,
+) (RecoveryEffectEvidence, error) {
+	if input.ValidateIdentity() != nil || boundary.ValidateEnvelope(input) != nil || boundary.Ack == nil ||
+		!boundary.Progress.InFlight ||
+		len(raw) == 0 ||
+		len(raw) > MaximumCheckpointBytes {
 		return RecoveryEffectEvidence{}, invalidProgress()
 	}
 	evidence, err := jcs.Decode[RecoveryEffectEvidence](raw)
@@ -100,7 +128,12 @@ func DecodeRecoveryEffectEnvelope(input RecoveryInput, boundary RecoveryReport, 
 	return evidence, nil
 }
 
-func DecodeRecoveryEffect(input RecoveryInput, boundary RecoveryReport, raw []byte, reference workexecution.Input) (RecoveryEffectEvidence, error) {
+func DecodeRecoveryEffect(
+	input RecoveryInput,
+	boundary RecoveryReport,
+	raw []byte,
+	reference workexecution.Input,
+) (RecoveryEffectEvidence, error) {
 	evidence, err := DecodeRecoveryEffectEnvelope(input, boundary, raw, reference)
 	if err != nil {
 		return RecoveryEffectEvidence{}, err
@@ -112,12 +145,21 @@ func DecodeRecoveryEffect(input RecoveryInput, boundary RecoveryReport, raw []by
 	return evidence, nil
 }
 
-func recoveryEffectReference(attempt workexecution.Attempt, boundary RecoveryReport, raw []byte) (workexecution.Input, error) {
+func recoveryEffectReference(
+	attempt workexecution.Attempt,
+	boundary RecoveryReport,
+	raw []byte,
+) (workexecution.Input, error) {
 	at, err := ids.Timestamp(ids.KindAttempt, attempt.ID)
 	if err != nil {
 		return workexecution.Input{}, err
 	}
-	id := ids.DeriveAt(ids.KindPlan, at, attempt.ID, fmt.Sprintf("release/recovery-effect/%d/%s", boundary.Progress.Sequence, boundary.StageID))
+	id := ids.DeriveAt(
+		ids.KindPlan,
+		at,
+		attempt.ID,
+		fmt.Sprintf("release/recovery-effect/%d/%s", boundary.Progress.Sequence, boundary.StageID),
+	)
 	digest := sha256.Sum256(raw)
 	return workexecution.Input{ID: id, SHA256: hex.EncodeToString(digest[:])}, nil
 }

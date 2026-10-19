@@ -7,9 +7,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (service *Service) LoadRecoveryInput(ctx context.Context, view workqueue.ResumeView) (releaseexecution.RecoveryInput, error) {
+func (service *Service) LoadRecoveryInput(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (releaseexecution.RecoveryInput, error) {
 	origin, err := service.ledger.LoadBlueprintReleaseRecoveryOrigin(ctx, view)
 	if err != nil {
 		return releaseexecution.RecoveryInput{}, err
@@ -26,7 +30,16 @@ func (service *Service) LoadRecoveryInput(ctx context.Context, view workqueue.Re
 	if err != nil {
 		return releaseexecution.RecoveryInput{}, err
 	}
-	input := releaseexecution.RecoveryInput{Input: releaseexecution.Input{Attempt: view.Attempt.Attempt, Release: release, Artifacts: artifacts}, Forward: origin.Forward, Failure: origin.Failure}
+	input := releaseexecution.RecoveryInput{
+		Input:       releaseexecution.Input{Attempt: view.Attempt.Attempt, Release: release, Artifacts: artifacts},
+		Forward:     origin.Forward,
+		Failure:     origin.Failure,
+		Disposition: agentpb.WorkReleaseRecoveryDisposition_WORK_RELEASE_RECOVERY_DISPOSITION_RESTORE_CAPTURED,
+	}
+	input.Disposition, _, err = service.ledger.SelectReleaseRecoveryDisposition(ctx, view, input)
+	if err != nil {
+		return releaseexecution.RecoveryInput{}, err
+	}
 	if err := input.Validate(); err != nil {
 		return releaseexecution.RecoveryInput{}, err
 	}

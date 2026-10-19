@@ -12,8 +12,13 @@ import (
 
 // PrepareRecoveryFailure accounts for a stopped cleanup executor. Even failure
 // before its first checkpoint retains claims: the original effects still exist.
-func PrepareRecoveryFailure(ctx context.Context, store Reader, view workqueue.ResumeView, input releaseexecution.RecoveryInput,
-	reason releaseexecution.FailureReason, at time.Time,
+func PrepareRecoveryFailure(
+	ctx context.Context,
+	store Reader,
+	view workqueue.ResumeView,
+	input releaseexecution.RecoveryInput,
+	reason releaseexecution.FailureReason,
+	at time.Time,
 ) (workqueue.Change, workexecution.Completion, error) {
 	if !view.CanSettleResult() {
 		return workqueue.Change{}, workexecution.Completion{}, invalid()
@@ -23,15 +28,26 @@ func PrepareRecoveryFailure(ctx context.Context, store Reader, view workqueue.Re
 
 // PrepareInterruptedRecoveryFailure freezes a replaced attempt, retaining all
 // resource claims. It grants no cleanup and asserts no helper termination.
-func PrepareInterruptedRecoveryFailure(ctx context.Context, store Reader, view workqueue.ResumeView, input releaseexecution.RecoveryInput, at time.Time) (workqueue.Change, workexecution.Completion, error) {
+func PrepareInterruptedRecoveryFailure(
+	ctx context.Context,
+	store Reader,
+	view workqueue.ResumeView,
+	input releaseexecution.RecoveryInput,
+	at time.Time,
+) (workqueue.Change, workexecution.Completion, error) {
 	if view.CanSettleResult() || view.ExecutorRevision <= 0 {
 		return workqueue.Change{}, workexecution.Completion{}, invalid()
 	}
 	return prepareRecoveryFailure(ctx, store, view, input, releaseexecution.ExecutionInterrupted, at)
 }
 
-func prepareRecoveryFailure(ctx context.Context, store Reader, view workqueue.ResumeView, input releaseexecution.RecoveryInput,
-	reason releaseexecution.FailureReason, at time.Time,
+func prepareRecoveryFailure(
+	ctx context.Context,
+	store Reader,
+	view workqueue.ResumeView,
+	input releaseexecution.RecoveryInput,
+	reason releaseexecution.FailureReason,
+	at time.Time,
 ) (workqueue.Change, workexecution.Completion, error) {
 	if ctx == nil || store == nil || input.Validate() != nil || !view.ActiveAttempt ||
 		!workexecution.SameAssignment(view.Attempt.Attempt, input.Input.Attempt) ||
@@ -44,12 +60,16 @@ func prepareRecoveryFailure(ctx context.Context, store Reader, view workqueue.Re
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	if progress.Record != nil {
-		if progress.Record.Report.Progress.Phase == releaseexecution.RecoveryComplete || view.Checkpoint.Record == nil ||
-			progress.Revision != view.Checkpoint.Revision {
+		if progress.Record.Report.Progress.Phase == releaseexecution.RecoveryComplete ||
+			view.Checkpoint.Record == nil ||
+			view.Checkpoint.Record.Sequence < progress.Record.Report.Sequence {
 			return workqueue.Change{}, workexecution.Completion{}, invalid()
 		}
 		checkpoint, err := progress.Record.Report.Checkpoint(input)
-		if err != nil || !releaseexecution.EqualCheckpoint(checkpoint, *view.Checkpoint.Record) {
+		if err != nil || view.Checkpoint.Record.Sequence == checkpoint.Sequence &&
+			(progress.Revision != view.Checkpoint.Revision || !releaseexecution.EqualCheckpoint(checkpoint, *view.Checkpoint.Record)) ||
+			view.Checkpoint.Record.Sequence > checkpoint.Sequence &&
+				(!progress.Record.Report.Progress.InFlight || progress.Record.Report.Progress.Phase != releaseexecution.FailureHooks) {
 			return workqueue.Change{}, workexecution.Completion{}, invalid()
 		}
 	} else if view.Checkpoint.Record != nil || view.Checkpoint.Revision != 0 {
@@ -71,5 +91,9 @@ func prepareRecoveryFailure(ctx context.Context, store Reader, view workqueue.Re
 		{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision},
 		{Key: RecoveryKey(attempt.ID), ModRevision: progress.Revision},
 	}, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: FailureKey(reference.ID), Value: raw}}}
-	return change, workexecution.Completion{Outcome: workexecution.Failed, Evidence: reference, EffectsSettled: false}, nil
+	return change, workexecution.Completion{
+		Outcome:        workexecution.Failed,
+		Evidence:       reference,
+		EffectsSettled: false,
+	}, nil
 }

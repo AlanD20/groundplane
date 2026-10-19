@@ -10,14 +10,30 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func DecodeRecoveryConfigurationFile(input RecoveryInput, report RecoveryReport, file *agentpb.ReleaseConfigurationFile) (entrymaterialization.Header, error) {
+// RecoveryConfigurationReference is selected by the captured recovery decision,
+// never by the current Environment head. Preserving a proved serving candidate
+// verifies its files; restoration uses the exact pre-operation snapshot.
+func (input RecoveryInput) RecoveryConfigurationReference() *agentpb.WorkConfigurationReference {
+	if input.PreservesServing() {
+		return input.Input.Release.Configuration
+	}
+	return input.Input.Release.PriorConfiguration
+}
+
+func DecodeRecoveryConfigurationFile(
+	input RecoveryInput,
+	report RecoveryReport,
+	file *agentpb.ReleaseConfigurationFile,
+) (entrymaterialization.Header, error) {
 	if file == nil || executionplan.RejectUnknown(file) != nil || input.Validate() != nil ||
-		len(file.Sha256) != sha256.Size || file.Length > entrymaterialization.MaximumContentBytes || input.Input.Release.Configuration == nil {
+		len(
+			file.Sha256,
+		) != sha256.Size || file.Length > entrymaterialization.MaximumContentBytes || input.Input.Release.Configuration == nil {
 		return entrymaterialization.Header{}, invalidProgress()
 	}
 	generation := input.Input.Release.Configuration.Generation
-	if prior := input.Input.Release.PriorConfiguration; prior != nil {
-		generation = prior.Generation
+	if selected := input.RecoveryConfigurationReference(); selected != nil {
+		generation = selected.Generation
 	}
 	kind, err := entrymaterialization.ParseOutputKind(file.OutputKind)
 	if err != nil {
@@ -25,9 +41,11 @@ func DecodeRecoveryConfigurationFile(input RecoveryInput, report RecoveryReport,
 	}
 	var digest entrymaterialization.Digest
 	copy(digest[:], file.Sha256)
-	header, err := entrymaterialization.NewHeader(entrymaterialization.HeaderSpec{TaskID: input.Input.Attempt.TaskID, StepID: report.StageID,
-		EnvironmentID: input.Input.Release.EnvironmentId, Generation: generation, Destination: file.Destination, ServiceID: file.ServiceId,
-		ServiceName: file.ServiceName, OutputKind: kind, UID: file.Uid, GID: file.Gid, Mode: entrymaterialization.Mode(file.Mode), Length: file.Length, Digest: digest})
+	header, err := entrymaterialization.NewHeader(
+		entrymaterialization.HeaderSpec{TaskID: input.Input.Attempt.TaskID, StepID: report.StageID,
+			EnvironmentID: input.Input.Release.EnvironmentId, Generation: generation, Destination: file.Destination, ServiceID: file.ServiceId,
+			ServiceName: file.ServiceName, OutputKind: kind, UID: file.Uid, GID: file.Gid, Mode: entrymaterialization.Mode(file.Mode), Length: file.Length, Digest: digest},
+	)
 	if err != nil {
 		return entrymaterialization.Header{}, err
 	}
@@ -46,10 +64,11 @@ type RecoveryConfigurationProof struct {
 }
 
 func (proof RecoveryConfigurationProof) Validate(input RecoveryInput) error {
-	if input.Validate() != nil || proof.SelectionSHA256 != configurationSelection(input.Input.Release.ConfigurationDestinations) {
+	if input.Validate() != nil ||
+		proof.SelectionSHA256 != configurationSelection(input.Input.Release.ConfigurationDestinations) {
 		return invalidProgress()
 	}
-	reference := input.Input.Release.PriorConfiguration
+	reference := input.RecoveryConfigurationReference()
 	if reference == nil {
 		if !proof.Absent || proof.Configuration != nil {
 			return invalidProgress()
@@ -72,7 +91,7 @@ func ValidateRecoveryFile(input RecoveryInput, report RecoveryReport, header ent
 		!slices.Contains(input.Input.Release.ConfigurationDestinations, header.Destination()) {
 		return invalidProgress()
 	}
-	reference := input.Input.Release.PriorConfiguration
+	reference := input.RecoveryConfigurationReference()
 	if reference != nil {
 		if header.Generation() != reference.Generation {
 			return invalidProgress()
@@ -86,27 +105,37 @@ func ValidateRecoveryFile(input RecoveryInput, report RecoveryReport, header ent
 		return invalidProgress()
 	}
 	switch header.OutputKind() {
-	case entrymaterialization.OutputRemoveGeneratedEnv, entrymaterialization.OutputRemovePlainFile, entrymaterialization.OutputRemoveSecretFile:
+	case entrymaterialization.OutputRemoveGeneratedEnv,
+		entrymaterialization.OutputRemovePlainFile,
+		entrymaterialization.OutputRemoveSecretFile:
 		return nil
 	default:
 		return invalidProgress()
 	}
 }
 
-func RecoveryConfigurationResult(input RecoveryInput, report RecoveryReport, files []entrymaterialization.Header) (RecoveryConfigurationProof, error) {
+func RecoveryConfigurationResult(
+	input RecoveryInput,
+	report RecoveryReport,
+	files []entrymaterialization.Header,
+) (RecoveryConfigurationProof, error) {
 	if report.Validate(input) != nil || report.Ack == nil || !report.Progress.InFlight ||
 		(report.Progress.Phase != RestoreConfiguration && report.Progress.Phase != VerifyRestoration) ||
 		len(files) != len(input.Input.Release.ConfigurationDestinations) {
 		return RecoveryConfigurationProof{}, invalidProgress()
 	}
 	for index, file := range files {
-		if ValidateRecoveryFile(input, report, file) != nil || file.Destination() != input.Input.Release.ConfigurationDestinations[index] {
+		if ValidateRecoveryFile(input, report, file) != nil ||
+			file.Destination() != input.Input.Release.ConfigurationDestinations[index] {
 			return RecoveryConfigurationProof{}, invalidProgress()
 		}
 	}
 	selection := configurationSelection(input.Input.Release.ConfigurationDestinations)
-	proof := RecoveryConfigurationProof{Absent: input.Input.Release.PriorConfiguration == nil, SelectionSHA256: selection}
-	if reference := input.Input.Release.PriorConfiguration; reference != nil {
+	proof := RecoveryConfigurationProof{
+		Absent:          input.RecoveryConfigurationReference() == nil,
+		SelectionSHA256: selection,
+	}
+	if reference := input.RecoveryConfigurationReference(); reference != nil {
 		proof.Configuration = &ConfigurationProof{ID: reference.ConfigurationId, EnvironmentID: reference.EnvironmentId,
 			Generation: reference.Generation, SHA256: hex.EncodeToString(reference.Sha256), SelectionSHA256: selection}
 	}

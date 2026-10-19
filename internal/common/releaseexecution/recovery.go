@@ -5,6 +5,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // RecoveryInput binds the shared restoration procedure to a captured cause:
@@ -17,20 +18,34 @@ type RecoveryInput struct {
 	Failure      Failure
 	Group        *GroupRestorationAuthority
 	Interruption *RestorationInterruption
+	Disposition  agentpb.WorkReleaseRecoveryDisposition
 }
 
 func (input RecoveryInput) Validate() error {
 	if err := input.ValidateIdentity(); err != nil {
 		return err
 	}
+	if input.PreservesServing() &&
+		(input.Input.Release == nil || input.Input.Release.FailurePolicy != agentpb.WorkReleaseFailurePolicy_WORK_RELEASE_FAILURE_POLICY_LEAVE_ACTIVE) {
+		return invalidProgress()
+	}
 	_, err := executionplan.OpenReleaseWorkArtifacts(input.Input.Attempt, input.Input.Release)
 	return err
+}
+
+func (input RecoveryInput) PreservesServing() bool {
+	return input.Disposition == agentpb.WorkReleaseRecoveryDisposition_WORK_RELEASE_RECOVERY_DISPOSITION_PRESERVE_SERVING
 }
 
 // ValidateIdentity checks the compact journal binding without requiring a copy
 // of configuration/artifact bytes. Effect execution also requires Validate.
 func (input RecoveryInput) ValidateIdentity() error {
 	recovery, forward := input.Input.Attempt, input.Forward
+	if input.Disposition != agentpb.WorkReleaseRecoveryDisposition_WORK_RELEASE_RECOVERY_DISPOSITION_RESTORE_CAPTURED &&
+		input.Disposition != agentpb.WorkReleaseRecoveryDisposition_WORK_RELEASE_RECOVERY_DISPOSITION_PRESERVE_SERVING ||
+		input.PreservesServing() && (input.Group != nil || forward.Outcome != workexecution.Failed) {
+		return invalidProgress()
+	}
 	if input.Group != nil {
 		if input.Failure != (Failure{}) {
 			return invalidProgress()
@@ -47,11 +62,18 @@ func (input RecoveryInput) ValidateIdentity() error {
 		return input.Group.ValidateFor(recovery, forward)
 	}
 	if input.Interruption != nil || recovery.Validate() != nil || forward.Validate() != nil || recovery.Direction != workexecution.Recovery ||
-		forward.Direction != workexecution.Forward || recovery.FinishedAt != nil || forward.FinishedAt == nil || forward.Result == nil ||
-		forward.Outcome == workexecution.Succeeded || recovery.TaskID != forward.TaskID || recovery.WorkItemID != forward.WorkItemID ||
-		recovery.Number <= forward.Number || recovery.Input != forward.Input || recovery.Executor.Executor != workexecution.Agent ||
-		forward.Executor.Executor != workexecution.Agent || recovery.Executor.HostID != forward.Executor.HostID ||
-		recovery.AssignedAt.Before(*forward.FinishedAt) || !input.Failure.RecordedAt.Equal(*forward.FinishedAt) {
+		forward.Direction != workexecution.Forward || recovery.FinishedAt != nil || forward.FinishedAt == nil ||
+		forward.Result == nil ||
+		forward.Outcome == workexecution.Succeeded ||
+		recovery.TaskID != forward.TaskID ||
+		recovery.WorkItemID != forward.WorkItemID ||
+		recovery.Number <= forward.Number ||
+		recovery.Input != forward.Input ||
+		recovery.Executor.Executor != workexecution.Agent ||
+		forward.Executor.Executor != workexecution.Agent ||
+		recovery.Executor.HostID != forward.Executor.HostID ||
+		recovery.AssignedAt.Before(*forward.FinishedAt) ||
+		!input.Failure.RecordedAt.Equal(*forward.FinishedAt) {
 		return invalidProgress()
 	}
 	_, reference, err := EncodeFailure(forward, input.Failure)
@@ -70,26 +92,31 @@ const (
 	RestoreServingRuntime RecoveryPhase = "restore_serving_runtime"
 	RemoveFailedCandidate RecoveryPhase = "remove_failed_candidate"
 	VerifyRestoration     RecoveryPhase = "verify_restoration"
+	FailureHooks          RecoveryPhase = "failure_hooks"
 	RecoveryComplete      RecoveryPhase = "complete"
 )
 
-// RecoveryProgress is separate from forward progress and never runs deployment
-// hooks. Quiescence must be proved before any restorative write; merely replacing
+// RecoveryProgress is separate from forward progress. Failure hooks run only
+// after restoration is proved. Quiescence precedes any restorative write; replacing
 // an Agent generation or observing a timeout is not that proof.
 type RecoveryProgress struct {
 	AttemptID string               `json:"attempt_id"`
 	Phase     RecoveryPhase        `json:"phase"`
 	Sequence  uint64               `json:"sequence"`
+	Hook      uint32               `json:"hook,omitempty"`
+	HookCount uint32               `json:"hook_count"`
 	InFlight  bool                 `json:"in_flight"`
 	UpdatedAt time.Time            `json:"updated_at"`
 	Evidence  *workexecution.Input `json:"evidence,omitempty"`
 }
 
 func NewRecoveryProgress(input RecoveryInput, at time.Time) (RecoveryProgress, error) {
-	if input.Validate() != nil || input.Input.Attempt.StartedAt == nil || at.Before(*input.Input.Attempt.StartedAt) || !at.Before(input.Input.Attempt.Deadline) {
+	if input.Validate() != nil || input.Input.Attempt.StartedAt == nil || at.Before(*input.Input.Attempt.StartedAt) ||
+		!at.Before(input.Input.Attempt.Deadline) {
 		return RecoveryProgress{}, invalidProgress()
 	}
-	return RecoveryProgress{AttemptID: input.Input.Attempt.ID, Phase: QuiesceForward, UpdatedAt: at.UTC()}, nil
+	return RecoveryProgress{AttemptID: input.Input.Attempt.ID, Phase: QuiesceForward,
+		HookCount: uint32(len(input.failureHooks())), UpdatedAt: at.UTC()}, nil
 }
 
 func recoveryPhaseIndex(phase RecoveryPhase) (uint64, bool) {
@@ -117,16 +144,36 @@ func (progress RecoveryProgress) Validate(input RecoveryInput) error {
 	if err := input.Validate(); err != nil {
 		return err
 	}
+	if progress.HookCount != uint32(len(input.failureHooks())) {
+		return invalidProgress()
+	}
 	return progress.validateEnvelope(input)
 }
 
 func (progress RecoveryProgress) validateEnvelope(input RecoveryInput) error {
-	if input.ValidateIdentity() != nil || input.Input.Attempt.StartedAt == nil || progress.AttemptID != input.Input.Attempt.ID ||
-		progress.UpdatedAt.IsZero() || progress.UpdatedAt.Location() != time.UTC || progress.UpdatedAt.Before(*input.Input.Attempt.StartedAt) ||
+	if input.ValidateIdentity() != nil || input.Input.Attempt.StartedAt == nil ||
+		progress.AttemptID != input.Input.Attempt.ID ||
+		progress.UpdatedAt.IsZero() ||
+		progress.UpdatedAt.Location() != time.UTC ||
+		progress.UpdatedAt.Before(*input.Input.Attempt.StartedAt) ||
 		progress.Evidence != nil && progress.Evidence.Validate() != nil {
 		return invalidProgress()
 	}
 	index, valid := recoveryPhaseIndex(progress.Phase)
+	if progress.HookCount > 16 {
+		return invalidProgress()
+	}
+	switch progress.Phase {
+	case FailureHooks:
+		index, valid = 6+uint64(progress.Hook), progress.Hook < progress.HookCount
+	case RecoveryComplete:
+		index += uint64(progress.HookCount)
+		fallthrough
+	default:
+		if progress.Hook != 0 {
+			return invalidProgress()
+		}
+	}
 	sequence := index * 2
 	if progress.InFlight {
 		sequence++
@@ -139,7 +186,9 @@ func (progress RecoveryProgress) validateEnvelope(input RecoveryInput) error {
 }
 
 func (progress RecoveryProgress) Begin(input RecoveryInput, at time.Time) (RecoveryProgress, error) {
-	if progress.Validate(input) != nil || progress.InFlight || progress.Phase == RecoveryComplete || at.Before(progress.UpdatedAt) || !at.Before(input.Input.Attempt.Deadline) {
+	if progress.Validate(input) != nil || progress.InFlight || progress.Phase == RecoveryComplete ||
+		at.Before(progress.UpdatedAt) ||
+		!at.Before(input.Input.Attempt.Deadline) {
 		return RecoveryProgress{}, invalidProgress()
 	}
 	progress.Sequence++
@@ -147,8 +196,14 @@ func (progress RecoveryProgress) Begin(input RecoveryInput, at time.Time) (Recov
 	return progress, nil
 }
 
-func (progress RecoveryProgress) Confirm(input RecoveryInput, evidence workexecution.Input, at time.Time) (RecoveryProgress, error) {
-	if progress.Validate(input) != nil || !progress.InFlight || evidence.Validate() != nil || at.Before(progress.UpdatedAt) || !at.Before(input.Input.Attempt.Deadline) {
+func (progress RecoveryProgress) Confirm(
+	input RecoveryInput,
+	evidence workexecution.Input,
+	at time.Time,
+) (RecoveryProgress, error) {
+	if progress.Validate(input) != nil || !progress.InFlight || evidence.Validate() != nil ||
+		at.Before(progress.UpdatedAt) ||
+		!at.Before(input.Input.Attempt.Deadline) {
 		return RecoveryProgress{}, invalidProgress()
 	}
 	switch progress.Phase {
@@ -164,6 +219,14 @@ func (progress RecoveryProgress) Confirm(input RecoveryInput, evidence workexecu
 		progress.Phase = VerifyRestoration
 	case VerifyRestoration:
 		progress.Phase = RecoveryComplete
+		if progress.HookCount > 0 {
+			progress.Phase = FailureHooks
+		}
+	case FailureHooks:
+		progress.Hook++
+		if progress.Hook == progress.HookCount {
+			progress.Phase, progress.Hook = RecoveryComplete, 0
+		}
 	default:
 		return RecoveryProgress{}, invalidProgress()
 	}

@@ -10,10 +10,19 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) PrepareRecoveryEvidence(ctx context.Context, view workqueue.ResumeView, input releaseexecution.RecoveryInput, previous releasework.RecoverySnapshot, report releaseexecution.RecoveryReport) (workqueue.Change, error) {
+func (service *Service) PrepareRecoveryEvidence(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input releaseexecution.RecoveryInput,
+	previous releasework.RecoverySnapshot,
+	report releaseexecution.RecoveryReport,
+) (workqueue.Change, error) {
 	if service == nil || service.ledger == nil || ctx == nil || !view.ActiveAttempt || !view.CurrentExecutor ||
 		!workexecution.SameAssignment(input.Input.Attempt, view.Attempt.Attempt) || input.Validate() != nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint recovery checkpoint does not own this cleanup attempt")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint recovery checkpoint does not own this cleanup attempt",
+		)
 	}
 	var prior *releaseexecution.RecoveryProgress
 	if previous.Record != nil {
@@ -30,6 +39,14 @@ func (service *Service) PrepareRecoveryEvidence(ctx context.Context, view workqu
 	}
 	defer clear(sources.Rollout.Record.CandidateArtifact)
 	change := workqueue.Change{Conditions: sources.Conditions}
+	disposition, conditions, err := service.ledger.SelectReleaseRecoveryDisposition(ctx, view, input)
+	if err != nil || disposition != input.Disposition {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Release recovery policy differs from its retained serving proof",
+		)
+	}
+	change.Conditions = append(change.Conditions, conditions...)
 	if !report.Progress.InFlight {
 		proof, err := service.ledger.RecoveryEffectConditions(ctx, view, input, previous, report)
 		if err != nil {

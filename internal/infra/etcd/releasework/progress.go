@@ -65,7 +65,8 @@ func Load(ctx context.Context, store Reader, input releaseexecution.Input, revis
 	if value == nil {
 		return Snapshot{}, nil
 	}
-	if value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision || len(value.Value) > maximumProgressBytes {
+	if value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision ||
+		len(value.Value) > maximumProgressBytes {
 		return Snapshot{}, invalid()
 	}
 	record, err := recordcodec.Decode[Record](value.Value, "release-work-progress")
@@ -80,14 +81,23 @@ func Load(ctx context.Context, store Reader, input releaseexecution.Input, revis
 
 // Prepare publishes no effect by itself. The operation owner must join its
 // current effect authority for Begin, or verified result evidence for Confirm.
-func Prepare(view workqueue.ResumeView, input releaseexecution.Input, previous Snapshot, report releaseexecution.CheckpointReport) (workqueue.Change, error) {
+func Prepare(
+	view workqueue.ResumeView,
+	input releaseexecution.Input,
+	previous Snapshot,
+	report releaseexecution.CheckpointReport,
+) (workqueue.Change, error) {
 	if report.Ack != nil || report.ValidateEnvelope(input.Attempt) != nil {
 		return workqueue.Change{}, invalid()
 	}
 	next := report.Progress
-	if !view.ActiveAttempt || !view.CurrentExecutor || !workexecution.SameAssignment(view.Attempt.Attempt, input.Attempt) ||
-		view.Attempt.Attempt.StartedAt == nil || input.Attempt.StartedAt == nil || !view.Attempt.Attempt.StartedAt.Equal(*input.Attempt.StartedAt) ||
-		previous.Revision < 0 || (previous.Record == nil) != (previous.Revision == 0) ||
+	if !view.ActiveAttempt || !view.CurrentExecutor ||
+		!workexecution.SameAssignment(view.Attempt.Attempt, input.Attempt) ||
+		view.Attempt.Attempt.StartedAt == nil ||
+		input.Attempt.StartedAt == nil ||
+		!view.Attempt.Attempt.StartedAt.Equal(*input.Attempt.StartedAt) ||
+		previous.Revision < 0 ||
+		(previous.Record == nil) != (previous.Revision == 0) ||
 		(previous.Record == nil) != (view.Checkpoint.Record == nil) {
 		return workqueue.Change{}, invalid()
 	}
@@ -101,11 +111,14 @@ func Prepare(view workqueue.ResumeView, input releaseexecution.Input, previous S
 			return workqueue.Change{}, invalid()
 		}
 		if previous.Record.CheckpointSequence == view.Checkpoint.Record.Sequence {
-			expected, err := (releaseexecution.CheckpointReport{Sequence: previous.Record.CheckpointSequence, StageID: previous.Record.StageID, Progress: previous.Record.Progress}).Checkpoint(input.Attempt)
+			expected, err := (releaseexecution.CheckpointReport{Sequence: previous.Record.CheckpointSequence, StageID: previous.Record.StageID, Progress: previous.Record.Progress}).Checkpoint(
+				input.Attempt,
+			)
 			if err != nil {
 				return workqueue.Change{}, err
 			}
-			if !releaseexecution.EqualCheckpoint(*view.Checkpoint.Record, expected) || previous.Revision != view.Checkpoint.Revision {
+			if !releaseexecution.EqualCheckpoint(*view.Checkpoint.Record, expected) ||
+				previous.Revision != view.Checkpoint.Revision {
 				return workqueue.Change{}, invalid()
 			}
 		} else if !prior.InFlight || prior.Phase != releaseexecution.PreHooks && prior.Phase != releaseexecution.PostHooks {
@@ -145,13 +158,25 @@ func Prepare(view workqueue.ResumeView, input releaseexecution.Input, previous S
 	if report.Sequence != sequence || report.StageID != stageID {
 		return workqueue.Change{}, invalid()
 	}
-	record := Record{TaskID: input.Attempt.TaskID, WorkItemID: input.Attempt.WorkItemID, Input: input.Attempt.Input, Progress: next,
-		StageID: stageID, CheckpointSequence: sequence}
+	record := Record{
+		TaskID:             input.Attempt.TaskID,
+		WorkItemID:         input.Attempt.WorkItemID,
+		Input:              input.Attempt.Input,
+		Progress:           next,
+		StageID:            stageID,
+		CheckpointSequence: sequence,
+	}
 	if previous.Record != nil {
 		record.Serving = previous.Record.Serving
 	}
-	if !replay && prior != nil && prior.InFlight && prior.Phase == releaseexecution.Rollout && prior.Action == releaseexecution.VerifyServing && !next.InFlight {
-		boundary := releaseexecution.CheckpointReport{Sequence: previous.Record.CheckpointSequence, StageID: previous.Record.StageID, Progress: *prior}
+	if !replay && prior != nil && prior.InFlight && prior.Phase == releaseexecution.Rollout &&
+		prior.Action == releaseexecution.VerifyServing &&
+		!next.InFlight {
+		boundary := releaseexecution.CheckpointReport{
+			Sequence: previous.Record.CheckpointSequence,
+			StageID:  previous.Record.StageID,
+			Progress: *prior,
+		}
 		ack, err := boundary.Checkpoint(input.Attempt)
 		if err != nil || next.Evidence == nil {
 			return workqueue.Change{}, invalid()
@@ -177,7 +202,9 @@ func Prepare(view workqueue.ResumeView, input releaseexecution.Input, previous S
 		clear(value)
 		return workqueue.Change{}, invalid()
 	}
-	checkpoint, err := (releaseexecution.CheckpointReport{Sequence: sequence, StageID: stageID, Progress: next}).Checkpoint(input.Attempt)
+	checkpoint, err := (releaseexecution.CheckpointReport{Sequence: sequence, StageID: stageID, Progress: next}).Checkpoint(
+		input.Attempt,
+	)
 	if err != nil {
 		clear(value)
 		return workqueue.Change{}, err
@@ -187,20 +214,30 @@ func Prepare(view workqueue.ResumeView, input releaseexecution.Input, previous S
 		clear(value)
 		return workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ProgressKey(input.Attempt.ID), ModRevision: previous.Revision},
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: ProgressKey(input.Attempt.ID), ModRevision: previous.Revision},
 		keyvalue.Condition{Key: workqueue.TaskKey(input.Attempt.TaskID), ModRevision: view.Work.Task.Revision},
-		keyvalue.Condition{Key: workqueue.ExecutorKey(input.Attempt.Executor), ModRevision: view.ExecutorRevision})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ProgressKey(input.Attempt.ID), Value: value})
+		keyvalue.Condition{Key: workqueue.ExecutorKey(input.Attempt.Executor), ModRevision: view.ExecutorRevision},
+	)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ProgressKey(input.Attempt.ID), Value: value},
+	)
 	return change, nil
 }
 
 func validate(record Record, input releaseexecution.Input) error {
-	if record.TaskID != input.Attempt.TaskID || record.WorkItemID != input.Attempt.WorkItemID || record.Input != input.Attempt.Input || record.Progress.Sequence == 0 ||
-		record.CheckpointSequence == 0 || ids.Validate(ids.KindStep, record.StageID) != nil {
+	if record.TaskID != input.Attempt.TaskID || record.WorkItemID != input.Attempt.WorkItemID ||
+		record.Input != input.Attempt.Input ||
+		record.Progress.Sequence == 0 ||
+		record.CheckpointSequence == 0 ||
+		ids.Validate(ids.KindStep, record.StageID) != nil {
 		return invalid()
 	}
 	expectedHook := ""
-	if record.Progress.InFlight && (record.Progress.Phase == releaseexecution.PreHooks || record.Progress.Phase == releaseexecution.PostHooks) {
+	if record.Progress.InFlight &&
+		(record.Progress.Phase == releaseexecution.PreHooks || record.Progress.Phase == releaseexecution.PostHooks) {
 		hook, err := record.Progress.ActiveHook(input)
 		if err != nil {
 			return err
@@ -210,16 +247,22 @@ func validate(record Record, input releaseexecution.Input) error {
 	if record.ActiveHookID != expectedHook {
 		return invalid()
 	}
-	afterServing := record.Progress.Phase == releaseexecution.PostHooks || record.Progress.Phase == releaseexecution.Complete
+	afterServing := record.Progress.Phase == releaseexecution.Complete ||
+		input.Artifacts.Rolling != nil && record.Progress.Phase == releaseexecution.PostHooks
 	if afterServing != (record.Serving != nil) {
 		return invalid()
 	}
 	if serving := record.Serving; serving != nil {
 		boundary := serving.Boundary
-		if boundary.Ack == nil || boundary.ValidateEnvelope(input.Attempt) != nil || boundary.Progress.Validate(input) != nil ||
-			!boundary.Progress.InFlight || boundary.Progress.Phase != releaseexecution.Rollout || boundary.Progress.Action != releaseexecution.VerifyServing ||
-			boundary.Sequence >= record.CheckpointSequence || boundary.Progress.Sequence >= record.Progress.Sequence ||
-			boundary.Progress.UpdatedAt.After(record.Progress.UpdatedAt) || serving.Evidence.Validate() != nil {
+		if boundary.Ack == nil || boundary.ValidateEnvelope(input.Attempt) != nil ||
+			boundary.Progress.Validate(input) != nil ||
+			!boundary.Progress.InFlight ||
+			boundary.Progress.Phase != releaseexecution.Rollout ||
+			boundary.Progress.Action != releaseexecution.VerifyServing ||
+			boundary.Sequence >= record.CheckpointSequence ||
+			boundary.Progress.Sequence >= record.Progress.Sequence ||
+			boundary.Progress.UpdatedAt.After(record.Progress.UpdatedAt) ||
+			serving.Evidence.Validate() != nil {
 			return invalid()
 		}
 		stage, err := boundary.Progress.StageID(input)
