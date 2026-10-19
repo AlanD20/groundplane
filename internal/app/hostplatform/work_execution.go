@@ -165,6 +165,21 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 					owners.provisioning.completion...),
 				owners.resolver.completion...),
 			[]workdispatch.CompletionRegistration{
+				{
+					Action:    workexecution.ActionCreate,
+					Operation: workexecution.EntryConfiguration,
+					Owner:     owners.entryAgent,
+				},
+				{
+					Action:    workexecution.ActionUpdate,
+					Operation: workexecution.EntryConfiguration,
+					Owner:     owners.entryAgent,
+				},
+				{
+					Action:    workexecution.ActionRemove,
+					Operation: workexecution.EntryConfiguration,
+					Owner:     owners.entryAgent,
+				},
 				{Action: workexecution.ActionRemove, Operation: workexecution.ReleaseGroup, Owner: owners.groupRemoval},
 				{Action: workexecution.ActionCreate, Operation: workexecution.AgentLifecycle, Owner: owners.agentWork},
 				{Action: workexecution.ActionRemove, Operation: workexecution.AgentLifecycle, Owner: owners.agentWork},

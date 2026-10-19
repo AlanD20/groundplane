@@ -15,7 +15,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
+	entryexecution "github.com/AlanD20/groundplane/internal/controller/entrywork"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -76,6 +78,82 @@ func TestNativeEntryDefinitionRemovalSettlesWithoutAgent(t *testing.T) {
 	}
 	if f.store.revision != beforeReplay {
 		t.Fatal("removal replay changed durable state")
+	}
+	finishNativeEntryDefinition(t, f, queue)
+	replay, err := etcd.NewIdempotencyRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locator, found, err := replay.ResolveReplayLocator(t.Context(), *f.request.Marker.ReplayTarget,
+		f.request.Marker.Locator.Method, f.request.Marker.Locator.Route, f.request.Marker.Locator.Key)
+	if err != nil || !found || locator != f.request.Marker.Locator {
+		t.Fatalf("removed Entry lost reverse replay authority: %v", err)
+	}
+	evidence, err := replay.Read(t.Context(), locator)
+	if err != nil || evidence == nil {
+		t.Fatalf("finished Entry replay receipt: %v", err)
+	}
+	marker, err := evidence.Marker()
+	defer clear(marker.Intent.Ciphertext)
+	defer clear(marker.Response.Body)
+	if err != nil || marker.State != idempotency.IdempotencyMarkerCompleted || marker.TaskID != f.request.Task.ID {
+		t.Fatalf("definition-only Entry Task did not finish replay: %v", err)
+	}
+}
+
+func finishNativeEntryDefinition(t *testing.T, f *nativeEntryDefinitionFixture, queue *workqueue.Repository) {
+	t.Helper()
+	inputs, err := entrywork.NewInputRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := entryexecution.NewAgentWork(inputs, queue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completions, err := workdispatch.NewCompletions(queue, []workdispatch.CompletionRegistration{
+		{Action: workexecution.ActionRemove, Operation: workexecution.EntryConfiguration, Owner: owner}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := completions.Finish(t.Context(), f.request.Task.ID, time.Now().UTC(), time.Hour); err != nil {
+		t.Fatalf("Entry definition completion: %v", err)
+	}
+}
+
+// TASK-82: an already-retired definition does not justify inventing terminal
+// history when the exact saved removal result is missing or corrupt.
+func TestNativeEntryDefinitionCompletionRejectsCorruptResult(t *testing.T) {
+	f := newNativeEntryDefinitionFixture(t)
+	if _, err := f.hierarchy.PublishEntryConfigurationWork(t.Context(), f.request); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Put(t.Context(), entrywork.DefinitionKey(f.request.Item.ID), []byte("invalid removal result")); err != nil {
+		t.Fatal(err)
+	}
+	queue, err := workqueue.NewRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputs, err := entrywork.NewInputRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := entryexecution.NewAgentWork(inputs, queue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completions, err := workdispatch.NewCompletions(queue, []workdispatch.CompletionRegistration{
+		{Action: workexecution.ActionRemove, Operation: workexecution.EntryConfiguration, Owner: owner}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := completions.Finish(t.Context(), f.request.Task.ID, time.Now().UTC(), time.Hour); err == nil {
+		t.Fatal("corrupt Entry result closed its Task")
+	}
+	task, _, err := queue.ReadTask(t.Context(), f.request.Task.ID, 0)
+	if err != nil || task.Task.FinishedAt != nil {
+		t.Fatalf("rejected Entry completion changed terminal history: %v", err)
 	}
 }
 

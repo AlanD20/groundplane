@@ -43,30 +43,64 @@ func PrepareDefinitionPublication(task workexecution.Task, item workexecution.It
 	}
 	digest := sha256.Sum256(value)
 	change, err := workqueue.PrepareSettledDecision(task, item, workexecution.Input{
-		ID: ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "entry-definition-result"), SHA256: hex.EncodeToString(digest[:]),
+		ID: ids.DeriveAt(
+			ids.KindPlan,
+			item.CreatedAt,
+			item.ID,
+			"entry-definition-result",
+		), SHA256: hex.EncodeToString(digest[:]),
 	}, marker, at)
 	if err != nil {
 		clear(value)
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: DefinitionKey(item.ID)})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DefinitionKey(item.ID), Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DefinitionKey(item.ID), Value: value},
+	)
 	return change, nil
 }
 
-func (repository *InputRepository) retireDefinition(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
-	task, item := view.Task.Task, view.Item.Item
-	if !final || task.Action != workexecution.ActionRemove || item.Input != nil || item.Result == nil ||
-		item.AttemptNumber != 0 || item.Outcome != workexecution.Succeeded || item.Cleanup != workexecution.CleanupNone {
+func (repository *InputRepository) retireDefinition(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
+	if !final {
 		return false, workqueue.Change{}, conflict("Entry definition retirement requires its completed decision")
 	}
-	read, err := repository.read(ctx, []string{DefinitionKey(item.ID)}, view.ReadRevision)
+	conditions, err := repository.DefinitionConditions(ctx, view)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
+	return true, workqueue.Change{Conditions: conditions,
+		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: DefinitionKey(view.Item.Item.ID)}}}, nil
+}
+
+// DefinitionConditions binds Task completion and later collection to the same
+// immutable removal result, not merely to an apparently settled item.
+func (repository *InputRepository) DefinitionConditions(
+	ctx context.Context,
+	view workqueue.View,
+) ([]keyvalue.Condition, error) {
+	task, item := view.Task.Task, view.Item.Item
+	if task.Validate() != nil || item.Validate() != nil || view.ReadRevision <= 0 || view.Task.Revision <= 0 || view.Item.Revision <= 0 ||
+		task.Action != workexecution.ActionRemove || ids.Validate(ids.KindEnvEntry, task.TargetID) != nil ||
+		item.TaskID != task.ID || item.Operation != workexecution.EntryConfiguration || item.TargetID != task.Scope.EnvironmentID ||
+		item.Placement.Executor != workexecution.Controller || item.Phase != workexecution.Settled || item.ActiveAttemptID != "" || item.Input != nil || item.Result == nil ||
+		item.AttemptNumber != 0 || item.Outcome != workexecution.Succeeded ||
+		item.Cleanup != workexecution.CleanupNone {
+		return nil, conflict("Entry definition requires its settled Controller removal")
+	}
+	read, err := repository.read(ctx, []string{DefinitionKey(item.ID)}, view.ReadRevision)
+	if err != nil {
+		return nil, err
+	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.Values[0] == nil {
-		return false, workqueue.Change{}, conflict("Entry definition result is missing")
+		return nil, conflict("Entry definition result is missing")
 	}
 	value := read.Values[0]
 	result, err := recordcodec.Decode[DefinitionResult](value.Value, "entry-definition-result")
@@ -76,13 +110,10 @@ func (repository *InputRepository) retireDefinition(ctx context.Context, view wo
 		!result.At.Equal(item.UpdatedAt) || result.ConfigurationRevision < 0 ||
 		item.Result.ID != ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "entry-definition-result") ||
 		item.Result.SHA256 != hex.EncodeToString(digest[:]) {
-		return false, workqueue.Change{}, conflict("Entry definition result differs from its settled action")
+		return nil, conflict("Entry definition result differs from its settled action")
 	}
-	return true, workqueue.Change{
-		Conditions: []keyvalue.Condition{{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
-			{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision},
-			{Key: DefinitionKey(item.ID), ModRevision: value.ModRevision},
-			{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true}},
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: DefinitionKey(item.ID)}},
-	}, nil
+	return []keyvalue.Condition{{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
+		{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision},
+		{Key: DefinitionKey(item.ID), ModRevision: value.ModRevision},
+		{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true}}, nil
 }
