@@ -345,21 +345,37 @@ func (f *nativeImageFixture) execute(t *testing.T, taskID string) (workqueue.Del
 }
 
 type imageFetchRegistry struct {
-	selected    imagefetch.Plan
-	returnedID  string
-	resolutions int
-	fetched     []imagefetch.Plan
-	tagged      []imagefetch.Plan
-	tagOutcome  imagefetch.TagAssignmentOutcome
-	tagErr      error
-	images      []imagefetch.LocalImage
+	selected      imagefetch.Plan
+	returnedID    string
+	resolutions   int
+	fetched       []imagefetch.Plan
+	tagged        []imagefetch.Plan
+	tagOutcome    imagefetch.TagAssignmentOutcome
+	tagErr        error
+	images        []imagefetch.LocalImage
+	removeEnabled bool
+	removals      int
+	removeFailure error
 }
 
 func (registry *imageFetchRegistry) List(context.Context) ([]imagefetch.LocalImage, error) {
 	return registry.images, nil
 }
-func (*imageFetchRegistry) Remove(context.Context, string) error {
-	return errs.New(errs.KindInternal, "unexpected image removal")
+func (registry *imageFetchRegistry) Remove(_ context.Context, id string) error {
+	if !registry.removeEnabled {
+		return errs.New(errs.KindInternal, "unexpected image removal")
+	}
+	registry.removals++
+	if registry.removeFailure != nil {
+		return registry.removeFailure
+	}
+	for index, image := range registry.images {
+		if image.ID == id {
+			registry.images = append(registry.images[:index], registry.images[index+1:]...)
+			break
+		}
+	}
+	return nil
 }
 func (registry *imageFetchRegistry) Resolve(context.Context, string) (imagefetch.Plan, error) {
 	registry.resolutions++
