@@ -70,21 +70,6 @@ func EncodeTaskRecord(record TaskRecord) ([]byte, error) {
 	return value, nil
 }
 
-func DecodeTaskRecord(value []byte) (TaskRecord, error) {
-	data, err := recordcodec.Decode[taskRecordData](value, "task")
-	if err != nil {
-		return TaskRecord{}, err
-	}
-	record, err := taskRecordFromData(data)
-	if err != nil {
-		return TaskRecord{}, errs.New(errs.KindInternal, "task record has invalid timestamps")
-	}
-	if err := ValidateTaskRecord(record); err != nil {
-		return TaskRecord{}, recordcodec.CorruptRecord()
-	}
-	return record, nil
-}
-
 func taskRecordToData(record TaskRecord) taskRecordData {
 	return taskRecordData{
 		ImageFetchProgress: record.ImageFetchProgress,
@@ -112,55 +97,6 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		RetainUntil:       formatOptionalTimestamp(record.RetainUntil),
 		IdempotencyMarker: cloneIdempotencyLocator(record.idempotencyMarker),
 	}
-}
-
-func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
-	createdAt, err := recordcodec.ParseCanonicalTimestamp(data.CreatedAt)
-	if err != nil {
-		return TaskRecord{}, err
-	}
-	updatedAt, err := recordcodec.ParseCanonicalTimestamp(data.UpdatedAt)
-	if err != nil {
-		return TaskRecord{}, err
-	}
-	startedAt, err := parseOptionalTimestamp(data.StartedAt)
-	if err != nil {
-		return TaskRecord{}, err
-	}
-	finishedAt, err := parseOptionalTimestamp(data.FinishedAt)
-	if err != nil {
-		return TaskRecord{}, err
-	}
-	retainUntil, err := parseOptionalTimestamp(data.RetainUntil)
-	if err != nil {
-		return TaskRecord{}, err
-	}
-	result, err := taskjournal.TaskResultFromData(data.Result)
-	if err != nil {
-		return TaskRecord{}, err
-	}
-	return TaskRecord{
-		EventCheckpoints: taskjournal.CloneEventCheckpoints(data.EventCheckpoints),
-		ID:               data.ID, OperationID: data.OperationID, RetryOf: data.RetryOf,
-		IdempotencyKey: data.IdempotencyKey, Owner: data.Owner, Actor: data.Actor,
-		Executor: data.Executor, PlanID: data.PlanID,
-		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
-		Type: data.Type, Target: data.Target, TargetName: data.TargetName, Params: data.Params, Steps: data.Steps,
-		ImageFetchProgress:     data.ImageFetchProgress,
-		ComponentActionStepIDs: append([]string(nil), data.ComponentActionStepIDs...),
-		ManagedComponentTeardownSources: projectionrecord.CloneManagedComponentRuntimeSources(
-			data.ManagedComponentTeardownSources,
-		),
-		Materializations: data.Materializations,
-		Configuration:    data.Configuration,
-		TimeoutSeconds:   data.TimeoutSeconds, Status: data.Status,
-		Result:             result,
-		BlueprintFailure:   taskjournal.CloneBlueprintFailure(data.BlueprintFailure),
-		TerminalAssignment: taskjournal.CloneTaskTerminalAssignment(data.TerminalAssignment),
-		NextEventSequence:  data.NextEventSequence, EventCount: data.EventCount,
-		CreatedAt: createdAt, UpdatedAt: updatedAt, StartedAt: startedAt, FinishedAt: finishedAt,
-		RetainUntil: retainUntil, idempotencyMarker: cloneIdempotencyLocator(data.IdempotencyMarker),
-	}, nil
 }
 
 func cloneTaskRecord(record TaskRecord) TaskRecord {
