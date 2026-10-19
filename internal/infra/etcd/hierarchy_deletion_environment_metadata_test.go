@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -14,16 +15,16 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
 // OWN-05/OWN-06: Apply's inert defaults must not wedge parent-last deletion;
 // configured authority and concurrent metadata changes must never be discarded.
 func TestHierarchyEnvironmentFinalizationRetiresOnlyIdleMetadata(t *testing.T) {
-	for _, scenario := range []string{"idle", "configured", "active-schedule", "foreign-owner", "retained-key", "policy-race", "coordination-race", "zone-reserved", "zone-corrupt", "zone-race"} {
+	for _, scenario := range []string{"idle", "configured", "active-schedule", "foreign-owner", "retained-key", "policy-race", "coordination-race", "zone-reserved", "zone-corrupt", "zone-race", "writer-active", "writer-race"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx := context.Background()
-			fixture := newEnvironmentDeletionLockFixture(t)
-			fixture.mustBegin(t)
+			fixture := newEnvironmentFinalizerFixture(t)
 			environmentID := fixture.environment.Record.ID
 			policyKey, coordinationKey := backuppolicy.BackupPolicyKey(
 				environmentID,
@@ -73,24 +74,22 @@ func TestHierarchyEnvironmentFinalizationRetiresOnlyIdleMetadata(t *testing.T) {
 			if scenario == "retained-key" {
 				fixture.putRaw(t, backuppolicy.BackupKeyKey(environmentID), []byte("retained authority"))
 			}
+			writerKey := workqueue.ClaimKey(workexecution.Claim{ScopeID: environmentID})
+			if scenario == "writer-active" {
+				fixture.putRaw(t, writerKey, []byte("supplied active writer"))
+			}
 			primary, err := fixture.store.Get(ctx, hierarchy.EnvironmentKey(environmentID))
 			if err != nil {
 				t.Fatal(err)
 			}
-			operation := hierarchydeletion.HierarchyDeletionOperation{
-				TombstoneRevision: fixture.store.revision,
-				Tombstone: hierarchydeletion.HierarchyDeletionTombstone{
-					TargetKind: hierarchydeletion.HierarchyDeletionTargetEnvironment,
-					TargetID:   environmentID, OperationID: fixture.task.OperationID,
-				},
-			}
+			operation := fixture.operation
 			effects, err := hierarchydeletionfinalization.NewPreparer(fixture.store).Prepare(ctx, operation,
 				hierarchydeletion.HierarchyDeletionAction{
 					ActionKind: hierarchydeletion.HierarchyDeletionEnvironmentFinalize,
 					TargetID:   environmentID, TargetRevision: primary.Entry.ModRevision,
 				})
 			blocked := scenario == "configured" || scenario == "active-schedule" || scenario == "foreign-owner" ||
-				scenario == "retained-key" || scenario == "zone-reserved" || scenario == "zone-corrupt"
+				scenario == "retained-key" || scenario == "zone-reserved" || scenario == "zone-corrupt" || scenario == "writer-active"
 			if blocked {
 				if err == nil {
 					t.Fatal("retained authority was accepted")
@@ -105,6 +104,9 @@ func TestHierarchyEnvironmentFinalizationRetiresOnlyIdleMetadata(t *testing.T) {
 				}
 				if scenario == "coordination-race" {
 					fixture.putRaw(t, coordinationKey, coordinationValue)
+				}
+				if scenario == "writer-race" {
+					fixture.putRaw(t, writerKey, []byte("supplied late writer"))
 				}
 				if scenario == "zone-race" {
 					pool.Reservations[ids.NewAt(ids.KindNetwork, fixture.now, 9903)] = "10.92.0.0/25"
