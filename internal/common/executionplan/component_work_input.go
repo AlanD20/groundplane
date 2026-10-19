@@ -40,7 +40,8 @@ func ValidateComponentWorkInput(input *agentpb.ComponentWorkInput) error {
 	} else if err := validateComponentWorkArtifact(prior.Runtime, input.EnvironmentId, input.ComponentId); err != nil {
 		return err
 	}
-	if (len(input.Files) != 0) != (input.Configuration != nil) || input.Remove && (len(input.Files) != 0 || input.ConfigurationAction != nil) {
+	if (len(input.Files) != 0) != (input.Configuration != nil) ||
+		input.Remove && (len(input.Files) != 0 || input.ConfigurationAction != nil) {
 		return invalidComponentWork()
 	}
 	for _, reference := range []*agentpb.WorkConfigurationReference{input.Configuration, input.PriorConfiguration} {
@@ -73,7 +74,21 @@ func ValidateComponentWorkInput(input *agentpb.ComponentWorkInput) error {
 			return err
 		}
 		if action.ComponentId != input.ComponentId || action.Generation != input.RenderGeneration ||
-			input.Configuration == nil {
+			input.Configuration == nil || action.ManagedConfigContent {
+			return invalidComponentWork()
+		}
+		matches := 0
+		for _, file := range input.Files {
+			if file.MaterializationId != action.ArtifactId {
+				continue
+			}
+			matches++
+			if file.OutputKind != agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE ||
+				file.Uid != 0 || file.Gid != 0 || !bytes.Equal(file.Sha256, action.ArtifactDigest) {
+				return invalidComponentWork()
+			}
+		}
+		if matches != 1 {
 			return invalidComponentWork()
 		}
 	}
@@ -85,7 +100,8 @@ func validateComponentWorkArtifact(artifact *agentpb.ComposeArtifact, environmen
 		return err
 	}
 	if artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT || artifact.OwnerId != environmentID ||
-		len(artifact.Services) != 1 || artifact.Services[0] == nil || artifact.Services[0].OwnerComponentId != componentID ||
+		len(artifact.Services) != 1 || artifact.Services[0] == nil ||
+		artifact.Services[0].OwnerComponentId != componentID ||
 		artifact.Services[0].ExpectedReplicas != 1 {
 		return invalidComponentWork()
 	}
@@ -112,7 +128,10 @@ func validateComponentWorkRetainedConfiguration(input *agentpb.ComponentWorkInpu
 		map[string]*agentpb.ComposeArtifact{input.Predecessor.Runtime.ArtifactId: input.Predecessor.Runtime})
 }
 
-func CaptureComponentWorkInput(inputID string, input *agentpb.ComponentWorkInput) (*agentpb.ComponentWorkInput, []byte, workexecution.Input, error) {
+func CaptureComponentWorkInput(
+	inputID string,
+	input *agentpb.ComponentWorkInput,
+) (*agentpb.ComponentWorkInput, []byte, workexecution.Input, error) {
 	if err := ValidateComponentWorkInput(input); err != nil {
 		return nil, nil, workexecution.Input{}, err
 	}
@@ -131,12 +150,18 @@ func CaptureComponentWorkInput(inputID string, input *agentpb.ComponentWorkInput
 }
 
 func invalidComponentWork() error {
-	return errs.New(errs.KindValidationFailed, "Component work requires one owned runtime and its captured configuration and predecessor")
+	return errs.New(
+		errs.KindValidationFailed,
+		"Component work requires one owned runtime and its captured configuration and predecessor",
+	)
 }
 
 // OpenComponentWorkInput binds authenticated assignment content to the attempt.
 // Recovery additionally requires its operation-owned failure/boundary evidence.
-func OpenComponentWorkInput(attempt workexecution.Attempt, input *agentpb.ComponentWorkInput) (*agentpb.ComponentWorkInput, error) {
+func OpenComponentWorkInput(
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+) (*agentpb.ComponentWorkInput, error) {
 	if attempt.Validate() != nil || attempt.Executor.Executor != workexecution.Agent || attempt.FinishedAt != nil {
 		return nil, invalidComponentWork()
 	}

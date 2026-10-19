@@ -5,54 +5,34 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"io"
+
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
-	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
-	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	"github.com/AlanD20/groundplane/internal/agent/componentaction"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"io"
 )
 
-// ComponentFileValidator runs only the compiled recipe selected by the sealed
-// action. Failure must occur before the materialization helper receives bytes.
+// ComponentFileValidator runs only the compiled recipe selected by the captured
+// native action. Failure precedes delivery to the physical file writer.
 type ComponentFileValidator interface {
 	ValidateComponentFile(context.Context, componentsdk.ActionEnvelope, string, []byte) error
 }
 
-func (runtime *Runtime) preflightComponentFile(
-	ctx context.Context, assignment taskassignment.Assignment, step *agentpb.ExecutionStep, payload Payload,
+// preflightComponentFile consumes the incoming source on success and failure;
+// successful validation transfers a fresh clearing reader to the caller.
+func (runtime *Runtime) preflightComponentFile(ctx context.Context, action *agentpb.ComponentApply,
+	payload Payload,
 ) (Payload, error) {
-	var selected *agentpb.ExecutionStep
-	for _, candidate := range assignment.Plan.GetSteps() {
-		action := candidate.GetComponentApply()
-		if action == nil || action.GetArtifactId() != step.GetMaterializeFile().GetMaterializationId() {
-			continue
-		}
-		if selected != nil {
-			return Payload{}, CloseSourceWithError(
-				payload.Source,
-				"agent: Component file action is duplicated",
-			)
-		}
-		selected = candidate
-	}
-	if selected == nil {
-		return payload, nil
-	}
-	action := selected.GetComponentApply()
 	header := payload.Header
 	digest := header.Digest()
-	if runtime.componentFiles == nil || !componentActionRequiresStep(assignment.Plan, selected, step.GetStepId()) ||
-		action.GetManagedConfigContent() || action.GetGeneration() != header.Generation() ||
+	if runtime.componentFiles == nil || action == nil || action.ManagedConfigContent ||
+		action.Generation != header.Generation() ||
 		header.OutputKind() != entrymaterialization.OutputPlainFile || header.ServiceID() != "" ||
 		header.ServiceName() != "" || header.UID() != 0 || header.GID() != 0 ||
-		header.Mode() != entrymaterialization.ModeReadOnly ||
-		!bytes.Equal(action.GetArtifactDigest(), digest[:]) {
-		return Payload{}, CloseSourceWithError(
-			payload.Source,
-			"agent: Component file preflight authority is invalid",
-		)
+		header.Mode() != entrymaterialization.ModeReadOnly || !bytes.Equal(action.ArtifactDigest, digest[:]) {
+		return Payload{}, CloseSourceWithError(payload.Source, "agent: Component file preflight authority is invalid")
 	}
 	envelope, err := componentaction.DecodeComponentAction(action)
 	if err != nil {
@@ -67,7 +47,7 @@ func (runtime *Runtime) preflightComponentFile(
 		clear(content)
 		return Payload{}, errs.New(
 			errs.KindValidationFailed,
-			"agent: Component preflight content differs from the sealed file",
+			"agent: Component preflight content differs from its captured file",
 		)
 	}
 	if err := runtime.componentFiles.ValidateComponentFile(ctx, envelope, header.Destination(), content); err != nil {
@@ -81,28 +61,6 @@ func (runtime *Runtime) preflightComponentFile(
 			"agent: Component preflight content or execution authority changed",
 		)
 	}
-	payload.Source = &ownedMaterializationSource{content: content, reader: bytes.NewReader(content)}
+	payload.Source = OwnContent(content)
 	return payload, nil
-}
-
-func componentActionRequiresStep(plan *agentpb.ExecutionPlan, action *agentpb.ExecutionStep, required string) bool {
-	steps := make(map[string]*agentpb.ExecutionStep, len(plan.GetSteps()))
-	for _, step := range plan.GetSteps() {
-		if step == nil || step.GetStepId() == "" || steps[step.GetStepId()] != nil {
-			return false
-		}
-		steps[step.GetStepId()] = step
-	}
-	prerequisite := action.GetPrerequisiteStepId()
-	for range len(steps) {
-		if prerequisite == required {
-			return true
-		}
-		previous := steps[prerequisite]
-		if previous == nil {
-			return false
-		}
-		prerequisite = previous.GetPrerequisiteStepId()
-	}
-	return false
 }
