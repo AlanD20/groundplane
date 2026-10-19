@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
@@ -17,7 +16,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -79,24 +77,6 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 		return retainResolverAppliedImages(&result, value)
 	}); err != nil {
 		return imageRetention{}, err
-	}
-	if err := read(taskjournal.TaskPrefix, func(value keyvalue.KeyValue) error {
-		task, err := etcd.DecodeTaskRecord(value.Value)
-		if err != nil {
-			return err
-		}
-		if task.OperationID != operationID && task.Status != taskjournal.TaskStatusCompleted && task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceImage {
-			covered, err := service.retainTaskImages(ctx, &result, task, revision)
-			if err != nil {
-				return err
-			}
-			if !covered {
-				result.busy = fmt.Sprintf("Task %s may still execute or recover; finish it or let its retention expire", task.ID)
-			}
-		}
-		return nil
-	}); err != nil {
-		return result, err
 	}
 	if err := read(runners.RunnerKey(""), func(value keyvalue.KeyValue) error {
 		runner, err := runners.DecodeRunnerDesiredRecord(value.Value)

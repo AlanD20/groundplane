@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -12,78 +11,17 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	compose "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 )
-
-type removalEngine struct {
-	imageFetchRegistry
-	images   []imagefetch.LocalImage
-	removals int
-	failure  error
-}
-
-func (engine *removalEngine) List(context.Context) ([]imagefetch.LocalImage, error) {
-	return engine.images, nil
-}
-func (engine *removalEngine) Remove(context.Context, string) error {
-	engine.removals++
-	if engine.failure != nil {
-		return engine.failure
-	}
-	engine.images = nil
-	return nil
-}
-
-func removalServiceFactory(
-	t *testing.T,
-	store *memoryHierarchyStore,
-	tasks *etcd.TaskRepository,
-	engine *removalEngine,
-) func() *imagedelivery.Service {
-	t.Helper()
-	protector, encrypted := manualJourneyEncryptedValue(t, "image-removal-intent")
-	clear(encrypted)
-	coordinator, err := requestidempotency.NewCoordinator(protector)
-	if err != nil {
-		t.Fatal(err)
-	}
-	evidence, err := etcd.NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	queue, err := workqueue.NewRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	diagnostics, err := executiondiagnostics.New(store, queue)
-	if err != nil {
-		t.Fatal(err)
-	}
-	releases, err := etcd.NewReleaseLedger(store, tasks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return func() *imagedelivery.Service {
-		service, err := imagedelivery.New(engine, store, tasks, evidence, coordinator, diagnostics, releases)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return service
-	}
-}
 
 // IMG-02: retained exact Release input protects its image without a live
 // projection, container or Task journal. This stages real rendered input; it
