@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -16,183 +15,101 @@ import (
 
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const helperImage = "registry.example/groundplane-agent@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-// TASK-31: short-lived helper isolation, outcome reporting and cleanup.
-// Rationale: one request gets one unnamed helper with only static process
-// configuration, the Docker socket, and no persistent Agent or host-root mount.
-func TestExecuteUsesExactContainerPolicyAndRemovesByImmutableID(t *testing.T) {
-	engine := newFakeEngine(t, successfulResponse())
+// TASK-31: the active frame transport must join output, deliver exact input and
+// remove its helper by immutable Docker ID. Native permission decoding and
+// operation-specific helper naming are separate boundaries.
+func TestExecuteFrameDeliversBytesAndRemovesByImmutableID(t *testing.T) {
+	expected := []byte("bounded helper response")
+	engine := newFakeEngine(expected)
 	executor, err := NewWithEngine(engine, helperImage)
 	if err != nil {
-		t.Fatalf("NewWithEngine() error = %v", err)
+		t.Fatal(err)
 	}
-	request := helperRequest(t)
-	response, err := executor.Execute(context.Background(), request)
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if response.Outcome != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
-		t.Fatalf("response = %#v", response)
+	request := []byte("captured native request")
+	response, err := executor.executeFrame(t.Context(), createOptions(helperImage, "release-helper", nil), request)
+	if err != nil || !bytes.Equal(response, expected) {
+		t.Fatalf("response=%q error=%v", response, err)
 	}
 	if len(engine.createCalls) != 1 {
-		t.Fatalf("create calls = %d, want 1", len(engine.createCalls))
+		t.Fatalf("create calls=%d", len(engine.createCalls))
 	}
-	assertCreatePolicy(t, engine.createCalls[0])
+	options := engine.createCalls[0]
+	if options.Config.Image != helperImage || options.Config.WorkingDir != composehelper.WorkDirectory ||
+		!options.HostConfig.ReadonlyRootfs || options.HostConfig.NetworkMode != "none" {
+		t.Fatalf("helper lost isolation: %#v", options)
+	}
 	if !reflect.DeepEqual(engine.attachIDs, []string{"helper-id"}) ||
 		!reflect.DeepEqual(engine.startIDs, []string{"helper-id"}) ||
-		!reflect.DeepEqual(engine.removeIDs, []string{"helper-id"}) {
-		t.Fatalf("lifecycle ids: attach=%v start=%v remove=%v", engine.attachIDs, engine.startIDs, engine.removeIDs)
+		!reflect.DeepEqual(engine.removeIDs, []string{"helper-id"}) || len(engine.stopIDs) != 0 {
+		t.Fatalf("lifecycle attach=%v start=%v stop=%v remove=%v",
+			engine.attachIDs, engine.startIDs, engine.stopIDs, engine.removeIDs)
 	}
-	if len(engine.stopIDs) != 0 {
-		t.Fatalf("stop calls = %v, want none on successful exit", engine.stopIDs)
-	}
-	decoded, err := composehelper.ReadRequest(context.Background(), bytes.NewReader(engine.connection.written.Bytes()))
-	if err != nil {
-		t.Fatalf("decode attached request: %v", err)
-	}
-	if decoded.TaskId != request.TaskId || !bytes.Equal(decoded.Plan.PlanHash, request.Plan.PlanHash) {
-		t.Fatalf("attached request = %#v", decoded)
+	if !bytes.Equal(engine.connection.written.Bytes(), request) {
+		t.Fatalf("attached request=%q", engine.connection.written.Bytes())
 	}
 }
 
-// Rationale: helper cleanup is an execution invariant; a remove failure must
-// replace an otherwise successful response and remain attributable internally.
-func TestExecuteCleanupFailureTakesPrecedence(t *testing.T) {
+// TASK-31: cleanup failure leaves the effect outcome unknown even after a
+// successful helper response; callers must not accept that response as proof.
+func TestExecuteFrameCleanupFailureTakesPrecedence(t *testing.T) {
 	removeErr := errors.New("daemon refused removal")
-	engine := newFakeEngine(t, successfulResponse())
+	engine := newFakeEngine([]byte("successful response"))
 	engine.removeErr = removeErr
 	executor, err := NewWithEngine(engine, helperImage)
 	if err != nil {
-		t.Fatalf("NewWithEngine() error = %v", err)
+		t.Fatal(err)
 	}
-	response, err := executor.Execute(context.Background(), helperRequest(t))
+	response, err := executor.executeFrame(
+		t.Context(),
+		createOptions(helperImage, "release-helper", nil),
+		[]byte("request"),
+	)
 	if response != nil || !errors.Is(err, removeErr) || !errors.Is(err, errs.New(errs.KindInternal, "")) {
-		t.Fatalf("response=%#v error=%v, want cleanup internal failure", response, err)
+		t.Fatalf("response=%q error=%v, want cleanup internal failure", response, err)
 	}
 }
 
-func TestExecuteReportsBoundedHelperFailure(t *testing.T) {
-	engine := newFakeEngine(t, successfulResponse())
+// TASK-31: a process failure reports bounded stderr instead of a successful
+// stdout frame, while still reclaiming the exact helper.
+func TestExecuteFrameReportsHelperFailure(t *testing.T) {
+	engine := newFakeEngine(nil)
 	engine.reader = multiplexedReader(stdcopy.Stderr, []byte("docker compose: network is missing\n"))
 	engine.exitStatus = 17
 	executor, err := NewWithEngine(engine, helperImage)
 	if err != nil {
-		t.Fatalf("NewWithEngine() error = %v", err)
+		t.Fatal(err)
 	}
-	response, err := executor.Execute(context.Background(), helperRequest(t))
-	if response != nil || !errors.Is(err, errs.New(errs.KindInternal, "")) {
-		t.Fatalf("response=%#v error=%v, want internal helper failure", response, err)
+	response, err := executor.executeFrame(
+		t.Context(),
+		createOptions(helperImage, "release-helper", nil),
+		[]byte("request"),
+	)
+	if response != nil || !errors.Is(err, errs.New(errs.KindInternal, "")) ||
+		!reflect.DeepEqual(engine.removeIDs, []string{"helper-id"}) {
+		t.Fatalf("response=%q error=%v removes=%v", response, err, engine.removeIDs)
 	}
 	for _, want := range []string{"exit code 17", "docker compose: network is missing"} {
 		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("Execute() error = %q, want %q", err, want)
+			t.Fatalf("error=%q, want %q", err, want)
 		}
 	}
 }
 
-// Rationale: the helper image is executable authority and must never resolve
-// through a mutable tag.
+// TASK-31: executable helper authority cannot resolve through a mutable tag.
 func TestNewWithEngineRejectsUnpinnedImage(t *testing.T) {
-	engine := newFakeEngine(t, successfulResponse())
-	if _, err := NewWithEngine(
-		engine,
-		"registry.example/groundplane-agent:latest",
-	); !errors.Is(
+	if _, err := NewWithEngine(newFakeEngine(nil), "registry.example/groundplane-agent:latest"); !errors.Is(
 		err,
 		errs.New(errs.KindValidationFailed, ""),
 	) {
-		t.Fatalf("NewWithEngine(tag) error = %v, want validation.failed", err)
-	}
-}
-
-func assertCreatePolicy(t *testing.T, options client.ContainerCreateOptions) {
-	t.Helper()
-	if options.Name != "" || options.Config == nil || options.HostConfig == nil {
-		t.Fatalf("create options = %#v", options)
-	}
-	config := options.Config
-	if config.Image != helperImage || config.User != "0" || !reflect.DeepEqual(config.Cmd, []string{helperArgument}) ||
-		!config.AttachStdin || !config.AttachStdout || !config.AttachStderr || !config.OpenStdin ||
-		!config.StdinOnce || config.Tty || config.WorkingDir != composehelper.WorkDirectory ||
-		!config.NetworkDisabled || len(config.Env) != 0 || len(config.Labels) != 0 {
-		t.Fatalf("container config = %#v", config)
-	}
-	host := options.HostConfig
-	if host.NetworkMode != container.NetworkMode("none") || !host.ReadonlyRootfs || host.AutoRemove ||
-		host.RestartPolicy.Name != container.RestartPolicyDisabled ||
-		!reflect.DeepEqual([]string(host.CapDrop), []string{"ALL"}) ||
-		!reflect.DeepEqual(host.SecurityOpt, []string{"no-new-privileges"}) ||
-		!reflect.DeepEqual(host.Tmpfs, map[string]string{composehelper.WorkDirectory: helperWorkTmpfs}) {
-		t.Fatalf("host config = %#v", host)
-	}
-	wantMounts := []mount.Mount{{
-		Type: mount.TypeBind, Source: dockerSocketPath, Target: dockerSocketPath,
-	}}
-	if !reflect.DeepEqual(host.Mounts, wantMounts) {
-		t.Fatalf("mounts = %#v, want %#v", host.Mounts, wantMounts)
-	}
-}
-
-func helperRequest(t *testing.T) *agentpb.ComposeHelperRequest {
-	t.Helper()
-	yaml := []byte("services:\n  api:\n    image: registry.example/api@sha256:" +
-		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n")
-	yamlHash := sha256.Sum256(yaml)
-	planID := "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	artifactID := "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	serviceID := "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	stepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
-		Schema: executionplan.SchemaVersion, PlanId: planID, RenderGeneration: 1,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, TargetId: serviceID,
-		Artifacts: []*agentpb.ComposeArtifact{{
-			ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
-			ProjectName: "groundplane-infra", CanonicalYaml: yaml, YamlSha256: yamlHash[:],
-			Services: []*agentpb.ComposeService{{
-				ServiceId: serviceID, ComposeName: "api", ExpectedReplicas: 1, HasHealthcheck: true,
-				ExpectedLabels: []*agentpb.LabelPair{
-					{Key: "com.groundplane.kind", Value: "service"},
-					{Key: "com.groundplane.managed", Value: "true"},
-					{Key: "com.groundplane.plan-id", Value: planID},
-					{Key: "com.groundplane.render-generation", Value: "1"},
-					{Key: "com.groundplane.service-id", Value: serviceID},
-				},
-			}},
-		}},
-		Steps: []*agentpb.ExecutionStep{{
-			StepId: stepID, TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-				ArtifactId: artifactID, ServiceIds: []string{serviceID},
-			}},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("seal plan: %v", err)
-	}
-	return &agentpb.ComposeHelperRequest{
-		Schema:       composehelper.SchemaVersion,
-		AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		TaskId:       "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		OperationId:  "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Plan:         plan, StepId: stepID, TimeoutSeconds: 30,
-	}
-}
-
-func successfulResponse() *agentpb.ComposeHelperResponse {
-	return &agentpb.ComposeHelperResponse{
-		Schema:     composehelper.SchemaVersion,
-		Outcome:    agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
-		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+		t.Fatalf("NewWithEngine(tag) error=%v", err)
 	}
 }
 
@@ -242,20 +159,9 @@ func (*fakeEngine) ContainerInspect(
 	)
 }
 
-func newFakeEngine(t *testing.T, response *agentpb.ComposeHelperResponse) *fakeEngine {
-	t.Helper()
-	var framed bytes.Buffer
-	if err := composehelper.WriteResponse(context.Background(), &framed, response); err != nil {
-		t.Fatalf("frame response: %v", err)
-	}
-	var multiplexed bytes.Buffer
-	header := make([]byte, 8)
-	header[0] = byte(stdcopy.Stdout)
-	binary.BigEndian.PutUint32(header[4:], uint32(framed.Len()))
-	multiplexed.Write(header)
-	multiplexed.Write(framed.Bytes())
+func newFakeEngine(response []byte) *fakeEngine {
 	return &fakeEngine{
-		connection: &memoryConn{}, reader: bufio.NewReader(bytes.NewReader(multiplexed.Bytes())),
+		connection: &memoryConn{}, reader: multiplexedReader(stdcopy.Stdout, response),
 		waitResult: make(chan container.WaitResponse, 1), waitError: make(chan error, 1),
 	}
 }

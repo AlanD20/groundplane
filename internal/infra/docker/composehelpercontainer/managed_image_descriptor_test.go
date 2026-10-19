@@ -14,6 +14,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// TASK-31: OCI and classic Docker identities need different evidence; neither
+// a wrong platform nor an index/config descriptor can stand in for the child.
 func TestManagedImageDescriptorIdentity(t *testing.T) {
 	for _, name := range []string{
 		"oci-child", "docker-child", "explicit-platform", "classic-config",
@@ -23,8 +25,7 @@ func TestManagedImageDescriptorIdentity(t *testing.T) {
 		"descriptor-platform", "descriptor-os-version", "descriptor-os-features",
 	} {
 		t.Run(name, func(t *testing.T) {
-			request := managedImageRequest(t)
-			service := request.Plan.Artifacts[0].Services[0]
+			service := managedService()
 			child := "sha256:" + hex.EncodeToString(service.ImageChildDigest)
 			config := "sha256:" + hex.EncodeToString(service.ImageConfigDigest)
 			observed := client.ImageInspectResult{InspectResponse: image.InspectResponse{
@@ -84,23 +85,18 @@ func TestManagedImageDescriptorIdentity(t *testing.T) {
 					OSFeatures:   []string{"unsealed"},
 				}
 			}
-			engine := &imageEngine{fakeEngine: newFakeEngine(t, successfulResponse()), observed: observed}
+			engine := &imageEngine{fakeEngine: newFakeEngine(nil), observed: observed}
 			executor, err := NewWithEngine(engine, helperImage)
 			if err != nil {
 				t.Fatal(err)
 			}
-			response, err := executor.Execute(context.Background(), request)
+			err = executor.prepareServiceImage(context.Background(), service)
 			if wantSuccess {
-				if err != nil || response == nil || len(engine.createCalls) != 1 {
-					t.Fatalf(
-						"valid managed identity rejected: response=%v error=%v creates=%d",
-						response,
-						err,
-						len(engine.createCalls),
-					)
+				if err != nil {
+					t.Fatalf("valid managed identity rejected: %v", err)
 				}
-			} else if response != nil || !errors.Is(err, errs.New(errs.KindStateConflict, "")) || len(engine.createCalls) != 0 {
-				t.Fatalf("unproven managed identity accepted: response=%v error=%v creates=%d", response, err, len(engine.createCalls))
+			} else if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+				t.Fatalf("unproven managed identity accepted: %v", err)
 			}
 			if len(engine.pulled) != 0 || len(engine.inspected) != 1 || engine.inspected[0] != service.ImageReference {
 				t.Fatalf(
