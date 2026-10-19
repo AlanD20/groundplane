@@ -55,24 +55,6 @@ type TaskRecord struct {
 	ManagedComponentTeardownSources []projectionrecord.ManagedComponentRuntimeSource `json:"managed_component_teardown_sources,omitempty"`
 }
 
-func newTaskRecord(
-	id string,
-	operationID string,
-	owner taskjournal.TaskOwner,
-	actor taskjournal.TaskActor,
-	taskType taskjournal.TaskType,
-	target string,
-	timeoutSeconds int64,
-	createdAt time.Time,
-) TaskRecord {
-	return TaskRecord{
-		ID: id, OperationID: operationID, Owner: owner, Actor: actor,
-		Executor: taskjournal.TaskExecutorAgent, Type: taskType, Target: target,
-		TimeoutSeconds: timeoutSeconds, Status: taskjournal.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
-	}
-}
-
 func TransitionTaskStatus(
 	record TaskRecord,
 	expected taskjournal.TaskStatus,

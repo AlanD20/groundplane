@@ -184,28 +184,24 @@ same acknowledgement. Empty runtime metadata alone cannot prove resolver absence
 the native bootstrap marker or a completed shutdown supplies that evidence.
 Failure retains the resource and its reservation. Failed requests remain suppressed
 for unchanged removal fences; a new admitted fence cannot reuse an older failure
-as its own outcome. [Withdrawal coordination](../../internal/infra/etcd/zone_removal_dns.go)
-owns these comparisons. This path is local and not behavior-qualified.
+as its own outcome. The implementation owners are
+[Network work](../../internal/infra/etcd/networkwork) and
+[resolver acknowledgements](../../internal/infra/etcd/resolver_acknowledgement.go).
+This coordination still requires native integration and live qualification.
 
 Direct releases retain their native operation instead of invoking Blueprint Apply.
-Their atomic publication includes a hidden network-only Task derived from the
-already captured Compose artifact. The workload waits in the queue until that
-Task completes and CoreDNS acknowledges the selected gateways. Claim publication
-compares both facts; later desired edits cannot change the captured network input.
-Native release Retry remains recovery-only and does not repeat this forward
-prerequisite. Known no-effect failures use the native release finalizer, and a
-bounded durable scan resumes cleanup after a Controller interruption. Task
-retention keeps the prerequisite available until its parent retires.
-[Prerequisite coordination](../../internal/infra/etcd/release_network_claim.go)
-owns the queue evidence. Interrupted preparation uses the existing managed-network
-recovery machinery with an explicit read-only preparation variant, separate from
-network removal. Its captured plan pairs each forward Ensure with an observation
-step. Recovery accepts absence or exact ownership and configuration; it does not
-create, remove or disconnect a network. Durable completion of every observation
-is required before the original failure settles. Conflicting or unreadable state
-keeps ownership restricted. Task presentation reads these prerequisite facts at
-the same revision as the parent rather than inventing workload progress.
-This path is local and not behavior-qualified.
+Their [publication graph](../../internal/controller/releaseoperation/graph_publication.go)
+contains captured Network work items within the same visible Task, not hidden
+child Tasks. Workload eligibility depends on the required bridge outcomes and
+resolver readiness; later desired edits cannot choose different Network input.
+Retry retains captured authority rather than selecting new intent.
+
+Interrupted preparation uses the native Network recovery procedure. Inspection
+can prove absence or exact ownership and configuration; it does not create,
+remove or disconnect a bridge. Unreadable or conflicting state retains the
+affected resource claims. Task presentation exposes these dependencies as work
+within the action. Complete interruption and connectivity qualification remains
+required; capture and compilation alone do not prove this path.
 
 The [Zone resolver decision](../../internal/common/zonedns/configuration.go)
 and [typed CoreDNS input](../../component-sdk/dnsresolver/types.go) define the

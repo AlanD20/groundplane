@@ -8,56 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
-func (repository *TaskRepository) prepareTrimmedAttemptHistory(ctx context.Context, task TaskRecord,
-	event taskjournal.TaskEventRecord, revision int64,
-) ([]keyvalue.Condition, []keyvalue.Mutation, error) {
-	history, cursorRevision, err := repository.readAttemptArchive(ctx, task.ID, revision)
-	if err != nil {
-		return nil, nil, err
-	}
-	next, validation, err := taskjournal.AppendEvictedAttemptEvent(history, event)
-	clear(validation) // Validate the bounded projection; never persist a whole archive.
-	if err != nil {
-		return nil, nil, err
-	}
-	cursor, err := taskjournal.EncodeAttemptArchiveCursor(taskjournal.AttemptArchiveCursor{
-		TaskID: task.ID, ThroughSequence: next.ThroughSequence, DroppedSummaries: next.DroppedSummaries,
-		SummaryCount: len(next.Summaries),
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	key := taskjournal.TaskAttemptHistoryKey(task.ID)
-	mutations := []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: cursor}}
-	previous := make(map[uint64]bool, len(history.Summaries))
-	retained := make(map[uint64]bool, len(next.Summaries))
-	for _, summary := range history.Summaries {
-		previous[summary.LastSequence] = true
-	}
-	for _, summary := range next.Summaries {
-		retained[summary.LastSequence] = true
-		if previous[summary.LastSequence] {
-			continue
-		}
-		value, err := taskjournal.EncodeAttemptSummary(summary)
-		if err != nil {
-			for _, mutation := range mutations {
-				clear(mutation.Value)
-			}
-			return nil, nil, err
-		}
-		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut,
-			Key: taskjournal.TaskAttemptSummaryKey(task.ID, summary.LastSequence), Value: value})
-	}
-	for _, summary := range history.Summaries {
-		if !retained[summary.LastSequence] {
-			mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete,
-				Key: taskjournal.TaskAttemptSummaryKey(task.ID, summary.LastSequence)})
-		}
-	}
-	return []keyvalue.Condition{{Key: key, ModRevision: cursorRevision}}, mutations, nil
-}
-
 func (repository *TaskRepository) GetTaskAttemptHistory(ctx context.Context,
 	task TaskRecord, snapshot TaskEventSnapshot,
 ) (*taskjournal.AttemptHistory, error) {

@@ -25,21 +25,6 @@ type idempotencyMutationPlan struct {
 	validateExisting func(context.Context, idempotencyrecord.IdempotencyMarker, int64, int64) error
 }
 
-func (plan *idempotencyMutationPlan) enforceExistingReplay(
-	validate func(context.Context, idempotencyrecord.IdempotencyMarker, int64, int64) error,
-) error {
-	if plan == nil || validate == nil {
-		return errs.New(errs.KindInternal, "idempotency replay validator is required")
-	}
-	plan.mu.Lock()
-	defer plan.mu.Unlock()
-	if plan.consumed || plan.validateExisting != nil {
-		return errs.New(errs.KindInternal, "idempotency replay validator cannot be replaced")
-	}
-	plan.validateExisting = validate
-	return nil
-}
-
 func (plan *idempotencyMutationPlan) existingReplayValidator() func(
 	context.Context,
 	idempotencyrecord.IdempotencyMarker,
@@ -261,7 +246,11 @@ type idempotencyRepositoryStore interface {
 	Get(context.Context, string) (*etcdstore.GetResult, error)
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
-	MeasureTransaction(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionBudget, error)
+	MeasureTransaction(
+		context.Context,
+		[]etcdstore.Condition,
+		[]etcdstore.Mutation,
+	) (etcdstore.TransactionBudget, error)
 	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 

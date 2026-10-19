@@ -8,7 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // blueprintVolumeChildTaskMatches closes the durable shape used by one
@@ -48,33 +47,4 @@ func validBlueprintVolumeIntentDigest(value string) bool {
 	}
 	decoded, err := hex.DecodeString(value)
 	return err == nil && hex.EncodeToString(decoded) == value
-}
-
-func blueprintVolumeNeedsCreate(snapshot blueprintunits.Snapshot, unit blueprintunits.Unit) (bool, error) {
-	if unit.Target.Kind != ids.KindVolume || unit.Removal {
-		return false, errs.New(errs.KindStateConflict, "Blueprint Volume unit effect is invalid")
-	}
-	found := false
-	state := blueprintunits.AppliedState("")
-	for _, applied := range snapshot.Applied {
-		if applied.Record.Target != unit.Target {
-			continue
-		}
-		if found {
-			return false, errs.New(errs.KindInternal, "Blueprint Volume applied authority is duplicated")
-		}
-		found = true
-		state = applied.Record.State
-	}
-	if !found {
-		return false, errs.New(errs.KindStateConflict, "Blueprint Volume applied authority is missing")
-	}
-	switch state {
-	case blueprintunits.Absent:
-		return true, nil
-	case blueprintunits.Applied:
-		return false, nil
-	default:
-		return false, errs.New(errs.KindStateConflict, "Blueprint Volume applied effect is not executable")
-	}
 }

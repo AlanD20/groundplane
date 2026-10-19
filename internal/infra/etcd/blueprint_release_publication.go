@@ -234,13 +234,6 @@ func (publication ReleaseWorkPublication) Change(
 	}, nil
 }
 
-func (publication ReleaseWorkPublication) classify(values []*etcdstore.KeyValue) error {
-	if len(values) != len(publication.conditions) {
-		return errs.New(errs.KindInternal, "Blueprint Release compare evidence is incomplete")
-	}
-	return errs.New(errs.KindStateConflict, "Blueprint candidate Release publication changed")
-}
-
 // Abandon removes exactly the prepared Script source membership. Candidate
 // Release staging is immutable garbage-collectable evidence and is never
 // guessed at or rewritten during cleanup.

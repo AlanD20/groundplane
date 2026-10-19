@@ -14,7 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -460,19 +459,4 @@ func hierarchyDeletionNotFound(kind hierarchydeletion.HierarchyDeletionTargetKin
 
 func hierarchyDeletionUnavailable(kind hierarchydeletion.HierarchyDeletionTargetKind) error {
 	return errs.Newf(errs.KindResourceInUse, "%s deletion is already in progress", kind)
-}
-
-func hierarchyDeletionStableID(kind hierarchydeletion.HierarchyDeletionTargetKind, value string) bool {
-	var expected ids.Kind
-	switch kind {
-	case hierarchydeletion.HierarchyDeletionTargetTenant:
-		expected = ids.KindTenant
-	case hierarchydeletion.HierarchyDeletionTargetProject:
-		expected = ids.KindProject
-	case hierarchydeletion.HierarchyDeletionTargetBacking:
-		expected = ids.KindProject
-	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
-		expected = ids.KindEnvironment
-	}
-	return expected != "" && ids.Validate(expected, value) == nil
 }

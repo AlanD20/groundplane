@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -202,22 +203,6 @@ func bindPlatformComponentTaskMarker(task TaskRecord, marker idempotencyrecord.I
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
 	return task, nil
-}
-
-func requireAppliedPlatformComponentTask(result IdempotencyTransactionResult) error {
-	outcome, existing, conflict, err := result.Classify()
-	defer clear(existing.Intent.Ciphertext)
-	defer clear(existing.Response.Body)
-	if err != nil {
-		return err
-	}
-	if conflict != nil {
-		return conflict
-	}
-	if outcome != IdempotencyKnownApplied {
-		return errs.New(errs.KindStateConflict, "platform Component Task publication already exists")
-	}
-	return nil
 }
 
 func PlatformComponentDesiredDigest(record componentrecord.Record) (string, error) {

@@ -1,20 +1,13 @@
 package etcd
 
 import (
-	"context"
-	"encoding/json"
 	"slices"
 
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
-	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func blueprintNativePredecessorReferences(
@@ -39,55 +32,6 @@ func blueprintNativePredecessorReferences(
 		result[index] = reference
 	}
 	return result, nil
-}
-
-func validateBlueprintNativePredecessorReferences(
-	references []releases.BlueprintNativePredecessorReference,
-	procedure *agentpb.CandidateReleaseProcedure,
-) error {
-	if len(references) > releases.MaximumReleasePublicationMembers {
-		return releases.CorruptReleaseRecord()
-	}
-	byService := make(map[string]releases.BlueprintNativePredecessorReference, len(references))
-	for index, reference := range references {
-		if ids.Validate(ids.KindService, reference.ServiceID) != nil || reference.FixedReadRevision <= 0 ||
-			reference.ProjectionRevision < 0 || reference.ProjectionRevision > reference.FixedReadRevision ||
-			index > 0 && (references[index-1].ServiceID >= reference.ServiceID ||
-				references[index-1].FixedReadRevision != reference.FixedReadRevision) {
-			return releases.CorruptReleaseRecord()
-		}
-		if reference.Serving == nil {
-			if reference.RuntimeRevision != 0 || reference.PriorRuntimeSHA256 != "" {
-				return releases.CorruptReleaseRecord()
-			}
-		} else if !scriptexecutions.ValidLowerSHA256(reference.PriorRuntimeSHA256) || reference.ProjectionRevision <= 0 ||
-			reference.RuntimeRevision <= 0 || reference.RuntimeRevision > reference.FixedReadRevision ||
-			ids.Validate(ids.KindDeployment, reference.Serving.ServingReleaseID) != nil ||
-			reference.Serving.Target.Validate() != nil || reference.Serving.RetainedPriorReleaseID != "" &&
-			ids.Validate(ids.KindDeployment, reference.Serving.RetainedPriorReleaseID) != nil {
-			return releases.CorruptReleaseRecord()
-		}
-		byService[reference.ServiceID] = reference
-	}
-	for _, member := range procedure.GetMembers() {
-		reference := byService[member.GetServiceId()]
-		delete(byService, member.GetServiceId())
-		prior := member.GetServingPredecessor()
-		if reference.Serving == nil {
-			if prior.GetPriorArtifactId() != "" || prior.GetPriorReleaseId() != "" || prior.GetPriorTarget() != "" ||
-				prior.GetRetainedPriorArtifactId() != "" {
-				return releases.CorruptReleaseRecord()
-			}
-		} else if prior.GetPriorReleaseId() != reference.Serving.ServingReleaseID ||
-			prior.GetPriorTarget() != string(reference.Serving.Target) || prior.GetPriorArtifactId() == "" ||
-			(reference.Serving.RetainedPriorReleaseID != "") != (prior.GetRetainedPriorArtifactId() != "") {
-			return releases.CorruptReleaseRecord()
-		}
-	}
-	if len(byService) != 0 {
-		return releases.CorruptReleaseRecord()
-	}
-	return nil
 }
 
 func resolveBlueprintNativePredecessors(
@@ -152,57 +96,4 @@ func resolveBlueprintNativePredecessors(
 		}
 	}
 	return result, nil
-}
-
-func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
-	ctx context.Context,
-	task TaskRecord,
-	marker releases.ReleasePublicationMarker,
-	manifest releases.ReleaseStagedManifest,
-	revision int64,
-) ([]BlueprintNativePredecessor, []etcdstore.Condition, error) {
-	if len(marker.NativePredecessors) == 0 {
-		return nil, nil, nil
-	}
-	keys := make([]string, 0, len(manifest.Members)*2)
-	for _, member := range manifest.Members {
-		keys = append(keys, releases.ReleaseIntentStagingKey(manifest.PublicationID, member.ReleaseID),
-			releases.ReleaseRenderInputStagingKey(manifest.PublicationID, member.ReleaseID))
-	}
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
-	if err != nil {
-		return nil, nil, err
-	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return nil, nil, releases.CorruptReleaseRecord()
-	}
-	defer etcdstore.ClearValues(read.Values)
-	members := make([]releaserender.ReleaseTaskRenderMember, len(manifest.Members))
-	conditions := make([]etcdstore.Condition, len(keys))
-	for index, reference := range manifest.Members {
-		intentValue, renderValue := read.Values[index*2], read.Values[index*2+1]
-		if intentValue == nil || renderValue == nil {
-			return nil, nil, releases.CorruptReleaseRecord()
-		}
-		intent, intentErr := releases.DecodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
-		raw, rawErr := releases.DecodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
-		render, renderErr := releaserender.DecodeReleaseRenderInput(raw)
-		intentDigest, digestErr := domain.Digest(intent)
-		renderDigest, renderDigestErr := domain.Digest(raw)
-		if intentErr != nil || rawErr != nil || renderErr != nil || digestErr != nil || renderDigestErr != nil ||
-			domain.ValidateIntent(intent) != nil ||
-			intentDigest != reference.IntentDigest || renderDigest != reference.RenderDigest ||
-			renderDigest != intent.RenderInputDigest || intent.ID != reference.ReleaseID ||
-			intent.ServiceID != reference.ServiceID || intent.OperationID != task.OperationID ||
-			intent.EnvironmentID != task.Owner.EnvironmentID || intent.OperationKind != domain.OperationBlueprintApply ||
-			render.ReleaseID != intent.ID || render.ServiceID != intent.ServiceID || render.PlanID != task.PlanID ||
-			render.EnvironmentID != task.Owner.EnvironmentID || render.ArtifactID != task.Params[taskjournal.TaskComposeArtifactParam] {
-			return nil, nil, releases.CorruptReleaseRecord()
-		}
-		members[index] = releaserender.ReleaseTaskRenderMember{Intent: intent, Render: render}
-		conditions[index*2] = etcdstore.Condition{Key: keys[index*2], ModRevision: intentValue.ModRevision}
-		conditions[index*2+1] = etcdstore.Condition{Key: keys[index*2+1], ModRevision: renderValue.ModRevision}
-	}
-	native, err := resolveBlueprintNativePredecessors(marker.NativePredecessors, members)
-	return native, conditions, err
 }

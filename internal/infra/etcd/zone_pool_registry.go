@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -24,13 +25,6 @@ func (r *ZoneRepository) ListZoneSubnetReservationsAtRevision(
 		reservations = append(reservations, subnet)
 	}
 	return reservations, nil
-}
-
-func (r *ZoneRepository) getZonePoolRegistry(
-	ctx context.Context,
-	id string,
-) (etcdstore.Versioned[networkreservations.ZonePoolRegistry], error) {
-	return r.getZonePoolRegistryAtRevision(ctx, id, 0)
 }
 
 func (r *ZoneRepository) getZonePoolRegistryAtRevision(

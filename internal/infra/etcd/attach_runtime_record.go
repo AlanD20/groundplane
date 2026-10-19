@@ -1,8 +1,6 @@
 package etcd
 
 import (
-	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -22,15 +20,4 @@ func decodeAcknowledgedServiceRuntime(
 		return serviceruntimerecord.Record{}, errs.New(errs.KindInternal, "acknowledged Service runtime is corrupt")
 	}
 	return record, nil
-}
-
-func attachRuntimeSourceConditions(input attachrender.AttachTaskRenderInput) []etcdstore.Condition {
-	conditions := make([]etcdstore.Condition, len(input.RuntimePreparation.Updates))
-	for index, update := range input.RuntimePreparation.Updates {
-		conditions[index] = etcdstore.Condition{
-			Key:         serviceruntimerecord.Key(update.Runtime.ServiceID),
-			ModRevision: update.PreviousRevision,
-		}
-	}
-	return conditions
 }

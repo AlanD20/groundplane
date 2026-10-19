@@ -104,7 +104,7 @@ they never authorize deleting those records. Defragmentation is a separate,
 threshold/window-controlled operation after eligible history collection.
 Current owners: [history protection](../../internal/infra/etcd/history_protection.go),
 [maintenance](../../internal/infra/etcd/storage_maintenance.go), and
-[Task cleanup](../../internal/infra/etcd/task_cleanup_scan.go).
+[operation collection](../../internal/controller/operationretention).
 This implementation still requires its focused interruption and live data proof.
 
 ## Canonical mutation intent
@@ -212,55 +212,20 @@ Current source: [Secret use cases](../../internal/controller/secrets),
 [Secret reads](../../internal/infra/etcd/secrets), and
 [Secret mutations](../../internal/infra/etcd/secretmutations).
 
-## Task retention
+## Task execution records
 
-Terminal Tasks, their durable events, and deduplication evidence have a 90-day
-retention boundary. Cleanup is a restart-safe state machine because one Task
-may own more subordinate keys than one accepted transaction can remove.
+The [Task execution design](task-execution-redesign.md) owns identity, Retry,
+retention and diagnostic-expiry rules. The initiating action captures the Task's
+scope and actor; resource deletion or renaming does not reconstruct that history.
+Retry retains the visible Task and its captured work rather than copying an old
+Task into a replacement execution.
 
-Admission proves the exact terminal retain-until index, absence of idempotency
-authority, no conflicting retry, and matching immutable operation history. A
-resource-specific transfer may permit pruning an old attempt during an active
-retry only when every retry-shared ownership record is atomically transferred
-to that exact new attempt.
-
-The pruning intent removes owner/history indexes and attempt-scoped inputs,
-then drains checkpoint, event, and deduplication prefixes in revision-fenced
-batches. Empty phases require absence proof; malformed or cross-Task state is
-corruption, not skippable debris. Plan-scoped inputs survive until the final
-attempt that references them.
-
-Assigned Agent Tasks also require exact immutable terminal-receipt and delivery
-evidence. Awaiting, pending, or applied delivery is retained indefinitely;
-only fixed-revision clean evidence is eligible. Pruning never infers delivery
-from age, released domain ownership, or missing history.
-
-Current source: [Task journal records](../../internal/infra/etcd/taskjournal),
-[retention selection](../../internal/infra/etcd/task_retention.go), and
-[phased pruning](../../internal/infra/etcd/task_pruning.go).
-
-## Task ownership and views
-
-Every Task freezes its operator-visible owner when created. Workspace,
-Tenant, Project, and Environment ownership comes from the initiating capability,
-not its execution target or a hierarchy lookup performed later. A retry copies
-the source Task's owner tuple; a cascade keeps the initiating owner while
-touching descendants.
-
-The journal also freezes actor class and Controller-authored timestamps. The
-single-operator MVP records `operator` or `system`, never a token, digest,
-username, or inferred role.
-
-Creation writes immutable workspace and, when applicable, Environment indexes.
-Global, workspace, Project, and Environment views use the same Task primaries
-at one fixed revision and stable-id order. Activity is an alias over that same
-record set and cursor identity, not another journal. Historical Tasks stay in
-their original scope after label changes or deletion.
-
-There is no target- or Component-owned journal view, no compatibility backfill,
-and no inference for pre-contract Task records. Current source:
-[Task owner codec](../../internal/infra/etcd/taskjournal/owner.go) and
-[Task handlers](../../internal/controller/handlers/task_routes.go).
+Collection and Retry compare the same Task revision, so they cannot both win.
+Operation owners retain inputs and unresolved effect evidence independently of
+disposable diagnostics. Resource applied state does not depend on retaining Task
+history. Source owners are [execution storage](../../internal/infra/etcd/workqueue),
+[diagnostic expiry](../../internal/infra/etcd/executiondiagnostics/retention.go),
+and [Task queries](../../internal/controller/tasks).
 
 Verification for these contracts must exercise behavior, failure paths,
 generation, or architecture. Static source-text and declaration-shape tests are

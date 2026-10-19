@@ -21,14 +21,6 @@ func runtimeConfigurationHeadKey(environmentID string) string {
 	return "/v1/runtime/environment-configurations/" + environmentID
 }
 
-// Desired publication compares and rewrites the Environment epoch at this
-// revision, preventing concurrent acceptance of an absent configuration writer.
-func (repository *HierarchyRepository) requireSettledEnvironmentConfiguration(
-	ctx context.Context, environmentID string, revision int64,
-) error {
-	return requireSettledConfiguration(ctx, repository.store, environmentID, "", revision, errs.KindStateConflict)
-}
-
 func requireSettledConfiguration(
 	ctx context.Context, store hierarchyStore, environmentID, taskID string, revision int64, kind errs.Kind,
 ) error {
@@ -244,41 +236,6 @@ func taskConfigurationCondition(task TaskRecord) (etcdstore.Condition, bool, err
 		Key:         runtimeConfigurationHeadKey(reference.EnvironmentID),
 		ModRevision: revision,
 	}, true, nil
-}
-
-func bindRuntimeConfigurationPublication(
-	task TaskRecord, conditions []etcdstore.Condition, classify func(int64, []*etcdstore.KeyValue) error,
-) ([]etcdstore.Condition, func(int64, []*etcdstore.KeyValue) error, error) {
-	condition, present, err := taskConfigurationCondition(task)
-	if err != nil {
-		return nil, nil, err
-	}
-	if !present {
-		return conditions, classify, nil
-	}
-	base := len(conditions)
-	conditions = append(conditions, condition)
-	return conditions, func(revision int64, values []*etcdstore.KeyValue) error {
-		if len(values) != base+1 {
-			return errs.New(
-				errs.KindInternal,
-				"configuration publication compare evidence is incomplete",
-			)
-		}
-		if err := classify(revision, values[:base]); err != nil {
-			return err
-		}
-		value := values[base]
-		if value == nil && condition.ModRevision != 0 ||
-			value != nil &&
-				(value.Key != condition.Key || value.ModRevision != condition.ModRevision) {
-			return errs.New(
-				errs.KindStateConflict,
-				"acknowledged configuration changed before publication",
-			)
-		}
-		return nil
-	}, nil
 }
 
 // Claim checks retained members as well as the head before authorizing file I/O.

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
@@ -523,24 +524,6 @@ func decodeEnvironmentOperationLock(
 		return backupruntime.BackupOperationLockRecord{}, errs.New(
 			errs.KindInternal,
 			"environment operation lock is corrupt",
-		)
-	}
-	return record, nil
-}
-
-func decodeOwnedEnvironmentDeletionLock(
-	value *etcdstore.KeyValue,
-	task TaskRecord,
-) (backupruntime.BackupOperationLockRecord, error) {
-	record, err := decodeEnvironmentOperationLock(value, task.Target)
-	if err != nil {
-		return backupruntime.BackupOperationLockRecord{}, err
-	}
-	if record.Kind != backupruntime.BackupOperationDeletion || record.OperationID != task.OperationID ||
-		record.TaskID != task.ID {
-		return backupruntime.BackupOperationLockRecord{}, errs.New(
-			errs.KindStateConflict,
-			"environment deletion operation lock ownership changed",
 		)
 	}
 	return record, nil

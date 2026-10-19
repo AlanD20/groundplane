@@ -41,13 +41,6 @@ func (publication BlueprintScriptPublication) validate(
 	return nil
 }
 
-func (publication BlueprintScriptPublication) classify(values []*etcdstore.KeyValue) error {
-	if len(values) != 1 || etcdstore.ConditionMatchesRead(publication.conditions[0], values[0]) {
-		return errs.New(errs.KindInternal, "Blueprint Script compare evidence is invalid")
-	}
-	return errs.New(errs.KindStateConflict, "active Script-set generation changed")
-}
-
 func (publication BlueprintScriptPublication) IsZero() bool {
 	return publication.environmentID == "" && len(publication.conditions) == 0 && len(publication.mutations) == 0
 }

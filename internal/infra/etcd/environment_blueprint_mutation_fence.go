@@ -2,59 +2,14 @@ package etcd
 
 import (
 	"context"
+
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-func classifyEnvironmentBlueprintBaseConflict(
-	values []*etcdstore.KeyValue,
-	fileCount int,
-	expectedHeadRevision int64,
-	operationID string,
-) error {
-	if values[2] != nil {
-		activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
-		if err != nil {
-			return err
-		}
-		return errs.Newf(
-			errs.KindStateConflict,
-			"operation %s already has active task %s",
-			operationID,
-			activeTaskID,
-		)
-	}
-	for _, index := range []int{0, 1, 3} {
-		if values[index] != nil {
-			return errs.New(errs.KindInternal, "Blueprint apply collided with durable Task state")
-		}
-	}
-	for index := 4; index < 5+fileCount; index++ {
-		if values[index] != nil {
-			return errs.New(
-				errs.KindInternal,
-				"Blueprint apply collided with immutable revision state",
-			)
-		}
-	}
-	headIndex := 5 + fileCount
-	if (expectedHeadRevision == 0 && values[headIndex] != nil) ||
-		(expectedHeadRevision > 0 && (values[headIndex] == nil || values[headIndex].ModRevision != expectedHeadRevision)) {
-		return errs.New(errs.KindStateConflict, "Environment desired state changed")
-	}
-	projectionIndex := headIndex + 1
-	if (expectedHeadRevision == 0 && values[projectionIndex] != nil) ||
-		(expectedHeadRevision > 0 &&
-			(values[projectionIndex] == nil || values[projectionIndex].ModRevision != expectedHeadRevision)) {
-		return errs.New(errs.KindStateConflict, "Environment Compose projection changed")
-	}
-	return nil
-}
 
 func (repository *HierarchyRepository) loadEnvironmentBlueprintMutationFence(
 	ctx context.Context,

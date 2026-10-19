@@ -5,7 +5,6 @@ import (
 	"time"
 
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -56,33 +55,4 @@ func backupRunExclusionRecords(
 		result[index] = byKey[key]
 	}
 	return result, nil
-}
-
-func exactBackupExclusions(
-	values []*etcdstore.KeyValue,
-	records []backupruntime.BackupSourceTargetExclusionRecord,
-	resultRevision int64,
-) bool {
-	if len(values) != len(records) {
-		return false
-	}
-	for index, value := range values {
-		if value == nil || value.ModRevision != resultRevision {
-			return false
-		}
-		stored, err := backupruntime.DecodeBackupSourceTargetExclusionRecord(value.Value)
-		if err != nil || !sameBackupExclusionOwner(stored, records[index]) {
-			return false
-		}
-	}
-	return true
-}
-
-func sameBackupExclusionOwner(
-	left backupruntime.BackupSourceTargetExclusionRecord,
-	right backupruntime.BackupSourceTargetExclusionRecord,
-) bool {
-	return left.EnvironmentID == right.EnvironmentID && left.OperationID == right.OperationID &&
-		left.TaskID == right.TaskID && left.OperationKind == right.OperationKind &&
-		left.TargetKind == right.TargetKind && left.TargetID == right.TargetID
 }

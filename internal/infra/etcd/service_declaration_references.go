@@ -18,17 +18,6 @@ type serviceDeclarationDependencies struct {
 	DependsOn yaml.Node `yaml:"depends_on"`
 }
 
-func requireServiceDeclared(input environmentprojection.EnvironmentDesiredInput, name string) error {
-	var document serviceDeclarationDocument
-	if yaml.Unmarshal(input.Input.NormalizedCompose, &document) != nil {
-		return errs.New(errs.KindInternal, "Service retained Compose declaration is corrupt")
-	}
-	if _, found := document.Services[name]; !found {
-		return errs.New(errs.KindStateConflict, "Service retained declaration has no matching name")
-	}
-	return nil
-}
-
 func requireServiceDeclarationUnreferenced(input environmentprojection.EnvironmentDesiredInput, name string) error {
 	var document serviceDeclarationDocument
 	if yaml.Unmarshal(input.Input.NormalizedCompose, &document) != nil {
@@ -80,28 +69,6 @@ func requireServiceDeclarationUnreferenced(input environmentprojection.Environme
 	for _, group := range input.Input.ReleaseGroups {
 		if slices.Contains(group.Services, name) || slices.Contains(group.Order, name) {
 			return serviceDeclarationReferenceConflict()
-		}
-	}
-	return nil
-}
-
-func requireServiceAppliedUnreferenced(
-	projection environmentprojection.EnvironmentComposeProjection,
-	serviceID, name string,
-) error {
-	for _, service := range projection.DesiredServices {
-		if _, found := service.Desired.DependsOn[name]; found {
-			return serviceDeclarationReferenceConflict()
-		}
-	}
-	for _, entry := range projection.Entries {
-		if !entry.Entry.ExposesAll() && slices.Contains(entry.Entry.Exposure, name) {
-			return serviceDeclarationReferenceConflict()
-		}
-	}
-	for _, component := range projection.Components {
-		if slices.Contains(component.Runtime.GeneratedServices, serviceID) {
-			return errs.New(errs.KindResourceInUse, "Component-generated Services are removed through their Component")
 		}
 	}
 	return nil

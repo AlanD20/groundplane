@@ -256,22 +256,3 @@ func (prepared preparedBlueprintRequirementGatePublication) clear() {
 		clear(prepared.mutations[index].Value)
 	}
 }
-
-func (prepared preparedBlueprintRequirementGatePublication) classify(values []*etcdstore.KeyValue) error {
-	if len(values) != len(prepared.conditions) {
-		return errs.New(errs.KindInternal, "Blueprint requirement gate compare evidence is incomplete")
-	}
-	if len(values) == 0 {
-		return nil
-	}
-	if values[0] != nil {
-		return errs.New(errs.KindInternal, "Blueprint requirement gate collided with durable state")
-	}
-	for index, condition := range prepared.conditions[1:] {
-		value := values[index+1]
-		if value == nil || value.ModRevision != condition.ModRevision {
-			return errs.New(errs.KindStateConflict, "Blueprint requirement target changed before publication")
-		}
-	}
-	return nil
-}
