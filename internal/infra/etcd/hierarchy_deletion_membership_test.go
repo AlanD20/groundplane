@@ -7,10 +7,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	testhierarchydeletionfinalization "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
 	testhierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 )
@@ -41,20 +41,25 @@ func TestBackingDeletionFreezesProjectSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProjectSecretRecord() error = %v", err)
 	}
-	created, err := secrets.CreateSecret(
+	_, err = secrets.CreateSecret(
 		ctx, testsecrets.ProjectOwner(project), record, testSecretEncryptedValue(secretID, "ciphertext"),
 	)
 	if err != nil {
 		t.Fatalf("CreateSecret() error = %v", err)
 	}
-	tombstone := testhierarchydeletion.HierarchyDeletionTombstone{
-		OperationID:   ids.NewAt(ids.KindOperation, createdAt, 963),
-		OperationKind: testhierarchydeletion.HierarchyDeletionOperationBacking,
-		TargetKind:    testhierarchydeletion.HierarchyDeletionTargetBacking,
-		TargetID:      project.Record.ID, TargetRevision: project.Revision,
-		SnapshotRevision: created.ReadRevision, DeletionEpoch: 1,
+	operations, err := newHierarchyDeletionRepository(store)
+	if err != nil {
+		t.Fatal(err)
 	}
-	frozen, err := testhierarchydeletionplanning.NewPlanner(store).FreezeCapturedMembership(ctx, tombstone)
+	begin := hierarchyDeletionCreationTestBegin(createdAt, testhierarchydeletion.HierarchyDeletionTargetBacking,
+		project.Record.ID, testhierarchydeletion.HierarchyDeletionOperationBacking, "8")
+	begin.Marker.Locator.ScopeKind, begin.Marker.Locator.ScopeID = testidempotency.IdempotencyScopePlatform, "-"
+	created, err := operations.Begin(ctx, begin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := testhierarchydeletionplanning.NewPlanner(store).
+		FreezeCapturedMembership(ctx, created.Operation.Tombstone)
 	if err != nil {
 		t.Fatalf("FreezeCapturedMembership() error = %v", err)
 	}
@@ -71,19 +76,17 @@ func TestEnvironmentDeletionFreezesAndFinalizesReleaseGroups(t *testing.T) {
 	// Service removal and parent finalization can prove the Environment is empty.
 	ctx := context.Background()
 	fixture := newReleaseGroupPublisherFixture(t, 2)
-	primary, err := fixture.store.Get(ctx, testhierarchy.EnvironmentKey(fixture.environment.Record.ID))
-	if err != nil || primary == nil || primary.Entry == nil {
-		t.Fatalf("Environment primary = %#v, %v", primary, err)
+	operations, err := newHierarchyDeletionRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
 	}
-	operation := testhierarchydeletion.HierarchyDeletionOperation{
-		Tombstone: testhierarchydeletion.HierarchyDeletionTombstone{
-			OperationID:   ids.NewAt(ids.KindOperation, fixture.now, 970),
-			OperationKind: testhierarchydeletion.HierarchyDeletionOperationEnvironment,
-			TargetKind:    testhierarchydeletion.HierarchyDeletionTargetEnvironment,
-			TargetID:      fixture.environment.Record.ID, TargetRevision: primary.Entry.ModRevision,
-			SnapshotRevision: fixture.store.revision, DeletionEpoch: 1,
-		},
+	created, err := operations.Begin(ctx, hierarchyDeletionCreationTestBegin(fixture.now,
+		testhierarchydeletion.HierarchyDeletionTargetEnvironment, fixture.environment.Record.ID,
+		testhierarchydeletion.HierarchyDeletionOperationEnvironment, "9"))
+	if err != nil {
+		t.Fatal(err)
 	}
+	operation := created.Operation
 	frozen, err := testhierarchydeletionplanning.NewPlanner(fixture.store).
 		FreezeCapturedMembership(ctx, operation.Tombstone)
 	if err != nil {

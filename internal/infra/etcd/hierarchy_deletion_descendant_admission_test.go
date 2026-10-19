@@ -9,7 +9,7 @@ import (
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -126,7 +126,7 @@ func TestHierarchyDeletionRejectsDescendantDeletionAuthority(t *testing.T) {
 			} else if !isKind(err, errs.KindResourceInUse) {
 				t.Fatalf("Begin(%s deletion) error = %v, want resource.in_use", target.name, err)
 			}
-			for _, key := range []string{testhierarchydeletion.HierarchyDeletionTombstoneKey(string(target.kind), targetID), testtaskjournal.TaskStorageKey(begin.TaskID)} {
+			for _, key := range []string{testhierarchydeletion.HierarchyDeletionTombstoneKey(string(target.kind), targetID), workqueue.TaskKey(begin.TaskID)} {
 				if result, getErr := store.Get(ctx, key); getErr != nil || result.Entry != nil {
 					t.Fatalf("blocked %s deletion wrote %s = %#v/%v", target.name, key, result, getErr)
 				}
