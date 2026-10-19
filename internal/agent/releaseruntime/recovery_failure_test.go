@@ -19,10 +19,19 @@ import (
 // stop the actual recovery loop before failure hooks. Explicit reentry inspects
 // the same in-flight boundary; it cannot erase the original failure, repeat a
 // mutation automatically or manufacture terminal recovery. Host proofs before
-// the injected fault and Controller acknowledgements are supplied.
+// the injected fault and Controller acknowledgements are supplied. The exact
+// execution prefix also prevents runtime restoration before configuration.
 func TestNativeRecoveryFailureBlocksHooksAndRetainsItsBoundary(t *testing.T) {
+	ordered := []releaseexecution.RecoveryPhase{
+		releaseexecution.QuiesceForward,
+		releaseexecution.InspectFailedRuntime,
+		releaseexecution.RestoreConfiguration,
+		releaseexecution.RestoreServingRuntime,
+		releaseexecution.RemoveFailedCandidate,
+		releaseexecution.VerifyRestoration,
+	}
 	for _, phase := range []releaseexecution.RecoveryPhase{
-		releaseexecution.RestoreServingRuntime, releaseexecution.VerifyRestoration,
+		releaseexecution.RestoreConfiguration, releaseexecution.RestoreServingRuntime, releaseexecution.VerifyRestoration,
 	} {
 		t.Run(string(phase), func(t *testing.T) {
 			input := failureHookInput(t, false)
@@ -72,7 +81,7 @@ func TestNativeRecoveryFailureBlocksHooksAndRetainsItsBoundary(t *testing.T) {
 			first, err := RunRecovery(t.Context(), input, checkpoints, effects)
 			if !errors.Is(err, effects.failure) || first == nil || first.Ack == nil ||
 				!first.Progress.InFlight || first.Progress.Phase != phase ||
-				slices.Contains(effects.executed, releaseexecution.FailureHooks) {
+				!slices.Equal(effects.executed, ordered[:slices.Index(ordered, phase)+1]) {
 				t.Fatalf("failed restoration advanced recovery or reached hooks: %v", err)
 			}
 			before := slices.Clone(effects.executed)
