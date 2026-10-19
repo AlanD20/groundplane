@@ -278,6 +278,14 @@ Blueprint selection and rollout variants:
 Records below predate the native execution cutover unless explicitly labeled
 native. They do not qualify its replacement protocol, storage or viewer.
 
+The old worker-capacity, duplicate-assignment, queued-cancellation, identity and
+shutdown fixtures are retired in favor of TASK-86's native worker proof. Its
+Start-withheld cancellation is not a real host-interruption or Controller Abort
+journey. The removed generic Blueprint-executor classifier has no replacement:
+Blueprint now publishes typed resource work, not a generic Agent plan. Old DNS
+compensation and event-receipt fixtures remain pending, not qualified by this
+retirement.
+
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
 | TASK-99 | Assign work with pending, failed, cancelled, superseded, missing or foreign-Task prerequisites; replace a successful dependency after preparing admission. Try unrelated work after a refusal. | Only exact successful dependencies permit assignment. Changed authority atomically refuses the whole assignment, preserving its queue entry and free slot; unrelated work remains assignable. | Native workqueue race checks PASS (2026-10-19), over a supplied CAS store. Replaces the old single-worker Blueprint Network/Volume prerequisite fixtures at the assignment boundary. Blueprint edge construction, actual physical preparation before hooks/consumers and joined terminal settlement remain unqualified, not discarded requirements. Evidence: ignored `task-native-dependency-assignment-final.log`. |
