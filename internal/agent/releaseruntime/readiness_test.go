@@ -3,6 +3,7 @@ package releaseruntime
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,6 +91,8 @@ func TestNativeReadinessRequiresExactSelectedReplicas(t *testing.T) {
 			v.Containers[0].State = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED
 		}, false, false},
 		{"wrong image", func(v *agentpb.ObservedProject) { v.Containers[0].ImageReference = "foreign" }, false, true},
+		{"wrong actual image", func(v *agentpb.ObservedProject) { v.Containers[0].ImageId = "sha256:" + strings.Repeat("c", 64) }, false, true},
+		{"missing actual image", func(v *agentpb.ObservedProject) { v.Containers[0].ImageId = "" }, false, true},
 		{"wrong labels", func(v *agentpb.ObservedProject) { v.Containers[0].Labels[0].Value = "foreign" }, false, false},
 		{"duplicate ID", func(v *agentpb.ObservedProject) { v.Containers[1].ContainerId = v.Containers[0].ContainerId }, false, true},
 		{"stale observation", func(v *agentpb.ObservedProject) {
@@ -137,6 +140,32 @@ func TestNativeReadinessWithoutHealthcheckIsRecreateOnly(t *testing.T) {
 	}
 }
 
+// SVC-05/TASK-98: the stored readiness proof must validate actual image bytes,
+// not just the configured image reference, when the Controller admits it.
+func TestNativeReadinessEvidenceRejectsWrongActualImage(t *testing.T) {
+	input, report, observed := nativeReadinessBoundary(t, true)
+	result, err := releaseexecution.ReadinessResult(input, report.Progress, observed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, actual := range []string{observed.Containers[0].ImageId, "sha256:" + strings.Repeat("c", 64), ""} {
+		result.Readiness.Containers[0].ImageID = actual
+		raw, reference, err := releaseexecution.EncodeEffectEvidence(input, report, result, time.Now().UTC())
+		if actual != observed.Containers[0].ImageId {
+			if err == nil || len(raw) != 0 {
+				t.Fatal("wrong actual image acquired stored readiness authority")
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("exact readiness proof rejected: %v", err)
+		}
+		if _, err := releaseexecution.DecodeEffectEvidence(input, report, raw, reference); err != nil {
+			t.Fatalf("exact readiness proof could not be reopened: %v", err)
+		}
+	}
+}
+
 func nativeReadinessBoundary(
 	t *testing.T,
 	healthcheck bool,
@@ -153,6 +182,11 @@ func nativeReadinessBoundary(
 	report := releaseexecution.CheckpointReport{Sequence: 1, StageID: ids.New(ids.KindStep),
 		Progress: releaseexecution.Progress{AttemptID: input.Attempt.ID, Sequence: 1, Phase: releaseexecution.Rollout,
 			Action: releaseexecution.WaitCandidate, InFlight: true, BeganAt: &at, UpdatedAt: at}}
+	stage, err := report.Progress.StageID(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report.StageID = stage
 	ack, err := report.Checkpoint(input.Attempt)
 	if err != nil {
 		t.Fatal(err)

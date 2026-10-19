@@ -20,32 +20,57 @@ func Readiness(input Input, progress Progress, observed *agentpb.ObservedProject
 		return false, err
 	}
 	if observed == nil || executionplan.RejectUnknown(observed) != nil || observed.ProjectName != input.Artifacts.Candidate.ProjectName ||
-		observed.ObservedAt == nil || observed.ObservedAt.CheckValid() != nil || observed.ObservedAt.AsTime().Before(progress.UpdatedAt) {
-		return false, errs.New(errs.KindStateConflict, "Release readiness requires a fresh observation of its captured project")
+		observed.ObservedAt == nil ||
+		observed.ObservedAt.CheckValid() != nil ||
+		observed.ObservedAt.AsTime().Before(progress.UpdatedAt) {
+		return false, errs.New(
+			errs.KindStateConflict,
+			"Release readiness requires a fresh observation of its captured project",
+		)
 	}
 	for _, collision := range observed.Collisions {
 		if readinessCollision(input, services, progress.Rolling != nil, collision) {
-			return false, errs.New(errs.KindStateConflict, "candidate runtime ownership differs from the captured Release")
+			return false, errs.New(
+				errs.KindStateConflict,
+				"candidate runtime ownership differs from the captured Release",
+			)
 		}
 	}
 	seen := make(map[string]bool, len(observed.Containers))
 	for _, container := range observed.Containers {
 		if container == nil || container.ContainerId == "" || seen[container.ContainerId] {
-			return false, errs.New(errs.KindStateConflict, "Release observation contains an unidentified or duplicate container")
+			return false, errs.New(
+				errs.KindStateConflict,
+				"Release observation contains an unidentified or duplicate container",
+			)
 		}
 		seen[container.ContainerId] = true
 	}
 	for _, service := range services {
-		if !service.HasHealthcheck && service.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
-			return false, errs.Newf(errs.KindValidationFailed, "service %s requires an explicit healthcheck for this deployment strategy", service.ComposeName)
+		if !service.HasHealthcheck &&
+			service.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
+			return false, errs.Newf(
+				errs.KindValidationFailed,
+				"service %s requires an explicit healthcheck for this deployment strategy",
+				service.ComposeName,
+			)
 		}
 		count, ready := uint32(0), true
 		for _, container := range observed.Containers {
-			if container.ServiceId != service.ServiceId || !slices.EqualFunc(container.Labels, service.ExpectedLabels, func(a, b *agentpb.LabelPair) bool { return a != nil && b != nil && proto.Equal(a, b) }) {
+			if container.ServiceId != service.ServiceId ||
+				!slices.EqualFunc(
+					container.Labels,
+					service.ExpectedLabels,
+					func(a, b *agentpb.LabelPair) bool { return a != nil && b != nil && proto.Equal(a, b) },
+				) {
 				continue
 			}
-			if container.ImageReference != service.ImageReference {
-				return false, errs.Newf(errs.KindStateConflict, "service %s is running an image different from the captured Release", service.ComposeName)
+			if container.ImageReference != service.ImageReference || container.ImageId != service.ImageReference {
+				return false, errs.Newf(
+					errs.KindStateConflict,
+					"service %s is running an image different from the captured Release",
+					service.ComposeName,
+				)
 			}
 			count++
 			if container.State != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING {
@@ -54,7 +79,13 @@ func Readiness(input Input, progress Progress, observed *agentpb.ObservedProject
 			}
 			if service.HasHealthcheck {
 				if detail := healthcheckfailure.Detail(container.HealthcheckDiagnostic); detail != "" {
-					return false, errs.Newf(errs.KindValidationFailed, "service %s container %s: %s", service.ComposeName, container.Name, detail)
+					return false, errs.Newf(
+						errs.KindValidationFailed,
+						"service %s container %s: %s",
+						service.ComposeName,
+						container.Name,
+						detail,
+					)
 				}
 				if container.Health != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
 					ready = false
@@ -99,7 +130,12 @@ func ReadinessWorkloads(input Input, progress Progress) ([]*agentpb.ComposeServi
 	return nil, invalidProgress()
 }
 
-func readinessCollision(input Input, services []*agentpb.ComposeService, rolling bool, collision *agentpb.ObservedCollision) bool {
+func readinessCollision(
+	input Input,
+	services []*agentpb.ComposeService,
+	rolling bool,
+	collision *agentpb.ObservedCollision,
+) bool {
 	if collision == nil {
 		return true
 	}
@@ -109,19 +145,22 @@ func readinessCollision(input Input, services []*agentpb.ComposeService, rolling
 			return true
 		}
 		for _, service := range services {
-			if collision.ComposeServiceName == service.ComposeName || !rolling && collision.ServiceId == service.ServiceId {
+			if collision.ComposeServiceName == service.ComposeName ||
+				!rolling && collision.ServiceId == service.ServiceId {
 				return true
 			}
 		}
 		return false
 	case agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_NETWORK:
-		return rolling || collision.Name == "" || slices.ContainsFunc(input.Artifacts.Candidate.Networks, func(network *agentpb.ComposeNetwork) bool {
-			return collision.Name == network.ComposeName || collision.Name == network.DockerName
-		})
+		return rolling || collision.Name == "" ||
+			slices.ContainsFunc(input.Artifacts.Candidate.Networks, func(network *agentpb.ComposeNetwork) bool {
+				return collision.Name == network.ComposeName || collision.Name == network.DockerName
+			})
 	case agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_VOLUME:
-		return rolling || collision.Name == "" || slices.ContainsFunc(input.Artifacts.Candidate.Volumes, func(volume *agentpb.ComposeVolume) bool {
-			return collision.Name == volume.ComposeName || collision.Name == volume.DockerName
-		})
+		return rolling || collision.Name == "" ||
+			slices.ContainsFunc(input.Artifacts.Candidate.Volumes, func(volume *agentpb.ComposeVolume) bool {
+				return collision.Name == volume.ComposeName || collision.Name == volume.DockerName
+			})
 	default:
 		return true
 	}
