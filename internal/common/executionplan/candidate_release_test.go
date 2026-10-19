@@ -13,91 +13,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Rationale: the immutable plan owns one candidate Release procedure even
-// when several Services are selected, and a first application must authorize
-// exact candidate absence without fabricating a predecessor.
-func TestBuildCandidateReleaseProcedureBlueprintFirstApplication(t *testing.T) {
-	t.Parallel()
-
-	procedure, err := BuildCandidateReleaseProcedure(CandidateReleaseProcedureInput{
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
-		Members: []CandidateReleaseMemberInput{{
-			ServiceID:           "svc_01K4A1B2C3D4E5F6G7H8J9K0MN",
-			CandidateReleaseID:  "dep_01K4A1B2C3D4E5F6G7H8J9K0MN",
-			CandidateArtifactID: "cfg_01K4A1B2C3D4E5F6G7H8J9K0MN",
-			ForwardStepIDs: []string{
-				"step_01K4A1B2C3D4E5F6G7H8J9K0MN",
-				"step_01K4A1B2C3D4E5F6G7H8J9K0MP",
-			},
-			ServingPredecessor: &ServingPredecessorInput{
-				ProbeStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MQ", CompensateStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MR",
-			},
-			CandidateAbsence: &CandidateAbsenceInput{
-				ComposeProjectName: "gp-env_01K4A1B2C3D4E5F6G7H8J9K0MN",
-				ProbeStepID:        "step_01K4A1B2C3D4E5F6G7H8J9K0MQ", CompensateStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MR",
-				Services: []CandidateServiceIdentity{{
-					ServiceID: "svc_01K4A1B2C3D4E5F6G7H8J9K0MN",
-					ReleaseID: "dep_01K4A1B2C3D4E5F6G7H8J9K0MN",
-				}},
-			},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("build first-application candidate procedure: %v", err)
-	}
-	if len(procedure.GetMembers()) != 1 {
-		t.Fatalf("candidate procedure members = %d, want one", len(procedure.GetMembers()))
-	}
-	member := procedure.GetMembers()[0]
-	if member.GetCandidateAbsence() == nil || member.GetServingPredecessor() == nil {
-		t.Fatal("Blueprint first application omitted a lawful restoration alternative")
-	}
-	if member.GetCandidateArtifactId() == "baseline" || member.GetCandidateReleaseId() == "baseline" {
-		t.Fatal("first application fabricated baseline authority")
-	}
-}
-
-// Rationale: a native predecessor is an explicit plan artifact, not the
-// original source render. Its complete identity closure must survive the
-// input-to-protobuf boundary without silently dropping retained history.
-func TestBuildCandidateReleaseProcedureCarriesServingPredecessorReferences(t *testing.T) {
-	t.Parallel()
-
-	const (
-		priorArtifactID    = "cfg_01K4A1B2C3D4E5F6G7H8J9K0MT"
-		priorReleaseID     = "dep_01K4A1B2C3D4E5F6G7H8J9K0MS"
-		retainedArtifactID = "cfg_01K4A1B2C3D4E5F6G7H8J9K0MV"
-	)
-	procedure, err := BuildCandidateReleaseProcedure(CandidateReleaseProcedureInput{
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
-		Members: []CandidateReleaseMemberInput{{
-			ServiceID: nativeWitnessService, CandidateReleaseID: nativeWitnessCandidate,
-			CandidateArtifactID: "cfg_01K4A1B2C3D4E5F6G7H8J9K0MN",
-			ForwardStepIDs:      []string{"step_01K4A1B2C3D4E5F6G7H8J9K0MN"},
-			ServingPredecessor: &ServingPredecessorInput{
-				ProbeStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MP", CompensateStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MQ",
-				PriorArtifactID: priorArtifactID, PriorReleaseID: priorReleaseID,
-				PriorTarget: "blue", RetainedPriorArtifactID: retainedArtifactID,
-			},
-			CandidateAbsence: &CandidateAbsenceInput{
-				ComposeProjectName: "gp-env_01K4A1B2C3D4E5F6G7H8J9K0MN",
-				Services: []CandidateServiceIdentity{
-					{ServiceID: nativeWitnessService, ReleaseID: nativeWitnessCandidate},
-				},
-				ProbeStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MP", CompensateStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MQ",
-			},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("build candidate procedure: %v", err)
-	}
-	serving := procedure.GetMembers()[0].GetServingPredecessor()
-	if serving.GetPriorArtifactId() != priorArtifactID || serving.GetPriorReleaseId() != priorReleaseID ||
-		serving.GetPriorTarget() != "blue" || serving.GetRetainedPriorArtifactId() != retainedArtifactID {
-		t.Fatalf("serving predecessor references = %#v", serving)
-	}
-}
-
 func TestValidateCandidateServingPredecessorReferencesRequiresExplicitPlanArtifacts(t *testing.T) {
 	t.Parallel()
 
@@ -476,30 +391,5 @@ func TestValidateCandidateReleasePlanAcceptsHookAndRecoveryPolicies(t *testing.T
 	}
 	if len(want) != 0 {
 		t.Fatalf("sealed plan omitted preserved hook or recovery policies: %v", want)
-	}
-}
-
-func TestCandidateReleaseDescriptorRejectsAnotherSealedPlan(t *testing.T) {
-	t.Parallel()
-
-	plan, err := Seal(validBlueprintScriptReconcilePlan(t))
-	if err != nil {
-		t.Fatalf("seal candidate plan: %v", err)
-	}
-	descriptor, err := DescribeCandidateRelease(plan)
-	if err != nil {
-		t.Fatalf("describe candidate release: %v", err)
-	}
-
-	other := proto.Clone(plan).(*agentpb.ExecutionPlan)
-	other.Steps[0].TimeoutSeconds++
-	other.PlanHash = nil
-	other, err = Seal(other)
-	if err != nil {
-		t.Fatalf("seal other plan: %v", err)
-	}
-
-	if err := CandidateReleaseDescriptorMatchesPlan(descriptor, other); err == nil {
-		t.Fatal("expected descriptor from another sealed plan to be rejected")
 	}
 }

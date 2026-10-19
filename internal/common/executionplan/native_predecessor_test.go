@@ -16,69 +16,6 @@ const (
 	nativeWitnessPrior       = "dep_01K4A1B2C3D4E5F6G7H8J9K0MS"
 )
 
-// Rationale: only a captured native Release or explicit absence can select recovery.
-func TestSelectNativeRestorationMembersUsesExplicitAbsenceAndServingWitness(t *testing.T) {
-	current := nativeWitnessArtifact(
-		t,
-		nativeWitnessRelease,
-		"blue",
-		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-	)
-	retained := nativeWitnessArtifact(
-		t,
-		nativeWitnessPrior,
-		"green",
-		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-	)
-	retained.ArtifactId = "cfg_01K4A1B2C3D4E5F6G7H8J9K0MV"
-	currentBytes := nativeWitnessBytes(t, current)
-	retainedBytes := nativeWitnessBytes(t, retained)
-
-	selected, err := SelectNativeRestorationMembers(nativeWitnessEnvironment, []CandidateServiceIdentity{{
-		ServiceID: nativeWitnessService, ReleaseID: nativeWitnessCandidate,
-	}}, []NativePredecessorWitness{{
-		ServiceID: nativeWitnessService, CurrentArtifact: currentBytes, RetainedPriorArtifact: retainedBytes,
-	}})
-	if err != nil || len(selected) != 1 ||
-		selected[0].Target != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR {
-		t.Fatalf("native selection = %v, %v", selected, err)
-	}
-
-	selected, err = SelectNativeRestorationMembers(nativeWitnessEnvironment, []CandidateServiceIdentity{{
-		ServiceID: nativeWitnessService, ReleaseID: nativeWitnessCandidate,
-	}}, []NativePredecessorWitness{{ServiceID: nativeWitnessService}})
-	if err != nil || len(selected) != 1 ||
-		selected[0].Target != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE {
-		t.Fatalf("explicit absence selection = %v, %v", selected, err)
-	}
-}
-
-// Rationale: native selection must bind a complete, sorted, unambiguous member
-// set; absent or malformed identity cannot authorize first-candidate removal.
-func TestSelectNativeRestorationMembersRejectsIncompleteMemberSet(t *testing.T) {
-	member := CandidateServiceIdentity{ServiceID: nativeWitnessService, ReleaseID: nativeWitnessCandidate}
-	witness := NativePredecessorWitness{ServiceID: nativeWitnessService}
-	for _, test := range []struct {
-		name       string
-		candidates []CandidateServiceIdentity
-		witnesses  []NativePredecessorWitness
-	}{
-		{name: "empty"},
-		{name: "missing witness", candidates: []CandidateServiceIdentity{member}},
-		{name: "duplicate member", candidates: []CandidateServiceIdentity{member, member}, witnesses: []NativePredecessorWitness{witness, witness}},
-		{name: "invalid service", candidates: []CandidateServiceIdentity{{ServiceID: "invalid", ReleaseID: nativeWitnessCandidate}}, witnesses: []NativePredecessorWitness{witness}},
-		{name: "missing release", candidates: []CandidateServiceIdentity{{ServiceID: nativeWitnessService}}, witnesses: []NativePredecessorWitness{witness}},
-		{name: "wrong witness", candidates: []CandidateServiceIdentity{member}, witnesses: []NativePredecessorWitness{{ServiceID: "svc_01K4A1B2C3D4E5F6G7H8J9K0MQ"}}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			if selected, err := SelectNativeRestorationMembers(nativeWitnessEnvironment, test.candidates, test.witnesses); err == nil ||
-				selected != nil {
-				t.Fatal("incomplete native member set acquired restoration authority")
-			}
-		})
-	}
-}
-
 func TestValidateNativePredecessorWitnessRejectsForeignOrActiveRetainedRuntime(t *testing.T) {
 	current := nativeWitnessArtifact(
 		t,

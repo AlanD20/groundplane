@@ -29,157 +29,65 @@ const (
 	candidateRuntimePriorPlanID   = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 )
 
-// Rationale: SVC-15/H41 requires an ordinary Deploy or Rollback receipt to
-// keep the unchanged stable proxy's acknowledged ownership and resources while
-// recording the candidate workload and exact post-switch configuration.
-func TestPrepareCandidateRuntimesBlueGreenPostActivation(t *testing.T) {
-	for _, operation := range []agentpb.PlanOperation{
-		agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
-		agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK,
-	} {
-		t.Run(operation.String(), func(t *testing.T) {
-			plan := candidateRuntimeBlueGreenPlan(t, true)
-			plan.PlanHash = nil
-			plan.Operation = operation
-			prior := plan.GetArtifacts()[1]
-			prior.CanonicalYaml = bytes.ReplaceAll(
-				prior.GetCanonicalYaml(), []byte("gp-proxy-runtime"), []byte("gp-proxy-prior"),
-			)
-			prior.CanonicalYaml = bytes.Replace(
-				prior.GetCanonicalYaml(), []byte("    image: proxy:sealed\n"),
-				[]byte("    image: proxy:sealed\n    x-runtime-source: acknowledged\n"), 1,
-			)
-			priorDigest := sha256.Sum256(prior.GetCanonicalYaml())
-			prior.YamlSha256 = priorDigest[:]
-			plan, err := Seal(plan)
-			if err != nil {
-				t.Fatalf("Seal(%s runtime fixture) error = %v", operation, err)
-			}
-			original := proto.CloneOf(plan)
-			switchStep := plan.GetSteps()[2].GetServiceProxySwitch()
-			preSwitch := slices.Clone(plan.GetArtifacts()[0].GetServices()[0].GetProxyConfigJson())
+// SVC-15/TASK-70: preserve actual proxy ownership and exact final traffic; filter
+// unrelated workloads/resources without changing the captured historical input.
+func TestPrepareReleaseWorkRuntimeBlueGreenPostActivation(t *testing.T) {
+	attempt, input := nativeTopologyRelease(t)
+	input.Candidate = candidateRuntimeFixtureArtifact(
+		t,
+		candidateRuntimeArtifactID,
+		candidateRuntimePlanID,
+		7,
+		candidateRuntimeReleaseID,
+		"blue",
+		input.Candidate.Services[0].ProxyConfigJson,
+		true,
+	)
+	prior := candidateRuntimeOpenArtifact(t, input.Predecessor.CurrentArtifact)
+	prior.CanonicalYaml = bytes.ReplaceAll(
+		prior.GetCanonicalYaml(), []byte("gp-proxy-runtime"), []byte("gp-proxy-prior"),
+	)
+	prior.CanonicalYaml = bytes.Replace(
+		prior.GetCanonicalYaml(), []byte("    image: proxy:sealed\n"),
+		[]byte("    image: proxy:sealed\n    x-runtime-source: acknowledged\n"), 1,
+	)
+	priorDigest := sha256.Sum256(prior.GetCanonicalYaml())
+	prior.YamlSha256 = priorDigest[:]
+	input.Predecessor.CurrentArtifact = nativeWitnessBytes(t, prior)
+	original := proto.CloneOf(input)
+	finalConfig := input.TrafficConfigurations[0]
+	finalDigest := sha256.Sum256(finalConfig)
+	preSwitch := slices.Clone(input.Candidate.GetServices()[0].GetProxyConfigJson())
 
-			got, err := PrepareCandidateRuntimes(plan)
-			if err != nil {
-				t.Fatalf("PrepareCandidateRuntimes() error = %v", err)
-			}
-			if !proto.Equal(plan, original) {
-				t.Fatal("PrepareCandidateRuntimes() mutated its sealed input")
-			}
-			if len(got) != 1 || got[0].ServiceID != candidateRuntimeServiceID ||
-				got[0].ReleaseID != candidateRuntimeReleaseID || got[0].Target != "blue" ||
-				got[0].ProxyGeneration != switchStep.GetProxyGeneration() ||
-				!bytes.Equal(got[0].ProxyConfigSHA256, switchStep.GetConfigSha256()) {
-				t.Fatalf("prepared runtime = %#v", got)
-			}
-			current := candidateRuntimeOpenArtifact(t, got[0].CurrentArtifact)
-			if current.GetArtifactId() != candidateRuntimeArtifactID || len(current.GetServices()) != 2 {
-				t.Fatalf("current artifact selection = %#v", current.GetServices())
-			}
-			wantWorkload := candidateRuntimeService(
-				plan.GetArtifacts()[0],
-				candidateRuntimeServiceID,
-				"blue",
-				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-			)
-			gotWorkload := candidateRuntimeService(
-				current,
-				candidateRuntimeServiceID,
-				"blue",
-				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-			)
-			gotProxy := candidateRuntimeService(
-				current,
-				candidateRuntimeServiceID,
-				"",
-				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-			)
-			wantProxy := proto.CloneOf(candidateRuntimeService(
-				plan.GetArtifacts()[1],
-				candidateRuntimeServiceID,
-				"",
-				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-			))
-			wantProxy.ProxyConfigJson = slices.Clone(switchStep.GetConfigJson())
-			wantProxy.ProxyConfigSha256 = slices.Clone(switchStep.GetConfigSha256())
-			if !proto.Equal(gotWorkload, wantWorkload) || !proto.Equal(gotProxy, wantProxy) {
-				t.Fatal("current artifact changed candidate workload or existing proxy ownership")
-			}
-			if bytes.Contains(current.GetCanonicalYaml(), preSwitch) ||
-				!candidateRuntimeYAMLConfigEquals(
-					t,
-					current.GetCanonicalYaml(),
-					"gp-proxy-prior",
-					switchStep.GetConfigJson(),
-				) {
-				t.Fatalf("current YAML did not replace pre-switch proxy config:\n%s", current.GetCanonicalYaml())
-			}
-			if !bytes.Contains(current.GetCanonicalYaml(), []byte("x-runtime-source: acknowledged")) ||
-				bytes.Contains(current.GetCanonicalYaml(), []byte("gp-proxy-runtime")) {
-				t.Fatalf("current YAML did not retain acknowledged proxy resources:\n%s", current.GetCanonicalYaml())
-			}
-			for _, unwanted := range []string{"api--green:", "worker:", "unrelated-data:", "unrelated-config:"} {
-				if bytes.Contains(current.GetCanonicalYaml(), []byte(unwanted)) {
-					t.Fatalf("current runtime retained unrelated %q:\n%s", unwanted, current.GetCanonicalYaml())
-				}
-			}
-			for _, wanted := range []string{"shared:", "api-data:", "app-config:", "api-secret:"} {
-				if !bytes.Contains(current.GetCanonicalYaml(), []byte(wanted)) {
-					t.Fatalf("current runtime lost referenced %q:\n%s", wanted, current.GetCanonicalYaml())
-				}
-			}
-
-			retained := candidateRuntimeOpenArtifact(t, got[0].RetainedPriorArtifact)
-			if retained.GetArtifactId() != candidateRuntimePriorArtifact || len(retained.GetServices()) != 1 ||
-				candidateRuntimeService(
-					retained,
-					candidateRuntimeServiceID,
-					"green",
-					agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-				) == nil || candidateRuntimeService(
-				retained,
-				candidateRuntimeServiceID,
-				"",
-				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-			) != nil {
-				t.Fatalf("retained artifact = %#v", retained)
-			}
-			if err := ValidateNativePredecessorWitness(
-				candidateRuntimeEnvironmentID,
-				candidateRuntimeServiceID,
-				got[0].CurrentArtifact,
-				got[0].RetainedPriorArtifact,
-			); err != nil {
-				t.Fatalf("prepared runtime is not a native witness: %v", err)
-			}
-			repeated, err := PrepareCandidateRuntimes(plan)
-			if err != nil || !candidateRuntimeEqual(got[0], repeated[0]) {
-				t.Fatalf("repeated derivation diverged: %v", err)
-			}
-		})
-	}
-}
-
-// Rationale: SVC-15/H41 must not invent a prior proxy for the first explicit
-// Deploy after configured-only Apply; EnsureProxy proves that Compose creates
-// the candidate proxy, whose new ownership and switched config are acknowledged.
-func TestPrepareCandidateRuntimesFirstBlueGreenAppliesCandidateProxy(t *testing.T) {
-	plan := candidateRuntimeBlueGreenPlan(t, false)
-	original := proto.CloneOf(plan)
-	switchStep := plan.GetSteps()[2].GetServiceProxySwitch()
-	apply := plan.GetSteps()[0].GetComposeWorkloadApply()
-	if !apply.GetEnsureProxy() {
-		t.Fatal("first Deploy fixture does not apply its candidate proxy")
-	}
-
-	got, err := PrepareCandidateRuntimes(plan)
+	got, err := PrepareReleaseWorkRuntime(attempt, input)
 	if err != nil {
-		t.Fatalf("PrepareCandidateRuntimes() error = %v", err)
+		t.Fatalf("PrepareReleaseWorkRuntime() error = %v", err)
 	}
-	if !proto.Equal(plan, original) {
-		t.Fatal("PrepareCandidateRuntimes() mutated its sealed first-Deploy input")
+	if !proto.Equal(input, original) {
+		t.Fatal("PrepareReleaseWorkRuntime() mutated its sealed input")
 	}
-	current := candidateRuntimeOpenArtifact(t, got[0].CurrentArtifact)
+	if got.ServiceID != candidateRuntimeServiceID ||
+		got.ReleaseID != candidateRuntimeReleaseID || got.Target != "blue" ||
+		got.ProxyGeneration != uint64(7) ||
+		!bytes.Equal(got.ProxyConfigSHA256, finalDigest[:]) {
+		t.Fatalf("prepared runtime = %#v", got)
+	}
+	current := candidateRuntimeOpenArtifact(t, got.CurrentArtifact)
+	if current.GetArtifactId() != candidateRuntimeArtifactID || len(current.GetServices()) != 2 {
+		t.Fatalf("current artifact selection = %#v", current.GetServices())
+	}
+	wantWorkload := candidateRuntimeService(
+		input.Candidate,
+		candidateRuntimeServiceID,
+		"blue",
+		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+	)
+	gotWorkload := candidateRuntimeService(
+		current,
+		candidateRuntimeServiceID,
+		"blue",
+		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+	)
 	gotProxy := candidateRuntimeService(
 		current,
 		candidateRuntimeServiceID,
@@ -187,30 +95,112 @@ func TestPrepareCandidateRuntimesFirstBlueGreenAppliesCandidateProxy(t *testing.
 		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
 	)
 	wantProxy := proto.CloneOf(candidateRuntimeService(
-		plan.GetArtifacts()[0],
+		prior,
 		candidateRuntimeServiceID,
 		"",
 		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
 	))
-	wantProxy.ProxyConfigJson = slices.Clone(switchStep.GetConfigJson())
-	wantProxy.ProxyConfigSha256 = slices.Clone(switchStep.GetConfigSha256())
+	wantProxy.ProxyConfigJson = slices.Clone(finalConfig)
+	wantProxy.ProxyConfigSha256 = slices.Clone(finalDigest[:])
+	if !proto.Equal(gotWorkload, wantWorkload) || !proto.Equal(gotProxy, wantProxy) {
+		t.Fatal("current artifact changed candidate workload or existing proxy ownership")
+	}
+	if bytes.Contains(current.GetCanonicalYaml(), preSwitch) ||
+		!candidateRuntimeYAMLConfigEquals(
+			t,
+			current.GetCanonicalYaml(),
+			"gp-proxy-prior",
+			finalConfig,
+		) {
+		t.Fatalf("current YAML did not replace pre-switch proxy config:\n%s", current.GetCanonicalYaml())
+	}
+	if !bytes.Contains(current.GetCanonicalYaml(), []byte("x-runtime-source: acknowledged")) ||
+		bytes.Contains(current.GetCanonicalYaml(), []byte("gp-proxy-runtime")) {
+		t.Fatalf("current YAML did not retain acknowledged proxy resources:\n%s", current.GetCanonicalYaml())
+	}
+	for _, unwanted := range []string{"api--green:", "worker:", "unrelated-data:", "unrelated-config:"} {
+		if bytes.Contains(current.GetCanonicalYaml(), []byte(unwanted)) {
+			t.Fatalf("current runtime retained unrelated %q:\n%s", unwanted, current.GetCanonicalYaml())
+		}
+	}
+	for _, wanted := range []string{"shared:", "api-data:", "app-config:", "api-secret:"} {
+		if !bytes.Contains(current.GetCanonicalYaml(), []byte(wanted)) {
+			t.Fatalf("current runtime lost referenced %q:\n%s", wanted, current.GetCanonicalYaml())
+		}
+	}
+
+	retained := candidateRuntimeOpenArtifact(t, got.RetainedPriorArtifact)
+	if retained.GetArtifactId() != candidateRuntimePriorArtifact || len(retained.GetServices()) != 1 ||
+		candidateRuntimeService(
+			retained,
+			candidateRuntimeServiceID,
+			"green",
+			agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+		) == nil || candidateRuntimeService(
+		retained,
+		candidateRuntimeServiceID,
+		"",
+		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+	) != nil {
+		t.Fatalf("retained artifact = %#v", retained)
+	}
+	if err := ValidateNativePredecessorWitness(
+		candidateRuntimeEnvironmentID,
+		candidateRuntimeServiceID,
+		got.CurrentArtifact,
+		got.RetainedPriorArtifact,
+	); err != nil {
+		t.Fatalf("prepared runtime is not a native witness: %v", err)
+	}
+	repeated, err := PrepareReleaseWorkRuntime(attempt, input)
+	if err != nil || !candidateRuntimeEqual(got, repeated) {
+		t.Fatalf("repeated derivation diverged: %v", err)
+	}
+}
+
+// SVC-15/BP-04: first deployment records its candidate proxy, not an invented predecessor.
+func TestPrepareReleaseWorkRuntimeFirstBlueGreenAppliesCandidateProxy(t *testing.T) {
+	attempt, input := nativeTopologyRelease(t)
+	input.Predecessor = &agentpb.ReleaseWorkPredecessor{Absent: true}
+	original := proto.CloneOf(input)
+	finalConfig := input.TrafficConfigurations[0]
+	finalDigest := sha256.Sum256(finalConfig)
+	got, err := PrepareReleaseWorkRuntime(attempt, input)
+	if err != nil {
+		t.Fatalf("PrepareReleaseWorkRuntime() error = %v", err)
+	}
+	if !proto.Equal(input, original) {
+		t.Fatal("PrepareReleaseWorkRuntime() mutated its sealed first-Deploy input")
+	}
+	current := candidateRuntimeOpenArtifact(t, got.CurrentArtifact)
+	gotProxy := candidateRuntimeService(
+		current,
+		candidateRuntimeServiceID,
+		"",
+		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+	)
+	wantProxy := proto.CloneOf(candidateRuntimeService(
+		input.Candidate,
+		candidateRuntimeServiceID,
+		"",
+		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+	))
+	wantProxy.ProxyConfigJson = slices.Clone(finalConfig)
+	wantProxy.ProxyConfigSha256 = slices.Clone(finalDigest[:])
 	if !proto.Equal(gotProxy, wantProxy) || !candidateRuntimeYAMLConfigEquals(
 		t,
 		current.GetCanonicalYaml(),
 		"gp-proxy-runtime",
-		switchStep.GetConfigJson(),
+		finalConfig,
 	) {
 		t.Fatal("first Deploy receipt did not retain the applied candidate proxy and switched config")
 	}
 }
 
-// Rationale: SVC-15/H41 cannot describe one real post-switch runtime when the
-// retained proxy and candidate workload give a shared Compose resource two
-// identities; publication must fail closed instead of fabricating a receipt.
-func TestPrepareCandidateRuntimesRejectsRetainedProxyResourceConflict(t *testing.T) {
-	plan := proto.CloneOf(candidateRuntimeBlueGreenPlan(t, true))
-	plan.PlanHash = nil
-	prior := plan.GetArtifacts()[1]
+// SVC-15: conflicting shared resources cannot authorize a fabricated runtime receipt.
+func TestPrepareReleaseWorkRuntimeRejectsRetainedProxyResourceConflict(t *testing.T) {
+	attempt, input := nativeTopologyRelease(t)
+	prior := candidateRuntimeOpenArtifact(t, input.Predecessor.CurrentArtifact)
 	prior.CanonicalYaml = bytes.Replace(
 		prior.GetCanonicalYaml(),
 		[]byte("  shared:\n    external: true\n"),
@@ -219,37 +209,40 @@ func TestPrepareCandidateRuntimesRejectsRetainedProxyResourceConflict(t *testing
 	)
 	digest := sha256.Sum256(prior.GetCanonicalYaml())
 	prior.YamlSha256 = digest[:]
-	plan, err := Seal(plan)
-	if err != nil {
-		t.Fatalf("Seal(conflicting retained proxy fixture) error = %v", err)
-	}
-	if _, err := PrepareCandidateRuntimes(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-		t.Fatalf("PrepareCandidateRuntimes() error = %v, want validation.failed", err)
+	input.Predecessor.CurrentArtifact = nativeWitnessBytes(t, prior)
+	if _, err := PrepareReleaseWorkRuntime(attempt, input); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("PrepareReleaseWorkRuntime() error = %v, want validation.failed", err)
 	}
 }
 
-// Rationale: a portless recreate member has no proxy activation evidence; its
-// exact ComposeApply, health wait, and recreate acknowledgement still select
-// one singleton runtime with zero proxy metadata.
-func TestPrepareCandidateRuntimesPortlessRecreate(t *testing.T) {
+// SVC-15: portless recreate preserves health policy without proxy-switch authority.
+func TestPrepareReleaseWorkRuntimePortlessRecreate(t *testing.T) {
 	for _, hasHealthcheck := range []bool{true, false} {
 		t.Run(fmt.Sprintf("healthcheck=%t", hasHealthcheck), func(t *testing.T) {
-			plan := candidateRuntimeRecreatePlan(t)
-			plan.Artifacts[0].Services[0].HasHealthcheck = hasHealthcheck
-			plan.PlanHash = nil
-			plan, err := Seal(plan)
+			attempt, input := nativeTopologyRelease(t)
+			input.Strategy = agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE
+			input.Predecessor = &agentpb.ReleaseWorkPredecessor{Absent: true}
+			input.TrafficConfigurations = nil
+			input.Candidate = candidateRuntimeFixtureArtifact(
+				t,
+				candidateRuntimeArtifactID,
+				candidateRuntimePlanID,
+				7,
+				candidateRuntimeReleaseID,
+				"singleton",
+				nil,
+				true,
+			)
+			input.Candidate.Services[0].HasHealthcheck = hasHealthcheck
+			got, err := PrepareReleaseWorkRuntime(attempt, input)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("PrepareReleaseWorkRuntime() error = %v", err)
 			}
-			got, err := PrepareCandidateRuntimes(plan)
-			if err != nil {
-				t.Fatalf("PrepareCandidateRuntimes() error = %v", err)
-			}
-			if len(got) != 1 || got[0].Target != "singleton" || got[0].ProxyGeneration != 0 ||
-				len(got[0].ProxyConfigSHA256) != 0 || len(got[0].RetainedPriorArtifact) != 0 {
+			if got.Target != "singleton" || got.ProxyGeneration != 0 ||
+				len(got.ProxyConfigSHA256) != 0 || len(got.RetainedPriorArtifact) != 0 {
 				t.Fatalf("portless recreate runtime = %#v", got)
 			}
-			current := candidateRuntimeOpenArtifact(t, got[0].CurrentArtifact)
+			current := candidateRuntimeOpenArtifact(t, got.CurrentArtifact)
 			if len(current.GetServices()) != 1 || current.GetServices()[0].GetRole() !=
 				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON ||
 				current.GetServices()[0].GetComposeName() != "api" ||
@@ -260,7 +253,7 @@ func TestPrepareCandidateRuntimesPortlessRecreate(t *testing.T) {
 			if err := ValidateNativePredecessorWitness(
 				candidateRuntimeEnvironmentID,
 				candidateRuntimeServiceID,
-				got[0].CurrentArtifact,
+				got.CurrentArtifact,
 				nil,
 			); err != nil {
 				t.Fatalf("portless recreate runtime is not a native witness: %v", err)
@@ -269,275 +262,47 @@ func TestPrepareCandidateRuntimesPortlessRecreate(t *testing.T) {
 	}
 }
 
-// Rationale: publication may consume only a fully sealed ordinary Release
-// whose forward anchors and proxy YAML agree with its exact activation; it
-// must not invent a runtime from malformed, unrelated, or mismatched input.
-func TestPrepareCandidateRuntimesRejectsInvalidAuthority(t *testing.T) {
-	valid := candidateRuntimeBlueGreenPlan(t, false)
-	tests := []struct {
-		name string
-		plan func(*testing.T) *agentpb.ExecutionPlan
+// TASK-70: a receipt must reject changed capture identity, bytes or traffic;
+// it cannot invent a serving runtime from unrelated or contradictory inputs.
+func TestPrepareReleaseWorkRuntimeRejectsInvalidAuthority(t *testing.T) {
+	attempt, valid := nativeTopologyRelease(t)
+	valid.Predecessor = &agentpb.ReleaseWorkPredecessor{Absent: true}
+	for _, test := range []struct {
+		name   string
+		mutate func(*agentpb.ReleaseWorkInput)
 	}{
-		{name: "nil", plan: func(*testing.T) *agentpb.ExecutionPlan { return nil }},
-		{name: "unsealed", plan: func(*testing.T) *agentpb.ExecutionPlan {
-			value := proto.CloneOf(valid)
-			value.PlanHash = nil
-			return value
+		{"missing predecessor", func(v *agentpb.ReleaseWorkInput) { v.Predecessor = nil }},
+		{"missing candidate", func(v *agentpb.ReleaseWorkInput) { v.Candidate = nil }},
+		{"wrong environment", func(v *agentpb.ReleaseWorkInput) { v.EnvironmentId = "foreign" }},
+		{"wrong service", func(v *agentpb.ReleaseWorkInput) { v.ServiceId = candidateRuntimeOtherService }},
+		{"wrong generation", func(v *agentpb.ReleaseWorkInput) { v.RenderGeneration++ }},
+		{"changed candidate bytes", func(v *agentpb.ReleaseWorkInput) { v.Candidate.CanonicalYaml[0] ^= 1 }},
+		{"wrong traffic target", func(v *agentpb.ReleaseWorkInput) {
+			v.TrafficConfigurations[0] = candidateRuntimeProxyConfig(v.ReleaseId, "green", 7)
 		}},
-		{name: "Blueprint", plan: func(t *testing.T) *agentpb.ExecutionPlan {
-			value, err := Seal(validBlueprintScriptReconcilePlan(t))
-			if err != nil {
-				t.Fatal(err)
-			}
-			return value
-		}},
-		{name: "mismatched wait target", plan: func(t *testing.T) *agentpb.ExecutionPlan {
-			value := proto.CloneOf(valid)
-			value.PlanHash = nil
-			value.Steps[1].GetWaitWorkloadHealthy().Target = "green"
-			sealed, err := Seal(value)
-			if err != nil {
-				t.Fatalf("seal independently valid mismatched wait: %v", err)
-			}
-			return sealed
-		}},
-		{name: "proxy YAML differs from metadata", plan: func(t *testing.T) *agentpb.ExecutionPlan {
-			value := proto.CloneOf(valid)
-			value.PlanHash = nil
-			artifact := value.Artifacts[0]
-			oldContent := []byte("content: " + strconv.Quote(string(artifact.Services[0].ProxyConfigJson)))
-			artifact.CanonicalYaml = bytes.Replace(
-				artifact.CanonicalYaml,
-				oldContent,
-				[]byte("content: \"{\\\"different\\\":true}\""),
-				1,
-			)
+		{"missing traffic", func(v *agentpb.ReleaseWorkInput) { v.TrafficConfigurations = nil }},
+		{"proxy YAML differs from metadata", func(v *agentpb.ReleaseWorkInput) {
+			artifact := v.Candidate
+			content := []byte("content: " + strconv.Quote(string(artifact.Services[0].ProxyConfigJson)))
+			artifact.CanonicalYaml = bytes.Replace(artifact.CanonicalYaml, content, []byte("content: '{}'"), 1)
 			digest := sha256.Sum256(artifact.CanonicalYaml)
 			artifact.YamlSha256 = digest[:]
-			sealed, err := Seal(value)
-			if err != nil {
-				t.Fatalf("seal independently valid mismatched YAML: %v", err)
-			}
-			return sealed
 		}},
-	}
-	for _, test := range tests {
+	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := PrepareCandidateRuntimes(test.plan(t)); !errors.Is(
+			input := proto.CloneOf(valid)
+			test.mutate(input)
+			if _, err := PrepareReleaseWorkRuntime(attempt, input); !errors.Is(
 				err,
 				errs.New(errs.KindValidationFailed, ""),
 			) {
-				t.Fatalf("PrepareCandidateRuntimes() error = %v, want validation.failed", err)
+				t.Fatalf("invalid authority accepted: %v", err)
 			}
 		})
 	}
-}
-
-func candidateRuntimeBlueGreenPlan(t *testing.T, withPrior bool) *agentpb.ExecutionPlan {
-	t.Helper()
-	preTarget, preRelease, preGeneration := "singleton", candidateRuntimeReleaseID, uint64(6)
-	if withPrior {
-		preTarget, preRelease = "green", candidateRuntimePriorRelease
+	if _, err := PrepareReleaseWorkRuntime(attempt, nil); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("nil input accepted: %v", err)
 	}
-	preConfig := candidateRuntimeProxyConfig(preRelease, preTarget, preGeneration)
-	postConfig := candidateRuntimeProxyConfig(candidateRuntimeReleaseID, "blue", 7)
-	candidate := candidateRuntimeFixtureArtifact(
-		t,
-		candidateRuntimeArtifactID,
-		candidateRuntimePlanID,
-		7,
-		candidateRuntimeReleaseID,
-		"blue",
-		preConfig,
-		true,
-	)
-	plan := &agentpb.ExecutionPlan{
-		Schema: SchemaVersion, PlanId: candidateRuntimePlanID, RenderGeneration: 7,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, TargetId: candidateRuntimeServiceID,
-		Artifacts: []*agentpb.ComposeArtifact{candidate},
-	}
-	priorArtifactID := ""
-	if withPrior {
-		prior := candidateRuntimeFixtureArtifact(
-			t,
-			candidateRuntimePriorArtifact,
-			candidateRuntimePriorPlanID,
-			6,
-			candidateRuntimePriorRelease,
-			"green",
-			preConfig,
-			false,
-		)
-		plan.Artifacts = append(plan.Artifacts, prior)
-		priorArtifactID = candidateRuntimePriorArtifact
-	}
-	postDigest := sha256.Sum256(postConfig)
-	plan.Steps = []*agentpb.ExecutionStep{
-		{
-			StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ComposeWorkloadApply{ComposeWorkloadApply: &agentpb.ComposeWorkloadApply{
-				ArtifactId: candidateRuntimeArtifactID, ServiceId: candidateRuntimeServiceID, Target: "blue",
-				EnsureProxy: !withPrior,
-			}},
-		},
-		{
-			StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAW", TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_WaitWorkloadHealthy{WaitWorkloadHealthy: &agentpb.WaitWorkloadHealthy{
-				ArtifactId: candidateRuntimeArtifactID, ServiceId: candidateRuntimeServiceID, Target: "blue",
-			}},
-		},
-		{
-			StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAX", TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ServiceProxySwitch{ServiceProxySwitch: &agentpb.ServiceProxySwitch{
-				CandidateArtifactId: candidateRuntimeArtifactID, PriorArtifactId: priorArtifactID,
-				ServiceId: candidateRuntimeServiceID, FromTarget: preTarget, ToTarget: "blue",
-				ProxyGeneration: 7, ConfigJson: postConfig, ConfigSha256: postDigest[:],
-				ReleaseId: candidateRuntimeReleaseID,
-			}},
-		},
-	}
-	for _, step := range plan.Steps {
-		step.Policy = agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD
-	}
-	probeID, compensateID := "step_01ARZ3NDEKTSV4RRFFQ69G5FAY", "step_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
-	member := &agentpb.CandidateReleaseMember{
-		ServiceId: candidateRuntimeServiceID, CandidateReleaseId: candidateRuntimeReleaseID,
-		CandidateArtifactId: candidateRuntimeArtifactID,
-		ForwardStepIds: []string{
-			plan.Steps[0].GetStepId(),
-			plan.Steps[1].GetStepId(),
-			plan.Steps[2].GetStepId(),
-		},
-	}
-	if !withPrior {
-		member.CandidateAbsence = &agentpb.CandidateAbsenceRestoration{
-			ComposeProjectName: candidate.GetProjectName(), ProbeStepId: probeID, CompensateStepId: compensateID,
-			Services: []*agentpb.CandidateReleaseService{{
-				ServiceId: candidateRuntimeServiceID, ReleaseId: candidateRuntimeReleaseID,
-			}},
-		}
-		plan.Steps = append(plan.Steps, candidateRuntimeAbsenceSteps(probeID, compensateID)...)
-	} else {
-		preDigest := sha256.Sum256(preConfig)
-		member.ServingPredecessor = &agentpb.ServingPredecessorRestoration{
-			ProbeStepId: probeID, CompensateStepId: compensateID,
-			PriorArtifactId: candidateRuntimePriorArtifact,
-			PriorReleaseId:  candidateRuntimePriorRelease,
-			PriorTarget:     "green",
-		}
-		plan.Steps = append(plan.Steps,
-			&agentpb.ExecutionStep{
-				StepId: probeID, TimeoutSeconds: 30,
-				Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
-				Payload: &agentpb.ExecutionStep_ServiceProxyProbe{ServiceProxyProbe: &agentpb.ServiceProxyProbe{
-					CandidateArtifactId:      candidateRuntimeArtifactID,
-					PriorArtifactId:          candidateRuntimePriorArtifact,
-					ServiceId:                candidateRuntimeServiceID,
-					ExpectedTarget:           "green",
-					ProxyGeneration:          preGeneration,
-					ConfigJson:               preConfig,
-					ConfigSha256:             preDigest[:],
-					ReleaseId:                candidateRuntimePriorRelease,
-					AlternateTarget:          "blue",
-					AlternateProxyGeneration: 7,
-					AlternateConfigJson:      postConfig,
-					AlternateConfigSha256:    postDigest[:],
-					AlternateReleaseId:       candidateRuntimeReleaseID,
-				}},
-			},
-			&agentpb.ExecutionStep{
-				StepId: compensateID, TimeoutSeconds: 30,
-				Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
-				Payload: &agentpb.ExecutionStep_ServiceProxyCompensate{ServiceProxyCompensate: &agentpb.ServiceProxyCompensate{
-					CandidateArtifactId: candidateRuntimeArtifactID,
-					PriorArtifactId:     candidateRuntimePriorArtifact,
-					ServiceId:           candidateRuntimeServiceID,
-					CandidateTarget:     "blue",
-					PriorTarget:         "green",
-					ProxyGeneration:     preGeneration,
-					ConfigJson:          preConfig,
-					ConfigSha256:        preDigest[:],
-					PriorReleaseId:      candidateRuntimePriorRelease,
-					Enabled:             true,
-				}},
-			},
-		)
-	}
-	plan.CandidateReleaseProcedure = &agentpb.CandidateReleaseProcedure{
-		Members: []*agentpb.CandidateReleaseMember{member},
-	}
-	sealed, err := Seal(plan)
-	if err != nil {
-		t.Fatalf("Seal(blue-green runtime fixture) error = %v", err)
-	}
-	return sealed
-}
-
-func candidateRuntimeRecreatePlan(t *testing.T) *agentpb.ExecutionPlan {
-	t.Helper()
-	artifact := candidateRuntimeFixtureArtifact(
-		t,
-		candidateRuntimeArtifactID,
-		candidateRuntimePlanID,
-		7,
-		candidateRuntimeReleaseID,
-		"singleton",
-		nil,
-		true,
-	)
-	applyID, waitID, acknowledgeID := "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", "step_01ARZ3NDEKTSV4RRFFQ69G5FAW", "step_01ARZ3NDEKTSV4RRFFQ69G5FAX"
-	probeID, compensateID := "step_01ARZ3NDEKTSV4RRFFQ69G5FAY", "step_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
-	steps := []*agentpb.ExecutionStep{
-		{
-			StepId: applyID, TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-				ArtifactId: candidateRuntimeArtifactID, ServiceIds: []string{candidateRuntimeServiceID},
-				ForceRecreate: true, NoDependencies: true,
-			}},
-		},
-		{
-			StepId: waitID, TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
-				ArtifactId: candidateRuntimeArtifactID, ServiceIds: []string{candidateRuntimeServiceID},
-			}},
-		},
-		{
-			StepId: acknowledgeID, TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ServiceRecreateAcknowledge{
-				ServiceRecreateAcknowledge: &agentpb.ServiceRecreateAcknowledge{
-					ArtifactId: candidateRuntimeArtifactID, ServiceId: candidateRuntimeServiceID,
-					ReleaseId: candidateRuntimeReleaseID,
-				},
-			},
-		},
-	}
-	for _, step := range steps {
-		step.Policy = agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD
-	}
-	steps = append(steps, candidateRuntimeAbsenceSteps(probeID, compensateID)...)
-	plan := &agentpb.ExecutionPlan{
-		Schema: SchemaVersion, PlanId: candidateRuntimePlanID, RenderGeneration: 7,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK, TargetId: candidateRuntimeServiceID,
-		Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
-		CandidateReleaseProcedure: &agentpb.CandidateReleaseProcedure{
-			Members: []*agentpb.CandidateReleaseMember{{
-				ServiceId: candidateRuntimeServiceID, CandidateReleaseId: candidateRuntimeReleaseID,
-				CandidateArtifactId: candidateRuntimeArtifactID,
-				ForwardStepIds:      []string{applyID, waitID, acknowledgeID},
-				CandidateAbsence: &agentpb.CandidateAbsenceRestoration{
-					ComposeProjectName: artifact.GetProjectName(), ProbeStepId: probeID, CompensateStepId: compensateID,
-					Services: []*agentpb.CandidateReleaseService{{
-						ServiceId: candidateRuntimeServiceID, ReleaseId: candidateRuntimeReleaseID,
-					}},
-				},
-			}},
-		},
-	}
-	sealed, err := Seal(plan)
-	if err != nil {
-		t.Fatalf("Seal(recreate runtime fixture) error = %v", err)
-	}
-	return sealed
 }
 
 func candidateRuntimeFixtureArtifact(
@@ -691,33 +456,6 @@ func candidateRuntimeLabels(
 		labels[index] = &agentpb.LabelPair{Key: key, Value: values[key]}
 	}
 	return labels
-}
-
-func candidateRuntimeAbsenceSteps(probeID, compensateID string) []*agentpb.ExecutionStep {
-	return []*agentpb.ExecutionStep{
-		{
-			StepId: probeID, TimeoutSeconds: 30,
-			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
-			Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{
-				CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
-					CandidateArtifactId: candidateRuntimeArtifactID,
-					ServiceId:           candidateRuntimeServiceID,
-					CandidateReleaseId:  candidateRuntimeReleaseID,
-				},
-			},
-		},
-		{
-			StepId: compensateID, TimeoutSeconds: 30,
-			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
-			Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
-				CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
-					CandidateArtifactId: candidateRuntimeArtifactID,
-					ServiceId:           candidateRuntimeServiceID,
-					CandidateReleaseId:  candidateRuntimeReleaseID,
-				},
-			},
-		},
-	}
 }
 
 func candidateRuntimeProxyConfig(releaseID, target string, generation uint64) []byte {
