@@ -3,11 +3,12 @@ package hierarchydeletionfinalization
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -120,43 +121,44 @@ func (repository *Preparer) prepareHierarchyDeletionBackupHistoryDetach(ctx cont
 		return Effects{}, err
 	}
 	defer clear(primary.Value)
-	environmentID, operationID := "", ""
+	environmentID := ""
+	expectedAction := workexecution.ActionBackup
+	completed := false
 	switch action.ActionKind {
 	case hierarchydeletion.HierarchyDeletionBackupRunDetach:
 		record, decodeErr := backupruntime.DecodeBackupRunRecord(primary.Value)
 		valid = decodeErr == nil && record.TaskID == action.TargetID &&
 			backupruntime.TerminalBackupRunState(record.State)
 		environmentID = record.EnvironmentID
-		operationID = record.OperationID
+		completed = record.State == backupruntime.BackupRunCompleted
 		indexKey, err = backupruntime.BackupRunEnvironmentIndexKey(environmentID, action.TargetID)
 	case hierarchydeletion.HierarchyDeletionBackupRestoreDetach:
 		record, decodeErr := backupruntime.DecodeBackupRestoreRecord(primary.Value)
 		valid = decodeErr == nil && record.TaskID == action.TargetID &&
 			(record.State == backupruntime.BackupRestoreCompleted || record.State == backupruntime.BackupRestoreFailedSafe)
 		environmentID = record.EnvironmentID
-		operationID = record.OperationID
+		expectedAction = workexecution.ActionRestore
+		completed = record.State == backupruntime.BackupRestoreCompleted
 		indexKey, err = backupruntime.BackupRestoreEnvironmentIndexKey(environmentID, action.TargetID)
 	case hierarchydeletion.HierarchyDeletionBackupKeyRotationDetach:
 		record, decodeErr := backupruntime.DecodeBackupKeyRotationRecord(primary.Value)
 		valid = decodeErr == nil && record.TaskID == action.TargetID &&
 			(record.State == backupruntime.BackupKeyRotationApplied || record.State == backupruntime.BackupKeyRotationDiscarded)
 		environmentID = record.EnvironmentID
-		operationID = record.OperationID
+		expectedAction = workexecution.ActionRotate
+		completed = record.State == backupruntime.BackupKeyRotationApplied
 		indexKey, err = backupruntime.BackupKeyRotationEnvironmentIndexKey(environmentID, action.TargetID)
 	}
 	if err != nil || !valid {
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	keys := []string{indexKey}
-	if action.ActionKind != hierarchydeletion.HierarchyDeletionBackupKeyRotationDetach {
-		keys = append(keys, backupruntime.BackupTerminalReceiptKey(action.TargetID))
-	}
+	keys := []string{indexKey, workqueue.TaskKey(action.TargetID)}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		return Effects{}, err
 	}
-	if read == nil || len(read.Values) != len(keys) || read.Values[0] == nil ||
-		(len(keys) > 1 && read.Values[1] == nil) ||
+	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) || read.Values[0] == nil ||
+		read.Values[1] == nil ||
 		string(read.Values[0].Value) != action.TargetID {
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
@@ -164,22 +166,22 @@ func (repository *Preparer) prepareHierarchyDeletionBackupHistoryDetach(ctx cont
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if action.ActionKind != hierarchydeletion.HierarchyDeletionBackupKeyRotationDetach {
-		receipt, decodeErr := backupruntime.DecodeBackupTerminalReceiptRecord(read.Values[1].Value)
-		expectedType := taskjournal.TaskBackup
-		if action.ActionKind == hierarchydeletion.HierarchyDeletionBackupRestoreDetach {
-			expectedType = taskjournal.TaskRestore
-		}
-		if decodeErr != nil || receipt.Task.TaskID != action.TargetID || receipt.Task.TaskType != expectedType ||
-			receipt.Task.Owner.EnvironmentID != environmentID || receipt.Task.OperationID != operationID {
+	for index, value := range read.Values {
+		if value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision {
 			return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 	}
-	conditions := []keyvalue.Condition{{Key: primary.Key, ModRevision: primary.ModRevision},
-		{Key: indexKey, ModRevision: read.Values[0].ModRevision}}
-	if len(keys) > 1 {
-		conditions = append(conditions, keyvalue.Condition{Key: keys[1], ModRevision: read.Values[1].ModRevision})
+	task, err := workqueue.DecodeTask(read.Values[1].Value)
+	if err != nil || task.ID != action.TargetID || task.Scope.EnvironmentID != environmentID ||
+		task.TargetID != environmentID || task.Action != expectedAction || task.ExpectedItems != 1 {
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
+	if task.FinishedAt == nil || task.Outcome == workexecution.Succeeded && !completed {
+		return Effects{}, errs.New(errs.KindResourceInUse, "Backup history still has unsettled native work")
+	}
+	conditions := []keyvalue.Condition{{Key: primary.Key, ModRevision: primary.ModRevision},
+		{Key: indexKey, ModRevision: read.Values[0].ModRevision},
+		{Key: keys[1], ModRevision: read.Values[1].ModRevision}}
 	return Effects{fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(primary.Value),
 		conditions: conditions,
 		mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: indexKey}}}, nil

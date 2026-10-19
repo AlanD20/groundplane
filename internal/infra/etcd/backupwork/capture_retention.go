@@ -17,7 +17,8 @@ func (repository *InputRepository) PrepareCaptureRetention(ctx context.Context, 
 	task, item := view.Task.Task, view.Item.Item
 	if task.Validate() != nil || item.Validate() != nil || task.Action != workexecution.ActionBackup || task.ExpectedItems != 1 ||
 		task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil ||
-		at.Before(*task.CollectionStartedAt) || at.Before(*task.RetainUntil) {
+		at.Before(*task.CollectionStartedAt) ||
+		at.Before(*task.RetainUntil) {
 		return false, workqueue.Change{}, conflict("Backup history requires expired settled execution")
 	}
 	input, inputGuard, err := repository.Load(ctx, view)
@@ -39,7 +40,10 @@ func (repository *InputRepository) PrepareCaptureRetention(ctx context.Context, 
 	if !final {
 		return true, change, nil
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true},
+	)
 	indexes, err := repository.prepareStagingIndexRetirement(ctx, view, input)
 	if err != nil {
 		return false, workqueue.Change{}, err
@@ -65,20 +69,20 @@ func (repository *InputRepository) PrepareCaptureRetention(ctx context.Context, 
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
-	member, err := repository.readSettlementKeys(ctx, []string{membership}, view.ReadRevision)
+	membershipGuards, err := backupruntime.HistoryMembershipRetentionGuards(ctx, repository.store,
+		backupruntime.BackupOperationBackup, run.EnvironmentID, task.ID, view.ReadRevision)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
-	defer keyvalue.ClearValues(member.Values)
-	if member.Values[0] == nil || member.Values[0].Version != 1 || string(member.Values[0].Value) != task.ID {
-		return false, workqueue.Change{}, conflict("Backup run membership is missing")
-	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: membership, ModRevision: member.Values[0].ModRevision})
+	change.Conditions = append(change.Conditions, membershipGuards...)
 	for _, key := range []string{InputKey(item.ID), ProgressKey(item.ID), RecoveryKey(item.ID), backupruntime.BackupRunKey(task.ID), membership} {
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})
 	}
 	for _, prefix := range []string{checkpointPrefix(item.ID), credentialGrantPrefix(item.ID), backupconfiguration.ConfigTransferTaskPrefix(task.ID)} {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: prefix, Prefix: true})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: prefix, Prefix: true},
+		)
 	}
 	return true, change, nil
 }

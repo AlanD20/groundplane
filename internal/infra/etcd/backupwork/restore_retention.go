@@ -62,7 +62,13 @@ func (repository *InputRepository) PrepareRestoreRetention(ctx context.Context, 
 		}
 		environments = append(environments, environment)
 	}
-	ready, backingGuards, err := repository.retentionBackingGuards(ctx, view, environments, record.OperationID, backupruntime.BackupOperationRestore)
+	ready, backingGuards, err := repository.retentionBackingGuards(
+		ctx,
+		view,
+		environments,
+		record.OperationID,
+		backupruntime.BackupOperationRestore,
+	)
 	if err != nil || !ready {
 		return false, workqueue.Change{}, err
 	}
@@ -88,22 +94,22 @@ func (repository *InputRepository) PrepareRestoreRetention(ctx context.Context, 
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
-	member, err := repository.readSettlementKeys(ctx, []string{membership}, view.ReadRevision)
+	membershipGuards, err := backupruntime.HistoryMembershipRetentionGuards(ctx, repository.store,
+		backupruntime.BackupOperationRestore, record.EnvironmentID, task.ID, view.ReadRevision)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
-	defer keyvalue.ClearValues(member.Values)
-	if member.Values[0] == nil || member.Values[0].Version != 1 || string(member.Values[0].Value) != task.ID {
-		return false, workqueue.Change{}, conflict("Restore retention membership is missing")
-	}
+	change.Conditions = append(change.Conditions, membershipGuards...)
 	change.Conditions = append(change.Conditions,
-		keyvalue.Condition{Key: membership, ModRevision: member.Values[0].ModRevision},
 		keyvalue.Condition{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true})
 	for _, owned := range []string{key, membership, InputKey(item.ID), ProgressKey(item.ID), RecoveryKey(item.ID)} {
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: owned})
 	}
 	for _, prefix := range []string{checkpointPrefix(item.ID), credentialGrantPrefix(item.ID), backupconfiguration.ConfigTransferTaskPrefix(task.ID)} {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: prefix, Prefix: true})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: prefix, Prefix: true},
+		)
 	}
 	return true, change, nil
 }

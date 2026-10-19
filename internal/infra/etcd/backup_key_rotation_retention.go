@@ -21,7 +21,10 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotationRetention(ctx 
 	if !final || task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil ||
 		at.Before(*task.CollectionStartedAt) || at.Before(*task.RetainUntil) || item.AttemptNumber != 0 ||
 		item.Phase != workexecution.Settled || item.ActiveAttemptID != "" {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "backup key rotation history is not ready for collection")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"backup key rotation history is not ready for collection",
+		)
 	}
 	change, err := repository.PrepareBackupKeyRotationFinish(ctx, workqueue.FinishedWork{
 		Task: view.Task, Items: []workqueue.ItemSnapshot{view.Item}, ReadRevision: view.ReadRevision})
@@ -32,31 +35,35 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotationRetention(ctx 
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{index}, Revision: view.ReadRevision})
+	membershipGuards, err := backupruntime.HistoryMembershipRetentionGuards(ctx, repository.store,
+		backupruntime.BackupOperationRotation, task.TargetID, task.ID, view.ReadRevision)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
-	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "backup key rotation index is unavailable")
-	}
-	defer keyvalue.ClearValues(read.Values)
-	if read.Values[0] != nil && string(read.Values[0].Value) != task.ID {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "backup key rotation index changed")
-	}
+	change.Conditions = append(change.Conditions, membershipGuards...)
 	ancestors := []string{hierarchydeletion.HierarchyDeletionTombstoneKey("environment", task.Scope.EnvironmentID)}
 	if task.Scope.ProjectID != "" {
 		ancestors = append(ancestors, hierarchydeletion.HierarchyDeletionTombstoneKey("project", task.Scope.ProjectID))
-		ancestors = append(ancestors, hierarchydeletion.HierarchyDeletionTombstoneKey("backing-service", task.Scope.ProjectID))
+		ancestors = append(
+			ancestors,
+			hierarchydeletion.HierarchyDeletionTombstoneKey("backing-service", task.Scope.ProjectID),
+		)
 	}
 	if task.Scope.TenantID != "" {
 		ancestors = append(ancestors, hierarchydeletion.HierarchyDeletionTombstoneKey("tenant", task.Scope.TenantID))
 	}
-	deletions, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: ancestors, Revision: view.ReadRevision})
+	deletions, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: ancestors, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
 	if deletions == nil || deletions.ReadRevision != view.ReadRevision || len(deletions.Values) != len(ancestors) {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "backup key rotation retention ancestry is unavailable")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"backup key rotation retention ancestry is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(deletions.Values)
 	for index, value := range deletions.Values {
@@ -66,7 +73,6 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotationRetention(ctx 
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ancestors[index]})
 	}
 	change.Conditions = append(change.Conditions,
-		keyvalue.Condition{Key: index, ModRevision: keyvalue.RevisionOf(read.Values[0])},
 		keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
 		keyvalue.Condition{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true})
 	change.Mutations = append(change.Mutations,

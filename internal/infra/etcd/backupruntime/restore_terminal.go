@@ -1,6 +1,13 @@
 package backupruntime
 
-import "time"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"time"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
 
 // Successful settlement is deliberately stricter than Agent Task completion:
 // canonical publication, file verification and physical source cleanup must
@@ -58,5 +65,10 @@ func BackupRestoreTerminalDomainDigest(record BackupRestoreRecord) (string, erro
 	if err := ValidateBackupRestoreRecord(record); err != nil {
 		return "", err
 	}
-	return backupTerminalCanonicalDigest("groundplane.backup.terminal.restore.v1\x00", record)
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return "", errs.Wrap(errs.KindInternal, err)
+	}
+	digest := sha256.Sum256(append([]byte("groundplane.backup.terminal.restore.v1\x00"), encoded...))
+	return hex.EncodeToString(digest[:]), nil
 }

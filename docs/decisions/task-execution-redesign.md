@@ -264,6 +264,13 @@ retention cannot remove evidence from an unproved orphan. The
 replaces the old Task-journal and startup-delivery reader; no legacy proof decoder
 is retained.
 
+Hierarchy removal detaches completed Backup, Restore and key-rotation membership
+under native terminal Task and resource-revision guards. Subsequent history
+collection checks the Environment and membership at one revision: both remain,
+or both have been removed. Active hierarchy-removal fences still block collection.
+The [membership owner](../../internal/infra/etcd/backupruntime/history_membership.go)
+does not depend on a generic Task terminal receipt.
+
 [Diagnostic expiry](../../internal/infra/etcd/executiondiagnostics/retention.go)
 uses a revision-bound cursor, independent of operation-owned Task collection.
 Retry invalidates the previous expiry cursor. Expiring the event tail retains its
