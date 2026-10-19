@@ -553,7 +553,7 @@ func boundaryClaimInput(now time.Time, environmentID, revisionID string) ClaimIn
 		EnvironmentID: environmentID, CandidateTaskID: revisionID,
 		Locator: testidempotency.IdempotencyLocator{
 			ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environmentID,
-			Method: "PUT", Route: blueprintRoute, Key: "boundary-idempotency-key-0001",
+			Method: "PUT", Route: "/environments/{id}/blueprint", Key: "boundary-idempotency-key-0001",
 		},
 		Intent: intent,
 		MatchExistingIntent: func(_ context.Context, existing testidempotency.ProtectedIntentRecord) (bool, error) {

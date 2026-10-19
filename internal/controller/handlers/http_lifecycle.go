@@ -90,24 +90,9 @@ type routePolicy struct {
 	validateJSON func([]byte) error
 }
 
-func (s *Server) jsonRoute(pattern string, handler http.HandlerFunc) {
-	s.Mux.HandleFunc(pattern, handler)
-	s.setRoutePolicy(pattern, routePolicy{body: jsonBody})
-}
-
-func (s *Server) streamRoute(pattern string, handler http.HandlerFunc) {
-	s.Mux.HandleFunc(pattern, handler)
-	s.setRoutePolicy(pattern, routePolicy{streaming: true})
-}
-
 func (s *Server) upgradeRoute(pattern string, handler http.HandlerFunc) {
 	s.Mux.HandleFunc(pattern, handler)
 	s.setRoutePolicy(pattern, routePolicy{upgrade: true})
-}
-
-func (s *Server) blueprintRoute(pattern string, handler http.HandlerFunc) {
-	s.Mux.HandleFunc(pattern, handler)
-	s.setRoutePolicy(pattern, routePolicy{body: blueprintBody})
 }
 
 func (s *Server) setRoutePolicy(pattern string, policy routePolicy) {

@@ -3,14 +3,14 @@ package handlers
 import (
 	"context"
 	"errors"
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
-	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -164,12 +164,28 @@ func (s *Server) listTasks(ctx context.Context, request *taskListInput) (*taskPa
 	if s.taskInspection == nil {
 		return nil, errs.New(errs.KindInternal, "task inspection is not configured")
 	}
-	page, err := s.taskInspection.List(ctx, request.Scope, request.After, request.Limit, request.Revision,
-		taskinspection.Filter{Action: workexecution.Action(request.Action), Status: request.Status, ResourceKind: request.ResourceKind})
+	page, err := s.taskInspection.List(
+		ctx,
+		request.Scope,
+		request.After,
+		request.Limit,
+		request.Revision,
+		taskinspection.Filter{
+			Action:       workexecution.Action(request.Action),
+			Status:       request.Status,
+			ResourceKind: request.ResourceKind,
+		},
+	)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
-	response := apiTypes.ExecutionPage[apiTypes.TaskSummary]{Items: []apiTypes.TaskSummary{}, More: page.More, After: page.After, Revision: page.Revision, ScanLimited: page.ScanLimited}
+	response := apiTypes.ExecutionPage[apiTypes.TaskSummary]{
+		Items:       []apiTypes.TaskSummary{},
+		More:        page.More,
+		After:       page.After,
+		Revision:    page.Revision,
+		ScanLimited: page.ScanLimited,
+	}
 	for _, task := range page.Tasks {
 		response.Items = append(response.Items, executionSummary(task))
 	}
@@ -183,7 +199,12 @@ func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOut
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
-	work := apiTypes.ExecutionPage[apiTypes.TaskWork]{Items: []apiTypes.TaskWork{}, More: page.More, After: page.After, Revision: page.Revision}
+	work := apiTypes.ExecutionPage[apiTypes.TaskWork]{
+		Items:    []apiTypes.TaskWork{},
+		More:     page.More,
+		After:    page.After,
+		Revision: page.Revision,
+	}
 	for _, item := range page.Work {
 		work.Items = append(work.Items, executionWork(item))
 	}
@@ -201,14 +222,6 @@ func normalizeTaskRouteError(err error) error {
 		return domainError
 	}
 	return errs.Wrap(errs.KindInternal, err)
-}
-
-func taskAPITime(value *time.Time) *time.Time {
-	if value == nil {
-		return nil
-	}
-	normalized := value.UTC()
-	return &normalized
 }
 
 func (s *Server) validateTaskListQuery(ctx huma.Context, next func(huma.Context)) {

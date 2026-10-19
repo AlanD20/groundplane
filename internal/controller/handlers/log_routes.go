@@ -103,14 +103,6 @@ func (s *Server) logStreamResponse(kind ids.Kind) *huma.StreamResponse {
 	}}
 }
 
-func (s *Server) environmentLogs(w http.ResponseWriter, request *http.Request) {
-	s.serveLogs(w, request, ids.KindEnvironment)
-}
-
-func (s *Server) serviceLogs(w http.ResponseWriter, request *http.Request) {
-	s.serveLogs(w, request, ids.KindService)
-}
-
 func (s *Server) serveLogs(w http.ResponseWriter, request *http.Request, kind ids.Kind) {
 	if s.logs == nil {
 		s.writeTaskProblem(w, errs.New(errs.KindInternal, "logs are not configured"))

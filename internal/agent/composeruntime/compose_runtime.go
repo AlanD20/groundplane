@@ -200,22 +200,6 @@ func (runtime *Runtime) waitWorkloadHealthy(
 	}
 }
 
-func releaseRuntimeComposeName(
-	artifact *agentpb.ComposeArtifact,
-	serviceID, slot string,
-	role agentpb.ComposeServiceRole,
-) string {
-	if artifact == nil {
-		return ""
-	}
-	for _, service := range artifact.Services {
-		if service.ServiceId == serviceID && service.Slot == slot && service.Role == role {
-			return service.ComposeName
-		}
-	}
-	return ""
-}
-
 func (runtime *Runtime) removeManagedVolume(
 	ctx context.Context,
 	assignment taskassignment.Assignment,

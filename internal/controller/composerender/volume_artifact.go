@@ -2,14 +2,15 @@ package composerender
 
 import (
 	"crypto/sha256"
+	"sort"
+	"strconv"
+	"strings"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
-	"sort"
-	"strconv"
-	"strings"
 )
 
 type VolumeArtifactAction string
@@ -379,25 +380,6 @@ func rewriteArtifactOwnership(root *yaml.Node, planID string, generation uint64)
 				RemoveMappingValue(labels, composeLabelRenderGen)
 			}
 		}
-	}
-	return nil
-}
-
-func rewriteServiceExpectedLabels(labels []*agentpb.LabelPair, planID string, generation uint64) error {
-	foundPlan, foundGeneration := false, false
-	for _, label := range labels {
-		if label == nil {
-			return errs.New(errs.KindInternal, "Compose artifact Service labels are corrupt")
-		}
-		switch label.Key {
-		case composeLabelPlanID:
-			label.Value, foundPlan = planID, true
-		case composeLabelRenderGen:
-			label.Value, foundGeneration = strconv.FormatUint(generation, 10), true
-		}
-	}
-	if !foundPlan || !foundGeneration {
-		return errs.New(errs.KindInternal, "Compose artifact Service labels are incomplete")
 	}
 	return nil
 }

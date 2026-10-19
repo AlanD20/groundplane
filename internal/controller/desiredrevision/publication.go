@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"sync"
+	"time"
+
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"sync"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -217,59 +218,6 @@ func Stage(
 		projection:   projectionrecord.CloneEnvironmentComposeProjection(input.Projection),
 		desiredInput: detachedInput,
 	}}, nil
-}
-
-func (publication StagedPublication) consume(
-	environmentID, taskID string,
-	locator idempotencyrecord.IdempotencyLocator,
-) (
-	blueprints.EnvironmentBlueprintStageClaim,
-	projectionrecord.EnvironmentComposeProjection,
-	error,
-) {
-	if publication.state == nil {
-		return blueprints.EnvironmentBlueprintStageClaim{}, projectionrecord.EnvironmentComposeProjection{}, errs.New(
-			errs.KindValidationFailed,
-			"Environment desired staged publication is invalid",
-		)
-	}
-	publication.state.mu.Lock()
-	defer publication.state.mu.Unlock()
-	if publication.state.consumed {
-		return blueprints.EnvironmentBlueprintStageClaim{}, projectionrecord.EnvironmentComposeProjection{}, errs.New(
-			errs.KindStateConflict,
-			"Environment desired staged publication was already consumed",
-		)
-	}
-	publication.state.consumed = true
-	claim := publication.state.claim
-	if locator != publication.state.locator || claim.Locator != publication.state.locator ||
-		claim.EnvironmentID != environmentID || claim.TaskID != taskID ||
-		claim.RevisionID != publication.state.seal.RevisionID ||
-		claim.EnvironmentID != publication.state.seal.EnvironmentID ||
-		publication.state.projection.EnvironmentID != publication.state.seal.EnvironmentID ||
-		publication.state.projection.RevisionID != publication.state.seal.RevisionID {
-		return claim, projectionrecord.EnvironmentComposeProjection{}, errs.New(
-			errs.KindValidationFailed,
-			"Environment desired staged publication identity is invalid",
-		)
-	}
-	encoded, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(publication.state.projection)
-	if err != nil {
-		return claim, projectionrecord.EnvironmentComposeProjection{}, err
-	}
-	defer clear(encoded)
-	if sha256.Sum256(encoded) != publication.state.seal.DependencyDigest {
-		return claim, projectionrecord.EnvironmentComposeProjection{}, errs.New(
-			errs.KindInternal,
-			"Environment desired runtime projection changed after staging",
-		)
-	}
-	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(encoded)
-	if err != nil {
-		return claim, projectionrecord.EnvironmentComposeProjection{}, err
-	}
-	return claim, projection, nil
 }
 
 func (publication StagedPublication) reserveAbandonment() (blueprints.EnvironmentBlueprintStageClaim, error) {

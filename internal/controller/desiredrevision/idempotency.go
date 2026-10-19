@@ -3,16 +3,15 @@ package desiredrevision
 import (
 	"context"
 	"crypto/sha256"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"sort"
+
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-const blueprintRoute = "/environments/{id}/blueprint"
 
 type Evidence struct {
 	candidate requestidempotency.ProtectedEvidence

@@ -80,23 +80,6 @@ func (service *Service) loadAuthoredRuntimeRequirements(
 	return authority.Record.Requirements.Clone(), nil
 }
 
-func sameBlueprintRequirements(left, right core.BlueprintRequirements) bool {
-	if left.ResolutionRevision != right.ResolutionRevision ||
-		!sameAuthoredRequirements(left.Authored, right.Authored) ||
-		len(left.Resolved) != len(right.Resolved) {
-		return false
-	}
-	for index := range left.Resolved {
-		leftRequirement, rightRequirement := left.Resolved[index], right.Resolved[index]
-		if leftRequirement.Target != rightRequirement.Target ||
-			leftRequirement.Condition != rightRequirement.Condition ||
-			!slices.Equal(leftRequirement.Phases, rightRequirement.Phases) {
-			return false
-		}
-	}
-	return true
-}
-
 func sameAuthoredRequirements(left, right []core.Requirement) bool {
 	leftNormalized, leftErr := core.NormalizeRequirements(left)
 	rightNormalized, rightErr := core.NormalizeRequirements(right)

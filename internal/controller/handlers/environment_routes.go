@@ -5,13 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
 	"strconv"
 	"unicode/utf8"
+
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 
@@ -53,11 +54,6 @@ type environmentEditInput struct {
 	ID             string `path:"id"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 	Body           apiTypes.EnvironmentEdit
-}
-
-type environmentDeleteInput struct {
-	ID  string `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Key string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
 type environmentOutput struct {

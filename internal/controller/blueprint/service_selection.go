@@ -6,12 +6,10 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
@@ -160,29 +158,6 @@ func selectionAuthoringDocument(parsed blueprintparser.Result, compose []byte) b
 		Scripts: parsed.Extensions.Scripts, Components: parsed.Extensions.Components,
 		Backup: parsed.Extensions.Backup, ReleaseGroups: parsed.Extensions.ReleaseGroups,
 	}
-}
-
-func selectedServiceMaterializations(
-	records []taskmaterialization.Record,
-	steps []*agentpb.ExecutionStep,
-	serviceID string,
-) ([]taskmaterialization.Record, []*agentpb.ExecutionStep) {
-	selected := make([]taskmaterialization.Record, 0)
-	byStep := make(map[string]bool)
-	for _, record := range records {
-		if record.ServiceID == serviceID ||
-			record.ServiceID == "" && record.OutputKind == taskmaterialization.OutputGeneratedEnvironment {
-			selected = append(selected, record)
-			byStep[record.StepID] = true
-		}
-	}
-	selectedSteps := make([]*agentpb.ExecutionStep, 0, len(selected))
-	for _, step := range steps {
-		if byStep[step.StepId] {
-			selectedSteps = append(selectedSteps, step)
-		}
-	}
-	return selected, selectedSteps
 }
 
 func unselectedCompose(project *composetypes.Project, selected string) ([]byte, error) {

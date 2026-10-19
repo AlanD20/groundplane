@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -43,7 +42,6 @@ type LogSubscription struct {
 	state          *sessionState
 	ready          chan error
 	events         chan *agentpb.LogEvent
-	mu             sync.Mutex
 	isReady        bool
 	closed         bool
 	canceling      bool

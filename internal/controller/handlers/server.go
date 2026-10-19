@@ -379,10 +379,6 @@ func (s *Server) routes() {
 	s.registerAgents()
 }
 
-func (s *Server) notImplemented(w http.ResponseWriter, r *http.Request) {
-	s.writeProblem(w, errs.New(errs.KindNotImplemented, "not implemented"))
-}
-
 // writeProblem serializes err as RFC 7807 problem+json at its own
 // descriptor-owned HTTPStatus; call sites cannot override the Kind's public
 // Code, Class, or status.

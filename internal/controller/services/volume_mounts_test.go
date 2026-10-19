@@ -35,7 +35,7 @@ func TestServiceMountSaveUpdatesBothDeploymentAndExportConfiguration(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	current, err := buildServiceDesiredProjection(
+	current, err := buildServiceDesiredProjectionWithSettings(
 		tenantID,
 		projectID,
 		environment,
@@ -44,6 +44,7 @@ func TestServiceMountSaveUpdatesBothDeploymentAndExportConfiguration(t *testing.
 		record,
 		servicerecord.ServiceMutationReferences{},
 		true,
+		nil,
 		nil,
 		ids.NewAt(ids.KindTask, at, 5),
 		1,
@@ -68,7 +69,7 @@ func TestServiceMountSaveUpdatesBothDeploymentAndExportConfiguration(t *testing.
 	current.NormalizedCompose = append(current.NormalizedCompose, []byte("volumes:\n  data: {}\n")...)
 	mounts := []core.Mount{{Volume: volumeID, Mount: "/app/data", RO: true}}
 	record.Desired.Mounts = mounts
-	candidate, err := buildServiceDesiredProjection(
+	candidate, err := buildServiceDesiredProjectionWithSettings(
 		tenantID,
 		projectID,
 		environment,
@@ -78,6 +79,7 @@ func TestServiceMountSaveUpdatesBothDeploymentAndExportConfiguration(t *testing.
 		servicerecord.ServiceMutationReferences{},
 		false,
 		&mounts,
+		nil,
 		ids.NewAt(ids.KindTask, at, 7),
 		2,
 	)

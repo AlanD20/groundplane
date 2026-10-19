@@ -42,11 +42,12 @@ func TestServiceRemovalCandidatePreservesAbsentRuntimeFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	current, err := buildServiceDesiredProjection(
+	current, err := buildServiceDesiredProjectionWithSettings(
 		tenantID,
 		projectID,
 		environment, testenvironmentprojection.EnvironmentComposeProjection{}, false,
 		record, testservices.ServiceMutationReferences{}, true, nil,
+		nil,
 		currentRevisionID,
 		1,
 	)

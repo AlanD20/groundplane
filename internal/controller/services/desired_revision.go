@@ -212,25 +212,6 @@ func (service *serviceMutationService) claimServiceDesiredRevision(
 	return claim, nil
 }
 
-func buildServiceDesiredProjection(
-	tenantID string,
-	projectID string,
-	environment hierarchyrecord.EnvironmentRecord,
-	current projectionrecord.EnvironmentComposeProjection,
-	hasCurrent bool,
-	record servicerecord.ServiceRecord,
-	references servicerecord.ServiceMutationReferences,
-	create bool,
-	volumeMounts *[]core.Mount,
-	revisionID string,
-	generation uint64,
-) (projectionrecord.EnvironmentComposeProjection, error) {
-	return buildServiceDesiredProjectionWithSettings(
-		tenantID, projectID, environment, current, hasCurrent, record, references, create,
-		volumeMounts, nil, revisionID, generation,
-	)
-}
-
 func buildServiceDesiredProjectionWithSettings(
 	tenantID string,
 	projectID string,

@@ -2,43 +2,20 @@ package blueprint
 
 import (
 	"context"
+
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+
+	"sort"
 
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
-	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"sort"
 )
-
-func (service *Service) listBlueprintZones(
-	ctx context.Context,
-	environmentID string,
-) ([]etcdstore.Versioned[zonerecord.Record], error) {
-	zones := []etcdstore.Versioned[zonerecord.Record](nil)
-	cursor := ""
-	for {
-		page, err := service.repository.ListZones(
-			ctx,
-			environmentID,
-			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
-		)
-		if err != nil {
-			return nil, err
-		}
-		zones = append(zones, page.Items...)
-		if page.NextCursor == "" {
-			return zones, nil
-		}
-		cursor = page.NextCursor
-	}
-}
 
 func (service *Service) listBlueprintServices(
 	ctx context.Context,
@@ -88,29 +65,6 @@ func (service *Service) listBlueprintScripts(
 		scripts = append(scripts, page.Items...)
 		if page.NextCursor == "" {
 			return scripts, readRevision, nil
-		}
-		cursor = page.NextCursor
-	}
-}
-
-func (service *Service) listBlueprintRoutes(
-	ctx context.Context,
-	environmentID string,
-) ([]etcdstore.Versioned[routerecord.Record], error) {
-	routes := []etcdstore.Versioned[routerecord.Record](nil)
-	cursor := ""
-	for {
-		page, err := service.repository.ListRoutes(
-			ctx,
-			environmentID,
-			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
-		)
-		if err != nil {
-			return nil, err
-		}
-		routes = append(routes, page.Items...)
-		if page.NextCursor == "" {
-			return routes, nil
 		}
 		cursor = page.NextCursor
 	}

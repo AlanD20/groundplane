@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"sort"
-	"sync"
 	"sync/atomic"
 
 	"github.com/AlanD20/groundplane/internal/agent/backupruntime"
@@ -20,7 +19,6 @@ import (
 
 type backupStagingState struct {
 	runtime   *backupruntime.Staging
-	mu        sync.Mutex
 	active    map[backupstage.IDs]*backupstage.Stage
 	cleaned   map[backupstage.IDs]bool
 	journal   *agentstagingjournal.Journal

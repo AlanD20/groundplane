@@ -101,9 +101,9 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 			if test.mutate != nil {
 				test.mutate(observed)
 			}
-			err := releaseRestorationWorkloadSetProven(artifact, observed, "api")
+			err := releaseRestorationWorkloadTargetProven(artifact, observed, "api", "", "", nil)
 			if (err == nil) != test.wantOK {
-				t.Fatalf("releaseRestorationWorkloadSetProven() error = %v, want success %t", err, test.wantOK)
+				t.Fatalf("captured runtime proof error = %v, want success %t", err, test.wantOK)
 			}
 			err = releaseRestorationWorkloadTargetProven(artifact, observed, "api", "singleton", "prior-api", nil)
 			if (err == nil) != test.wantOK {
@@ -115,11 +115,11 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 	for _, observed := range valid.Containers {
 		observed.Health = agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE
 	}
-	if err := releaseRestorationWorkloadSetProven(artifact, valid, "api"); err != nil {
+	if err := releaseRestorationWorkloadTargetProven(artifact, valid, "api", "", "", nil); err != nil {
 		t.Fatalf("running singleton without healthcheck cannot be restored: %v", err)
 	}
 	valid.Containers[0].State = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED
-	if err := releaseRestorationWorkloadSetProven(artifact, valid, "api"); err == nil {
+	if err := releaseRestorationWorkloadTargetProven(artifact, valid, "api", "", "", nil); err == nil {
 		t.Fatal("stopped singleton without healthcheck accepted as restored")
 	}
 }
@@ -160,7 +160,7 @@ func TestReleaseRestorationRequiresBothCapturedSlots(t *testing.T) {
 			case "wrong retained release":
 				actual.Containers[1].Labels[2].Value = "failed-candidate"
 			}
-			err := releaseRestorationWorkloadSetProven(artifact, actual, "api")
+			err := releaseRestorationWorkloadTargetProven(artifact, actual, "api", "", "", nil)
 			if (err == nil) != (scenario == "complete") {
 				t.Fatalf("captured runtime proof = %v, scenario=%s", err, scenario)
 			}

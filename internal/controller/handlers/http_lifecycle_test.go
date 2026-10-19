@@ -20,6 +20,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+func registerLifecycleRoute(server *Server, pattern string, policy routePolicy, handler http.HandlerFunc) {
+	server.Mux.HandleFunc(pattern, handler)
+	server.setRoutePolicy(pattern, policy)
+}
+
 // Delivery: pinned transport policy values; live enforcement is tested separately.
 func TestProductionHTTPPolicyIsPinned(t *testing.T) {
 	// Rationale: transport limits are invariants rather than operator tuning;
@@ -248,10 +253,15 @@ func TestJSONBodyBoundariesKnownAndChunked(t *testing.T) {
 			policy.jsonBodyLimit = 32
 			var dispatched atomic.Bool
 			_, addr, cancel, done := startLifecycleServer(t, policy, func(server *Server) {
-				server.jsonRoute("POST /", func(w http.ResponseWriter, _ *http.Request) {
-					dispatched.Store(true)
-					w.WriteHeader(http.StatusNoContent)
-				})
+				registerLifecycleRoute(
+					server,
+					"POST /",
+					routePolicy{body: jsonBody},
+					func(w http.ResponseWriter, _ *http.Request) {
+						dispatched.Store(true)
+						w.WriteHeader(http.StatusNoContent)
+					},
+				)
 			})
 			request, err := http.NewRequest(
 				http.MethodPost,
@@ -336,7 +346,12 @@ func TestSSESurvivesOrdinaryDeadlineAndHeartbeats(t *testing.T) {
 	policy.sseHeartbeat = 8 * time.Millisecond
 	events := make(chan []byte)
 	_, addr, cancel, done := startLifecycleServer(t, policy, func(server *Server) {
-		server.streamRoute("GET /", func(w http.ResponseWriter, r *http.Request) { server.writeSSE(w, r, events) })
+		registerLifecycleRoute(
+			server,
+			"GET /",
+			routePolicy{streaming: true},
+			func(w http.ResponseWriter, r *http.Request) { server.writeSSE(w, r, events) },
+		)
 	})
 	defer stopLifecycleServer(t, cancel, done)
 
@@ -364,7 +379,7 @@ func TestStreamRouteRequiresEventStreamNegotiation(t *testing.T) {
 	// Rationale: activity serves both the JSON task-list alias and live SSE;
 	// only an explicit event-stream Accept value may bypass ordinary deadlines.
 	server := testControllerServer()
-	server.streamRoute("GET /", func(http.ResponseWriter, *http.Request) {})
+	registerLifecycleRoute(server, "GET /", routePolicy{streaming: true}, func(http.ResponseWriter, *http.Request) {})
 	jsonRequest := httptest.NewRequest(http.MethodGet, "/", nil)
 	if server.policyFor(jsonRequest).streaming {
 		t.Fatal("JSON request was classified as an indefinite stream")
@@ -419,10 +434,15 @@ func TestSSEStopsWhenClientDisconnects(t *testing.T) {
 	exited := make(chan struct{})
 	events := make(chan []byte)
 	_, addr, cancel, done := startLifecycleServer(t, policy, func(server *Server) {
-		server.streamRoute("GET /", func(w http.ResponseWriter, r *http.Request) {
-			defer close(exited)
-			server.writeSSE(w, r, events)
-		})
+		registerLifecycleRoute(
+			server,
+			"GET /",
+			routePolicy{streaming: true},
+			func(w http.ResponseWriter, r *http.Request) {
+				defer close(exited)
+				server.writeSSE(w, r, events)
+			},
+		)
 	})
 	defer stopLifecycleServer(t, cancel, done)
 	response, err := http.Get("http://" + addr + "/")
@@ -447,10 +467,15 @@ func TestSSEStalledClientHitsPerWriteDeadline(t *testing.T) {
 	events := make(chan []byte, 1)
 	events <- append(append([]byte("data: "), bytes.Repeat([]byte("x"), 16<<20)...), '\n', '\n')
 	_, addr, cancel, done := startLifecycleServer(t, policy, func(server *Server) {
-		server.streamRoute("GET /", func(w http.ResponseWriter, r *http.Request) {
-			defer close(exited)
-			server.writeSSE(w, r, events)
-		})
+		registerLifecycleRoute(
+			server,
+			"GET /",
+			routePolicy{streaming: true},
+			func(w http.ResponseWriter, r *http.Request) {
+				defer close(exited)
+				server.writeSSE(w, r, events)
+			},
+		)
 	})
 	defer stopLifecycleServer(t, cancel, done)
 	connection := dialLifecycleServer(t, addr)
@@ -512,10 +537,15 @@ func TestGracefulShutdownDrainsSSE(t *testing.T) {
 	events := make(chan []byte)
 	exited := make(chan struct{})
 	_, addr, cancel, done := startLifecycleServer(t, policy, func(server *Server) {
-		server.streamRoute("GET /", func(w http.ResponseWriter, r *http.Request) {
-			defer close(exited)
-			server.writeSSE(w, r, events)
-		})
+		registerLifecycleRoute(
+			server,
+			"GET /",
+			routePolicy{streaming: true},
+			func(w http.ResponseWriter, r *http.Request) {
+				defer close(exited)
+				server.writeSSE(w, r, events)
+			},
+		)
 	})
 	response, err := openSSE(addr)
 	if err != nil {

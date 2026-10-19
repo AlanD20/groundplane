@@ -2,6 +2,7 @@ package composeruntime
 
 import (
 	"context"
+
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 
@@ -347,14 +348,6 @@ func candidateServingPredecessorEvidenceMatches(
 	)
 	return err == nil && exclusiveProxyEvidence(result) && exactProxyEvidence(result.ProxyEvidence,
 		serviceID, target, generation, proxy.GetProxyConfigSha256(), releaseID, true)
-}
-
-func releaseRestorationWorkloadSetProven(
-	artifact *agentpb.ComposeArtifact,
-	observed *agentpb.ObservedProject,
-	serviceID string,
-) error {
-	return releaseRestorationWorkloadTargetProven(artifact, observed, serviceID, "", "", nil)
 }
 
 func releaseRestorationWorkloadTargetProven(

@@ -2,23 +2,15 @@ package operations
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"net/http"
 	"sort"
 	"time"
 
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -29,20 +21,6 @@ const (
 	maximumEntryNumericID        = int64(1<<32 - 2)
 )
 
-type entryCreationRepository interface {
-	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
-	CreateEntryIdempotent(
-		context.Context,
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		entryrecord.Record,
-		entryrecord.EntryValueGeneration,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-}
-
 type entryCreationGenerator interface {
 	Generate(
 		context.Context,
@@ -52,199 +30,6 @@ type entryCreationGenerator interface {
 		string,
 		time.Time,
 	) (entryrecord.EntryValueGeneration, error)
-}
-
-type entryCreationService struct {
-	repository  entryCreationRepository
-	generator   entryCreationGenerator
-	idempotency entryCreationIdempotency
-	now         func() time.Time
-}
-
-func newEntryCreationService(
-	repository entryCreationRepository,
-	generator entryCreationGenerator,
-	idempotency entryCreationIdempotency,
-) (*entryCreationService, error) {
-	if repository == nil || generator == nil || idempotency == nil {
-		return nil, errs.New(errs.KindInternal, "Entry creation service is not configured")
-	}
-	return &entryCreationService{
-		repository: repository, generator: generator, idempotency: idempotency, now: time.Now,
-	}, nil
-}
-
-func (service *entryCreationService) CreateEntry(
-	ctx context.Context,
-	input apiTypes.EntryCreateRequest,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Entry creation context is required",
-		)
-	}
-	for attempt := 0; attempt < maximumEntryCreationAttempts; attempt++ {
-		response, err := service.createEntryOnce(ctx, input, idempotencyKey)
-		if err == nil {
-			return response, nil
-		}
-		kind, ok := errs.KindOf(err)
-		if !ok || kind != errs.KindStateConflict || attempt == maximumEntryCreationAttempts-1 {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(
-		errs.KindInternal,
-		"Entry creation retry bound was not enforced",
-	)
-}
-
-func (service *entryCreationService) createEntryOnce(
-	ctx context.Context,
-	input apiTypes.EntryCreateRequest,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	entry, err := prepareEntryCreation(input)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	evidence, err := service.idempotency.Prepare(ctx, input.EnvironmentID, entry)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(evidence.durable.Ciphertext)
-	locator := idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: input.EnvironmentID,
-		Method: http.MethodPost, Route: entryCreationRoute, Key: idempotencyKey,
-	}
-	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if existing {
-		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Entry creation replay resolution is invalid",
-			)
-		}
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	}
-
-	environment, err := service.repository.GetEnvironment(ctx, input.EnvironmentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if err := service.validateExposure(ctx, input.EnvironmentID, entry.Exposure); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	now := service.now().UTC()
-	generationID := ids.New(ids.KindConfig)
-	generation, err := service.generator.Generate(
-		ctx,
-		project.Record.ID,
-		environment.Record.ID,
-		entry,
-		generationID,
-		now,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer entrygeneration.ClearEntryValueGeneration(&generation)
-	persisted := entry
-	if persisted.Secret && persisted.Source.Kind == core.SourceLiteral {
-		persisted.Source.Literal = ""
-	}
-	record, err := entryrecord.NewRecord(environment.Record.ID, persisted, generationID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	responseBody, err := json.Marshal(entryCreationResponse(persisted))
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusCreated, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
-	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, now)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	result, createErr := service.repository.CreateEntryIdempotent(
-		ctx, environment, project, record, generation, marker,
-	)
-	if createErr != nil {
-		if !isUnknownEntryCreationOutcome(createErr) {
-			return idempotencyrecord.IdempotencyResponse{}, createErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return requestidempotency.CloneResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Entry creation resolution is invalid",
-		)
-	}
-}
-
-func (service *entryCreationService) validateExposure(
-	ctx context.Context,
-	environmentID string,
-	exposure []string,
-) error {
-	if len(exposure) == 1 && exposure[0] == "all" {
-		return nil
-	}
-	missing := make(map[string]struct{}, len(exposure))
-	for _, name := range exposure {
-		missing[name] = struct{}{}
-	}
-	cursor := ""
-	for {
-		page, err := service.repository.ListServices(
-			ctx,
-			environmentID,
-			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
-		)
-		if err != nil {
-			return err
-		}
-		for _, item := range page.Items {
-			delete(missing, item.Record.Desired.Name)
-		}
-		if len(missing) == 0 {
-			return nil
-		}
-		if page.NextCursor == "" {
-			for _, name := range exposure {
-				if _, absent := missing[name]; absent {
-					return errs.Newf(errs.KindServiceNotFound, "Entry exposure service %q was not found", name)
-				}
-			}
-			return errs.New(errs.KindInternal, "Entry exposure validation did not identify a missing service")
-		}
-		cursor = page.NextCursor
-	}
 }
 
 func prepareEntryCreation(input apiTypes.EntryCreateRequest) (core.EnvEntry, error) {
@@ -388,54 +173,4 @@ func isUnknownEntryCreationOutcome(err error) bool {
 	}
 	kind, ok := errs.KindOf(err)
 	return ok && kind == errs.KindStorageUnavailable
-}
-
-type durableEntryCreationRepository struct {
-	hierarchy *etcd.HierarchyRepository
-	entries   *etcd.EntryRepository
-	services  *etcd.ServiceRepository
-}
-
-func newDurableEntryCreationRepository(
-	hierarchy *etcd.HierarchyRepository,
-	entries *etcd.EntryRepository,
-	services *etcd.ServiceRepository,
-) (*durableEntryCreationRepository, error) {
-	if hierarchy == nil || entries == nil || services == nil {
-		return nil, errs.New(errs.KindInternal, "Entry creation repositories are not configured")
-	}
-	return &durableEntryCreationRepository{hierarchy: hierarchy, entries: entries, services: services}, nil
-}
-
-func (repository *durableEntryCreationRepository) GetEnvironment(
-	ctx context.Context,
-	id string,
-) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
-	return repository.hierarchy.GetEnvironment(ctx, id)
-}
-
-func (repository *durableEntryCreationRepository) GetProject(
-	ctx context.Context,
-	id string,
-) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
-	return repository.hierarchy.GetProject(ctx, id)
-}
-
-func (repository *durableEntryCreationRepository) ListServices(
-	ctx context.Context,
-	environmentID string,
-	request etcdstore.PageRequest,
-) (etcdstore.Page[servicerecord.ServiceRecord], error) {
-	return repository.services.ListServices(ctx, environmentID, request)
-}
-
-func (repository *durableEntryCreationRepository) CreateEntryIdempotent(
-	ctx context.Context,
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	record entryrecord.Record,
-	generation entryrecord.EntryValueGeneration,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.entries.CreateEntryIdempotent(ctx, environment, project, record, generation, marker)
 }

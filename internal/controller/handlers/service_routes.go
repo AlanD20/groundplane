@@ -2,13 +2,14 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
+	"net/http"
+	"reflect"
+
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"log/slog"
-	"net/http"
-	"reflect"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -66,8 +67,6 @@ type serviceRemoveInput struct {
 	ID             string `path:"id" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
-
-type serviceOutput struct{ Body apiTypes.Service }
 
 type serviceDetailOutput struct{ Body apiTypes.ServiceDetail }
 

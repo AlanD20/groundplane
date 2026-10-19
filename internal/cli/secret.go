@@ -198,10 +198,6 @@ func readValueFile(path string, stdin io.Reader, maximum int, label string) (str
 	return value, nil
 }
 
-func readBoundedSecretValue(reader io.Reader) (string, error) {
-	return readBoundedValue(reader, apiTypes.MaximumSecretValueBytes, "secret")
-}
-
 func readBoundedValue(reader io.Reader, maximum int, label string) (string, error) {
 	if reader == nil {
 		return "", errs.Newf(errs.KindValidationFailed, "%s value input is required", label)

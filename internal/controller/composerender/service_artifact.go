@@ -2,6 +2,10 @@ package composerender
 
 import (
 	"crypto/sha256"
+	"sort"
+	"strconv"
+	"strings"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
@@ -11,9 +15,6 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
-	"sort"
-	"strconv"
-	"strings"
 )
 
 type ServiceArtifactAction string
@@ -449,10 +450,6 @@ func setServiceStringSequence(mapping *yaml.Node, key string, values []string) {
 		sequence.Content = append(sequence.Content, scalarNode(value))
 	}
 	setMappingNode(mapping, key, sequence)
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func serviceArtifactOwnershipLabels(environmentID string, mutation ServiceArtifactMutation) map[string]string {

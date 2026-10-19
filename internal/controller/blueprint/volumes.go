@@ -5,28 +5,12 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
-	"github.com/AlanD20/groundplane/pkg/errs"
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"path"
 	"sort"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
-
-func managedEnvironmentVolumeIDs(current []composeidentity.Resource) []string {
-	result := make([]string, 0, len(current))
-	for _, volume := range current {
-		result = append(result, volume.ID)
-	}
-	sort.Strings(result)
-	return result
-}
-
-func environmentBlueprintVolumeSlugs(
-	project *composetypes.Project,
-	previous projectionrecord.EnvironmentComposeProjection,
-	hasPrevious bool,
-) (map[string]string, error) {
-	return environmentBlueprintVolumeSlugsFromVolumes(project, previous.Volumes, hasPrevious)
-}
 
 func environmentBlueprintVolumeSlugsFromVolumes(
 	project *composetypes.Project,

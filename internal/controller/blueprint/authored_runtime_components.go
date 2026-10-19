@@ -33,19 +33,6 @@ type authoredComponentCompileInput struct {
 	sources   []projectionrecord.ManagedComponentRuntimeSource
 }
 
-// loadAuthoredRuntimeComponents joins the immutable authored selection to the
-// exact applied receipts and acknowledged runtime records at the unit snapshot.
-// The complete singleton pair is returned for rendering; an omitted singleton
-// is accepted only when the ledger does not retain a possible applied effect.
-func (service *Service) loadAuthoredRuntimeComponents(
-	ctx context.Context,
-	parent workexecution.Task,
-	source authoredRuntimeProjectionSource,
-	snapshot blueprintunits.Snapshot,
-) (authoredRuntimeComponents, error) {
-	return service.loadAuthoredComponentSelections(ctx, parent, source, snapshot, nil)
-}
-
 type authoredPendingProxy struct {
 	record componentrecord.Record
 	source projectionrecord.ManagedComponentRuntimeSource

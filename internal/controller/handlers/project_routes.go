@@ -5,13 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
 	"strconv"
 	"unicode/utf8"
+
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
 	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -353,13 +354,4 @@ func normalizeProjectError(err error) error {
 		return domainError
 	}
 	return errs.Wrap(errs.KindInternal, err)
-}
-
-func (s *Server) writeProjectProblem(w http.ResponseWriter, err error) {
-	normalized := normalizeProjectError(err)
-	var domainError *errs.Error
-	if !errors.As(normalized, &domainError) {
-		domainError = errs.New(errs.KindInternal, "Hierarchy request failed")
-	}
-	s.writeProblem(w, domainError)
 }

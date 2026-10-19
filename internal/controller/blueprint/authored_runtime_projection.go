@@ -14,7 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -32,85 +31,6 @@ type authoredRuntimeProjectionSource struct {
 	tenant      etcdstore.Versioned[hierarchyrecord.TenantRecord]
 	project     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-}
-
-// sealAuthoredRuntimeProjection waits for acknowledged input effects, compiles
-// one complete runtime projection and atomically settles its Backup policy.
-func (service *Service) sealAuthoredRuntimeProjection(
-	ctx context.Context,
-	parent workexecution.Task,
-	snapshot blueprintunits.Snapshot,
-) error {
-	if service == nil || service.repository == nil || ctx == nil ||
-		validateAuthoredRuntimeProjectionParent(parent, snapshot) != nil {
-		return errs.New(errs.KindStateConflict, "Blueprint runtime projection authority changed")
-	}
-	source, err := service.loadAuthoredRuntimeProjectionSource(ctx, parent)
-	if err != nil {
-		return err
-	}
-	if current, found, err := service.repository.GetEnvironmentComposeProjectionRevision(
-		ctx, parent.Scope.EnvironmentID, parent.ID,
-	); err == nil && found {
-		if current.Record.EnvironmentID != parent.Scope.EnvironmentID ||
-			current.Record.RevisionID != parent.ID ||
-			current.Record.RenderGeneration != source.desired.Record.RenderGeneration {
-			return errs.New(errs.KindStateConflict, "Blueprint runtime projection changed")
-		}
-		return nil
-	} else if err != nil {
-		kind, known := errs.KindOf(err)
-		if !known || kind != errs.KindStateConflict {
-			return err
-		}
-	}
-	if err := requireAuthoredRuntimeProjectionInputs(
-		source.desired.Record, source.identities.Record, snapshot,
-	); err != nil {
-		return err
-	}
-	components, err := service.loadAuthoredRuntimeComponents(ctx, parent, source, snapshot)
-	if err != nil {
-		return err
-	}
-	attaches, err := service.loadAuthoredRuntimeAttaches(
-		ctx, parent.Scope.EnvironmentID, source.identities.Record, snapshot,
-	)
-	if err != nil {
-		return err
-	}
-	requirements, err := service.loadAuthoredRuntimeRequirements(
-		ctx, source.desired, snapshot.HeadRevision,
-	)
-	if err != nil {
-		return err
-	}
-	projection, err := service.compileAuthoredRuntimeProjection(
-		ctx, parent, source, snapshot, attaches, components, requirements,
-	)
-	if err != nil {
-		return err
-	}
-	backup, err := service.prepareAuthoredRuntimeBackup(ctx, parent, source, snapshot, projection, attaches)
-	if err != nil {
-		return err
-	}
-	defer backup.Clear()
-	projection.Backup = backup.Projection()
-	return service.repository.SealEnvironmentBlueprintRuntimeProjection(
-		ctx,
-		etcd.BlueprintRuntimeProjectionSeal{
-			Parent: parent, SnapshotReadRevision: snapshot.ReadRevision,
-			ExpectedHeadRevision:    snapshot.HeadRevision,
-			ExpectedEpochRevision:   snapshot.EpochRevision,
-			DesiredRootRevision:     source.desired.Revision,
-			OwnedIdentitiesRevision: source.identities.Revision,
-			Tenant:                  source.tenant, Project: source.project, Environment: source.environment,
-			Projection: projection, Attaches: attaches,
-			Components: components.authorities, ComponentReceipts: components.receipts,
-			BackupPreparation: backup,
-		},
-	)
 }
 
 func validateAuthoredRuntimeProjectionParent(
@@ -166,7 +86,10 @@ func (service *Service) loadAuthoredRuntimeProjectionSource(
 	digest := sha256.Sum256(encoded)
 	clear(encoded)
 	if hex.EncodeToString(digest[:]) != parent.Intent.SHA256 {
-		return authoredRuntimeProjectionSource{}, errs.New(errs.KindStateConflict, "Blueprint captured desired input changed")
+		return authoredRuntimeProjectionSource{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint captured desired input changed",
+		)
 	}
 	if _, err := authoredOwnedIdentitySnapshot(ctx, desired.Record, identities.Record); err != nil {
 		return authoredRuntimeProjectionSource{}, err
@@ -197,24 +120,6 @@ func (service *Service) loadAuthoredRuntimeProjectionSource(
 		desired: desired, identities: identities,
 		tenant: tenant, project: project, environment: environment,
 	}, nil
-}
-
-func (service *Service) compileAuthoredRuntimeProjection(
-	ctx context.Context,
-	parent workexecution.Task,
-	source authoredRuntimeProjectionSource,
-	unitSnapshot blueprintunits.Snapshot,
-	attaches []etcdstore.Versioned[attachrecord.Record],
-	components authoredRuntimeComponents,
-	requirements core.BlueprintRequirements,
-) (projectionrecord.EnvironmentComposeProjection, error) {
-	if err := requireAuthoredRuntimeProjectionInputs(source.desired.Record, source.identities.Record, unitSnapshot); err != nil {
-		return projectionrecord.EnvironmentComposeProjection{}, err
-	}
-	return service.compileAuthoredEnvironmentInput(ctx, parent, source, attaches,
-		authoredComponentCompileInput{
-			records: components.records, projected: components.projected, sources: components.sources,
-		}, requirements)
 }
 
 // compileAuthoredEnvironmentInput only renders exact input configuration. It
@@ -354,16 +259,8 @@ func (service *Service) compileAuthoredEnvironmentInput(
 	return projection, nil
 }
 
-func requireAuthoredRuntimeProjectionInputs(
-	desired projectionrecord.EnvironmentDesiredInput,
-	identities projectionrecord.EnvironmentOwnedIdentities,
-	snapshot blueprintunits.Snapshot,
-) error {
-	return requireAuthoredProjectionInputReceipts(desired, identities, snapshot, "")
-}
-
 // Only pre-switch planning may omit the one pending proxy's receipt. Runtime
-// publication always calls the wrapper above with no omitted receipt.
+// publication requires every receipt, with no omitted input.
 func requireAuthoredProjectionInputReceipts(
 	desired projectionrecord.EnvironmentDesiredInput,
 	identities projectionrecord.EnvironmentOwnedIdentities,

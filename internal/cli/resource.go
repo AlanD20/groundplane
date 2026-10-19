@@ -59,32 +59,6 @@ func runCreate(cmd *cobra.Command, path string, body any) error {
 	return app.Out.RenderOne(fields, values, item)
 }
 
-// runReplaceSingleton performs a complete replacement of one of the closed
-// singleton resources. Entity edits must use runPatch instead.
-func runReplaceSingleton(cmd *cobra.Command, path string, body any) error {
-	app := fromContext(cmd)
-	var item map[string]any
-	request := app.Client.NewRequest("PUT", path, nil, body, 200)
-	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
-		return err
-	}
-	fields, values := fieldsOfVia(item)
-	return app.Out.RenderOne(fields, values, item)
-}
-
-// runPostUpdate is a synchronous POST sub-resource update such as rename. It
-// returns the updated representation rather than dispatching a Task.
-func runPostUpdate(cmd *cobra.Command, path string, body any) error {
-	app := fromContext(cmd)
-	var item map[string]any
-	request := app.Client.NewRequest("POST", path, nil, body, 200)
-	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
-		return err
-	}
-	fields, values := fieldsOfVia(item)
-	return app.Out.RenderOne(fields, values, item)
-}
-
 // runPatch is a partial update — used where api-cli.md's resource map
 // lists PATCH (tenant, project, service, release-group, zone, route, volume,
 // entry, script). PUT is reserved for explicit singleton replacement.
@@ -97,28 +71,6 @@ func runPatch(cmd *cobra.Command, path string, body any) error {
 	}
 	fields, values := fieldsOfVia(item)
 	return app.Out.RenderOne(fields, values, item)
-}
-
-// changedStringFields builds a PATCH document from flags the operator
-// explicitly supplied. Unset flags must not clear existing server fields.
-func changedStringFields(cmd *cobra.Command, values map[string]string) map[string]string {
-	fields := make(map[string]string, len(values))
-	for name, value := range values {
-		if cmd.Flags().Changed(name) {
-			fields[name] = value
-		}
-	}
-	return fields
-}
-
-func runRemove(cmd *cobra.Command, path string) error {
-	app := fromContext(cmd)
-	request := app.Client.NewRequest("DELETE", path, nil, nil, 204)
-	if err := app.Client.Do(cmd.Context(), request, nil); err != nil {
-		return err
-	}
-	_, err := fmt.Fprintln(cmd.OutOrStdout(), "removed")
-	return err
 }
 
 // runDestroy is DELETE for resources whose deletion is destructive and
@@ -238,25 +190,6 @@ func writePrivateExportFile(path string, body []byte) (result error) {
 		return errs.Wrap(errs.KindInternal, err)
 	}
 	return nil
-}
-
-// scopeQuery builds the ?tenant=&project=&environment= filter set from
-// the resolved Scope — the CLI's flags become the API's query params,
-// exactly like the Console sidebar's filters. Only non-empty, requested
-// keys are included.
-func scopeQuery(app *App, keys ...string) map[string]string {
-	q := map[string]string{}
-	for _, k := range keys {
-		switch k {
-		case "tenant":
-			q["tenant"] = app.Scope.Tenant
-		case "project":
-			q["project"] = app.Scope.Project
-		case "environment":
-			q["environment"] = app.Scope.Environment
-		}
-	}
-	return q
 }
 
 // target escapes an already-resolved API path segment. Resource commands own
