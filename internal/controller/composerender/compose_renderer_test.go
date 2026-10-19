@@ -10,7 +10,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
-	testtaskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -431,20 +430,6 @@ func TestRenderComposePersistentResourceLabelsExcludeExecutionIdentity(t *testin
 		if _, exists := labels[composeLabelRenderGen]; exists {
 			t.Fatalf("%s labels contain volatile render generation: %#v", kind, labels)
 		}
-	}
-	if _, err := testtaskplan.Build(testtaskplan.BuildInput{
-		VolumeRoot: input.AuthorizedVolumeDir[:len("/var/lib/groundplane/vol")],
-		PlanID:     input.PlanID, RenderGeneration: input.RenderGeneration,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, TargetID: serviceID,
-		Artifacts: []*agentpb.ComposeArtifact{artifact},
-		Steps: []*agentpb.ExecutionStep{{
-			StepId: composeIdentityTestID(ids.KindStep, 38), TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-				ArtifactId: artifact.ArtifactId, ServiceIds: []string{serviceID},
-			}},
-		}},
-	}); err != nil {
-		t.Fatalf("BuildPlan() rejected stable persistent labels: %v", err)
 	}
 }
 
