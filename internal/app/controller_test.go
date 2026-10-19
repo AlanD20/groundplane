@@ -44,16 +44,19 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 
 	serveFailure := errors.New("listen failed")
 	agentFailure := errors.New("agent channel failed")
+	executionFailure := errors.New("execution loop failed")
 	closeFailure := errors.New("close failed")
 	containerFailure := errors.New("container close failed")
 	tests := []struct {
 		name          string
 		serveErr      error
 		agentErr      error
+		executionErr  error
 		closeErr      error
 		containerErr  error
 		wantServe     bool
 		wantAgent     bool
+		wantExecution bool
 		wantClose     bool
 		wantContainer bool
 		wantFailure   bool
@@ -61,6 +64,7 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 		{name: "normal cancellation"},
 		{name: "serve failure", serveErr: serveFailure, wantServe: true, wantFailure: true},
 		{name: "Agent channel failure", agentErr: agentFailure, wantAgent: true, wantFailure: true},
+		{name: "execution loop failure", executionErr: executionFailure, wantExecution: true, wantFailure: true},
 		{name: "close failure", closeErr: closeFailure, wantClose: true, wantFailure: true},
 		{name: "Docker close failure", containerErr: containerFailure, wantContainer: true, wantFailure: true},
 		{
@@ -86,33 +90,33 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 			t.Parallel()
 
 			server := &fakeControllerServer{err: test.serveErr}
-			agent := &fakeControllerAgentChannel{err: test.agentErr, stopped: make(chan struct{})}
+			agent := &fakeControllerRunLoop{err: test.agentErr, stopped: make(chan struct{})}
+			execution := &fakeControllerRunLoop{err: test.executionErr, stopped: make(chan struct{})}
 			scheduler := &fakeControllerScheduler{stopped: make(chan struct{})}
-			controllerTasks := &fakeControllerScheduler{stopped: make(chan struct{})}
 			localAgent := &fakeControllerScheduler{stopped: make(chan struct{})}
 			etcdLifecycle := &fakeControllerEtcdLifecycle{stopped: make(chan struct{})}
 			container := &fakeOwnedContainer{
 				err: test.containerErr, localAgentStopped: localAgent.stopped,
 			}
 			store := &fakeOwnedStore{
-				err:                    test.closeErr,
-				serverReturned:         &server.returned,
-				schedulerStopped:       scheduler.stopped,
-				controllerTasksStopped: controllerTasks.stopped,
-				agentStopped:           agent.stopped,
-				etcdLifecycleStopped:   etcdLifecycle.stopped,
-				containerClosed:        &container.closed,
+				err:                  test.closeErr,
+				serverReturned:       &server.returned,
+				schedulerStopped:     scheduler.stopped,
+				agentStopped:         agent.stopped,
+				executionStopped:     execution.stopped,
+				etcdLifecycleStopped: etcdLifecycle.stopped,
+				containerClosed:      &container.closed,
 			}
 			controller := &Controller{
-				Config:          config.DefaultControllerConfig(),
-				server:          server,
-				agent:           agent,
-				scheduler:       scheduler,
-				controllerTasks: controllerTasks,
-				localAgent:      localAgent,
-				container:       container,
-				etcdContainer:   etcdLifecycle,
-				store:           store,
+				Config:        config.DefaultControllerConfig(),
+				server:        server,
+				agent:         agent,
+				workExecution: execution,
+				scheduler:     scheduler,
+				localAgent:    localAgent,
+				container:     container,
+				etcdContainer: etcdLifecycle,
+				store:         store,
 			}
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -147,8 +151,8 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 			if store.closedBeforeSchedulerStopped {
 				t.Fatal("Store.Close ran before the scheduler stopped")
 			}
-			if store.closedBeforeControllerTasksStopped {
-				t.Fatal("Store.Close ran before the Controller Task runner stopped")
+			if store.closedBeforeExecutionStopped {
+				t.Fatal("Store.Close ran before the native execution loop stopped")
 			}
 			if store.closedBeforeAgentStopped {
 				t.Fatal("Store.Close ran before the Agent channel stopped")
@@ -172,6 +176,9 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 					errors.Is(err, agentFailure),
 					test.wantAgent,
 				)
+			}
+			if errors.Is(err, executionFailure) != test.wantExecution {
+				t.Fatalf("Controller.Run preserved execution failure incorrectly: %v", err)
 			}
 			if errors.Is(err, closeFailure) != test.wantClose {
 				t.Fatalf(
@@ -201,12 +208,12 @@ type fakeControllerScheduler struct {
 	stopped chan struct{}
 }
 
-type fakeControllerAgentChannel struct {
+type fakeControllerRunLoop struct {
 	err     error
 	stopped chan struct{}
 }
 
-func (channel *fakeControllerAgentChannel) Run(ctx context.Context) error {
+func (channel *fakeControllerRunLoop) Run(ctx context.Context) error {
 	defer close(channel.stopped)
 	if channel.err != nil {
 		return channel.err
@@ -221,19 +228,19 @@ func (s *fakeControllerScheduler) Run(ctx context.Context) {
 }
 
 type fakeOwnedStore struct {
-	err                                error
-	closeCalls                         int
-	serverReturned                     *bool
-	schedulerStopped                   <-chan struct{}
-	controllerTasksStopped             <-chan struct{}
-	agentStopped                       <-chan struct{}
-	etcdLifecycleStopped               <-chan struct{}
-	containerClosed                    *bool
-	closedBeforeServerReturned         bool
-	closedBeforeSchedulerStopped       bool
-	closedBeforeControllerTasksStopped bool
-	closedBeforeAgentStopped           bool
-	closedBeforeContainer              bool
+	err                          error
+	closeCalls                   int
+	serverReturned               *bool
+	schedulerStopped             <-chan struct{}
+	agentStopped                 <-chan struct{}
+	executionStopped             <-chan struct{}
+	etcdLifecycleStopped         <-chan struct{}
+	containerClosed              *bool
+	closedBeforeServerReturned   bool
+	closedBeforeSchedulerStopped bool
+	closedBeforeExecutionStopped bool
+	closedBeforeAgentStopped     bool
+	closedBeforeContainer        bool
 }
 
 func (s *fakeOwnedStore) Close() error {
@@ -245,11 +252,6 @@ func (s *fakeOwnedStore) Close() error {
 		s.closedBeforeSchedulerStopped = true
 	}
 	select {
-	case <-s.controllerTasksStopped:
-	default:
-		s.closedBeforeControllerTasksStopped = true
-	}
-	select {
 	case <-s.agentStopped:
 	default:
 		s.closedBeforeAgentStopped = true
@@ -258,6 +260,11 @@ func (s *fakeOwnedStore) Close() error {
 	case <-s.etcdLifecycleStopped:
 	default:
 		s.closedBeforeAgentStopped = true
+	}
+	select {
+	case <-s.executionStopped:
+	default:
+		s.closedBeforeExecutionStopped = true
 	}
 	s.closedBeforeContainer = !*s.containerClosed
 	return s.err

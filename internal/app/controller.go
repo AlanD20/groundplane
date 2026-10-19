@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/app/hostplatform"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"log/slog"
@@ -40,9 +39,9 @@ type Controller struct {
 	Logger *slog.Logger
 
 	server                controllerServer
-	agent                 controllerAgentChannel
+	agent                 controllerRunLoop
 	scheduler             controllerScheduler
-	workExecution         *hostplatform.WorkExecution
+	workExecution         controllerRunLoop
 	runners               controllerScheduler
 	resolverConfiguration controllerScheduler
 	localAgent            controllerScheduler
@@ -60,7 +59,7 @@ type controllerScheduler interface {
 	Run(ctx context.Context)
 }
 
-type controllerAgentChannel interface {
+type controllerRunLoop interface {
 	Run(ctx context.Context) error
 }
 

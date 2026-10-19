@@ -13,6 +13,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/controller/volume"
+	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
@@ -229,7 +230,7 @@ func (f *nativeVolumeFixture) authorize(t *testing.T) {
 	}
 }
 
-func (f *nativeVolumeFixture) start(t *testing.T, taskID string) workqueue.ResumeView {
+func (f *nativeVolumeFixture) assign(t *testing.T, taskID string) workqueue.ResumeView {
 	t.Helper()
 	ctx := t.Context()
 	workID := ""
@@ -276,20 +277,31 @@ func (f *nativeVolumeFixture) start(t *testing.T, taskID string) workqueue.Resum
 	if err != nil {
 		t.Fatal(err)
 	}
+	return resume
+}
+
+func (f *nativeVolumeFixture) start(t *testing.T, taskID string) workqueue.ResumeView {
+	t.Helper()
+	resume := f.assign(t, taskID)
 	owner, err := volume.NewAgentWork(f.inputs, f.queue)
 	if err != nil {
 		t.Fatal(err)
 	}
-	guard, err := owner.AuthorizeAgentStart(ctx, resume)
+	starts, err := workdispatch.NewAgentStarts(f.queue, []workdispatch.AgentStartRegistration{
+		{Operation: workexecution.Volume, Owner: owner},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	change, err = workqueue.PrepareStart(resume.Work.Task, resume.Work.Item, resume.Attempt, executor, time.Now().UTC())
+	wire, err := workexecution.EncodeAgentAttempt(resume.Attempt.Attempt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.commit(t, guard, change)
-	resume, err = f.queue.ReadResume(ctx, taskID, workID, attempt.ID, executor.Record.Identity)
+	if _, err := starts.Start(t.Context(), f.authorization, &agentpb.WorkStartRequest{Attempt: wire}); err != nil {
+		t.Fatal(err)
+	}
+	resume, err = f.queue.ReadResume(t.Context(), taskID, resume.Work.Item.Item.ID,
+		resume.Attempt.Attempt.ID, f.authorization.Identity())
 	if err != nil {
 		t.Fatal(err)
 	}
