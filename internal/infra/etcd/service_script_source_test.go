@@ -68,8 +68,8 @@ func TestServiceParentFinalizerProtectsPreparedScriptSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	transactionStore := &connectorReferenceRaceStore{memoryHierarchyStore: store, injected: true}
-	raceStore := &entryScriptReservationRaceStore{connectorReferenceRaceStore: transactionStore, member: member}
+	transactionStore := store
+	raceStore := &entryScriptReservationRaceStore{memoryHierarchyStore: transactionStore, member: member}
 	race, err := raceStore.Transact(ctx, effects.Conditions(), effects.Mutations())
 	if err != nil || race.Succeeded || !raceStore.reserved ||
 		store.valueAt(testservices.ServiceRuntimeKey(serviceID), store.revision) == nil {

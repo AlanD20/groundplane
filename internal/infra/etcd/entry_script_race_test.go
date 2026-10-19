@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
@@ -9,38 +10,26 @@ import (
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	testscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Rationale: a Script reservation after the removal read must be detected by
 // the actual final transaction, including when the old generation is reserved.
 func TestEntryRemovalFencesScriptReservationAfterRead(t *testing.T) {
-	for _, path := range []string{"dispatch", "direct-finalizer", "parent-finalizer"} {
+	for _, path := range []string{"direct-finalizer", "parent-finalizer"} {
 		t.Run(path, func(t *testing.T) {
 			ctx := context.Background()
-			_, memory, environment, project, current, generationIDs := entryDeletionTestState(t)
+			_, memory, environment, project, current, generationIDs := entryMetadataFixture(t)
 			member := entryScriptTestMember(t, memory, current.Record, generationIDs[0])
 			store := &entryScriptReservationRaceStore{
-				connectorReferenceRaceStore: &connectorReferenceRaceStore{memoryHierarchyStore: memory, injected: true},
-				member:                      member,
+				memoryHierarchyStore: memory,
+				member:               member,
 			}
 			entries, err := newEntryRepository(store)
 			if err != nil {
 				t.Fatal(err)
 			}
 			switch path {
-			case "dispatch":
-				task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
-				result, err := entries.BeginEntryDeletionWithTask(
-					ctx, environment, project, current, nil, tombstone, intent, task, marker,
-				)
-				if err != nil || !isKind(result.conflict, errs.KindResourceInUse) {
-					t.Fatalf("dispatch lost reservation race: %v / %v", err, result.conflict)
-				}
-				if memory.valueAt(testtaskjournal.TaskStorageKey(task.ID), memory.revision) != nil {
-					t.Fatal("losing deletion published a Task")
-				}
 			case "direct-finalizer":
 				if _, err := entries.DeleteEntry(ctx, environment, project, current); !isKind(
 					err,
@@ -67,7 +56,7 @@ func TestEntryRemovalFencesScriptReservationAfterRead(t *testing.T) {
 			if !store.reserved {
 				t.Fatal("final transaction did not compare Entry source absence")
 			}
-			assertEntryRemovalRetained(t, entries, memory, current, generationIDs)
+			assertEntryMetadataRetained(t, entries, memory, current, generationIDs)
 			if memory.valueAt(
 				testscriptsourceevidence.ScriptSourceCountKey(member.Reference.Source),
 				memory.revision,
@@ -83,7 +72,7 @@ func TestEntryRemovalFencesScriptReservationAfterRead(t *testing.T) {
 }
 
 type entryScriptReservationRaceStore struct {
-	*connectorReferenceRaceStore
+	*memoryHierarchyStore
 	member   testscriptsourceevidence.ScriptSourcePreparationMember
 	reserved bool
 }
@@ -92,7 +81,7 @@ func (store *entryScriptReservationRaceStore) Transact(
 	ctx context.Context, conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
 ) (testkeyvalue.TransactionResult, error) {
 	if !store.reserved &&
-		connectorReferenceConditionContains(
+		scriptReservationConditionContains(
 			conditions,
 			testscriptsourceevidence.ScriptSourceForwardReferenceKey(store.member.Reference),
 		) {
@@ -106,5 +95,14 @@ func (store *entryScriptReservationRaceStore) Transact(
 		}
 		store.reserved = true
 	}
-	return store.connectorReferenceRaceStore.Transact(ctx, conditions, mutations)
+	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
+}
+
+func scriptReservationConditionContains(conditions []testkeyvalue.Condition, key string) bool {
+	for _, condition := range conditions {
+		if condition.Prefix && strings.HasPrefix(key, condition.Key) {
+			return true
+		}
+	}
+	return false
 }

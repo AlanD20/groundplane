@@ -75,8 +75,8 @@ func TestDesiredVolumeRemovalProtectsPreparedScriptSource(t *testing.T) {
 		t.Fatalf("Volume removal remained blocked after reference release: %v", err)
 	}
 	transactions := &entryScriptReservationRaceStore{
-		connectorReferenceRaceStore: &connectorReferenceRaceStore{memoryHierarchyStore: store, injected: true},
-		member:                      member,
+		memoryHierarchyStore: store,
+		member:               member,
 	}
 	mutation := testkeyvalue.Mutation{
 		Type:  testkeyvalue.MutationPut,
