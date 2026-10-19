@@ -22,6 +22,8 @@ export function AttemptEvents({
   const [value, setValue] = useState<TaskAttemptEvents | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const [snapshot, setSnapshot] = useState(revision);
+  const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [state, setState] = useState("all");
   const search = query.trim().toLowerCase();
@@ -38,13 +40,13 @@ export function AttemptEvents({
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
-    setValue(null);
+    setLoading(true);
     setError(null);
     void requestTaskAttemptEvents(
       taskId,
       workId,
       attemptId,
-      revision,
+      snapshot,
       0,
       controller.signal,
     )
@@ -58,14 +60,22 @@ export function AttemptEvents({
               ? cause.message
               : "Unable to read execution events",
           );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [open, taskId, workId, attemptId, revision, reload]);
+  }, [open, taskId, workId, attemptId, snapshot, reload]);
   return (
     <Disclosure
       summary="Recorded events"
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          setSnapshot(revision);
+        }
+        setOpen(nextOpen);
+      }}
       summaryClassName="text-sm font-medium"
     >
       {open && (
@@ -138,6 +148,22 @@ export function AttemptEvents({
                   recorded separately.
                 </p>
               )}
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Retained events at the captured revision; not following live.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={loading}
+                  onClick={() => {
+                    setSnapshot(revision);
+                    setReload((count) => count + 1);
+                  }}
+                >
+                  Refresh events
+                </Button>
+              </div>
               {value.items.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No events are retained for this attempt. This does not mean no

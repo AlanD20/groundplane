@@ -172,13 +172,15 @@ function WorkEvidence({
   const [attempts, setAttempts] = useState<TaskAttempts | null>(null);
   const [image, setImage] = useState<TaskImage | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState(false);
+  const [historyRevision, setHistoryRevision] = useState<number | null>(null);
+  const history = historyRevision !== null;
+  const inspectionRevision = historyRevision ?? revision;
   const [after, setAfter] = useState(0);
   const [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     setAfter(0);
-  }, [taskId, work.id, revision]);
+  }, [taskId, work.id, historyRevision]);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -187,12 +189,17 @@ function WorkEvidence({
       requestTaskAttempts(
         taskId,
         work.id,
-        revision,
+        inspectionRevision,
         history ? after : Math.max(0, work.attempt_count - 1),
         controller.signal,
       ),
       work.operation === "image"
-        ? requestTaskImage(taskId, work.id, revision, controller.signal)
+        ? requestTaskImage(
+            taskId,
+            work.id,
+            inspectionRevision,
+            controller.signal,
+          )
         : Promise.resolve(null),
     ])
       .then(([page, details]) => {
@@ -218,8 +225,8 @@ function WorkEvidence({
     work.id,
     work.operation,
     work.attempt_count,
-    revision,
     history,
+    inspectionRevision,
     after,
     reload,
   ]);
@@ -363,6 +370,21 @@ function WorkEvidence({
             ))}
           </ol>
           <div className="flex gap-2">
+            {work.attempt_count > 1 && (
+              <Button
+                size="sm"
+                variant="outline"
+                aria-pressed={history}
+                onClick={() => {
+                  setAfter(0);
+                  setHistoryRevision((value) =>
+                    value === null ? revision : null,
+                  );
+                }}
+              >
+                {history ? "Latest attempt" : "Earlier attempts"}
+              </Button>
+            )}
             {history && after > 0 && (
               <Button size="sm" variant="outline" onClick={() => setAfter(0)}>
                 First attempts
@@ -378,6 +400,12 @@ function WorkEvidence({
               </Button>
             )}
           </div>
+          {history && (
+            <p className="text-xs text-muted-foreground">
+              Earlier attempts are shown at the captured revision. Return to the
+              latest attempt for live updates.
+            </p>
+          )}
         </>
       )}
     </div>

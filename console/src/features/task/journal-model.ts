@@ -118,7 +118,8 @@ function taskTitle(
     rotate: "Rotate",
     fetch: "Fetch image",
     prepare: "Prepare software",
-    apply: "Apply software",
+    apply:
+      resourceKind === "environment" ? "Apply Blueprint" : "Apply software",
     check: "Test connection",
   };
   return `${labels[type]} · ${target}`;
@@ -132,7 +133,11 @@ export function taskFromAPI(task: TaskPageItem): ActivityEntry {
   return {
     id: task.id,
     type,
-    title: taskTitle(type, task.target_name || task.target_id),
+    title: taskTitle(
+      type,
+      task.target_name || task.target_id,
+      task.resource_kind,
+    ),
     target: task.target_id,
     targetName: task.target_name,
     resourceKind: task.resource_kind,

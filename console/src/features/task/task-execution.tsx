@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Select } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { WorkInspection } from "./work-inspection";
 import { WorkCheckEvidence } from "./work-check-evidence";
 import type { TaskResponse } from "./api";
@@ -8,6 +9,7 @@ import {
   AdvancedDetails,
 } from "@/components/common/resource-panel";
 import { StatusBadge } from "@/components/common/status-badge";
+import { operationLabel } from "./operation-label";
 
 export function TaskExecution({
   detail,
@@ -17,6 +19,10 @@ export function TaskExecution({
   onChanged?: () => void;
 }) {
   const [filter, setFilter] = useState("all");
+  const attention = detail.work.items.filter(
+    (work) => work.phase === "attention" || work.outcome === "failed",
+  );
+  const waiting = detail.work.items.filter((work) => work.phase === "waiting");
   const visible = detail.work.items.filter((work) => {
     switch (filter) {
       case "active":
@@ -77,6 +83,44 @@ export function TaskExecution({
     );
   return (
     <section aria-label="Task work" className="min-w-0 space-y-4">
+      {detail.work.items.length > 1 &&
+        (attention.length > 0 || waiting.length > 0) && (
+          <section
+            aria-label="Resources needing attention"
+            className="space-y-3 rounded-lg border border-border bg-muted/30 p-3"
+          >
+            {[
+              {
+                value: "attention",
+                label: "Needs attention",
+                items: attention,
+              },
+              { value: "waiting", label: "Waiting", items: waiting },
+            ].map(
+              (group) =>
+                group.items.length > 0 && (
+                  <div key={group.value} className="min-w-0 space-y-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-pressed={filter === group.value}
+                      onClick={() => setFilter(group.value)}
+                    >
+                      {group.label} · {group.items.length}
+                    </Button>
+                    <p className="break-words text-sm">
+                      {group.items
+                        .map(
+                          (work) =>
+                            work.target_name || operationLabel(work.operation),
+                        )
+                        .join(", ")}
+                    </p>
+                  </div>
+                ),
+            )}
+          </section>
+        )}
       {detail.work.items.length > 1 && (
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-sm font-medium">Resource work</h2>
