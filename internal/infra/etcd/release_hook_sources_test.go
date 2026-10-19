@@ -5,8 +5,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	"testing"
+
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -52,7 +53,7 @@ func TestReleaseHookSourcesSeparateAuthoredInputsFromDerivedArtifact(t *testing.
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			store, sources, _, _, _ := manualScriptLifecycleFixture(t)
+			store, sources, _ := scriptExecutionSourceFixture(t)
 			intent := sources.Release.Intent
 			rootArtifact := bytes.Clone(sources.DesiredProjection.Record.ComposeArtifact)
 			render := testreleaserender.ReleaseRenderInput{

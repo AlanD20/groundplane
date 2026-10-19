@@ -26,7 +26,7 @@ func TestManualScriptSourceConditionsShareDesiredHead(t *testing.T) {
 	if len(conditions) != 2 {
 		t.Fatalf("source fences = %d, want head and immutable root", len(conditions))
 	}
-	store := newMemoryTaskStore()
+	store := newMemoryHierarchyStore()
 	ctx := context.Background()
 	seed, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{
 		{Type: testkeyvalue.MutationPut, Key: conditions[0].Key, Value: []byte("head")},
@@ -103,6 +103,6 @@ func manualScriptSourceTestFixture(
 	t *testing.T,
 ) (*memoryHierarchyStore, testscriptsourcequeries.ScriptExecutionSources) {
 	t.Helper()
-	store, sources, _, _, _ := manualScriptLifecycleFixture(t)
+	store, sources, _ := scriptExecutionSourceFixture(t)
 	return store, sources
 }

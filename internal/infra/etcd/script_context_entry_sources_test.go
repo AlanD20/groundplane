@@ -20,7 +20,7 @@ import (
 // Entry generations, not require or reserve unrelated exposed credentials.
 func TestScriptContextManualEntrySourcesSelectOnlyGrantedEntries(t *testing.T) {
 	for _, granted := range []bool{false, true} {
-		store, sources, execution, _, _ := manualScriptLifecycleFixture(t)
+		store, sources, execution := scriptExecutionSourceFixture(t)
 		const entryID = "ev_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		const generationID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		content := []byte("selected value")
@@ -78,7 +78,7 @@ func TestScriptContextManualEntrySourcesSelectOnlyGrantedEntries(t *testing.T) {
 // Rationale: an empty projection and binding list must not hide a missing
 // explicitly declared Entry at the persistence boundary.
 func TestScriptContextManualEntrySourcesRejectMissingGrant(t *testing.T) {
-	store, sources, _, _, _ := manualScriptLifecycleFixture(t)
+	store, sources, _ := scriptExecutionSourceFixture(t)
 	sources.Script.Record.Desired.Execution = &core.ScriptExecution{
 		Mode: core.ScriptExecutionExplicit, Image: "example/setup@sha256:" + strings.Repeat("b", 64), User: "0:0",
 		EntryIDs: []string{"ev_01ARZ3NDEKTSV4RRFFQ69G5FAV"},

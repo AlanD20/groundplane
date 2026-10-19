@@ -15,7 +15,7 @@ import (
 // Rationale: source preparation may change reference counts, but the existing
 // final primary comparison must not also admit a changed execution context.
 func TestScriptContextPrimaryFenceAllowsCountsButRejectsContextEdit(t *testing.T) {
-	store, sources, _, _, _ := manualScriptLifecycleFixture(t)
+	store, sources, _ := scriptExecutionSourceFixture(t)
 	prepared := sources.Script.Record
 	prepared.ActiveReferences++
 	key := testscripts.ScriptSetScriptKey(prepared.EnvironmentID, prepared.ScriptSetGeneration, prepared.Desired.ID)
