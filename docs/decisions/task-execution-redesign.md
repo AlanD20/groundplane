@@ -193,6 +193,15 @@ Unknown effects retain only the necessary conflict claims, not an unrelated
 host-wide execution lock. Host-wide faults may legitimately block the host and
 must be reported as such.
 
+A correctly authenticated terminal report that cannot be settled receives an
+exact-report rejection, not a successful receipt or a stream disconnect. The
+Agent retains its durable report and returns the refusal to that operation;
+unrelated reports can continue. A refusal releases no resource claim, grants no
+effect and cannot be used to retire the retained result. Malformed frames and
+foreign executor identities remain protocol errors. The
+[report boundary](../../internal/common/workreceipt/rejection.go) binds this
+response to the full captured report.
+
 Retry classification belongs to the operation: safe transient failures have
 finite attempts, backoff and a captured deadline. Invalid input fails promptly.
 Ambiguous custom commands do not automatically replay. Explicit Retry can grant

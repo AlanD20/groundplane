@@ -66,16 +66,36 @@ type nativeDispatchStream struct {
 	grpc.ServerStream
 	ctx      context.Context
 	messages []*agentpb.ControllerMessage
+	received []*agentpb.AgentMessage
+	recvErr  error
+	sendErr  func(*agentpb.ControllerMessage) error
 }
 
-func (stream *nativeDispatchStream) Context() context.Context             { return stream.ctx }
-func (stream *nativeDispatchStream) Recv() (*agentpb.AgentMessage, error) { return nil, io.EOF }
+func (stream *nativeDispatchStream) Context() context.Context { return stream.ctx }
+func (stream *nativeDispatchStream) Recv() (*agentpb.AgentMessage, error) {
+	if len(stream.received) == 0 {
+		if stream.recvErr != nil {
+			err := stream.recvErr
+			stream.recvErr = nil
+			return nil, err
+		}
+		return nil, io.EOF
+	}
+	message := stream.received[0]
+	stream.received = stream.received[1:]
+	return message, nil
+}
 func (stream *nativeDispatchStream) Send(message *agentpb.ControllerMessage) error {
+	if stream.sendErr != nil {
+		if err := stream.sendErr(message); err != nil {
+			return err
+		}
+	}
 	stream.messages = append(stream.messages, proto.CloneOf(message))
 	return nil
 }
 
-func nativeDispatchFixture(t *testing.T) (*Server, *Session, *nativeDispatchPeer) {
+func nativeDispatchFixture(t *testing.T) (*Server, *Session, *nativeDispatchPeer, *channelMemoryStore) {
 	t.Helper()
 	at := time.Now().UTC()
 	agentID := ids.New(ids.KindAgent)
@@ -126,7 +146,7 @@ func nativeDispatchFixture(t *testing.T) (*Server, *Session, *nativeDispatchPeer
 	peer := &nativeDispatchPeer{attempt: attempt}
 	server := New(nil, registry, nil, nil, nil)
 	server.workIdentities, server.workDispatch = identities, peer
-	return server, session, peer
+	return server, session, peer, store
 }
 
 // TASK-107: pause or fence an authenticated native dispatch while its supplied
@@ -136,7 +156,7 @@ func nativeDispatchFixture(t *testing.T) (*Server, *Session, *nativeDispatchPeer
 func TestNativeDispatchFencesPreparedDelivery(t *testing.T) {
 	for _, mode := range []string{"pause", "stop", "revoke", "replace-session"} {
 		t.Run(mode, func(t *testing.T) {
-			server, session, peer := nativeDispatchFixture(t)
+			server, session, peer, _ := nativeDispatchFixture(t)
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			stream := &nativeDispatchStream{ctx: ctx}

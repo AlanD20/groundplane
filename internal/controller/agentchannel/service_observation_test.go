@@ -227,28 +227,11 @@ func nextServiceWire(t *testing.T, ctx context.Context, stream *liveStream) *age
 // connection, and serve a later read without a Task store or reconnect retry.
 func TestServiceObservationThroughControllerStream(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	r := NewRegistry()
-	stream := newLiveStream(ctx)
-	stream.received <- authenticateMessage(testAgentID, testToken(4))
-	serverDone := make(chan error, 1)
-	go func() { serverDone <- New(authorizedAuthenticator(), r, nil, nil).Connect(stream) }()
-	t.Cleanup(func() {
-		cancel()
-		select {
-		case err := <-serverDone:
-			if err != nil && !errors.Is(err, context.Canceled) {
-				t.Error(err)
-			}
-		case <-time.After(time.Second):
-			t.Error("Controller stream did not stop")
-		}
-	})
-	if nextServiceWire(t, ctx, stream).GetConfigUpdate() == nil {
-		t.Fatal("configuration must follow authentication")
-	}
+	defer cancel()
+	r, stream, agentID := nativeConnectedQueryChannel(t, ctx)
 	readCtx, readCancel := context.WithCancel(ctx)
 	defer readCancel()
-	done := beginServiceRead(readCtx, r, testAgentID)
+	done := beginServiceRead(readCtx, r, agentID)
 	request := nextServiceWire(t, ctx, stream).GetObserveServices()
 	if request == nil {
 		t.Fatal("missing observation request")
@@ -264,7 +247,7 @@ func TestServiceObservationThroughControllerStream(t *testing.T) {
 		t.Fatal("missing correlated cancellation")
 	}
 	stream.received <- servingResult(request)
-	done = beginServiceRead(ctx, r, testAgentID)
+	done = beginServiceRead(ctx, r, agentID)
 	next := nextServiceWire(t, ctx, stream).GetObserveServices()
 	if next == nil || next.RequestId == request.RequestId {
 		t.Fatal("missing fresh read")

@@ -33,24 +33,23 @@ type BackupStagingStore interface {
 }
 
 func (s *Server) resolveBackupStagingPlan(ctx context.Context, store BackupStagingStore, process ProcessAuthentication,
-	agentID string, agentGeneration uint64, identity workexecution.Identity, inventory *agentpb.BackupStagingInventory,
+	identity workexecution.Identity, inventory *agentpb.BackupStagingInventory,
 ) (*agentpb.BackupStagingRecoveryPlan, error) {
-	if identity.Validate() != nil || identity.Executor != workexecution.Agent ||
-		identity.AgentID != agentID || identity.Generation != agentGeneration {
+	if identity.Validate() != nil || identity.Executor != workexecution.Agent {
 		return nil, errs.New(errs.KindStateConflict, "Backup recovery identity does not match the authenticated Agent")
 	}
 	digest, err := executionplan.BackupStagingInventorySHA256(inventory)
 	if err != nil {
 		return nil, err
 	}
-	current, found, err := store.ReadBackupStagingDelivery(ctx, agentID)
+	current, found, err := store.ReadBackupStagingDelivery(ctx, identity.AgentID)
 	if err != nil {
 		return nil, err
 	}
 	record := backupruntime.BackupStagingDeliveryRecord{
 		HostID:            identity.HostID,
-		AgentID:           agentID,
-		AgentGeneration:   agentGeneration,
+		AgentID:           identity.AgentID,
+		AgentGeneration:   identity.Generation,
 		ProcessGeneration: process.ProcessGeneration,
 		Inventory:         proto.CloneOf(inventory),
 		Plan:              &agentpb.BackupStagingRecoveryPlan{InventorySha256: digest},
@@ -80,7 +79,7 @@ func (s *Server) resolveBackupStagingPlan(ctx context.Context, store BackupStagi
 		guards = append(guards, volumeGuards...)
 		record.Plan.VolumeDispositions = append(record.Plan.VolumeDispositions, disposition)
 	}
-	if found && current.Record.AgentGeneration == agentGeneration &&
+	if found && current.Record.AgentGeneration == identity.Generation &&
 		proto.Equal(current.Record.Inventory, inventory) && current.Record.Ack == nil {
 		record.Plan.SupersedesPlanSha256 = append([]byte(nil), current.Record.Plan.SupersedesPlanSha256...)
 		if !proto.Equal(record.Plan, current.Record.Plan) {

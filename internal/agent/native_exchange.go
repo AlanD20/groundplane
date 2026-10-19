@@ -26,11 +26,15 @@ import (
 )
 
 type nativeExchangeKey struct{ attempt, kind string }
+type nativeResponse struct {
+	message *agentpb.ControllerMessage
+	err     error
+}
 type nativeWaiter struct {
 	terminalReport *agentpb.AgentMessage
 	identity       *agentpb.WorkAttemptIdentity
 	executionID    string
-	response       chan *agentpb.ControllerMessage
+	response       chan nativeResponse
 	abandoned      bool
 }
 
@@ -77,7 +81,8 @@ func (exchange *nativeExchange) request(ctx context.Context, message *agentpb.Ag
 		return nil, errs.New(errs.KindValidationFailed, "native work exchange request is invalid")
 	}
 	key := nativeExchangeKey{identity.AttemptId, kind}
-	waiter := &nativeWaiter{identity: proto.CloneOf(identity), executionID: executionID, response: make(chan *agentpb.ControllerMessage, 1)}
+	waiter := &nativeWaiter{identity: proto.CloneOf(identity), executionID: executionID,
+		response: make(chan nativeResponse, 1)}
 	_, expectedKind, terminal, reportErr := workreceipt.Describe(message)
 	if reportErr != nil {
 		return nil, reportErr
@@ -104,7 +109,8 @@ func (exchange *nativeExchange) request(ctx context.Context, message *agentpb.Ag
 		defer exchange.mu.Unlock()
 		waiter.abandoned = true
 		select {
-		case response := <-waiter.response:
+		case result := <-waiter.response:
+			response := result.message
 			backingprovision.ClearPrivateDelivery(response)
 			releaseexecution.ClearHookDelivery(response.GetReleaseHookDelivery())
 			releaseexecution.ClearConfigurationDelivery(response.GetReleaseConfigurationFileDelivery())
@@ -138,7 +144,7 @@ func (exchange *nativeExchange) request(ctx context.Context, message *agentpb.Ag
 	}
 	select {
 	case response := <-waiter.response:
-		return response, nil
+		return response.message, response.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-exchange.done:
@@ -147,6 +153,9 @@ func (exchange *nativeExchange) request(ctx context.Context, message *agentpb.Ag
 }
 
 func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool, error) {
+	if message.GetWorkReportRejection() != nil {
+		return true, exchange.rejectReport(message)
+	}
 	if handled, err := exchange.acceptBackupVolume(message); handled {
 		return true, err
 	}
@@ -358,7 +367,7 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 		removalexecution.ClearConfigurationDelivery(message.GetServiceRemovalConfigurationFileDelivery())
 		return true, nil
 	}
-	waiter.response <- message
+	waiter.response <- nativeResponse{message: message}
 	return true, nil
 }
 

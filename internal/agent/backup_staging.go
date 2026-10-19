@@ -314,9 +314,7 @@ func (state *backupStagingState) acceptReceipt(
 		return err
 	}
 	state.stager, state.ready = stager, true
-	for _, entry := range prepared {
-		state.prepared = append(state.prepared, entry)
-	}
+	state.prepared = append(state.prepared, prepared...)
 	runtime, err := backupruntime.NewStaging(state.stager, state.prepared, state.inventory, state.plan)
 	if err != nil {
 		return err

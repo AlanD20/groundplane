@@ -2,6 +2,10 @@ package agentchannel
 
 import (
 	"context"
+	"errors"
+	"log/slog"
+
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/common/workreceipt"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
@@ -9,8 +13,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (server *Server) terminalOperationReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	_, _, supported, err := workreceipt.Describe(message)
+func (server *Server) terminalOperationReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
+	identity, _, supported, err := workreceipt.Describe(message)
 	if !supported {
 		return false, nil, err
 	}
@@ -21,8 +29,25 @@ func (server *Server) terminalOperationReport(session *Session, generation uint6
 	if err != nil {
 		return true, nil, taskStoreStatus(err)
 	}
+	if _, err := workexecution.DecodeAgentAttempt(identity, authorization.Identity()); err != nil {
+		return true, nil, taskStoreStatus(err)
+	}
 	reply, err := server.terminalReport(session.ctx, authorization, message)
 	if err != nil {
+		slog.WarnContext(session.ctx, "Agent result requires reconciliation", "task_id", identity.TaskId,
+			"work_id", identity.WorkItemId, "attempt_id", identity.AttemptId, "error", err)
+		problem := errs.New(errs.KindInternal, "").ToProblem()
+		var productError *errs.Error
+		if errors.As(err, &productError) {
+			problem = productError.ToProblem()
+		}
+		if len(problem.Detail) > 4096 {
+			problem.Detail = "terminal report could not be settled; inspect Controller logs"
+		}
+		rejection, rejectErr := workreceipt.Reject(message, string(problem.Code), problem.Detail)
+		return true, rejection, rejectErr
+	}
+	if err := workreceipt.Match(message, reply); err != nil {
 		return true, nil, taskStoreStatus(err)
 	}
 	return true, reply, nil
@@ -30,7 +55,11 @@ func (server *Server) terminalOperationReport(session *Session, generation uint6
 
 // terminalReport is shared by live delivery and startup replay. This
 // switch is deliberately closed: no grant, hook, input or checkpoint route.
-func (server *Server) terminalReport(ctx context.Context, authorization agentregistration.WorkAuthorization, message *agentpb.AgentMessage) (*agentpb.ControllerMessage, error) {
+func (server *Server) terminalReport(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	message *agentpb.AgentMessage,
+) (*agentpb.ControllerMessage, error) {
 	switch payload := message.Payload.(type) {
 	case *agentpb.AgentMessage_ReleaseWorkCompletionRequest:
 		if server.releaseCheckpoints == nil {

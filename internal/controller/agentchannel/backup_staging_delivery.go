@@ -11,7 +11,6 @@ type backupStagingSession struct{ ready bool }
 func (s *Server) handleBackupStagingDelivery(
 	stream agentpb.AgentChannel_ConnectServer,
 	session *Session,
-	agentID string,
 	agentGeneration uint64,
 	message *agentpb.AgentMessage,
 	staging *backupStagingSession,
@@ -39,7 +38,7 @@ func (s *Server) handleBackupStagingDelivery(
 		if staging.ready {
 			return true, errs.New(errs.KindStateConflict, "Backup startup inventory arrived after Ready")
 		}
-		plan, err := s.resolveBackupStagingPlan(stream.Context(), store, process, agentID, agentGeneration, authorization.Identity(), inventory)
+		plan, err := s.resolveBackupStagingPlan(stream.Context(), store, process, authorization.Identity(), inventory)
 		if err != nil {
 			return true, err
 		}

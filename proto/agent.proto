@@ -54,6 +54,17 @@ message WorkJournalReplayAck {
   string accounted_attempt_id = 6;
 }
 
+// A terminal result could not be settled. This response grants no execution and
+// acknowledges no effect or outcome. The Agent retains its exact report for
+// reconciliation; unrelated operations may continue on the same stream.
+message WorkReportRejection {
+  WorkAttemptIdentity attempt = 1;
+  string kind = 2;
+  bytes report_sha256 = 3;
+  string failure_code = 4;
+  string failure_detail = 5;
+}
+
 enum WorkDirection {
   WORK_DIRECTION_UNSPECIFIED = 0;
   WORK_DIRECTION_FORWARD = 1;
@@ -1655,6 +1666,7 @@ message ControllerMessage {
     ResolverWorkCheckpointAck resolver_work_checkpoint_ack = 132;
     ResolverWorkResultAck resolver_work_result_ack = 133;
     WorkJournalReplayAck work_journal_replay_ack = 134;
+    WorkReportRejection work_report_rejection = 135;
   }
 }
 

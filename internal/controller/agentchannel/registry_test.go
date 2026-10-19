@@ -16,6 +16,10 @@ const (
 	testOtherAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 )
 
+func testTime() time.Time {
+	return time.Date(2026, time.August, 20, 10, 30, 0, 0, time.UTC)
+}
+
 // QA: TASK-01/09; in-memory wake delivery/coalescing, not Task publication or execution.
 // Rationale: repeated publication hints must wake every current session while
 // retaining at most one pending signal per Agent.

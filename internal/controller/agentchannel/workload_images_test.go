@@ -140,20 +140,8 @@ func TestImageResolutionReplacementRejectsOldResponse(t *testing.T) {
 func TestImageResolutionThroughControllerStream(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	registry := NewRegistry()
-	stream := newLiveStream(ctx)
-	stream.received <- authenticateMessage(testAgentID, testToken(4))
-	serverDone := make(chan error, 1)
-	go func() { serverDone <- New(authorizedAuthenticator(), registry, nil, nil).Connect(stream) }()
-	select {
-	case config := <-stream.sent:
-		if config.GetConfigUpdate() == nil {
-			t.Fatal("missing authenticated configuration")
-		}
-	case <-ctx.Done():
-		t.Fatal(ctx.Err())
-	}
-	done := beginImageRead(ctx, registry, testAgentID)
+	registry, stream, agentID := nativeConnectedQueryChannel(t, ctx)
+	done := beginImageRead(ctx, registry, agentID)
 	var requestID string
 	select {
 	case message := <-stream.sent:
@@ -170,15 +158,6 @@ func TestImageResolutionThroughControllerStream(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 	assertImageReply(t, awaitImageRead(t, ctx, done), requestID)
-	cancel()
-	select {
-	case err := <-serverDone:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatal(err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("server did not stop")
-	}
 }
 
 // QA: BP-08, SVC-05/10; local error classification, late-response fencing and slot reuse only.

@@ -250,7 +250,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
-			if handled, err := s.handleBackupStagingDelivery(stream, session, authenticate.AgentId, authorization.Generation, result.message, staging); handled {
+			if handled, err := s.handleBackupStagingDelivery(
+				stream, session, authorization.Generation, result.message, staging,
+			); handled {
 				if err != nil {
 					return taskStoreStatus(err)
 				}
