@@ -1,3 +1,5 @@
+// Package taskprogress provides output-free failure observations for operation
+// diagnostics and software handoff.
 package taskprogress
 
 import (

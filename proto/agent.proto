@@ -1265,19 +1265,6 @@ message StepFailure {
   int32 exit_code = 2; // zero means no nonzero exit was reported
 }
 
-message HealthWaitProgress {
-  uint32 expected = 1;
-  uint32 observed = 2;
-  uint32 running = 3;
-  uint32 ready = 4;
-  uint32 starting = 5;
-  uint32 unhealthy = 6;
-  uint32 exited = 7;
-  uint64 elapsed_milliseconds = 8;
-  uint64 timeout_milliseconds = 9;
-  ComposeHelperDiagnostic diagnostic = 10;
-}
-
 message ObservedState {
   repeated ObservedProject projects = 1;
   string snapshot_id = 2;
