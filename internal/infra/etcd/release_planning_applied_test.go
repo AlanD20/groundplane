@@ -17,9 +17,8 @@ func TestReleasePlanningAppliedProjectionUsesCapturedRevisionNotDesiredHead(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	project, environment := createEnvironmentBlueprintOwners(t, hierarchy)
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 901)
-	initial := releasePlanningTestProjection(environment.Record.ID, task)
+	_, environment := createEnvironmentBlueprintOwners(t, hierarchy)
+	initial := releasePlanningTestProjection(t, environment.Record.ID, ids.New(ids.KindTask))
 	value, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(initial)
 	if err != nil {
 		t.Fatal(err)
@@ -47,8 +46,7 @@ func TestReleasePlanningAppliedProjectionUsesCapturedRevisionNotDesiredHead(t *t
 	}
 	// Intervening no-candidate Apply advances the acknowledged projection while
 	// the caller's captured predecessor revision must stay fixed.
-	nextTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 902)
-	next := releasePlanningTestProjection(environment.Record.ID, nextTask)
+	next := releasePlanningTestProjection(t, environment.Record.ID, ids.New(ids.KindTask))
 	next.RevisionID = ids.New(ids.KindTask)
 	nextValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(next)
 	if err != nil {

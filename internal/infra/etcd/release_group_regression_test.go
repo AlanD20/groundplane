@@ -3,11 +3,12 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -20,7 +21,6 @@ import (
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -73,19 +73,13 @@ func TestReleaseGroupMaximumRemovalFitsRealTaskPublicationEnvelope(t *testing.T)
 		Value: []byte(`{"phase":"requested"}`),
 	}})
 	fixture.store.maxOperations = 0
-	task, marker := releaseGroupRemovalTaskAndMarker(
-		t,
-		fixture.project.Record,
-		fixture.environment.Record,
-		fixture.group.ID,
-		fixture.now,
-	)
-	result, err := fixture.tasks.PublishReleaseGroupMutation(
+	input, marker := releaseGroupRemovalInputAndMarker(t, fixture)
+	result, err := fixture.tasks.PublishReleaseGroupRemoval(
 		context.Background(),
 		fixture.environment,
 		fixture.project,
 		prepared,
-		task,
+		input,
 		marker,
 	)
 	if err != nil {
@@ -100,6 +94,47 @@ func TestReleaseGroupMaximumRemovalFitsRealTaskPublicationEnvelope(t *testing.T)
 			"real maximum-member removal envelope = %d operations, want <= %d",
 			fixture.store.maxOperations, testkeyvalue.MaximumOperations,
 		)
+	}
+	queue, err := workqueue.NewRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := queue.ReadWork(t.Context(), input.TaskID, input.WorkItemID, 0)
+	if err != nil || view.Item.Item.Phase != workexecution.Ready || view.Item.Item.AttemptNumber != 0 ||
+		!view.Task.Task.PublicationComplete {
+		t.Fatalf("native Group removal was not ready: %#v, %v", view, err)
+	}
+	if fixture.store.valueAt(testreleasegroups.ReleaseGroupRecordKey(input.GroupID), fixture.store.revision) == nil {
+		t.Fatal("acceptance deleted the Group before settlement")
+	}
+	owner, err := testreleasegroups.NewRemovalRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision, err := owner.PrepareDecision(t.Context(), view, workexecution.Succeeded, input.CreatedAt.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testkeyvalue.ClearMutationValues(decision.Mutations)
+	committed, err := queue.Commit(t.Context(), decision)
+	if err != nil || !committed.Succeeded {
+		t.Fatalf("native Group removal settlement = %t, %v", committed.Succeeded, err)
+	}
+	for _, key := range []string{
+		testreleasegroups.ReleaseGroupRecordKey(input.GroupID),
+		testreleasegroups.ReleaseGroupOwnerKey(input.Scope.EnvironmentID, input.GroupID),
+		testreleasegroups.ReleaseGroupNameKey(input.Scope.EnvironmentID, input.GroupName),
+		testdeletions.TombstoneKey(string(testdeletions.DeletionTargetReleaseGroup), input.GroupID),
+	} {
+		if fixture.store.valueAt(key, fixture.store.revision) != nil {
+			t.Fatalf("Group removal retained %s", key)
+		}
+	}
+	settled, err := queue.ReadWork(t.Context(), input.TaskID, input.WorkItemID, 0)
+	if err != nil || settled.Item.Item.Phase != workexecution.Settled || settled.Item.Item.Outcome != workexecution.Succeeded ||
+		settled.Item.Revision != committed.Revision ||
+		settled.Task.Revision != committed.Revision {
+		t.Fatalf("Group removal did not join native progress: %#v, %v", settled, err)
 	}
 }
 
@@ -119,19 +154,13 @@ func TestReleaseGroupRemovalFencesExactSelectedServiceDeletion(t *testing.T) {
 		Key:   testdeletions.TombstoneKey("service", fixture.serviceIDs[len(fixture.serviceIDs)-1]),
 		Value: []byte(`{"phase":"requested"}`),
 	}})
-	task, marker := releaseGroupRemovalTaskAndMarker(
-		t,
-		fixture.project.Record,
-		fixture.environment.Record,
-		fixture.group.ID,
-		fixture.now,
-	)
-	result, err := fixture.tasks.PublishReleaseGroupMutation(
+	input, marker := releaseGroupRemovalInputAndMarker(t, fixture)
+	result, err := fixture.tasks.PublishReleaseGroupRemoval(
 		context.Background(),
 		fixture.environment,
 		fixture.project,
 		prepared,
-		task,
+		input,
 		marker,
 	)
 	if err != nil {
@@ -142,7 +171,7 @@ func TestReleaseGroupRemovalFencesExactSelectedServiceDeletion(t *testing.T) {
 		!isKind(conflict, errs.KindStateConflict) {
 		t.Fatalf("selected deletion race = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	if value := fixture.store.valueAt(testtaskjournal.TaskStorageKey(task.ID), fixture.store.revision); value != nil {
+	if value := fixture.store.valueAt(workqueue.TaskKey(input.TaskID), fixture.store.revision); value != nil {
 		t.Fatalf("failed selected-member publication wrote Task %#v", value)
 	}
 }
@@ -322,12 +351,8 @@ func newReleaseGroupPublisherFixture(
 	}
 	// These Services are authored but have never been deployed. Grouping their
 	// definitions must not depend on an acknowledged runtime projection.
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 701)
-	task.ID = projection.RevisionID
-	stageEnvironmentBlueprintForPublicationTest(t, repository, 0,
-		environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n"),
-		projection, environmentBlueprintTestMarker(task, environment.Record.ID))
-	seedEffectiveBlueprintFixture(t, store, projection)
+	projection.NormalizedCompose = declaredComposeFixture(projection)
+	seedServiceRepositoryTestDesiredProjection(t, store.memoryHierarchyStore, projection)
 	projectionValue, err := testidempotency.EncodeTaskReference(projection.RevisionID)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
@@ -374,76 +399,34 @@ func newReleaseGroupPublisherFixture(
 	}
 }
 
-func releaseGroupRemovalTaskAndMarker(
+func releaseGroupRemovalInputAndMarker(
 	t *testing.T,
-	project testhierarchy.ProjectRecord,
-	environment testhierarchy.EnvironmentRecord,
-	groupID string,
-	now time.Time,
-) (TaskRecord, testidempotency.IdempotencyMarker) {
+	fixture releaseGroupPublisherFixture,
+) (testreleasegroups.RemovalInput, testidempotency.IdempotencyMarker) {
 	t.Helper()
-	owner, err := testtaskjournal.EnvironmentTaskOwner(project, environment)
-	if err != nil {
-		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
-	}
-	task := TaskRecord{
-		ID:               ids.NewAt(ids.KindTask, now, 900),
-		OperationID:      ids.NewAt(ids.KindOperation, now, 901),
-		IdempotencyKey:   ids.NewAt(ids.KindOperation, now, 902)[3:],
-		Owner:            owner,
-		Actor:            testtaskjournal.TaskActorOperator,
-		Executor:         testtaskjournal.TaskExecutorController,
-		PlanID:           ids.NewAt(ids.KindPlan, now, 903),
-		PlanHash:         strings.Repeat("a", 64),
-		RenderGeneration: 1,
-		Type:             testtaskjournal.TaskRemove,
-		Target:           groupID,
-		Params: map[string]string{
-			testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceReleaseGroup,
+	input := testreleasegroups.RemovalInput{
+		TaskID: ids.NewAt(ids.KindTask, fixture.now, 900), WorkItemID: ids.NewAt(ids.KindWorkItem, fixture.now, 901),
+		PlanID: ids.NewAt(ids.KindPlan, fixture.now, 903),
+		Scope: workexecution.Scope{
+			TenantID:      fixture.project.Record.TenantID,
+			ProjectID:     fixture.project.Record.ID,
+			EnvironmentID: fixture.environment.Record.ID,
 		},
-		Steps: []testtaskjournal.TaskStepRecord{
-			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 904)},
-		},
-		TimeoutSeconds:    30,
-		Status:            testtaskjournal.TaskStatusPending,
-		NextEventSequence: 1,
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		GroupID: fixture.group.ID, GroupName: fixture.group.Name, GroupRevision: fixture.revision, CreatedAt: fixture.now,
 	}
-	ciphertext := []byte("protected-release-group-removal")
-	digest := sha256.Sum256(ciphertext)
-	target := testidempotency.IdempotencyReplayTarget{
+	marker := testDirectMarker()
+	marker.Kind, marker.State, marker.TaskID = testidempotency.IdempotencyMarkerTask, testidempotency.IdempotencyMarkerPending, input.TaskID
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: fixture.environment.Record.ID,
+		Method: http.MethodDelete, Route: "/release-groups/{id}", Key: "release-group-native-removal",
+	}
+	marker.CreatedAt, marker.UpdatedAt, marker.TerminalAt, marker.RetainUntil = fixture.now, fixture.now, time.Time{}, time.Time{}
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
 		Kind: testidempotency.IdempotencyReplayTargetReleaseGroup,
-		ID:   groupID,
+		ID:   input.GroupID,
 	}
-	marker := testidempotency.IdempotencyMarker{
-		Kind:  testidempotency.IdempotencyMarkerTask,
-		State: testidempotency.IdempotencyMarkerPending,
-		Locator: testidempotency.IdempotencyLocator{
-			ScopeKind: testidempotency.IdempotencyScopeEnvironment,
-			ScopeID:   environment.ID,
-			Method:    http.MethodDelete,
-			Route:     "/release-groups/{id}",
-			Key:       task.IdempotencyKey,
-		},
-		ReplayTarget: &target,
-		Intent: testidempotency.ProtectedIntentRecord{
-			EnvelopeVersion:  1,
-			Cipher:           "age-x25519",
-			DigestAlgorithm:  "sha256",
-			CiphertextDigest: hex.EncodeToString(digest[:]),
-			Ciphertext:       ciphertext,
-		},
-		Response: testidempotency.IdempotencyResponse{
-			Status:      http.StatusAccepted,
-			ContentKind: "application/json",
-			Body:        []byte(`{"task_id":"` + task.ID + `"}`),
-		},
-		TaskID:    task.ID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	return task, marker
+	marker.Response.Status, marker.Response.Body = http.StatusAccepted, []byte(`{"task_id":"`+input.TaskID+`"}`)
+	return input, marker
 }
 
 func mustReleaseGroupTransaction(

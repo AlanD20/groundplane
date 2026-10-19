@@ -3,27 +3,15 @@ package etcd
 import (
 	"context"
 	"errors"
-	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
-	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"io"
 	"testing"
+
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 type releasePlanningTestStore struct {
 	*memoryHierarchyStore
-}
-
-func (store *releasePlanningTestStore) TransactBlueprintChild(
-	ctx context.Context,
-	transaction BlueprintChildTransaction,
-) (testkeyvalue.TransactionResult, error) {
-	conditions, mutations, err := transaction.Operations()
-	if err != nil {
-		return testkeyvalue.TransactionResult{}, err
-	}
-	return store.Transact(ctx, conditions, mutations)
 }
 
 func (*releasePlanningTestStore) Health(context.Context) error { return nil }
@@ -53,51 +41,24 @@ func (*releasePlanningTestStore) Snapshot(context.Context, io.Writer) error {
 func (*releasePlanningTestStore) Close() error { return nil }
 
 func releasePlanningTestProjection(
-	environmentID string,
-	task TaskRecord,
+	t *testing.T,
+	environmentID, revisionID string,
 ) testenvironmentprojection.EnvironmentComposeProjection {
-	projection := environmentBlueprintTestProjection(environmentID, task, 1)
-	service := projection.DesiredServices[0].Desired
-	projection.DesiredServices = []testservices.EnvironmentServiceProjection{{
-		EnvironmentID: environmentID,
-		Desired:       service,
-	}}
-	return projection
+	t.Helper()
+	return routeRepositoryTestProjection(t, environmentID, "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", revisionID)
 }
 
 func TestReleasePlanningLoadsPublishedBlueprintProjection(t *testing.T) {
 	ctx := context.Background()
-	store := &releasePlanningTestStore{memoryHierarchyStore: newMemoryHierarchyStore()}
+	_, base, environment, _, service := routeRepositoryTestHierarchy(t)
+	store := &releasePlanningTestStore{memoryHierarchyStore: base}
 	hierarchy, err := newHierarchyRepository(store)
 	if err != nil {
-		t.Fatalf("newHierarchyRepository() error = %v", err)
+		t.Fatal(err)
 	}
-	project, environment := createEnvironmentBlueprintOwners(t, hierarchy)
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 90)
-	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
-	projection := releasePlanningTestProjection(environment.Record.ID, task)
-	result := publishEnvironmentBlueprintTestRevision(
-		t,
-		hierarchy,
-		project,
-		environment,
-		0,
-		revision,
-		projection,
-		environmentBlueprintTestZoneChanges(t, hierarchy, projection),
-		environmentBlueprintTestServiceChanges(t, hierarchy, projection),
-		environmentBlueprintTestRouteChanges(
-			t,
-			hierarchy,
-			projection,
-		),
-		testcomponentplanning.ComponentTaskPreparation{},
-		task,
-		environmentBlueprintTestMarker(task, environment.Record.ID),
-	)
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
-		outcome != IdempotencyKnownApplied {
-		t.Fatalf("publication outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+	desired, found, err := hierarchy.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
+	if err != nil || !found {
+		t.Fatalf("desired projection = %#v, %v, %v", desired, found, err)
 	}
 	tasks, err := NewTaskRepository(store)
 	if err != nil {
@@ -111,7 +72,8 @@ func TestReleasePlanningLoadsPublishedBlueprintProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPlanningScope() error = %v", err)
 	}
-	if scope.Compose.Record.RevisionID != task.ID || scope.Compose.ReadRevision != scope.ReadRevision {
+	if scope.Compose.Record.RevisionID != desired.Record.RevisionID ||
+		scope.Compose.ReadRevision != scope.ReadRevision {
 		t.Fatalf("planning Compose projection = %#v", scope.Compose)
 	}
 	if _, err := store.Put(ctx, "/unrelated/global-write", []byte("unrelated")); err != nil {
@@ -122,11 +84,11 @@ func TestReleasePlanningLoadsPublishedBlueprintProjection(t *testing.T) {
 		fixed.EnvironmentEpochRevision != scope.EnvironmentEpochRevision {
 		t.Fatalf("LoadPlanningScopeAtRevision() = %#v, %v", fixed, err)
 	}
-	planning, err := ledger.LoadPlanningServices(ctx, scope, []string{projection.DesiredServices[0].Desired.ID})
+	planning, err := ledger.LoadPlanningServices(ctx, scope, []string{service.Record.Desired.ID})
 	if err != nil {
 		t.Fatalf("LoadPlanningServices() error = %v", err)
 	}
-	if len(planning) != 1 || planning[0].Service.Record.Desired.ID != projection.DesiredServices[0].Desired.ID {
+	if len(planning) != 1 || planning[0].Service.Record.Desired.ID != service.Record.Desired.ID {
 		t.Fatalf("planning Services = %#v", planning)
 	}
 }
