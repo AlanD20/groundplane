@@ -207,7 +207,7 @@ func recoverVolumeConsumerSet(ctx context.Context, input *agentpb.BackupWorkInpu
 						return err
 					}
 				}
-				_, digest, err = commands.recover(ctx, serviceID)
+				_, _, err = commands.recover(ctx, serviceID)
 				if err != nil {
 					return err
 				}

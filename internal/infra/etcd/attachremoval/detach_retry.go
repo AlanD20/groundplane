@@ -54,6 +54,7 @@ func (repository *InputRepository) PrepareDetachRetry(ctx context.Context, view 
 		budget = attachexecution.RemovalBudget(int64(source.Backing.Desired.Hooks.Detach.TimeoutSeconds))
 	}
 	var change workqueue.Change
+	var retryErr error
 	if item.AttemptNumber == 0 {
 		if item.Result == nil || item.Outcome != workexecution.Failed {
 			return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Detach has no failed unassigned decision")
@@ -79,7 +80,7 @@ func (repository *InputRepository) PrepareDetachRetry(ctx context.Context, view 
 			return workqueue.Change{}, recordcodec.CorruptRecord()
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
-		change, err = workqueue.PrepareUnstartedRetry(view.Task, view.Item, at.Add(budget), at)
+		change, retryErr = workqueue.PrepareUnstartedRetry(view.Task, view.Item, at.Add(budget), at)
 	} else {
 		attempt := previous.Attempt
 		if previous.Revision <= 0 || attempt.FinishedAt == nil || attempt.Result == nil || attempt.Input != *item.Input ||
@@ -97,11 +98,11 @@ func (repository *InputRepository) PrepareDetachRetry(ctx context.Context, view 
 			return workqueue.Change{}, err
 		}
 		conditions = append(conditions, capture.Conditions...)
-		change, err = workqueue.PrepareRetry(view.Task, view.Item, previous, workexecution.RetryDecision{
+		change, retryErr = workqueue.PrepareRetry(view.Task, view.Item, previous, workexecution.RetryDecision{
 			Direction: workexecution.Forward, Result: *attempt.Result, NotBefore: at, Deadline: at.Add(budget)}, at)
 	}
-	if err != nil {
-		return workqueue.Change{}, err
+	if retryErr != nil {
+		return workqueue.Change{}, retryErr
 	}
 	resource, err := repository.prepareDetachRetryBinding(ctx, view, input)
 	if err != nil {

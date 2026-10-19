@@ -76,8 +76,8 @@ func RunAttachRemoval(ctx context.Context, input attachexecution.RemovalInput, c
 		if !time.Now().UTC().Before(input.Attempt.Deadline) {
 			inspectOnly = true
 		}
-		effectContext := ctx
-		cancel := func() {}
+		var effectContext context.Context
+		var cancel context.CancelFunc
 		if !inspectOnly {
 			effectContext, cancel = context.WithDeadline(ctx, input.Attempt.Deadline)
 		} else {
