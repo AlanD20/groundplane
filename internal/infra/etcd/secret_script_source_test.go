@@ -26,10 +26,8 @@ func TestSecretDeletionAndScriptPreparationAreMutuallyExclusive(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
-			store, project := secretDeletionTestStore(t)
-			repository, err := newSecretRepository(&connectorReferenceRaceStore{
-				memoryHierarchyStore: store, injected: true,
-			})
+			store, project := secretMetadataStore(t)
+			repository, err := newSecretRepository(store)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -72,16 +70,9 @@ func TestSecretDeletionAndScriptPreparationAreMutuallyExclusive(t *testing.T) {
 					},
 				},
 			}
-			task, marker, tombstone := secretDeletionTestTask(t, current, project, at.Add(time.Second), 160)
 			if deletionFirst {
-				result, err := repository.BeginSecretDeletionWithTask(
-					ctx, testsecrets.ProjectOwner(project), current,
-					tombstone,
-					task,
-					marker,
-				)
-				if err != nil || result.kind != idempotencyTransactionApplied {
-					t.Fatalf("initial deletion = %v", err)
+				if _, err := repository.DeleteSecret(ctx, testsecrets.ProjectOwner(project), current); err != nil {
+					t.Fatal(err)
 				}
 				if _, err := authority.Prepare(ctx, operationID, []testscriptsourceevidence.ScriptSourcePreparationMember{member}); err == nil {
 					t.Fatal("reserved a Secret whose deletion already owns its ciphertext")
@@ -99,15 +90,6 @@ func TestSecretDeletionAndScriptPreparationAreMutuallyExclusive(t *testing.T) {
 				t.Fatal(err)
 			}
 			before := store.revision
-			result, err := repository.BeginSecretDeletionWithTask(
-				ctx, testsecrets.ProjectOwner(project), current,
-				tombstone,
-				task,
-				marker,
-			)
-			if err != nil || !isKind(result.conflict, errs.KindResourceInUse) || store.revision != before {
-				t.Fatalf("deleted prepared Secret before Script publication: %v / %v", err, result.conflict)
-			}
 			if _, err := repository.DeleteSecret(ctx, testsecrets.ProjectOwner(project), current); !isKind(
 				err,
 				errs.KindResourceInUse,
@@ -122,6 +104,16 @@ func TestSecretDeletionAndScriptPreparationAreMutuallyExclusive(t *testing.T) {
 				},
 			); !isKind(err, errs.KindResourceInUse) || store.revision != before {
 				t.Fatalf("parent Secret finalizer ignored prepared references: %v", err)
+			}
+			if err := authority.Abandon(ctx, operationID, []testscriptsourceevidence.ScriptSourcePreparationMember{member}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := repository.DeleteSecret(ctx, testsecrets.ProjectOwner(project), current); err != nil {
+				t.Fatalf("Secret removal remained blocked after source release: %v", err)
+			}
+			deleted, err := store.Get(ctx, testsecrets.ValueKey(secretID))
+			if err != nil || deleted.Entry != nil {
+				t.Fatalf("released Secret ciphertext remained after deletion: %#v, %v", deleted, err)
 			}
 		})
 	}

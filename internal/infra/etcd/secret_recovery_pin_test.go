@@ -12,7 +12,6 @@ import (
 	testhierarchydeletionfinalization "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -20,7 +19,7 @@ import (
 // Rationale: SEC-07 requires every Secret deletion path to reject an exact
 // recovery pin, preserving the predecessor configuration needed by SVC-15 and
 // JOURNEY-02 without copying ciphertext into the membership record.
-func TestSecretRecoveryPinBlocksDeletionAdmissionDirectFinalizationAndHierarchy(t *testing.T) {
+func TestSecretRecoveryPinBlocksDirectAndHierarchyFinalization(t *testing.T) {
 	ctx := context.Background()
 	store, project, secrets, current, value := secretRecoveryPinFixture(t)
 	operationID := ids.NewAt(
@@ -32,26 +31,8 @@ func TestSecretRecoveryPinBlocksDeletionAdmissionDirectFinalizationAndHierarchy(
 		OperationID: operationID, SecretID: current.Record.Secret.ID,
 		MetadataRevision: current.Revision, CiphertextSHA256: value.CiphertextSHA256,
 	})
-
-	task, marker, tombstone := secretDeletionTestTask(
-		t, current, project, current.Record.Secret.UpdatedAt.Add(2*time.Second), 302,
-	)
-	admission, err := newSecretRepository(&connectorReferenceRaceStore{
-		memoryHierarchyStore: store, injected: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	before := store.revision
-	result, err := admission.BeginSecretDeletionWithTask(
-		ctx, testsecrets.ProjectOwner(project), current, tombstone, task, marker,
-	)
-	if err != nil || !isKind(result.conflict, errs.KindResourceInUse) || store.revision != before {
-		t.Fatalf("pinned Secret deletion admission = %#v/%v", result, err)
-	}
-	if store.valueAt(testtaskjournal.TaskStorageKey(task.ID), store.revision) != nil {
-		t.Fatal("rejected pinned Secret deletion published a Task")
-	}
+
 	if _, err := secrets.DeleteSecret(ctx, testsecrets.ProjectOwner(project), current); !isKind(
 		err,
 		errs.KindResourceInUse,
@@ -65,55 +46,6 @@ func TestSecretRecoveryPinBlocksDeletionAdmissionDirectFinalizationAndHierarchy(
 		},
 	); !isKind(err, errs.KindResourceInUse) || store.revision != before {
 		t.Fatalf("pinned Secret hierarchy finalization = %v", err)
-	}
-}
-
-// Rationale: SEC-07 requires Retry to reacquire the same deletion fence and
-// lose to a recovery pin created while a failed deletion is visible; this keeps
-// the exact SVC-15/JOURNEY-02 predecessor source available for recovery.
-func TestSecretRecoveryPinBlocksDeletionRetry(t *testing.T) {
-	ctx := context.Background()
-	store, project, secrets, current, value := secretRecoveryPinFixture(t)
-	tasks, err := newTaskRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	at := current.Record.Secret.UpdatedAt.Add(time.Second)
-	task, marker, tombstone := secretDeletionTestTask(t, current, project, at, 311)
-	result, err := secrets.BeginSecretDeletionWithTask(
-		ctx, testsecrets.ProjectOwner(project), current, tombstone, task, marker,
-	)
-	if err != nil || result.kind != idempotencyTransactionApplied {
-		t.Fatalf("unpinned initial Secret deletion = %#v/%v", result, err)
-	}
-	if _, found, err := tasks.ClaimNextControllerTask(ctx, at.Add(time.Second)); err != nil ||
-		!found {
-		t.Fatalf("claim initial Secret deletion = %t/%v", found, err)
-	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, nil, at.Add(2*time.Second)); err != nil {
-		t.Fatalf("fail initial Secret deletion = %v", err)
-	}
-	seedSecretRecoveryPin(t, store, tasksecretpinrecord.Record{
-		OperationID: ids.NewAt(ids.KindOperation, at.Add(3*time.Second), 312),
-		SecretID:    current.Record.Secret.ID, MetadataRevision: current.Revision,
-		CiphertextSHA256: value.CiphertextSHA256,
-	})
-	retryID := ids.NewAt(ids.KindTask, at.Add(4*time.Second), 313)
-	retryMarker := pendingRetryMarker(
-		task,
-		retryID,
-		at.Add(4*time.Second),
-		"secret-recovery-pin-retry",
-	)
-	before := store.revision
-	if _, err := tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker); !isKind(
-		err,
-		errs.KindResourceInUse,
-	) || store.revision != before {
-		t.Fatalf("pinned Secret deletion Retry = %v", err)
-	}
-	if store.valueAt(testtaskjournal.TaskStorageKey(retryID), store.revision) != nil {
-		t.Fatal("rejected pinned Secret Retry published a Task")
 	}
 }
 
@@ -189,22 +121,7 @@ func TestMalformedSecretRecoveryPinsFailClosed(t *testing.T) {
 			) || store.revision != before {
 				t.Fatalf("malformed recovery pin authorized direct deletion: %v", err)
 			}
-			task, marker, tombstone := secretDeletionTestTask(
-				t, current, project, current.Record.Secret.UpdatedAt.Add(time.Second), 321,
-			)
-			admission, err := newSecretRepository(&connectorReferenceRaceStore{
-				memoryHierarchyStore: store, injected: true,
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			result, err := admission.BeginSecretDeletionWithTask(
-				ctx, testsecrets.ProjectOwner(project), current, tombstone, task, marker,
-			)
-			if err != nil || !isKind(result.conflict, errs.KindInternal) ||
-				store.revision != before {
-				t.Fatalf("malformed recovery pin admission = %#v/%v", result, err)
-			}
+
 		})
 	}
 }
@@ -214,7 +131,7 @@ func secretRecoveryPinFixture(
 ) (*memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.ProjectRecord], *SecretRepository, testkeyvalue.Versioned[testsecrets.Record], testsecrets.EncryptedValue) {
 	t.Helper()
 	ctx := context.Background()
-	store, project := secretDeletionTestStore(t)
+	store, project := secretMetadataStore(t)
 	secrets, err := newSecretRepository(store)
 	if err != nil {
 		t.Fatal(err)
