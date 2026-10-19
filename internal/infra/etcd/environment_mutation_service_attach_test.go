@@ -546,7 +546,7 @@ func TestAttachRenameNoOpPersistsMarkerWithoutEpochAdvance(t *testing.T) {
 		t.Fatalf("NewAttachRepository() error = %v", err)
 	}
 	record, facts := testPendingAttach(t, scope, 940, "no-op-rename", nil)
-	current := createTestAttach(t, ctx, repository, scope, record, &facts)
+	current := seedAttachMetadata(t, repository, record, &facts)
 	marker := testDirectMarker()
 	marker.Locator = testidempotency.IdempotencyLocator{
 		ScopeKind: testidempotency.IdempotencyScopeEnvironment,

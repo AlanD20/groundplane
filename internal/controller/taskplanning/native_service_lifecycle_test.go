@@ -28,6 +28,12 @@ func TestNativeLifecycleRetainsBothSlotsAndOriginalProxy(t *testing.T) {
 	for _, action := range []workexecution.Action{workexecution.ActionStart, workexecution.ActionStop, workexecution.ActionDestroy} {
 		t.Run(string(action), func(t *testing.T) {
 			capture, expected := nativeLifecycleCaptureFixture(t, action)
+			generation := capture.Runtime.RenderGeneration()
+			name := capture.Runtime.Release.Current.Projection.DesiredServices[0].Desired.Name
+			runtimeValue, err := releaserender.EncodeServiceLifecycleRenderInput(*capture.Runtime)
+			if err != nil {
+				t.Fatal(err)
+			}
 			encoded, err := servicelifecyclework.Encode(capture)
 			if err != nil {
 				t.Fatal(err)
@@ -37,9 +43,19 @@ func TestNativeLifecycleRetainsBothSlotsAndOriginalProxy(t *testing.T) {
 				t.Fatal(err)
 			}
 			capture.Runtime.Release.Current.Projection.NormalizedCompose = []byte("not execution authority")
+			capture.Runtime.Release.Current.Projection.DesiredServices[0].Desired.Name = "edited-after-capture"
+			decodedRuntime, err := releaserender.DecodeServiceLifecycleRenderInput(runtimeValue)
+			clear(runtimeValue)
+			if err != nil || decodedRuntime.RenderGeneration() != generation ||
+				decodedRuntime.Release.Current.Projection.DesiredServices[0].Desired.Name != name {
+				t.Fatalf("captured lifecycle projection aliases later edits or changed generation: %v", err)
+			}
 			retained, err := servicelifecyclework.Decode(encoded)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if retained.Runtime.Release.Current.Projection.DesiredServices[0].Desired.Name != name {
+				t.Fatal("captured lifecycle input selected a later desired Service")
 			}
 			second, err := servicelifecycle.BuildWorkInput(retained)
 			if err != nil || !proto.Equal(first, second) {
