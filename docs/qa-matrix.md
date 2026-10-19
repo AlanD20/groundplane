@@ -1043,6 +1043,13 @@ retains the full dated review narrative and local run locators.
 | Three in [workload_images_test.go](../internal/agent/workload_images_test.go) | Unknown envelope rejection, exact image-result forwarding without Task capacity use, and one bounded image worker joined at teardown. | SVC-01, TASK-07, HOST-05: fake resolver/session behavior, not actual Docker inspection, Release publication or reconnect fencing. |
 | Ten in [backup_secret_inbox_test.go](../internal/agent/backup_secret_inbox_test.go) | Exact one-use slot ownership, receive-buffer clearing, stale assignment refusal, closed purpose selection, terminal/abort/stop clearing, cancellation races, malformed sequences and fresh-pool redispatch. | CON-07, TASK-10, BAK-05/08/16: in-memory ownership only, not Controller credential resolution, S3 execution, durable claim recovery or process-wide erasure. |
 
+#### Retired application fixtures for the former execution engine
+
+| Reviewed fixtures | Disposition | Native obligation still open |
+| --- | --- | --- |
+| Blueprint executed-artifact, hidden-child publication, mixed worker/recovery/observer and reconnect-epoch fixtures | Removed their old TaskRecord, assignment, Step and publisher helpers. Retained shared digest and image-catalog builders without execution APIs. Tests named “native” that still constructed hidden child Tasks were not proof of the replacement. | BP-04, GRP-04, TASK-70/95/98/122/126: publish the exact executed per-Service runtime, preserve independent runtimes and immutable history, reject changed source/proof without partial writes, restore every affected member, retain the original failure and replay completion after restart. Reconnect must retain the attempt rather than increment the former execution epoch. Removal qualifies none of these journeys. |
+| Generic adapter runtime, registered Component action and Entry-removal Agent fixtures | Removed the deleted generic worker/assignment dispatch and canned observation/file-helper responses. Current adapter compiler, Component physical activation, file-delivery and Entry owners retain their separately recorded checks. | ATT-01, SCRIPT-07, CMP-02/03, TASK-64/65/66/90/92/114: explicit authentication, closed secret-safe execution, immutable captured input, exact Component image/generation/evidence and actual Entry-file removal with last-shared-file retention still require joined native delivery/effects/settlement proof. No full operation pass is claimed. |
+
 #### Public API models and error taxonomy
 
 | Reviewed tests | Disposition and reason | Matrix coverage or gap |
