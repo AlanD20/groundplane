@@ -6,33 +6,43 @@ import (
 	"encoding/hex"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
-	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
-// QA: ENT-08, SVC-15, JOURNEY-02; local sealed-plan proof, not live recovery.
+// QA: TASK-72, ENT-08, SVC-15, JOURNEY-02; native capture proof, not live recovery.
 // Rationale: a successful Entry candidate must prepare a new receipt from the
 // selected acknowledged runtime while keeping the stable proxy byte-identical.
 // A stopped or unrelated Service has no update.
 func TestEntryMutationPreparesOnlySelectedAcknowledgedRuntime(t *testing.T) {
-	_, _, input := redeployRestorationInput(t, domain.StrategyBlueGreen)
-	render := input.Members[0].Render
-	priorRuntime := entryReceiptRuntimeFromAuthority(t, render)
+	render, authored, active, retained := nativeRetainedArtifactsFixture(t)
+	source := acknowledgedRuntimeSource(t, active, retained)
+	priorRuntime := source.Runtime
 	current := render.Projection
-	current.ComposeArtifact = slices.Clone(priorRuntime.CurrentArtifact)
+	baseline, err := RetainBlueprintNativeRuntimeSources(
+		authored,
+		[]serviceruntimerecord.Record{source},
+		[]string{render.ServiceID},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.ComposeArtifact, err = proto.MarshalOptions{Deterministic: true}.Marshal(baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
 	entry := testentries.Record{EnvironmentID: current.EnvironmentID,
 		Entry: core.EnvEntry{ID: "ev_01ARZ3NDEKTSV4RRFFQ69G5FC1", Kind: core.EntryKindEnv,
 			Key: "MODE", Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"api"}},
@@ -48,41 +58,79 @@ func TestEntryMutationPreparesOnlySelectedAcknowledgedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task := etcd.TaskRecord{ID: candidate.RevisionID, PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FC5",
-		Type: testtaskjournal.TaskUpdate, Executor: testtaskjournal.TaskExecutorAgent, Target: current.EnvironmentID,
-		RenderGeneration: int32(candidate.RenderGeneration), TimeoutSeconds: 120}
+	at := time.Now().UTC()
+	digest := sha256.Sum256([]byte("MODE=test\n"))
+	intent := workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: hex.EncodeToString(digest[:])}
+	task := workexecution.Task{
+		ID:     candidate.RevisionID,
+		Actor:  workexecution.OperatorActor,
+		Action: workexecution.ActionUpdate,
+		Scope: workexecution.Scope{
+			TenantID:      render.TenantID,
+			ProjectID:     render.ProjectID,
+			EnvironmentID: current.EnvironmentID,
+		},
+		TargetID:      entry.Entry.ID,
+		Intent:        intent,
+		ExpectedItems: 1,
+		CreatedAt:     at,
+		UpdatedAt:     at,
+		Deadline:      at.Add(time.Minute),
+	}
+	item := workexecution.Item{
+		ID:        ids.New(ids.KindWorkItem),
+		TaskID:    task.ID,
+		Operation: workexecution.EntryConfiguration,
+		TargetID:  current.EnvironmentID,
+		Placement: workexecution.Placement{Executor: workexecution.Agent, HostID: ids.New(ids.KindHost)},
+		Phase:     workexecution.Waiting,
+		Wait:      &workexecution.Wait{Reason: workexecution.WaitInput},
+		Cleanup:   workexecution.CleanupNone,
+		CreatedAt: at,
+		UpdatedAt: at,
+		Deadline:  task.Deadline,
+	}
+	item.Claims = []workexecution.Claim{
+		{ScopeID: current.EnvironmentID},
+		{ScopeID: current.EnvironmentID, HostID: item.Placement.HostID},
+	}
+	files := []testtaskmaterialization.Record{}
+	configuration := runtimeconfiguration.WorkCapture{TaskID: task.ID, WorkItemID: item.ID, Placement: item.Placement,
+		ReadRevision: 19, Generation: candidate.RenderGeneration,
+		Current: runtimeconfiguration.Reference{ID: ids.New(ids.KindConfig), EnvironmentID: current.EnvironmentID,
+			Generation: candidate.RenderGeneration, SHA256: intent.SHA256}}
 	for _, material := range materials {
-		digest := sha256.Sum256([]byte("MODE=test\n"))
-		task.Materializations = append(task.Materializations, testtaskmaterialization.Record{
+		files = append(files, testtaskmaterialization.Record{
 			StepID: ids.New(ids.KindStep), MaterializationID: ids.New(ids.KindConfig),
 			EnvironmentID: current.EnvironmentID, Destination: material.Destination,
 			ServiceID: material.ServiceID, ServiceName: material.ServiceName, OutputKind: material.OutputKind,
 			UID: material.UID, GID: material.GID, Mode: uint32(material.Mode), Length: 10,
 			SHA256: hex.EncodeToString(digest[:]), Source: material.Source,
 		})
+		configuration.Destinations = append(configuration.Destinations, material.Destination)
 	}
 	runtime := EntryMutationRuntime{Projection: current, EpochRevision: 19,
 		RunningServiceIDs: []string{render.ServiceID},
 		Sources: []testkeyvalue.Versioned[serviceruntimerecord.Record]{{
-			Revision: 17, Record: serviceruntimerecord.Record{Runtime: priorRuntime},
+			Revision: 17, Record: source,
 		}}}
-	task, err = runtime.PrepareTask("/var/lib/groundplane/vol", task, candidate,
-		"step_01ARZ3NDEKTSV4RRFFQ69G5FC9")
+	input, capture, err := runtime.PrepareConfigurationWork(EntryConfigurationRequest{Task: task, Item: item,
+		OperationID: ids.New(ids.KindOperation), Candidate: candidate, Files: files, Configuration: configuration})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.EntryRuntime == nil || len(task.EntryRuntime.Updates) != 1 ||
-		task.EntryRuntime.Updates[0].PreviousRevision != 17 ||
-		task.EntryRuntime.Updates[0].ServiceID != render.ServiceID {
-		t.Fatalf("prepared Entry runtime = %#v", task.EntryRuntime)
+	if len(capture.Consumers) != 1 || capture.Consumers[0].Revision != 17 ||
+		capture.Consumers[0].Previous.Runtime.ServiceID != render.ServiceID ||
+		!slices.Equal(input.RunningConsumerIds, []string{render.ServiceID}) {
+		t.Fatal("native Entry capture did not select the acknowledged running consumer")
 	}
 	artifact := new(agentpb.ComposeArtifact)
 	if proto.Unmarshal(candidate.ComposeArtifact, artifact) != nil {
 		t.Fatal("open Entry candidate artifact")
 	}
-	update := task.EntryRuntime.Updates[0]
+	update := capture.Consumers[0]
 	prepared, err := executionplan.PrepareEntryRuntime(
-		artifact, priorRuntime, update.CurrentArtifactID, update.RetainedPriorArtifactID,
+		artifact, priorRuntime, update.CurrentArtifactID, update.RetainedArtifactID,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -120,53 +168,4 @@ func TestEntryMutationPreparesOnlySelectedAcknowledgedRuntime(t *testing.T) {
 		proxy(afterRetained) != nil {
 		t.Fatal("Entry mutation changed or fabricated the acknowledged stable proxy")
 	}
-}
-
-func entryReceiptRuntimeFromAuthority(
-	t *testing.T,
-	render testreleaserender.ReleaseRenderInput,
-) executionplan.CandidateRuntime {
-	t.Helper()
-	artifact := new(agentpb.ComposeArtifact)
-	if render.PriorRuntime == nil || proto.Unmarshal(render.PriorRuntime.CurrentArtifact, artifact) != nil {
-		t.Fatal("open prior runtime authority")
-	}
-	runtime := executionplan.CandidateRuntime{ServiceID: render.ServiceID,
-		CurrentArtifact:       slices.Clone(render.PriorRuntime.CurrentArtifact),
-		RetainedPriorArtifact: slices.Clone(render.PriorRuntime.RetainedPriorArtifact)}
-	for _, service := range artifact.Services {
-		if service.ServiceId != render.ServiceID {
-			continue
-		}
-		if service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
-			continue
-		}
-		for _, label := range service.ExpectedLabels {
-			if label.Key == "com.groundplane.release-id" {
-				runtime.ReleaseID = label.Value
-			}
-		}
-		if service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT {
-			runtime.Target = service.Slot
-		} else {
-			runtime.Target = "singleton"
-		}
-	}
-	for _, service := range artifact.Services {
-		if service.ServiceId == render.ServiceID &&
-			service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
-			var err error
-			runtime.ProxyGeneration, err = executionplan.ProxyConfigGeneration(
-				service.ProxyImplementation,
-				service.ProxyConfigJson,
-				runtime.ReleaseID,
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			digest := sha256.Sum256(service.ProxyConfigJson)
-			runtime.ProxyConfigSHA256 = digest[:]
-		}
-	}
-	return runtime
 }

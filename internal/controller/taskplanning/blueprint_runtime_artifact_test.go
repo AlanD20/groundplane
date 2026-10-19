@@ -8,15 +8,18 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 )
 
-// Rationale: retained native references may preserve their own proxy config,
+// TASK-72: retained native references may preserve their own proxy config,
 // but must neither restore nor veto obsolete Component-only resource config.
 func TestRetainBlueprintRuntimeScopesResourcesToNativeReferences(t *testing.T) {
 	prior := &agentpb.ComposeArtifact{
@@ -192,19 +195,27 @@ func acknowledgedRuntimeArtifacts(
 	t *testing.T,
 ) (*agentpb.ComposeArtifact, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact) {
 	t.Helper()
-	_, _, input := redeployRestorationInput(t, domain.StrategyBlueGreen)
-	source := input.Members[0].Render
+	_, current, active, prior := nativeRetainedArtifactsFixture(t)
+	return current, active, prior
+}
+
+func nativeRetainedArtifactsFixture(
+	t *testing.T,
+) (releaserender.ReleaseRenderInput, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact) {
+	t.Helper()
+	source := nativeRetainedRenderFixture(t, domain.StrategyBlueGreen)
 	current := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(source.Projection.ComposeArtifact, current); err != nil {
 		t.Fatal(err)
 	}
 	source.CandidateWorkload.LocalImageID = "sha256:" + strings.Repeat("c", 64)
 	active := nativeRuntimeFixture(t, source, true)
-	source.ArtifactID, source.ReleaseID = source.PriorArtifactID, input.Members[0].Intent.PriorServingReleaseID
+	captured := source
+	source.ArtifactID, source.ReleaseID = source.PriorArtifactID, "dep_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 	source.CandidateTarget, source.Slot = source.PriorTarget, source.PriorSlot
 	source.ProxyGeneration = source.PriorProxyGeneration
 	source.CandidateWorkload.LocalImageID = "sha256:" + strings.Repeat("b", 64)
-	return current, active, nativeRuntimeFixture(t, source, false)
+	return captured, current, active, nativeRuntimeFixture(t, source, false)
 }
 
 // These explicit acknowledgement fields model a completed fixture deployment.
@@ -248,13 +259,17 @@ func acknowledgedRuntimeSource(t *testing.T, active, retained *agentpb.ComposeAr
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256([]byte("completed fixture deployment"))
+	at := time.Date(2026, 8, 22, 20, 0, 0, 0, time.UTC)
+	attemptID := ids.New(ids.KindAttempt)
+	input := workexecution.Input{ID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", SHA256: hex.EncodeToString(digest[:])}
 	return serviceruntimerecord.Record{EnvironmentID: active.OwnerId, Runtime: runtime,
 		Source: serviceruntimerecord.Acknowledgement{
-			TaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			StepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", AgentID: "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			AssignmentID: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV", ExecutionEpoch: 1, RenderGeneration: 1,
-			PlanHash: hex.EncodeToString(digest[:]), EffectDigest: hex.EncodeToString(digest[:]),
-			AcknowledgedAt: time.Date(2026, 8, 22, 20, 0, 0, 0, time.UTC),
+			TaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", WorkItemID: ids.New(ids.KindWorkItem), AttemptID: attemptID,
+			Executor: workexecution.Identity{Executor: workexecution.Agent, HostID: ids.New(ids.KindHost),
+				AgentID: ids.New(ids.KindAgent), Generation: 1}, Input: input,
+			Checkpoint: workexecution.Checkpoint{AttemptID: attemptID, Sequence: 1,
+				StageID: ids.New(ids.KindStep), Evidence: input, RecordedAt: at},
+			RenderGeneration: 7, AcknowledgedAt: at,
 		}}
 }
 
