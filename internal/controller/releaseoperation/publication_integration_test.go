@@ -1,7 +1,6 @@
 package releaseoperation
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,8 +13,8 @@ import (
 	"time"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -26,21 +25,21 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
-	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 )
 
-// This invokes the complete direct publisher: image preflight, staging, hook
-// selection, render encoding, plan construction, and final ledger transaction.
-// The store implements CAS; it does not substitute a publisher response.
+// TASK-100: execute native direct publication through image preflight, frozen
+// render/configuration capture, staging and atomic Task/work acceptance. The CAS
+// store supplies persistence only, not the publisher's result. This does not run
+// Agent effects, prepare the later complete graph or settle applied runtime.
 func TestPublishFirstBlueGreenCommitsTaskAndCandidateAuthority(t *testing.T) {
 	testPublishFirstBlueGreen(t, false, false)
 }
@@ -218,9 +217,6 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := plans.EnableReleasePlans(ledger); err != nil {
-		t.Fatal(err)
-	}
 	proxyImage := componentsdk.OCIImage{
 		Repository:  "docker.io/library/caddy",
 		IndexDigest: strings.Repeat("e", 64),
@@ -275,6 +271,13 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	if err != nil {
 		t.Fatal(err)
 	}
+	bound, err := hostbindings.PrepareLocalEnrollment(ctx, store, ids.New(ids.KindAgent))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := store.Transact(ctx, bound.Conditions, bound.Mutations); err != nil || !result.Succeeded {
+		t.Fatalf("native host enrollment: %v", err)
+	}
 	epoch := store.values["/v1/runtime/environment-mutation-epochs/"+environmentID]
 	if epoch == nil {
 		t.Fatal("fixture missing real environment epoch")
@@ -309,7 +312,8 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	}
 	planning := testreleasequeries.ReleasePlanningService{
 		Service: testkeyvalue.Versioned[testservices.ServiceRecord]{
-			Record: testservices.ServiceRecord{EnvironmentID: environmentID, Desired: desired},
+			Record:   testservices.ServiceRecord{EnvironmentID: environmentID, Desired: desired},
+			Revision: headRevision,
 		},
 	}
 	candidate, err := producer.deployCandidate(
@@ -321,24 +325,12 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	if err != nil {
 		t.Fatalf("actual first blue-green candidate: %v", err)
 	}
-	response, err := producer.publish(
-		ctx,
-		scope,
-		etcd.ReleaseDesiredService,
-		serviceID,
-		headRevision,
-		"",
-		[]releaseCandidateInput{candidate}, testidempotency.IdempotencyLocator{
-			ScopeKind: testidempotency.IdempotencyScopeEnvironment,
-			ScopeID:   environmentID,
-			Method:    http.MethodPost,
-			Route:     "/services/{id}/deploy",
-			Key:       "first-blue-green",
-		}, durable,
-		protected,
-	)
+	response, err := producer.publishServiceWork(ctx, scope, candidate, testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environmentID,
+		Method: http.MethodPost, Route: serviceDeployRoute, Key: "first-blue-green",
+	}, durable, protected)
 	if err != nil {
-		t.Fatalf("actual first blue-green publisher: %v", err)
+		t.Fatalf("native first blue-green publisher: %v", err)
 	}
 	if response.Status != http.StatusAccepted {
 		t.Fatalf("publication status=%d", response.Status)
@@ -349,125 +341,51 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	if json.Unmarshal(response.Body, &accepted) != nil || accepted.TaskID == "" {
 		t.Fatal("missing accepted Task")
 	}
-	stored, err := tasks.GetTask(ctx, accepted.TaskID)
+	queue, err := workqueue.NewRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	descriptor, err := tasks.CandidateReleaseDescriptor(ctx, stored.Record, stored.ReadRevision)
-	if err != nil || stored.Record.Params[testtaskjournal.TaskComposeArtifactParam] == "" ||
-		descriptor.PlanID != stored.Record.PlanID {
-		t.Fatalf("published candidate authority cannot be reopened: %v", err)
+	stored, revision, err := queue.ReadTask(ctx, accepted.TaskID, 0)
+	if err != nil || stored.Task.Action != workexecution.ActionDeploy || stored.Task.TargetID != serviceID ||
+		stored.Task.Scope.EnvironmentID != environmentID || stored.Task.Progress.Waiting != 1 {
+		t.Fatalf("accepted action lost native identity or preparation barrier: %v", err)
 	}
-	procedure, err := executionplan.OpenCandidateReleaseDescriptor(descriptor)
-	if err != nil || len(procedure.GetMembers()) != 1 || procedure.GetMembers()[0].GetServingPredecessor() != nil ||
-		procedure.GetMembers()[0].GetCandidateAbsence() == nil || procedure.GetMembers()[0].GetCandidateArtifactId() != stored.Record.Params[testtaskjournal.TaskComposeArtifactParam] {
-		t.Fatalf("first publication lost its exact artifact or absence recovery authority: %v", err)
+	page, err := queue.ListWork(ctx, accepted.TaskID, "", 100, revision)
+	if err != nil || len(page.Items) != 1 || page.Items[0].Item.Operation != workexecution.Release ||
+		page.Items[0].Item.Input != nil || page.Items[0].Item.Phase != workexecution.Waiting {
+		t.Fatalf("acceptance made an incompletely prepared Release executable: %v", err)
 	}
-	render, err := ledger.GetReleaseRenderInputAt(
-		ctx,
-		procedure.GetMembers()[0].GetCandidateReleaseId(),
-		stored.ReadRevision,
-	)
+	work, err := queue.ReadWork(ctx, accepted.TaskID, page.Items[0].Item.ID, revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	captured, err := ledger.GetServiceRollout(ctx, work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preparation, _, err := ledger.ReadDirectReleasePreparation(ctx, work)
+	if err != nil || preparation.Predecessor.Serving != nil ||
+		preparation.Intent.PriorServingReleaseID != "" || preparation.Intent.CandidateWorkload.LocalImageID != "sha256:"+strings.Repeat("a", 64) ||
+		preparation.Intent.CandidateWorkload.RequestedReference != "api:first" {
+		t.Fatalf("first native publication lost image or initial-absence authority: %v", err)
+	}
+	render := captured.Record.Render
 	selected, _, found := proxyImage.Select(runtime.GOOS, runtime.GOARCH)
-	if err != nil || !found || render.Record.ProxyImage == nil ||
-		render.Record.ProxyImage.Repository != proxyImage.Repository ||
-		render.Record.ProxyImage.IndexDigest != proxyImage.IndexDigest ||
-		render.Record.ProxyImage.Platform != selected {
-		t.Fatalf("publication failed to persist exact compiled proxy identity: %v", err)
+	if !found || render.ProxyImage == nil || render.ProxyImage.Repository != proxyImage.Repository ||
+		render.ProxyImage.IndexDigest != proxyImage.IndexDigest || render.ProxyImage.Platform != selected {
+		t.Fatal("publication failed to persist exact compiled proxy identity")
 	}
-	reconstructed, err := plans.ResolveExecutionPlan(ctx, stored.Record)
-	if err != nil {
-		t.Fatalf("reconstruct published plan: %v", err)
-	}
-	var reconstructedArtifact *agentpb.ComposeArtifact
-	for _, candidateArtifact := range reconstructed.GetArtifacts() {
-		if candidateArtifact.GetArtifactId() == stored.Record.Params[testtaskjournal.TaskComposeArtifactParam] {
-			reconstructedArtifact = candidateArtifact
-			break
-		}
-	}
-	if reconstructedArtifact == nil {
-		t.Fatal("reconstructed sealed plan omitted its candidate artifact")
-	}
-	if profileDisabled {
-		for _, service := range reconstructedArtifact.GetServices() {
-			if service.GetServiceId() != serviceID || service.GetExpectedReplicas() != 1 {
-				t.Fatal("explicit Deploy did not select exactly its configured singleton")
-			}
-		}
-	}
-	wantArtifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(reconstructedArtifact)
-	if err != nil {
-		t.Fatal(err)
-	}
-	publication := store.values["/v1/records/release-publications/"+stored.Record.Params[testreleaserender.TaskReleasePublicationParam]]
-	var envelope struct {
-		Data testreleases.ReleasePublicationMarker `json:"data"`
-	}
-	if publication == nil || json.Unmarshal(publication.Value, &envelope) != nil ||
-		!bytes.Equal(envelope.Data.ExecutedComposeArtifact, wantArtifact) {
-		t.Fatal("ordinary publication did not retain its reconstructed sealed candidate artifact")
-	}
-	authoredArtifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Equal(envelope.Data.ExecutedComposeArtifact, authoredArtifact) {
-		t.Fatal("ordinary publication retained the authored pre-native projection instead of the prepared candidate")
-	}
+	provePreparedReleaseRuntime(t, store, captured.Record, serviceID, detachedNetwork)
 	if detachedNetwork {
-		captured := &agentpb.ComposeArtifact{}
-		if err := proto.Unmarshal(render.Record.Projection.ComposeArtifact, captured); err != nil {
-			t.Fatal(err)
-		}
+		capturedSource := mustPublicationArtifact(t, render.Projection.ComposeArtifact)
 		const oldNetwork = "gp_attach_net_01arz3ndektsv4rrffq69g5fav"
-		if strings.Contains(string(captured.CanonicalYaml), oldNetwork) {
-			t.Fatal("new Release revived a detached network from an earlier desired artifact")
-		}
-		if !strings.Contains(string(captured.CanonicalYaml), publicationCurrentAttachNetwork) {
-			t.Fatal("new Release omitted the current Attach network")
-		}
-		if !strings.Contains(string(artifact.CanonicalYaml), oldNetwork) ||
-			!proto.Equal(artifact, mustPublicationArtifact(t, projection.ComposeArtifact)) {
-			t.Fatal("Release capture rewrote its immutable desired source")
+		if strings.Contains(string(capturedSource.CanonicalYaml), oldNetwork) ||
+			!strings.Contains(string(capturedSource.CanonicalYaml), publicationCurrentAttachNetwork) {
+			t.Fatal("Release capture did not replace detached memberships with current Attaches")
 		}
 	}
-	provePreparedReleaseRuntime(t, store, envelope.Data, reconstructed, serviceID, detachedNetwork)
 	if !proto.Equal(artifact, mustPublicationArtifact(t, projection.ComposeArtifact)) {
 		t.Fatal("Release capture changed its immutable source")
-	}
-	// Rationale: aborting an unassigned Release must retire its publication
-	// fence as well as the Task, otherwise every subsequent deployment locks.
-	store.failAbortCleanup = true
-	if _, err := tasks.AbortPendingTask(ctx, stored.Record.ID, time.Now().UTC().Add(time.Second)); err == nil {
-		t.Fatal("expected interrupted cleanup")
-	}
-	interrupted, err := tasks.GetTask(ctx, stored.Record.ID)
-	if err != nil || interrupted.Record.Status != testtaskjournal.TaskStatusAborted ||
-		interrupted.Record.StartedAt != nil {
-		t.Fatalf("cleanup interruption lost unassigned terminal Task: %v", err)
-	}
-	fence, err := store.Get(ctx, "/v1/runtime/release-fence-sets/"+environmentID)
-	if err != nil || fence.Entry == nil {
-		t.Fatalf("expected owned fence awaiting replay: %v", err)
-	}
-	aborted, err := tasks.AbortPendingTask(ctx, stored.Record.ID, time.Now().UTC().Add(2*time.Second))
-	if err != nil || aborted.Record.Status != testtaskjournal.TaskStatusAborted {
-		t.Fatalf("abort unassigned Release: %v", err)
-	}
-	if !aborted.Record.FinishedAt.Equal(*interrupted.Record.FinishedAt) {
-		t.Fatal("cleanup replay changed the original terminal timestamp")
-	}
-	fence, err = store.Get(ctx, "/v1/runtime/release-fence-sets/"+environmentID)
-	if err != nil || fence.Entry != nil {
-		t.Fatalf("aborted unassigned Release retained its Environment fence: %v", err)
-	}
-	revision := store.revision
-	if _, err := tasks.AbortPendingTask(ctx, stored.Record.ID, time.Now().UTC().Add(3*time.Second)); err != nil {
-		t.Fatalf("replay completed abort: %v", err)
-	}
-	if store.revision != revision {
-		t.Fatal("completed Abort replay mutated durable state")
 	}
 }
 
@@ -504,20 +422,8 @@ func (directPublicationImages) ResolveWorkloadImages(
 
 // Minimal revisioned CAS store for this sequential publication journey.
 type directPublicationStore struct {
-	revision         int64
-	values           map[string]*testkeyvalue.KeyValue
-	failAbortCleanup bool
-}
-
-func (store *directPublicationStore) TransactBlueprintChild(
-	ctx context.Context,
-	transaction etcd.BlueprintChildTransaction,
-) (testkeyvalue.TransactionResult, error) {
-	conditions, mutations, err := transaction.Operations()
-	if err != nil {
-		return testkeyvalue.TransactionResult{}, err
-	}
-	return store.Transact(ctx, conditions, mutations)
+	revision int64
+	values   map[string]*testkeyvalue.KeyValue
 }
 
 func (s *directPublicationStore) Health(context.Context) error { return nil }
@@ -555,10 +461,6 @@ func (s *directPublicationStore) GetMany(
 	_ context.Context,
 	r testkeyvalue.GetManyRequest,
 ) (*testkeyvalue.GetManyResult, error) {
-	if s.failAbortCleanup && len(r.Keys) == 2 && strings.HasPrefix(r.Keys[1], "/v1/runtime/release-fence-sets/") {
-		s.failAbortCleanup = false
-		return nil, context.Canceled
-	}
 	revision := r.Revision
 	if revision == 0 {
 		revision = s.revision
@@ -651,27 +553,4 @@ func (s *directPublicationStore) Transact(
 		}
 	}
 	return testkeyvalue.TransactionResult{Succeeded: true, Revision: s.revision}, nil
-}
-
-func (s *directPublicationStore) ValidateBlueprintTaskTerminal(
-	_ context.Context,
-	envelope etcd.BlueprintTaskTerminalTransaction,
-) error {
-	return envelope.ValidateBudget("")
-}
-
-func (s *directPublicationStore) TransactBlueprintTaskTerminal(
-	ctx context.Context,
-	envelope etcd.BlueprintTaskTerminalTransaction,
-) (testkeyvalue.TransactionResult, error) {
-	conditions, mutations, err := envelope.Operations()
-	if err != nil {
-		return testkeyvalue.TransactionResult{}, err
-	}
-	defer func() {
-		for _, mutation := range mutations {
-			clear(mutation.Value)
-		}
-	}()
-	return s.Transact(ctx, conditions, mutations)
 }

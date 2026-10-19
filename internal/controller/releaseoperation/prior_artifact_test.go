@@ -17,13 +17,14 @@ func TestReleaseRetainsEveryServingPredecessorArtifact(t *testing.T) {
 				candidate.slot = domain.SlotGreen
 				candidate.planning.Projection.ServingSlot = domain.SlotBlue
 			}
-			if releaseNeedsPriorArtifact(candidate) {
+			if releasePriorWorkload(domain.Intent{}, false) != nil {
 				t.Fatal("first Release invented a predecessor artifact")
 			}
 			candidate.priorWorkload = &domain.WorkloadSeal{
 				RequestedReference: "api:old", LocalImageID: "sha256:" + strings.Repeat("a", 64), ReplicaCount: 1,
 			}
-			if !releaseNeedsPriorArtifact(candidate) {
+			if got := releasePriorWorkload(domain.Intent{CandidateWorkload: *candidate.priorWorkload}, true); got == nil ||
+				*got != *candidate.priorWorkload {
 				t.Fatal("serving predecessor workload authority would be discarded")
 			}
 		})

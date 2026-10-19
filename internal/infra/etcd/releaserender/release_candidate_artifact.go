@@ -38,7 +38,10 @@ func OpenReleaseCandidateArtifact(capture ServiceRolloutCapture) (*agentpb.Compo
 		artifact.OwnerId != render.EnvironmentID || artifact.ProjectName != "gp-"+strings.ToLower(render.EnvironmentID) ||
 		artifact.AuthorizedVolumeDir != render.AuthorizedVolumeDir || len(artifact.CanonicalYaml) == 0 ||
 		!bytes.Equal(digest[:], artifact.YamlSha256) {
-		return nil, errs.New(errs.KindValidationFailed, "Service candidate artifact differs from its captured identity or content")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Service candidate artifact differs from its captured identity or content",
+		)
 	}
 	role := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON
 	expectedMembers := 1
@@ -55,12 +58,9 @@ func OpenReleaseCandidateArtifact(capture ServiceRolloutCapture) (*agentpb.Compo
 	}
 	count := 0
 	for _, service := range artifact.Services {
-		if service.GetServiceId() != render.ServiceID || service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+		if service.GetServiceId() != render.ServiceID ||
+			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 			continue
-		}
-		if service.GetRole() != role || service.GetImageReference() != render.CandidateWorkload.LocalImageID ||
-			service.GetOwnerComponentId() != "" {
-			return nil, errs.New(errs.KindValidationFailed, "Service candidate workload differs from its captured Release")
 		}
 		releaseID := ""
 		for _, label := range service.GetExpectedLabels() {
@@ -71,13 +71,33 @@ func OpenReleaseCandidateArtifact(capture ServiceRolloutCapture) (*agentpb.Compo
 				releaseID = label.GetValue()
 			}
 		}
+		// The renderer includes both blue-green slots. Only the selected slot
+		// has Release ownership; the other is an inert template, not a second
+		// candidate or an acknowledged predecessor. Never ignore a second
+		// slot claiming this or another Release.
+		if render.Strategy == domain.StrategyBlueGreen &&
+			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT &&
+			(service.GetSlot() == string(domain.SlotBlue) || service.GetSlot() == string(domain.SlotGreen)) &&
+			service.GetSlot() != expectedSlot && releaseID == "" && service.GetOwnerComponentId() == "" {
+			continue
+		}
+		if service.GetRole() != role || service.GetImageReference() != render.CandidateWorkload.LocalImageID ||
+			service.GetOwnerComponentId() != "" {
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Service candidate workload differs from its captured Release",
+			)
+		}
 		if releaseID != render.ReleaseID {
 			return nil, errs.New(errs.KindValidationFailed, "Service candidate belongs to another Release")
 		}
 		if render.Strategy != domain.StrategyRolling &&
 			(service.GetExpectedReplicas() != render.CandidateWorkload.ReplicaCount ||
 				service.GetSlot() != expectedSlot) {
-			return nil, errs.New(errs.KindValidationFailed, "Service candidate count or target differs from its captured Release")
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Service candidate count or target differs from its captured Release",
+			)
 		}
 		count++
 	}

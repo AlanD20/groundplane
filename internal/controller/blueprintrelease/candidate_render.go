@@ -13,6 +13,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -72,9 +73,12 @@ func renderBlueprintCandidateArtifact(
 		if matched != 1 {
 			return nil, errs.New(errs.KindInternal, "Blueprint candidate resolved runtime identity diverges")
 		}
-		service, err := runtime.GetService(name)
-		if err != nil {
-			return nil, errs.New(errs.KindInternal, "Blueprint candidate is absent from resolved runtime")
+		service, found := runtime.Services[name]
+		if !found {
+			service, found = runtime.DisabledServices[name]
+			if !found {
+				return nil, errs.New(errs.KindInternal, "Blueprint candidate is absent from resolved runtime")
+			}
 		}
 		if err := composerender.ApplySealedWorkload(&service, seal); err != nil {
 			return nil, err
@@ -86,7 +90,14 @@ func renderBlueprintCandidateArtifact(
 			project.Services[name] = service
 		} else if _, disabled := project.DisabledServices[name]; disabled {
 			service.DNS = slices.Clone(project.DisabledServices[name].DNS)
-			project.DisabledServices[name] = service
+			// This is a selected Release, not a Blueprint profile change.
+			// Enable only its local render input so explicit Deploy can run it;
+			// preserve authored profiles and all unselected disabled Services.
+			if project.Services == nil {
+				project.Services = make(composetypes.Services)
+			}
+			project.Services[name] = service
+			delete(project.DisabledServices, name)
 		} else {
 			return nil, errs.New(errs.KindInternal, "Blueprint candidate is not an authored native Service")
 		}

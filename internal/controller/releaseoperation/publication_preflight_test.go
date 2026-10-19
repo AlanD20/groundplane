@@ -47,14 +47,13 @@ func TestPublishUnavailableImageResolutionDoesNotStage(t *testing.T) {
 					ReplicaCount:       3,
 				}
 			}
-			response, err := service.publish(
-				context.Background(), testreleasequeries.ReleasePlanningScope{}, etcd.ReleaseDesiredService,
-				"service",
-				1,
-				"",
-				[]releaseCandidateInput{
-					candidate,
-				}, testidempotency.IdempotencyLocator{}, testidempotency.ProtectedIntentRecord{}, idempotentintent.ProtectedEvidence{},
+			response, err := service.publishServiceWork(
+				context.Background(),
+				testreleasequeries.ReleasePlanningScope{},
+				candidate,
+				testidempotency.IdempotencyLocator{},
+				testidempotency.ProtectedIntentRecord{},
+				idempotentintent.ProtectedEvidence{},
 			)
 			if kind, ok := errs.KindOf(err); !ok || kind != errs.KindWorkloadImageResolutionUnavailable {
 				t.Fatalf("missing image error = %v", err)
@@ -102,15 +101,6 @@ func (resolver *missingPublicationImage) ResolveWorkloadImages(
 type publicationStoreWitness struct {
 	t      *testing.T
 	writes int
-}
-
-func (store *publicationStoreWitness) TransactBlueprintChild(
-	context.Context,
-	etcd.BlueprintChildTransaction,
-) (testkeyvalue.TransactionResult, error) {
-	store.writes++
-	store.unexpected()
-	return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "unexpected Blueprint child transaction")
 }
 
 func (store *publicationStoreWitness) unexpected() {
@@ -175,20 +165,3 @@ func (store *publicationStoreWitness) Snapshot(context.Context, io.Writer) error
 	return nil
 }
 func (store *publicationStoreWitness) Close() error { return nil }
-
-func (store *publicationStoreWitness) ValidateBlueprintTaskTerminal(
-	context.Context,
-	etcd.BlueprintTaskTerminalTransaction,
-) error {
-	store.unexpected()
-	return errs.New(errs.KindInternal, "unexpected Blueprint terminal validation")
-}
-
-func (store *publicationStoreWitness) TransactBlueprintTaskTerminal(
-	context.Context,
-	etcd.BlueprintTaskTerminalTransaction,
-) (testkeyvalue.TransactionResult, error) {
-	store.writes++
-	store.unexpected()
-	return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "unexpected Blueprint terminal transaction")
-}
