@@ -1,11 +1,11 @@
-package agent
+package backupruntime
 
 import (
 	"bytes"
 	"testing"
 )
 
-// Agent loss can leave a partial dump in staging. Recovery must compare that
+// BAK-16: Agent loss can leave a partial dump in staging. Recovery must compare that
 // prefix, append only missing original bytes, and reject altered or oversized
 // output instead of accepting corruption or duplicating the prefix.
 func TestDatabaseDumpRecoveryPreservesPrefixAndRejectsChangedOutput(t *testing.T) {
