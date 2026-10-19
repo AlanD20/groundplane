@@ -27,8 +27,6 @@ import (
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: public preparation and protected publication must commit ordered
@@ -530,29 +528,14 @@ func seedBackupPolicyVolumeProjection(
 	if err != nil {
 		t.Fatal(err)
 	}
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, seed)
-	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-	projection.Volumes = append([]testenvironmentprojection.EnvironmentVolumeIdentity{volume}, additionalVolumes...)
-	artifact := &agentpb.ComposeArtifact{}
-	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
-		t.Fatal(err)
-	}
-	artifact.Volumes = make([]*agentpb.ComposeVolume, len(projection.Volumes))
-	for index, selected := range projection.Volumes {
-		artifact.Volumes[index] = &agentpb.ComposeVolume{VolumeId: selected.ID, ComposeName: selected.Key}
-	}
-	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil {
-		t.Fatal(err)
-	}
-	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
-	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
-	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
-	seedEffectiveBlueprintFixture(t, store, projection)
-	headValue, err := testidempotency.EncodeTaskReference(task.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Supply current Volume metadata, not an execution Task. The policy tests
+	// exercise captured source fences independently of Volume creation/effects.
+	projection := withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
+		EnvironmentID: environment.Record.ID,
+		RevisionID:    ids.NewAt(ids.KindTask, environment.Record.CreatedAt, seed), RenderGeneration: 1,
+		Volumes: append([]testenvironmentprojection.EnvironmentVolumeIdentity{volume}, additionalVolumes...),
+	})
+	headValue := routeRepositoryTestStageProjection(t, hierarchy, projection)
 	result, err := store.Transact(context.Background(), []testkeyvalue.Condition{{
 		Key: testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), ModRevision: 0,
 	}}, []testkeyvalue.Mutation{{

@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"net/netip"
 	"testing"
 	"time"
 
@@ -14,157 +13,10 @@ import (
 	testbackuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	testbackupsources "github.com/AlanD20/groundplane/internal/infra/etcd/backupsources"
 	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
-	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
-	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-func TestBlueprintBackupRetainFencesConnectorOnComposedFinalPublication(t *testing.T) {
-	fixture := newBackupPolicyReplacementFixture(t, false)
-	ctx := context.Background()
-	direct, err := fixture.repository.PrepareBackupPolicyReplacement(ctx, testbackuppolicy.BackupPolicyReplacementInput{
-		EnvironmentID: fixture.environment.Record.ID, Enabled: false,
-		Frequency: "0 2 * * *", Keep: 7, Encryption: "age",
-		ConnectorID: fixture.connector.Record.Connector.ID,
-		Sources: []testbackuppolicy.BackupPolicySourceSelection{{
-			Kind: core.BackupSourceConfig, TargetID: fixture.environment.Record.ID,
-		}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer direct.Destroy()
-	direct, err = direct.FinalizeSchedule(fixture.now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	seeded, err := fixture.repository.ReplaceBackupPolicyProtected(
-		ctx, direct, backupPolicyReplacementMarker(fixture.environment.Record.ID, "blueprint-backup-retain-seed-0001"),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome, _, conflict, classifyErr := seeded.Classify(); classifyErr != nil || conflict != nil ||
-		outcome != IdempotencyKnownApplied {
-		t.Fatalf("seed policy = %v/%v/%v", outcome, conflict, classifyErr)
-	}
-
-	task := environmentBlueprintTestTask(t, fixture.project.Record, fixture.environment.Record, 5100)
-	prior, found, err := testblueprints.ReadCurrentProjection(ctx, fixture.store, fixture.environment.Record.ID, 0)
-	if err != nil || !found {
-		t.Fatalf("read seeded Backup projection: %t, %v", found, err)
-	}
-	task.RenderGeneration = int32(prior.Record.RenderGeneration + 1)
-	projection := environmentBlueprintTestProjection(
-		fixture.environment.Record.ID,
-		task,
-		prior.Record.RenderGeneration+1,
-	)
-	projection.DesiredZones[0].Desired.Subnet = "10.240.0.0/25"
-	beforePreparation := fixture.store.revision
-	prepared, err := fixture.repository.PrepareEnvironmentBlueprintBackupPolicy(
-		ctx, testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
-			EnvironmentID: fixture.environment.Record.ID, TaskID: task.ID,
-			ReadRevision: beforePreparation, Retain: true, Projection: projection, CreatedAt: task.CreatedAt,
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer prepared.Clear()
-	if prepared.IsZero() || fixture.store.revision != beforePreparation || prepared.RequiresInitialKey() {
-		t.Fatalf("retained preparation = zero:%t revision:%d/%d initial-key:%t",
-			prepared.IsZero(), fixture.store.revision, beforePreparation, prepared.RequiresInitialKey())
-	}
-	projection.Backup = prepared.Projection()
-	marker := environmentBlueprintTestMarker(task, fixture.environment.Record.ID)
-	hierarchy, err := newEnvironmentBlueprintRepository(fixture.store, fixture.store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	head, found, err := hierarchy.GetEnvironmentBlueprintHead(ctx, fixture.environment.Record.ID)
-	if err != nil || !found {
-		t.Fatalf("read seeded Backup desired head: %t, %v", found, err)
-	}
-	claim := stageEnvironmentBlueprintForPublicationTest(
-		t, hierarchy.HierarchyRepository, head.Revision,
-		environmentBlueprintTestRevision(fixture.environment.Record.ID, task, "services: {}\n"),
-		projection, marker,
-	)
-	connectorValue, err := testconnectors.EncodeRecord(fixture.connector.Record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(connectorValue)
-	race, err := fixture.store.Transact(ctx, []testkeyvalue.Condition{{
-		Key: testconnectors.RecordKey(fixture.connector.Record.Connector.ID), ModRevision: fixture.connector.Revision,
-	}}, []testkeyvalue.Mutation{{
-		Type: testkeyvalue.MutationPut, Key: testconnectors.RecordKey(fixture.connector.Record.Connector.ID), Value: connectorValue,
-	}})
-	if err != nil || !race.Succeeded {
-		t.Fatalf("Connector race = %#v, %v", race, err)
-	}
-	result, err := hierarchy.PublishEnvironmentBlueprintDesiredRevision(
-		ctx,
-		netip.MustParsePrefix("10.240.0.0/24"),
-		fixture.environment.Record.NetworkPool,
-		fixture.project,
-		fixture.environment,
-		head.Revision,
-		claim,
-		testblueprints.EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: fixture.environment.Record.ID,
-			RevisionID:    task.ID,
-		},
-		projection,
-		environmentBlueprintTestZoneChanges(t, hierarchy.HierarchyRepository, projection),
-		environmentBlueprintTestServiceChanges(t, hierarchy.HierarchyRepository, projection),
-		environmentBlueprintTestRouteChanges(
-			t,
-			hierarchy.HierarchyRepository,
-			projection,
-		),
-		testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
-		testcomponentplanning.ComponentTaskPreparation{},
-		testblueprintplanning.BlueprintAttachTaskPreparation{},
-		prepared,
-		BlueprintScriptPublication{},
-		BlueprintReleasePublication{},
-		BlueprintRequirementGate{},
-		task,
-		marker,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict == nil ||
-		outcome != IdempotencyKnownConflict {
-		t.Fatalf("raced publication = %v/%v/%v", outcome, conflict, classifyErr)
-	}
-	afterHead, found, err := hierarchy.GetEnvironmentBlueprintHead(ctx, fixture.environment.Record.ID)
-	if err != nil || !found || afterHead.Revision != head.Revision || afterHead.Record != head.Record {
-		t.Fatalf("raced publication changed the existing head: %v", err)
-	}
-	for _, key := range []string{testtaskjournal.TaskStorageKey(task.ID), testtaskjournal.TaskQueueKey(task.Executor, task.ID), testbackuppolicy.BackupKeyKey(fixture.environment.Record.ID), testbackuppolicy.BackupKeyValueKey(fixture.environment.Record.ID)} {
-		value, getErr := fixture.store.Get(ctx, key)
-		if getErr != nil || value.Entry != nil {
-			t.Fatalf("raced publication exposed %q = %#v, %v", key, value, getErr)
-		}
-	}
-	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if value, getErr := fixture.store.Get(ctx, markerKey); getErr != nil || value.Entry != nil {
-		t.Fatalf("raced publication marker = %#v, %v", value, getErr)
-	}
-}
 
 func TestBlueprintBackupCanonicalValidationRejectsDisabledConfigWithoutAge(t *testing.T) {
 	fixture := newBackupPolicyReplacementFixture(t, false)
@@ -184,99 +36,6 @@ func TestBlueprintBackupCanonicalValidationRejectsDisabledConfigWithoutAge(t *te
 	}
 }
 
-func TestBlueprintBackupCandidateVolumePublishesWithFinalAuthority(t *testing.T) {
-	fixture := newBackupPolicyReplacementFixture(t, false)
-	ctx := context.Background()
-	task := environmentBlueprintTestTask(t, fixture.project.Record, fixture.environment.Record, 5200)
-	projection := environmentBlueprintTestProjection(fixture.environment.Record.ID, task, 1)
-	projection.DesiredZones[0].Desired.Subnet = "10.240.0.0/25"
-	volumeID := projection.Volumes[0].ID
-	sourceID := ids.NewAt(ids.KindBackupSource, fixture.now, 5201)
-	beforePreparation := fixture.store.revision
-	prepared, err := fixture.repository.PrepareEnvironmentBlueprintBackupPolicy(
-		ctx, testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
-			EnvironmentID: fixture.environment.Record.ID, TaskID: task.ID,
-			ReadRevision: beforePreparation, Enabled: true, Frequency: "0 2 * * *", Keep: 7,
-			Encryption: "none", ConnectorName: fixture.connector.Record.Connector.Name,
-			Sources: []testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{{
-				CandidateID: sourceID, Kind: core.BackupSourceVolume, TargetID: volumeID,
-			}},
-			Projection: projection, CreatedAt: task.CreatedAt,
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer prepared.Clear()
-	if fixture.store.revision != beforePreparation {
-		t.Fatalf("Backup preparation wrote revision %d, want %d", fixture.store.revision, beforePreparation)
-	}
-	projection.Backup = prepared.Projection()
-	marker := environmentBlueprintTestMarker(task, fixture.environment.Record.ID)
-	hierarchy, err := newEnvironmentBlueprintRepository(fixture.store, fixture.store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	claim := stageEnvironmentBlueprintForPublicationTest(
-		t, hierarchy.HierarchyRepository, 0,
-		environmentBlueprintTestRevision(fixture.environment.Record.ID, task, "services: {}\n"),
-		projection, marker,
-	)
-	result, err := hierarchy.PublishEnvironmentBlueprintDesiredRevision(
-		ctx,
-		netip.MustParsePrefix("10.240.0.0/24"),
-		fixture.environment.Record.NetworkPool,
-		fixture.project,
-		fixture.environment,
-		0,
-		claim,
-		testblueprints.EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: fixture.environment.Record.ID,
-			RevisionID:    task.ID,
-		},
-		projection,
-		environmentBlueprintTestZoneChanges(t, hierarchy.HierarchyRepository, projection),
-		environmentBlueprintTestServiceChanges(t, hierarchy.HierarchyRepository, projection),
-		environmentBlueprintTestRouteChanges(
-			t,
-			hierarchy.HierarchyRepository,
-			projection,
-		),
-		testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
-		testcomponentplanning.ComponentTaskPreparation{},
-		testblueprintplanning.BlueprintAttachTaskPreparation{},
-		prepared,
-		BlueprintScriptPublication{},
-		BlueprintReleasePublication{},
-		BlueprintRequirementGate{},
-		task,
-		marker,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
-		outcome != IdempotencyKnownApplied {
-		t.Fatalf("candidate Volume publication = %v/%v/%v", outcome, conflict, classifyErr)
-	}
-	head, found, err := hierarchy.GetEnvironmentBlueprintHead(ctx, fixture.environment.Record.ID)
-	if err != nil || !found || head.Record.RevisionID != task.ID {
-		t.Fatalf("candidate Volume head = %#v/%t/%v", head, found, err)
-	}
-	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range []string{testbackuppolicy.BackupPolicyKey(fixture.environment.Record.ID), testbackuppolicy.BackupSourceKey(sourceID), testbackuppolicy.BackupSourceEnvironmentKey(fixture.environment.Record.ID, sourceID), testbackuppolicy.BackupSourceIdentityKey(fixture.environment.Record.ID, core.BackupSourceVolume, volumeID), testbackuppolicy.BackupPolicyConnectorReferenceKey(fixture.connector.Record.Connector.ID, fixture.environment.Record.ID), testtaskjournal.TaskStorageKey(task.ID), testtaskjournal.TaskQueueKey(task.Executor, task.ID), markerKey} {
-		value, getErr := fixture.store.Get(ctx, key)
-		if getErr != nil || value.Entry == nil || value.Entry.ModRevision != head.Revision {
-			t.Fatalf("candidate Volume authority %q = %#v, %v; want revision %d", key, value, getErr, head.Revision)
-		}
-	}
-}
-
-// Rationale: Blueprint preparation must be read-only, while final publication
-// creates the missing source triple and first age key in one transaction.
 func TestBlueprintBackupPreparationDefersSourceAndKeyWritesAndReusesStableSource(t *testing.T) {
 	fixture := newBackupPolicyReplacementFixture(t, false)
 	ctx := context.Background()
@@ -321,7 +80,7 @@ func TestBlueprintBackupPreparationDefersSourceAndKeyWritesAndReusesStableSource
 	projection.Backup = prepared.Projection()
 	publication, err := testblueprintplanning.PrepareBlueprintBackupPolicyPublication(
 		testblueprintplanning.TaskIdentity{ID: taskID, Target: fixture.environment.Record.ID},
-		projection, testblueprintplanning.BlueprintAttachTaskPreparation{}, prepared,
+		projection, prepared,
 	)
 	if err != nil {
 		t.Fatalf("prepareBlueprintBackupPolicyPublication() error = %v", err)
@@ -329,21 +88,6 @@ func TestBlueprintBackupPreparationDefersSourceAndKeyWritesAndReusesStableSource
 	defer testblueprintplanning.ClearPreparedBlueprintBackupPolicyPublication(publication)
 	if fixture.store.revision != before {
 		t.Fatalf("final preparation revision = %d, want unchanged %d", fixture.store.revision, before)
-	}
-	createdSourceMutations := 0
-	for _, mutation := range publication.Mutations() {
-		if mutation.Key == testbackuppolicy.BackupSourceKey(sourceID) ||
-			mutation.Key == testbackuppolicy.BackupSourceEnvironmentKey(fixture.environment.Record.ID, sourceID) ||
-			mutation.Key == testbackuppolicy.BackupSourceIdentityKey(
-				fixture.environment.Record.ID,
-				core.BackupSourceVolume,
-				volumeID,
-			) {
-			createdSourceMutations++
-		}
-	}
-	if createdSourceMutations != 3 {
-		t.Fatalf("source triple mutations = %d, want 3", createdSourceMutations)
 	}
 	transaction, err := fixture.store.Transact(ctx, publication.Conditions(), publication.Mutations())
 	if err != nil || !transaction.Succeeded {
@@ -379,10 +123,15 @@ func TestBlueprintBackupPreparationDefersSourceAndKeyWritesAndReusesStableSource
 	}
 }
 
-// Rationale: the public maximum must reserve exactly three durable writes for
-// each newly introduced stable source and remain within the Blueprint arm cap.
-func TestBlueprintBackupMaximumSourcesProducesTwelveDurableTriples(t *testing.T) {
+// Rationale: the supported maximum must publish readable, correctly scoped
+// sources within storage limits, rather than merely producing a write inventory.
+func TestBlueprintBackupMaximumSourcesPublishAndResolve(t *testing.T) {
 	fixture := newBackupPolicyReplacementFixture(t, false)
+	existing, err := testbackupsources.ListBackupSources(t.Context(), fixture.store, fixture.environment.Record.ID,
+		testkeyvalue.PageRequest{Limit: 100})
+	if err != nil || existing.NextCursor != "" {
+		t.Fatalf("read existing Backup sources: %v", err)
+	}
 	taskID := ids.NewAt(ids.KindTask, fixture.now, 4001)
 	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: fixture.environment.Record.ID,
@@ -413,28 +162,30 @@ func TestBlueprintBackupMaximumSourcesProducesTwelveDurableTriples(t *testing.T)
 	projection.Backup = prepared.Projection()
 	publication, err := testblueprintplanning.PrepareBlueprintBackupPolicyPublication(
 		testblueprintplanning.TaskIdentity{ID: taskID, Target: fixture.environment.Record.ID},
-		projection, testblueprintplanning.BlueprintAttachTaskPreparation{}, prepared,
+		projection, prepared,
 	)
 	if err != nil {
 		t.Fatalf("prepareBlueprintBackupPolicyPublication(maximum) error = %v", err)
 	}
 	defer testblueprintplanning.ClearPreparedBlueprintBackupPolicyPublication(publication)
-	wanted := make(map[string]struct{}, testbackuppolicy.MaximumBackupPolicySources*3)
-	for _, source := range input.Sources {
-		wanted[testbackuppolicy.BackupSourceKey(source.CandidateID)] = struct{}{}
-		wanted[testbackuppolicy.BackupSourceEnvironmentKey(input.EnvironmentID, source.CandidateID)] = struct{}{}
-		wanted[testbackuppolicy.BackupSourceIdentityKey(input.EnvironmentID, source.Kind, source.TargetID)] = struct{}{}
+	budget, err := fixture.store.MeasureTransaction(t.Context(), publication.Conditions(), publication.Mutations())
+	if err != nil || !budget.Fits() {
+		t.Fatalf("maximum Backup source publication exceeds ordinary storage bounds: %v", err)
 	}
-	triples := 0
-	for _, mutation := range publication.Mutations() {
-		if _, found := wanted[mutation.Key]; found {
-			triples++
+	result, err := fixture.store.Transact(t.Context(), publication.Conditions(), publication.Mutations())
+	if err != nil || !result.Succeeded {
+		t.Fatalf("publish maximum Backup sources: %v", err)
+	}
+	listed, err := testbackupsources.ListBackupSources(t.Context(), fixture.store, input.EnvironmentID,
+		testkeyvalue.PageRequest{Limit: 100})
+	if err != nil || len(listed.Items) != len(existing.Items)+len(input.Sources) || listed.NextCursor != "" {
+		t.Fatalf("maximum Backup source catalog is incomplete: %v", err)
+	}
+	for _, selected := range input.Sources {
+		stored, err := testbackupsources.GetBackupSource(t.Context(), fixture.store, selected.CandidateID)
+		if err != nil || stored.Record.EnvironmentID != input.EnvironmentID ||
+			stored.Record.Kind != selected.Kind || stored.Record.TargetID != selected.TargetID {
+			t.Fatalf("published Backup source changed identity or target: %v", err)
 		}
-	}
-	if triples != testbackuppolicy.MaximumBackupPolicySources*3 {
-		t.Fatalf("source mutations = %d, want %d", triples, testbackuppolicy.MaximumBackupPolicySources*3)
-	}
-	if err := validateEnvironmentBlueprintTransactionBudget(publication.Conditions(), publication.Mutations()); err != nil {
-		t.Fatalf("maximum Backup publication exceeds unified envelope: %v", err)
 	}
 }

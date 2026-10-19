@@ -240,7 +240,7 @@ func routeRepositoryTestSelectDesiredHead(
 	defer clear(headValue)
 	conditions := make([]testkeyvalue.Condition, 0, len(projection.DesiredRoutes))
 	mutations := []testkeyvalue.Mutation{{
-		Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), Value: headValue,
+		Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(projection.EnvironmentID), Value: headValue,
 	}}
 	for _, desired := range projection.DesiredRoutes {
 		observation, observationErr := testroutes.NewObservationRecord(
