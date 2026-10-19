@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type backupRunTestCipher struct{}
@@ -34,21 +35,6 @@ func (repository *backupRunReplayRepository) PrepareBackupRun(
 ) (BackupRunPrepared, error) {
 	repository.prepares++
 	return BackupRunPrepared{}, nil
-}
-
-func (*backupRunReplayRepository) PrepareBackupRunRetry(
-	context.Context,
-	BackupRunRetryPrepareInput,
-) (BackupRunRetryPrepared, error) {
-	return BackupRunRetryPrepared{}, nil
-}
-
-type backupRunReplayPlans struct{}
-
-func (backupRunReplayPlans) BuildBackupRunPlan(
-	BackupRunPlanInput,
-) (*agentpb.ExecutionPlan, error) {
-	return nil, nil
 }
 
 type backupRunReplayIdempotency struct{}
@@ -99,21 +85,27 @@ func (backupRunReplayIdempotency) ResolveUnknown(
 type backupRunServicePublication struct {
 	err       error
 	publishes int
+	task      workexecution.Task
+	item      workexecution.Item
+	input     *agentpb.BackupWorkInput
 }
 
-func (publication *backupRunServicePublication) Publish(
+func (publication *backupRunServicePublication) PublishWork(
 	_ context.Context,
-	_ etcd.TaskRecord,
-	_ *agentpb.ExecutionPlan,
+	task workexecution.Task,
+	item workexecution.Item,
+	input *agentpb.BackupWorkInput,
 	_ testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	publication.publishes++
+	publication.task, publication.item, publication.input = task, item, proto.CloneOf(input)
 	return etcd.IdempotencyTransactionResult{}, publication.err
 }
 
 func (*backupRunServicePublication) Clear() {}
 
 type backupRunServiceRepository struct {
+	t           *testing.T
 	publication *backupRunServicePublication
 	prepares    int
 }
@@ -123,29 +115,10 @@ func (repository *backupRunServiceRepository) PrepareBackupRun(
 	input BackupRunPrepareInput,
 ) (BackupRunPrepared, error) {
 	repository.prepares++
-	return BackupRunPrepared{
-		Run: testbackupruntime.BackupRunRecord{
-			TaskID:        input.TaskID,
-			OperationID:   input.OperationID,
-			EnvironmentID: input.EnvironmentID,
-		},
-		Publication: repository.publication,
-	}, nil
-}
-
-func (*backupRunServiceRepository) PrepareBackupRunRetry(
-	context.Context,
-	BackupRunRetryPrepareInput,
-) (BackupRunRetryPrepared, error) {
-	return BackupRunRetryPrepared{}, nil
-}
-
-type backupRunServicePlans struct{}
-
-func (backupRunServicePlans) BuildBackupRunPlan(
-	BackupRunPlanInput,
-) (*agentpb.ExecutionPlan, error) {
-	return &agentpb.ExecutionPlan{PlanHash: make([]byte, 32)}, nil
+	prepared := backupRunWorkFixture(repository.t, input)
+	prepared.Publication = repository.publication
+	prepared.Run.Initiator = input.Initiator
+	return prepared, nil
 }
 
 type backupRunServiceIdempotency struct {
@@ -198,10 +171,10 @@ func (idempotency backupRunServiceIdempotency) ResolveUnknown(
 	return idempotency.unknown, nil
 }
 
-// Rationale: exact replay must not derive a second durable candidate.
+// TASK-101: exact replay must not derive a second durable candidate.
 func TestBackupRunServiceReplaysBeforePreparation(t *testing.T) {
 	repository := &backupRunReplayRepository{}
-	service := NewBackupRunService(repository, backupRunReplayPlans{}, backupRunReplayIdempotency{})
+	service := NewBackupRunService(repository, backupRunReplayIdempotency{})
 	response, err := service.RunBackup(
 		context.Background(),
 		"env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -260,12 +233,12 @@ func TestDurableBackupRunNewMarkerHasNoPendingRetention(t *testing.T) {
 	}
 }
 
-// Rationale: a fresh internal request returns the exact applied response only
+// TASK-101: a fresh internal request returns the exact applied response only
 // after one publication attempt has been classified as applied.
 func TestBackupRunServicePublishesFreshAppliedRun(t *testing.T) {
 	publication := &backupRunServicePublication{}
-	repository := &backupRunServiceRepository{publication: publication}
-	service := NewBackupRunService(repository, backupRunServicePlans{}, backupRunServiceIdempotency{
+	repository := &backupRunServiceRepository{t: t, publication: publication}
+	service := NewBackupRunService(repository, backupRunServiceIdempotency{
 		known: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
 	})
 	service.now = func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) }
@@ -282,6 +255,14 @@ func TestBackupRunServicePublishesFreshAppliedRun(t *testing.T) {
 			repository.prepares,
 		)
 	}
+	if publication.task.Action != workexecution.ActionBackup ||
+		publication.task.Actor != workexecution.OperatorActor ||
+		publication.task.TargetID != "env_01ARZ3NDEKTSV4RRFFQ69G5FAV" ||
+		publication.item.TaskID != publication.task.ID || publication.item.Input == nil ||
+		*publication.item.Input != publication.task.Intent ||
+		publication.input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_CAPTURE {
+		t.Fatal("accepted Backup did not publish its native captured work")
+	}
 }
 
 // Rationale: an unknown commit outcome must resolve the marker rather than
@@ -295,8 +276,8 @@ func TestBackupRunServiceResolvesUnknownPublication(t *testing.T) {
 	publication := &backupRunServicePublication{
 		err: errs.New(errs.KindStorageUnavailable, "unknown commit"),
 	}
-	repository := &backupRunServiceRepository{publication: publication}
-	service := NewBackupRunService(repository, backupRunServicePlans{}, backupRunServiceIdempotency{
+	repository := &backupRunServiceRepository{t: t, publication: publication}
+	service := NewBackupRunService(repository, backupRunServiceIdempotency{
 		unknown: idempotentintent.Resolution{
 			Kind:     idempotentintent.ResolutionReplay,
 			Response: want,
@@ -329,10 +310,9 @@ func TestBackupRunServiceRejectsExistingMarkerConflictBeforePreparation(t *testi
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			publication := &backupRunServicePublication{}
-			repository := &backupRunServiceRepository{publication: publication}
+			repository := &backupRunServiceRepository{t: t, publication: publication}
 			service := NewBackupRunService(
 				repository,
-				backupRunServicePlans{},
 				backupRunServiceIdempotency{
 					existingErr: errs.New(test.kind, test.name),
 				},
@@ -373,9 +353,9 @@ func TestBackupRunScheduledIdempotencyNamespaceCannotCollideWithOperatorHeader(t
 	evaluatedAt := scheduledAt.Add(time.Hour)
 	key := fmt.Sprintf("scheduled:%d:%s", 42, scheduledAt.Format("20060102T150405Z"))
 	publication := &backupRunServicePublication{}
-	repository := &backupRunServiceRepository{publication: publication}
+	repository := &backupRunServiceRepository{t: t, publication: publication}
 	capture := &backupRunLocatorCapture{}
-	service := NewBackupRunService(repository, backupRunServicePlans{}, capture)
+	service := NewBackupRunService(repository, capture)
 	service.now = func() time.Time { return evaluatedAt }
 
 	if _, err := service.RunBackup(

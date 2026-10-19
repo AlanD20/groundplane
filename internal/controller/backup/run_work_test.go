@@ -10,36 +10,31 @@ import (
 	"filippo.io/age"
 	"github.com/AlanD20/groundplane/internal/common/backupformat"
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
-// Rationale: the locked source maximum must be enforced before schema dispatch.
-func TestBuildBackupRunPlanRejectsMoreThanTwelveSources(t *testing.T) {
-	input := backupRunPlanFixture(t)
-	if _, err := BuildBackupRunPlan(input); err != nil {
-		t.Fatalf("valid starting plan: %v", err)
-	}
-	input.Run.Sources = make([]testbackupruntime.BackupRunSourceAttemptRecord, 13)
-	input.Task.Steps = make([]testtaskjournal.TaskStepRecord, 13)
-	plan, err := BuildBackupRunPlan(input)
-	if err == nil || plan != nil {
-		t.Fatal("BuildBackupRunPlan accepted more than twelve sources")
-	}
-}
-
-func backupRunPlanFixture(t *testing.T) BackupRunPlanInput {
+func backupRunWorkFixture(t *testing.T, request BackupRunPrepareInput) BackupRunPrepared {
 	t.Helper()
-	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
-	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
-	taskID := ids.NewAt(ids.KindTask, now, 2)
-	operationID := ids.NewAt(ids.KindOperation, now, 3)
-	planID := ids.NewAt(ids.KindPlan, now, 4)
+	now := request.CreatedAt
+	if now.IsZero() {
+		now = time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	}
+	environmentID, taskID, operationID := request.EnvironmentID, request.TaskID, request.OperationID
+	if environmentID == "" {
+		environmentID = ids.NewAt(ids.KindEnvironment, now, 1)
+	}
+	if taskID == "" {
+		taskID = ids.NewAt(ids.KindTask, now, 2)
+	}
+	if operationID == "" {
+		operationID = ids.NewAt(ids.KindOperation, now, 3)
+	}
 	stepID := ids.NewAt(ids.KindStep, now, 5)
 	sourceID := ids.NewAt(ids.KindBackupSource, now, 6)
 	pointID := ids.NewAt(ids.KindRecoveryPoint, now, 7)
@@ -47,14 +42,6 @@ func backupRunPlanFixture(t *testing.T) BackupRunPlanInput {
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
 		t.Fatal(err)
-	}
-	task := etcd.TaskRecord{
-		ID: taskID, OperationID: operationID, PlanID: planID,
-		Type: testtaskjournal.TaskBackup, Target: environmentID,
-		Executor: testtaskjournal.TaskExecutorAgent, Actor: testtaskjournal.TaskActorOperator,
-		Status: testtaskjournal.TaskStatusPending, TimeoutSeconds: backupRunTaskTimeoutSeconds,
-		Steps:     []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}},
-		CreatedAt: now,
 	}
 	run := testbackupruntime.BackupRunRecord{
 		TaskID: taskID, OperationID: operationID, EnvironmentID: environmentID,
@@ -91,8 +78,8 @@ func backupRunPlanFixture(t *testing.T) BackupRunPlanInput {
 	pathStyle := run.ConnectorPathStyle
 	era := uint64(run.KeyEra)
 	recipientDigest := sha256.Sum256([]byte(run.Recipient))
-	return BackupRunPlanInput{
-		Task: task, Run: run,
+	prepared := BackupRunPrepared{
+		HostID: ids.New(ids.KindHost), Run: run,
 		Scope: &agentpb.BackupPlanScope{
 			ProjectId: ids.NewAt(ids.KindProject, now, 10), Project: revision(18),
 			EnvironmentId: environmentID, Environment: revision(22), TaskAttempt: 1,
@@ -136,20 +123,25 @@ func backupRunPlanFixture(t *testing.T) BackupRunPlanInput {
 			}},
 		}},
 	}
+	prepared.Owner = testtaskjournal.TaskOwner{ProjectID: prepared.Scope.ProjectId, EnvironmentID: environmentID}
+	prepared.Authority[0], err = executionplan.SealBackupStepAuthority(prepared.Authority[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return prepared
 }
 
-// Rationale: reconnect after durable source progress must rebuild the identical
-// sealed plan while accepting the running Task and its already stored hash.
-func TestBuildBackupRunPlanReconnectAfterProgressIsIdentical(t *testing.T) {
-	input := backupRunPlanFixture(t)
-	pending, err := BuildBackupRunPlan(input)
+// TASK-101: mutable source progress cannot alter the native immutable input.
+// This is capture stability, not restart/transport or source-effect proof.
+func TestBackupWorkCaptureIgnoresMutableSourceProgress(t *testing.T) {
+	input := backupRunWorkFixture(t, BackupRunPrepareInput{})
+	inputID := ids.New(ids.KindPlan)
+	pending, _, captured, err := buildBackupRunWork(input, inputID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	input.Task.Status = testtaskjournal.TaskStatusRunning
 	input.Run.State = testbackupruntime.BackupRunRunning
-	input.Task.PlanHash = hex.EncodeToString(pending.PlanHash)
 	input.Run.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
 	input.Run.Sources[0].Phase = testbackupruntime.BackupSourcePhaseUpload
 	storedSize, err := backupformat.AgeStoredSize(4096)
@@ -160,11 +152,40 @@ func TestBuildBackupRunPlanReconnectAfterProgressIsIdentical(t *testing.T) {
 		SourceSizeBytes: 4096, SourceSHA256: hex.EncodeToString(bytes.Repeat([]byte{0x2a}, 32)),
 		StoredSizeBytes: storedSize, StoredSHA256: hex.EncodeToString(bytes.Repeat([]byte{0x2b}, 32)),
 	}
-	running, err := BuildBackupRunPlan(input)
+	running, _, recaptured, err := buildBackupRunWork(input, inputID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(running.PlanHash, pending.PlanHash) || !proto.Equal(running, pending) {
-		t.Fatal("running reconnect changed the sealed Backup plan")
+	if running.Intent != pending.Intent || !proto.Equal(captured, recaptured) {
+		t.Fatal("source progress changed immutable Backup input")
+	}
+}
+
+// TASK-101: prove the valid maximum before refusing one additional source.
+func TestBackupWorkCaptureEnforcesTwelveSourceBoundary(t *testing.T) {
+	input := backupRunWorkFixture(t, BackupRunPrepareInput{})
+	first := input.Authority[0]
+	for index := 1; index < 13; index++ {
+		step := proto.CloneOf(first)
+		step.StepDigest = nil
+		step.StepId, step.ExecutionId = ids.New(ids.KindStep), ids.NewULID()
+		step.GetCapture().PointId = ids.New(ids.KindRecoveryPoint)
+		step.GetCapture().Target.ObjectKey = "objects/" + input.Run.EnvironmentID + "/" +
+			ids.New(ids.KindBackupSource) + "/" + step.GetCapture().PointId + "/artifact.bin"
+		var err error
+		step, err = executionplan.SealBackupStepAuthority(step)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.Authority = append(input.Authority, step)
+	}
+	inputID := ids.New(ids.KindPlan)
+	maximum := input
+	maximum.Authority = input.Authority[:12]
+	if _, _, _, err := buildBackupRunWork(maximum, inputID); err != nil {
+		t.Fatalf("valid twelve-source capture rejected: %v", err)
+	}
+	if _, _, captured, err := buildBackupRunWork(input, inputID); err == nil || captured != nil {
+		t.Fatal("thirteen sources produced executable Backup input")
 	}
 }
