@@ -140,10 +140,10 @@ groundplane task events task_01J00000000000000000000000
 groundplane task list --limit 20 --output json
 ```
 
-Task actions always take a Task id, without requiring `--id`. `pending` and
-`running` mean work is in progress; `completed`, `failed`, `aborted` and
-`timed_out` are terminal outcomes. Check the application, Route or data after
-completion. A completed Task alone does not prove application health.
+Task actions always take a Task id, without requiring `--id`. A Task finishes
+when `finished_at` is present; inspect its work outcomes and cleanup separately.
+Check the application, Route or data afterward. A finished Task alone does not
+prove application health.
 
 `task retry <id> --work <work-id> --attempt <number>` authorizes an eligible
 attempt for the selected work item, retaining its Task identity and captured

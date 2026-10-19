@@ -58,33 +58,6 @@ func TestNativeScriptRemovalPublishesSettlesAndReplays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The reused Volume fixture supplies Environment metadata directly rather
-	// than running bootstrap; supply its missing initial Script set as well.
-	initialSet, err := scripts.EncodeScriptSetGeneration(scripts.SetGenerationRecord{
-		EnvironmentID: environment.Record.ID, GenerationID: environment.Record.ID,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(initialSet)
-	setKey := scripts.ScriptSetActiveKey(environment.Record.ID)
-	if result, err := f.base.store.Transact(ctx, []keyvalue.Condition{{Key: setKey}}, []keyvalue.Mutation{{
-		Type: keyvalue.MutationPut, Key: setKey, Value: initialSet,
-	}}); err != nil || !result.Succeeded {
-		t.Fatalf("seed initial Script set: %v", err)
-	}
-	environment, err = hierarchy.GetEnvironment(ctx, environment.Record.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	project, err = hierarchy.GetProject(ctx, project.Record.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target, err = services.GetService(ctx, target.Record.Desired.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
 	current, err := repository.CreateScript(ctx, environment, project, target, record)
 	if err != nil {
 		t.Fatal(err)

@@ -3,14 +3,19 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient"
 	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/oklog/ulid/v2"
 	"github.com/spf13/cobra"
 )
@@ -532,28 +537,39 @@ func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) 
 // follows, rather than requiring polling or a Console session.
 func TestTaskEventsStreamsCanonicalEndpoint(t *testing.T) {
 	t.Parallel()
+	const taskID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	at := time.Date(2026, 8, 23, 4, 30, 0, 0, time.UTC)
+	event := apiTypes.TaskEvent{
+		Sequence: 1, WorkItemID: "work_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		AttemptID: "try_01ARZ3NDEKTSV4RRFFQ69G5FAV", AttemptSequence: 1, RecordedAt: at,
+		Stage: workexecution.Stage{Key: "start-candidate", Name: "Start candidate", State: workexecution.StageRunning,
+			Expected: "Candidate is running", StartedAt: &at},
+	}
+	raw, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	server := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			if request.Method != http.MethodGet {
 				t.Errorf("request = %s %s", request.Method, request.URL.RequestURI())
 			}
-			switch request.URL.RequestURI() {
-			case "/api/v1/tasks/task_1/events":
+			switch request.URL.Path {
+			case "/api/v1/tasks/" + taskID + "/events":
 				if accept := request.Header.Get("Accept"); accept != "text/event-stream" {
 					t.Errorf("Accept = %q, want text/event-stream", accept)
 				}
 				writer.Header().Set("Content-Type", "text/event-stream")
 				_, _ = io.WriteString(
 					writer,
-					"id: 1\ndata: {\"sequence\":1,\"step_id\":\"step_1\",\"state\":\"completed\","+
-						"\"attempt\":1,\"ordinal\":1,\"received_at\":\"2026-08-23T04:30:00Z\"}\n\n",
+					fmt.Sprintf("id: 1\ndata: %s\n\n", raw),
 				)
-			case "/api/v1/tasks/task_1":
+			case "/api/v1/tasks/" + taskID:
 				writer.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(
 					writer,
-					`{"id":"task_1","operation_id":"op_1","type":"run","target":"svc_1","status":"completed"}`,
+					`{"task":{"id":"`+taskID+`","finished_at":"2026-08-23T04:31:00Z"},"work":{"items":[],"revision":1,"more":false}}`,
 				)
 			default:
 				t.Errorf("request = %s %s", request.Method, request.URL.RequestURI())
@@ -562,9 +578,8 @@ func TestTaskEventsStreamsCanonicalEndpoint(t *testing.T) {
 	)
 	defer server.Close()
 
-	output := executeNoun(t, newTaskCmd(), server.URL, Scope{}, "events", "task_1")
-	want := "{\"sequence\":1,\"step_id\":\"step_1\",\"state\":\"completed\"," +
-		"\"attempt\":1,\"ordinal\":1,\"received_at\":\"2026-08-23T04:30:00Z\"}\n"
+	output := executeNoun(t, newTaskCmd(), server.URL, Scope{}, "events", taskID)
+	want := string(raw) + "\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)
 	}
@@ -597,24 +612,25 @@ func TestServiceAttachDispatchesTaskWithBothTargets(t *testing.T) {
 	}
 }
 
-// QA: TASK-05, UI-01; local bodyless dispatch only, not eligibility, frozen inputs, or execution safety.
-// Rationale: Retry must address the original Task through the canonical action
-// endpoint while exposing the distinct Task id of the new attempt.
-func TestTaskRetryDispatchesNewAttempt(t *testing.T) {
+// QA: TASK-05, UI-01; selected attempt dispatch, not server eligibility or effect safety.
+// Retry retains Task identity and must not silently select different work.
+func TestTaskRetryPreservesTaskAndSelectedWork(t *testing.T) {
 	t.Parallel()
+	const taskID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const workID = "work_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 	server := exactRequestServer(
 		t,
 		http.MethodPost,
-		"/api/v1/tasks/task_1/retry",
-		"",
+		"/api/v1/tasks/"+taskID+"/retry",
+		`{"work_item_id":"`+workID+`","attempt":1}`,
 		http.StatusAccepted,
-		`{"task_id":"task_2"}`,
+		`{"task_id":"`+taskID+`"}`,
 	)
 	defer server.Close()
 
-	output := executeNoun(t, newTaskCmd(), server.URL, Scope{}, "retry", "task_1")
-	want := "{\n  \"task_id\": \"task_2\"\n}\n"
+	output := executeNoun(t, newTaskCmd(), server.URL, Scope{}, "retry", taskID, "--work", workID, "--attempt", "1")
+	want := "{\n  \"task_id\": \"" + taskID + "\"\n}\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)
 	}
