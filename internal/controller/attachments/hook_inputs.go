@@ -3,28 +3,21 @@ package attachments
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"strings"
+
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"slices"
-	"strings"
 
-	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/attachplan"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-type backingHookTaskInputRepository interface {
-	GetBackingHookTaskInputs(context.Context, etcd.TaskRecord) (taskconfiguration.BackingHookEncryptedInputs, error)
-}
 
 type backingHookSecretRepository interface {
 	ResolveSecretAtRevision(context.Context, string, string, int64) (etcdstore.Versioned[secretrecord.Record], error)
@@ -220,90 +213,6 @@ func (service *FactService) resolveBackingHookTaskInput(
 	return value, pin, nil
 }
 
-func (service *FactService) ResolveLifecycleHookInput(
-	ctx context.Context,
-	task etcd.TaskRecord,
-	serviceID string,
-	event backinghook.Event,
-	consume attachplan.HookInputConsumer,
-) error {
-	return service.resolveLifecycleHookInput(ctx, task, nil, serviceID, event, consume)
-}
-
-func (service *FactService) ResolveDraftLifecycleHookInput(
-	ctx context.Context,
-	task etcd.TaskRecord,
-	stored *taskconfiguration.BackingHookEncryptedInputs,
-	serviceID string,
-	event backinghook.Event,
-	consume attachplan.HookInputConsumer,
-) error {
-	return service.resolveLifecycleHookInput(ctx, task, stored, serviceID, event, consume)
-}
-
-func (service *FactService) resolveLifecycleHookInput(
-	ctx context.Context,
-	task etcd.TaskRecord,
-	draft *taskconfiguration.BackingHookEncryptedInputs,
-	serviceID string,
-	event backinghook.Event,
-	consume attachplan.HookInputConsumer,
-) error {
-	creationServiceID := task.Params[taskjournal.TaskBackingServiceCreationParam]
-	ownsService := task.Target == serviceID ||
-		event == backinghook.AfterStart && creationServiceID == serviceID
-	if ctx == nil || consume == nil || !ownsService ||
-		ids.Validate(ids.KindService, serviceID) != nil ||
-		(event != backinghook.BeforeStop && event != backinghook.AfterStart) {
-		return errs.New(errs.KindValidationFailed, "Backing lifecycle hook input request is invalid")
-	}
-	input := backinghook.Input{Context: backinghook.Context{Event: event, BackingServiceID: serviceID}}
-	input.Values = append(input.Values, backinghook.Value{
-		Key: "HOST", Value: []byte(backingendpoint.New(serviceID)),
-	})
-	if err := service.appendBackingHookTaskInputs(ctx, task, draft, &input); err != nil {
-		clearBackingHookInput(&input)
-		return err
-	}
-	slices.SortFunc(input.Values, func(left, right backinghook.Value) int {
-		return strings.Compare(left.Key, right.Key)
-	})
-	defer clearBackingHookInput(&input)
-	return consume(input)
-}
-
-func (service *FactService) appendBackingHookTaskInputs(
-	ctx context.Context,
-	task etcd.TaskRecord,
-	draft *taskconfiguration.BackingHookEncryptedInputs,
-	input *backinghook.Input,
-) error {
-	if task.Configuration == nil || task.Configuration.BackingHookInputs == nil {
-		return nil
-	}
-	appendValues := func(bundle *backingHookTaskInputBundle) error {
-		for _, value := range bundle.Values {
-			input.Values = append(input.Values, backinghook.Value{
-				Key: value.Key, Value: append([]byte(nil), value.Value...),
-			})
-		}
-		return nil
-	}
-	if draft != nil {
-		return service.openBackingHookTaskInputs(ctx, task, *draft, appendValues)
-	}
-	repository, ok := service.repository.(backingHookTaskInputRepository)
-	if !ok {
-		return errs.New(errs.KindInternal, "Backing hook Task input repository is not configured")
-	}
-	stored, err := repository.GetBackingHookTaskInputs(ctx, task)
-	if err != nil {
-		return err
-	}
-	defer clearAttachBytes(stored.Ciphertext)
-	return service.openBackingHookTaskInputs(ctx, task, stored, appendValues)
-}
-
 func (service *FactService) SealHookResult(
 	ctx context.Context,
 	current etcdstore.Versioned[attachrecord.Record],
@@ -376,20 +285,6 @@ func (service *FactService) sealHookBundle(
 		attachID, uint8(metadata.Version), string(metadata.Cipher),
 		string(metadata.Digest.Algorithm), ciphertext,
 	)
-}
-
-func (service *FactService) openBackingHookTaskInputs(
-	ctx context.Context,
-	task etcd.TaskRecord,
-	stored taskconfiguration.BackingHookEncryptedInputs,
-	consume func(*backingHookTaskInputBundle) error,
-) error {
-	if task.Configuration == nil || task.Configuration.BackingHookInputs == nil ||
-		stored.OperationID != task.OperationID ||
-		stored.CiphertextSHA256 != task.Configuration.BackingHookInputs.CiphertextSHA256 {
-		return errs.New(errs.KindStateConflict, "Backing hook Task input authority changed")
-	}
-	return service.openCapturedBackingHookInputs(ctx, task.OperationID, *task.Configuration.BackingHookInputs, stored, consume)
 }
 
 func (service *FactService) openCapturedBackingHookInputs(ctx context.Context, operationID string,

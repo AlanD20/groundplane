@@ -7,10 +7,8 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // TaskRecord is the versioned persistence DTO for one execution attempt.
@@ -53,58 +51,4 @@ type TaskRecord struct {
 
 	ComponentActionStepIDs          []string                                         `json:"component_action_step_ids"`
 	ManagedComponentTeardownSources []projectionrecord.ManagedComponentRuntimeSource `json:"managed_component_teardown_sources,omitempty"`
-}
-
-func TransitionTaskStatus(
-	record TaskRecord,
-	expected taskjournal.TaskStatus,
-	next taskjournal.TaskStatus,
-	at time.Time,
-) (TaskRecord, error) {
-	if err := ValidateTaskRecord(record); err != nil {
-		return TaskRecord{}, err
-	}
-	if record.Status != expected {
-		return TaskRecord{}, errs.Newf(
-			errs.KindStateConflict,
-			"task %s status changed from %s to %s",
-			record.ID,
-			expected,
-			record.Status,
-		)
-	}
-	if expected == next || !taskjournal.ValidTaskTransition(expected, next) ||
-		expected == taskjournal.TaskStatusPending && next == taskjournal.TaskStatusTimedOut &&
-			at.Before(record.CreatedAt.Add(time.Duration(record.TimeoutSeconds)*time.Second)) {
-		return TaskRecord{}, errs.Newf(
-			errs.KindStateConflict,
-			"task %s cannot transition from %s to %s",
-			record.ID,
-			expected,
-			next,
-		)
-	}
-	if err := recordcodec.ValidateTimestamp("task transition", at); err != nil {
-		return TaskRecord{}, err
-	}
-
-	at, err := nextTaskControllerTimestamp(record.UpdatedAt, at)
-	if err != nil {
-		return TaskRecord{}, err
-	}
-	replacement := cloneTaskRecord(record)
-	replacement.Status = next
-	replacement.UpdatedAt = at
-	if next == taskjournal.TaskStatusRunning {
-		replacement.StartedAt = timePointer(at)
-	}
-	if taskjournal.IsTerminalTaskStatus(next) {
-		replacement.FinishedAt = timePointer(at)
-		retention := at.Add(taskjournal.TaskRetention)
-		replacement.RetainUntil = &retention
-	}
-	if err := ValidateTaskRecord(replacement); err != nil {
-		return TaskRecord{}, err
-	}
-	return replacement, nil
 }

@@ -60,7 +60,3 @@ func cloneTimePointer(value *time.Time) *time.Time {
 	cloned := *value
 	return &cloned
 }
-
-func timePointer(value time.Time) *time.Time {
-	return &value
-}

@@ -35,31 +35,6 @@ type BlueprintRequirementGate struct {
 	DAGDigest         string                       `json:"dag_sha256"`
 }
 
-func NewBlueprintRequirementGate(
-	task TaskRecord,
-	candidateRevision int64,
-	dag core.BlueprintRequirementDAG,
-) (BlueprintRequirementGate, error) {
-	digest, err := blueprintRequirementDAGDigest(dag)
-	if err != nil {
-		return BlueprintRequirementGate{}, err
-	}
-	gate := BlueprintRequirementGate{
-		Schema: 1, TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID,
-		CandidateRevision: candidateRevision, DAG: dag.Clone(), DAGDigest: digest,
-	}
-	if task.RetryOf != "" {
-		return BlueprintRequirementGate{}, errs.New(
-			errs.KindValidationFailed,
-			"Blueprint requirement gate must originate on its root Task",
-		)
-	}
-	if err := gate.validateTaskIdentity(task, false); err != nil {
-		return BlueprintRequirementGate{}, err
-	}
-	return gate, nil
-}
-
 func (gate BlueprintRequirementGate) IsZero() bool {
 	return gate.Schema == 0 && gate.TaskID == "" && gate.RetryOf == "" &&
 		gate.OperationID == "" && gate.PlanID == "" && gate.CandidateRevision == 0 &&

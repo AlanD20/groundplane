@@ -1,24 +1,12 @@
 package etcd
 
 import (
-	"time"
-
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func firstTaskEventSequence(task TaskRecord) uint64 {
 	return task.NextEventSequence - uint64(task.EventCount)
-}
-
-func nextTaskControllerTimestamp(previous time.Time, supplied time.Time) (time.Time, error) {
-	if err := recordcodec.ValidateTimestamp("task controller timestamp", supplied); err != nil {
-		return time.Time{}, err
-	}
-	if supplied.After(previous) {
-		return supplied, nil
-	}
-	return previous.Add(time.Nanosecond), nil
 }
 
 func validateTaskEventCheckpoints(task TaskRecord) error {

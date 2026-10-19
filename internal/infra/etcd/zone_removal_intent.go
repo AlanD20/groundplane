@@ -2,11 +2,9 @@ package etcd
 
 import (
 	"context"
-	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -47,49 +45,4 @@ func (repository *HierarchyRepository) GetZoneRemovalIntent(
 		Revision:     result.Entry.ModRevision,
 		ReadRevision: result.ReadRevision,
 	}, true, nil
-}
-
-func validateZoneRemovalTaskOwner(task TaskRecord, intent environmentchanges.ZoneRemovalIntent) error {
-	desiredRevisionID := environmentchanges.ZoneRemovalDesiredRevisionID(intent)
-	if task.ID != intent.ActiveTaskID || task.Target != intent.ZoneID || task.Type != taskjournal.TaskRemove ||
-		!task.CreatedAt.Equal(
-			intent.ActiveTaskCreatedAt,
-		) || task.Params[taskjournal.TaskZoneRemovalOperationParam] != intent.OperationID ||
-		task.Params[taskjournal.TaskZoneEnvironmentParam] != intent.EnvironmentID ||
-		task.Params[blueprints.EnvironmentDesiredRevisionParam] != desiredRevisionID {
-		return errs.New(errs.KindStateConflict, "Zone removal intent does not belong to its Task")
-	}
-	if intent.Authored != nil {
-		if !authoredBlueprintZoneRemovalTask(task) ||
-			task.Params[taskjournal.TaskBlueprintParentParam] != intent.Authored.ParentTaskID ||
-			task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != intent.ZoneID {
-			return errs.New(errs.KindStateConflict, "authored Zone removal Agent Task input changed")
-		}
-		return nil
-	}
-	if task.Executor == taskjournal.TaskExecutorAgent {
-		if len(task.Params) != 3 || len(task.Steps) != 1 {
-			return errs.New(errs.KindStateConflict, "Zone removal Agent Task input changed")
-		}
-		return nil
-	}
-	if task.Executor != taskjournal.TaskExecutorController || len(task.Params) != 5 ||
-		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceBackingZone || !recordcodec.ValidSHA256(task.Params[taskjournal.TaskZoneImpactTokenParam]) {
-		return errs.New(errs.KindStateConflict, "Zone removal Controller Task input changed")
-	}
-	return nil
-}
-
-func authoredBlueprintZoneRemovalTask(task TaskRecord) bool {
-	parentID := task.Params[taskjournal.TaskBlueprintParentParam]
-	return task.Actor == taskjournal.TaskActorSystem && task.Executor == taskjournal.TaskExecutorAgent &&
-		task.Type == taskjournal.TaskRemove && ids.Validate(ids.KindNetwork, task.Target) == nil &&
-		len(task.Params) == 5 && task.Params[taskjournal.TaskBlueprintNetworkUnitParam] == task.Target &&
-		ids.Validate(ids.KindTask, parentID) == nil && parentID != task.ID &&
-		task.Params[blueprints.EnvironmentDesiredRevisionParam] == parentID &&
-		task.Params[taskjournal.TaskZoneEnvironmentParam] == task.Owner.EnvironmentID &&
-		ids.Validate(ids.KindOperation, task.Params[taskjournal.TaskZoneRemovalOperationParam]) == nil &&
-		len(task.Steps) == 1 && task.Steps[0].Kind == taskjournal.TaskStepOperation &&
-		len(task.Materializations) == 0 && task.Configuration == nil &&
-		len(task.ComponentActionStepIDs) == 0 && len(task.ManagedComponentTeardownSources) == 0
 }
