@@ -1067,6 +1067,14 @@ Blueprint cleanup, plus the old Attach Task-epoch gate. Separate protected Volum
 removal and proof before applied resource absence remain required; actual native
 publication, claims and host effects are not qualified by these capture checks.
 
+Existing hierarchy CRUD and request-idempotency checks also pass against the
+current deletion Begin input after removing its obsolete separate Task-operation
+identifier. Evidence: ignored `task-native-hierarchy-idempotency-migration-race.log`
+(race run of the hierarchy cases with actual production repositories and supplied
+storage). This retains OWN-01/02/05 metadata and admission evidence; it does not
+qualify the complete hierarchy deletion, descendants, physical cleanup or real
+etcd failure/restart journey. No old input field was added back to production.
+
 | Reviewed fixtures | Disposition | Native obligation still open |
 | --- | --- | --- |
 | Blueprint executed-artifact, hidden-child publication, mixed worker/recovery/observer and reconnect-epoch fixtures | Removed their old TaskRecord, assignment, Step and publisher helpers. Retained the independent shared digest builder; the image-catalog builder was removed after its last old-engine caller. Tests named “native” that still constructed hidden child Tasks were not proof of the replacement. | BP-04, GRP-04, TASK-70/95/98/122/126: publish the exact executed per-Service runtime, preserve independent runtimes and immutable history, reject changed source/proof without partial writes, restore every affected member, retain the original failure and replay completion after restart. Reconnect must retain the attempt rather than increment the former execution epoch. Removal qualifies none of these journeys. |
