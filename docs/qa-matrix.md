@@ -279,8 +279,11 @@ The final source-writing checkpoint is `3ec2154fd` (2026-10-19). Whole productio
 Go compilation, Console compilation/build and the architecture gate passed;
 these are mechanical checks, not product behavior. After native fixture migration,
 the full executionplan, releaseruntime and releasequeries packages pass under the
-race detector; the architecture gate also passes. Test compilation still fails
-in remaining obsolete Agent, application and root-storage fixtures that reference
+race detector; the architecture gate also passes. The complete Agent package-tree
+race gate now passes, including local socket tests with the required local socket
+permission (ignored `task-native-agent-tree-migration-race.log`). Several native
+operation packages have no package tests; this is not complete operation proof.
+Test compilation still fails in remaining obsolete application and root-storage fixtures that reference
 removed execution APIs. Remaining migration and the behavior/installed/viewer
 requirements below remain open. Evidence is ignored local
 `task-native-final-writing-{production-build,console-build,architecture,test-compile-inventory}.log`.
