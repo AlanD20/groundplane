@@ -181,7 +181,6 @@ func (capture ExecutionCapture) Task() (workexecution.Task, error) {
 
 // PrepareExecutionCapture joins native Task acceptance. The producer also joins
 // complete immutable member preparations and source/host/hierarchy comparisons.
-// No generic TaskRecord, network child Task or mutable GroupProgress is stored.
 func PrepareExecutionCapture(task workexecution.Task, capture ExecutionCapture) (workqueue.Change, error) {
 	expected, err := capture.Task()
 	if err != nil {

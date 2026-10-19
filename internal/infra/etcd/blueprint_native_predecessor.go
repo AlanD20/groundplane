@@ -93,7 +93,10 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 		return nil, err
 	}
 	if len(evidence.NativePredecessors) != 1 || evidence.NativePredecessors[0].ServiceID != member.Render.ServiceID {
-		return nil, errs.New(errs.KindStateConflict, "Blueprint Release requires its selected Service predecessor or explicit absence")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Release requires its selected Service predecessor or explicit absence",
+		)
 	}
 	for _, capture := range evidence.NativePredecessors {
 		if capture.FixedReadRevision <= 0 || capture.ProjectionRevision < 0 ||
@@ -121,8 +124,14 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 	}
 	for _, captured := range evidence.NativePredecessors {
 		if captured.Serving == nil && captured.ProjectionRevision == 0 {
-			keys := []string{releases.ReleaseProjectionKey(captured.ServiceID), serviceruntimerecord.Key(captured.ServiceID)}
-			read, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: captured.FixedReadRevision})
+			keys := []string{
+				releases.ReleaseProjectionKey(captured.ServiceID),
+				serviceruntimerecord.Key(captured.ServiceID),
+			}
+			read, err := ledger.store.GetMany(
+				ctx,
+				etcdstore.GetManyRequest{Keys: keys, Revision: captured.FixedReadRevision},
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -132,7 +141,10 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 			absent := read.Values[0] == nil && read.Values[1] == nil
 			etcdstore.ClearValues(read.Values)
 			if !absent {
-				return nil, errs.New(errs.KindStateConflict, "Blueprint first deployment found existing Service runtime")
+				return nil, errs.New(
+					errs.KindStateConflict,
+					"Blueprint first deployment found existing Service runtime",
+				)
 			}
 			conditions = append(conditions, etcdstore.Condition{Key: keys[0]}, etcdstore.Condition{Key: keys[1]})
 			continue
@@ -198,7 +210,8 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 			},
 		)
 		if captured.Serving == nil {
-			if captured.RuntimeRevision != 0 || len(captured.CurrentArtifact) != 0 || len(captured.RetainedPriorArtifact) != 0 {
+			if captured.RuntimeRevision != 0 || len(captured.CurrentArtifact) != 0 ||
+				len(captured.RetainedPriorArtifact) != 0 {
 				return nil, releases.CorruptReleaseRecord()
 			}
 			conditions = append(conditions, etcdstore.Condition{Key: serviceruntimerecord.Key(captured.ServiceID)})
@@ -220,33 +233,6 @@ func validateBlueprintNativeIntent(intent domain.Intent, snapshots []BlueprintNa
 	}
 	if intent.PriorServingReleaseID != expected {
 		return releases.CorruptReleaseRecord()
-	}
-	return nil
-}
-
-func validateBlueprintNativeRenderInput(
-	input ReleaseTaskRenderInput,
-	marker releases.ReleasePublicationMarker,
-	task TaskRecord,
-) error {
-	procedure, err := executionplan.OpenCandidateReleaseDescriptor(marker.CandidateReleaseDescriptor)
-	if err != nil ||
-		validateBlueprintNativePredecessors(input.NativePredecessors, procedure, task.Owner.EnvironmentID) != nil {
-		return releases.CorruptReleaseRecord()
-	}
-	for _, member := range input.Members {
-		if validateBlueprintNativeIntent(member.Intent, input.NativePredecessors) != nil {
-			return releases.CorruptReleaseRecord()
-		}
-		expected := ""
-		for _, selected := range procedure.GetMembers() {
-			if selected.ServiceId == member.Intent.ServiceID {
-				expected = selected.GetServingPredecessor().GetPriorArtifactId()
-			}
-		}
-		if member.Render.PriorArtifactID != expected {
-			return releases.CorruptReleaseRecord()
-		}
 	}
 	return nil
 }

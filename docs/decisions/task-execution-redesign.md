@@ -67,6 +67,15 @@ event or attempt. Their lifetime follows active execution and resource needs,
 not diagnostic retention. Secrets remain encrypted or transient protected
 material, never public Task input, events or error text.
 
+Blueprint prerequisite ancestry belongs to the captured authored revision.
+Planning reads that snapshot at the same fixed revision as Attach resolution,
+instead of reconstructing ancestry from current desired state or a parallel gate.
+A direct Attach has no Apply snapshot; an Apply missing its snapshot is rejected.
+The [snapshot owner](../../internal/infra/etcd/blueprint_prerequisite_authority.go)
+retains this authority independently of Task diagnostics. The clean cutover
+advances the storage epoch because older captures may omit inherited ancestry;
+the new reader does not guess missing edges or decode an old gate.
+
 ## Submission and scheduling
 
 Submission validates intent and atomically publishes the Task, accepted desired

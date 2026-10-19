@@ -4,24 +4,19 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/hex"
+	"unicode/utf8"
+
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
-	"io"
-	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type materializationBlueprintReader interface {
@@ -53,13 +48,12 @@ type materializationSecretValueReader interface {
 // TaskMaterializationResolver resolves only the immutable Controller source
 // named by one durable Task reference and returns one clearing byte stream.
 type TaskMaterializationResolver struct {
-	blueprints            materializationBlueprintReader
-	values                materializationEntryValueReader
-	secrets               materializationSecretValueReader
-	components            materializationComponentFileReader
-	materializations      componentMaterializationContentRepository
-	configurationRecovery *configurationrecovery.Sources
-	protector             *secretvalue.Protector
+	blueprints       materializationBlueprintReader
+	values           materializationEntryValueReader
+	secrets          materializationSecretValueReader
+	components       materializationComponentFileReader
+	materializations componentMaterializationContentRepository
+	protector        *secretvalue.Protector
 }
 
 func NewTaskMaterializationResolver(
@@ -94,91 +88,6 @@ func (resolver *TaskMaterializationResolver) ResolveTaskMaterializationSource(
 		return nil, err
 	}
 	return resolver.resolveSource(ctx, environmentID, source)
-}
-
-func (resolver *TaskMaterializationResolver) ResolveMaterialization(
-	ctx context.Context,
-	task etcd.TaskRecord,
-	plan *agentpb.ExecutionPlan,
-	step *agentpb.ExecutionStep,
-) (io.ReadCloser, error) {
-	if ctx == nil {
-		return nil, errs.New(errs.KindInternal, "materialization resolution context is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if resolver == nil || resolver.blueprints == nil || resolver.values == nil || resolver.secrets == nil ||
-		resolver.components == nil ||
-		resolver.protector == nil {
-		return nil, errs.New(errs.KindInternal, "materialization value resolver is not configured")
-	}
-	materialization := step.GetMaterializeFile()
-	if plan == nil || step == nil || materialization == nil || task.PlanID != plan.PlanId ||
-		task.RenderGeneration != int32(plan.RenderGeneration) ||
-		task.PlanHash != hex.EncodeToString(plan.PlanHash) {
-		return nil, errs.New(errs.KindInternal, "materialization Task and plan identity are inconsistent")
-	}
-	reference, metadata, err := resolver.materializationReference(ctx, task, plan, step)
-	if err != nil {
-		return nil, err
-	}
-	if reference.EnvironmentID != materialization.EnvironmentId {
-		return nil, errs.New(errs.KindInternal, "materialization source Environment is inconsistent")
-	}
-	if !taskMaterializationMetadataMatches(metadata, materialization) {
-		return nil, errs.New(errs.KindInternal, "materialization Task and plan metadata are inconsistent")
-	}
-	var content []byte
-	if reference.Source.Kind == materializationrecord.SourceComponentFile {
-		if resolver.materializations == nil {
-			return nil, errs.New(errs.KindInternal, "Component materialization content repository is unavailable")
-		}
-		content, err = resolver.materializations.Load(ctx, reference, uint64(task.RenderGeneration))
-	} else {
-		content, err = resolver.resolveSource(ctx, reference.EnvironmentID, reference.Source)
-	}
-	if err != nil {
-		clear(content)
-		return nil, err
-	}
-	if uint64(len(content)) != materialization.Length {
-		clear(content)
-		return nil, errs.New(errs.KindInternal, "materialization source length changed")
-	}
-	digest := sha256.Sum256(content)
-	if len(materialization.Sha256) != sha256.Size ||
-		subtle.ConstantTimeCompare(digest[:], materialization.Sha256) != 1 {
-		clear(content)
-		return nil, errs.New(errs.KindInternal, "materialization source digest changed")
-	}
-	return entrymaterialization.OwnBytes(content), nil
-}
-
-func taskMaterializationReference(
-	task etcd.TaskRecord,
-	stepID string,
-) (materializationrecord.Record, error) {
-	var selected *materializationrecord.Record
-	for index := range task.Materializations {
-		if task.Materializations[index].StepID != stepID {
-			continue
-		}
-		if selected != nil {
-			return materializationrecord.Record{}, errs.New(
-				errs.KindInternal,
-				"materialization Task contains duplicate step references",
-			)
-		}
-		selected = &task.Materializations[index]
-	}
-	if selected == nil {
-		return materializationrecord.Record{}, errs.New(
-			errs.KindInternal,
-			"materialization Task is missing its source reference",
-		)
-	}
-	return *selected, nil
 }
 
 func (resolver *TaskMaterializationResolver) resolveSource(

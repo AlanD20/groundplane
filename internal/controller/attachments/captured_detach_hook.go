@@ -13,8 +13,8 @@ import (
 )
 
 // ResolveCapturedDetachHook opens only retained Attach facts and an operation's
-// encrypted input capture. Missing capture is an error; it never reads latest
-// Secrets or manufactures a TaskRecord to resolve a native operation.
+// encrypted input capture. Missing capture is an error; current Secret values
+// cannot replace the captured values.
 func (service *FactService) ResolveCapturedDetachHook(ctx context.Context, source attachremoval.Input,
 	consume attachplan.HookInputConsumer,
 ) error {

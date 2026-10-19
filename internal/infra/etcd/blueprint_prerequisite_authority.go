@@ -6,12 +6,14 @@ import (
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -161,34 +163,64 @@ func (prepared *preparedBlueprintPrerequisiteAuthority) clear() {
 func (repository *EnvironmentBlueprintRepository) GetBlueprintPrerequisiteAuthority(
 	ctx context.Context,
 	environmentID, revisionID string,
+	revision int64,
 ) (etcdstore.Versioned[BlueprintPrerequisiteAuthority], bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{}, false, err
 	}
-	if ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindTask, revisionID) != nil {
+	if ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindTask, revisionID) != nil ||
+		revision < 0 {
 		return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{}, false, errs.New(
 			errs.KindValidationFailed, "Blueprint prerequisite authority read is invalid",
 		)
 	}
-	result, err := repository.store.Get(ctx, blueprintPrerequisiteAuthorityKey(environmentID, revisionID))
+	keys := []string{blueprintPrerequisiteAuthorityKey(environmentID, revisionID), workqueue.TaskKey(revisionID)}
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{}, false, err
 	}
-	if result == nil {
+	if result != nil {
+		defer etcdstore.ClearValues(result.Values)
+	}
+	if result == nil || result.ReadRevision <= 0 || revision > 0 && result.ReadRevision != revision ||
+		len(result.Values) != len(keys) {
 		return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{}, false, errs.New(
 			errs.KindInternal, "Blueprint prerequisite authority read is incomplete",
 		)
 	}
-	if result.Entry == nil {
+	for index, value := range result.Values {
+		if value != nil &&
+			(value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > result.ReadRevision) {
+			return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{}, false,
+				errs.New(errs.KindStateConflict, "Blueprint prerequisite snapshot is inconsistent")
+		}
+	}
+	var producer workexecution.Task
+	if result.Values[1] != nil {
+		producer, err = workqueue.DecodeTask(result.Values[1].Value)
+		if err != nil {
+			return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{}, false, err
+		}
+		if producer.ID != revisionID || producer.Scope.EnvironmentID != environmentID {
+			return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{}, false,
+				errs.New(errs.KindStateConflict, "Blueprint prerequisite producer belongs to another Environment")
+		}
+		if producer.Action == workexecution.ActionApply && result.Values[0] == nil {
+			return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{}, false,
+				errs.New(errs.KindStateConflict, "Blueprint Apply prerequisite snapshot is missing")
+		}
+	}
+	if result.Values[0] == nil {
 		return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{ReadRevision: result.ReadRevision}, false, nil
 	}
-	authority, err := decodeBlueprintPrerequisiteAuthority(result.Entry.Value)
-	if err != nil || authority.EnvironmentID != environmentID || authority.RevisionID != revisionID {
+	authority, err := decodeBlueprintPrerequisiteAuthority(result.Values[0].Value)
+	if err != nil || authority.EnvironmentID != environmentID || authority.RevisionID != revisionID ||
+		producer.ID != "" && producer.Action != workexecution.ActionApply {
 		return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{}, false, errs.New(
 			errs.KindInternal, "Blueprint prerequisite authority is corrupt",
 		)
 	}
 	return etcdstore.Versioned[BlueprintPrerequisiteAuthority]{
-		Record: authority, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
+		Record: authority, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }

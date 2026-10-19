@@ -10,7 +10,7 @@ import (
 )
 
 // CreateImageOperation commits the captured operation, its work and tag selection
-// with request replay. It never publishes an old TaskRecord alongside new work.
+// with request replay in one transaction.
 func (repository *TaskRepository) CreateImageOperation(ctx context.Context,
 	input imageoperations.Input, marker idempotency.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {

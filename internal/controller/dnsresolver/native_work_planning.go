@@ -39,8 +39,7 @@ type PreparedWork struct {
 	InitialProjection bool
 }
 
-// PrepareWork captures the compiled DNS recipe directly. It never constructs a
-// TaskRecord, a hidden Task or an ExecutionPlan to obtain native host authority.
+// PrepareWork captures the compiled DNS recipe and its host-bound inputs.
 func (planner *PlatformRenderPlanner) PrepareWork(ctx context.Context, records *resolverwork.Repository,
 	current keyvalue.Versioned[componentrecord.Record], desired core.Component, request WorkRequest,
 ) (PreparedWork, error) {

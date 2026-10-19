@@ -11,12 +11,10 @@ import (
 	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const (
@@ -267,7 +265,6 @@ func resolveMaterializationForTest(
 	expected []byte,
 ) []byte {
 	t.Helper()
-	planHash := bytes.Repeat([]byte{0x5a}, sha256.Size)
 	digest := sha256.Sum256(expected)
 	reference := testtaskmaterialization.Record{
 		StepID: resolverStepID, MaterializationID: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAX",
@@ -282,21 +279,10 @@ func resolveMaterializationForTest(
 		reference.OutputKind = testtaskmaterialization.OutputGeneratedEnvironment
 		reference.Mode = 0o600
 	}
-	step, err := BuildTaskMaterializationStep(reference, "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAY", 120)
+	_, stream, err := resolver.OpenCapturedFile(context.Background(), "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		resolverStepID, 9, reference)
 	if err != nil {
-		t.Fatalf("BuildTaskMaterializationStep() error = %v", err)
-	}
-	plan := &agentpb.ExecutionPlan{
-		PlanId: resolverPlanID, PlanHash: planHash, RenderGeneration: 9,
-		Steps: []*agentpb.ExecutionStep{step},
-	}
-	task := etcd.TaskRecord{
-		PlanID: resolverPlanID, PlanHash: hex.EncodeToString(planHash), RenderGeneration: 9,
-		Materializations: []testtaskmaterialization.Record{reference},
-	}
-	stream, err := resolver.ResolveMaterialization(context.Background(), task, plan, step)
-	if err != nil {
-		t.Fatalf("ResolveMaterialization() error = %v", err)
+		t.Fatalf("OpenCapturedFile() error = %v", err)
 	}
 	content, err := io.ReadAll(stream)
 	if err != nil {

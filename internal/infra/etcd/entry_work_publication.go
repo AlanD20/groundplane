@@ -36,9 +36,8 @@ type EntryWorkPublication struct {
 	DefinitionConfigurationRevision int64
 }
 
-// PublishEntryConfigurationWork accepts a direct Entry action without any old
-// TaskRecord, generic plan or hidden child. Removal keeps the staged desired head
-// private until its acknowledged file cleanup settles.
+// PublishEntryConfigurationWork atomically accepts a direct Entry action.
+// Removal keeps the staged desired head private until acknowledged file cleanup.
 func (repository *HierarchyRepository) PublishEntryConfigurationWork(ctx context.Context, request EntryWorkPublication) (IdempotencyTransactionResult, error) {
 	project, environment, claim := request.Project, request.Environment, request.Claim
 	task, item := request.Task, request.Item

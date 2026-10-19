@@ -2,7 +2,6 @@ package core
 
 import (
 	"reflect"
-	"sort"
 	"testing"
 	"time"
 
@@ -52,13 +51,12 @@ func TestNormalizeRequirementsRejectsOpenGrammar(t *testing.T) {
 	}
 }
 
-func TestResolveAndPlanBlueprintRequirements(t *testing.T) {
-	// Rationale: labels round-trip while retry planning uses stable target and step ids only.
+func TestResolveBlueprintRequirementsRetainsStableTarget(t *testing.T) {
+	// Rationale: later work uses the captured resource and producer, not a label
+	// that might now resolve to another Attach.
 	t.Parallel()
 	at := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
 	target := ids.NewAt(ids.KindAttach, at, 1)
-	firstStep := ids.NewAt(ids.KindStep, at, 2)
-	secondStep := ids.NewAt(ids.KindStep, at, 3)
 	producerTask := ids.NewAt(ids.KindTask, at, 4)
 	rootTask := ids.NewAt(ids.KindTask, at, 5)
 	authored := []Requirement{{
@@ -72,26 +70,15 @@ func TestResolveAndPlanBlueprintRequirements(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := BuildBlueprintRequirementPhasePlan(resolved, []string{secondStep, firstStep}, RequirementPhaseDeploy)
+	edges, order, err := BuildBlueprintRequirementTaskGraph(rootTask, resolved, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantSteps := []string{firstStep, secondStep}
-	sort.Strings(wantSteps)
-	wantOrder := append([]string{target}, wantSteps...)
 	if !reflect.DeepEqual(resolved.Authored, authored) || resolved.Resolved[0].Target.ID != target ||
 		resolved.Resolved[0].Target.TaskID != producerTask || resolved.Resolved[0].Target.Revision != 39 ||
-		!reflect.DeepEqual(plan.OrderedNodeIDs, wantOrder) || len(plan.Edges) != 2 {
-		t.Fatalf("resolved/plan = %#v / %#v", resolved, plan)
-	}
-	dag, err := BuildBlueprintRequirementDAG(rootTask, resolved, []string{secondStep, firstStep}, nil)
-	if err != nil || dag.Validate() != nil {
-		t.Fatalf("BuildBlueprintRequirementDAG() = %#v, %v", dag, err)
-	}
-	tampered := dag.Clone()
-	tampered.PhasePlans[1].Edges = nil
-	if err := tampered.Validate(); err == nil {
-		t.Fatal("tampered sealed phase plan accepted")
+		!reflect.DeepEqual(order, []string{producerTask, rootTask}) || len(edges) != 1 ||
+		edges[0].PrerequisiteTaskID != producerTask || edges[0].DependentTaskID != rootTask {
+		t.Fatalf("captured prerequisite identity/order changed: %#v / %#v", resolved, order)
 	}
 }
 

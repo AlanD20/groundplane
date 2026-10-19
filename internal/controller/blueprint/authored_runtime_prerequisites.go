@@ -11,14 +11,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type authoredPrerequisiteAuthorityReader interface {
-	GetBlueprintPrerequisiteAuthority(
-		context.Context,
-		string,
-		string,
-	) (etcdstore.Versioned[etcd.BlueprintPrerequisiteAuthority], bool, error)
-}
-
 func (service *Service) prepareAuthoredPrerequisiteAuthority(
 	ctx context.Context,
 	environmentID, revisionID string,
@@ -28,7 +20,7 @@ func (service *Service) prepareAuthoredPrerequisiteAuthority(
 	var err error
 	if len(requirements.Resolved) != 0 {
 		inherited, err = environmentBlueprintRequirementTaskEdges(
-			ctx, service.repository, revisionID, requirements, requirements.ResolutionRevision,
+			ctx, service.repository, environmentID, revisionID, requirements, requirements.ResolutionRevision,
 		)
 		if err != nil {
 			return etcd.BlueprintPrerequisiteAuthority{}, err
@@ -41,13 +33,7 @@ func (service *Service) loadAuthoredPrerequisiteAuthority(
 	ctx context.Context,
 	environmentID, revisionID string,
 ) (etcdstore.Versioned[etcd.BlueprintPrerequisiteAuthority], error) {
-	reader, ok := service.repository.(authoredPrerequisiteAuthorityReader)
-	if !ok {
-		return etcdstore.Versioned[etcd.BlueprintPrerequisiteAuthority]{}, errs.New(
-			errs.KindInternal, "Blueprint prerequisite authority repository is not configured",
-		)
-	}
-	authority, found, err := reader.GetBlueprintPrerequisiteAuthority(ctx, environmentID, revisionID)
+	authority, found, err := service.repository.GetBlueprintPrerequisiteAuthority(ctx, environmentID, revisionID, 0)
 	if err != nil {
 		return etcdstore.Versioned[etcd.BlueprintPrerequisiteAuthority]{}, err
 	}

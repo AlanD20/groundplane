@@ -11,7 +11,7 @@ import (
 )
 
 // Accepted input, independent artifact projection, native execution and request
-// replay are one transaction. No generic TaskRecord or hidden child is created.
+// replay are one transaction.
 func (repository *TaskRepository) CreateSoftwarePreparationWork(ctx context.Context, capture preparation.Capture,
 	record preparation.Record, marker idempotency.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {

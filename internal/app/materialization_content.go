@@ -2,11 +2,11 @@ package app
 
 import (
 	"fmt"
+
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/materializationcontent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -31,13 +31,6 @@ func initializeTaskMaterializationResolver(
 	}
 	if err := resolver.EnableComponentMaterializationContent(contents); err != nil {
 		return nil, fmt.Errorf("controller: initialize Component materialization runtime content: %w", err)
-	}
-	snapshots, err := runtimeconfiguration.New(store)
-	if err != nil {
-		return nil, err
-	}
-	if err := resolver.EnableConfigurationRecovery(snapshots); err != nil {
-		return nil, err
 	}
 	return resolver, nil
 }

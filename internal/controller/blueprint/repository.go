@@ -31,6 +31,8 @@ import (
 )
 
 type environmentBlueprintRepository interface {
+	GetBlueprintPrerequisiteAuthority(context.Context, string, string, int64,
+	) (etcdstore.Versioned[etcd.BlueprintPrerequisiteAuthority], bool, error)
 	ValidateAgentProxyPublication(
 		context.Context,
 		workqueue.View,

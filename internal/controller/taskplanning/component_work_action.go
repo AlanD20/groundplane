@@ -16,8 +16,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// PrepareComponentWorkAction captures the provider operation directly, with no
-// TaskRecord, generic step or predecessor lookup through execution history.
+// PrepareComponentWorkAction binds the provider operation to its captured
+// configuration and retained predecessor.
 func (resolver *ComponentConfigurationCapture) PrepareComponentWorkAction(ctx context.Context,
 	input EnvironmentManagedConfigApplyInput, capture runtimeconfiguration.WorkCapture,
 	prior runtimeconfiguration.Snapshot, predecessorKind core.ComponentKind,
