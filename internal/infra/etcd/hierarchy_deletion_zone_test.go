@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -24,7 +25,7 @@ func TestEnvironmentHierarchyDeletionFreezesProjectionZonesAndReleasesPool(t *te
 	// Rationale: whole-Environment deletion must freeze Zones from the selected
 	// immutable projection and release only their operational allocation state.
 	ctx := context.Background()
-	fixture, operationID := newHierarchyDeletionZoneFixture(t)
+	fixture := newHierarchyDeletionZoneFixture(t)
 	addressesValue, err := testrecordcodec.Encode(
 		"component_address_registry",
 		testnetworkreservations.ComponentAddressRegistry{
@@ -43,20 +44,17 @@ func TestEnvironmentHierarchyDeletionFreezesProjectionZonesAndReleasesPool(t *te
 	if err != nil || !seed.Succeeded {
 		t.Fatalf("seed Zone address registry = %#v/%v", seed, err)
 	}
-	primary, err := fixture.store.Get(ctx, testhierarchy.EnvironmentKey(fixture.environment.Record.ID))
-	if err != nil || primary == nil || primary.Entry == nil {
-		t.Fatalf("Environment primary = %#v/%v", primary, err)
+	operations, err := newHierarchyDeletionRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
 	}
-	defer clear(primary.Entry.Value)
-	operation := testhierarchydeletion.HierarchyDeletionOperation{
-		Tombstone: testhierarchydeletion.HierarchyDeletionTombstone{
-			OperationID:   operationID,
-			OperationKind: testhierarchydeletion.HierarchyDeletionOperationEnvironment,
-			TargetKind:    testhierarchydeletion.HierarchyDeletionTargetEnvironment,
-			TargetID:      fixture.environment.Record.ID, TargetRevision: primary.Entry.ModRevision,
-			SnapshotRevision: seed.Revision, DeletionEpoch: 1,
-		},
+	created, err := operations.Begin(ctx, hierarchyDeletionCreationTestBegin(fixture.environment.Record.CreatedAt,
+		testhierarchydeletion.HierarchyDeletionTargetEnvironment, fixture.environment.Record.ID,
+		testhierarchydeletion.HierarchyDeletionOperationEnvironment, "7"))
+	if err != nil {
+		t.Fatal(err)
 	}
+	operation := created.Operation
 	frozen, err := testhierarchydeletionplanning.NewPlanner(fixture.store).
 		FreezeCapturedMembership(ctx, operation.Tombstone)
 	if err != nil {
@@ -115,14 +113,18 @@ func TestEnvironmentHierarchyDeletionFreezesProjectionZonesAndReleasesPool(t *te
 			t.Fatalf("Zone finalizer retained operational key %s", key)
 		}
 	}
-	fixture.assertCurrentHead(t)
+	current, found, err := fixture.hierarchy.GetEnvironmentComposeProjection(ctx, fixture.environment.Record.ID)
+	if err != nil || !found || current.Revision != fixture.projection.Revision ||
+		!reflect.DeepEqual(current.Record, fixture.projection.Record) {
+		t.Fatalf("Zone metadata finalization changed desired state: %#v/%t/%v", current, found, err)
+	}
 	retained, err := fixture.zones.GetZone(ctx, fixture.zone.Record.Desired.ID)
 	if err != nil || retained.Revision != fixture.projection.Revision {
 		t.Fatalf("GetZone(retained projection) = %#v/%v", retained, err)
 	}
 }
 
-func newHierarchyDeletionZoneFixture(t *testing.T) (*zoneDeletionProjectionFixture, string) {
+func newHierarchyDeletionZoneFixture(t *testing.T) *hierarchyZoneMetadataFixture {
 	t.Helper()
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
@@ -130,16 +132,18 @@ func newHierarchyDeletionZoneFixture(t *testing.T) (*zoneDeletionProjectionFixtu
 	if err != nil {
 		t.Fatal(err)
 	}
-	project, environment := zoneDeletionOwners(t, hierarchy, false)
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 15100)
+	_, environment := createEnvironmentBlueprintOwners(t, hierarchy)
+	at := environment.Record.CreatedAt
 	record, err := testzones.NewRecord(environment.Record.ID, core.Zone{
-		ID: ids.NewAt(ids.KindNetwork, task.CreatedAt, 101), Name: "frontend", Subnet: "10.40.20.0/24",
+		ID: ids.NewAt(ids.KindNetwork, at, 101), Name: "frontend", Subnet: "10.40.20.0/24",
 		Internal: true, OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environment.Record.ID,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
+	projection := withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
+		EnvironmentID: environment.Record.ID, RevisionID: ids.New(ids.KindTask), RenderGeneration: 1,
+	})
 	projection.DesiredZones = []testenvironmentprojection.EnvironmentZoneProjection{{
 		EnvironmentID: environment.Record.ID, Desired: record.Desired,
 	}}
@@ -197,8 +201,17 @@ func newHierarchyDeletionZoneFixture(t *testing.T) (*zoneDeletionProjectionFixtu
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &zoneDeletionProjectionFixture{
-		store: store, hierarchy: hierarchy, zones: zones, project: project,
+	return &hierarchyZoneMetadataFixture{
+		store: store, hierarchy: hierarchy, zones: zones,
 		environment: environment, zone: zone, projection: selected,
-	}, ids.NewAt(ids.KindOperation, task.CreatedAt, 102)
+	}
+}
+
+type hierarchyZoneMetadataFixture struct {
+	store       *memoryHierarchyStore
+	hierarchy   *HierarchyRepository
+	zones       *ZoneRepository
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
+	zone        testkeyvalue.Versioned[testzones.Record]
+	projection  testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]
 }

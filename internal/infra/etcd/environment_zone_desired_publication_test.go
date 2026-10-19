@@ -11,13 +11,12 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -34,57 +33,35 @@ func TestEnvironmentZoneDesiredPublicationCommitsHeadPoolAndReplay(t *testing.T)
 func testEnvironmentZoneDesiredPublication(t *testing.T, firstZone bool) {
 	t.Helper()
 	ctx := context.Background()
-	store := newMemoryHierarchyStore()
+	_, store, environment, project, _ := routeRepositoryTestHierarchy(t)
 	repository, err := newHierarchyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	project, environment := createEnvironmentBlueprintOwners(t, repository)
-
-	baseTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 14000)
-	baseRevision := environmentBlueprintTestRevision(environment.Record.ID, baseTask, "services: {}\n")
-	baseProjection := environmentBlueprintTestProjection(environment.Record.ID, baseTask, 1)
-	if firstZone {
-		baseProjection.DesiredZones = nil
-		baseProjection.DesiredServices[0].Desired.Zones = nil
-	}
-	var baseZoneChanges []testblueprints.EnvironmentBlueprintZoneChange
 	if !firstZone {
-		baseZoneChanges = environmentBlueprintTestZoneChanges(t, repository, baseProjection)
-	}
-	baseMarker := environmentBlueprintTestMarker(baseTask, environment.Record.ID)
-	baseClaim := stageEnvironmentBlueprintForPublicationTest(t, repository, 0, baseRevision, baseProjection, baseMarker)
-	baseResult, err := publishEnvironmentBlueprintClaimTest(
-		repository,
-		ctx,
-		project,
-		environment,
-		0,
-		baseClaim,
-		testblueprints.EnvironmentDesiredRevisionIdentity{
+		baseline, found, err := repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
+		if err != nil || !found {
+			t.Fatalf("read baseline: %v", err)
+		}
+		existingID := ids.New(ids.KindNetwork)
+		baseline.Record.DesiredZones = []testenvironmentprojection.EnvironmentZoneProjection{{
 			EnvironmentID: environment.Record.ID,
-			RevisionID:    baseTask.ID,
-		},
-		baseProjection,
-		baseZoneChanges,
-		environmentBlueprintTestServiceChanges(t, repository, baseProjection),
-		environmentBlueprintTestRouteChanges(
-			t,
-			repository,
-			baseProjection,
-		),
-		testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
-		testcomponentplanning.ComponentTaskPreparation{},
-		testblueprintplanning.BlueprintAttachTaskPreparation{},
-		baseTask,
-		baseMarker,
-	)
-	if err != nil {
-		t.Fatalf("publish base desired revision: %v", err)
-	}
-	if outcome, _, conflict, classifyErr := baseResult.Classify(); classifyErr != nil || conflict != nil ||
-		outcome != IdempotencyKnownApplied {
-		t.Fatalf("base publication = %v/%v/%v", outcome, conflict, classifyErr)
+			Desired: core.Zone{ID: existingID, Name: "default", Subnet: "10.40.10.0/24", Internal: true,
+				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environment.Record.ID},
+		}}
+		baseline.Record.RevisionID = ids.New(ids.KindTask)
+		seedServiceRepositoryTestDesiredProjection(t, store, baseline.Record)
+		pool, err := recordcodec.Encode("zone_pool_registry", networkreservations.ZonePoolRegistry{
+			Reservations: map[string]string{existingID: "10.40.10.0/24"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer clear(pool)
+		if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: networkreservations.ZonePoolRegistryKey(environment.Record.ID), Value: pool,
+		}}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	current, found, err := repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
 	if err != nil || !found {
