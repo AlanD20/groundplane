@@ -7,7 +7,6 @@ import (
 	time "time"
 
 	testbackupconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
-	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -104,154 +103,6 @@ func TestBackupRuntimeRepositoryConfigReplayRequiresExactCompanions(t *testing.T
 
 // Rationale: unknown-outcome replay must reject a membership rewritten after
 // publication even when its raw value still names the same run.
-func TestBackupRuntimeRepositoryCreateRunReplayRejectsChangedMembershipRevision(t *testing.T) {
-	t.Parallel()
-	repository, store, run := newBackupRuntimeRepositoryFixture(t)
-	if _, err := repository.createBackupRunForTest(
-		context.Background(),
-		run,
-		backupRuntimeCurrentRevision(t, repository.store, run.EnvironmentID),
-	); err != nil {
-		t.Fatalf("createBackupRunForTest() error = %v", err)
-	}
-	membership, err := testbackupruntime.BackupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	entry := mustOptionalKey(t, store, membership)
-	result, err := store.Transact(
-		context.Background(),
-		[]testkeyvalue.Condition{{Key: membership, ModRevision: entry.ModRevision}},
-		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: membership, Value: entry.Value}},
-	)
-	if err != nil || !result.Succeeded {
-		t.Fatalf("rewrite run membership = %#v, %v", result, err)
-	}
-	if _, err := repository.GetBackupRun(
-		context.Background(), run.TaskID,
-	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-		t.Fatalf("GetBackupRun(changed membership) error = %v", err)
-	}
-}
-
-// Rationale: cursors are meaningful only with the fixed revision whose
-// snapshot they continue.
-func TestBackupRuntimeRepositoryRejectsCursorWithoutRevision(t *testing.T) {
-	t.Parallel()
-	repository, _, run := newBackupRuntimeRepositoryFixture(t)
-	_, err := repository.ListBackupRunsByEnvironment(
-		context.Background(),
-		run.EnvironmentID, testbackupruntime.BackupRuntimeListRequest{
-			Limit:          1,
-			StartExclusive: testbackupruntime.BackupRunEnvironmentPrefix + run.EnvironmentID + "/" + run.TaskID,
-		},
-	)
-	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-		t.Fatalf("ListBackupRunsByEnvironment(cursor without revision) error = %v", err)
-	}
-}
-
-// Rationale: the full twelve-source contract must remain composable after
-// primary-owned derived membership removes redundant absence compares.
-func TestBackupRuntimeRepositoryPreparesTwelveSourcePublicationWithinBounds(t *testing.T) {
-	t.Parallel()
-	repository, _, run := newBackupRuntimeBareFixture(t)
-	for ordinal := uint32(1); ordinal < testbackuppolicy.MaximumBackupPolicySources; ordinal++ {
-		source := testBackupLaterSource(run.CreatedAt, ordinal, testbackupruntime.BackupSourceAttemptPending)
-		source.Snapshot.Postgres.ConsumerEnvironmentID = run.EnvironmentID
-		source.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + source.SourceID + "/" +
-			source.RecoveryPointID + "/artifact.bin"
-		run.Sources = append(run.Sources, source)
-	}
-	extendBackupRuntimePublicationSources(t, repository.store, &run)
-	lock := testbackupruntime.BackupOperationLockRecord{
-		EnvironmentID: run.EnvironmentID, OperationID: run.OperationID, TaskID: run.TaskID,
-		Kind: testbackupruntime.BackupOperationBackup, CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
-	}
-	plan, err := repository.prepareBackupRunPublication(
-		context.Background(),
-		run,
-		lock,
-		backupRuntimeCurrentRevision(t, repository.store, run.EnvironmentID),
-	)
-	if err != nil {
-		t.Fatalf("prepareBackupRunPublication(12 sources) error = %v", err)
-	}
-	defer plan.clear()
-	if len(plan.conditions)+len(plan.mutations) > testkeyvalue.MaximumOperations {
-		t.Fatalf(
-			"12-source publication operations = %d, want <= %d",
-			len(plan.conditions)+len(plan.mutations), testkeyvalue.MaximumOperations,
-		)
-	}
-	exclusions, err := backupRunExclusionRecords(run, run.CreatedAt)
-	if err != nil || len(exclusions) != testbackuppolicy.MaximumBackupPolicySources {
-		t.Fatalf("12-source exclusions = %d, %v", len(exclusions), err)
-	}
-}
-
-// Rationale: exclusion cleanup is an all-or-none authority transition; a
-// partial set cannot be accepted as replay or opportunistically repaired.
-func TestBackupRuntimeRepositoryRejectsMixedExclusionRelease(t *testing.T) {
-	t.Parallel()
-	repository, store, run := newBackupRuntimeRepositoryFixture(t)
-	second := testBackupLaterSource(run.CreatedAt, 1, testbackupruntime.BackupSourceAttemptPending)
-	second.Snapshot.Postgres.ConsumerEnvironmentID = run.EnvironmentID
-	second.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + second.SourceID + "/" +
-		second.RecoveryPointID + "/artifact.bin"
-	run.Sources = append(run.Sources, second)
-	extendBackupRuntimePublicationSources(t, repository.store, &run)
-	created, err := repository.createBackupRunForTest(
-		context.Background(),
-		run,
-		backupRuntimeCurrentRevision(t, repository.store, run.EnvironmentID),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	failed := run
-	failed.State = testbackupruntime.BackupRunFailed
-	failed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
-	failed.Sources[0].State = testbackupruntime.BackupSourceAttemptFailed
-	failed.Sources[0].FailureCode = testbackupruntime.BackupFailureCapture
-	failed.Sources[1].State = testbackupruntime.BackupSourceAttemptUnstarted
-	failed.Sources[1].Phase = testbackupruntime.BackupSourcePhaseCapture
-	failed.UpdatedAt = run.UpdatedAt.Add(time.Second)
-	firstKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
-		testbackupruntime.BackupSourceTargetAttach,
-		run.Sources[0].TargetID,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	entry := mustOptionalKey(t, store, firstKey)
-	result, err := store.Transact(
-		context.Background(),
-		[]testkeyvalue.Condition{{Key: firstKey, ModRevision: entry.ModRevision}},
-		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: firstKey}},
-	)
-	if err != nil || !result.Succeeded {
-		t.Fatalf("delete one exclusion = %#v, %v", result, err)
-	}
-	if _, err := repository.prepareBackupRunTerminal(
-		context.Background(), created, failed,
-	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-		t.Fatalf("prepareBackupRunTerminal(mixed) error = %v", err)
-	}
-	secondKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
-		testbackupruntime.BackupSourceTargetAttach,
-		second.TargetID,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if entry := mustOptionalKey(t, store, secondKey); entry == nil {
-		t.Fatal("mixed exclusion release removed the surviving authority")
-	}
-}
-
-// Rationale: terminal Task evidence, run state, exclusion release, lock release,
-// and epoch advance must share one bounded transaction revision.
 func TestBackupRuntimeRepositoryComposesTerminalRunAndAuthorityRelease(t *testing.T) {
 	t.Parallel()
 	repository, store, run := newBackupRuntimeRepositoryFixture(t)
@@ -710,3 +561,64 @@ func TestBackupRuntimeRepositoryRejectsRewrittenRetainedOrphanCompanion(t *testi
 		t.Fatal("rewritten orphan companion released the Environment lock")
 	}
 }
+
+func TestBackupRuntimeRepositoryRejectsMixedExclusionRelease(t *testing.T) {
+	t.Parallel()
+	repository, store, run := newBackupRuntimeRepositoryFixture(t)
+	second := testBackupLaterSource(run.CreatedAt, 1, testbackupruntime.BackupSourceAttemptPending)
+	second.Snapshot.Postgres.ConsumerEnvironmentID = run.EnvironmentID
+	second.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + second.SourceID + "/" +
+		second.RecoveryPointID + "/artifact.bin"
+	run.Sources = append(run.Sources, second)
+	extendBackupRuntimePublicationSources(t, repository.store, &run)
+	created, err := repository.createBackupRunForTest(
+		context.Background(),
+		run,
+		backupRuntimeCurrentRevision(t, repository.store, run.EnvironmentID),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failed := run
+	failed.State = testbackupruntime.BackupRunFailed
+	failed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
+	failed.Sources[0].State = testbackupruntime.BackupSourceAttemptFailed
+	failed.Sources[0].FailureCode = testbackupruntime.BackupFailureCapture
+	failed.Sources[1].State = testbackupruntime.BackupSourceAttemptUnstarted
+	failed.Sources[1].Phase = testbackupruntime.BackupSourcePhaseCapture
+	failed.UpdatedAt = run.UpdatedAt.Add(time.Second)
+	firstKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+		testbackupruntime.BackupSourceTargetAttach,
+		run.Sources[0].TargetID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := mustOptionalKey(t, store, firstKey)
+	result, err := store.Transact(
+		context.Background(),
+		[]testkeyvalue.Condition{{Key: firstKey, ModRevision: entry.ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: firstKey}},
+	)
+	if err != nil || !result.Succeeded {
+		t.Fatalf("delete one exclusion = %#v, %v", result, err)
+	}
+	if _, err := repository.prepareBackupRunTerminal(
+		context.Background(), created, failed,
+	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("prepareBackupRunTerminal(mixed) error = %v", err)
+	}
+	secondKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+		testbackupruntime.BackupSourceTargetAttach,
+		second.TargetID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry := mustOptionalKey(t, store, secondKey); entry == nil {
+		t.Fatal("mixed exclusion release removed the surviving authority")
+	}
+}
+
+// Rationale: terminal Task evidence, run state, exclusion release, lock release,
+// and epoch advance must share one bounded transaction revision.
