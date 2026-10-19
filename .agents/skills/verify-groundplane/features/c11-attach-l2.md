@@ -1,65 +1,50 @@
-# C11 per-service Attach L2 acceptance
+# C11 Attach local acceptance
 
-This hermetic journey proves the implemented C11 Attach contract without
-requiring an already provisioned PostgreSQL or Valkey host. It runs the
-production durable repositories, Controller plan and HTTP handlers, CLI
-command mapping, adapter compilers, and the Agent's PostgreSQL adapter runtime.
-The external-service boundary is the Agent runner used by its focused test; it
-returns bounded Docker and adapter results without contacting or mutating a
-host.
+This hermetic gate exercises current Attach publication, encrypted facts, captured
+adapter procedures, Custom-hook cancellation and metadata-only Detach through the
+native Task owners. It does not execute a complete Agent-backed Attach or Detach.
 
 ## Prerequisites
 
-- Go at the version declared by `go.mod`.
-- Local commands: `go`, `cmp`, `date`, `mkdir`, and `mktemp`.
-- A writable repository-local `.tmp/verify-groundplane` directory.
+Use the Go version declared by the repository and the standard repository
+environment. Required shell tools are checked by the script. No installed
+Controller, database, Docker Engine or remote host is needed.
 
-Optional variables:
+Optional evidence/runtime roots follow the
+[shared path rules](../../../../docs/agents.md#supported-tooling-invocation).
+The script preserves a unique evidence directory and removes only its own
+temporary directory. It reuses the validated repository Go cache.
 
-| Variable | Default |
-| --- | --- |
-| `GROUNDPLANE_EVIDENCE_DIR` | `.tmp/verify-groundplane/` |
-| `GROUNDPLANE_VERIFY_RUNTIME_DIR` | initialized `$TMPDIR` (repo-local `.tmp/tmp` by default) |
-
-The [shared path rules](../../../../docs/agents.md#supported-tooling-invocation)
-validate defaults and overrides before the verifier creates evidence or runtime state.
-
-## Journey
+## Run
 
 ```sh
 .agents/skills/verify-groundplane/scripts/c11-attach-l2.sh
 ```
 
-The runner first proves that every package-specific selection contains at
-least one test. It then executes those exact C11-focused tests under the race
-detector and regenerates OpenAPI to an evidence file before comparing it
-byte-for-byte with the committed contract. It preserves all logs and the
-generated contract in one unique evidence directory on success or failure.
+The script rejects empty test selections, runs the selected current packages
+under the race detector, and regenerates OpenAPI into evidence for byte parity.
+The script owns exact package and test selections; do not copy those lists here.
 
-## Assertions
+## What it checks
 
-- concurrent protected retries have one winner and one replay outcome;
-- one Attach owns exactly one consumer Service, backing Project, backing
-  Environment, backing Service, and durable backing Network;
-- attach retry preserves identity, encrypted facts, and grant edges across
-  repository reconstruction after an injected terminal failure;
-- list responses expose fact keys and secret classification, never fact values;
-- explicit fact reveal requires ready state and exact grant membership;
-- PostgreSQL compiles its provision, grant, revoke, and detach procedure with
-  stable database context, and the Agent runtime keeps its secret out of argv;
-- Valkey provisioning keeps its ACL secret out of argv and places it on stdin;
-- provision/grant precede targeted network reconciliation, while detach orders
-  revoke, network removal, then deprovision;
-- failed detach retains the Attach and exact Task plan, and successful retry
-  atomically removes the Attach, facts, memberships, and outgoing grant edges;
-- network-union construction mutates only the intended consumer membership;
-- REST operations, CLI slug/default and `--id` paths, and the regenerated
-  OpenAPI document retain the exercised Attach surface.
+- Native Custom and no-auth Valkey Attach publication, protected replay, captured
+  resource identity and Controller settlement before first Deploy.
+- Queued Custom Detach expiry, same-work Retry, shared Retry error propagation,
+  atomic binding/index removal and rejection of a concurrent deployment.
+- Captured password/no-auth identity, encrypted fact grants, credential procedure
+  ordering and targeted PostgreSQL database context.
+- Custom-hook cancellation joins execution before cleanup and keeps untrusted
+  runner errors out of public diagnostics.
+- Durable metadata ownership, scoped fact reveal, HTTP request behavior and CLI
+  command mapping.
 
 ## Evidence and limits
 
-The evidence directory retains each package's test enumeration, the exact
-selection counts, race-test log, regenerated OpenAPI, byte-parity result, and
-final summary. The verifier owns a unique non-symlink runtime directory for Go
-caches and removes it on exit. This journey does not claim a live external
-database, Docker Engine, browser or Console session, or remote Controller.
+Retained evidence includes test enumeration, race output, generated OpenAPI,
+parity and a final receipt. These are separate focused checks, not one live
+end-to-end workflow. Resource storage is MVCC memory and external effects use
+captured procedures or hermetic runners.
+
+Real database/credential effects, complete Agent-backed Attach/Detach, interrupted
+command recovery, public Retry/Abort, remote Controller and rendered Console
+qualification remain separate requirements in the [QA matrix](../../../../docs/qa-matrix.md).

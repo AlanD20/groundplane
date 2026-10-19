@@ -216,14 +216,12 @@ class RepoEnvironmentTest(unittest.TestCase):
         self.assertEqual(list((self.root / "bin").iterdir()), [controller])
 
     def run_verifier(self, name: str, ok: bool = True) -> subprocess.CompletedProcess:
-        self.env.update(GROUNDPLANE_ETCD_ENDPOINT="http://example.invalid:2379",
-                        GROUNDPLANE_C07_ETCD_PREFIX="/groundplane-c07-acceptance/run-fixture/")
         return self.run_command("bash", str(VERIFY / name), ok=ok)
 
     # Delivery: verifier wrapper ownership with fake test execution, not an L2 pass.
     # Rationale: successful wrappers retain receipts and preserve pre-existing state.
     def test_local_verifiers_cleanup_only_their_runtime_and_retain_evidence(self) -> None:
-        for name in ("network-zone-route-etcd.sh", "c11-attach-l2.sh"):
+        for name in ("c11-attach-l2.sh",):
             with self.subTest(name=name):
                 runtime = self.root / ".tmp/runtime"
                 runtime.mkdir(parents=True, exist_ok=True)
@@ -235,7 +233,7 @@ class RepoEnvironmentTest(unittest.TestCase):
                 self.assertEqual(marker.read_text(), "pre-existing")
         self.assert_local_records()
         receipts = list((self.root / ".tmp/verify-groundplane").glob("*/result.txt"))
-        self.assertEqual(len(receipts), 2)
+        self.assertEqual(len(receipts), 1)
         for receipt in receipts:
             self.assertIn("runtime_cleanup=passed", receipt.read_text())
 
@@ -243,7 +241,7 @@ class RepoEnvironmentTest(unittest.TestCase):
     # Rationale: cleanup must preserve the original failure code and evidence.
     def test_failed_verifier_retains_evidence_and_cleans_runtime(self) -> None:
         self.env["GP_TEST_FAIL"] = "1"
-        self.run_verifier("network-zone-route-etcd.sh", ok=False)
+        self.run_verifier("c11-attach-l2.sh", ok=False)
         receipt = next((self.root / ".tmp/verify-groundplane").glob("*/result.txt"))
         self.assertIn("exit_status=7", receipt.read_text())
         self.assertIn("runtime_cleanup=passed", receipt.read_text())
@@ -255,7 +253,7 @@ class RepoEnvironmentTest(unittest.TestCase):
         for name in ("GROUNDPLANE_EVIDENCE_DIR", "GROUNDPLANE_VERIFY_RUNTIME_DIR"):
             with self.subTest(name=name):
                 self.env[name] = str(Path(self.scratch.name) / "outside")
-                self.run_verifier("network-zone-route-etcd.sh", ok=False)
+                self.run_verifier("c11-attach-l2.sh", ok=False)
                 self.assertFalse(Path(self.env[name]).exists())
                 self.assertFalse(Path(self.env["GP_TEST_RECORD"]).exists())
                 del self.env[name]
