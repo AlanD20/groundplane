@@ -56,12 +56,9 @@ func (service *BackupOrphanReconciliationService) Tick(ctx context.Context, afte
 		return next, false, err
 	}
 	if current.Record.CleanupProof == (backupruntime.BackupOrphanCleanupProof{}) {
-		proved, ready, err := service.runtime.CaptureBackupOrphanCleanupProof(
-			ctx, current, service.now().UTC().Truncate(time.Millisecond))
-		if err != nil || !ready {
-			return next, false, err
-		}
-		current = proved
+		// Only native recovery settlement can prove physical cleanup. Until
+		// then, neither remote reconciliation nor history retention may run.
+		return next, false, nil
 	}
 	identity := current.Record.Object
 	if identity == (backupruntime.BackupObjectIdentity{}) &&

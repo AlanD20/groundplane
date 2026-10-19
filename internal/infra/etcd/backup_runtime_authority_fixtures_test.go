@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
@@ -442,21 +443,29 @@ func createBackupRuntimeOrphanForReadTest(
 	return repository, store, orphan
 }
 
-// These reconciliation tests start after acknowledged stage cleanup. This fixture
-// seeds that durable boundary; it does not exercise the Agent cleanup handshake.
+// These reconciliation tests start after native recovery cleanup. This fixture
+// supplies that receipt boundary; it does not exercise recovery execution.
 func seedBackupOrphanAcknowledgedCleanup(t *testing.T, store *memoryHierarchyStore,
 	current testkeyvalue.Versioned[testbackupruntime.BackupOrphanRecord],
 ) testkeyvalue.Versioned[testbackupruntime.BackupOrphanRecord] {
 	t.Helper()
 	next := current.Record
-	next.CleanupProof = testbackupruntime.BackupOrphanCleanupProof{
-		TaskID: next.TaskID, TaskRevision: current.Revision,
-		StepID:            ids.NewAt(ids.KindStep, next.CreatedAt, 303),
-		RecoveryKeySHA256: testBackupDigest,
-		AgentID:           ids.NewAt(ids.KindAgent, next.CreatedAt, 304), AgentGeneration: 1,
-		DeliveryRevision: current.Revision + 1, DeliverySHA256: testBackupDigest, Disposition: "absent",
-	}
 	next.UpdatedAt = next.UpdatedAt.Add(time.Millisecond)
+	executionID := "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	digest, err := executionplan.BackupSourceStagingKey(next.TaskID, executionID, next.Target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next.CleanupProof = testbackupruntime.BackupOrphanCleanupProof{
+		TaskID: next.TaskID, WorkItemID: ids.NewAt(ids.KindWorkItem, next.CreatedAt, 303),
+		AttemptID: ids.NewAt(ids.KindAttempt, next.CreatedAt, 304),
+		Executor: workexecution.Identity{Executor: workexecution.Agent,
+			HostID:  ids.NewAt(ids.KindHost, next.CreatedAt, 305),
+			AgentID: ids.NewAt(ids.KindAgent, next.CreatedAt, 306), Generation: 1},
+		Input:       workexecution.Input{ID: ids.NewAt(ids.KindPlan, next.CreatedAt, 307), SHA256: testBackupDigest},
+		Result:      workexecution.Input{ID: ids.NewAt(ids.KindPlan, next.CreatedAt, 308), SHA256: testBackupDigest},
+		ExecutionID: executionID, RecoveryKeySHA256: hex.EncodeToString(digest), RecordedAt: next.UpdatedAt,
+	}
 	value, err := testbackupruntime.EncodeBackupOrphanRecord(next)
 	if err != nil {
 		t.Fatal(err)

@@ -5,17 +5,18 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (repository *InputRepository) prepareCaptureRecoverySettlement(ctx context.Context, view workqueue.View,
+func (repository *InputRepository) prepareCaptureRecoverySettlement(ctx context.Context, view workqueue.ResumeView,
 	input *agentpb.BackupWorkInput, sources []*agentpb.BackupStepResume,
-	failure executionplan.BackupWorkRecovery, at time.Time,
+	failure executionplan.BackupWorkRecovery, evidence workexecution.Input, at time.Time,
 ) (workqueue.Change, error) {
-	run, guard, err := repository.LoadStagingCapture(ctx, StagingSource{View: view, Input: input})
+	run, guard, err := repository.LoadStagingCapture(ctx, StagingSource{View: view.Work, Input: input})
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -51,24 +52,11 @@ func (repository *InputRepository) prepareCaptureRecoverySettlement(ctx context.
 	} else if !backupruntime.TerminalBackupRunState(run.State) {
 		return workqueue.Change{}, conflict("Backup cleanup requires its started or failed resource record")
 	}
-	orphan, err := repository.captureFailureOrphan(ctx, run, next, view.ReadRevision)
+	orphan, err := repository.prepareCaptureOrphanCleanup(ctx, view, input, run, next, evidence, at)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	// A failure recorded earlier already created the orphan. Recheck its exact
-	// ownership before releasing source locks; cleanup must not lose that debt.
-	for ordinal, source := range run.Sources {
-		if source.State != backupruntime.BackupSourceAttemptOrphaned || run.State == backupruntime.BackupRunRunning {
-			continue
-		}
-		guards, err := repository.retainedCaptureOrphan(ctx, run, uint32(ordinal), view.ReadRevision)
-		if err != nil {
-			keyvalue.ClearMutationValues(orphan.Mutations)
-			return workqueue.Change{}, err
-		}
-		orphan.Conditions = append(orphan.Conditions, guards.Conditions...)
-	}
-	change, err := repository.prepareCaptureRelease(ctx, view, run, next, guard, orphan)
+	change, err := repository.prepareCaptureRelease(ctx, view.Work, run, next, guard, orphan)
 	if err != nil {
 		keyvalue.ClearMutationValues(orphan.Mutations)
 	}

@@ -1,12 +1,16 @@
 package backupruntime
 
 import (
+	"encoding/hex"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/mysql84protocol"
 	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"time"
 )
 
 type BackupOrphanRecord struct {
@@ -37,19 +41,19 @@ type BackupOrphanReconciliationAuthority struct {
 	RetentionKeep  int64  `json:"retention_keep"`
 }
 
-// BackupOrphanCleanupProof is copied from one acknowledged Agent startup
-// inventory while its original terminal Task and staging index still exist.
-// It is independent of Task retention after the guarded native write.
+// BackupOrphanCleanupProof is retained atomically with the native recovery
+// receipt. It binds physical cleanup to captured input, not diagnostic history.
 type BackupOrphanCleanupProof struct {
-	TaskID            string `json:"task_id"`
-	TaskRevision      int64  `json:"task_revision"`
-	StepID            string `json:"step_id"`
-	RecoveryKeySHA256 string `json:"recovery_key_sha256"`
-	AgentID           string `json:"agent_id"`
-	AgentGeneration   uint64 `json:"agent_generation"`
-	DeliveryRevision  int64  `json:"delivery_revision"`
-	DeliverySHA256    string `json:"delivery_sha256"`
-	Disposition       string `json:"disposition"`
+	TaskID            string                 `json:"task_id"`
+	WorkItemID        string                 `json:"work_item_id"`
+	AttemptID         string                 `json:"attempt_id"`
+	Executor          workexecution.Identity `json:"executor"`
+	Input             workexecution.Input    `json:"input"`
+	Result            workexecution.Input    `json:"result"`
+	SourceOrdinal     uint32                 `json:"source_ordinal"`
+	ExecutionID       string                 `json:"execution_id"`
+	RecoveryKeySHA256 string                 `json:"recovery_key_sha256"`
+	RecordedAt        time.Time              `json:"recorded_at"`
 }
 
 type BackupRetentionSweepRecord struct {
@@ -139,13 +143,16 @@ func validateBackupOrphanRecord(record BackupOrphanRecord) error {
 		return invalidBackupRuntimeRecord("non-MySQL backup orphan carries database identity")
 	}
 	if proof := record.CleanupProof; proof != (BackupOrphanCleanupProof{}) {
-		if proof.TaskID != record.TaskID || proof.TaskRevision <= 0 ||
-			recordcodec.ValidateID(ids.KindStep, proof.StepID) != nil ||
-			!recordcodec.ValidSHA256(proof.RecoveryKeySHA256) ||
-			recordcodec.ValidateID(ids.KindAgent, proof.AgentID) != nil || proof.AgentGeneration == 0 ||
-			proof.DeliveryRevision <= proof.TaskRevision ||
-			!recordcodec.ValidSHA256(proof.DeliverySHA256) ||
-			(proof.Disposition != "discarded" && proof.Disposition != "absent") {
+		digest, err := executionplan.BackupSourceStagingKey(proof.TaskID, proof.ExecutionID, record.Target.ID)
+		if err != nil || proof.TaskID != record.TaskID ||
+			recordcodec.ValidateID(ids.KindWorkItem, proof.WorkItemID) != nil ||
+			recordcodec.ValidateID(ids.KindAttempt, proof.AttemptID) != nil ||
+			proof.Executor.Validate() != nil || proof.Executor.Executor != workexecution.Agent ||
+			proof.Input.Validate() != nil || proof.Result.Validate() != nil ||
+			proof.SourceOrdinal >= executionplan.MaximumBackupSources ||
+			proof.RecoveryKeySHA256 != hex.EncodeToString(digest) ||
+			!ValidBackupRuntimeInstant(proof.RecordedAt) || proof.RecordedAt.Before(record.CreatedAt) ||
+			proof.RecordedAt.After(record.UpdatedAt) {
 			return invalidBackupRuntimeRecord("backup orphan cleanup proof is incomplete")
 		}
 	}

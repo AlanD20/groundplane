@@ -246,6 +246,15 @@ active reader or a newly captured reference. Admission under storage pressure
 must reserve room for existing work to settle rather than continue unbounded
 publication; exact thresholds belong to the storage implementation.
 
+Backup recovery retains orphan cleanup authority in the same transaction as its
+validated recovery receipt, resource settlement and claim release. The orphan
+then owns the captured source and receipt identity independently of execution
+history. Remote reconciliation cannot proceed before that transfer, and Task
+retention cannot remove evidence from an unproved orphan. The
+[native cleanup owner](../../internal/infra/etcd/backupwork/capture_orphan_cleanup.go)
+replaces the old Task-journal and startup-delivery reader; no legacy proof decoder
+is retained.
+
 [Diagnostic expiry](../../internal/infra/etcd/executiondiagnostics/retention.go)
 uses a revision-bound cursor, independent of operation-owned Task collection.
 Retry invalidates the previous expiry cursor. Expiring the event tail retains its

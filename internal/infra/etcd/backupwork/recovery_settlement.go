@@ -30,13 +30,17 @@ func (repository *InputRepository) PrepareRecoverySettlement(ctx context.Context
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	if report.Operation != view.Work.Item.Item.Operation {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Backup recovery report operation differs from captured work")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Backup recovery report operation differs from captured work",
+		)
 	}
 	if err := report.ValidateInput(assignment.Input); err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	if at.Before(report.ObservedAt) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Backup recovery report observation is in the future")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Backup recovery report observation is in the future",
+		)
 	}
 	sources, progress, err := repository.LoadProgress(ctx, view.Work, assignment.Input)
 	if err != nil {
@@ -47,26 +51,45 @@ func (repository *InputRepository) PrepareRecoverySettlement(ctx context.Context
 	case workexecution.BackupPrune:
 		change, err = repository.preparePruneReleasedResources(ctx, view.Work, assignment.Input, sources, at)
 	case workexecution.Backup:
-		change, err = repository.prepareCaptureRecoverySettlement(ctx, view.Work, assignment.Input, sources, source, at)
+		change, err = repository.prepareCaptureRecoverySettlement(
+			ctx,
+			view,
+			assignment.Input,
+			sources,
+			source,
+			evidence,
+			at,
+		)
 	case workexecution.Restore:
 		change, err = repository.prepareRestoreRecoverySettlement(ctx, view.Work, assignment.Input, at)
 	default:
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Restore recovery requires its resource settlement proof")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Restore recovery requires its resource settlement proof",
+		)
 	}
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	change.Conditions = append(change.Conditions, guards.Conditions...)
-	change.Conditions = append(change.Conditions, progress, keyvalue.Condition{Key: RecoveryReportKey(view.Attempt.Attempt.ID)})
+	change.Conditions = append(
+		change.Conditions,
+		progress,
+		keyvalue.Condition{Key: RecoveryReportKey(view.Attempt.Attempt.ID)},
+	)
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut,
 		Key: RecoveryReportKey(view.Attempt.Attempt.ID), Value: append([]byte(nil), raw...)})
-	return change, workexecution.Completion{Outcome: workexecution.Succeeded, Evidence: evidence, EffectsSettled: true}, nil
+	return change, workexecution.Completion{
+		Outcome:        workexecution.Succeeded,
+		Evidence:       evidence,
+		EffectsSettled: true,
+	}, nil
 }
 
 func (repository *InputRepository) LoadRecoveryReport(ctx context.Context, view workqueue.ResumeView) ([]byte, error) {
 	attempt := view.Attempt.Attempt
 	if (view.Work.Item.Item.Operation != workexecution.BackupPrune && view.Work.Item.Item.Operation != workexecution.Backup && view.Work.Item.Item.Operation != workexecution.Restore) || attempt.Direction != workexecution.Recovery ||
-		attempt.FinishedAt == nil || attempt.Result == nil || attempt.Outcome != workexecution.Succeeded {
+		attempt.FinishedAt == nil || attempt.Result == nil ||
+		attempt.Outcome != workexecution.Succeeded {
 		return nil, conflict("Backup recovery has no settled report")
 	}
 	source, err := repository.LoadRecovery(ctx, view.Work)
