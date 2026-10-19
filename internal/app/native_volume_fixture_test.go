@@ -17,10 +17,8 @@ import (
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumework"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -53,7 +51,8 @@ type nativeDesiredRepository struct {
 // atomic transaction, without bypassing the store's comparisons.
 type nativeVolumeStore struct {
 	*memoryHierarchyStore
-	beforeCommit func([]keyvalue.Mutation)
+	beforeCommit         func([]keyvalue.Mutation)
+	afterBlueprintCommit func(keyvalue.TransactionResult)
 }
 
 func (store *nativeVolumeStore) Transact(
@@ -65,6 +64,21 @@ func (store *nativeVolumeStore) Transact(
 		store.beforeCommit(mutations)
 	}
 	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
+}
+
+func (store *nativeVolumeStore) TransactEnvironmentBlueprint(
+	ctx context.Context,
+	conditions []keyvalue.Condition,
+	mutations []keyvalue.Mutation,
+) (keyvalue.TransactionResult, error) {
+	if store.beforeCommit != nil {
+		store.beforeCommit(mutations)
+	}
+	result, err := store.memoryHierarchyStore.TransactEnvironmentBlueprint(ctx, conditions, mutations)
+	if err == nil && store.afterBlueprintCommit != nil {
+		store.afterBlueprintCommit(result)
+	}
+	return result, err
 }
 
 func newNativeVolumeFixture(t *testing.T) *nativeVolumeFixture {
@@ -116,22 +130,17 @@ func newNativeVolumeFixture(t *testing.T) *nativeVolumeFixture {
 	f.authorize(t)
 
 	tenant := hierarchy.TenantRecord{ID: ids.New(ids.KindTenant), Slug: "volume-check", Name: "Volume check"}
-	nativeVolumePut(t, f.store, hierarchy.TenantKey(tenant.ID), tenant, hierarchy.EncodeTenant)
+	parents, err := etcd.NewHierarchyRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parents.CreateTenant(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
 	project := hierarchy.ProjectRecord{ID: ids.New(ids.KindProject), TenantID: tenant.ID,
 		Slug: "volume-check", Name: "Volume check", Kind: hierarchy.ProjectKindTenant}
-	nativeVolumePut(t, f.store, hierarchy.ProjectKey(project.ID), project, hierarchy.EncodeProject)
-	for kind, id := range map[hierarchydeletion.HierarchyDeletionTargetKind]string{
-		hierarchydeletion.HierarchyDeletionTargetTenant:  tenant.ID,
-		hierarchydeletion.HierarchyDeletionTargetProject: project.ID,
-	} {
-		raw, err := hierarchydeletion.EncodeInitialCoordination(kind, id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := f.store.Put(ctx, hierarchydeletion.HierarchyCoordinationKey(string(kind), id), raw); err != nil {
-			t.Fatal(err)
-		}
-		clear(raw)
+	if _, err := parents.CreateProject(ctx, project); err != nil {
+		t.Fatal(err)
 	}
 	environment, err := hierarchy.NewProvisioningEnvironment("/var/lib/groundplane/vol", project,
 		ids.New(ids.KindEnvironment), "qa", "10.40.0.0/24", ids.New(ids.KindTask), at)
@@ -143,16 +152,9 @@ func newNativeVolumeFixture(t *testing.T) *nativeVolumeFixture {
 		t.Fatal(err)
 	}
 	f.environmentID = environment.ID
-	nativeVolumePut(t, f.store, hierarchy.EnvironmentKey(environment.ID), environment, hierarchy.EncodeEnvironment)
-	nativeVolumePut(
-		t,
-		f.store,
-		hierarchy.EnvironmentMutationEpochKey(environment.ID),
-		backupruntime.EnvironmentMutationEpochRecord{
-			EnvironmentID: environment.ID,
-		},
-		backupruntime.EncodeEnvironmentMutationEpochRecord,
-	)
+	if _, err := parents.CreateEnvironment(ctx, environment); err != nil {
+		t.Fatal(err)
+	}
 	f.blueprint, err = etcd.NewEnvironmentBlueprintRepository(f.store)
 	if err != nil {
 		t.Fatal(err)

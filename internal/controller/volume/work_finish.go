@@ -12,10 +12,18 @@ import (
 
 // PrepareFinish closes a direct resource action only after its work owner has
 // atomically settled the host result and resource state.
-func (owner *AgentWork) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
+func (owner *AgentWork) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	_ time.Time,
+) (workqueue.Change, error) {
 	task := finished.Task.Task
-	if task.ExpectedItems != 1 || len(finished.Items) != 1 || (task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Volume action requires one settled resource operation")
+	if task.ExpectedItems != 1 || len(finished.Items) != 1 ||
+		(task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove) {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Volume action requires one settled resource operation",
+		)
 	}
 	item := finished.Items[0]
 	if item.Item.Operation != workexecution.Volume || item.Item.TaskID != task.ID ||
@@ -33,5 +41,10 @@ func (owner *AgentWork) PrepareFinish(ctx context.Context, finished workqueue.Fi
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Volume result belongs to another resource")
 	}
 	guards = append(guards, keyvalue.Condition{Key: workqueue.ItemKey(item.Item.ID), ModRevision: item.Revision})
-	return workqueue.Change{Conditions: guards}, nil
+	ownership, err := owner.inputs.PrepareOwnershipRelease(ctx, view)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	ownership.Conditions = append(ownership.Conditions, guards...)
+	return ownership, nil
 }

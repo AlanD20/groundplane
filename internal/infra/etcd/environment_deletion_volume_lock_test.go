@@ -22,7 +22,7 @@ func TestHierarchyEnvironmentFinalizerExcludesVolumeRemovalLock(t *testing.T) {
 			fixture := newEnvironmentFinalizerFixture(t)
 			backend := &specializedRemovalLockRaceStore{memoryHierarchyStore: fixture.store}
 			owner := removalrecord.Owner{EnvironmentID: fixture.environment.Record.ID,
-				VolumeID: ids.New(ids.KindVolume), OperationID: ids.New(ids.KindOperation)}
+				VolumeID: ids.New(ids.KindVolume), TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem)}
 			if mode == "held" {
 				putSpecializedRemovalLock(t, fixture.store, owner)
 			} else if mode == "late" {

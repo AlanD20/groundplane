@@ -2,6 +2,7 @@ package hierarchydeletionplanning
 
 import (
 	"context"
+
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -84,6 +85,10 @@ func (repository *Planner) requireEnvironmentVolumeRemovalAbsent(
 	}
 	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] != nil {
+		owner, err := removalrecord.DecodeOwner(read.Values[0].Value)
+		if err != nil || owner.EnvironmentID != environmentID {
+			return hierarchydeletion.CorruptHierarchyDeletion()
+		}
 		return errs.New(errs.KindResourceInUse, "descendant Volume removal is still owned")
 	}
 	return nil

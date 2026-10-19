@@ -29,7 +29,8 @@ func TestSpecializedDesiredPublishersExcludeVolumeRemovalLock(t *testing.T) {
 					fixture = specializedZoneRemovalLockFixture(t)
 				}
 				owner := removalrecord.Owner{
-					EnvironmentID: fixture.environmentID, VolumeID: ids.New(ids.KindVolume), OperationID: ids.New(ids.KindOperation),
+					EnvironmentID: fixture.environmentID, VolumeID: ids.New(ids.KindVolume),
+					TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
 				}
 				backend := &specializedRemovalLockRaceStore{memoryHierarchyStore: fixture.store}
 				if mode == "held" {

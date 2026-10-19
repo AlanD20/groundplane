@@ -23,7 +23,7 @@ func TestVolumeRemovalOwnershipExcludesScriptPreparation(t *testing.T) {
 				owner := removalrecord.Owner{
 					VolumeID:      member.Reference.Source.VolumeID,
 					EnvironmentID: member.Reference.SourceOwnerID,
-					OperationID:   ids.New(ids.KindOperation),
+					TaskID:        ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
 				}
 				value, err := removalrecord.EncodeOwner(owner)
 				if err != nil {
@@ -124,7 +124,7 @@ func TestVolumeRemovalInitialOwnershipWinsSourceAcquisitionRace(t *testing.T) {
 	member := members[2]
 	transactions := &volumeSourceOwnerRaceStore{hierarchyStore: store, owner: removalrecord.Owner{
 		VolumeID: member.Reference.Source.VolumeID, EnvironmentID: member.Reference.SourceOwnerID,
-		OperationID: ids.New(ids.KindOperation),
+		TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
 	}}
 	authority, err := testscriptsourcepublication.NewAuthority(transactions)
 	if err != nil {
@@ -153,7 +153,7 @@ func TestVolumeRemovalInitialOwnerCodecRejectsCorruption(t *testing.T) {
 	owner := removalrecord.Owner{
 		VolumeID:      ids.New(ids.KindVolume),
 		EnvironmentID: ids.New(ids.KindEnvironment),
-		OperationID:   ids.New(ids.KindOperation),
+		TaskID:        ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
 	}
 	value, err := removalrecord.EncodeOwner(owner)
 	if err != nil {
@@ -172,8 +172,8 @@ func TestVolumeRemovalInitialOwnerCodecRejectsCorruption(t *testing.T) {
 		}
 	}
 	for _, invalid := range []removalrecord.Owner{
-		{EnvironmentID: owner.EnvironmentID, OperationID: owner.OperationID},
-		{VolumeID: owner.VolumeID, OperationID: owner.OperationID},
+		{EnvironmentID: owner.EnvironmentID, TaskID: owner.TaskID, WorkItemID: owner.WorkItemID},
+		{VolumeID: owner.VolumeID, TaskID: owner.TaskID, WorkItemID: owner.WorkItemID},
 		{VolumeID: owner.VolumeID, EnvironmentID: owner.EnvironmentID},
 	} {
 		if _, err := removalrecord.EncodeOwner(invalid); !isKind(err, errs.KindValidationFailed) {

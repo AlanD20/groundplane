@@ -133,9 +133,11 @@ implementation.
 ## Source navigation
 
 Volume behavior is owned by
-[`internal/controller/volume`](../../internal/controller/volume/removal_publication.go)
-and its durable evidence by
-[`internal/infra/volumeremovalrecord`](../../internal/infra/volumeremovalrecord/records.go).
+[`internal/controller/volume`](../../internal/controller/volume/mutations.go).
+Native captured inputs and result evidence are owned by
+[`volumework`](../../internal/infra/etcd/volumework/input.go); the independent
+[`removal owner`](../../internal/infra/volumeremovalrecord/owner.go) protects
+resource admission until settled completion, not until diagnostic expiry.
 Aggregate planning, execution and finalization are separated into
 [`hierarchydeletionplanning`](../../internal/infra/etcd/hierarchydeletionplanning/planner.go),
 [`hierarchydeletionexecution`](../../internal/infra/etcd/hierarchydeletionexecution/executor.go)

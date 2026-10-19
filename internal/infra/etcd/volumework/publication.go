@@ -71,6 +71,13 @@ func (repository *InputRepository) PreparePublication(ctx context.Context, task 
 	if err != nil {
 		return workqueue.Change{}, err
 	}
+	ownership, err := prepareRemovalOwnership(task, item)
+	if err != nil {
+		keyvalue.ZeroMutationBytes(change.Mutations)
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, ownership.Conditions...)
+	change.Mutations = append(change.Mutations, ownership.Mutations...)
 	_, raw, expected, err := executionplan.CaptureVolumeWorkInput(item.Input.ID, input)
 	clear(raw)
 	if err != nil || expected != *item.Input {
@@ -93,6 +100,9 @@ func (repository *InputRepository) PreparePublication(ctx context.Context, task 
 	change.Conditions = append(change.Conditions, captured.Conditions...)
 	change.Mutations = append(change.Mutations, captured.Mutations...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: desiredKey(item.ID)})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: desiredKey(item.ID), Value: desired})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: desiredKey(item.ID), Value: desired},
+	)
 	return change, nil
 }
