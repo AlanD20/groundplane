@@ -25,6 +25,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/materializationcontent"
 	networkstore "github.com/AlanD20/groundplane/internal/infra/etcd/network"
@@ -204,6 +205,75 @@ func TestNativeRouteCompletionFencesItsExactDecision(t *testing.T) {
 				}
 			},
 		)
+	}
+}
+
+// TASK-84: conflict retries must obtain fresh Environment authority and stop
+// after three commits, not loop or turn failed publication into accepted work.
+func TestNativeRouteRemovalRetriesOnlyBoundedPublicationConflicts(t *testing.T) {
+	for _, conflicts := range []int{2, 3} {
+		t.Run(map[int]string{2: "third attempt wins", 3: "retry bound exhausted"}[conflicts], func(t *testing.T) {
+			f := newNativeRouteFixture(t)
+			response, err := f.network.CreateRoute(
+				t.Context(),
+				networkmodel.CreateRouteRequest{EnvironmentID: f.base.environmentID,
+					Host: "retry.example.test", Path: "/", Exposure: networkmodel.RouteExposure("public"), TargetServiceID: f.target.ID, TargetPort: 8080},
+				"native-route-retry-source",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var created api.RouteTaskAccepted
+			if err := json.Unmarshal(response.Body, &created); err != nil {
+				t.Fatal(err)
+			}
+			f.checkDefinition(t, created.TaskID, created.Route.ID, true)
+			attempts := 0
+			f.base.store.beforeCommit = func(mutations []keyvalue.Mutation) {
+				for _, mutation := range mutations {
+					task, err := workqueue.DecodeTask(mutation.Value)
+					if err != nil || task.Action != workexecution.ActionRemove || task.TargetID != created.Route.ID {
+						continue
+					}
+					attempts++
+					if attempts > conflicts {
+						f.base.store.beforeCommit = nil
+						return
+					}
+					key := hierarchy.EnvironmentMutationEpochKey(f.base.environmentID)
+					current, err := f.base.store.Get(t.Context(), key)
+					if err != nil || current.Entry == nil {
+						t.Fatalf("race epoch: %v", err)
+					}
+					if _, err := f.base.store.Put(t.Context(), key, current.Entry.Value); err != nil {
+						t.Fatal(err)
+					}
+					return
+				}
+			}
+			removed, err := f.network.RemoveRoute(t.Context(), created.Route.ID, "native-route-publication-retry")
+			f.base.store.beforeCommit = nil
+			if attempts != 3 {
+				t.Fatalf("publication attempts=%d, want bounded three", attempts)
+			}
+			if conflicts == 3 {
+				if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+					t.Fatalf("exhausted retry: %v", err)
+				}
+				if _, err := f.network.GetRoute(t.Context(), created.Route.ID); err != nil {
+					t.Fatalf("failed publication removed its Route: %v", err)
+				}
+				removed, err = f.network.RemoveRoute(t.Context(), created.Route.ID, "native-route-publication-retry")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var accepted api.TaskAccepted
+			if err := json.Unmarshal(removed.Body, &accepted); err != nil || accepted.TaskID == "" {
+				t.Fatalf("retried removal: %v", err)
+			}
+			f.checkDefinition(t, accepted.TaskID, created.Route.ID, false)
+		})
 	}
 }
 

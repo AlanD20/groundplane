@@ -151,7 +151,10 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	defer clear(desiredValue)
 	desiredDigest := sha256.Sum256(desiredValue)
 	if hex.EncodeToString(desiredDigest[:]) != parent.Intent.SHA256 {
-		return keyvalue.TransactionResult{}, errs.New(errs.KindValidationFailed, "Blueprint Task input differs from the sealed desired revision")
+		return keyvalue.TransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Task input differs from the sealed desired revision",
+		)
 	}
 	if len(input.ZoneReservations) != len(input.OwnedIdentities.Networks) {
 		return keyvalue.TransactionResult{}, errs.New(
@@ -212,6 +215,11 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return keyvalue.TransactionResult{}, err
 	}
 	defer keyvalue.ClearMutationValues(work.Mutations)
+	markerConditions, markerMutations, err := idempotency.PreparePublication(input.Marker)
+	if err != nil {
+		return keyvalue.TransactionResult{}, err
+	}
+	defer keyvalue.ClearMutationValues(markerMutations)
 	reference, err := idempotency.EncodeTaskReference(parent.ID)
 	if err != nil {
 		return keyvalue.TransactionResult{}, err
@@ -333,7 +341,9 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
 	}
 	conditions = append(conditions, input.RetainedAttachConditions...)
-	result, publicationErr := queue.Commit(ctx, work, graph, workqueue.Change{Conditions: conditions, Mutations: mutations})
+	result, publicationErr := queue.Commit(ctx, work, graph,
+		workqueue.Change{Conditions: markerConditions, Mutations: markerMutations},
+		workqueue.Change{Conditions: conditions, Mutations: mutations})
 	return attachInputs.finish(ctx, repository.store, parent.ID, result, publicationErr)
 }
 

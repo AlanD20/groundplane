@@ -16,10 +16,12 @@ func TestBackingZoneCascadeOrdersDependentsBeforeGrantTargets(t *testing.T) {
 	first := ids.NewAt(ids.KindAttach, now, 1)
 	grant := ids.NewAt(ids.KindAttach, now, 2)
 	dependent := ids.NewAt(ids.KindAttach, now, 3)
+	service := ids.NewAt(ids.KindService, now, 4)
 	ordered, err := orderBackingZoneCascadeAttaches([]testkeyvalue.Versioned[testattachments.Record]{
-		{Record: testattachments.Record{ID: grant}},
-		{Record: testattachments.Record{ID: dependent, GrantAttachIDs: []string{grant}}},
-		{Record: testattachments.Record{ID: first}},
+		{Record: testattachments.Record{ID: grant, CredentialAttachID: grant, BackingServiceID: service}},
+		{Record: testattachments.Record{ID: dependent, CredentialAttachID: dependent, BackingServiceID: service,
+			GrantAttachIDs: []string{grant}}},
+		{Record: testattachments.Record{ID: first, CredentialAttachID: first, BackingServiceID: service}},
 	})
 	if err != nil {
 		t.Fatalf("orderBackingZoneCascadeAttaches() error = %v", err)
@@ -32,9 +34,10 @@ func TestBackingZoneCascadeOrdersDependentsBeforeGrantTargets(t *testing.T) {
 		t.Fatalf("cascade order = %#v", ordered)
 	}
 	repeated, err := orderBackingZoneCascadeAttaches([]testkeyvalue.Versioned[testattachments.Record]{
-		{Record: testattachments.Record{ID: first}},
-		{Record: testattachments.Record{ID: dependent, GrantAttachIDs: []string{grant}}},
-		{Record: testattachments.Record{ID: grant}},
+		{Record: testattachments.Record{ID: first, CredentialAttachID: first, BackingServiceID: service}},
+		{Record: testattachments.Record{ID: dependent, CredentialAttachID: dependent, BackingServiceID: service,
+			GrantAttachIDs: []string{grant}}},
+		{Record: testattachments.Record{ID: grant, CredentialAttachID: grant, BackingServiceID: service}},
 	})
 	if err != nil || len(repeated) != len(ordered) {
 		t.Fatalf("orderBackingZoneCascadeAttaches(repeated) = %#v, %v", repeated, err)

@@ -5,22 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/netip"
 	"strings"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/app/adaptercompiler"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/controller/backingservices"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
-	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
-	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backingprovisionwork"
-	desiredstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -46,7 +37,6 @@ func TestNativeCustomBackingCreationPreservesTagAndCapturedRuntime(t *testing.T)
 
 func nativeCustomBackingCreationJourney(t *testing.T, race bool) {
 	t.Helper()
-	adaptercompiler.Register()
 	// Reuse an enrolled host and an unrelated Tenant Environment as an isolation
 	// sentinel. A Backing Project must not acquire that Tenant or alter its input.
 	f := newNativeVolumeFixture(t)
@@ -54,62 +44,7 @@ func nativeCustomBackingCreationJourney(t *testing.T, race bool) {
 	if err != nil || !found {
 		t.Fatal("sentinel desired input is missing", err)
 	}
-	desired, err := desiredstore.NewRepository(f.store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	inputs, err := backingprovisionwork.NewRepository(f.store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	key, err := ageinfra.GenerateKeypair()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cipher := nativeVolumeCipher{key: key}
-	protector, err := secretvalue.NewProtector(cipher, cipher)
-	if err != nil {
-		t.Fatal(err)
-	}
-	coordinator, err := requestidempotency.NewCoordinator(protector)
-	if err != nil {
-		t.Fatal(err)
-	}
-	replay, err := etcd.NewIdempotencyRepository(f.store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	idempotency, err := desiredrevision.NewIdempotency(coordinator, replay)
-	if err != nil {
-		t.Fatal(err)
-	}
-	agent, err := f.agents.GetSingleton(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	images := &nativeBackingCreationImages{t: t, agentID: agent.Record.ID, plan: imagefetch.Plan{
-		Requested: "registry.example/internal/search:1.4", Repository: "registry.example/internal/search",
-		ManifestDigest: "sha256:" + strings.Repeat("a", 64), ConfigDigest: "sha256:" + strings.Repeat("b", 64),
-		Architecture: "amd64"}}
-	service, err := backingservices.NewCreationService(
-		"/var/lib/groundplane/vol",
-		netip.MustParsePrefix("10.0.0.0/8"),
-		nativeDesiredRepository{
-			f.blueprint,
-			desired,
-		},
-		idempotency,
-		protector,
-		inputs,
-		nil,
-		nil,
-		f.agents,
-		images,
-		images,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	service, images, inputs := newNativeBackingCreationService(t, f)
 	request := api.BackingServiceCreate{
 		Slug:        "search-api",
 		Name:        "Search API",

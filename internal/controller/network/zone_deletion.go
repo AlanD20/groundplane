@@ -414,7 +414,6 @@ func (service *zoneDeletionService) removeZoneOnce(
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
-		now = claim.CreatedAt
 	}
 	if claim.EnvironmentID != environment.Record.ID || claim.RevisionID != claim.TaskID ||
 		claim.Locator != locator || claim.BaselineHeadRevision != projection.Revision ||

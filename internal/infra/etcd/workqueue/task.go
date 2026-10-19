@@ -50,19 +50,10 @@ func PrepareTask(task workexecution.Task, marker idempotency.IdempotencyMarker) 
 		marker.TaskID != task.ID || !marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(task.CreatedAt) {
 		return Change{}, invalid("task submission requires its matching request replay record")
 	}
-	markerValue, err := idempotency.EncodeIdempotencyMarker(marker)
-	if err != nil {
-		return Change{}, err
-	}
-	markerKey, err := idempotency.IdempotencyMarkerKey(marker.Locator)
-	if err != nil {
-		return Change{}, err
-	}
 	change := Change{
-		Conditions: []keyvalue.Condition{{Key: TaskKey(task.ID)}, {Key: markerKey}},
+		Conditions: []keyvalue.Condition{{Key: TaskKey(task.ID)}},
 		Mutations: []keyvalue.Mutation{
 			{Type: keyvalue.MutationPut, Key: TaskKey(task.ID), Value: value},
-			{Type: keyvalue.MutationPut, Key: markerKey, Value: markerValue},
 			{Type: keyvalue.MutationPut, Key: taskPublishingKey(task.ID), Value: []byte(task.ID)},
 		},
 	}
@@ -110,7 +101,8 @@ func PreparePublicationComplete(snapshot TaskSnapshot, items []workexecution.Ite
 		return Change{}, err
 	}
 	for _, item := range items {
-		if item.AttemptNumber != 0 || item.Outcome != "" || item.Phase != workexecution.Ready && item.Phase != workexecution.Waiting {
+		if item.AttemptNumber != 0 || item.Outcome != "" ||
+			item.Phase != workexecution.Ready && item.Phase != workexecution.Waiting {
 			return Change{}, invalid("unpublished task contains already executed work")
 		}
 	}
