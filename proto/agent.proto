@@ -1260,19 +1260,6 @@ message ServiceObservationResult {
   repeated ServiceObservationRow observations = 2;
 }
 
-message TaskEvent {
-  string task_id = 1;
-  bytes plan_hash = 2; // exactly 32 immutable SHA-256 bytes
-  string step_id = 3;
-  uint32 execution_epoch = 4; // exact durable assignment execution epoch
-  uint64 ordinal = 5; // one-based stable delivery identity within the step attempt
-  TaskState state = 6;
-  bytes chunk = 7; // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
-  string assignment_id = 8;
-  HealthWaitProgress health_wait = 9; // bounded, output-free readiness observation
-  StepFailure failure = 10; // closed diagnostic code, never provider text
-}
-
 message StepFailure {
   string code = 1; // validated by the shared Task diagnostic catalog
   int32 exit_code = 2; // zero means no nonzero exit was reported
@@ -1289,41 +1276,6 @@ message HealthWaitProgress {
   uint64 elapsed_milliseconds = 8;
   uint64 timeout_milliseconds = 9;
   ComposeHelperDiagnostic diagnostic = 10;
-}
-
-message TaskEventAck {
-  string task_id = 1;
-  bytes plan_hash = 2;
-  string step_id = 3;
-  uint32 execution_epoch = 4;
-  uint64 ordinal = 5;
-  TaskState state = 6;
-  string assignment_id = 7;
-  RollingStepBudget rolling_budget = 8; // first Running acknowledgement only; captured durable budget
-  StepStartDecision start_decision = 9; // first Running only; denied/waiting starts are not journal events
-  uint64 event_ordinal_base = 10; // allowed first Running only; subsequent events increment from this durable watermark
-}
-
-enum StepStartDecision {
-  STEP_START_DECISION_UNSPECIFIED = 0;
-  STEP_START_DECISION_ALLOWED = 1;
-  STEP_START_DECISION_WAIT = 2;
-  STEP_START_DECISION_STOP = 3;
-}
-
-message RollingStepBudget {
-  google.protobuf.Timestamp deadline = 1;
-  google.protobuf.Timestamp drain_until = 2;
-}
-
-enum TaskState {
-  TASK_STATE_UNSPECIFIED = 0;
-  TASK_STATE_PENDING = 1;
-  TASK_STATE_RUNNING = 2;
-  TASK_STATE_COMPLETED = 3;
-  TASK_STATE_FAILED = 4;
-  TASK_STATE_ABORTED = 5;
-  TASK_STATE_TIMED_OUT = 6;
 }
 
 message ObservedState {
@@ -1397,45 +1349,6 @@ enum ObservedCollisionKind {
   OBSERVED_COLLISION_KIND_CONTAINER = 1;
   OBSERVED_COLLISION_KIND_NETWORK = 2;
   OBSERVED_COLLISION_KIND_VOLUME = 3;
-}
-
-message TaskAck {
-  string task_id = 1;
-  bytes plan_hash = 2; // exactly 32 immutable SHA-256 bytes
-  TaskTerminal terminal = 3;
-  int32 exit_code = 4;
-  oneof result {
-    ComposeTaskResult compose_result = 5;
-    EnvironmentDirectoryTaskResult environment_directory_result = 6;
-    BackupTaskResult backup_result = 10;
-  }
-  string assignment_id = 7;
-  uint32 execution_epoch = 8;
-  bytes release_recovery_record_sha256 = 9;
-  uint64 assignment_generation = 11;
-  reserved 12;
-}
-
-message BackupTaskResult {
-  string failed_step_id = 1;
-  optional bool recovery_required = 2; // presence required
-  StepFailure failure = 3;
-}
-
-message ComposeTaskResult {
-  repeated ObservedProject projects = 1;
-  string failed_step_id = 2;
-  ComposeHelperDiagnostic diagnostic = 3;
-  bool reconciliation_required = 4;
-  repeated ServiceProxyEvidence proxy_evidence = 5;
-  repeated ServiceRecreateEvidence recreate_evidence = 6;
-  DNSResolverObservationEvidence dns_resolver_candidate_observation = 7;
-  DNSResolverObservationEvidence dns_resolver_rollback_observation = 8;
-  CandidateAbsenceEvidence candidate_absence_evidence = 9;
-  reserved 10;
-  ServiceAbsenceEvidence service_absence_evidence = 11;
-  StepFailure failure = 12;
-  repeated RollingReleaseEvidence rolling_evidence = 13;
 }
 
 message RollingReleaseEvidence {
@@ -1528,23 +1441,6 @@ message DNSQueryProof {
   bool local_used_tcp = 9;
   bool direct_used_tcp = 10;
   uint32 attempts = 11;
-}
-
-message EnvironmentDirectoryTaskResult {
-  string failed_step_id = 1;
-  bytes next_cursor = 2;
-  uint32 mutation_count = 3;
-  bool complete = 4;
-  bytes response_sha256 = 5;
-  StepFailure failure = 6;
-}
-
-enum TaskTerminal {
-  TASK_TERMINAL_UNSPECIFIED = 0;
-  TASK_TERMINAL_COMPLETED = 1;
-  TASK_TERMINAL_FAILED = 2;
-  TASK_TERMINAL_TIMED_OUT = 3;
-  TASK_TERMINAL_ABORTED = 4;
 }
 
 // ---- Controller -> Agent ----
@@ -1736,103 +1632,6 @@ message LogEvent {
 message LogEnd {
   string request_id = 1;
   LogEndReason reason = 2;
-}
-
-// MaterializationTransfer is one ordered transient record for a metadata-only
-// MaterializeFile step. The header repeats the sealed step metadata; content
-// exists only in chunk records and is never part of ExecutionPlan.
-message MaterializationTransfer {
-  string task_id = 1;
-  bytes plan_hash = 2;
-  string step_id = 3;
-  oneof record {
-    MaterializationTransferHeader header = 4;
-    MaterializationTransferChunk chunk = 5;
-    MaterializationTransferEnd end = 6;
-  }
-  string assignment_id = 7;
-}
-
-message MaterializationTransferHeader {
-  string artifact_id = 1;
-  string materialization_id = 2;
-  string environment_id = 3;
-  uint64 render_generation = 4;
-  string destination = 5;
-  string service_id = 6;
-  MaterializationOutputKind output_kind = 7;
-  uint32 uid = 8;
-  uint32 gid = 9;
-  uint32 mode = 10;
-  uint64 length = 11;
-  bytes sha256 = 12;
-  string service_name = 13;
-}
-
-message MaterializationTransferChunk {
-  uint32 sequence = 1; // one-based within this task step
-  bytes content = 2;
-}
-
-message MaterializationTransferEnd {
-  uint32 chunk_count = 1;
-}
-
-// ManagedConfigTransfer carries one bounded immutable artifact referenced by
-// a generic ComponentApply step. It never carries a destination, executable,
-// argv, shell text, host path, image, or URL; the compiled Agent catalog owns
-// those choices.
-message ManagedConfigTransfer {
-  string task_id = 1;
-  bytes plan_hash = 2;
-  string step_id = 3;
-  string assignment_id = 4;
-  oneof record {
-    ManagedConfigTransferHeader header = 5;
-    ManagedConfigTransferChunk chunk = 6;
-    ManagedConfigTransferEnd end = 7;
-  }
-}
-
-message ManagedConfigTransferHeader {
-  string artifact_id = 1;
-  string media_type = 2;
-  uint64 length = 3;
-  bytes sha256 = 4;
-}
-
-message ManagedConfigTransferChunk {
-  uint32 sequence = 1;
-  bytes content = 2;
-}
-
-message ManagedConfigTransferEnd {
-  uint32 chunk_count = 1;
-}
-
-message TaskAssignment {
-  string task_id = 1;
-  string operation_id = 2; // stable across retries
-  string retry_of = 3;     // set iff this is a retry of a prior task_id
-  ExecutionPlan plan = 4;  // complete authoritative procedure
-  reserved 5;
-  google.protobuf.Timestamp forward_deadline = 7; // durable absolute forward deadline; reconnect never restarts the budget
-  string assignment_id = 6;
-  ScriptAssignmentArtifacts script_artifacts = 8;
-  repeated ScriptExecutionCheckpoint script_checkpoints = 9;
-  bool automatic_reconcile = 10;
-  BackupTaskAuthority backup_authority = 11;
-  BackupTaskResume backup_resume = 12;
-  bytes backup_authority_sha256 = 13;
-  uint64 assignment_generation = 14;
-  uint32 execution_epoch = 16; // positive shared fence for every emitted event and terminal acknowledgement
-  TaskExecutionMode execution_mode = 17;
-  google.protobuf.Timestamp recovery_deadline = 18; // fixed at first claim and never extended
-  ReleaseRestorationAuthority restoration_authority = 19;
-  bytes release_recovery_record_sha256 = 20; // required only in recovery_only mode
-  ReleaseRecoveryDirective release_recovery_directive = 21; // required only in recovery_only mode
-  google.protobuf.Timestamp execution_deadline = 22; // current bounded attempt deadline; proof-required recovery uses a distinct non-renewable budget
-  reserved 23, 24;
 }
 
 message ReleaseRecoveryDirective {
@@ -4581,18 +4380,6 @@ message BackupConfigPriorFile {
   uint32 gid = 5;
 }
 
-message BackupConfigMetadataRow {
-  bytes authority_digest = 1;
-  bytes metadata_snapshot_sha256 = 2;
-  uint32 ordinal = 3;
-  oneof entry {
-    BackupConfigEntry capture_entry = 4;
-    BackupConfigRestoreEntry restore_entry = 5;
-  }
-  bytes preceding_transfer_chain_sha256 = 6;
-  bytes resulting_transfer_chain_sha256 = 7;
-}
-
 // Exactly 46 metadata records / 393216 bytes; initial and subsequent value
 // grants never exceed 262144 bytes / eight records.
 message BackupConfigMetadataAccepted {
@@ -4972,60 +4759,6 @@ message BackupSecretSlotEnd {
   uint32 chunk_count = 1;
 }
 
-message TaskTerminalReceiptAck {
-  bytes process_generation = 1;
-  string task_id = 2;
-  string assignment_id = 3;
-  uint64 assignment_generation = 4;
-  bytes plan_hash = 5;
-  TaskTerminal terminal = 6;
-  bytes task_ack_sha256 = 7;
-  bytes terminal_receipt_sha256 = 8;
-  int64 durable_task_mod_revision = 9;
-}
-
-message TaskTerminalReceiptApplied {
-  bytes process_generation = 1;
-  string task_id = 2;
-  string assignment_id = 3;
-  uint64 assignment_generation = 4;
-  bytes plan_hash = 5;
-  TaskTerminal terminal = 6;
-  bytes task_ack_sha256 = 7;
-  bytes terminal_receipt_sha256 = 8;
-  int64 durable_task_mod_revision = 9;
-}
-
-message TaskTerminalReceiptAppliedAck {
-  bytes process_generation = 1;
-  string task_id = 2;
-  string assignment_id = 3;
-  uint64 assignment_generation = 4;
-  bytes plan_hash = 5;
-  TaskTerminal terminal = 6;
-  bytes task_ack_sha256 = 7;
-  bytes terminal_receipt_sha256 = 8;
-  int64 durable_task_mod_revision = 9;
-}
-
-message TaskTerminalAssignmentRetired {
-  bytes process_generation = 1;
-  string task_id = 2;
-  string assignment_id = 3;
-  uint64 assignment_generation = 4;
-  bytes plan_hash = 5;
-  TaskTerminal terminal = 6;
-}
-
-message TaskTerminalAssignmentRetiredAck {
-  bytes process_generation = 1;
-  string task_id = 2;
-  string assignment_id = 3;
-  uint64 assignment_generation = 4;
-  bytes plan_hash = 5;
-  TaskTerminal terminal = 6;
-}
-
 message BackupStagingRecoveryAckReceipt {
   bytes process_generation = 1;
   bytes inventory_sha256 = 2;
@@ -5075,7 +4808,7 @@ enum MaterializationOutputKind {
 }
 
 // MaterializeFile contains authenticated metadata and a durable reference id,
-// never plaintext. Bytes arrive separately in MaterializationTransfer.
+// never plaintext. Content is delivered separately under the native work attempt.
 message MaterializeFile {
   string artifact_id = 1;
   string materialization_id = 2;
@@ -5527,18 +5260,6 @@ enum ComposeHelperDiagnostic {
   COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_NC_MISSING = 8;
   COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_COMMAND_MISSING = 9;
   COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_COMMAND_NOT_EXECUTABLE = 10;
-}
-
-message TaskAbort {
-  string task_id = 1;
-  string reason = 2;
-  string assignment_id = 3;
-  uint64 assignment_generation = 4;
-  bytes plan_hash = 5;
-  TaskTerminal terminal = 6;
-  bytes terminal_receipt_sha256 = 7;
-  int64 durable_task_mod_revision = 8;
-  optional bytes rejected_task_ack_sha256 = 9;
 }
 
 message ConfigUpdate {
