@@ -9,12 +9,7 @@ import (
 	testing "testing"
 	time "time"
 
-	backupformat "github.com/AlanD20/groundplane/internal/common/backupformat"
-	backupsecret "github.com/AlanD20/groundplane/internal/common/backupsecret"
-	"github.com/AlanD20/groundplane/internal/common/backupservicefact"
-	executionplan "github.com/AlanD20/groundplane/internal/common/executionplan"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	testbackupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -23,363 +18,96 @@ import (
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	errs "github.com/AlanD20/groundplane/pkg/errs"
-	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func backupRuntimeRunPlanDraft(
-	t *testing.T,
-	run testbackupruntime.BackupRunRecord,
-	planID string,
-	projectID string,
-) *agentpb.ExecutionPlan {
-	t.Helper()
-	digest, err := hex.DecodeString(testBackupDigest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	revision := func(value int64) *agentpb.RevisionDigest {
-		return &agentpb.RevisionDigest{ModRevision: value, Sha256: append([]byte(nil), digest...)}
-	}
-	pathStyle := run.ConnectorPathStyle
-	era := uint64(run.KeyEra)
-	recipientDigest := sha256.Sum256([]byte(run.Recipient))
-	plan := &agentpb.ExecutionPlan{
-		Schema:    executionplan.SchemaVersion,
-		PlanId:    planID,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP,
-		TargetId:  run.EnvironmentID,
-		BackupScope: &agentpb.BackupPlanScope{
-			ProjectId: projectID, Project: revision(1),
-			EnvironmentId: run.EnvironmentID, Environment: revision(2), TaskAttempt: 1,
-		},
-		Steps: make([]*agentpb.ExecutionStep, len(run.Sources)),
-	}
-	addService := func(fact *agentpb.BackupServiceFact) {
-		for _, current := range plan.BackupScope.Services {
-			if current.ServiceId == fact.ServiceId {
-				return
-			}
-		}
-		plan.BackupScope.Services = append(plan.BackupScope.Services, fact)
-	}
-	for index, source := range run.Sources {
-		capture := &agentpb.BackupCaptureAuthority{
-			PointId: source.RecoveryPointID,
-			Resource: &agentpb.BackupResourceIdentity{
-				ResourceId: source.TargetID, Resource: revision(source.TargetRevision),
-			},
-			Target: &agentpb.BackupObjectTarget{
-				Connector: &agentpb.BackupConnectorAuthority{
-					ConnectorId: run.ConnectorID, Connector: revision(run.ConnectorRevision),
-					CanonicalEndpointUrl: run.ConnectorEndpoint, Region: run.ConnectorRegion,
-					PathStyle: &pathStyle, Prefix: run.ConnectorPrefix,
-					AccessKeySlotId: backupsecret.AccessKeySlotID, SecretKeySlotId: backupsecret.SecretKeySlotID,
-					AccessKeySlot: revision(run.ConnectorCredentialsRevision),
-					SecretKeySlot: revision(run.ConnectorCredentialsRevision),
-				},
-				Bucket: run.ConnectorBucket, ObjectKey: source.ObjectKey,
-			},
-			Encryption: &agentpb.BackupEncryptionAuthority{
-				Kind:            agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE,
-				SecretSlotId:    backupsecret.CurrentAgeIdentitySlotID,
-				RecipientSha256: recipientDigest[:], SecretSlot: revision(run.BackupKeyValueRevision), KeyEra: &era,
-			},
-		}
-		consumerServiceIDs := []string(nil)
-		switch source.Kind {
-		case testbackupruntime.BackupRuntimeSourceAttach:
-			snapshot := source.Snapshot.Postgres
-			projectName := "gp-" + strings.ToLower(snapshot.BackingEnvironmentID)
-			release, err := postgres16protocol.DecodeManagedReleaseIndex([]byte(snapshot.ManagedReleaseIndex))
-			if err != nil {
-				t.Fatal(err)
-			}
-			image := release.DatabaseImage
-			labels := []*agentpb.LabelPair{
-				{Key: "com.groundplane.environment-id", Value: snapshot.BackingEnvironmentID},
-				{Key: "com.groundplane.kind", Value: "service"},
-				{Key: "com.groundplane.managed", Value: "true"},
-				{Key: "com.groundplane.plan-id", Value: planID},
-				{Key: "com.groundplane.project-id", Value: snapshot.BackingProjectID},
-				{Key: "com.groundplane.render-generation", Value: "1"},
-				{Key: "com.groundplane.service-id", Value: snapshot.BackingServiceID},
-			}
-			labelsDigest, labelErr := backupservicefact.LabelsDigest(labels)
-			if labelErr != nil {
-				t.Fatal(labelErr)
-			}
-			if len(plan.Artifacts) == 0 {
-				yaml := []byte("services:\n  postgres:\n    image: " + image + "\n")
-				yamlDigest := sha256.Sum256(yaml)
-				plan.Artifacts = append(plan.Artifacts, &agentpb.ComposeArtifact{
-					ArtifactId: ids.NewAt(ids.KindConfig, run.CreatedAt, 2700),
-					OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
-					OwnerId:    snapshot.BackingEnvironmentID, CanonicalYaml: yaml, YamlSha256: yamlDigest[:],
-					ProjectName: projectName,
-					Services: []*agentpb.ComposeService{{
-						ServiceId: snapshot.BackingServiceID, ComposeName: "postgres",
-						ExpectedReplicas:   1,
-						PostgresToolsImage: release.Image,
-						ExpectedLabels:     labels, ImageReference: image,
-					}},
-				})
-			}
-			capture.Resource.Kind = agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ATTACH
-			capture.Source = &agentpb.BackupCaptureAuthority_Postgres{Postgres: &agentpb.BackupPostgresCaptureAuthority{
-				AdapterContractVersion: 1, DatabaseServiceId: snapshot.BackingServiceID,
-				DatabaseName: snapshot.Database, RoleName: snapshot.Role,
-				MaxPlaintextBytes: backupformat.MaxAgeSourceBytes, ManagedReleaseIndex: []byte(snapshot.ManagedReleaseIndex),
-			}}
-			addService(&agentpb.BackupServiceFact{
-				ServiceId: snapshot.BackingServiceID, CurrentName: "postgres",
-				Service: revision(snapshot.BackingServiceRevision), Compose: revision(snapshot.BackingServiceRevision),
-				PriorRuntimeIntent: &agentpb.BackupPriorRuntimeIntent{
-					Kind:   agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING,
-					Intent: revision(snapshot.BackingServiceRevision),
-				},
-				RequiredLabelCount: uint32(len(labels)), RequiredLabelsSha256: labelsDigest,
-				LocalImageIdSha256: append([]byte(nil), digest...),
-			})
-		case testbackupruntime.BackupRuntimeSourceConfig:
-			capture.Resource.Kind = agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ENVIRONMENT
-			capture.Source = &agentpb.BackupCaptureAuthority_Config{Config: &agentpb.BackupConfigCaptureAuthority{
-				EnvironmentId: run.EnvironmentID, MetadataSnapshotRevision: source.Snapshot.Config.ReadRevision,
-				MetadataEntryCount: 1, MetadataProtoBytes: 128,
-				Content: &agentpb.BackupConfigContentAuthority{
-					ManifestSha256: append(
-						[]byte(nil),
-						digest...), MetadataSnapshotSha256: append([]byte(nil), digest...),
-					EntryCount: 1, TotalSelectedValueBytes: 1, ManifestSizeBytes: 128, SourceSizeBytes: 4096,
-				},
-			}}
-		case testbackupruntime.BackupRuntimeSourceVolume:
-			artifactSHA256, err := hex.DecodeString(source.Snapshot.Volume.ArtifactDigest)
-			if err != nil {
-				t.Fatal(err)
-			}
-			capture.Resource.Kind = agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_VOLUME
-			volume := source.Snapshot.Volume
-			plan.BackupScope.Environment = revision(volume.EnvironmentRevision)
-			capture.Resource.Resource.Sha256, err = hex.DecodeString(volume.HeadSHA256)
-			if err != nil {
-				t.Fatal(err)
-			}
-			capture.Source = &agentpb.BackupCaptureAuthority_Volume{Volume: &agentpb.BackupVolumeCaptureAuthority{
-				VolumeId: source.TargetID, Volume: revision(source.TargetRevision),
-				SourceSizeUpperBound: backupformat.MaxAgeSourceBytes,
-				Projection: &agentpb.BackupVolumeProjectionAuthority{
-					ArtifactId: volume.ArtifactID, ArtifactSha256: artifactSHA256,
-					ArtifactRevision: volume.ArtifactRevision, ProjectionRoot: volume.ProjectionRoot,
-					RenderGeneration: volume.RenderGeneration, ComposeVolumeKey: volume.ComposeVolumeKey,
-					DockerVolumeName: volume.DockerVolumeName, AuthorizedVolumeDir: volume.AuthorizedVolumeDir,
-				},
-			}}
-			for _, service := range volume.Services {
-				consumerServiceIDs = append(consumerServiceIDs, service.ServiceID)
-				addService(&agentpb.BackupServiceFact{
-					ServiceId: service.ServiceID, CurrentName: service.ComposeKey,
-					Service: revision(service.ServiceRevision), Compose: revision(service.ServiceRevision),
-					PriorRuntimeIntent: &agentpb.BackupPriorRuntimeIntent{
-						Kind:   agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING,
-						Intent: revision(service.ServiceRevision),
-					},
-					RequiredLabelCount: 1, RequiredLabelsSha256: append([]byte(nil), digest...),
-					LocalImageIdSha256: append([]byte(nil), digest...),
-				})
-			}
-		}
-		authority := &agentpb.BackupStepAuthority{
-			StepId: ids.NewAt(ids.KindStep, run.CreatedAt, int64(2600+index)), ExecutionId: ids.NewULID(),
-			StepDeadlineUnixNano: uint64(run.CreatedAt.Add(6 * time.Hour).UnixNano()),
-			ConsumerServiceIds:   consumerServiceIDs,
-			Operation:            &agentpb.BackupStepAuthority_Capture{Capture: capture},
-		}
-		plan.Steps[index] = &agentpb.ExecutionStep{
-			StepId: authority.StepId, TimeoutSeconds: 6 * 60 * 60,
-			Payload: &agentpb.ExecutionStep_BackupStep{BackupStep: authority},
-		}
-	}
-	return plan
-}
-
-func prepareBackupRuntimeStagedRun(
-	t *testing.T,
-	repository *BackupRuntimeRepository,
-	run testbackupruntime.BackupRunRecord,
-) (testkeyvalue.Versioned[testbackupruntime.BackupRunRecord], testbackupruntime.BackupRunRecord) {
-	t.Helper()
-	created, err := repository.createBackupRunForTest(
-		context.Background(),
-		run,
-		backupRuntimeCurrentRevision(t, repository.store, run.EnvironmentID),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	staged := run
-	staged.State = testbackupruntime.BackupRunRunning
-	staged.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
-	staged.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
-	staged.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
-	backupRuntimeCompleteSourceArtifact(staged, &staged.Sources[0])
-	staged.UpdatedAt = run.UpdatedAt.Add(time.Second)
-	created, err = repository.replaceBackupRunForTest(context.Background(), created, staged)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return created, staged
-}
-
-func backupRuntimePointCommitRecords(
-	run testbackupruntime.BackupRunRecord,
-	staged testbackupruntime.BackupRunRecord,
-) (testbackupruntime.BackupRunRecord, testbackupruntime.BackupRecoveryPointRecord, testbackupruntime.BackupRetentionSweepRecord) {
-	committed := staged
-	committed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
-	committed.Sources[0].State = testbackupruntime.BackupSourceAttemptPointCommitted
-	committed.Sources[0].Phase = testbackupruntime.BackupSourcePhaseRetention
-	committed.UpdatedAt = staged.UpdatedAt.Add(time.Second)
-	point := backupRuntimeTestPoint(run, staged.Sources[0], committed.UpdatedAt)
-	sweep := testbackupruntime.BackupRetentionSweepRecord{
-		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID, Keep: 3,
-		Revision: run.PolicyRevision, PolicySHA256: run.PolicySHA256,
-		State:     testbackupruntime.BackupRetentionPending,
-		CreatedAt: committed.UpdatedAt, UpdatedAt: committed.UpdatedAt,
-	}
-	return committed, point, sweep
-}
-
-// Rationale: a point selected through any one index is visible only when the
-// primary and all three immutable memberships retain their commit revision.
-func TestBackupRuntimeRepositoryPointPagesRejectIncompleteAuthority(t *testing.T) {
+// TASK-157: retained orphan reads reject missing, rewritten, malformed or
+// misbucketed membership rather than overlooking cleanup obligations.
+func TestBackupRuntimeRepositoryRejectsCorruptOrphanConnectorIndex(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
-		key    func(testbackupruntime.BackupRecoveryPointRecord) string
-		delete bool
+		mutate func(*testing.T, *memoryHierarchyStore, testbackupruntime.BackupOrphanRecord, string) []testkeyvalue.Mutation
 	}{
 		{
-			name: "missing Connector membership",
-			key: func(point testbackupruntime.BackupRecoveryPointRecord) string {
-				key, _ := testbackupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
-				return key
+			name: "missing",
+			mutate: func(_ *testing.T, _ *memoryHierarchyStore, _ testbackupruntime.BackupOrphanRecord, key string) []testkeyvalue.Mutation {
+				return []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}}
 			},
-			delete: true,
 		},
 		{
-			name: "rewritten Environment membership",
-			key: func(point testbackupruntime.BackupRecoveryPointRecord) string {
-				key, _ := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
-				return key
+			name: "malformed",
+			mutate: func(_ *testing.T, _ *memoryHierarchyStore, _ testbackupruntime.BackupOrphanRecord, key string) []testkeyvalue.Mutation {
+				return []testkeyvalue.Mutation{
+					{Type: testkeyvalue.MutationPut, Key: key, Value: []byte("not-a-point-id")},
+				}
+			},
+		},
+		{
+			name: "mismatched",
+			mutate: func(_ *testing.T, _ *memoryHierarchyStore, orphan testbackupruntime.BackupOrphanRecord, key string) []testkeyvalue.Mutation {
+				other := ids.NewAt(ids.KindRecoveryPoint, orphan.CreatedAt.Add(time.Second), 611)
+				return []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: []byte(other)}}
+			},
+		},
+		{
+			name: "misbucketed",
+			mutate: func(t *testing.T, _ *memoryHierarchyStore, orphan testbackupruntime.BackupOrphanRecord, key string) []testkeyvalue.Mutation {
+				otherConnector := ids.NewAt(ids.KindConnector, orphan.CreatedAt.Add(time.Second), 612)
+				wrongKey, err := testbackupruntime.BackupOrphanConnectorIndexKey(otherConnector, orphan.Target.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return []testkeyvalue.Mutation{
+					{Type: testkeyvalue.MutationDelete, Key: key},
+					{Type: testkeyvalue.MutationPut, Key: wrongKey, Value: []byte(orphan.Target.ID)},
+				}
+			},
+		},
+		{
+			name: "identical byte replay",
+			mutate: func(t *testing.T, store *memoryHierarchyStore, _ testbackupruntime.BackupOrphanRecord, key string) []testkeyvalue.Mutation {
+				entry := mustOptionalKey(t, store, key)
+				return []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: entry.Value}}
 			},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repository, store, run := newBackupRuntimeRepositoryFixture(t)
-			stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
-			committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
-			checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-			checkpoint = backupSourceCleanupCheckpoint(t, checkpoint, point.ID, point.Evidence)
-			if _, _, err := repository.CommitBackupRecoveryPoint(
-				context.Background(), checkpoint, stagedVersion,
-				committed, 0, point, nil, sweep,
-			); err != nil {
-				t.Fatal(err)
-			}
-			key := test.key(point)
-			entry := mustOptionalKey(t, store, key)
-			mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: entry.Value}
-			if test.delete {
-				mutation = testkeyvalue.Mutation{Type: testkeyvalue.MutationDelete, Key: key}
-			}
-			changed, err := store.Transact(
-				context.Background(),
-				[]testkeyvalue.Condition{{Key: key, ModRevision: entry.ModRevision}},
-				[]testkeyvalue.Mutation{mutation},
-			)
-			if err != nil || !changed.Succeeded {
-				t.Fatalf("tamper point companion = %#v, %v", changed, err)
-			}
-			if _, err := repository.ListBackupRecoveryPointsBySource(
-				context.Background(), point.SourceID, testbackupruntime.BackupRuntimeListRequest{Limit: 1},
-			); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-				t.Fatalf("ListBackupRecoveryPointsBySource(corrupt authority) error = %v", err)
-			}
-		})
-	}
-}
-
-// Rationale: retention enumeration uses the same immutable point aggregate as
-// public pages, including the selected source index and both other memberships.
-func TestBackupRuntimeRepositoryRetentionRejectsMalformedPointAuthority(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name   string
-		key    func(testbackupruntime.BackupRecoveryPointRecord) string
-		delete bool
-	}{
-		{
-			name: "rewritten source index",
-			key: func(point testbackupruntime.BackupRecoveryPointRecord) string {
-				key, _ := testbackupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
-				return key
-			},
-		},
-		{
-			name: "missing Environment index",
-			key: func(point testbackupruntime.BackupRecoveryPointRecord) string {
-				key, _ := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
-				return key
-			},
-			delete: true,
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			repository, store, run := newBackupRuntimeRepositoryFixture(t)
-			stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
-			committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
-			checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-			checkpoint = backupSourceCleanupCheckpoint(t, checkpoint, point.ID, point.Evidence)
-			_, committedRun, err := repository.CommitBackupRecoveryPoint(
-				context.Background(), checkpoint, stagedVersion,
-				committed, 0, point, nil, sweep,
+			t.Parallel()
+			repository, store, orphan := createBackupRuntimeOrphanForReadTest(t)
+			connectorIndex, err := testbackupruntime.BackupOrphanConnectorIndexKey(
+				orphan.Target.ConnectorID,
+				orphan.Target.ID,
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			currentSweep, found, err := repository.GetBackupRetentionSweep(
-				context.Background(), point.SourceID, point.ID,
-			)
-			if err != nil || !found {
-				t.Fatalf("GetBackupRetentionSweep() = %#v/%v/%v", currentSweep, found, err)
-			}
-			key := test.key(point)
-			entry := mustOptionalKey(t, store, key)
-			mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: entry.Value}
-			if test.delete {
-				mutation = testkeyvalue.Mutation{Type: testkeyvalue.MutationDelete, Key: key}
-			}
+			entry := mustOptionalKey(t, store, connectorIndex)
 			changed, err := store.Transact(
 				context.Background(),
-				[]testkeyvalue.Condition{{Key: key, ModRevision: entry.ModRevision}},
-				[]testkeyvalue.Mutation{mutation},
+				[]testkeyvalue.Condition{{Key: connectorIndex, ModRevision: entry.ModRevision}},
+				test.mutate(t, store, orphan, connectorIndex),
 			)
 			if err != nil || !changed.Succeeded {
-				t.Fatalf("tamper retention point authority = %#v, %v", changed, err)
+				t.Fatalf("corrupt Connector index = %#v, %v", changed, err)
 			}
-			if _, _, err := repository.AdvanceBackupRetentionSweep(
-				context.Background(), committedRun, currentSweep, sweep.UpdatedAt.Add(time.Second),
+			if _, _, err := repository.GetBackupOrphan(
+				context.Background(), orphan.Target.ID,
 			); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-				t.Fatalf("AdvanceBackupRetentionSweep(corrupt point authority) error = %v", err)
+				t.Fatalf("GetBackupOrphan() error = %v", err)
+			}
+			if _, err := repository.ListBackupOrphansByEnvironment(
+				context.Background(),
+				orphan.Target.EnvironmentID, testbackupruntime.BackupRuntimeListRequest{Limit: 1},
+			); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+				t.Fatalf("ListBackupOrphansByEnvironment() error = %v", err)
 			}
 		})
 	}
 }
 
-// Rationale: stale prune authority is a retryable CAS conflict, while bytes
-// or aggregate companions that disagree at the exact revision are corruption.
+// TASK-157: stale ownership is a conflict; malformed bytes and incomplete
+// immutable companions are corruption, not authority for another attempt.
 func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	t.Parallel()
 	_, _, run := newBackupRuntimeBareFixture(t)
@@ -490,28 +218,26 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	expectedDispatch := testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneDispatchRecord]{
 		Record: dispatch, Revision: dispatchRevision,
 	}
-	for _, path := range []string{"checkpoint", "failure", "completion"} {
-		t.Run(path+" revision drift", func(t *testing.T) {
-			stale := expectedDispatch
-			stale.Revision++
-			if err := testbackupruntime.ValidateExactBackupPruneDispatchValue(dispatchEntry, stale); !errors.Is(
-				err,
-				errs.New(errs.KindStateConflict, ""),
-			) {
-				t.Fatalf("dispatch revision drift error = %v", err)
-			}
-		})
-		t.Run(path+" same-revision corruption", func(t *testing.T) {
-			corrupt := *dispatchEntry
-			corrupt.Value = []byte(`{"invalid":`)
-			if err := testbackupruntime.ValidateExactBackupPruneDispatchValue(&corrupt, expectedDispatch); !errors.Is(
-				err,
-				errs.New(errs.KindInternal, ""),
-			) {
-				t.Fatalf("dispatch same-revision corruption error = %v", err)
-			}
-		})
-	}
+	t.Run("dispatch revision drift", func(t *testing.T) {
+		stale := expectedDispatch
+		stale.Revision++
+		if err := testbackupruntime.ValidateExactBackupPruneDispatchValue(dispatchEntry, stale); !errors.Is(
+			err,
+			errs.New(errs.KindStateConflict, ""),
+		) {
+			t.Fatalf("dispatch revision drift error = %v", err)
+		}
+	})
+	t.Run("dispatch same-revision corruption", func(t *testing.T) {
+		corrupt := *dispatchEntry
+		corrupt.Value = []byte(`{"invalid":`)
+		if err := testbackupruntime.ValidateExactBackupPruneDispatchValue(&corrupt, expectedDispatch); !errors.Is(
+			err,
+			errs.New(errs.KindInternal, ""),
+		) {
+			t.Fatalf("dispatch same-revision corruption error = %v", err)
+		}
+	})
 }
 
 // Rationale: corrupt normalized authority is durable corruption, while a
@@ -782,13 +508,4 @@ func TestBackupRuntimeRepositoryRejectsAlternateValidReconciledOrphanAdoptionRep
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AdoptReconciledBackupOrphan(alternate valid replay) error = %v", err)
 	}
-}
-
-func backupRemoteAbsentCheckpoint(
-	input testbackupruntime.BackupCheckpointInput,
-	sequence uint64,
-	run testbackupruntime.BackupRunRecord,
-	pointID string,
-) testbackupruntime.BackupCheckpointInput {
-	return backupPruneObjectDeletedCheckpoint(input, sequence, 1, pointID, backupCheckpointPruneObject(run, pointID))
 }
