@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	api "github.com/AlanD20/groundplane/pkg/api"
 )
 
@@ -39,7 +40,8 @@ func TestNativeTaskHTTPInspectionPreservesExecutionWhenDiagnosticsExpire(t *test
 	}
 	workPath := path + "/work/" + view.Work.Item.Item.ID
 	attempts := nativeTaskHTTPGet[api.TaskAttemptPage](t, f, workPath+"/attempts")
-	if len(attempts.Items) != 1 || attempts.Items[0].ID != view.Attempt.Attempt.ID || attempts.Items[0].StartedAt == nil ||
+	if len(attempts.Items) != 1 || attempts.Items[0].ID != view.Attempt.Attempt.ID ||
+		attempts.Items[0].StartedAt == nil ||
 		attempts.Items[0].HostID != view.Attempt.Attempt.Executor.HostID ||
 		attempts.Items[0].AgentID != view.Attempt.Attempt.Executor.AgentID {
 		t.Fatal("attempt inspection lost host/process identity or actual start time")
@@ -87,6 +89,23 @@ func TestNativeTaskHTTPInspectionPreservesExecutionWhenDiagnosticsExpire(t *test
 	if applied, err := f.volume.inputs.ReadApplied(t.Context(), f.volume.created.Volume.ID, 0); err != nil ||
 		applied == nil {
 		t.Fatalf("diagnostic expiry removed resource applied state: %v", err)
+	}
+	// Immutable Task scope must still locate completed history when its former
+	// hierarchy no longer exists. This injects absent hierarchy records; it is
+	// not qualification of the hierarchy-removal operation itself.
+	scope := retained.Task.Scope
+	for _, key := range []string{hierarchy.EnvironmentKey(scope.EnvironmentID),
+		hierarchy.ProjectKey(scope.ProjectID), hierarchy.TenantKey(scope.TenantID)} {
+		if _, err := f.volume.store.Delete(t.Context(), key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, selected := range []string{"all", scope.TenantID, scope.ProjectID, scope.EnvironmentID} {
+		query := url.Values{"scope": {selected}, "status": {"succeeded"}, "limit": {"25"}}
+		history := nativeTaskHTTPGet[api.ExecutionPage[api.TaskSummary]](t, f, "/api/v1/tasks?"+query.Encode())
+		if len(history.Items) != 1 || history.Items[0].ID != taskID || history.Items[0].Scope != scope {
+			t.Fatalf("deleted hierarchy hid completed Task history for scope %s", selected)
+		}
 	}
 }
 
