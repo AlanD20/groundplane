@@ -68,7 +68,7 @@ func testAuthenticationLifecycle(t *testing.T, mode core.BackingAuthentication) 
 	args := []string{"run", "--detach", "--pull=never", "--network", networkID, "--network-alias", "backing",
 		"--label", "groundplane.test=valkey-auth", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 		"--mount", "type=bind,src=" + data + ",dst=/data", "--entrypoint", spec.Command[0],
-		"--env", "VALKEY_PASSWORD=fixture-admin-only", "--env", "REDISCLI_AUTH=fixture-admin-only",
+		"--env", "REDISCLI_AUTH=fixture-admin-only",
 		"--env", "VALKEY_AUTHENTICATION=" + string(mode), image}
 	args = append(args, spec.Command[1:]...)
 	started, err := executor.Run(ctx, runner.RunCmdOpts{Name: "docker", Args: args})

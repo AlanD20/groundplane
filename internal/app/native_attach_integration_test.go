@@ -33,13 +33,29 @@ import (
 // execution. Ready backing state is supplied; no container/network effect is
 // claimed by this repository and Controller integration check.
 func TestNativeCustomAttachPublicationReplayAndControllerSettlement(t *testing.T) {
+	nativeControllerAttachJourney(t, "custom")
+}
+
+// ATT-01/02: explicit no-auth Valkey still exposes its captured endpoint facts,
+// but must not run a credential provisioning procedure or invent an Agent attempt.
+func TestNativeNoAuthValkeyAttachPublicationReplayAndControllerSettlement(t *testing.T) {
+	nativeControllerAttachJourney(t, "valkey")
+}
+
+func nativeControllerAttachJourney(t *testing.T, adapter string) {
+	t.Helper()
 	f := newNativeRouteFixture(t)
 	creation, images, _ := newNativeBackingCreationService(t, f.base)
-	created, err := creation.CreateBackingService(t.Context(), api.BackingServiceCreate{
-		Slug: "shared-search", Name: "Shared search", Adapter: "custom", Image: images.plan.Requested,
+	backingRequest := api.BackingServiceCreate{
+		Slug: "shared-search", Name: "Shared search", Adapter: adapter, Image: images.plan.Requested,
 		NetworkPool: "10.200.0.0/24",
 		Zone:        api.BackingServiceZoneCreate{Name: "data", Subnet: "10.200.0.0/28", Internal: true},
-	}, "native-attach-backing")
+	}
+	if adapter == "valkey" {
+		images.plan.Requested, images.plan.Repository = "valkey/valkey:9-alpine", "docker.io/valkey/valkey"
+		backingRequest.Image, backingRequest.AdapterVersion, backingRequest.Authentication = "", "9", "none"
+	}
+	created, err := creation.CreateBackingService(t.Context(), backingRequest, "native-attach-backing")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,9 +154,14 @@ func TestNativeCustomAttachPublicationReplayAndControllerSettlement(t *testing.T
 		t.Fatal(err)
 	}
 	defer captured.Clear()
-	if !captured.Generation.Record.SettlesInController() || captured.Generation.Record.AdapterKey != "custom" ||
+	if !captured.Generation.Record.SettlesInController() || captured.Generation.Record.AdapterKey != adapter ||
 		captured.Generation.Record.ConsumerServiceID != request.ServiceID {
-		t.Fatal("native capture changed the accepted Custom connection")
+		t.Fatal("native capture changed the accepted connection")
+	}
+	if adapter == "valkey" && (captured.Generation.Record.Authentication != core.BackingAuthenticationNone ||
+		captured.Generation.Record.Provision == nil || captured.Generation.Record.Provision.RequiresProvisioning ||
+		len(captured.Generation.Record.GeneratedInputs.Ciphertext) == 0) {
+		t.Fatal("no-auth Valkey lost encrypted endpoint facts or requested credential provisioning")
 	}
 	revision := f.base.store.revision
 	_, err = mutations.CreateAttach(t.Context(), request, "native-custom-attach")

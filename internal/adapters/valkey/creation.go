@@ -21,7 +21,6 @@ func (a *adapter) CreationSpec(_ string, authentication core.BackingAuthenticati
 		HealthTCP:     "127.0.0.1:6379",
 		Environment: []adapters.CreationEnvironment{
 			{Name: "VALKEY_AUTHENTICATION", Literal: string(authentication)},
-			{Name: "VALKEY_PASSWORD", BootstrapKey: "password", Secret: true},
 			{Name: "REDISCLI_AUTH", BootstrapKey: "password", Secret: true},
 		},
 	}
@@ -31,7 +30,7 @@ func (a *adapter) CreationSpec(_ string, authentication core.BackingAuthenticati
 // credentials, and only the dedicated management user receives the bootstrap.
 const valkeyStartup = `umask 077
 if [ ! -f /data/groundplane.acl ]; then
-  gp_admin_hash=$(printf '%s' "$VALKEY_PASSWORD" | sha256sum | cut -d ' ' -f 1)
+  gp_admin_hash=$(printf '%s' "$REDISCLI_AUTH" | sha256sum | cut -d ' ' -f 1)
   case "$VALKEY_AUTHENTICATION" in
     username_password) gp_default='off resetpass' ;;
     password) gp_default='on resetpass' ;;

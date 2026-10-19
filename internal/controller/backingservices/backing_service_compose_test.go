@@ -60,7 +60,7 @@ func TestBackingServiceComposePreservesRuntimeShell(t *testing.T) {
 				WorkingDir:  environment.VolumeDir,
 				ConfigFiles: []composetypes.ConfigFile{{Filename: "compose.yaml", Content: artifact.CanonicalYaml}},
 				Environment: composetypes.Mapping{
-					"VALKEY_PASSWORD": "must-not-be-substituted", "VALKEY_AUTHENTICATION": "wrong",
+					"REDISCLI_AUTH": "must-not-be-substituted", "VALKEY_AUTHENTICATION": "wrong",
 					"POSTGRES_USER": "wrong", "POSTGRES_DB": "wrong",
 				},
 			}, func(options *loader.Options) {
