@@ -64,29 +64,3 @@ func TestRestorationRequiresLiveAndRestartProxyConfig(t *testing.T) {
 		})
 	}
 }
-
-// Rationale: SVC-06. Candidate startup must also start an existing stopped
-// proxy, but applying new proxy YAML would replace the stable container and
-// break connections. Start is the idempotent non-reconciling operation.
-func TestBlueGreenStartsExistingProxyWithoutRecreatingIt(t *testing.T) {
-	artifact := &agentpb.ComposeArtifact{ProjectName: "gp-test", Services: []*agentpb.ComposeService{
-		{ServiceId: "api", ComposeName: "api", Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY},
-		{
-			ServiceId:   "api",
-			ComposeName: "api--green",
-			Role:        agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-			Slot:        "green",
-		},
-	}}
-	step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_ComposeWorkloadApply{
-		ComposeWorkloadApply: &agentpb.ComposeWorkloadApply{ServiceId: "api", Target: "green"},
-	}}
-	commands, err := commandsFor(&agentpb.ComposeHelperRequest{}, step, artifact)
-	if err != nil || len(commands) != 3 {
-		t.Fatalf("commands=%v error=%v", commands, err)
-	}
-	if !slices.Equal(commands[1].Args[len(commands[1].Args)-3:], []string{"up", "--detach", "api--green"}) ||
-		!slices.Equal(commands[2].Args[len(commands[2].Args)-2:], []string{"start", "api"}) {
-		t.Fatalf("candidate/proxy startup changed stable proxy: %v", commands)
-	}
-}

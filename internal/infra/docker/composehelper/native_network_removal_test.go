@@ -1,10 +1,12 @@
 package composehelper
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -15,10 +17,34 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/networkexecution"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// TASK-31/74: the actual native request reader must reject concatenated or
+// trailing instructions, not just decode the first permitted frame.
+func TestNativeNetworkRequestRejectsTrailingBytes(t *testing.T) {
+	request := nativeNetworkRemovalRequest(t)
+	framed, err := MarshalNetworkWorkRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := ReadNetworkWorkRequest(t.Context(), bytes.NewReader(framed))
+	if err != nil || !proto.Equal(decoded, request) {
+		t.Fatalf("native request roundtrip: %v", err)
+	}
+	for _, extra := range [][]byte{{0}, framed} {
+		trailing := append(append([]byte(nil), framed...), extra...)
+		if _, err := ReadNetworkWorkRequest(t.Context(), bytes.NewReader(trailing)); !errors.Is(
+			err,
+			errs.New(errs.KindValidationFailed, ""),
+		) {
+			t.Fatalf("accepted trailing helper instructions: %v", err)
+		}
+	}
+}
 
 // NET-04 / TASK-74: removal disconnects captured singleton/proxy/slot endpoints,
 // never deploys a workload, and lost-ack inspection observes absence without

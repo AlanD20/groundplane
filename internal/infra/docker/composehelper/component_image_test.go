@@ -17,8 +17,12 @@ import (
 
 // Rationale: containerd reports the child manifest as the actual image ID.
 func TestComponentConfigAcceptsSealedContainerdImage(t *testing.T) {
-	request, configPath := validComponentConfigRequest(t)
+	artifact, action, configPath := componentActivationFixture(t)
 	fake := componentConfigRunner(t, configPath, 0)
+	recipe, err := (componentCatalogFake{}).ResolveContainerConfigAction(action)
+	if err != nil {
+		t.Fatal(err)
+	}
 	base := fake.RunFunc
 	child := strings.Split(componentImageReference, "@")[1]
 	descriptor, err := json.Marshal(
@@ -41,12 +45,7 @@ func TestComponentConfigAcceptsSealedContainerdImage(t *testing.T) {
 		}
 		return base(ctx, options)
 	}
-	response, err := ExecuteWithComponentCatalog(
-		context.Background(),
-		fake,
-		request,
-		componentCatalogFake{},
-	)
+	response, err := executeComponentContainerConfigAction(t.Context(), fake, 30, artifact, action, recipe)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,8 +57,12 @@ func TestComponentConfigAcceptsSealedContainerdImage(t *testing.T) {
 // Rationale: a configured OCI reference is not proof of the actual container
 // image. A substituted image must never receive validation or activation exec.
 func TestComponentConfigRejectsSubstitutedActualImage(t *testing.T) {
-	request, configPath := validComponentConfigRequest(t)
+	artifact, action, configPath := componentActivationFixture(t)
 	fake := componentConfigRunner(t, configPath, 0)
+	recipe, err := (componentCatalogFake{}).ResolveContainerConfigAction(action)
+	if err != nil {
+		t.Fatal(err)
+	}
 	base := fake.RunFunc
 	fake.RunFunc = func(ctx context.Context, options runner.RunCmdOpts) (runner.Result, error) {
 		if strings.Contains(strings.Join(options.Args, " "), "{{.Image}}") {
@@ -71,12 +74,7 @@ func TestComponentConfigRejectsSubstitutedActualImage(t *testing.T) {
 		}
 		return base(ctx, options)
 	}
-	response, err := ExecuteWithComponentCatalog(
-		context.Background(),
-		fake,
-		request,
-		componentCatalogFake{},
-	)
+	response, err := executeComponentContainerConfigAction(t.Context(), fake, 30, artifact, action, recipe)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || response != nil {
 		t.Fatalf("substituted image result = %v, %v; want state conflict", response, err)
 	}
