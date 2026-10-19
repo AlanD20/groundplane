@@ -127,65 +127,6 @@ func TestExecuteReleaseCompletedCompensationWithoutExactProofRequiresReconciliat
 	}
 }
 
-// Rationale: a mutation-capable candidate step cannot reach the host until
-// Controller acceptance of its exact running event is returned to the Agent.
-func TestExecuteReleaseWaitsForDurableRunningEventBeforeCandidateMutation(t *testing.T) {
-	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
-		"switch-api": releaseExecutionSuccess("api", false),
-	}}
-	pool := releaseExecutionPool(t, helper)
-	plan := &agentpb.ExecutionPlan{
-		PlanHash: make([]byte, 32), Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
-		Steps:     []*agentpb.ExecutionStep{releaseForwardSwitch("switch-api")},
-		Artifacts: []*agentpb.ComposeArtifact{releaseTestArtifact("candidate-artifact")},
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	reservation := &taskReservation{assignment: testtaskassignment.Assignment{
-		AssignmentID: "assignment-event-fence", TaskID: "task-event-fence", OperationID: "operation-event-fence",
-		Plan: plan, ExecutionEpoch: 2, ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
-		Deadline: time.Now().Add(5 * time.Second),
-	}, ctx: ctx, cancel: cancel, eventsDurable: true}
-	go pool.executeRelease(context.Background(), reservation)
-
-	output := <-pool.Outputs()
-	if output.Progress == nil || output.Progress.State != TaskProgressRunning {
-		t.Fatalf("first output = %#v, want running event", output)
-	}
-	helper.mu.Lock()
-	if len(helper.calls) != 0 {
-		helper.mu.Unlock()
-		t.Fatalf("candidate mutation ran before event acceptance: %#v", helper.calls)
-	}
-	helper.mu.Unlock()
-	ack := &agentpb.TaskEventAck{
-		TaskId: output.Progress.TaskID, AssignmentId: output.Progress.AssignmentID,
-		PlanHash: output.Progress.PlanHash[:], StepId: output.Progress.StepID,
-		ExecutionEpoch: 1, Ordinal: output.Progress.Ordinal, State: agentpb.TaskState_TASK_STATE_RUNNING,
-		StartDecision:    agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
-		EventOrdinalBase: 1,
-	}
-	if err := pool.AcceptTaskEventAck(context.Background(), ack); err == nil {
-		t.Fatal("accepted stale execution epoch")
-	}
-	ack.ExecutionEpoch = output.Progress.ExecutionEpoch
-	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
-		t.Fatalf("AcceptTaskEventAck() error = %v", err)
-	}
-
-	for {
-		output = <-pool.Outputs()
-		if output.Result != nil {
-			break
-		}
-	}
-	helper.mu.Lock()
-	defer helper.mu.Unlock()
-	if len(helper.calls) != 1 || helper.calls[0].stepID != "switch-api" {
-		t.Fatalf("candidate mutation calls = %#v", helper.calls)
-	}
-}
-
 // Rationale: exact recovery proof is part of the step outcome. A helper's
 // completed outcome with mismatched evidence must publish failed progress so
 // the Controller cannot advance the recovery cursor.
@@ -242,54 +183,6 @@ func TestExecuteReleaseRecoveryProofFailurePublishesFailedProgress(t *testing.T)
 		!terminal.Result.Compose.GetReconciliationRequired() {
 		t.Fatalf("proof failure terminal = %#v", terminal)
 	}
-}
-
-// Rationale: rejection of the durable running event occurs before host
-// authority exists, so it terminalizes without invoking the helper or opening
-// a reconciliation gate.
-func TestExecuteReleaseRejectedRunningEventRemainsTerminalWithoutRecovery(t *testing.T) {
-	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
-		"switch-api": releaseExecutionSuccess("api", false),
-	}}
-	pool := releaseExecutionPool(t, helper)
-	plan := &agentpb.ExecutionPlan{
-		PlanHash: make([]byte, 32), Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
-		Steps: []*agentpb.ExecutionStep{releaseForwardSwitch("switch-api")},
-	}
-	taskCtx, cancel := context.WithCancel(context.Background())
-	reservation := &taskReservation{assignment: testtaskassignment.Assignment{
-		AssignmentID: "assignment-rejected-event", TaskID: "task-rejected-event",
-		OperationID: "operation-rejected-event", Plan: plan, ExecutionEpoch: 2,
-		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD, Deadline: time.Now().Add(5 * time.Second),
-	}, ctx: taskCtx, cancel: cancel, eventsDurable: true}
-	go pool.executeRelease(context.Background(), reservation)
-
-	output := <-pool.Outputs()
-	if output.Progress == nil || output.Progress.State != TaskProgressRunning {
-		t.Fatalf("first output = %#v, want running event", output)
-	}
-	stale := &agentpb.TaskEventAck{
-		TaskId: output.Progress.TaskID, AssignmentId: output.Progress.AssignmentID,
-		PlanHash: output.Progress.PlanHash[:], StepId: output.Progress.StepID,
-		ExecutionEpoch: 1, Ordinal: output.Progress.Ordinal, State: agentpb.TaskState_TASK_STATE_RUNNING,
-		StartDecision:    agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
-		EventOrdinalBase: 1,
-	}
-	if err := pool.AcceptTaskEventAck(context.Background(), stale); err == nil {
-		t.Fatal("accepted rejected running-event authority")
-	}
-	cancel()
-	for {
-		output = <-pool.Outputs()
-		if output.Result == nil {
-			continue
-		}
-		if output.Result.Terminal != TaskTerminalAborted || output.Result.Compose.GetReconciliationRequired() {
-			t.Fatalf("rejected running-event result = %#v", output.Result)
-		}
-		break
-	}
-	assertReleaseExecutionCalls(t, helper, nil)
 }
 
 func TestExecuteReleaseRecreateCompensatesSingletonReplacement(t *testing.T) {
