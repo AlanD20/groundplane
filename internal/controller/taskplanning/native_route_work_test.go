@@ -9,7 +9,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -124,7 +123,6 @@ func TestNativeRouteMutationAndRemovalCaptureOnlyRouterWork(t *testing.T) {
 				assertNativeComponentRemovalCapture(t, task, item, input)
 			}
 			changed := request
-			changed.Provider = environmentchanges.CloneRouteProviderPin(*pin)
 			changed.Provider.CatalogDigest = strings.Repeat("f", 64)
 			if _, err := files.PrepareRouteWork(t.Context(), changed); err == nil {
 				t.Fatal("changed provider catalog acquired router activation authority")

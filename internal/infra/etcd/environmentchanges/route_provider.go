@@ -53,14 +53,3 @@ func ValidateRouteProviderPin(provider *RouteProviderPin) error {
 	}
 	return nil
 }
-
-func CloneRouteProviderPin(source RouteProviderPin) RouteProviderPin {
-	clone := source
-	clone.Input = componentsdk.CloneHTTPRouterInput(source.Input)
-	if source.Runtime != nil {
-		retained := *source.Runtime
-		retained.Artifact = append([]byte(nil), source.Runtime.Artifact...)
-		clone.Runtime = &retained
-	}
-	return clone
-}
