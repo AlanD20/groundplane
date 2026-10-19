@@ -633,24 +633,6 @@ func (store *ordinaryServiceMutationAuditStore) Transact(
 	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
 }
 
-func mustEnvironmentMutationEpochRevision(
-	t *testing.T,
-	store interface {
-		Get(context.Context, string) (*testkeyvalue.GetResult, error)
-	},
-	environmentID string,
-) int64 {
-	t.Helper()
-	result, err := store.Get(context.Background(), testhierarchy.EnvironmentMutationEpochKey(environmentID))
-	if err != nil || result == nil || result.Entry == nil {
-		t.Fatalf("get mutation epoch = %#v, %v", result, err)
-	}
-	if _, err := testbackupruntime.DecodeEnvironmentMutationEpochRecord(result.Entry.Value); err != nil {
-		t.Fatalf("decodeEnvironmentMutationEpochRecord() error = %v", err)
-	}
-	return result.Entry.ModRevision
-}
-
 func readyServiceMutationEnvironment(
 	t *testing.T,
 	ctx context.Context,

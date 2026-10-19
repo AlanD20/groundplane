@@ -8,7 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
-	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -125,43 +124,6 @@ func TestEntryWriteAdvancesEpoch(t *testing.T) {
 	if afterEntry.Revision <= before.Revision {
 		t.Fatalf("Entry epoch = %d, want > %d", afterEntry.Revision, before.Revision)
 	}
-}
-
-type entryVolumeEpochRaceStore struct {
-	hierarchyStore
-	beforeTransact func()
-}
-
-func (store *entryVolumeEpochRaceStore) Transact(
-	ctx context.Context,
-	conditions []testkeyvalue.Condition,
-	mutations []testkeyvalue.Mutation,
-) (testkeyvalue.TransactionResult, error) {
-	if store.beforeTransact != nil {
-		before := store.beforeTransact
-		store.beforeTransact = nil
-		before()
-	}
-	return store.hierarchyStore.Transact(ctx, conditions, mutations)
-}
-
-type entryMutationRevisionAuditStore struct {
-	hierarchyStore
-	anchorRevision int64
-	fixedRevisions []int64
-}
-
-func (store *entryMutationRevisionAuditStore) GetMany(
-	ctx context.Context,
-	request testkeyvalue.GetManyRequest,
-) (*testkeyvalue.GetManyResult, error) {
-	result, err := store.hierarchyStore.GetMany(ctx, request)
-	if err == nil && request.Revision == 0 && store.anchorRevision == 0 {
-		store.anchorRevision = result.ReadRevision
-	} else if err == nil && request.Revision > 0 {
-		store.fixedRevisions = append(store.fixedRevisions, request.Revision)
-	}
-	return result, err
 }
 
 func environmentMutationTestEntry(

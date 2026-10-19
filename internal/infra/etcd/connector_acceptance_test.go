@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"maps"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -135,27 +134,21 @@ func TestC15ConnectorRemovalDistinguishesDisabledAndEnabledPolicyReferences(t *t
 			if err != nil {
 				t.Fatalf("newConnectorRepository() error = %v", err)
 			}
-			task, marker, tombstone, intent := connectorDeletionTestTask(
-				t,
-				fixture.connector,
-				fixture.project,
-				fixture.environment,
-				fixture.now.Add(time.Minute),
-				3000,
-			)
-			marker.Locator.Method = http.MethodDelete
-			result, err := repository.BeginConnectorDeletionWithTask(
+			native := nativeConnectorFixture{store: fixture.store, repository: repository,
+				environment: fixture.environment, project: fixture.project, current: fixture.connector}
+			native.capture(t, fixture.now.Add(time.Minute))
+			result, err := repository.PublishConnectorRemoval(
 				context.Background(), fixture.environment, fixture.project, fixture.connector,
-				tombstone, intent, task, marker,
+				native.input, native.task, native.marker,
 			)
 			if test.wantBlocked {
 				if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
-					t.Fatalf("BeginConnectorDeletionWithTask(enabled policy) error = %v", err)
+					t.Fatalf("PublishConnectorRemoval(enabled policy) error = %v", err)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("BeginConnectorDeletionWithTask(disabled policy) error = %v", err)
+				t.Fatalf("PublishConnectorRemoval(disabled policy) error = %v", err)
 			}
 			outcome, _, conflict, classifyErr := result.Classify()
 			if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {

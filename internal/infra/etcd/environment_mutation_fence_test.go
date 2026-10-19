@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testenvironmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -208,62 +207,4 @@ func (store *environmentMutationFenceAuditStore) GetMany(
 ) (*testkeyvalue.GetManyResult, error) {
 	store.revisions = append(store.revisions, request.Revision)
 	return store.memoryHierarchyStore.GetMany(ctx, request)
-}
-
-func environmentMutationFenceTestOwner(at time.Time, seed int64) testenvironmentfence.Owner {
-	return testenvironmentfence.Owner{
-		Kind:        testbackupruntime.BackupOperationBackup,
-		OperationID: ids.NewAt(ids.KindOperation, at, seed),
-		TaskID:      ids.NewAt(ids.KindTask, at, seed+1),
-	}
-}
-
-func putEnvironmentMutationFenceTestLock(
-	t *testing.T,
-	store *memoryHierarchyStore,
-	environmentID string,
-	owner testenvironmentfence.Owner,
-) int64 {
-	t.Helper()
-	at := time.Date(2026, 8, 24, 20, 20, 0, 0, time.UTC)
-	value, err := testbackupruntime.EncodeBackupOperationLockRecord(testbackupruntime.BackupOperationLockRecord{
-		EnvironmentID: environmentID,
-		OperationID:   owner.OperationID,
-		TaskID:        owner.TaskID,
-		Kind:          owner.Kind,
-		CreatedAt:     at,
-		UpdatedAt:     at,
-	})
-	if err != nil {
-		t.Fatalf("encodeBackupOperationLockRecord() error = %v", err)
-	}
-	defer clear(value)
-	result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
-		Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentOperationLockKey(environmentID), Value: value,
-	}})
-	if err != nil || !result.Succeeded {
-		t.Fatalf("put operation lock = %#v, %v", result, err)
-	}
-	return result.Revision
-}
-
-func advanceEnvironmentMutationFenceEpoch(
-	t *testing.T,
-	store *memoryHierarchyStore,
-	environmentID string,
-) {
-	t.Helper()
-	value, err := testbackupruntime.EncodeEnvironmentMutationEpochRecord(
-		testbackupruntime.EnvironmentMutationEpochRecord{EnvironmentID: environmentID},
-	)
-	if err != nil {
-		t.Fatalf("encodeEnvironmentMutationEpochRecord() error = %v", err)
-	}
-	defer clear(value)
-	result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
-		Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentMutationEpochKey(environmentID), Value: value,
-	}})
-	if err != nil || !result.Succeeded {
-		t.Fatalf("advance mutation epoch = %#v, %v", result, err)
-	}
 }

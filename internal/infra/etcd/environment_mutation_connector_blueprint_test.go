@@ -6,14 +6,12 @@ import (
 	"testing"
 	"time"
 
-	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorremoval"
 	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
-	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -186,19 +184,7 @@ func TestConnectorCreateReplayDoesNotAdvanceEpoch(t *testing.T) {
 // must stop before every Task, tombstone, and intent write while the lock is held.
 func TestConnectorDeletionRejectsHeldEnvironmentLockWithoutWrites(t *testing.T) {
 	t.Parallel()
-	fixture := newConnectorDeletionFixture(t)
-	repository, err := newConnectorRepository(fixture.store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	task, marker, tombstone, intent := connectorDeletionTestTask(
-		t,
-		fixture.connector,
-		fixture.project,
-		fixture.environment,
-		fixture.now.Add(time.Minute),
-		13050,
-	)
+	fixture := nativeConnectorRemovalFixture(t)
 	epoch := mustEnvironmentMutationEpochRevision(t, fixture.store, fixture.environment.Record.ID)
 	putEnvironmentMutationFenceTestLock(
 		t,
@@ -206,13 +192,13 @@ func TestConnectorDeletionRejectsHeldEnvironmentLockWithoutWrites(t *testing.T) 
 		fixture.environment.Record.ID,
 		environmentMutationFenceTestOwner(serviceRecordTestTime(), 13051),
 	)
-	if _, err := repository.BeginConnectorDeletionWithTask(
-		context.Background(), fixture.environment, fixture.project, fixture.connector,
-		tombstone, intent, task, marker,
+	if _, err := fixture.repository.PublishConnectorRemoval(
+		context.Background(), fixture.environment, fixture.project, fixture.current,
+		fixture.input, fixture.task, fixture.marker,
 	); !isKind(err, errs.KindResourceInUse) {
-		t.Fatalf("BeginConnectorDeletionWithTask(held lock) error = %v", err)
+		t.Fatalf("PublishConnectorRemoval(held lock) error = %v", err)
 	}
-	for _, key := range []string{testtaskjournal.TaskStorageKey(task.ID), testdeletions.TombstoneKey(string(testdeletions.DeletionTargetConnector), fixture.connector.Record.Connector.ID), testconnectors.RemovalIntentKey(task.ID)} {
+	for _, key := range []string{workqueue.TaskKey(fixture.task.ID), testdeletions.TombstoneKey(string(testdeletions.DeletionTargetConnector), fixture.current.Record.Connector.ID), connectorremoval.InputKey(fixture.input.WorkItemID)} {
 		result, getErr := fixture.store.Get(context.Background(), key)
 		if getErr != nil || result.Entry != nil {
 			t.Fatalf("blocked Connector deletion key %q = %#v, %v", key, result, getErr)
@@ -227,306 +213,37 @@ func TestConnectorDeletionRejectsHeldEnvironmentLockWithoutWrites(t *testing.T) 
 	}
 }
 
-// Rationale: Blueprint publication must use one fixed revision, advance the
-// epoch with its desired-state writes, and replay read-only under a later lock.
-func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t *testing.T) {
+// Rationale: a held Environment lock must reject Connector creation before
+// exposing credentials or partial indexes.
+func TestConnectorCreationRejectsHeldEnvironmentLock(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	store := newMemoryHierarchyStore()
-	base, err := newHierarchyRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	project, environment := createEnvironmentBlueprintOwners(t, base)
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 13060)
-	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
-	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-	zoneChanges := environmentBlueprintTestZoneChanges(t, base, projection)
-	serviceChanges := environmentBlueprintTestServiceChanges(t, base, projection)
-	routeChanges := environmentBlueprintTestRouteChanges(t, base, projection)
-	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
-	claim := stageEnvironmentBlueprintForPublicationTest(t, base, 0, revision, projection, marker)
-	audited := &entryMutationRevisionAuditStore{hierarchyStore: store}
-	repository, err := newHierarchyRepository(audited)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, err := publishEnvironmentBlueprintClaimTest(
-		repository,
-		ctx,
-		project,
-		environment,
-		0,
-		claim,
-		testblueprints.EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: revision.EnvironmentID,
-			RevisionID:    revision.RevisionID,
-		},
-		projection,
-		zoneChanges,
-		serviceChanges,
-		routeChanges,
-		testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
-		testcomponentplanning.ComponentTaskPreparation{},
-		testblueprintplanning.BlueprintAttachTaskPreparation{},
-		task,
-		marker,
-	)
-	if err != nil {
-		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
-	}
-	if outcome, _, conflict, classifyErr := first.Classify(); classifyErr != nil ||
-		conflict != nil ||
-		outcome != IdempotencyKnownApplied {
-		t.Fatalf("Blueprint apply = %v/%v/%v", outcome, conflict, classifyErr)
-	}
-	if audited.anchorRevision <= 0 || len(audited.fixedRevisions) == 0 {
-		t.Fatalf(
-			"Blueprint anchor/fixed revisions = %d/%v",
-			audited.anchorRevision,
-			audited.fixedRevisions,
-		)
-	}
-	for _, fixed := range audited.fixedRevisions {
-		if fixed != audited.anchorRevision {
-			t.Fatalf("Blueprint fixed revision = %d, want %d", fixed, audited.anchorRevision)
-		}
-	}
-	head, found, err := repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
-	if err != nil || !found {
-		t.Fatalf("GetEnvironmentBlueprintHead() = %#v/%v/%v", head, found, err)
-	}
-	epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID)
-	if epoch != head.Revision {
-		t.Fatalf("Blueprint epoch revision = %d, want %d", epoch, head.Revision)
-	}
+	store, environment, project := testConnectorHierarchy(t)
 	putEnvironmentMutationFenceTestLock(
 		t,
 		store,
 		environment.Record.ID,
-		environmentMutationFenceTestOwner(serviceRecordTestTime(), 13061),
+		environmentMutationFenceTestOwner(time.Date(2026, 8, 24, 23, 0, 0, 0, time.UTC), 13000),
 	)
-	replayed, err := publishEnvironmentBlueprintClaimTest(
-		repository,
-		ctx,
-		project,
-		environment,
-		0,
-		claim,
-		testblueprints.EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: revision.EnvironmentID,
-			RevisionID:    revision.RevisionID,
-		},
-		projection,
-		zoneChanges,
-		serviceChanges,
-		routeChanges,
-		testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
-		testcomponentplanning.ComponentTaskPreparation{},
-		testblueprintplanning.BlueprintAttachTaskPreparation{},
-		task,
-		marker,
-	)
+	repository, err := newConnectorRepository(store)
 	if err != nil {
-		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask(replay) error = %v", err)
+		t.Fatal(err)
 	}
-	outcome, existing, conflict, classifyErr := replayed.Classify()
-	defer clear(existing.Intent.Ciphertext)
-	defer clear(existing.Response.Body)
-	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownExisting {
-		t.Fatalf("Blueprint replay = %v/%v/%v", outcome, conflict, classifyErr)
-	}
-	if after := mustEnvironmentMutationEpochRevision(
+	record := testConnectorRecord(
 		t,
-		store,
 		environment.Record.ID,
-	); after != epoch {
-		t.Fatalf("Blueprint replay epoch = %d, want %d", after, epoch)
-	}
-}
-
-// Rationale: a Blueprint epoch race must prevent its head, Task, immutable
-// revision, projection, and every desired record from becoming visible.
-func TestEnvironmentBlueprintEpochRacePerformsNoDomainWrites(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	store := newMemoryHierarchyStore()
-	base, err := newHierarchyRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	project, environment := createEnvironmentBlueprintOwners(t, base)
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 13070)
-	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
-	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-	zoneChanges := environmentBlueprintTestZoneChanges(t, base, projection)
-	serviceChanges := environmentBlueprintTestServiceChanges(t, base, projection)
-	routeChanges := environmentBlueprintTestRouteChanges(t, base, projection)
-	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
-	claim := stageEnvironmentBlueprintForPublicationTest(t, base, 0, revision, projection, marker)
-	racing := &entryVolumeEpochRaceStore{hierarchyStore: store}
-	racing.beforeTransact = func() {
-		advanceEnvironmentMutationFenceEpoch(t, store, environment.Record.ID)
-	}
-	repository, err := newHierarchyRepository(racing)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := publishEnvironmentBlueprintClaimTest(
-		repository,
-		ctx,
-		project,
-		environment,
-		0,
-		claim,
-		testblueprints.EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: revision.EnvironmentID,
-			RevisionID:    revision.RevisionID,
-		},
-		projection,
-		zoneChanges,
-		serviceChanges,
-		routeChanges,
-		testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
-		testcomponentplanning.ComponentTaskPreparation{},
-		testblueprintplanning.BlueprintAttachTaskPreparation{},
-		task,
-		marker,
+		serviceRecordTestTime(),
+		13001,
+		"locked",
 	)
+	credentials, err := testconnectors.NewEncryptedCredentials(record.Connector.ID, []byte("sealed"))
 	if err != nil {
-		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask(epoch race) error = %v", err)
+		t.Fatal(err)
 	}
-	outcome, _, conflict, classifyErr := result.Classify()
-	if classifyErr != nil || outcome != IdempotencyKnownConflict ||
-		!isKind(conflict, errs.KindStateConflict) {
-		t.Fatalf("Blueprint race = %v/%v/%v", outcome, conflict, classifyErr)
-	}
-	for _, key := range []string{testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), testtaskjournal.TaskStorageKey(task.ID)} {
-		stored, getErr := store.Get(ctx, key)
-		if getErr != nil || stored.Entry != nil {
-			t.Fatalf("failed Blueprint publication key %q = %#v, %v", key, stored, getErr)
-		}
-	}
-}
-
-// Rationale: Connector and Blueprint ordinary publication must reject a held
-// Environment persistence lock before exposing any partial durable state.
-func TestConnectorAndBlueprintPublicationRejectHeldEnvironmentLock(t *testing.T) {
-	t.Parallel()
-	t.Run("Connector", func(t *testing.T) {
-		t.Parallel()
-		store, environment, project := testConnectorHierarchy(t)
-		putEnvironmentMutationFenceTestLock(
-			t,
-			store,
-			environment.Record.ID,
-			environmentMutationFenceTestOwner(time.Date(2026, 8, 24, 23, 0, 0, 0, time.UTC), 13000),
-		)
-		repository, err := newConnectorRepository(store)
-		if err != nil {
-			t.Fatal(err)
-		}
-		record := testConnectorRecord(
-			t,
-			environment.Record.ID,
-			serviceRecordTestTime(),
-			13001,
-			"locked",
-		)
-		credentials, err := testconnectors.NewEncryptedCredentials(record.Connector.ID, []byte("sealed"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer clear(credentials.Ciphertext)
-		if _, err := repository.CreateConnector(
-			context.Background(), environment, project, record, credentials,
-		); !isKind(err, errs.KindResourceInUse) {
-			t.Fatalf("CreateConnector() error = %v", err)
-		}
-	})
-	t.Run("Blueprint", func(t *testing.T) {
-		t.Parallel()
-		store := newMemoryHierarchyStore()
-		repository, err := newHierarchyRepository(store)
-		if err != nil {
-			t.Fatal(err)
-		}
-		project, environment := createEnvironmentBlueprintOwners(t, repository)
-		task := environmentBlueprintTestTask(t, project.Record, environment.Record, 70)
-		revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
-		projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-		marker := environmentBlueprintTestMarker(task, environment.Record.ID)
-		claim := stageEnvironmentBlueprintForPublicationTest(
-			t, repository, 0, revision, projection, marker,
-		)
-		putEnvironmentMutationFenceTestLock(
-			t,
-			store,
-			environment.Record.ID,
-			environmentMutationFenceTestOwner(
-				time.Date(2026, 8, 24, 23, 10, 0, 0, time.UTC),
-				13010,
-			),
-		)
-		_, err = publishEnvironmentBlueprintClaimTest(
-			repository,
-			context.Background(),
-			project,
-			environment,
-			0,
-			claim,
-			testblueprints.EnvironmentDesiredRevisionIdentity{
-				EnvironmentID: revision.EnvironmentID,
-				RevisionID:    revision.RevisionID,
-			},
-			projection,
-			nil,
-			nil,
-			nil,
-			testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
-			testcomponentplanning.ComponentTaskPreparation{},
-			testblueprintplanning.BlueprintAttachTaskPreparation{},
-			task,
-			marker,
-		)
-		if !isKind(err, errs.KindResourceInUse) {
-			t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
-		}
-	})
-}
-
-// Rationale: each wrapped Blueprint publication arm has its own 32-operation
-// partition; aggregate arithmetic must not let one arm consume another's room.
-func TestEnvironmentBlueprintPublicationPartitionsAreIndependentlyBounded(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name             string
-		comparisons      int
-		successMutations int
-		failureReads     int
-		wantError        bool
-	}{
-		{name: "exact bound", comparisons: 32, successMutations: 32, failureReads: 32},
-		{name: "compare overflow", comparisons: 33, successMutations: 32, failureReads: 32, wantError: true},
-		{name: "success overflow", comparisons: 32, successMutations: 33, failureReads: 32, wantError: true},
-		{name: "failure overflow", comparisons: 32, successMutations: 32, failureReads: 33, wantError: true},
-	}
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			err := validateEnvironmentDesiredPublicationPartitionCounts(
-				test.comparisons,
-				test.successMutations,
-				test.failureReads,
-			)
-			if test.wantError && !isKind(err, errs.KindValidationFailed) {
-				t.Fatalf("partition validation error = %v", err)
-			}
-			if !test.wantError && err != nil {
-				t.Fatalf("partition validation error = %v", err)
-			}
-		})
+	defer clear(credentials.Ciphertext)
+	if _, err := repository.CreateConnector(
+		context.Background(), environment, project, record, credentials,
+	); !isKind(err, errs.KindResourceInUse) {
+		t.Fatalf("CreateConnector() error = %v", err)
 	}
 }
 
