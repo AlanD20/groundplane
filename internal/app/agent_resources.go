@@ -10,9 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
 	"github.com/AlanD20/groundplane/internal/agent/backingruntime"
 	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
-	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
-	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
 	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
@@ -48,20 +46,13 @@ type ownedComposeHelper interface {
 	hierarchyruntime.ConsumerHelper
 	environmentruntime.Host
 	hierarchyruntime.EnvironmentHelper
-	composeruntime.Helper
 	releaseruntime.MutationHelper
 	releaseruntime.RecoveryHostHelper
 	io.Closer
 }
 
 type ownedComposeObserver interface {
-	composeruntime.Observer
 	releaseruntime.Observer
-	io.Closer
-}
-
-type ownedEnvironmentDirectoryHelper interface {
-	directoryruntime.Helper
 	io.Closer
 }
 
@@ -71,17 +62,16 @@ type ownedMaterializationHelper interface {
 }
 
 type agentRuntimeResources struct {
-	compose                *agentComposeResources
-	environmentDirectories ownedEnvironmentDirectoryHelper
-	materializer           ownedMaterializationHelper
-	managedConfigs         *managedconfighelpercontainer.Executor
-	dnsResolverObserver    *dnsresolverobserver.Executor
-	hostResolution         *hostresolutionhelpercontainer.Executor
-	logs                   *containerlogs.Reader
-	scripts                *scriptruntime.Runtime
-	dockerReads            *mobyclient.Client
-	workJournal            *agentworkjournal.Journal
-	ownership              *agentownership.Lease
+	compose             *agentComposeResources
+	materializer        ownedMaterializationHelper
+	managedConfigs      *managedconfighelpercontainer.Executor
+	dnsResolverObserver *dnsresolverobserver.Executor
+	hostResolution      *hostresolutionhelpercontainer.Executor
+	logs                *containerlogs.Reader
+	scripts             *scriptruntime.Runtime
+	dockerReads         *mobyclient.Client
+	workJournal         *agentworkjournal.Journal
+	ownership           *agentownership.Lease
 }
 
 type agentComposeResources struct {
@@ -93,7 +83,7 @@ func (resources *agentRuntimeResources) Close() error {
 	if resources == nil {
 		return nil
 	}
-	var logErr, scriptErr, hostResolutionErr, managedConfigErr, dnsObserverErr, materializerErr, directoryErr, composeErr error
+	var logErr, scriptErr, hostResolutionErr, managedConfigErr, dnsObserverErr, materializerErr, composeErr error
 	var imageErr, workJournalErr error
 	if resources.workJournal != nil {
 		workJournalErr = resources.workJournal.Close()
@@ -119,9 +109,6 @@ func (resources *agentRuntimeResources) Close() error {
 	if resources.hostResolution != nil {
 		hostResolutionErr = resources.hostResolution.Close()
 	}
-	if resources.environmentDirectories != nil {
-		directoryErr = resources.environmentDirectories.Close()
-	}
 	if resources.compose != nil {
 		composeErr = resources.compose.Close()
 	}
@@ -137,7 +124,6 @@ func (resources *agentRuntimeResources) Close() error {
 		managedConfigErr,
 		dnsObserverErr,
 		materializerErr,
-		directoryErr,
 		composeErr,
 	); joined != nil {
 		return errs.Wrap(errs.KindInternal, joined)

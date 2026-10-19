@@ -5,9 +5,13 @@ import (
 	"io"
 
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
+	"github.com/AlanD20/groundplane/internal/infra/docker/environmentdirectoryhelper"
 )
 
-const EnvironmentProvisionHelperArgument = "environment-provision-helper"
+const (
+	EnvironmentProvisionHelperArgument = "environment-provision-helper"
+	EnvironmentVolumeRootEnv           = environmentdirectoryhelper.VolumeRootEnv
+)
 
 func RunEnvironmentProvisionHelper(ctx context.Context, input io.Reader, output io.Writer, volumeRoot string) error {
 	request, err := composehelper.ReadEnvironmentProvisionRequest(ctx, input)

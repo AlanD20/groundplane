@@ -9,7 +9,7 @@ Status: Accepted architecture. Delivery and qualification status belongs in
 [capabilities](../capabilities.md) and the linked feature documents.
 
 Groundplane has one native Controller, one Controller-managed local Agent
-container, one Docker host, and one durable Task journal. The Controller owns
+container, one Docker host, and durable Task/work-item/attempt storage. The Controller owns
 policy and durable intent; the Agent applies bounded workload procedures. This
 document records the runtime boundary and the read-only observation paths that
 depend on it.
@@ -32,7 +32,8 @@ partial parser or a parallel Docker execution path. Runtime and Engine versions
 are release inputs. A future runtime is a separate capability adapter rather
 than compatibility branches in the Compose adapter.
 
-Current source: [Agent Compose runtime](../../internal/agent/composeruntime) and
+Current source: [native Release execution](../../internal/agent/releaseruntime),
+[typed host helpers](../../internal/infra/docker/composehelper), and
 [Compose rendering](../../internal/controller/composerender).
 
 ## Independent etcd configuration activation
@@ -78,15 +79,16 @@ and [Agent registration persistence](../../internal/infra/etcd/agentregistration
 
 ## Agent runtime and identity
 
-The Agent image is immutable and selected by OCI digest. Every assignment and
-event carries stable Task, plan, step, attempt, and sequence identity so a
-reconnect can distinguish exact replay from a conflicting plan. Retrying work
-creates a new Task while retaining operation lineage; terminal acknowledgements
-preserve the exact completed, failed, timed-out, or aborted state.
+The Agent image is immutable and selected by OCI digest. Assignment authority
+binds the captured operation input to its Task, work item, attempt, host and
+authenticated Agent generation. Retry retains the Task and work-item identity;
+only an authorized new attempt can execute. Reconnect replays the same attempt's
+durable checkpoints and reports rather than creating a new execution.
 
-Active checkpoints and assignment authority are durable Controller records,
-not container-local authority. Repeating a Task with the same plan resumes from
-that evidence; reusing its identity with another plan fails closed.
+The Controller owns execution permission. The Agent's local operation journal
+retains effects and exact unacknowledged results across interruption, but cannot
+authorize replay of an ambiguous command. See the
+[Task execution contract](task-execution-redesign.md#interruption-retry-and-cancellation).
 
 Agent replacement is a Controller Task. It pauses new assignment admission,
 requires the Agent to be idle, advances generation and credential authority,
@@ -121,7 +123,8 @@ Installed etcd image metadata is read by immutable local image configuration id;
 its live server-version response remains a separate observation.
 
 Current source: [Agent channel](../../internal/controller/agentchannel),
-[assignment handling](../../internal/agent/taskassignment), and
+[native assignment authority](../../internal/common/workexecution),
+[durable operation journals](../../internal/infra/agentworkjournal), and
 [Agent update orchestration](../../internal/controller/agentmanagement/update.go).
 
 ## Local Agent channel authentication

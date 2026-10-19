@@ -135,18 +135,6 @@ func main() {
 		}
 		return
 	}
-	if len(os.Args) == 2 && os.Args[1] == hostcommands.EnvironmentDirectoryHelperArgument {
-		if err := hostcommands.RunEnvironmentDirectoryHelper(
-			ctx,
-			os.Stdin,
-			os.Stdout,
-			os.Getenv(hostcommands.EnvironmentVolumeRootEnv),
-		); err != nil {
-			fmt.Fprintln(os.Stderr, "agent Environment directory helper:", err)
-			os.Exit(1)
-		}
-		return
-	}
 	if len(os.Args) == 2 && os.Args[1] == hostcommands.ManagedConfigHelperArgument {
 		if err := hostcommands.RunManagedConfigHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent managed-config helper:", err)

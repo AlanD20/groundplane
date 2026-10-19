@@ -41,7 +41,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/docker/composeobserver"
 	"github.com/AlanD20/groundplane/internal/infra/docker/containerlogs"
 	"github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"
-	"github.com/AlanD20/groundplane/internal/infra/docker/environmentdirectoryhelpercontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/hostresolutionhelpercontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/materializerrunner"
@@ -110,40 +109,33 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	if err != nil {
 		return nil, err
 	}
-	directoryHelper, err := environmentdirectoryhelpercontainer.New(
-		os.Getenv(agentprotocol.AgentImageEnv),
-		cfg.Storage.VolumeRoot,
-	)
-	if err != nil {
-		return nil, preferAgentComposeCleanup(err, resources.Close())
-	}
 	materializerHelper, err := materializerrunner.New(ctx, image, cfg.Storage.VolumeRoot)
 	if err != nil {
-		return nil, preferAgentComposeCleanup(err, errors.Join(directoryHelper.Close(), resources.Close()))
+		return nil, preferAgentComposeCleanup(err, resources.Close())
 	}
 	managedConfigs, err := managedconfighelpercontainer.New(image)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(
 			err,
-			errors.Join(materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+			errors.Join(materializerHelper.Close(), resources.Close()),
 		)
 	}
 	actionCatalog, err := componentregistration.NewCatalog()
 	if err != nil {
 		return nil, preferAgentComposeCleanup(
 			err,
-			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+			errors.Join(managedConfigs.Close(), materializerHelper.Close(), resources.Close()),
 		)
 	}
 	componentFiles, err := agentplatform.NewComponentFileValidator(actionCatalog, managedConfigs)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err,
-			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()))
+			errors.Join(managedConfigs.Close(), materializerHelper.Close(), resources.Close()))
 	}
 	materializer, err := filematerialization.New(materializerHelper, componentFiles)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err,
-			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()))
+			errors.Join(managedConfigs.Close(), materializerHelper.Close(), resources.Close()))
 	}
 	dnsObserver, err := dnsresolverobserver.New()
 	if err != nil {
@@ -153,13 +145,12 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 				dnsObserver.Close(),
 				managedConfigs.Close(),
 				materializerHelper.Close(),
-				directoryHelper.Close(),
 				resources.Close(),
 			),
 		)
 	}
 	componentActions, err := componentaction.New(
-		actionCatalog, managedConfigs, resources.helper, dnsObserver,
+		actionCatalog, dnsObserver,
 	)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(
@@ -168,7 +159,6 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 				dnsObserver.Close(),
 				managedConfigs.Close(),
 				materializerHelper.Close(),
-				directoryHelper.Close(),
 				resources.Close(),
 			),
 		)
@@ -177,7 +167,7 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	if err != nil {
 		return nil, preferAgentComposeCleanup(
 			err,
-			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+			errors.Join(managedConfigs.Close(), materializerHelper.Close(), resources.Close()),
 		)
 	}
 	logReader, err := containerlogs.New()
@@ -189,7 +179,6 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 				dnsObserver.Close(),
 				managedConfigs.Close(),
 				materializerHelper.Close(),
-				directoryHelper.Close(),
 				resources.Close(),
 			),
 		)
@@ -204,7 +193,6 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 				dnsObserver.Close(),
 				managedConfigs.Close(),
 				materializerHelper.Close(),
-				directoryHelper.Close(),
 				resources.Close(),
 			),
 		)
@@ -220,14 +208,13 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 				dnsObserver.Close(),
 				managedConfigs.Close(),
 				materializerHelper.Close(),
-				directoryHelper.Close(),
 				resources.Close(),
 			),
 		)
 	}
 	runtimeResources := &agentRuntimeResources{
 		ownership: ownership,
-		compose:   resources, environmentDirectories: directoryHelper, materializer: materializerHelper,
+		compose:   resources, materializer: materializerHelper,
 		managedConfigs: managedConfigs, dnsResolverObserver: dnsObserver,
 		hostResolution: hostResolution, logs: logReader, scripts: scripts,
 	}

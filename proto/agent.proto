@@ -1362,17 +1362,6 @@ message RollingReleaseEvidence {
   bool compensated = 8;
 }
 
-// ServiceAbsenceEvidence proves that every exact Compose identity captured by
-// an authored Service omission is absent. It never infers absence from desired
-// state or from missing Controller runtime metadata.
-message ServiceAbsenceEvidence {
-  string service_id = 1;
-  string artifact_id = 2;
-  string compose_project_name = 3;
-  repeated string compose_names = 4;
-  bool absence_proven = 5;
-}
-
 message CandidateAbsenceEvidence {
   string assignment_id = 1;
   bytes plan_hash = 2;
@@ -1647,12 +1636,6 @@ enum ReleaseRecoveryPhase {
   RELEASE_RECOVERY_PHASE_PROBE = 1;
   RELEASE_RECOVERY_PHASE_COMPENSATE = 2;
   RELEASE_RECOVERY_PHASE_PROVEN = 3;
-}
-
-enum TaskExecutionMode {
-  TASK_EXECUTION_MODE_UNSPECIFIED = 0;
-  TASK_EXECUTION_MODE_FORWARD = 1;
-  TASK_EXECUTION_MODE_RECOVERY_ONLY = 2;
 }
 
 enum ReleaseRestorationTarget {
@@ -3217,22 +3200,9 @@ message ScriptBodyArtifactMetadata {
   uint32 gid = 7;
 }
 
-message ScriptAssignmentArtifacts {
-  repeated ScriptBodyArtifact bodies = 1;
-  repeated ScriptSecretArtifact secrets = 2;
-  repeated ScriptEntryArtifact entries = 3;
-}
-
 message ScriptBodyArtifact {
   ScriptBodyArtifactMetadata metadata = 1;
   bytes body = 2;
-}
-
-message ScriptSecretArtifact {
-  string owner_id = 1;
-  string value_generation_id = 2;
-  bytes sha256 = 3;
-  bytes value = 4;
 }
 
 message ScriptEntryArtifact {
@@ -5169,30 +5139,6 @@ message ManagedConfigHelperResponse {
   bytes previous_sha256 = 6;
   uint64 live_device = 7;
   uint64 live_inode = 8;
-}
-
-// EnvironmentDirectoryHelperRequest is the single length-framed stdin message
-// accepted by the static environment-directory-helper Agent-binary mode.
-message EnvironmentDirectoryHelperRequest {
-  uint32 schema = 1; // exactly 1
-  string task_id = 2;
-  string operation_id = 3;
-  ExecutionPlan plan = 4;
-  string step_id = 5;
-  uint32 timeout_seconds = 6; // remaining bounded execution time
-  string assignment_id = 7;
-  reserved 8;
-}
-
-message EnvironmentDirectoryHelperResponse {
-  uint32 schema = 1; // exactly 1
-  int32 exit_code = 2;
-  string failed_step_id = 3;
-  bytes next_cursor = 4;
-  uint32 mutation_count = 5;
-  bool complete = 6;
-  bytes response_sha256 = 7;
-  reserved 8;
 }
 
 // ComposeHelperRequest is the single length-framed stdin message accepted by

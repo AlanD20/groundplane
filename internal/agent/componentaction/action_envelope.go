@@ -7,21 +7,6 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-type ComponentActionResult struct {
-	DNSResolverObservation *agentpb.DNSResolverObservationEvidence
-	ManagedConfig          *ManagedConfigTransactionState
-}
-
-type ManagedConfigFileState struct {
-	Present bool
-	SHA256  [sha256.Size]byte
-}
-
-type ManagedConfigTransactionState struct {
-	Live     ManagedConfigFileState
-	Previous ManagedConfigFileState
-}
-
 func DecodeComponentAction(payload *agentpb.ComponentApply) (componentsdk.ActionEnvelope, error) {
 	if payload == nil || len(payload.DefinitionDigest) != sha256.Size ||
 		len(payload.CatalogDigest) != sha256.Size || len(payload.ArtifactDigest) != sha256.Size {
