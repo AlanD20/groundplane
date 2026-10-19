@@ -4,13 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-func BackupTerminalResultDigest(result *taskjournal.TaskResultRecord) (string, error) {
-	return backupTerminalCanonicalDigest("groundplane.backup.terminal.result.v1\x00", result)
-}
 
 func BackupTerminalDomainDigest(value any) (string, error) {
 	return backupTerminalCanonicalDigest("groundplane.backup.terminal.domain.v1\x00", value)

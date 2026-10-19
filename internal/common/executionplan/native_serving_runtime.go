@@ -26,7 +26,7 @@ func OpenNativeServingRuntime(environmentID, serviceID string, current, retained
 	if err := ValidateNativePredecessorWitness(environmentID, serviceID, current, retained); err != nil {
 		return NativeServingRuntime{}, err
 	}
-	artifact, err := openNativePredecessorArtifact(environmentID, current)
+	artifact, err := OpenNativePredecessorArtifact(environmentID, current)
 	if err != nil {
 		return NativeServingRuntime{}, err
 	}
@@ -37,7 +37,7 @@ func OpenNativeServingRuntime(environmentID, serviceID string, current, retained
 	result := NativeServingRuntime{Artifact: artifact, Workloads: workloads, Proxy: proxy,
 		ReleaseID: nativePredecessorReleaseID(workloads[0]), Target: workloads[0].GetSlot()}
 	if len(retained) != 0 {
-		result.Retained, err = openNativePredecessorArtifact(environmentID, retained)
+		result.Retained, err = OpenNativePredecessorArtifact(environmentID, retained)
 		if err != nil {
 			return NativeServingRuntime{}, err
 		}

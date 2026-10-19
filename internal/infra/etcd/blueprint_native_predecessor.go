@@ -12,7 +12,6 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
-	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 
@@ -278,14 +277,14 @@ func validateBlueprintNativePredecessors(
 			}
 			continue
 		}
-		artifact, err := taskassignments.OpenRestorationWitness(environmentID, captured.CurrentArtifact)
+		artifact, err := executionplan.OpenNativePredecessorArtifact(environmentID, captured.CurrentArtifact)
 		if err != nil || prior.GetPriorArtifactId() != artifact.GetArtifactId() ||
 			prior.GetPriorReleaseId() != captured.Serving.ServingReleaseID ||
 			prior.GetPriorTarget() != string(captured.Serving.Target) {
 			return releases.CorruptReleaseRecord()
 		}
 		if len(captured.RetainedPriorArtifact) != 0 {
-			retained, err := taskassignments.OpenRestorationWitness(environmentID, captured.RetainedPriorArtifact)
+			retained, err := executionplan.OpenNativePredecessorArtifact(environmentID, captured.RetainedPriorArtifact)
 			if err != nil || prior.GetRetainedPriorArtifactId() != retained.GetArtifactId() {
 				return releases.CorruptReleaseRecord()
 			}

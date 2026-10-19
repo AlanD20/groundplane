@@ -22,7 +22,7 @@ func PrepareEntryRuntime(
 		) != nil {
 		return CandidateRuntime{}, invalidEntryRuntime()
 	}
-	priorCurrent, err := openNativePredecessorArtifact(source.GetOwnerId(), previous.CurrentArtifact)
+	priorCurrent, err := OpenNativePredecessorArtifact(source.GetOwnerId(), previous.CurrentArtifact)
 	if err != nil {
 		return CandidateRuntime{}, invalidEntryRuntime()
 	}
@@ -55,7 +55,7 @@ func PrepareEntryRuntime(
 		if ids.Validate(ids.KindConfig, retainedPriorArtifactID) != nil || retainedPriorArtifactID == currentArtifactID {
 			return CandidateRuntime{}, invalidEntryRuntime()
 		}
-		priorRetained, openErr := openNativePredecessorArtifact(
+		priorRetained, openErr := OpenNativePredecessorArtifact(
 			source.GetOwnerId(), previous.RetainedPriorArtifact,
 		)
 		if openErr != nil {

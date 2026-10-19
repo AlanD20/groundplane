@@ -56,7 +56,7 @@ func NewRestorationObservation(
 			authority.GetCandidates()[index].GetTarget() != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR {
 			continue
 		}
-		artifact, err := openNativePredecessorArtifact(
+		artifact, err := OpenNativePredecessorArtifact(
 			authority.GetEnvironmentId(),
 			authority.GetNativePredecessors()[index].GetCurrentArtifact(),
 		)
@@ -64,7 +64,7 @@ func NewRestorationObservation(
 			return nil, err
 		}
 		if retained := authority.GetNativePredecessors()[index].GetRetainedPriorArtifact(); len(retained) != 0 {
-			prior, err := openNativePredecessorArtifact(authority.GetEnvironmentId(), retained)
+			prior, err := OpenNativePredecessorArtifact(authority.GetEnvironmentId(), retained)
 			if err != nil {
 				return nil, err
 			}

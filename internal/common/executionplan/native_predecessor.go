@@ -22,14 +22,13 @@ type NativePredecessorWitness struct {
 }
 
 // ValidateNativePredecessorWitness validates one native runtime snapshot
-// without consulting a plan, a repository, or host state. It is also used by
-// the durable claim validator, which cannot consume an ExecutionPlan.
+// without consulting a plan, a repository, or host state.
 func ValidateNativePredecessorWitness(environmentID, serviceID string, current, retained []byte) error {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindService, serviceID) != nil ||
 		len(current) == 0 {
 		return invalidNativePredecessorWitness()
 	}
-	currentArtifact, err := openNativePredecessorArtifact(environmentID, current)
+	currentArtifact, err := OpenNativePredecessorArtifact(environmentID, current)
 	if err != nil {
 		return err
 	}
@@ -46,7 +45,7 @@ func ValidateNativePredecessorWitness(environmentID, serviceID string, current, 
 	if retained == nil {
 		return nil
 	}
-	retainedArtifact, err := openNativePredecessorArtifact(environmentID, retained)
+	retainedArtifact, err := OpenNativePredecessorArtifact(environmentID, retained)
 	if err != nil {
 		return err
 	}
@@ -105,7 +104,7 @@ func SelectNativeRestorationMembers(
 		if err := ValidateNativePredecessorWitness(environmentID, witness.ServiceID, witness.CurrentArtifact, witness.RetainedPriorArtifact); err != nil {
 			return nil, err
 		}
-		artifact, err := openNativePredecessorArtifact(environmentID, witness.CurrentArtifact)
+		artifact, err := OpenNativePredecessorArtifact(environmentID, witness.CurrentArtifact)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +120,10 @@ func SelectNativeRestorationMembers(
 	return result, nil
 }
 
-func openNativePredecessorArtifact(environmentID string, encoded []byte) (*agentpb.ComposeArtifact, error) {
+// OpenNativePredecessorArtifact decodes a bounded canonical Environment artifact.
+// Service membership and serving-set validation remain the caller's responsibility.
+// It never substitutes a newer projection for the supplied captured bytes.
+func OpenNativePredecessorArtifact(environmentID string, encoded []byte) (*agentpb.ComposeArtifact, error) {
 	if len(encoded) == 0 || len(encoded) > MaximumPlanBytes {
 		return nil, invalidNativePredecessorWitness()
 	}
