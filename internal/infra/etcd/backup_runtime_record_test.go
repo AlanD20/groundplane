@@ -1,16 +1,15 @@
 package etcd
 
 import (
-	bytes "bytes"
-	age "filippo.io/age"
 	fmt "fmt"
+	testing "testing"
+	time "time"
+
+	age "filippo.io/age"
 	backupobject "github.com/AlanD20/groundplane/internal/common/backupobject"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	postgres16protocol "github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
-	"strings"
-	testing "testing"
-	time "time"
 )
 
 const (
@@ -30,30 +29,6 @@ const (
 	testBackupEntryID              = "ev_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	testBackupDigest               = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 )
-
-func assertBackupCodecRoundTrip[T any](
-	t *testing.T,
-	record T,
-	encode func(T) ([]byte, error),
-	decode func([]byte) (T, error),
-) {
-	t.Helper()
-	value, err := encode(record)
-	if err != nil {
-		t.Fatalf("encode() error = %v", err)
-	}
-	decoded, err := decode(value)
-	if err != nil {
-		t.Fatalf("decode() error = %v", err)
-	}
-	reencoded, err := encode(decoded)
-	if err != nil {
-		t.Fatalf("re-encode() error = %v", err)
-	}
-	if !bytes.Equal(reencoded, value) {
-		t.Fatalf("re-encoded bytes = %q, want %q", reencoded, value)
-	}
-}
 
 func testBackupRun(createdAt time.Time, updatedAt time.Time, recipient string) testbackupruntime.BackupRunRecord {
 	pointID := ids.NewAt(ids.KindRecoveryPoint, createdAt, 300)
@@ -163,37 +138,6 @@ func testBackupLaterSource(
 	return record
 }
 
-func testBackupVolumePoint(createdAt time.Time, recipient string) testbackupruntime.BackupRecoveryPointSnapshot {
-	pointID := ids.NewAt(ids.KindRecoveryPoint, createdAt, 301)
-	point := testbackupruntime.BackupRecoveryPointSnapshot{
-		BackupRecoveryPointTargetSnapshot: testbackupruntime.BackupRecoveryPointTargetSnapshot{
-			ID: pointID, EnvironmentID: testBackupEnvironmentID,
-			SourceID: testBackupSourceID, SourceKind: testbackupruntime.BackupRuntimeSourceVolume,
-			TargetID: testBackupVolumeID, ConnectorID: testBackupConnectorID,
-			ConnectorPrefix:   "production/",
-			ConnectorEndpoint: "https://objects.example.test", ConnectorBucket: "backups", ConnectorRegion: "auto",
-			ObjectKey: "production/" + testBackupEnvironmentID + "/" + testBackupSourceID + "/" +
-				pointID + "/artifact.bin",
-			SourceFormat: testbackupruntime.BackupRuntimeFormatVolume,
-			Encryption:   testbackupruntime.BackupRuntimeEncryptionAge,
-			KeyEra:       2, Recipient: recipient, CreatedAt: createdAt,
-		},
-		Evidence: testBackupArtifact(),
-		VolumeArchive: testbackupruntime.BackupVolumeArchiveEvidence{
-			EntryCount: 1, ContentManifestSHA256: testBackupDigest, FullTreeSHA256: testBackupDigest,
-			SourceSizeBytes: 4096,
-			Manifest: testbackupruntime.BackupVolumeManifestReference{
-				TaskID: testBackupTaskID, AssignmentID: ids.NewAt(ids.KindAssignment, createdAt, 302),
-				StepID: ids.NewAt(ids.KindStep, createdAt, 303), TransferID: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-				AuthoritySHA256: testBackupDigest, AgentID: ids.NewAt(ids.KindAgent, createdAt, 304),
-				AgentGeneration: 1, AssignmentGeneration: 1, CursorRevision: 40,
-			},
-		},
-	}
-	point.Object = testBackupObject(point.ObjectKey)
-	return point
-}
-
 func newTestBackupRecipient(t *testing.T) string {
 	t.Helper()
 	identity, err := age.GenerateX25519Identity()
@@ -201,57 +145,6 @@ func newTestBackupRecipient(t *testing.T) string {
 		t.Fatalf("age.GenerateX25519Identity() error = %v", err)
 	}
 	return identity.Recipient().String()
-}
-
-func testBackupRestore(
-	point testbackupruntime.BackupRecoveryPointSnapshot,
-	createdAt time.Time,
-	updatedAt time.Time,
-) testbackupruntime.BackupRestoreRecord {
-	return testbackupruntime.BackupRestoreRecord{
-		TaskID:                testBackupTaskID,
-		OperationID:           testBackupOperationID,
-		EnvironmentID:         testBackupEnvironmentID,
-		RestoreGenerationID:   "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		RecoveryPointRevision: 20, Point: point, SourceRevision: 21,
-		CurrentTarget: testbackupruntime.BackupRestoreTargetSnapshot{
-			Volume: ptrTestBackupVolumeSourceSnapshot(22),
-		},
-		ConnectorRevision:             23,
-		ConnectorHasDirectCredentials: true,
-		ConnectorCredentialsRevision:  24,
-		ExpectedKeyRecordRevision:     25,
-		ExpectedKeyValueRevision:      26,
-		Artifact:                      &point.Evidence,
-		VolumeProgress: &testbackupruntime.BackupRestoreVolumeProgress{
-			OldEntryCount: 1, OldContentManifestSHA256: testBackupDigest, OldFullTreeSHA256: testBackupDigest,
-			ConstructionCursor: 1, FinalizationCursor: 1, DeletionCursor: 1,
-			ExchangeIntent: true, Exchanged: true, OldRemoved: true,
-			ServiceMutationStarted: true, ConsumersStopped: true, ServiceCursor: 1, ServicesRecovered: true,
-		},
-		StagedTreeManifestSHA256: testBackupDigest,
-		State:                    testbackupruntime.BackupRestoreCompleted,
-		MutationStarted:          true,
-		ServiceCount:             1,
-		Verification:             testbackupruntime.BackupVerificationPassed,
-		CreatedAt:                createdAt,
-		UpdatedAt:                updatedAt,
-	}
-}
-
-func testBackupVolumeSourceSnapshot(revision int64) testbackupruntime.BackupVolumeSourceSnapshot {
-	return testbackupruntime.BackupVolumeSourceSnapshot{
-		EnvironmentID: testBackupEnvironmentID, EnvironmentRevision: revision,
-		VolumeID: testBackupVolumeID, DesiredRevisionID: testBackupTaskID,
-		HeadRevision: revision, HeadSHA256: testBackupDigest,
-		ProjectionRoot: revision + 1, DependencyDigest: testBackupDigest, RenderGeneration: 1,
-		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + strings.ToLower(testBackupVolumeID),
-		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
-		Services: []testbackupruntime.BackupVolumeServiceSnapshot{{
-			ServiceID: testBackupServiceID, ServiceRevision: revision + 2,
-			ComposeKey: "database", MountPaths: []string{"/data"}, PriorIntent: testbackupruntime.BackupServiceIntentRunning,
-		}},
-	}
 }
 
 func testBackupArtifact() testbackupruntime.BackupArtifactEvidence {
@@ -280,9 +173,4 @@ func testBackupManagedRelease() string {
 		testBackupDigest,
 		postgres16protocol.ManagedLaunchProfileSHA256().String(),
 	)
-}
-
-func ptrTestBackupVolumeSourceSnapshot(revision int64) *testbackupruntime.BackupVolumeSourceSnapshot {
-	snapshot := testBackupVolumeSourceSnapshot(revision)
-	return &snapshot
 }
