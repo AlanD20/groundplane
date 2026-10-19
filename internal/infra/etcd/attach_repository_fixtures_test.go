@@ -5,7 +5,6 @@ import (
 	sha256 "crypto/sha256"
 	hex "encoding/hex"
 	http "net/http"
-	"slices"
 	strings "strings"
 	testing "testing"
 
@@ -21,39 +20,6 @@ import (
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 	proto "google.golang.org/protobuf/proto"
 )
-
-func refreshAttachDesiredScope(t *testing.T, ctx context.Context, repository *AttachRepository,
-	scope AttachCreateScope,
-) AttachCreateScope {
-	t.Helper()
-	projection, found, err := testblueprints.ReadCurrentProjection(
-		ctx,
-		repository.store,
-		scope.Environment.Record.ID,
-		0,
-	)
-	if err != nil || !found {
-		t.Fatalf("read current Attach desired scope: found=%t, error=%v", found, err)
-	}
-	scope.ComposeProjection = projection
-	scope.DesiredHead = testkeyvalue.Versioned[testblueprints.EnvironmentBlueprintHead]{
-		Record: testblueprints.EnvironmentBlueprintHead{EnvironmentID: scope.Environment.Record.ID,
-			RevisionID: projection.Record.RevisionID},
-		Revision: projection.Revision, ReadRevision: projection.ReadRevision,
-	}
-	services, err := NewServiceRepository(repository.store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	scope.Services = slices.Clone(scope.Services)
-	for index, service := range scope.Services {
-		scope.Services[index], err = services.GetService(ctx, service.Record.Desired.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	return scope
-}
 
 func seedDesiredServiceFixture(
 	t *testing.T,
