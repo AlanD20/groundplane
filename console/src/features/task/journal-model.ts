@@ -119,7 +119,11 @@ function taskTitle(
     fetch: "Fetch image",
     prepare: "Prepare software",
     apply:
-      resourceKind === "environment" ? "Apply Blueprint" : "Apply software",
+      resourceKind === "environment"
+        ? "Apply Blueprint"
+        : resourceKind === "etcd"
+          ? "Apply configuration"
+          : "Apply software",
     check: "Test connection",
   };
   return `${labels[type]} · ${target}`;
