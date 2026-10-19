@@ -23,13 +23,13 @@ func (repository *InputRepository) settleAddresses(ctx context.Context, view wor
 			keyvalue.ClearMutationValues(change.Mutations)
 		}
 	}()
-	retained, hasRetained, err := environmentchanges.ComponentTaskAddress(keep)
+	retained, hasRetained, err := environmentchanges.ComponentAddress(keep)
 	if err != nil {
 		return change, err
 	}
 	expected := map[string]string{}
 	for _, record := range []componentrecord.Record{capture.Current, capture.Candidate} {
-		binding, present, err := environmentchanges.ComponentTaskAddress(record)
+		binding, present, err := environmentchanges.ComponentAddress(record)
 		if err != nil {
 			return change, err
 		}
@@ -72,7 +72,10 @@ func (repository *InputRepository) settleAddresses(ctx context.Context, view wor
 			return change, conflict("Component reservation disappeared before settlement")
 		}
 		value := read.Values[0]
-		registry, decodeErr := recordcodec.Decode[networkreservations.ComponentAddressRegistry](value.Value, "component_address_registry")
+		registry, decodeErr := recordcodec.Decode[networkreservations.ComponentAddressRegistry](
+			value.Value,
+			"component_address_registry",
+		)
 		revision := value.ModRevision
 		keyvalue.ClearValues(read.Values)
 		if decodeErr != nil || networkreservations.ValidateComponentAddressRegistry(zone, registry) != nil ||
@@ -88,7 +91,10 @@ func (repository *InputRepository) settleAddresses(ctx context.Context, view wor
 		if err != nil {
 			return change, err
 		}
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: encoded})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: encoded},
+		)
 	}
 	return change, nil
 }

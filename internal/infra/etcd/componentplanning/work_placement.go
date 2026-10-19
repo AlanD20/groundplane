@@ -34,13 +34,18 @@ func (repository *Planner) PrepareWorkPlacement(ctx context.Context, work workqu
 		current.Record.Desired.ID != item.TargetID || candidate.ID != item.TargetID ||
 		candidate.Owner != core.ComponentOwnerEnvironment || candidate.OwnerID != task.Scope.EnvironmentID ||
 		current.Record.Desired.Owner != candidate.Owner || current.Record.Desired.OwnerID != candidate.OwnerID ||
-		!current.Record.Desired.Kind.SharesEnvironmentCapability(candidate.Kind) || candidate.PinnedIPv4 != "" || candidate.Healthy ||
+		!current.Record.Desired.Kind.SharesEnvironmentCapability(
+			candidate.Kind,
+		) || candidate.PinnedIPv4 != "" || candidate.Healthy ||
 		authority.environmentID != task.Scope.EnvironmentID || authority.readRevision != work.ReadRevision ||
 		authority.unitRuntimeCondition == nil || authority.desiredHeadRevision <= 0 || authority.desiredRevisionID != task.ID ||
 		work.Task.Revision <= 0 || work.Item.Revision <= 0 || work.Task.Revision > work.ReadRevision || work.Item.Revision > work.ReadRevision {
-		return componentrecord.Record{}, workqueue.Change{}, errs.New(errs.KindStateConflict, "Component placement requires captured unstarted Agent work")
+		return componentrecord.Record{}, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Component placement requires captured unstarted Agent work",
+		)
 	}
-	prior, hasPrior, err := environmentchanges.ComponentTaskAddress(current.Record)
+	prior, hasPrior, err := environmentchanges.ComponentAddress(current.Record)
 	if err != nil {
 		return componentrecord.Record{}, workqueue.Change{}, err
 	}
@@ -63,7 +68,10 @@ func (repository *Planner) PrepareWorkPlacement(ctx context.Context, work workqu
 	}
 	if hasCandidate {
 		if _, found := desiredZones[zoneID]; !found {
-			return componentrecord.Record{}, workqueue.Change{}, errs.New(errs.KindStateConflict, "Component candidate Zone is absent from captured desired state")
+			return componentrecord.Record{}, workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Component candidate Zone is absent from captured desired state",
+			)
 		}
 	}
 	selected := map[string]bool{}
@@ -82,34 +90,53 @@ func (repository *Planner) PrepareWorkPlacement(ctx context.Context, work workqu
 		{Key: workqueue.TaskKey(task.ID), ModRevision: work.Task.Revision},
 		{Key: workqueue.ItemKey(item.ID), ModRevision: work.Item.Revision},
 		{Key: componentrecord.RecordKey(item.TargetID), ModRevision: current.Revision},
-		{Key: blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID), ModRevision: authority.desiredHeadRevision},
+		{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID),
+			ModRevision: authority.desiredHeadRevision,
+		},
 		*authority.unitRuntimeCondition,
 	}}
 	change.Conditions = append(change.Conditions, authority.proxyServiceConditions...)
 	for _, id := range ordered {
 		zone, found := zones[id]
 		if !found || zonerecord.ValidateRecord(zone) != nil || zone.EnvironmentID != task.Scope.EnvironmentID {
-			return componentrecord.Record{}, workqueue.Change{}, errs.New(errs.KindStateConflict, "Component placement Zone is unavailable")
+			return componentrecord.Record{}, workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Component placement Zone is unavailable",
+			)
 		}
 		key := networkreservations.ComponentAddressRegistryKey(id)
-		read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: work.ReadRevision})
+		read, err := repository.store.GetMany(
+			ctx,
+			keyvalue.GetManyRequest{Keys: []string{key}, Revision: work.ReadRevision},
+		)
 		if err != nil {
 			return componentrecord.Record{}, workqueue.Change{}, err
 		}
 		if read == nil || read.ReadRevision != work.ReadRevision || len(read.Values) != 1 {
-			return componentrecord.Record{}, workqueue.Change{}, errs.New(errs.KindStateConflict, "Component address snapshot is incomplete")
+			return componentrecord.Record{}, workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Component address snapshot is incomplete",
+			)
 		}
 		registry := networkreservations.ComponentAddressRegistry{Reservations: map[string]string{}}
 		revision := keyvalue.RevisionOf(read.Values[0])
 		if value := read.Values[0]; value != nil {
-			registry, err = recordcodec.Decode[networkreservations.ComponentAddressRegistry](value.Value, "component_address_registry")
-			if err != nil || value.Key != key || revision <= 0 || revision > work.ReadRevision || networkreservations.ValidateComponentAddressRegistry(zone, registry) != nil {
+			registry, err = recordcodec.Decode[networkreservations.ComponentAddressRegistry](
+				value.Value,
+				"component_address_registry",
+			)
+			if err != nil || value.Key != key || revision <= 0 || revision > work.ReadRevision ||
+				networkreservations.ValidateComponentAddressRegistry(zone, registry) != nil {
 				return componentrecord.Record{}, workqueue.Change{}, networkreservations.CorruptComponentAddressRegistry()
 			}
 		}
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: revision})
 		if hasPrior && prior.ZoneID() == id && registry.Reservations[item.TargetID] != prior.Address() {
-			return componentrecord.Record{}, workqueue.Change{}, errs.New(errs.KindStateConflict, "Component predecessor address reservation changed")
+			return componentrecord.Record{}, workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Component predecessor address reservation changed",
+			)
 		}
 		if hasCandidate && zoneID == id {
 			next, address, err := registry.Reserve(zone, item.TargetID)
@@ -122,7 +149,10 @@ func (repository *Planner) PrepareWorkPlacement(ctx context.Context, work workqu
 				if err != nil {
 					return componentrecord.Record{}, workqueue.Change{}, err
 				}
-				change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
+				change.Mutations = append(
+					change.Mutations,
+					keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value},
+				)
 			}
 		}
 	}

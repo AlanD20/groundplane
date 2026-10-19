@@ -2,15 +2,17 @@ package hierarchydeletionfinalization
 
 import (
 	"context"
+
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -98,19 +100,25 @@ func (repository *Preparer) prepareHierarchyDeletionZoneFinalizer(
 	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		poolKey, addressesKey,
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID),
-		environmentchanges.ComponentTaskActiveEnvironmentKey(evidence.EnvironmentID),
+		workqueue.ClaimKey(workexecution.Claim{ScopeID: evidence.EnvironmentID}),
 	}})
 	if err != nil {
 		return Effects{}, err
 	}
 	if values == nil || len(values.Values) != 4 || values.Values[0] == nil ||
-		values.Values[2] != nil || values.Values[3] != nil {
+		values.Values[2] != nil {
 		if values != nil {
 			etcdstore.ClearValues(values.Values)
 		}
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer etcdstore.ClearValues(values.Values)
+	if values.Values[3] != nil {
+		return Effects{}, errs.New(
+			errs.KindResourceInUse,
+			"Zone cleanup is waiting for active Environment configuration work",
+		)
+	}
 	pool, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](values.Values[0].Value, "zone_pool_registry")
 	if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil ||
 		pool.Reservations[action.TargetID] != evidence.Desired.Subnet {
@@ -139,7 +147,7 @@ func (repository *Preparer) prepareHierarchyDeletionZoneFinalizer(
 			{Key: poolKey, ModRevision: values.Values[0].ModRevision},
 			{Key: addressesKey, ModRevision: etcdstore.RevisionOf(values.Values[1])},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID)},
-			{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(evidence.EnvironmentID)},
+			{Key: workqueue.ClaimKey(workexecution.Claim{ScopeID: evidence.EnvironmentID})},
 		},
 		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: addressesKey}},
 	}

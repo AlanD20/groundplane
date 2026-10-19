@@ -15,7 +15,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entries"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -72,7 +71,6 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 		entries.BlueprintEntryEnvironmentPrefix + entryID,
 		environmentprojection.EnvironmentComposeProjectionStorageKey(environmentID),
 		deletions.TombstoneKey(string(deletions.DeletionTargetEntry), entryID),
-		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
 		workqueue.ClaimKey(workexecution.Claim{ScopeID: environmentID}),
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: snapshot.ReadRevision})

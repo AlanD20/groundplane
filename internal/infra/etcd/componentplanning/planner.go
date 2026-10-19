@@ -13,8 +13,3 @@ type planningStore interface {
 type Planner struct{ store planningStore }
 
 func NewPlanner(store planningStore) *Planner { return &Planner{store: store} }
-
-// These slices retain the prepared Route observation buffers until publication.
-func (change RouteObservationChange) Conditions() []keyvalue.Condition { return change.conditions }
-func (change RouteObservationChange) Mutations() []keyvalue.Mutation   { return change.mutations }
-func (change RouteObservationChange) Values() [][]byte                 { return change.values }

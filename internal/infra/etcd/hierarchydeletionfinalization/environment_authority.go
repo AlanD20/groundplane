@@ -2,6 +2,8 @@ package hierarchydeletionfinalization
 
 import (
 	"context"
+
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -10,12 +12,12 @@ import (
 	connectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
-	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -118,7 +120,7 @@ func environmentDeletionAuthorityConditions(environmentID, operationID string, k
 
 func environmentDeletionChildAuthorityKeys(environmentID string) []string {
 	return []string{
-		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
+		workqueue.ClaimKey(workexecution.Claim{ScopeID: environmentID}),
 		removalrecord.EnvironmentLockKey(environmentID),
 		backuppolicy.BackupKeyKey(environmentID),
 		backuppolicy.BackupKeyValueKey(environmentID),

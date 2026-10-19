@@ -13,7 +13,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/components"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -52,7 +51,6 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteOmission(
 		workqueue.TaskKey(parent.ID), workqueue.ItemKey(work.Item.Item.ID),
 		blueprints.EnvironmentBlueprintRootKey(environmentID, parent.ID),
 		blueprints.EnvironmentBlueprintOwnedIdentitiesKey(environmentID, parent.ID),
-		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
 		workqueue.ClaimKey(workexecution.Claim{ScopeID: environmentID}),
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: snapshot.ReadRevision})
@@ -73,7 +71,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteOmission(
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: keys[index], ModRevision: keyvalue.RevisionOf(value)})
 	}
-	if read.Values[4] != nil || read.Values[5] != nil {
+	if read.Values[4] != nil {
 		return workqueue.Change{}, errs.New(
 			errs.KindResourceInUse,
 			"Blueprint Route withdrawal overlaps an active configuration writer",

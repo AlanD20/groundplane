@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -28,69 +29,6 @@ type routeProviderStateReader interface {
 	) (etcdstore.Versioned[componentplanning.Runtime], bool, error)
 }
 
-// ResolveComponentTaskRouteProvider pins the registered HTTP router input for
-// a Component lifecycle Task. The boolean is true only when that Task changes
-// the provider, allowing nil Provider to mean a deliberate disable projection.
-func ResolveComponentTaskRouteProvider(
-	catalog []componentrender.EnvironmentComponentRegistration,
-	environment core.Environment,
-	components []componentrecord.Record,
-	candidates []environmentchanges.ComponentTaskCandidate,
-	inputRevision int64,
-	inputGeneration uint64,
-) (*environmentchanges.RouteProviderPin, bool, error) {
-	if err := componentrender.ValidateEnvironmentComponentCatalog(catalog); err != nil {
-		return nil, false, err
-	}
-	changesProvider := false
-	for _, candidate := range candidates {
-		registration, found := environmentComponentRegistration(catalog, candidate.Candidate.Desired.Kind)
-		changesProvider = changesProvider || found && registration.ProjectHTTPRouter != nil
-	}
-	if !changesProvider {
-		return nil, false, nil
-	}
-	var selected *environmentchanges.RouteProviderPin
-	for _, record := range components {
-		if !record.Desired.Enabled {
-			continue
-		}
-		registration, found := environmentComponentRegistration(catalog, record.Desired.Kind)
-		if !found || registration.ProjectHTTPRouter == nil {
-			continue
-		}
-		if selected != nil {
-			return nil, false, errs.New(
-				errs.KindStateConflict,
-				"Environment has multiple enabled HTTP router providers",
-			)
-		}
-		component, err := componentrecord.ProjectRecord(record)
-		if err != nil {
-			return nil, false, err
-		}
-		input, err := registration.ProjectHTTPRouter(environment, component)
-		if err != nil {
-			return nil, false, err
-		}
-		destination, actionID, found := componentrender.ManagedConfigurationIdentity(registration)
-		if !found || inputRevision <= 0 || inputGeneration == 0 {
-			return nil, false, errs.New(errs.KindInternal, "HTTP router Component lifecycle pin is incomplete")
-		}
-		definitionDigest := registration.Definition.Digest()
-		pin := environmentchanges.RouteProviderPin{
-			ComponentID:      record.Desired.ID,
-			DefinitionDigest: hex.EncodeToString(definitionDigest[:]),
-			CatalogDigest:    hex.EncodeToString(registration.CatalogDigest[:]),
-			InputRevision:    inputRevision, InputGeneration: inputGeneration,
-			Destination: destination, ActionID: string(actionID),
-			ServiceID: input.GeneratedServiceID, Input: input,
-		}
-		selected = &pin
-	}
-	return selected, true, nil
-}
-
 // RouteProviderCapture owns immutable router selection and rendering independently
 // of Task scheduling and execution.
 type RouteProviderCapture struct {
@@ -98,7 +36,10 @@ type RouteProviderCapture struct {
 	catalog []componentrender.EnvironmentComponentRegistration
 }
 
-func NewRouteProviderCapture(state routeProviderStateReader, catalog []componentrender.EnvironmentComponentRegistration) (*RouteProviderCapture, error) {
+func NewRouteProviderCapture(
+	state routeProviderStateReader,
+	catalog []componentrender.EnvironmentComponentRegistration,
+) (*RouteProviderCapture, error) {
 	if state == nil {
 		return nil, errs.New(errs.KindInternal, "Route runtime snapshot reader is required")
 	}
@@ -111,7 +52,9 @@ func NewRouteProviderCapture(state routeProviderStateReader, catalog []component
 // InactiveKinds identifies every registered router implementation, including
 // providers omitted from the current desired projection. Persistence checks
 // their retained runtimes before a metadata-only Route decision is accepted.
-func (resolver *RouteProviderCapture) InactiveKinds(projection projectionrecord.EnvironmentComposeProjection) ([]core.ComponentKind, error) {
+func (resolver *RouteProviderCapture) InactiveKinds(
+	projection projectionrecord.EnvironmentComposeProjection,
+) ([]core.ComponentKind, error) {
 	if resolver == nil {
 		return nil, errs.New(errs.KindInternal, "Route provider catalog is unavailable")
 	}
