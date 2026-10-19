@@ -5,6 +5,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/attachreports"
+	"github.com/AlanD20/groundplane/internal/controller/attachwork"
 	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	componentexecution "github.com/AlanD20/groundplane/internal/controller/componentwork"
@@ -156,12 +157,18 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
+	attachCompletions, err := attachwork.DirectCompletions(owners.attachRecords)
+	if err != nil {
+		return nil, err
+	}
 	completions, err := workdispatch.NewCompletions(
 		queue,
 		append(
 			append(
 				append(
-					append(append(softwareWork.completion, routeCompletions...), owners.directReleases.completion...),
+					append(
+						append(append(softwareWork.completion, routeCompletions...), attachCompletions...),
+						owners.directReleases.completion...),
 					owners.provisioning.completion...),
 				owners.resolver.completion...),
 			[]workdispatch.CompletionRegistration{

@@ -18,6 +18,16 @@ func DirectControllerResultKey(workID string) string {
 	return "/v1/attach-controller-results/" + workID
 }
 
+type directControllerResult struct {
+	TaskID        string                         `json:"task_id"`
+	WorkItemID    string                         `json:"work_item_id"`
+	AttachID      string                         `json:"attach_id"`
+	Input         workexecution.Input            `json:"input"`
+	BindingSHA256 string                         `json:"binding_sha256"`
+	References    []attachments.BindingReference `json:"references"`
+	At            time.Time                      `json:"at"`
+}
+
 // PrepareDirectControllerSettlement commits a pending binding, applied receipt
 // and visible work result together. This is a Controller decision with no host
 // effects, not a synthetic Agent execution or a hidden Apply.
@@ -86,22 +96,21 @@ func (repository *InputRepository) PrepareDirectControllerSettlement(ctx context
 	}
 	change.Conditions = append(change.Conditions, binding.Conditions...)
 	change.Mutations = append(change.Mutations, binding.Mutations...)
-	value, err := recordcodec.Encode("attach-controller-result", struct {
-		TaskID        string                         `json:"task_id"`
-		WorkItemID    string                         `json:"work_item_id"`
-		AttachID      string                         `json:"attach_id"`
-		Input         workexecution.Input            `json:"input"`
-		BindingSHA256 string                         `json:"binding_sha256"`
-		References    []attachments.BindingReference `json:"references"`
-		At            time.Time                      `json:"at"`
-	}{task.ID, item.ID, item.TargetID, *item.Input, digest, references, at})
+	value, err := recordcodec.Encode("attach-controller-result", directControllerResult{
+		task.ID, item.ID, item.TargetID, *item.Input, digest, references, at,
+	})
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	resultHash := sha256.Sum256(value)
 	terminal, err := workqueue.PrepareUnstartedSettlement(view.Task, view.Item, workexecution.Completion{
 		Outcome: workexecution.Succeeded, EffectsSettled: true, Evidence: workexecution.Input{
-			ID: ids.DeriveAt(ids.KindPlan, task.CreatedAt, item.ID, "attach-controller-result"), SHA256: hex.EncodeToString(resultHash[:]),
+			ID: ids.DeriveAt(
+				ids.KindPlan,
+				task.CreatedAt,
+				item.ID,
+				"attach-controller-result",
+			), SHA256: hex.EncodeToString(resultHash[:]),
 		},
 	}, at)
 	if err != nil {

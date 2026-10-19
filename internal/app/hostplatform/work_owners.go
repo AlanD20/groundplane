@@ -81,6 +81,7 @@ type workOwners struct {
 	entryAgent                *entryexecution.AgentWork
 	componentAgent            *componentexecution.AgentWork
 	attachInputs              *attachwork.Inputs
+	attachRecords             *attachprovision.InputRepository
 	attachPreparation         *attachwork.Preparation
 	provisionReports          *attachwork.Reports
 	scriptRemoval             *scriptremovalwork.RemovalWork
@@ -373,6 +374,7 @@ func (platform *Platform) newWorkOwners(
 		attachInputs:              attachInputs,
 		attachPreparation:         attachPreparation,
 		provisionReports:          provisionReports,
+		attachRecords:             attachRecords,
 		scriptRemoval:             scriptRemoval,
 		secretRemoval:             secretRemoval,
 		connectorRemoval:          connectorRemoval,

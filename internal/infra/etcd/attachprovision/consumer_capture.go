@@ -30,10 +30,19 @@ func (repository *InputRepository) CaptureConsumer(ctx context.Context, generati
 	if repository == nil || repository.store == nil || revision <= 0 ||
 		blueprintattachinputs.ValidateDraft(generation) != nil ||
 		ids.Validate(ids.KindConfig, artifactID) != nil || ids.Validate(ids.KindHost, hostID) != nil ||
-		len(generation.ConsumerTransition) != 0 || generation.ConsumerRuntime != nil || generation.ConsumerRuntimeRevision != 0 {
-		return blueprintattachinputs.Generation{}, nil, errs.New(errs.KindValidationFailed, "Attach consumer capture requires an unbound input and fixed host snapshot")
+		len(
+			generation.ConsumerTransition,
+		) != 0 || generation.ConsumerRuntime != nil || generation.ConsumerRuntimeRevision != 0 {
+		return blueprintattachinputs.Generation{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"Attach consumer capture requires an unbound input and fixed host snapshot",
+		)
 	}
-	keys := []string{services.ServiceRuntimeKey(generation.ConsumerServiceID), serviceruntimerecord.Key(generation.ConsumerServiceID)}
+	keys := []string{
+		services.ServiceRuntimeKey(generation.ConsumerServiceID),
+		serviceruntimerecord.Key(generation.ConsumerServiceID),
+		releases.ReleaseProjectionKey(generation.ConsumerServiceID),
+	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
@@ -42,7 +51,9 @@ func (repository *InputRepository) CaptureConsumer(ctx context.Context, generati
 		return blueprintattachinputs.Generation{}, nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) || read.Values[0] == nil {
-		return blueprintattachinputs.Generation{}, nil, checkpointConflict("Attach consumer runtime state is unavailable")
+		return blueprintattachinputs.Generation{}, nil, checkpointConflict(
+			"Attach consumer runtime state is unavailable",
+		)
 	}
 	guards := make([]keyvalue.Condition, len(keys))
 	for index, value := range read.Values {
@@ -63,12 +74,21 @@ func (repository *InputRepository) CaptureConsumer(ctx context.Context, generati
 	}
 	value := read.Values[1]
 	if value == nil {
-		if state.Runtime.RuntimeIntent == "running" {
-			return blueprintattachinputs.Generation{}, nil, checkpointConflict("Attach cannot connect a running Service without its acknowledged runtime")
+		unapplied, err := unappliedConsumer(generation, read.Values[0], read.Values[2])
+		if err != nil {
+			return blueprintattachinputs.Generation{}, nil, err
+		}
+		if !unapplied {
+			return blueprintattachinputs.Generation{}, nil, checkpointConflict(
+				"Attach requires the Service's acknowledged runtime or a Service with no applied or pending deployment",
+			)
 		}
 		return generation, guards, nil
 	}
-	runtime, err := releases.DecodeReleaseRecord[serviceruntimerecord.Record](value.Value, "service-acknowledged-runtime")
+	runtime, err := releases.DecodeReleaseRecord[serviceruntimerecord.Record](
+		value.Value,
+		"service-acknowledged-runtime",
+	)
 	if err != nil {
 		return blueprintattachinputs.Generation{}, nil, err
 	}
@@ -81,7 +101,9 @@ func (repository *InputRepository) CaptureConsumer(ctx context.Context, generati
 	}()
 	if serviceruntimerecord.Validate(runtime) != nil || runtime.EnvironmentID != generation.EnvironmentID ||
 		runtime.Runtime.ServiceID != generation.ConsumerServiceID || runtime.Source.Executor.HostID != hostID {
-		return blueprintattachinputs.Generation{}, nil, checkpointConflict("Attach consumer runtime does not belong to the selected Service and host")
+		return blueprintattachinputs.Generation{}, nil, checkpointConflict(
+			"Attach consumer runtime does not belong to the selected Service and host",
+		)
 	}
 	baseline := &agentpb.ComposeArtifact{}
 	if proto.Unmarshal(runtime.Runtime.CurrentArtifact, baseline) != nil {
