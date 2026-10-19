@@ -28086,8 +28086,8 @@ type ExecutionStep_BackingHookProcedure struct {
 }
 
 type ExecutionStep_BackupStep struct {
-	// Immutable typed Backup step input. Dispatch wraps these exact steps in
-	// the assignment-specific BackupTaskAuthority; no source reconstruction.
+	// Immutable typed Backup source input. Native work captures these exact
+	// steps in BackupWorkInput without reconstructing their source authority.
 	BackupStep *BackupStepAuthority `protobuf:"bytes,37,opt,name=backup_step,json=backupStep,proto3,oneof"`
 }
 

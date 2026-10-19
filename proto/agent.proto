@@ -2798,8 +2798,8 @@ message ExecutionStep {
     ManagedNetworkEnsure managed_network_ensure = 34;
     ManagedVolumeEnsure managed_volume_ensure = 35;
     BackingHookProcedure backing_hook_procedure = 36;
-    // Immutable typed Backup step input. Dispatch wraps these exact steps in
-    // the assignment-specific BackupTaskAuthority; no source reconstruction.
+    // Immutable typed Backup source input. Native work captures these exact
+    // steps in BackupWorkInput without reconstructing their source authority.
     BackupStepAuthority backup_step = 37;
     ServiceAbsenceProbe service_absence_probe = 40;
     ComposeWorkloadRemove compose_workload_remove = 41;
