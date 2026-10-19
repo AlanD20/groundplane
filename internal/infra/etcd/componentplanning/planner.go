@@ -2,9 +2,8 @@ package componentplanning
 
 import (
 	"context"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"time"
 )
 
 type planningStore interface {
@@ -14,15 +13,6 @@ type planningStore interface {
 type Planner struct{ store planningStore }
 
 func NewPlanner(store planningStore) *Planner { return &Planner{store: store} }
-
-// TaskIdentity carries the existing Task fields that bind a Component candidate.
-type TaskIdentity struct {
-	ID        string
-	Target    string
-	Executor  taskjournal.TaskExecutor
-	Type      taskjournal.TaskType
-	CreatedAt time.Time
-}
 
 // These slices retain the prepared Route observation buffers until publication.
 func (change RouteObservationChange) Conditions() []keyvalue.Condition { return change.conditions }

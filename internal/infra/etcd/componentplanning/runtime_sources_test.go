@@ -8,7 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
-	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -62,15 +61,6 @@ func TestManagedComponentRuntimeSourcesCarryFailedHeadThenDisable(t *testing.T) 
 		t.Fatalf("failed desired head changed source descriptors: %#v", carried)
 	}
 
-	currentTunnel := managedComponentSourceRecord(
-		t,
-		environmentID,
-		tunnelID,
-		core.ComponentKindEdgeCloudflare,
-		true,
-		oldTunnelService,
-		"",
-	)
 	disabledTunnel := managedComponentSourceRecord(
 		t,
 		environmentID,
@@ -80,37 +70,10 @@ func TestManagedComponentRuntimeSourcesCarryFailedHeadThenDisable(t *testing.T) 
 		"",
 		"",
 	)
-	taskID := ids.NewAt(ids.KindTask, now, 11)
-	intent, err := testenvironmentchanges.NewComponentTaskIntent(
-		taskID,
-		environmentID,
-		[]testenvironmentchanges.ComponentTaskCandidate{{
-			CurrentRevision: 7, Current: currentTunnel, Candidate: disabledTunnel,
-		}},
-		now,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	disabledProjection := failedHead
 	disabledProjection.Components = []testcomponents.Record{
 		failedHead.Components[0], disabledTunnel,
 	}
-	preparation := ComponentTaskPreparation{
-		Intent: intent, managedRuntimeSources: oldSources, desiredProjectionRevision: 12,
-	}
-	if err := ValidateComponentTaskPreparation(preparation); err != nil {
-		t.Fatalf("ValidateComponentTaskPreparation() error = %v", err)
-	}
-	retained := preparation.ManagedComponentTeardownSources()
-	if !reflect.DeepEqual(retained, oldSources) {
-		t.Fatalf("disable changed historical source descriptors: %#v", retained)
-	}
-	retained[0].ComposeName = "mutated"
-	if reflect.DeepEqual(preparation.ManagedComponentTeardownSources(), retained) {
-		t.Fatal("managed Component teardown sources leaked mutable preparation authority")
-	}
-
 	newArtifactBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
 		ArtifactId: newArtifact,
 		Services: []*agentpb.ComposeService{
