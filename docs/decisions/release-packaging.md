@@ -234,8 +234,9 @@ whether publication completed before a retry.
 This adds a software-preparation capability, not an application build service
 or a configurable command runner. Runtime source selection remains limited to
 the Groundplane repository. Preparation and activation records protect their
-outputs until Task retention retires those records; accepted activation also
-retains its child Task evidence while the parent remains nonterminal.
+outputs until Task retention retires those records. Accepted activation retains
+each work item's inputs and completion evidence until its Task settles and
+retention permits collection.
 
 The preparation owner is [softwarepreparation](../../internal/controller/softwarepreparation),
 its bounded Docker/GitHub transport is [infrastructure](../../internal/infra/softwarepreparation),

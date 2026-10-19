@@ -221,8 +221,8 @@ unsuperseded Blueprint restoration.
 A mutation-capable Task captures the acknowledged per-Service runtime and the
 exact pre-operation configuration files it may overwrite, including presence,
 content digest, destination and metadata. Recovery may restore only those
-pinned files alongside the selected prior runtime. It retains the assignment,
-execution epoch, writer and source fences, so stale recovery cannot overwrite a
+pinned files alongside the selected prior runtime. It retains the exact attempt,
+host and Agent generation, resource claims and source revisions, so stale recovery cannot overwrite a
 newer operation.
 
 Pinned Secret values remain undeletable while recovery or retry can still use

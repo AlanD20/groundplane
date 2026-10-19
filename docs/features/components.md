@@ -139,21 +139,21 @@ workload deployment must use its configured release strategy.
 
 Local resolver selection now captures only materialized, owned internal bridges.
 CoreDNS configuration Tasks pin those private listeners and verify both UDP and
-TCP replies before acknowledgement. Full Blueprint Service children wait in the
+TCP replies before acknowledgement. Full Blueprint Service work waits in the
 Controller for that acknowledgement, leaving the Agent available for DNS work.
 
 Zone removal now waits in the queue for acknowledged listener withdrawal before
 bridge removal, and rechecks that evidence before releasing its subnet. A failed
 or timed-out withdrawal retains the resource and reservation. This local path is
-not behavior-qualified. Direct Deploy and Rollback now have a local, hidden
-network-preparation Task before their captured workload execution. They wait for
+not behavior-qualified. Direct Deploy and Rollback capture Network work items
+within their visible Task before workload execution. They wait for
 successful CoreDNS acknowledgement without occupying an Agent worker. Known
 preparation or resolver failures leave workloads unchanged. Queued preparation
 and resolver waiting share the release deadline. If bridge preparation loses its
 result, recovery checks only those captured networks. Proven absence or matching
 ownership and configuration settles that uncertainty; GP preserves the failure
 and does not replay the workload. Unknown or conflicting bridges retain the
-release fence. Task details show the preparation, reconciliation and CoreDNS
+resource claims. Task details show the preparation, reconciliation and CoreDNS
 waiting phases through the existing Console, CLI and API.
 Selected container UDP/TCP, managed/local/upstream resolution and named-target
 HTTP passed [H105](../acceptance.md#historical-evidence-register). Opt-out and

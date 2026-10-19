@@ -138,7 +138,8 @@ Read an exact result with `connector check-result TASK_ID`, or use
 If cleanup is incomplete, the result lists the owned object keys and multipart
 upload ids. GP retains the captured encrypted credentials and exact Secret pins,
 blocking their deletion until cleanup finishes. **Retry cleanup only** (CLI:
-`task retry TASK_ID`) transfers that cleanup to a new Task; it never repeats the
+`task retry TASK_ID --work WORK_ID --attempt NUMBER`) authorizes a cleanup
+attempt for the same Task and work item; it never repeats the
 probe or certifies permissions. Cleanup of an older failure does not replace a
 newer check. An interrupted check is not automatically rerun. Start a new
 **Test connection** when you want a fresh permission check.

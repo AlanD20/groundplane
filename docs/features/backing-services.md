@@ -123,8 +123,9 @@ a no-op. A hook failure blocks its operation. The operator owns command
 correctness and idempotency; GP owns targeting, time bounds, recording, and
 result validation. An interrupted custom command must not be silently executed
 again; retry is an explicit operator action. For an interrupted Blueprint Detach,
-the visible Apply offers [Retry captured Detach hook](tasks-and-logs.md#retry),
-which resumes its original hidden Task with the captured command and inputs.
+select the affected work item in the visible Apply's
+[Retry action](tasks-and-logs.md#retry-and-cancellation). It retains that work's
+captured command and inputs, not a separate hidden Task.
 Operators are responsible for whether that command can safely run again.
 
 Configuration uses `attach`, `detach`, `before_stop`, and `after_start` fields,

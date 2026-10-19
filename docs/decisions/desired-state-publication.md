@@ -89,9 +89,9 @@ read, write and predecessor claims.
 An omitted owned resource becomes a removal unit; only acknowledged absence
 satisfies it. Merely dropping it from the desired document cannot prove cleanup.
 
-One operator-visible Blueprint Apply Task owns those units. Host-effect units
-execute as hidden system Agent child Tasks so they can use the existing durable
-claim, abort and recovery machinery. An Entry value derived and encrypted by
+One operator-visible Blueprint Apply Task owns those units as typed work items.
+Host-effect work executes on its captured Agent and host through the shared
+scheduler, durable checkpoints and operation-specific recovery. An Entry value derived and encrypted by
 the Controller has no Agent effect before Deploy; it settles through an atomic
 Controller write of its exact value generation and unit receipt, fenced by the
 parent, current head and unit epoch. It does not create a no-op Agent Task or
@@ -102,26 +102,25 @@ uses the current desired Service definition. A Route unit can similarly be
 acknowledged against its exact sealed projection; the HTTP-router Component
 owns any host configuration that consumes it. Script definitions settle as
 Controller metadata before their Service can deploy; execution remains a hook
-within that Service's child Task. Publication flips the complete active Script
+within that Service's work item. Publication flips the complete active Script
 set with the desired head. Older executions retain their pinned set and bodies,
 including definitions omitted by the new input; omission never deletes their
-recovery authority. Child identity is not an operator
-action: Task
-lists, direct reads, Retry, Abort and event streams expose only the parent.
+recovery authority. Work items are not separate operator actions: Task lists
+contain one Apply, whose details expose its grouped work items and attempts.
 The parent remains nonterminal while any required unit is running or has
-unknown effects. A child terminal status alone cannot mark the parent
+unknown effects. One work item's terminal status alone cannot mark the Task
 successful or release its resource claims.
 
-Apply uses the Controller's configured release execution timeout. Each private
-child receives only the parent's remaining forward-work budget; it does not
+Apply uses the Controller's configured release execution timeout. Each work
+item receives only the Task's remaining forward-work budget; it does not
 restart the whole timeout for each resource.
 
-The visible parent's deadline starts at its durable claim time, not at a
-Controller process restart or each new child. Expiry atomically closes the same
+The Task's absolute deadline is captured at publication, not renewed by a
+Controller process restart or a new work attempt. Expiry atomically closes the same
 selection gate as Abort. The first durable stop outcome wins: deadline expiry
-does not overwrite an earlier Abort or proved child failure. Pending children
-are withdrawn and running children are asked to stop; the parent becomes timed
-out only after exact child settlement proves that no unaccounted effects remain.
+does not overwrite an earlier Abort or proved work failure. Pending work
+is withdrawn and running attempts are asked to stop; the Task becomes timed
+out only after exact settlement proves that no unaccounted effects remain.
 Recovery may therefore outlive the forward-execution deadline without granting
 more forward work.
 
@@ -133,7 +132,7 @@ while waiting for those facts and must be sealed before successful completion.
 Reconciliation fences each expansion against the current head and planning
 epoch. A failed or superseded hook cannot be replaced with facts from another
 revision, and an empty unsealed plan is never evidence of success.
-All Service children wait for one complete Environment runtime projection while
+All Service work waits for one complete Environment runtime projection while
 any Custom Attach fact needed by that projection is pending. Independent Zone
 and Volume units may proceed. This keeps Service renders on one sealed input
 instead of introducing per-Service snapshots with separate fact lifetimes.
@@ -142,8 +141,8 @@ acknowledged Attaches. Its seal fences the exact Attach record revisions; a
 completed hook without the consumer's network binding is not a complete Apply.
 
 An Attach that can produce facts has one immutable, encrypted input generation
-prepared before admission. The visible parent owns it until the hidden Attach
-child is published; publication transfers ownership to that child atomically.
+prepared before admission. The Apply owns it until its Attach work is published;
+publication transfers ownership to that work item atomically.
 Secret values and hook inputs remain protected by exact-generation pins through
 retry and recovery. A successful hook writes a create-only output generation;
 the mutable current Attach facts record is not replay authority. Dependent
@@ -153,8 +152,8 @@ while an Attach, Entry, runtime projection or recoverable Task still uses it.
 Superseded or failed work releases generations only after those references and
 the executor's effects have been accounted for.
 
-An exactly restored failed child closes the parent's publication gate and
-eventually fails the visible Apply after other children settle. The coordinator
+An exactly restored failed work item closes the Apply's publication gate and
+eventually fails the visible Apply after other work settles. The coordinator
 does not retry it automatically: a new Apply is a new operator decision. An
 operator Abort already committed before that receipt retains its Aborted result.
 

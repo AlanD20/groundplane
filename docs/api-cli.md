@@ -145,12 +145,13 @@ Task actions always take a Task id, without requiring `--id`. `pending` and
 `timed_out` are terminal outcomes. Check the application, Route or data after
 completion. A completed Task alone does not prove application health.
 
-`task retry <id>` creates a new eligible attempt using captured inputs. For a
-running Blueprint Apply that reports an interrupted Custom Detach hook, it
-authorizes that captured hook once in the same child Task instead; it does not
-retry the Blueprint. When automatic recovery has stopped, Retry authorizes one
-bounded restoration attempt in the existing Task; it does not repeat forward
-work or change the captured inputs. See [Tasks and logs](features/tasks-and-logs.md#retry).
+`task retry <id> --work <work-id> --attempt <number>` authorizes an eligible
+attempt for the selected work item, retaining its Task identity and captured
+inputs. An interrupted Custom hook requires explicit Retry when its operation
+permits repeating that captured command; this does not retry the Blueprint.
+When automatic recovery has stopped, Retry authorizes bounded cleanup in the
+same Task, not the obsolete forward action or newer inputs.
+See [Tasks and logs](features/tasks-and-logs.md#retry-and-cancellation).
 `task abort <id>` addresses the existing Task. Closing a stream or pressing
 Ctrl-C stops the client request, not the Task. Restrictions and recovery limits
 are in [Tasks and logs](features/tasks-and-logs.md).

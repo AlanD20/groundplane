@@ -30,7 +30,7 @@ Removal first publishes a desired revision without the Volume and its mounts,
 then proves all consumers detached before data destruction. Filesystem traversal
 is descriptor-relative and split into bounded, durably checkpointed calls. A
 failed attempt retains its cursor and Environment removal lock; Retry appends a
-new Task attempt for the same operation and never rebases or repeats completed
+new execution attempt in the same Task and never rebases or repeats completed
 work.
 
 Removing a current Backup source does not delete historical Recovery Points or
@@ -61,12 +61,13 @@ Task while all conflicting mutation and descendant creation are fenced.
 The coordinator freezes descendant membership at one revision and seals one
 stable-id postorder action plan. Retry never resnapshots. Tenant plans are
 flattened rather than dispatching nested Controller Project Tasks, which would
-deadlock the serial native executor. Agent-owned host effects use child Tasks;
+deadlock the serial native executor. Agent-owned host effects use typed work
+items within the same Task;
 Controller-owned record, Secret, Runner and parent finalizers are checkpointed
 actions in the same plan.
 
 Every action produces typed immutable completion evidence. Agent work additionally
-uses durable child receipts, so Task status or a missing Docker name alone is
+uses durable attempt receipts, so Task status or a missing Docker name alone is
 not proof of cleanup. Bounded scans summarize the complete plan before the
 parent-last final transaction removes the resource and releases its slug.
 
