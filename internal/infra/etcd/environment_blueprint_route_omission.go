@@ -18,7 +18,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/routepersistence"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -54,7 +53,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteOmission(
 		blueprints.EnvironmentBlueprintRootKey(environmentID, parent.ID),
 		blueprints.EnvironmentBlueprintOwnedIdentitiesKey(environmentID, parent.ID),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
-		taskjournal.TaskMaterializationWriterKey(environmentID),
+		workqueue.ClaimKey(workexecution.Claim{ScopeID: environmentID}),
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: snapshot.ReadRevision})
 	if err != nil {
@@ -67,12 +66,18 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteOmission(
 	conditions := make([]keyvalue.Condition, 0, len(keys)+2)
 	for index, value := range read.Values {
 		if index < 4 && value == nil || value != nil && value.Key != keys[index] {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route omission authority is unavailable")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Route omission authority is unavailable",
+			)
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: keys[index], ModRevision: keyvalue.RevisionOf(value)})
 	}
 	if read.Values[4] != nil || read.Values[5] != nil {
-		return workqueue.Change{}, errs.New(errs.KindResourceInUse, "Blueprint Route withdrawal overlaps an active configuration writer")
+		return workqueue.Change{}, errs.New(
+			errs.KindResourceInUse,
+			"Blueprint Route withdrawal overlaps an active configuration writer",
+		)
 	}
 	desired, found, desiredErr := blueprints.ReadDesiredInputRevision(
 		ctx,
@@ -97,7 +102,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteOmission(
 	digest := sha256.Sum256(encoded)
 	clear(encoded)
 	if hex.EncodeToString(digest[:]) != parent.Intent.SHA256 {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route omission input differs from captured intent")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Route omission input differs from captured intent",
+		)
 	}
 	for _, identity := range owned.Routes {
 		if identity.ID == unit.Target.ID {
@@ -115,7 +123,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteOmission(
 		}
 	}
 	if router == nil || !blueprintRouteWithdrawalAcknowledged(snapshot, owned, *router) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "router has not acknowledged the Blueprint without this Route")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"router has not acknowledged the Blueprint without this Route",
+		)
 	}
 	conditions = append(
 		conditions,

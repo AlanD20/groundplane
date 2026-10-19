@@ -19,7 +19,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -36,7 +35,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 	if repository == nil || parent.Validate() != nil || parent.Action != workexecution.ActionApply ||
 		work.ReadRevision <= 0 || work.Task.Revision <= 0 || work.Item.Revision <= 0 || !unit.Removal ||
 		unit.Target.Kind != ids.KindEnvEntry {
-		return workqueue.Change{}, false, errs.New(errs.KindValidationFailed, "Blueprint Entry omission identity is invalid")
+		return workqueue.Change{}, false, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Entry omission identity is invalid",
+		)
 	}
 	ledger, err := blueprintunits.NewRepository(repository.store)
 	if err != nil {
@@ -47,7 +49,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 		return workqueue.Change{}, false, err
 	}
 	if snapshot.HeadTaskID != parent.ID {
-		return workqueue.Change{}, false, errs.New(errs.KindStateConflict, "Blueprint Entry omission has been superseded")
+		return workqueue.Change{}, false, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Entry omission has been superseded",
+		)
 	}
 	// Per-Service acknowledgements can be newer than the Environment-wide
 	// projection. Their presence precludes a metadata-only absence proof, even
@@ -68,7 +73,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 		environmentprojection.EnvironmentComposeProjectionStorageKey(environmentID),
 		deletions.TombstoneKey(string(deletions.DeletionTargetEntry), entryID),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
-		taskjournal.TaskMaterializationWriterKey(environmentID),
+		workqueue.ClaimKey(workexecution.Claim{ScopeID: environmentID}),
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: snapshot.ReadRevision})
 	if err != nil {
@@ -81,7 +86,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 	conditions := make([]keyvalue.Condition, 0, len(keys))
 	for index, value := range read.Values {
 		if (index < 7 && value == nil) || (value != nil && value.Key != keys[index]) {
-			return workqueue.Change{}, false, errs.New(errs.KindStateConflict, "Blueprint Entry omission authority is unavailable")
+			return workqueue.Change{}, false, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Entry omission authority is unavailable",
+			)
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: keys[index], ModRevision: keyvalue.RevisionOf(value)})
 	}
@@ -109,7 +117,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 	digest := sha256.Sum256(encodedDesired)
 	clear(encodedDesired)
 	if hex.EncodeToString(digest[:]) != parent.Intent.SHA256 {
-		return workqueue.Change{}, false, errs.New(errs.KindStateConflict, "Blueprint Entry removal captured intent changed")
+		return workqueue.Change{}, false, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Entry removal captured intent changed",
+		)
 	}
 	for _, identity := range owned.Entries {
 		if identity.ID == entryID {
@@ -122,12 +133,18 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 		return workqueue.Change{}, false, errs.New(errs.KindStateConflict, "Blueprint Entry omission owner changed")
 	}
 	if _, declared := desired.Input.Entries[record.BlueprintKey]; declared {
-		return workqueue.Change{}, false, errs.New(errs.KindStateConflict, "Blueprint Entry omission retains its authored name")
+		return workqueue.Change{}, false, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Entry omission retains its authored name",
+		)
 	}
 	if read.Values[7] != nil {
 		applied, err := environmentprojection.DecodeEnvironmentComposeProjectionStorage(read.Values[7].Value)
 		if err != nil || applied.EnvironmentID != environmentID {
-			return workqueue.Change{}, false, errs.New(errs.KindStateConflict, "Blueprint Entry applied runtime is invalid")
+			return workqueue.Change{}, false, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Entry applied runtime is invalid",
+			)
 		}
 		for _, entry := range applied.Entries {
 			if entry.Entry.ID == entryID {
