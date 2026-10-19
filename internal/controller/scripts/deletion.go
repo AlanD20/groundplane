@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -11,8 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptremoval"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"net/http"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -291,18 +292,31 @@ func (service *scriptDeletionService) deleteScriptOnce(
 	}
 
 	now := service.now().UTC()
-	input := scriptremoval.Input{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
-		TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID,
-		ServiceID: current.Record.ServiceID, ScriptID: scriptID, ScriptRevision: current.Revision,
-		ScriptSetGeneration: current.Record.ScriptSetGeneration, CreatedAt: now}
+	input := scriptremoval.Input{
+		TaskID:              ids.New(ids.KindTask),
+		WorkItemID:          ids.New(ids.KindWorkItem),
+		PlanID:              ids.New(ids.KindPlan),
+		TenantID:            project.Record.TenantID,
+		ProjectID:           project.Record.ID,
+		EnvironmentID:       environment.Record.ID,
+		ServiceID:           current.Record.ServiceID,
+		ScriptID:            scriptID,
+		ScriptRevision:      current.Revision,
+		ScriptSetGeneration: current.Record.ScriptSetGeneration,
+		CreatedAt:           now,
+	}
 	ref, err := input.Reference()
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task := workexecution.Task{ID: input.TaskID, Action: workexecution.ActionRemove, Actor: workexecution.OperatorActor,
-		Scope:    workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID},
+		Scope: workexecution.Scope{
+			TenantID:      input.TenantID,
+			ProjectID:     input.ProjectID,
+			EnvironmentID: input.EnvironmentID,
+		},
 		TargetID: scriptID, TargetName: current.Record.Desired.Slug, Intent: ref, ExpectedItems: 1,
-		CreatedAt: now, Deadline: now.Add(time.Duration(scriptDeletionTimeoutSeconds) * time.Second)}
+		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(scriptDeletionTimeoutSeconds) * time.Second)}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
