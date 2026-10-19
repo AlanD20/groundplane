@@ -15,9 +15,10 @@ import (
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
-// QA: BACK-15. Rationale: Blueprint must not publish a network-only substitute
-// for an Attach that requires an operator hook, or allocate incomplete facts.
-func TestBlueprintRejectsNewCustomHookAttachBeforePreparation(t *testing.T) {
+// QA: BACK-15, TASK-104. The ordinary candidate builder cannot substitute a
+// network-only Attach for a Custom hook. Authored hook-generation capture is
+// a separate native path, not prohibited by this lower-level refusal.
+func TestBlueprintCandidateBuilderRefusesCustomHookSubstitution(t *testing.T) {
 	registerAdapters()
 	now := time.Date(2026, 9, 20, 18, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
@@ -45,7 +46,7 @@ func TestBlueprintRejectsNewCustomHookAttachBeforePreparation(t *testing.T) {
 		}},
 	}
 	service := &Service{repository: repository}
-	prepared, err := service.prepareBlueprintAttaches(context.Background(), environmentID,
+	prepared, err := service.prepareBlueprintAttachCandidates(context.Background(), environmentID,
 		ids.NewAt(ids.KindTask, now, 7), map[string]core.AttachmentSpec{
 			"shared": {BackingProject: "shared", BackingService: "shared", Service: "worker",
 				Credential: core.AttachmentCredentialSpec{Mode: "new"}},
@@ -54,12 +55,12 @@ func TestBlueprintRejectsNewCustomHookAttachBeforePreparation(t *testing.T) {
 		}}}, nil, func(ids.Kind, string) string {
 			t.Fatal("rejected hook Attach allocated candidate identity")
 			return ""
-		}, false, now)
+		}, now)
 	defer prepared.clear()
 	if err == nil || !strings.Contains(err.Error(), "create the custom Attach directly") {
 		t.Fatalf("expected standalone-first guidance, got %v", err)
 	}
-	if len(prepared.publication.Intent.Candidates) != 0 || len(prepared.procedures) != 0 {
+	if len(prepared.candidates) != 0 || len(prepared.effective) != 0 {
 		t.Fatal("rejected hook Attach produced publication or execution work")
 	}
 }

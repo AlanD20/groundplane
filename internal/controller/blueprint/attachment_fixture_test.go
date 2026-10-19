@@ -10,6 +10,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters/postgres"
 	"github.com/AlanD20/groundplane/internal/adapters/valkey"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/attachments"
+	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
 	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -41,6 +43,7 @@ func (blueprintTestCrypt) Open(_ context.Context, ciphertext []byte) ([]byte, er
 type blueprintAttachFactRepository struct {
 	records   map[string]testkeyvalue.Versioned[testattachments.Record]
 	facts     testattachments.EncryptedFacts
+	factsByID map[string]testattachments.EncryptedFacts
 	factReads int
 }
 
@@ -67,15 +70,50 @@ func (repository *blueprintAttachFactRepository) ResolveAttach(
 
 func (repository *blueprintAttachFactRepository) GetAttachFacts(
 	_ context.Context,
-	_ testkeyvalue.Versioned[testattachments.Record],
+	owner testkeyvalue.Versioned[testattachments.Record],
 ) (testattachments.EncryptedFacts, bool, error) {
 	repository.factReads++
-	if len(repository.facts.Ciphertext) == 0 {
+	result := repository.facts
+	if repository.factsByID != nil {
+		result = repository.factsByID[owner.Record.ID]
+	}
+	if len(result.Ciphertext) == 0 {
 		return testattachments.EncryptedFacts{}, false, nil
 	}
-	result := repository.facts
-	result.Ciphertext = append([]byte(nil), repository.facts.Ciphertext...)
+	result.Ciphertext = append([]byte(nil), result.Ciphertext...)
 	return result, true, nil
+}
+
+// Supply ready bindings so candidate sealing can be checked through the actual
+// fact reader. This does not execute or acknowledge provisioning.
+func candidateFactService(t *testing.T, prepared preparedBlueprintAttaches,
+	protector *secretvalue.Protector,
+) *attachments.FactService {
+	t.Helper()
+	repository := &blueprintAttachFactRepository{
+		records:   make(map[string]testkeyvalue.Versioned[testattachments.Record]),
+		factsByID: make(map[string]testattachments.EncryptedFacts),
+	}
+	for _, candidate := range prepared.candidates {
+		record, err := testattachments.MarkAttachProvisioning(candidate.Record, candidate.Record.TaskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		record, err = testattachments.CompleteAttachProvisioning(record, record.TaskID, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		versioned := testkeyvalue.Versioned[testattachments.Record]{Record: record, Revision: 1, ReadRevision: 1}
+		repository.records[record.Name], repository.records[record.ID] = versioned, versioned
+		if candidate.Facts != nil {
+			repository.factsByID[record.ID] = *candidate.Facts
+		}
+	}
+	service, err := attachments.NewFactService(repository, protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service
 }
 
 type attachFactTestAdapter struct{}

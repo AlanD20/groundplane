@@ -57,14 +57,13 @@ func (resolver *environmentBlueprintMaterializationResolverFake) RetainComponent
 	return nil
 }
 
-// Rationale: Component output bytes must produce authenticated Task metadata
+// TASK-105: Component output bytes must produce authenticated source metadata
 // while secret token bytes remain transient and absent from durable JSON.
 func TestEnvironmentComponentMaterializationsBuildMetadataOnlyTaskInputs(t *testing.T) {
 	const (
 		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		projectID     = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		revisionID    = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-		artifactID    = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		caddyID       = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		tunnelID      = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 		serviceID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -84,16 +83,16 @@ func TestEnvironmentComponentMaterializationsBuildMetadataOnlyTaskInputs(t *test
 			Values:      []componentsdk.ManagedSecretEnvironment{{Name: "TUNNEL_TOKEN", SecretID: secretID}},
 		}},
 	}
-	references, steps, err := service.environmentComponentMaterializations(
-		context.Background(), environmentID, projectID, revisionID, artifactID, 7,
+	references, err := service.environmentFileSources(
+		context.Background(), environmentID, projectID, revisionID, 7,
 		func(kind ids.Kind, _ string) string { return ids.New(kind) },
 		nil, projection, nil, nil,
 	)
 	if err != nil {
-		t.Fatalf("environmentComponentMaterializations() error = %v", err)
+		t.Fatalf("environmentFileSources() error = %v", err)
 	}
-	if len(references) != 2 || len(steps) != 2 || references[0].StepID >= references[1].StepID {
-		t.Fatalf("materialization references/steps = %#v / %#v", references, steps)
+	if len(references) != 2 {
+		t.Fatalf("materialization references = %#v", references)
 	}
 	byKind := make(map[testtaskmaterialization.OutputKind]testtaskmaterialization.Record, len(references))
 	for _, reference := range references {
@@ -139,23 +138,21 @@ func TestEnvironmentComponentMaterializationsBuildMetadataOnlyTaskInputs(t *test
 	}
 }
 
-// Rationale: a declared read-only Blueprint bind must become a durable,
-// metadata-only Agent materialization before the Compose execution step.
+// TASK-105: a declared read-only Blueprint bind retains its exact captured
+// revision/path and content digest without embedding bytes in source metadata.
 func TestEnvironmentComponentMaterializationsBuildBlueprintFileInput(t *testing.T) {
 	const (
 		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		projectID     = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		revisionID    = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-		artifactID    = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	)
 	content := []byte("example.test { reverse_proxy app:8080 }\n")
 	service := &Service{}
-	references, steps, err := service.environmentComponentMaterializations(
+	references, err := service.environmentFileSources(
 		context.Background(),
 		environmentID,
 		projectID,
 		revisionID,
-		artifactID,
 		1,
 		func(kind ids.Kind, _ string) string { return ids.New(kind) },
 		[]core.BlueprintFile{
@@ -166,10 +163,10 @@ func TestEnvironmentComponentMaterializationsBuildBlueprintFileInput(t *testing.
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("environmentComponentMaterializations() error = %v", err)
+		t.Fatalf("environmentFileSources() error = %v", err)
 	}
-	if len(references) != 1 || len(steps) != 1 {
-		t.Fatalf("materialization references/steps = %#v / %#v", references, steps)
+	if len(references) != 1 {
+		t.Fatalf("materialization references = %#v", references)
 	}
 	reference := references[0]
 	digest := sha256.Sum256(content)

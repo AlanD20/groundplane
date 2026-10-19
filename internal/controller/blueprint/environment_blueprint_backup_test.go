@@ -204,7 +204,7 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedCredentialOwner(t *tes
 		backingProject: backingProject, backingEnvironment: backingEnvironment, backingService: backingService,
 	}
 	service := &Service{repository: repository}
-	prepared, err := service.prepareBlueprintAttaches(
+	prepared, err := service.prepareBlueprintAttachCandidates(
 		context.Background(),
 		environmentID,
 		taskID,
@@ -223,18 +223,17 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedCredentialOwner(t *tes
 		}}},
 		[]testkeyvalue.Versioned[testattachments.Record]{{Record: owner, Revision: 31, ReadRevision: 41}},
 		func(ids.Kind, string) string { return candidateID },
-		false,
 		now,
 	)
 	if err != nil {
-		t.Fatalf("prepareBlueprintAttaches(retained credential owner) error = %v", err)
+		t.Fatalf("prepareBlueprintAttachCandidates(retained credential owner) error = %v", err)
 	}
 	defer prepared.clear()
-	if len(prepared.publication.Intent.Candidates) != 1 ||
-		prepared.publication.Intent.Candidates[0].CredentialAttachID != ownerID ||
+	if len(prepared.candidates) != 1 ||
+		prepared.candidates[0].Record.CredentialAttachID != ownerID ||
 		len(prepared.effective) != 2 || prepared.effective[1].Record.ID != candidateID ||
 		prepared.effective[0].Revision != 31 || prepared.effective[0].Record.ID != ownerID {
-		t.Fatalf("retained credential owner preparation = %#v / %#v", prepared.publication.Intent, prepared.effective)
+		t.Fatalf("retained credential owner preparation = %#v / %#v", prepared.candidates, prepared.effective)
 	}
 	joins, err := testtaskplanning.ResolveAttachNetworkJoins(
 		environmentID,
@@ -326,7 +325,7 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedGrantTarget(t *testing
 	service := &Service{
 		repository: repository, attachFacts: facts, random: strings.NewReader(strings.Repeat("x", 256)),
 	}
-	prepared, err := service.prepareBlueprintAttaches(
+	prepared, err := service.prepareBlueprintAttachCandidates(
 		context.Background(),
 		environmentID,
 		taskID,
@@ -356,20 +355,19 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedGrantTarget(t *testing
 		},
 		[]testkeyvalue.Versioned[testattachments.Record]{{Record: grant, Revision: 31, ReadRevision: 41}},
 		func(ids.Kind, string) string { return candidateID },
-		false,
 		now,
 	)
 	if err != nil {
-		t.Fatalf("prepareBlueprintAttaches(retained grant) error = %v", err)
+		t.Fatalf("prepareBlueprintAttachCandidates(retained grant) error = %v", err)
 	}
 	defer prepared.clear()
-	if len(prepared.publication.Intent.Candidates) != 1 ||
-		len(prepared.publication.Intent.Candidates[0].GrantAttachIDs) != 1 ||
-		prepared.publication.Intent.Candidates[0].GrantAttachIDs[0] != grantID ||
+	if len(prepared.candidates) != 1 ||
+		len(prepared.candidates[0].Record.GrantAttachIDs) != 1 ||
+		prepared.candidates[0].Record.GrantAttachIDs[0] != grantID ||
 		factRepository.factReads != 1 {
 		t.Fatalf(
 			"retained grant preparation = %#v, fact reads = %d",
-			prepared.publication.Intent,
+			prepared.candidates,
 			factRepository.factReads,
 		)
 	}

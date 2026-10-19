@@ -16,7 +16,7 @@ import (
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
-// Rationale: grants between new owners must not depend on their authored name order.
+// TASK-104: grants between new owners must not depend on authored name order.
 func TestEnvironmentBlueprintNewGrantTargetSurvivesPreparationOrder(t *testing.T) {
 	registerAdapters()
 	for _, targetName := range []string{"a-target", "z-target"} {
@@ -81,28 +81,26 @@ func TestEnvironmentBlueprintNewGrantTargetSurvivesPreparationOrder(t *testing.T
 				{Record: testservices.ServiceRecord{EnvironmentID: environmentID,
 					Desired: core.Service{ID: ids.NewAt(ids.KindService, now, 8), Name: "reader"}}},
 			}
-			prepared, err := service.prepareBlueprintAttaches(context.Background(), environmentID, taskID,
+			prepared, err := service.prepareBlueprintAttachCandidates(context.Background(), environmentID, taskID,
 				specs, changes, nil, func(kind ids.Kind, purpose string) string {
 					return ids.DeriveAt(kind, now, taskID, purpose)
-				}, false, now)
+				}, now)
 			if err != nil {
 				t.Fatalf("new grant preparation: %v", err)
 			}
 			defer prepared.clear()
-			if len(prepared.procedures) != 2 {
+			if len(prepared.candidates) != 2 {
 				t.Fatal("expected both credential owners")
 			}
-			targetDatabase := ""
-			for _, procedure := range prepared.procedures {
-				if procedure.record.Name == targetName {
-					targetDatabase = procedure.identity.Database
-				}
-			}
-			for _, procedure := range prepared.procedures {
-				if procedure.record.Name == "m-reader" && (len(procedure.identity.Grants) != 1 ||
-					procedure.identity.Grants[0].Database != targetDatabase || targetDatabase == "") {
-					t.Fatal("grant does not retain target database identity")
-				}
+			resolved := candidateFactService(t, prepared, protector)
+			targetDatabase := resolvePreparedBlueprintFact(t, resolved, environmentID,
+				core.FactRef{Attach: targetName, Key: "pg_DATABASE"}, false)
+			grantDatabase := resolvePreparedBlueprintFact(t, resolved, environmentID,
+				core.FactRef{Attach: "m-reader", Grant: targetName, Key: "pg_DATABASE"}, false)
+			readerDatabase := resolvePreparedBlueprintFact(t, resolved, environmentID,
+				core.FactRef{Attach: "m-reader", Key: "pg_DATABASE"}, false)
+			if targetDatabase == "" || grantDatabase != targetDatabase || readerDatabase == targetDatabase {
+				t.Fatal("grant does not retain the distinct target database identity")
 			}
 		})
 	}

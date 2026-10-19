@@ -16,7 +16,8 @@ import (
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
-// QA: ATT-12; local Blueprint fact preparation, not live Docker DNS or authentication proof.
+// QA: ATT-12, TASK-104; local candidate fact sealing and supplied ready bindings,
+// not actual provisioning, live Docker DNS or authentication proof.
 // Rationale: Blueprint-created owner and grant fact sets must select the same stable backing endpoint as the
 // backing runtime alias, including while another same-name backing network remains attached.
 func TestEnvironmentBlueprintAttachFactsUseStableBackingEndpoint(t *testing.T) {
@@ -89,23 +90,23 @@ func TestEnvironmentBlueprintAttachFactsUseStableBackingEndpoint(t *testing.T) {
 			Desired:       core.Service{ID: ids.NewAt(ids.KindService, now, 8), Name: "reader"},
 		}},
 	}
-	prepared, err := service.prepareBlueprintAttaches(
+	prepared, err := service.prepareBlueprintAttachCandidates(
 		context.Background(), environmentID, taskID, specs, changes, nil,
 		func(kind ids.Kind, purpose string) string { return ids.DeriveAt(kind, now, taskID, purpose) },
-		false,
 		now,
 	)
 	if err != nil {
 		t.Fatalf("prepareBlueprintAttaches() error = %v", err)
 	}
 	defer prepared.clear()
+	resolvedFacts := candidateFactService(t, prepared, protector)
 
 	wantHost := "gp-svc-01m2fwkng0smhx4kvh89teeh1m"
 	for _, grant := range []string{"", "target"} {
-		host := resolvePreparedBlueprintFact(t, prepared.facts, environmentID, core.FactRef{
+		host := resolvePreparedBlueprintFact(t, resolvedFacts, environmentID, core.FactRef{
 			Attach: "reader", Grant: grant, Key: "pg_HOST",
 		}, false)
-		url := resolvePreparedBlueprintFact(t, prepared.facts, environmentID, core.FactRef{
+		url := resolvePreparedBlueprintFact(t, resolvedFacts, environmentID, core.FactRef{
 			Attach: "reader", Grant: grant, Key: "pg_URL",
 		}, true)
 		if host != wantHost {
@@ -119,7 +120,7 @@ func TestEnvironmentBlueprintAttachFactsUseStableBackingEndpoint(t *testing.T) {
 
 func resolvePreparedBlueprintFact(
 	t *testing.T,
-	facts *blueprintAttachFactOverlay,
+	facts *attachments.FactService,
 	environmentID string,
 	reference core.FactRef,
 	secret bool,
