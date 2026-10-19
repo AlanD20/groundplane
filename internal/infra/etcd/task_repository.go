@@ -124,90 +124,11 @@ func newTaskRepositoryWithRetryPolicy(
 		dispatchClaims: make(chan struct{}, 1)}, nil
 }
 
-func (repository *TaskRepository) GetTask(
-	ctx context.Context,
-	taskID string,
-) (etcdstore.Versioned[TaskRecord], error) {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[TaskRecord]{}, err
-	}
-	if err := recordcodec.ValidateID(ids.KindTask, taskID); err != nil {
-		return etcdstore.Versioned[TaskRecord]{}, err
-	}
-	result, err := repository.store.Get(ctx, taskjournal.TaskStorageKey(taskID))
-	if err != nil {
-		return etcdstore.Versioned[TaskRecord]{}, err
-	}
-	if result.Entry == nil {
-		return etcdstore.Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
-	}
-	record, err := DecodeTaskRecord(result.Entry.Value)
-	if err != nil {
-		return etcdstore.Versioned[TaskRecord]{}, err
-	}
-	if record.ID != taskID || result.Entry.Key != taskjournal.TaskStorageKey(taskID) {
-		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task primary does not match its key")
-	}
-	indexKeys, err := taskOwnerIndexKeys(record.Owner, record.ID)
-	if err != nil {
-		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner indexes are corrupt")
-	}
-	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: indexKeys, Revision: result.ReadRevision,
-	})
-	if err != nil {
-		return etcdstore.Versioned[TaskRecord]{}, err
-	}
-	if indexes == nil || indexes.ReadRevision != result.ReadRevision || len(indexes.Values) != len(indexKeys) {
-		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index read is incomplete")
-	}
-	for index, value := range indexes.Values {
-		if value == nil || value.Key != indexKeys[index] || string(value.Value) != taskID {
-			return etcdstore.Versioned[TaskRecord]{}, errs.New(
-				errs.KindInternal,
-				"task owner index membership is corrupt",
-			)
-		}
-	}
-	return etcdstore.Versioned[TaskRecord]{
-		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
-	}, nil
-}
-
 // TaskRetryScope is the immutable durable owner used to domain-separate a
 // human retry intent from the same idempotency key under another owner.
 type TaskRetryScope struct {
 	Kind idempotencyrecord.IdempotencyScopeKind
 	ID   string
-}
-
-func (repository *TaskRepository) GetTaskRetryScope(
-	ctx context.Context,
-	taskID string,
-) (TaskRetryScope, error) {
-	task, err := repository.GetTask(ctx, taskID)
-	if err != nil {
-		return TaskRetryScope{}, err
-	}
-	return taskOwnerRetryScope(task.Record.Owner)
-}
-
-func (repository *TaskRepository) GetSystemTaskInitiation(
-	ctx context.Context,
-	taskID string,
-) (TaskInitiation, error) {
-	parent, err := repository.GetTask(ctx, taskID)
-	if err != nil {
-		return TaskInitiation{}, err
-	}
-	if parent.Record.Executor != taskjournal.TaskExecutorController ||
-		parent.Record.Status != taskjournal.TaskStatusRunning {
-		return TaskInitiation{}, errs.New(
-			errs.KindStateConflict,
-			"system task initiation parent is not a running controller task",
-		)
-	}
-	return newInheritedTaskInitiation(parent, taskjournal.TaskActorSystem)
 }
 
 func visibleOperatorTask(record TaskRecord) bool {

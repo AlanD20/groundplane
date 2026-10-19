@@ -262,20 +262,6 @@ func (repository *Repository) ResolveRemovalDatabase(
 	return repository.facts.ResolveRemovalDatabase(ctx, attach, yield)
 }
 
-func (repository *Repository) GetTask(
-	ctx context.Context,
-	id string,
-) (etcdstore.Versioned[etcd.TaskRecord], error) {
-	return repository.tasks.GetTask(ctx, id)
-}
-
-func (repository *Repository) GetSystemTaskInitiation(
-	ctx context.Context,
-	id string,
-) (etcd.TaskInitiation, error) {
-	return repository.tasks.GetSystemTaskInitiation(ctx, id)
-}
-
 func (repository *Repository) GetZoneRemovalIntent(
 	ctx context.Context,
 	operationID string,
