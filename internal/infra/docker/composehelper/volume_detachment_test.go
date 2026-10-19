@@ -8,14 +8,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func TestManagedVolumeRemovalRequiresConsumerAbsence(t *testing.T) {
 	for _, mode := range []string{"bind held", "named volume held", "inspection unavailable", "detached"} {
 		t.Run(mode, func(t *testing.T) {
-			plan := volumeEnsureRequest(t).Plan
-			artifact, volume := plan.Artifacts[0], plan.Artifacts[0].Volumes[0]
+			artifact := volumeEnsureArtifact(t)
+			volume := artifact.Volumes[0]
 			device := artifact.AuthorizedVolumeDir + "/" + volume.ComposeName
 			removed := 0
 			fake := runner.NewFake()
@@ -59,8 +58,7 @@ func TestManagedVolumeRemovalRequiresConsumerAbsence(t *testing.T) {
 					return runner.Result{}, nil
 				}
 			}
-			response, err := executeManagedVolumeRemove(context.Background(), fake, 30,
-				&agentpb.ManagedVolumeRemove{VolumeId: volume.VolumeId, DockerName: volume.DockerName}, plan)
+			response, err := removeCapturedVolume(t.Context(), fake, artifact, volume)
 			if mode == "detached" {
 				if err != nil || response.ExitCode != 0 || removed != 1 {
 					t.Fatalf("detached control: %v", err)

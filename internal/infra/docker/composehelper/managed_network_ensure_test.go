@@ -8,13 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+const resourceEnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+// NET-02/04: resource preparation must not mutate existing or foreign networks.
 func TestManagedNetworkEnsureCreatesOnlyAbsentOwnedBridge(t *testing.T) {
-	request, name := networkEnsureRequest(t)
+	artifact, name := networkEnsureArtifact(t)
 	fake := &managedNetworkRunner{
 		results: []runner.Result{
 			{},
@@ -22,7 +24,13 @@ func TestManagedNetworkEnsureCreatesOnlyAbsentOwnedBridge(t *testing.T) {
 			{Stdout: networkInspection(t, name, "10.60.0.0/24", true)},
 		},
 	}
-	response, err := Execute(context.Background(), fake, request)
+	response, err := executeManagedNetworkEnsure(
+		t.Context(),
+		fake,
+		30,
+		artifact,
+		&agentpb.ManagedNetworkEnsure{NetworkId: artifact.Networks[0].NetworkId},
+	)
 	if err != nil || response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
 		t.Fatalf("response=%v error=%v commands=%v", response, err, fake.commands)
 	}
@@ -30,7 +38,7 @@ func TestManagedNetworkEnsureCreatesOnlyAbsentOwnedBridge(t *testing.T) {
 		t.Fatalf("commands=%v", fake.commands)
 	}
 	joined := strings.Join(fake.commands[1], " ")
-	for _, required := range []string{"--driver bridge", "--subnet 10.60.0.0/24", "--internal", "com.docker.compose.project=gp-" + strings.ToLower(helperEnvironmentID), "com.docker.compose.network=backend", name} {
+	for _, required := range []string{"--driver bridge", "--subnet 10.60.0.0/24", "--internal", "com.docker.compose.project=gp-" + strings.ToLower(resourceEnvironmentID), "com.docker.compose.network=backend", name} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("create lacks %q: %s", required, joined)
 		}
@@ -40,48 +48,29 @@ func TestManagedNetworkEnsureCreatesOnlyAbsentOwnedBridge(t *testing.T) {
 	}
 }
 
-func networkEnsureRequest(t *testing.T) (*agentpb.ComposeHelperRequest, string) {
+func networkEnsureArtifact(t *testing.T) (*agentpb.ComposeArtifact, string) {
 	t.Helper()
-	request, _ := validComponentConfigRequest(t)
-	artifact := request.Plan.Artifacts[0]
+	artifact := &agentpb.ComposeArtifact{
+		OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:   resourceEnvironmentID, ProjectName: "gp-" + strings.ToLower(resourceEnvironmentID),
+		AuthorizedVolumeDir: t.TempDir(),
+	}
 	const networkID = "net_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	name := "gp_net_" + networkID
-	artifact.Networks = []*agentpb.ComposeNetwork{
-		{
-			NetworkId:   networkID,
-			ComposeName: "backend",
-			DockerName:  name,
-			ExpectedLabels: []*agentpb.LabelPair{
-				{Key: "com.groundplane.environment-id", Value: helperEnvironmentID},
-				{Key: "com.groundplane.kind", Value: "network"},
-				{Key: "com.groundplane.managed", Value: "true"},
-			},
+	artifact.Networks = []*agentpb.ComposeNetwork{{
+		NetworkId: networkID, ComposeName: "backend", DockerName: name,
+		ExpectedLabels: []*agentpb.LabelPair{
+			{Key: "com.groundplane.environment-id", Value: resourceEnvironmentID},
+			{Key: "com.groundplane.kind", Value: "network"},
+			{Key: "com.groundplane.managed", Value: "true"},
 		},
-	}
-	artifact.CanonicalYaml = []byte(
-		"networks:\n  backend:\n    name: " + name + "\n    driver: bridge\n    internal: true\n    ipam:\n      config:\n        - subnet: 10.60.0.0/24\n    labels:\n      com.groundplane.environment-id: " + helperEnvironmentID + "\n      com.groundplane.kind: network\n      com.groundplane.managed: 'true'\n",
-	)
+	}}
+	artifact.CanonicalYaml = []byte("networks:\n  backend:\n    name: " + name +
+		"\n    driver: bridge\n    internal: true\n    ipam:\n      config:\n        - subnet: 10.60.0.0/24\n    labels:\n      com.groundplane.environment-id: " +
+		resourceEnvironmentID + "\n      com.groundplane.kind: network\n      com.groundplane.managed: 'true'\n")
 	hash := sha256.Sum256(artifact.CanonicalYaml)
 	artifact.YamlSha256 = hash[:]
-	request.Plan.Steps = []*agentpb.ExecutionStep{
-		{
-			StepId:         helperStepID,
-			TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ManagedNetworkEnsure{
-				ManagedNetworkEnsure: &agentpb.ManagedNetworkEnsure{
-					ArtifactId: artifact.ArtifactId,
-					NetworkId:  networkID,
-				},
-			},
-		},
-	}
-	request.Plan.PlanHash = nil
-	var err error
-	request.Plan, err = executionplan.Seal(request.Plan)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return request, name
+	return artifact, name
 }
 
 func networkInspection(t *testing.T, name, subnet string, internal bool) []byte {
@@ -92,10 +81,10 @@ func networkInspection(t *testing.T, name, subnet string, internal bool) []byte 
 		Driver:   "bridge",
 		Internal: internal,
 		Labels: map[string]string{
-			"com.groundplane.environment-id": helperEnvironmentID,
+			"com.groundplane.environment-id": resourceEnvironmentID,
 			"com.groundplane.kind":           "network",
 			"com.groundplane.managed":        "true",
-			"com.docker.compose.project":     "gp-" + strings.ToLower(helperEnvironmentID),
+			"com.docker.compose.project":     "gp-" + strings.ToLower(resourceEnvironmentID),
 			"com.docker.compose.network":     "backend",
 		},
 	}
@@ -114,7 +103,7 @@ func networkInspection(t *testing.T, name, subnet string, internal bool) []byte 
 func TestManagedNetworkEnsureExistingNetworkNeverMutated(t *testing.T) {
 	for _, name := range []string{"matching", "compose-created", "divergent-hash", "wrong-subnet", "wrong-internal", "foreign-owner", "wrong-compose-project", "wrong-compose-network", "wrong-id", "wrong-driver", "duplicate-name", "inspect-failed"} {
 		t.Run(name, func(t *testing.T) {
-			request, dockerName := networkEnsureRequest(t)
+			artifact, dockerName := networkEnsureArtifact(t)
 			var actual inspectedOwnedNetwork
 			if err := json.Unmarshal(networkInspection(t, dockerName, "10.60.0.0/24", true), &actual); err != nil {
 				t.Fatal(err)
@@ -123,7 +112,7 @@ func TestManagedNetworkEnsureExistingNetworkNeverMutated(t *testing.T) {
 			case "compose-created":
 				// Golden JSON follows Compose2.40.3 / compose-go2.9.1 NetworkConfig;
 				// it deliberately does not call the preparation hash implementation.
-				encoded := `{"name":"` + dockerName + `","driver":"bridge","ipam":{"config":[{"subnet":"10.60.0.0/24"}]},"internal":true,"labels":{"com.groundplane.environment-id":"` + helperEnvironmentID + `","com.groundplane.kind":"network","com.groundplane.managed":"true"}}`
+				encoded := `{"name":"` + dockerName + `","driver":"bridge","ipam":{"config":[{"subnet":"10.60.0.0/24"}]},"internal":true,"labels":{"com.groundplane.environment-id":"` + resourceEnvironmentID + `","com.groundplane.kind":"network","com.groundplane.managed":"true"}}`
 				hash := sha256.Sum256([]byte(encoded))
 				actual.Labels["com.docker.compose.config-hash"] = hex.EncodeToString(hash[:])
 			case "divergent-hash":
@@ -155,7 +144,13 @@ func TestManagedNetworkEnsureExistingNetworkNeverMutated(t *testing.T) {
 			if name == "inspect-failed" {
 				fake.results[1] = runner.Result{ExitCode: 1}
 			}
-			response, err := Execute(context.Background(), fake, request)
+			response, err := executeManagedNetworkEnsure(
+				t.Context(),
+				fake,
+				30,
+				artifact,
+				&agentpb.ManagedNetworkEnsure{NetworkId: artifact.Networks[0].NetworkId},
+			)
 			if (name == "matching" || name == "compose-created") != (err == nil && response.GetOutcome() == agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED) {
 				t.Fatalf("response=%v error=%v", response, err)
 			}
@@ -171,8 +166,7 @@ func TestManagedNetworkEnsureExistingNetworkNeverMutated(t *testing.T) {
 func TestManagedNetworkEnsureValidatesRenderedAuthorityBeforeCommands(t *testing.T) {
 	for _, name := range []string{"external", "wrong-name", "invalid-subnet", "missing-owner", "multiple-subnets", "default-driver", "authored-label"} {
 		t.Run(name, func(t *testing.T) {
-			request, dockerName := networkEnsureRequest(t)
-			artifact := request.Plan.Artifacts[0]
+			artifact, dockerName := networkEnsureArtifact(t)
 			content := string(artifact.CanonicalYaml)
 			switch name {
 			case "external":
@@ -201,12 +195,7 @@ func TestManagedNetworkEnsureValidatesRenderedAuthorityBeforeCommands(t *testing
 			artifact.CanonicalYaml = []byte(content)
 			hash := sha256.Sum256(artifact.CanonicalYaml)
 			artifact.YamlSha256 = hash[:]
-			request.Plan.PlanHash = nil
 			var err error
-			request.Plan, err = executionplan.Seal(request.Plan)
-			if err != nil {
-				t.Fatal(err)
-			}
 			physical := networkInspection(t, dockerName, "10.60.0.0/24", true)
 			if name == "authored-label" {
 				var actual inspectedOwnedNetwork
@@ -222,7 +211,13 @@ func TestManagedNetworkEnsureValidatesRenderedAuthorityBeforeCommands(t *testing
 			fake := &managedNetworkRunner{
 				results: []runner.Result{{}, {Stdout: []byte(strings.Repeat("a", 64))}, {Stdout: physical}},
 			}
-			response, err := Execute(context.Background(), fake, request)
+			response, err := executeManagedNetworkEnsure(
+				t.Context(),
+				fake,
+				30,
+				artifact,
+				&agentpb.ManagedNetworkEnsure{NetworkId: artifact.Networks[0].NetworkId},
+			)
 			valid := name == "default-driver" || name == "authored-label"
 			if valid != (err == nil && response.GetOutcome() == agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED) ||
 				!valid && len(fake.commands) != 0 {
@@ -230,4 +225,24 @@ func TestManagedNetworkEnsureValidatesRenderedAuthorityBeforeCommands(t *testing
 			}
 		})
 	}
+}
+
+type managedNetworkRunner struct {
+	results  []runner.Result
+	commands [][]string
+}
+
+func (fake *managedNetworkRunner) Run(_ context.Context, input runner.RunCmdOpts) (runner.Result, error) {
+	fake.commands = append(fake.commands, append([]string(nil), input.Args...))
+	result := fake.results[0]
+	fake.results = fake.results[1:]
+	return result, nil
+}
+
+func (*managedNetworkRunner) Stream(
+	context.Context,
+	runner.RunCmdOpts,
+	func(bool, string),
+) (runner.Result, error) {
+	return runner.Result{}, nil
 }

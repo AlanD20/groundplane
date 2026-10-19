@@ -3,7 +3,6 @@ package composehelper
 import (
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -12,10 +11,10 @@ import (
 func TestManagedVolumeVerifyCannotCreateOrRepair(t *testing.T) {
 	for _, state := range []string{"owned", "absent", "foreign"} {
 		t.Run(state, func(t *testing.T) {
-			request := volumeEnsureRequest(t)
+			artifact := volumeEnsureArtifact(t)
 			fake := &volumePreparationRunner{}
 			if state != "absent" {
-				if _, err := Execute(t.Context(), fake, request); err != nil {
+				if _, err := prepareCapturedVolume(t.Context(), fake, artifact, artifact.Volumes[0].VolumeId, false); err != nil {
 					t.Fatal(err)
 				}
 				if state == "foreign" {
@@ -23,14 +22,7 @@ func TestManagedVolumeVerifyCannotCreateOrRepair(t *testing.T) {
 				}
 			}
 			before := fake.creates
-			request.Plan.Steps[0].GetManagedVolumeEnsure().RequireExisting = true
-			request.Plan.PlanHash = nil
-			var err error
-			request.Plan, err = executionplan.Seal(request.Plan)
-			if err != nil {
-				t.Fatal(err)
-			}
-			response, err := Execute(t.Context(), fake, request)
+			response, err := prepareCapturedVolume(t.Context(), fake, artifact, artifact.Volumes[0].VolumeId, true)
 			success := err == nil &&
 				response.GetOutcome() == agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED
 			if success != (state == "owned") || fake.creates != before {
