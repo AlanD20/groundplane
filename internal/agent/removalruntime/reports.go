@@ -9,7 +9,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (input Input) CheckpointRequest(progress removalexecution.Progress) (*agentpb.ServiceRemovalRecoveryCheckpointRequest, error) {
+func (input Input) CheckpointRequest(
+	progress removalexecution.Progress,
+) (*agentpb.ServiceRemovalRecoveryCheckpointRequest, error) {
 	raw, err := removalexecution.EncodeProgress(input.attempt, input.procedure, input.capture, progress)
 	if err != nil {
 		return nil, err
@@ -23,7 +25,10 @@ func (input Input) CheckpointRequest(progress removalexecution.Progress) (*agent
 
 // Acknowledged compares the complete grant, not only its sequence. A reply from
 // another executor generation or with different evidence cannot authorize work.
-func (input Input) Acknowledged(progress removalexecution.Progress, ack *agentpb.ServiceRemovalRecoveryCheckpointAck) (workexecution.Checkpoint, error) {
+func (input Input) Acknowledged(
+	progress removalexecution.Progress,
+	ack *agentpb.ServiceRemovalRecoveryCheckpointAck,
+) (workexecution.Checkpoint, error) {
 	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil ||
 		ack.RecordedAt == nil || ack.RecordedAt.CheckValid() != nil {
 		return workexecution.Checkpoint{}, invalidInput()
@@ -45,7 +50,10 @@ func (input Input) Acknowledged(progress removalexecution.Progress, ack *agentpb
 	return expected, nil
 }
 
-func (input Input) CompletionRequest(progress removalexecution.Progress, ack *agentpb.ServiceRemovalRecoveryCheckpointAck) (*agentpb.ServiceRemovalRecoveryCompletionRequest, error) {
+func (input Input) CompletionRequest(
+	progress removalexecution.Progress,
+	ack *agentpb.ServiceRemovalRecoveryCheckpointAck,
+) (*agentpb.ServiceRemovalRecoveryCompletionRequest, error) {
 	if progress.Phase != removalexecution.Complete || progress.InFlight {
 		return nil, invalidInput()
 	}

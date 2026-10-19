@@ -33,7 +33,13 @@ import (
 // boundary.
 type RemovalDatabaseResolver interface {
 	ResolveRemovalDatabase(context.Context, etcdstore.Versioned[attachrecord.Record], func(string) error) error
-	SealBackingHookInputsAtRevision(context.Context, string, string, backinghook.Configuration, int64) (*taskconfiguration.BackingHookEncryptedInputs, error)
+	SealBackingHookInputsAtRevision(
+		context.Context,
+		string,
+		string,
+		backinghook.Configuration,
+		int64,
+	) (*taskconfiguration.BackingHookEncryptedInputs, error)
 }
 
 // Repository owns all durable records used by the Network capability.

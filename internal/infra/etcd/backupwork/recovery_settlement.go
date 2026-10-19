@@ -87,8 +87,10 @@ func (repository *InputRepository) PrepareRecoverySettlement(ctx context.Context
 
 func (repository *InputRepository) LoadRecoveryReport(ctx context.Context, view workqueue.ResumeView) ([]byte, error) {
 	attempt := view.Attempt.Attempt
-	if (view.Work.Item.Item.Operation != workexecution.BackupPrune && view.Work.Item.Item.Operation != workexecution.Backup && view.Work.Item.Item.Operation != workexecution.Restore) || attempt.Direction != workexecution.Recovery ||
-		attempt.FinishedAt == nil || attempt.Result == nil ||
+	if (view.Work.Item.Item.Operation != workexecution.BackupPrune && view.Work.Item.Item.Operation != workexecution.Backup && view.Work.Item.Item.Operation != workexecution.Restore) ||
+		attempt.Direction != workexecution.Recovery ||
+		attempt.FinishedAt == nil ||
+		attempt.Result == nil ||
 		attempt.Outcome != workexecution.Succeeded {
 		return nil, conflict("Backup recovery has no settled report")
 	}

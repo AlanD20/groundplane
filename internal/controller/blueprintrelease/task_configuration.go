@@ -31,7 +31,10 @@ func (service *Service) prepareWorkConfiguration(ctx context.Context, input prep
 		capture.Destinations = append([]string(nil), capture.Destinations...)
 		if len(files) != 0 || capture.Matches(input.Work.Task.Task, input.Work.Item.Item) != nil ||
 			capture.Generation != uint64(input.Projection.RenderGeneration) {
-			return preparedWorkConfiguration{}, errs.New(errs.KindStateConflict, "Release configuration differs from its accepted capture")
+			return preparedWorkConfiguration{}, errs.New(
+				errs.KindStateConflict,
+				"Release configuration differs from its accepted capture",
+			)
 		}
 	} else {
 		capture, err = service.ledger.PrepareReleaseWorkConfiguration(ctx, input.Work,

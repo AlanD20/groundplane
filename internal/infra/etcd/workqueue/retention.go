@@ -41,6 +41,9 @@ func updateRetentionIndex(change *Change, before, after workexecution.Task) {
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: previous})
 	}
 	if next != "" {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: next, Value: []byte(after.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: next, Value: []byte(after.ID)},
+		)
 	}
 }

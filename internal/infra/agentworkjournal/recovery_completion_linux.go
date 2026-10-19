@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) RecoveryCompletion(ctx context.Context, input releaseexecution.RecoveryInput) (*releaseexecution.CompletionReceipt, error) {
+func (journal *Journal) RecoveryCompletion(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+) (*releaseexecution.CompletionReceipt, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -26,7 +29,11 @@ func (journal *Journal) RecoveryCompletion(ctx context.Context, input releaseexe
 	return state.Recovery.Completion, nil
 }
 
-func (journal *Journal) AcknowledgeRecoveryCompletion(ctx context.Context, input releaseexecution.RecoveryInput, ack *agentpb.ReleaseWorkCompletionAck) error {
+func (journal *Journal) AcknowledgeRecoveryCompletion(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	ack *agentpb.ReleaseWorkCompletionAck,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err

@@ -38,7 +38,11 @@ func ReadVolumeWorkRequest(ctx context.Context, input io.Reader) (*agentpb.Volum
 	return request, nil
 }
 
-func ReadVolumeWorkResponse(ctx context.Context, input io.Reader, captured executionplan.VolumeHelperInput) (*agentpb.VolumeWorkHelperResponse, error) {
+func ReadVolumeWorkResponse(
+	ctx context.Context,
+	input io.Reader,
+	captured executionplan.VolumeHelperInput,
+) (*agentpb.VolumeWorkHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
@@ -57,7 +61,12 @@ func ReadVolumeWorkResponse(ctx context.Context, input io.Reader, captured execu
 	return response, nil
 }
 
-func WriteVolumeWorkResponse(ctx context.Context, output io.Writer, captured executionplan.VolumeHelperInput, response *agentpb.VolumeWorkHelperResponse) error {
+func WriteVolumeWorkResponse(
+	ctx context.Context,
+	output io.Writer,
+	captured executionplan.VolumeHelperInput,
+	response *agentpb.VolumeWorkHelperResponse,
+) error {
 	if err := executionplan.ValidateVolumeHelperResponse(captured, response); err != nil {
 		return err
 	}

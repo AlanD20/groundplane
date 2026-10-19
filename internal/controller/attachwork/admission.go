@@ -11,7 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *Reports) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Reports) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	if request.Item.Item.Placement.Executor == workexecution.Controller {
 		return owner.admitController(ctx, request, at)
 	}
@@ -23,7 +27,10 @@ func (owner *Reports) Admit(ctx context.Context, request workqueue.Assignment, a
 		item.Placement.Executor != workexecution.Agent || item.Phase != workexecution.Ready || item.ActiveAttemptID != "" ||
 		at.IsZero() || at.Before(item.UpdatedAt) ||
 		request.Executor.Record.Identity.HostID != item.Placement.HostID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Attach provisioning cannot obtain this host assignment")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Attach provisioning cannot obtain this host assignment",
+		)
 	}
 	view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
 	if task.Stop != nil || item.ForwardRevoked || !at.Before(item.Deadline) || !at.Before(task.Deadline) {
@@ -54,7 +61,12 @@ func (owner *Reports) Admit(ctx context.Context, request workqueue.Assignment, a
 		Change: workqueue.Change{Conditions: append(guards, bindings...)}}, nil
 }
 
-func (owner *Reports) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *Reports) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil || item.Item.Operation != workexecution.Attach || item.Item.TaskID != task.Task.ID {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Attach provisioning has no matching stop request")
 	}
@@ -67,14 +79,25 @@ func (owner *Reports) Stop(ctx context.Context, task workqueue.TaskSnapshot, ite
 		return workqueue.Change{}, err
 	}
 	if view.Task.Revision != task.Revision || view.Item.Revision != item.Revision {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Attach ownership changed while stopping queued work")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Attach ownership changed while stopping queued work",
+		)
 	}
 	return owner.stopPrepared(ctx, view, at)
 }
 
-func (owner *Reports) revokeUnstarted(ctx context.Context, view workqueue.View, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func (owner *Reports) revokeUnstarted(
+	ctx context.Context,
+	view workqueue.View,
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	if view.Item.Item.ActiveAttemptID != "" || view.Item.Item.Cleanup != workexecution.CleanupNone {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Attach revocation cannot discard an assigned execution")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Attach revocation cannot discard an assigned execution",
+		)
 	}
 	binding, err := owner.inputs.repository.PrepareFailedBinding(ctx, view)
 	if err != nil {

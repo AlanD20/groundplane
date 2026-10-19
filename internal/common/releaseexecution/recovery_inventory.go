@@ -22,7 +22,9 @@ type RecoveryInventory struct {
 func (inventory RecoveryInventory) Validate(input RecoveryInput, report RecoveryReport) error {
 	if report.Validate(input) != nil || report.Ack == nil || !report.Progress.InFlight ||
 		report.Progress.Phase != InspectFailedRuntime || inventory.ObservedAt.IsZero() || inventory.ObservedAt.Location() != time.UTC ||
-		inventory.ObservedAt.Before(report.Progress.UpdatedAt) || !inventory.ObservedAt.Before(input.Input.Attempt.Deadline) {
+		inventory.ObservedAt.Before(
+			report.Progress.UpdatedAt,
+		) || !inventory.ObservedAt.Before(input.Input.Attempt.Deadline) {
 		return invalidProgress()
 	}
 	artifacts, err := executionplan.OpenReleaseWorkArtifacts(input.Input.Attempt, input.Input.Release)
@@ -38,7 +40,8 @@ func (inventory RecoveryInventory) Validate(input RecoveryInput, report Recovery
 			priorLimit += uint64(service.ExpectedReplicas)
 		}
 		for _, service := range artifacts.Prior.Retained.GetServices() {
-			if service != nil && service.ServiceId == input.Input.Release.ServiceId && service.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			if service != nil && service.ServiceId == input.Input.Release.ServiceId &&
+				service.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 				priorLimit += uint64(service.ExpectedReplicas)
 			}
 		}

@@ -13,7 +13,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (executor *Executor) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (executor *Executor) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
 	input, err := executor.inputs.Load(ctx, item.ID, 0)
 	if err != nil {
@@ -28,17 +32,27 @@ func (executor *Executor) Admit(ctx context.Context, request workqueue.Assignmen
 			if err != nil {
 				return workdispatch.Decision{}, err
 			}
-			change.Conditions = append(change.Conditions, keyvalue.Condition{Key: runnerwork.InputKey(item.ID), ModRevision: input.Revision})
+			change.Conditions = append(
+				change.Conditions,
+				keyvalue.Condition{Key: runnerwork.InputKey(item.ID), ModRevision: input.Revision},
+			)
 			return workdispatch.Decision{Disposition: workdispatch.Advance, Change: change}, nil
 		}
 		change, err := executor.settleUnstarted(ctx, request.Task, request.Item, workexecution.Failed, at)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
 	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: item.Deadline,
-		Change: workqueue.Change{Conditions: []keyvalue.Condition{{Key: runnerwork.InputKey(item.ID), ModRevision: input.Revision}}}}, nil
+		Change: workqueue.Change{
+			Conditions: []keyvalue.Condition{{Key: runnerwork.InputKey(item.ID), ModRevision: input.Revision}},
+		}}, nil
 }
 
-func (executor *Executor) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (executor *Executor) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Runner Task has no stop request")
 	}

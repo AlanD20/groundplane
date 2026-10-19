@@ -42,7 +42,10 @@ func (repository *InputRepository) PreparePruneRetention(ctx context.Context, vi
 		{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
 		{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision}}}
 	if final {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true},
+		)
 		change.Mutations = []keyvalue.Mutation{
 			{Type: keyvalue.MutationDelete, Key: InputKey(item.ID)},
 			{Type: keyvalue.MutationDelete, Key: ProgressKey(item.ID)},
@@ -57,8 +60,10 @@ func (repository *InputRepository) PreparePruneRetention(ctx context.Context, vi
 func PrepareAttemptRetirement(view workqueue.View, snapshot workqueue.AttemptSnapshot) (workqueue.Change, error) {
 	item, attempt := view.Item.Item, snapshot.Attempt
 	if (item.Operation != workexecution.BackupPrune && item.Operation != workexecution.Backup && item.Operation != workexecution.Restore) ||
-		item.Input == nil || attempt.Input != *item.Input ||
-		attempt.Executor.Executor != workexecution.Agent || attempt.Executor.HostID != item.Placement.HostID {
+		item.Input == nil ||
+		attempt.Input != *item.Input ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		attempt.Executor.HostID != item.Placement.HostID {
 		return workqueue.Change{}, conflict("Backup attempt history differs from its captured input or host")
 	}
 	prepared, err := workqueue.PrepareAttemptCollection(view.Task, view.Item, snapshot)

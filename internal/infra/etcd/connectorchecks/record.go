@@ -141,13 +141,21 @@ func configurationDigest(record Record) (string, error) {
 
 func (record Record) Validate() error {
 	owner, connector := record.Owner, record.Connector.Connector
-	if record.Schema != 1 || ids.Validate(ids.KindTask, owner.TaskID) != nil || ids.Validate(ids.KindWorkItem, owner.WorkItemID) != nil ||
-		ids.Validate(ids.KindPlan, owner.PlanID) != nil || ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
+	if record.Schema != 1 || ids.Validate(ids.KindTask, owner.TaskID) != nil ||
+		ids.Validate(ids.KindWorkItem, owner.WorkItemID) != nil ||
+		ids.Validate(ids.KindPlan, owner.PlanID) != nil ||
+		ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
 		ids.Validate(ids.KindEnvironment, owner.EnvironmentID) != nil ||
-		connectorrecord.ValidateRecord(record.Connector) != nil || connector.EnvironmentID != owner.EnvironmentID ||
-		record.ConnectorRevision < 0 || record.ConnectorRevision == 0 && !record.Draft || !recordcodec.ValidSHA256(record.CredentialDigest) ||
-		!validTime(record.CreatedAt) || record.Cleanup.Validate(connector.Prefix) != nil ||
-		record.Cleanup.OperationID != owner.OperationID || len(record.Stages) > 4 || len(record.SecretSources) > 2 {
+		connectorrecord.ValidateRecord(record.Connector) != nil ||
+		connector.EnvironmentID != owner.EnvironmentID ||
+		record.ConnectorRevision < 0 ||
+		record.ConnectorRevision == 0 && !record.Draft ||
+		!recordcodec.ValidSHA256(record.CredentialDigest) ||
+		!validTime(record.CreatedAt) ||
+		record.Cleanup.Validate(connector.Prefix) != nil ||
+		record.Cleanup.OperationID != owner.OperationID ||
+		len(record.Stages) > 4 ||
+		len(record.SecretSources) > 2 {
 		return invalidRecord()
 	}
 	digest, err := configurationDigest(record)

@@ -156,7 +156,10 @@ func (repository *InputRepository) observeRoute(ctx context.Context, view workqu
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])},
+	)
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: encoded})
 	return change, nil
 }

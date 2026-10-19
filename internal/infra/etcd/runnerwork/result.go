@@ -50,7 +50,12 @@ func (result Result) Validate(input Input) error {
 		}
 	case workexecution.Failed, workexecution.Cancelled, workexecution.Superseded:
 		switch result.Failure {
-		case "registration_token_required", "runtime_failed", "interrupted", "cancelled", "deadline", "ownership_changed":
+		case "registration_token_required",
+			"runtime_failed",
+			"interrupted",
+			"cancelled",
+			"deadline",
+			"ownership_changed":
 		default:
 			return invalidResult()
 		}
@@ -125,8 +130,10 @@ func (result Result) Completion(input Input) (workexecution.Completion, error) {
 	}
 	hash := sha256.Sum256(value)
 	return workexecution.Completion{Outcome: result.Outcome, EffectsSettled: result.Effects != EffectsUnknown,
-		Evidence: workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, input.CreatedAt, result.Attempt.ID, "runner-result"),
-			SHA256: hex.EncodeToString(hash[:])}}, nil
+		Evidence: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, input.CreatedAt, result.Attempt.ID, "runner-result"),
+			SHA256: hex.EncodeToString(hash[:]),
+		}}, nil
 }
 
 func invalidResult() error {

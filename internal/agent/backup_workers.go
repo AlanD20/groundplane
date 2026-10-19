@@ -11,7 +11,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (workers *executionWorkers) submitBackup(delivery *agentpb.BackupWorkAssignment, available int, staging *backupruntime.Staging) error {
+func (workers *executionWorkers) submitBackup(
+	delivery *agentpb.BackupWorkAssignment,
+	available int,
+	staging *backupruntime.Staging,
+) error {
 	if staging == nil {
 		return errs.New(errs.KindStateConflict, "Backup startup recovery has not completed")
 	}
@@ -50,7 +54,13 @@ func (workers *executionWorkers) submitBackup(delivery *agentpb.BackupWorkAssign
 		defer workers.wait.Done()
 		defer workers.exchange.ReleaseBackupVolumes(attempt.ID)
 		defer workers.exchange.ReleaseBackupConfigs(attempt.ID)
-		terminal, err := workers.backups.Run(workers.executionContext(attempt), owned, workers.identity, workers.exchange, staging)
+		terminal, err := workers.backups.Run(
+			workers.executionContext(attempt),
+			owned,
+			workers.identity,
+			workers.exchange,
+			staging,
+		)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: attempt, backup: &terminal, err: err}:
@@ -74,7 +84,11 @@ func (workers *executionWorkers) consumeBackup(output executionOutput) error {
 	return nil
 }
 
-func (workers *executionWorkers) submitBackupRecovery(delivery *agentpb.BackupRecoveryAssignment, available int, staging *backupruntime.Staging) error {
+func (workers *executionWorkers) submitBackupRecovery(
+	delivery *agentpb.BackupRecoveryAssignment,
+	available int,
+	staging *backupruntime.Staging,
+) error {
 	owned, attempt, _, err := executionplan.OpenBackupRecoveryAssignment(delivery, workers.identity)
 	if err != nil {
 		return err
@@ -105,7 +119,14 @@ func (workers *executionWorkers) submitBackupRecovery(delivery *agentpb.BackupRe
 	go func() {
 		defer workers.wait.Done()
 		defer workers.exchange.ReleaseBackupVolumes(attempt.ID)
-		terminal, err := workers.backups.RunRecovery(workers.executionContext(attempt), owned, workers.identity, workers.exchange, workers.ownership, staging)
+		terminal, err := workers.backups.RunRecovery(
+			workers.executionContext(attempt),
+			owned,
+			workers.identity,
+			workers.exchange,
+			workers.ownership,
+			staging,
+		)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: attempt, backup: &terminal, err: err}:

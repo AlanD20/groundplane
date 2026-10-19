@@ -14,10 +14,19 @@ import (
 )
 
 type Exchange interface {
-	RecoverLifecycle(context.Context, *agentpb.ServiceLifecycleRecoveryReportRequest) (*agentpb.ServiceLifecycleRecoveryReportAck, error)
+	RecoverLifecycle(
+		context.Context,
+		*agentpb.ServiceLifecycleRecoveryReportRequest,
+	) (*agentpb.ServiceLifecycleRecoveryReportAck, error)
 	StartAttempt(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
-	LifecycleCheckpoint(context.Context, *agentpb.ServiceLifecycleCheckpointRequest) (*agentpb.ServiceLifecycleCheckpointAck, error)
-	CompleteLifecycle(context.Context, *agentpb.ServiceLifecycleCompletionRequest) (*agentpb.ServiceLifecycleCompletionAck, error)
+	LifecycleCheckpoint(
+		context.Context,
+		*agentpb.ServiceLifecycleCheckpointRequest,
+	) (*agentpb.ServiceLifecycleCheckpointAck, error)
+	CompleteLifecycle(
+		context.Context,
+		*agentpb.ServiceLifecycleCompletionRequest,
+	) (*agentpb.ServiceLifecycleCompletionAck, error)
 	FailLifecycle(context.Context, *agentpb.ServiceLifecycleFailureRequest) (*agentpb.ServiceLifecycleFailureAck, error)
 	LifecycleHook(context.Context, *agentpb.ServiceLifecycleHookRequest) (*agentpb.ServiceLifecycleHookDelivery, error)
 }
@@ -39,7 +48,10 @@ type Executor struct {
 
 func NewExecutor(root string, journal *agentworkjournal.Journal, host Host) (*Executor, error) {
 	if environmentpath.ValidateRoot(root) != nil || journal == nil || host == nil {
-		return nil, errs.New(errs.KindInternal, "Service lifecycle execution requires its host root, durable journal and runtime")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Service lifecycle execution requires its host root, durable journal and runtime",
+		)
 	}
 	return &Executor{root: root, journal: journal, host: host}, nil
 }
@@ -176,14 +188,24 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 	return terminal, nil
 }
 
-func (executor *Executor) save(ctx context.Context, input Input, exchange Exchange, progress lifecycleexecution.Progress) error {
+func (executor *Executor) save(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress lifecycleexecution.Progress,
+) error {
 	if _, err := executor.journal.PrepareLifecycle(ctx, input.attempt, input.procedure, progress); err != nil {
 		return err
 	}
 	return executor.acknowledge(ctx, input, exchange, progress)
 }
 
-func (executor *Executor) acknowledge(ctx context.Context, input Input, exchange Exchange, progress lifecycleexecution.Progress) error {
+func (executor *Executor) acknowledge(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress lifecycleexecution.Progress,
+) error {
 	request, err := input.checkpointRequest(progress)
 	if err != nil {
 		return err

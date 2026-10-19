@@ -21,15 +21,22 @@ func (record attemptRecord) validateEnvironmentProvision() error {
 		record.NetworkRecovery != nil || record.Network != nil || record.VolumeRecovery != nil || record.Volume != nil ||
 		record.AttachRecovery != nil || record.AttachFailure != nil || record.AttachRemoval != nil ||
 		record.EnvironmentFailure != nil || record.EnvironmentRemoval != nil || record.ScriptFailure != nil || record.ScriptRecovery != nil ||
-		len(record.Script) != 0 || record.Release != nil || record.Effect != nil || record.Completion != nil || record.Failure != nil ||
+		len(
+			record.Script,
+		) != 0 || record.Release != nil || record.Effect != nil || record.Completion != nil || record.Failure != nil ||
 		record.Recovery != nil || record.ScriptCompletion != nil {
 		return invalid()
 	}
 	if receipt := provision.Receipt; receipt != nil {
 		expected, err := provision.Result.Reference(record.Attempt)
-		if err != nil || !provision.Submitted || receipt.Validate() != nil || !workexecution.SameAssignment(*receipt, record.Attempt) ||
-			receipt.FinishedAt == nil || receipt.Result == nil || *receipt.Result != expected || receipt.StartedAt == nil ||
-			!receipt.StartedAt.Equal(*record.Attempt.StartedAt) || receipt.FinishedAt.Before(record.UpdatedAt) {
+		if err != nil || !provision.Submitted || receipt.Validate() != nil ||
+			!workexecution.SameAssignment(*receipt, record.Attempt) ||
+			receipt.FinishedAt == nil ||
+			receipt.Result == nil ||
+			*receipt.Result != expected ||
+			receipt.StartedAt == nil ||
+			!receipt.StartedAt.Equal(*record.Attempt.StartedAt) ||
+			receipt.FinishedAt.Before(record.UpdatedAt) {
 			return invalid()
 		}
 	}

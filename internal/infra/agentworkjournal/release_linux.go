@@ -9,7 +9,11 @@ import (
 
 // PrepareRelease persists the report before transport. A replay retains its
 // sequence; a different report cannot overtake an unacknowledged Script hook.
-func (journal *Journal) PrepareRelease(ctx context.Context, input releaseexecution.Input, next releaseexecution.Progress) (*releaseexecution.CheckpointReport, error) {
+func (journal *Journal) PrepareRelease(
+	ctx context.Context,
+	input releaseexecution.Input,
+	next releaseexecution.Progress,
+) (*releaseexecution.CheckpointReport, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -29,7 +33,8 @@ func (journal *Journal) PrepareRelease(ctx context.Context, input releaseexecuti
 		}
 		state = &attemptRecord{Attempt: input.Attempt}
 	}
-	if !workexecution.SameAssignment(state.Attempt, input.Attempt) || input.Attempt.StartedAt == nil || state.Attempt.StartedAt == nil ||
+	if !workexecution.SameAssignment(state.Attempt, input.Attempt) || input.Attempt.StartedAt == nil ||
+		state.Attempt.StartedAt == nil ||
 		!state.Attempt.StartedAt.Equal(*input.Attempt.StartedAt) {
 		return nil, conflict()
 	}
@@ -50,7 +55,8 @@ func (journal *Journal) PrepareRelease(ctx context.Context, input releaseexecuti
 	if err != nil {
 		return nil, err
 	}
-	if pending || state.Sequence == ^uint64(0) || next.UpdatedAt.Before(state.UpdatedAt) || prior == nil && state.Sequence != 0 {
+	if pending || state.Sequence == ^uint64(0) || next.UpdatedAt.Before(state.UpdatedAt) ||
+		prior == nil && state.Sequence != 0 {
 		return nil, conflict()
 	}
 	if state.Effect != nil && state.Effect.Boundary.Sequence == state.Sequence && !next.InFlight &&
@@ -98,7 +104,10 @@ func (journal *Journal) AcknowledgeRelease(ctx context.Context, ack workexecutio
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) Release(ctx context.Context, input releaseexecution.Input) (*releaseexecution.CheckpointReport, error) {
+func (journal *Journal) Release(
+	ctx context.Context,
+	input releaseexecution.Input,
+) (*releaseexecution.CheckpointReport, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err

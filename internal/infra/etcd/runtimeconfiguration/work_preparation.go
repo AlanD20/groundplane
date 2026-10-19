@@ -26,13 +26,20 @@ func (repository *Repository) CaptureWork(ctx context.Context, task workexecutio
 		task.Scope.EnvironmentID == "" || task.FinishedAt != nil || task.Stop != nil ||
 		item.AttemptNumber != 0 || item.ForwardRevoked || item.Phase == workexecution.Settled ||
 		!slices.Contains(item.Claims, workexecution.Claim{ScopeID: task.Scope.EnvironmentID}) ||
-		!slices.Contains(item.Claims, workexecution.Claim{HostID: item.Placement.HostID, ScopeID: task.Scope.EnvironmentID}) ||
+		!slices.Contains(
+			item.Claims,
+			workexecution.Claim{HostID: item.Placement.HostID, ScopeID: task.Scope.EnvironmentID},
+		) ||
 		ids.Validate(ids.KindConfig, configurationID) != nil || generation == 0 {
 		return empty, errs.New(errs.KindValidationFailed, "Work configuration requires unstarted native work")
 	}
 	environmentID := task.Scope.EnvironmentID
 	headKey := HeadKey(environmentID)
-	read, err := repository.read(ctx, []string{headKey, environmentprojection.EnvironmentComposeProjectionStorageKey(environmentID)}, revision)
+	read, err := repository.read(
+		ctx,
+		[]string{headKey, environmentprojection.EnvironmentComposeProjectionStorageKey(environmentID)},
+		revision,
+	)
 	if err != nil {
 		return empty, err
 	}
@@ -58,7 +65,10 @@ func (repository *Repository) CaptureWork(ctx context.Context, task workexecutio
 			return empty, err
 		}
 		if prior.EnvironmentID != environmentID || prior.Generation > generation {
-			return empty, errs.New(errs.KindStateConflict, "Work configuration predecessor belongs to newer or different intent")
+			return empty, errs.New(
+				errs.KindStateConflict,
+				"Work configuration predecessor belongs to newer or different intent",
+			)
 		}
 		previous, err = repository.Load(ctx, prior, revision)
 		if err != nil {

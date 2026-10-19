@@ -28,9 +28,14 @@ type BlueprintReleaseCompletion struct {
 // remain the latest: an already-authorized effect must still be recorded after
 // supersession. Settlement decides the work outcome separately and must join
 // Proof.Conditions with the resource writes and queue completion transaction.
-func (ledger *ReleaseLedger) LoadBlueprintReleaseCompletion(ctx context.Context, view workqueue.ResumeView, input releaseexecution.Input) (BlueprintReleaseCompletion, error) {
+func (ledger *ReleaseLedger) LoadBlueprintReleaseCompletion(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input releaseexecution.Input,
+) (BlueprintReleaseCompletion, error) {
 	var empty BlueprintReleaseCompletion
-	if ledger == nil || ledger.store == nil || input.Release == nil || input.Attempt.Direction != workexecution.Forward ||
+	if ledger == nil || ledger.store == nil || input.Release == nil ||
+		input.Attempt.Direction != workexecution.Forward ||
 		!workexecution.SameAssignment(input.Attempt, view.Attempt.Attempt) {
 		return empty, errs.New(errs.KindStateConflict, "Release completion requires its captured forward attempt")
 	}
@@ -62,8 +67,17 @@ func (ledger *ReleaseLedger) LoadBlueprintReleaseCompletion(ctx context.Context,
 }
 
 // Runtime publication is private to the joined settlement transaction.
-func prepareBlueprintReleaseRuntime(input releaseexecution.Input, completion BlueprintReleaseCompletion, at time.Time) (workqueue.Change, error) {
-	runtime, err := serviceruntimerecord.AcknowledgeCompletedRelease(input, completion.Proof, completion.Configuration.Current, at)
+func prepareBlueprintReleaseRuntime(
+	input releaseexecution.Input,
+	completion BlueprintReleaseCompletion,
+	at time.Time,
+) (workqueue.Change, error) {
+	runtime, err := serviceruntimerecord.AcknowledgeCompletedRelease(
+		input,
+		completion.Proof,
+		completion.Configuration.Current,
+		at,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -72,7 +86,10 @@ func prepareBlueprintReleaseRuntime(input releaseexecution.Input, completion Blu
 		return workqueue.Change{}, err
 	}
 	key := serviceruntimerecord.Key(runtime.Runtime.ServiceID)
-	conditions := append(completion.Proof.Conditions, keyvalue.Condition{Key: key, ModRevision: completion.Predecessor.RuntimeRevision})
+	conditions := append(
+		completion.Proof.Conditions,
+		keyvalue.Condition{Key: key, ModRevision: completion.Predecessor.RuntimeRevision},
+	)
 	return workqueue.Change{Conditions: conditions, Mutations: []keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: key, Value: value},
 	}}, nil

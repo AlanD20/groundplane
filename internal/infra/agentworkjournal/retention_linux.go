@@ -159,13 +159,17 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 		}
 		if recovery := record.AttachProvisionRecovery; recovery != nil {
 			if recovery.Receipt == nil || recovery.Receipt.Outcome != terminal.Outcome ||
-				!recovery.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *recovery.Receipt.Result != *terminal.Result {
+				!recovery.Receipt.FinishedAt.Equal(
+					*terminal.FinishedAt,
+				) || *recovery.Receipt.Result != *terminal.Result {
 				return conflict()
 			}
 		}
 		if provision := record.EnvironmentProvision; provision != nil {
 			if provision.Receipt == nil || provision.Receipt.Outcome != terminal.Outcome ||
-				!provision.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *provision.Receipt.Result != *terminal.Result {
+				!provision.Receipt.FinishedAt.Equal(
+					*terminal.FinishedAt,
+				) || *provision.Receipt.Result != *terminal.Result {
 				return conflict()
 			}
 		}
@@ -195,12 +199,16 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 		}
 		if recovery := record.AttachRecovery; recovery != nil {
 			if recovery.Receipt == nil || recovery.Receipt.Outcome != terminal.Outcome ||
-				!recovery.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *recovery.Receipt.Result != *terminal.Result {
+				!recovery.Receipt.FinishedAt.Equal(
+					*terminal.FinishedAt,
+				) || *recovery.Receipt.Result != *terminal.Result {
 				return conflict()
 			}
 		}
 		if failure := record.AttachFailure; failure != nil {
-			if failure.Receipt == nil || failure.Receipt.Outcome != terminal.Outcome || !failure.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *failure.Receipt.Result != *terminal.Result {
+			if failure.Receipt == nil || failure.Receipt.Outcome != terminal.Outcome ||
+				!failure.Receipt.FinishedAt.Equal(*terminal.FinishedAt) ||
+				*failure.Receipt.Result != *terminal.Result {
 				return conflict()
 			}
 			if record.AttachRemoval != nil && record.AttachRemoval.Report.Progress.InFlight {
@@ -260,9 +268,13 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 		}
 		if recovery := record.EntryRecovery; recovery != nil {
 			receipt := recovery.Receipt
-			if receipt == nil || receipt.Outcome != terminal.Outcome || receipt.FinishedAt == nil || receipt.Result == nil ||
-				!receipt.FinishedAt.Equal(*terminal.FinishedAt) || *receipt.Result != *terminal.Result ||
-				!workexecution.SameAssignment(*receipt, terminal) || terminal.StartedAt == nil || !receipt.StartedAt.Equal(*terminal.StartedAt) {
+			if receipt == nil || receipt.Outcome != terminal.Outcome || receipt.FinishedAt == nil ||
+				receipt.Result == nil ||
+				!receipt.FinishedAt.Equal(*terminal.FinishedAt) ||
+				*receipt.Result != *terminal.Result ||
+				!workexecution.SameAssignment(*receipt, terminal) ||
+				terminal.StartedAt == nil ||
+				!receipt.StartedAt.Equal(*terminal.StartedAt) {
 				return conflict()
 			}
 			if receipt.Outcome != workexecution.Succeeded {
@@ -338,16 +350,24 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 			if lifecycle.Failure != nil {
 				receipt = lifecycle.Failure.Receipt
 			}
-			if receipt == nil || receipt.Outcome != terminal.Outcome || !receipt.FinishedAt.Equal(*terminal.FinishedAt) || *receipt.Result != *terminal.Result {
+			if receipt == nil || receipt.Outcome != terminal.Outcome ||
+				!receipt.FinishedAt.Equal(*terminal.FinishedAt) ||
+				*receipt.Result != *terminal.Result {
 				return conflict()
 			}
 			if lifecycle.Failure != nil {
-				failure, err := lifecycleexecution.DecodeFailureStages(terminal, lifecycle.Stages, lifecycle.Failure.Evidence, *terminal.Result)
+				failure, err := lifecycleexecution.DecodeFailureStages(
+					terminal,
+					lifecycle.Stages,
+					lifecycle.Failure.Evidence,
+					*terminal.Result,
+				)
 				if err != nil {
 					return err
 				}
 				// Interrupted effects remain available to recovery inspection.
-				if lifecycle.Progress.BeganAt != nil || failure.Checkpoint != nil && failure.Checkpoint.Sequence%2 == 1 {
+				if lifecycle.Progress.BeganAt != nil ||
+					failure.Checkpoint != nil && failure.Checkpoint.Sequence%2 == 1 {
 					return nil
 				}
 			}
@@ -388,7 +408,9 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 		}
 		if recovery := record.ScriptRecovery; recovery != nil && record.ScriptFailure == nil {
 			if recovery.Receipt == nil || recovery.Receipt.Outcome != terminal.Outcome ||
-				!recovery.Receipt.FinishedAt.Equal(*terminal.FinishedAt) || *recovery.Receipt.Result != *terminal.Result {
+				!recovery.Receipt.FinishedAt.Equal(
+					*terminal.FinishedAt,
+				) || *recovery.Receipt.Result != *terminal.Result {
 				return conflict()
 			}
 		}

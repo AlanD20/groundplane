@@ -40,7 +40,12 @@ func ResultKey(attemptID string) string { return "/v1/execution/agent-management
 // A singleton claim serializes enrollment, replacement and removal, including
 // enrollment attempts with different newly allocated Agent IDs.
 func ClaimID() string {
-	return ids.DeriveAt(ids.KindComponent, time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), "groundplane-platform", "agent-lifecycle")
+	return ids.DeriveAt(
+		ids.KindComponent,
+		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		"groundplane-platform",
+		"agent-lifecycle",
+	)
 }
 
 func EncodeCapture(capture Capture) ([]byte, error) {
@@ -117,8 +122,21 @@ func (capture Capture) Work() (workexecution.Task, workexecution.Item, error) {
 	task := workexecution.Task{ID: capture.TaskID, Actor: workexecution.OperatorActor, Action: capture.Action,
 		TargetID: capture.AgentID, TargetName: "Agent", Intent: reference, ExpectedItems: 1, CreatedAt: capture.CreatedAt,
 		UpdatedAt: capture.CreatedAt, Deadline: capture.CreatedAt.Add(timeout)}
-	item := workexecution.Item{ID: capture.WorkItemID, TaskID: task.ID, Operation: capture.Operation(), TargetID: capture.AgentID,
-		Placement: workexecution.Placement{Executor: workexecution.Controller}, Claims: []workexecution.Claim{{ScopeID: ClaimID()}},
-		Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
+	item := workexecution.Item{
+		ID:        capture.WorkItemID,
+		TaskID:    task.ID,
+		Operation: capture.Operation(),
+		TargetID:  capture.AgentID,
+		Placement: workexecution.Placement{
+			Executor: workexecution.Controller,
+		},
+		Claims:    []workexecution.Claim{{ScopeID: ClaimID()}},
+		Input:     &reference,
+		Phase:     workexecution.Ready,
+		Cleanup:   workexecution.CleanupNone,
+		CreatedAt: task.CreatedAt,
+		UpdatedAt: task.CreatedAt,
+		Deadline:  task.Deadline,
+	}
 	return task, item, workexecution.ValidateGraph(task, []workexecution.Item{item})
 }

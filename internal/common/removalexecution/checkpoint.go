@@ -45,7 +45,11 @@ func (progress Progress) StageID(attempt workexecution.Attempt) (string, error) 
 	return ids.DeriveAt(ids.KindStep, at, attempt.Input.ID, "service-removal/recovery/"+string(phase)), nil
 }
 
-func (progress Progress) Checkpoint(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture) (workexecution.Checkpoint, error) {
+func (progress Progress) Checkpoint(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+) (workexecution.Checkpoint, error) {
 	if progress.Validate(attempt, input, capture) != nil {
 		return workexecution.Checkpoint{}, invalid()
 	}
@@ -54,8 +58,13 @@ func (progress Progress) Checkpoint(attempt workexecution.Attempt, input *agentp
 
 // CheckpointEnvelope binds the metadata-only Agent journal to its captured
 // forward result. It does not authorize execution without the full assignment.
-func (progress Progress) CheckpointEnvelope(attempt workexecution.Attempt, forwardID string, failure workexecution.Input) (workexecution.Checkpoint, error) {
-	if progress.ValidateEnvelope(attempt) != nil || ids.Validate(ids.KindAttempt, forwardID) != nil || failure.Validate() != nil {
+func (progress Progress) CheckpointEnvelope(
+	attempt workexecution.Attempt,
+	forwardID string,
+	failure workexecution.Input,
+) (workexecution.Checkpoint, error) {
+	if progress.ValidateEnvelope(attempt) != nil || ids.Validate(ids.KindAttempt, forwardID) != nil ||
+		failure.Validate() != nil {
 		return workexecution.Checkpoint{}, invalid()
 	}
 	stage, err := progress.StageID(attempt)
@@ -82,7 +91,12 @@ func (progress Progress) CheckpointEnvelope(attempt workexecution.Attempt, forwa
 		RecordedAt: progress.UpdatedAt, Evidence: workexecution.Input{ID: attempt.Input.ID, SHA256: hex.EncodeToString(digest[:])}}, nil
 }
 
-func EncodeProgress(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture, progress Progress) ([]byte, error) {
+func EncodeProgress(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+	progress Progress,
+) ([]byte, error) {
 	if _, err := progress.Checkpoint(attempt, input, capture); err != nil {
 		return nil, err
 	}
@@ -93,7 +107,12 @@ func EncodeProgress(attempt workexecution.Attempt, input *agentpb.ServiceLifecyc
 	return jcs.Canonicalize(raw)
 }
 
-func DecodeProgress(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture, raw []byte) (Progress, error) {
+func DecodeProgress(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+	raw []byte,
+) (Progress, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return Progress{}, invalid()
 	}

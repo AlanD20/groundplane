@@ -22,7 +22,10 @@ func MarshalRemovalRecoveryRequest(request *agentpb.ServiceRemovalRecoveryHelper
 	return frame(raw)
 }
 
-func ReadRemovalRecoveryRequest(ctx context.Context, input io.Reader) (*agentpb.ServiceRemovalRecoveryHelperRequest, error) {
+func ReadRemovalRecoveryRequest(
+	ctx context.Context,
+	input io.Reader,
+) (*agentpb.ServiceRemovalRecoveryHelperRequest, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
@@ -38,7 +41,11 @@ func ReadRemovalRecoveryRequest(ctx context.Context, input io.Reader) (*agentpb.
 	return request, nil
 }
 
-func ReadRemovalRecoveryResponse(ctx context.Context, input io.Reader, captured executionplan.RemovalRecoveryHelperInput) (*agentpb.ServiceRemovalRecoveryHelperResponse, error) {
+func ReadRemovalRecoveryResponse(
+	ctx context.Context,
+	input io.Reader,
+	captured executionplan.RemovalRecoveryHelperInput,
+) (*agentpb.ServiceRemovalRecoveryHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
@@ -57,7 +64,12 @@ func ReadRemovalRecoveryResponse(ctx context.Context, input io.Reader, captured 
 	return response, nil
 }
 
-func WriteRemovalRecoveryResponse(ctx context.Context, output io.Writer, captured executionplan.RemovalRecoveryHelperInput, response *agentpb.ServiceRemovalRecoveryHelperResponse) error {
+func WriteRemovalRecoveryResponse(
+	ctx context.Context,
+	output io.Writer,
+	captured executionplan.RemovalRecoveryHelperInput,
+	response *agentpb.ServiceRemovalRecoveryHelperResponse,
+) error {
 	if _, err := executionplan.ReadRemovalRecoveryHelperReceipt(captured, response); err != nil {
 		return err
 	}

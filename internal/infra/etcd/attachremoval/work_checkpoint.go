@@ -34,8 +34,10 @@ func PrepareRemovalCheckpoint(ctx context.Context, reader Reader, view workqueue
 	input attachexecution.RemovalInput, report attachexecution.RemovalReport,
 ) (workqueue.Change, error) {
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
-	if !workexecution.SameAssignment(input.Attempt, attempt) || attempt.StartedAt == nil || input.Attempt.StartedAt == nil ||
-		!input.Attempt.StartedAt.Equal(*attempt.StartedAt) || !removalOperation(item.Operation) ||
+	if !workexecution.SameAssignment(input.Attempt, attempt) || attempt.StartedAt == nil ||
+		input.Attempt.StartedAt == nil ||
+		!input.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
+		!removalOperation(item.Operation) ||
 		view.Work.ReadRevision <= 0 {
 		return workqueue.Change{}, checkpointConflict("Attach removal report has no matching started execution")
 	}
@@ -86,13 +88,18 @@ func PrepareRemovalCheckpoint(ctx context.Context, reader Reader, view workqueue
 		}
 		return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: existing.ModRevision},
 			{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision}},
-			Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)}}}, nil
+			Mutations: []keyvalue.Mutation{
+				{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)},
+			}}, nil
 	}
 	if !view.ActiveAttempt || task.FinishedAt != nil || task.CollectionStartedAt != nil {
 		return workqueue.Change{}, checkpointConflict("Attach removal no longer accepts new reports")
 	}
-	if report.Progress.InFlight && (!view.CurrentExecutor || item.ForwardRevoked || task.Stop != nil || !time.Now().UTC().Before(attempt.Deadline)) {
-		return workqueue.Change{}, checkpointConflict("Attach removal cannot begin a command after stop, replacement or deadline")
+	if report.Progress.InFlight &&
+		(!view.CurrentExecutor || item.ForwardRevoked || task.Stop != nil || !time.Now().UTC().Before(attempt.Deadline)) {
+		return workqueue.Change{}, checkpointConflict(
+			"Attach removal cannot begin a command after stop, replacement or deadline",
+		)
 	}
 	if err := attachexecution.ValidateRemovalTransition(input, previous, report.Progress); err != nil {
 		return workqueue.Change{}, err
@@ -104,9 +111,15 @@ func PrepareRemovalCheckpoint(ctx context.Context, reader Reader, view workqueue
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key},
 		keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: view.Work.Task.Revision})
 	if report.Progress.InFlight {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision},
+		)
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)},
+	)
 	return change, nil
 }
 

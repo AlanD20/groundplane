@@ -165,7 +165,9 @@ func (coordinator *Coordinator) execute(
 			}
 		}
 		coordinator.mu.Lock()
-		operation.failure = taskprogress.CaptureControllerFailure(errs.New(errs.KindRequestFailed, "Controller activation was interrupted before cutover"))
+		operation.failure = taskprogress.CaptureControllerFailure(
+			errs.New(errs.KindRequestFailed, "Controller activation was interrupted before cutover"),
+		)
 		coordinator.mu.Unlock()
 		return coordinator.settle(operation, workexecution.Failed), nil
 	}

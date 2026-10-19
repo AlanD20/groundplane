@@ -313,7 +313,8 @@ func (service *FactService) openCapturedBackingHookInputs(ctx context.Context, o
 			return errs.New(errs.KindInternal, "Backing hook Task input plaintext is corrupt")
 		}
 		defer bundle.clear()
-		if bundle.Version != 1 || bundle.OperationID != operationID || !slices.Equal(bundle.SecretSources, expected.SecretSources) {
+		if bundle.Version != 1 || bundle.OperationID != operationID ||
+			!slices.Equal(bundle.SecretSources, expected.SecretSources) {
 			return errs.New(errs.KindInternal, "Backing hook Task input plaintext does not match its authority")
 		}
 		previous := ""

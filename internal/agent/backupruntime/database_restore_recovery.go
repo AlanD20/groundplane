@@ -30,7 +30,8 @@ func (executor *Executor) continueDatabaseRestore(ctx context.Context, assignmen
 	}
 	step := assignment.Input.Steps[0]
 	progress := cursor.GetRestore().GetDatabaseProgress()
-	if progress == nil || (!progress.ConsumersOnly && progress.PostgresVerified == nil && progress.MysqlVerified == nil) {
+	if progress == nil ||
+		(!progress.ConsumersOnly && progress.PostgresVerified == nil && progress.MysqlVerified == nil) {
 		switch {
 		case progress != nil && cursor.GetRestore().ApplyStart == nil && cursor.GetRestore().MysqlApplyStart == nil:
 			err = publisher.DatabaseConsumerRecovery(ctx, step.GetRestore().PointId)
@@ -39,7 +40,10 @@ func (executor *Executor) continueDatabaseRestore(ctx context.Context, assignmen
 		case step.GetRestore().GetMysql() != nil && cursor.GetRestore().MysqlApplyStart != nil:
 			err = proveMySQLRecovery(ctx, assignment, cursor.GetRestore(), publisher)
 		default:
-			return nil, errs.New(errs.KindStateConflict, "Database Restore recovery requires the original apply receipt before verifying its effects")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Database Restore recovery requires the original apply receipt before verifying its effects",
+			)
 		}
 		if err != nil {
 			return nil, err
@@ -60,13 +64,35 @@ func (executor *Executor) continueDatabaseRestore(ctx context.Context, assignmen
 				return invalidDatabaseStaging()
 			}
 			copy(digest[:], value.ObservationSha256)
-			return publishDatabaseService(ctx, step, publisher, value.ServiceCursor, value.ServiceId, value.Phase, digest)
+			return publishDatabaseService(
+				ctx,
+				step,
+				publisher,
+				value.ServiceCursor,
+				value.ServiceId,
+				value.Phase,
+				digest,
+			)
 		},
 		observe: func(ctx context.Context, serviceID string) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
-			return host.RunRecovery(ctx, assignment, 0, serviceID, agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_UNSPECIFIED, true)
+			return host.RunRecovery(
+				ctx,
+				assignment,
+				0,
+				serviceID,
+				agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_UNSPECIFIED,
+				true,
+			)
 		},
 		recover: func(ctx context.Context, serviceID string) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
-			return host.RunRecovery(ctx, assignment, 0, serviceID, agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_RECOVER, false)
+			return host.RunRecovery(
+				ctx,
+				assignment,
+				0,
+				serviceID,
+				agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_RECOVER,
+				false,
+			)
 		},
 	}
 	if err := recoverDatabaseConsumerSet(ctx, assignment.Input, 0, cursor.GetRestore(), publisher, commands); err != nil {

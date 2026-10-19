@@ -21,7 +21,10 @@ func (publication *PreparedDatabaseRestorePublication) PublishWork(ctx context.C
 	state.mu.Lock()
 	if state.repository == nil {
 		state.mu.Unlock()
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Restore publication is consumed or is not a new action")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Restore publication is consumed or is not a new action",
+		)
 	}
 	repository := state.repository
 	captured := restoreWorkPublication{hostID: state.hostID, owner: state.owner, restore: state.restore,

@@ -12,7 +12,11 @@ import (
 
 // Reuse only published descriptors of the source owned by the excluded forward
 // executor. An incomplete source is not permission to overwrite its files.
-func (state *Staging) activeRestoreSource(ctx context.Context, taskID string, step *agentpb.BackupStepAuthority) (CaptureStage, bool, error) {
+func (state *Staging) activeRestoreSource(
+	ctx context.Context,
+	taskID string,
+	step *agentpb.BackupStepAuthority,
+) (CaptureStage, bool, error) {
 	ids := backupstage.IDs{Task: taskID, Step: step.ExecutionId, Point: step.GetRestore().PointId}
 	state.mu.Lock()
 	defer state.mu.Unlock()
@@ -25,14 +29,18 @@ func (state *Staging) activeRestoreSource(ctx context.Context, taskID string, st
 	}
 	key, err := executionplan.BackupSourceStagingKey(ids.Task, ids.Step, ids.Point)
 	if err != nil || state.sourceRecovery[string(key)].GetRecoveryRequired() != nil {
-		return CaptureStage{}, true, errs.New(errs.KindStateConflict, "Restore staging requires its startup disposition")
+		return CaptureStage{}, true, errs.New(
+			errs.KindStateConflict,
+			"Restore staging requires its startup disposition",
+		)
 	}
 	source, sourceEvidence, err := stage.PublishedArtifact(ctx, executionplan.BackupSourceStagingFinal)
 	if err != nil {
 		return CaptureStage{}, true, err
 	}
 	expected := step.GetRestore().ExpectedEvidence
-	if sourceEvidence.Size != expected.SourceSizeBytes || !bytes.Equal(sourceEvidence.SHA256[:], expected.SourceSha256) {
+	if sourceEvidence.Size != expected.SourceSizeBytes ||
+		!bytes.Equal(sourceEvidence.SHA256[:], expected.SourceSha256) {
 		return CaptureStage{}, true, errs.New(errs.KindStateConflict, "Restore source differs from captured evidence")
 	}
 	stored, storedEvidence := source, sourceEvidence
@@ -42,8 +50,18 @@ func (state *Staging) activeRestoreSource(ctx context.Context, taskID string, st
 			return CaptureStage{}, true, err
 		}
 	}
-	if storedEvidence.Size != expected.StoredSizeBytes || !bytes.Equal(storedEvidence.SHA256[:], expected.StoredSha256) {
-		return CaptureStage{}, true, errs.New(errs.KindStateConflict, "Restore stored object differs from captured evidence")
+	if storedEvidence.Size != expected.StoredSizeBytes ||
+		!bytes.Equal(storedEvidence.SHA256[:], expected.StoredSha256) {
+		return CaptureStage{}, true, errs.New(
+			errs.KindStateConflict,
+			"Restore stored object differs from captured evidence",
+		)
 	}
-	return CaptureStage{IDs: ids, Stage: stage, Source: source, SourceEvidence: sourceEvidence, Stored: stored}, true, nil
+	return CaptureStage{
+		IDs:            ids,
+		Stage:          stage,
+		Source:         source,
+		SourceEvidence: sourceEvidence,
+		Stored:         stored,
+	}, true, nil
 }

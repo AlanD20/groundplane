@@ -251,7 +251,11 @@ func (service *serviceLifecycleService) runOnce(
 	capture := servicelifecyclework.Input{
 		TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
 		Action: taskType, ServiceID: serviceID, ServiceRevision: current.Revision,
-		Scope:     workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID},
+		Scope: workexecution.Scope{
+			TenantID:      project.Record.TenantID,
+			ProjectID:     project.Record.ID,
+			EnvironmentID: environment.Record.ID,
+		},
 		CreatedAt: now,
 	}
 	timeout := serviceLifecycleControlTimeoutSeconds
@@ -263,7 +267,16 @@ func (service *serviceLifecycleService) runOnce(
 	}()
 	if applied {
 		input, sealed, captureErr := service.prepareAppliedServiceLifecycle(
-			ctx, capture.Action, current, tenant, project, environment, projection, nativeBacking, capture.PlanID, ids.New(ids.KindOperation),
+			ctx,
+			capture.Action,
+			current,
+			tenant,
+			project,
+			environment,
+			projection,
+			nativeBacking,
+			capture.PlanID,
+			ids.New(ids.KindOperation),
 		)
 		if captureErr != nil {
 			return idempotencyrecord.IdempotencyResponse{}, captureErr

@@ -44,8 +44,12 @@ func (planner *PlatformRenderPlanner) PrepareHostWork(ctx context.Context, tasks
 	return prepared, prepared.Capture.Validate(prepared.Input)
 }
 
-func (repository *PlatformMutationService) prepareMutation(ctx context.Context, current keyvalue.Versioned[componentrecord.Record],
-	desired core.Component, action workexecution.Action, ensure bool,
+func (repository *PlatformMutationService) prepareMutation(
+	ctx context.Context,
+	current keyvalue.Versioned[componentrecord.Record],
+	desired core.Component,
+	action workexecution.Action,
+	ensure bool,
 ) (PreparedWork, error) {
 	return repository.planner.PrepareHostWork(ctx, repository.tasks, current, desired, workexecution.OperatorActor,
 		action, ensure, repository.now().UTC(), time.Duration(platformComponentTaskTimeoutSeconds)*time.Second)

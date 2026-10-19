@@ -15,7 +15,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (ledger *ReleaseLedger) ReadDirectReleasePreparation(ctx context.Context, work workqueue.View) (DirectReleasePreparation, keyvalue.Condition, error) {
+func (ledger *ReleaseLedger) ReadDirectReleasePreparation(
+	ctx context.Context,
+	work workqueue.View,
+) (DirectReleasePreparation, keyvalue.Condition, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return DirectReleasePreparation{}, keyvalue.Condition{}, err
 	}
@@ -24,7 +27,10 @@ func (ledger *ReleaseLedger) ReadDirectReleasePreparation(ctx context.Context, w
 		work.ReadRevision < work.Task.Revision || work.ReadRevision < work.Item.Revision ||
 		task.Validate() != nil || item.Validate() != nil || item.TaskID != task.ID || item.Operation != workexecution.Release ||
 		task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback {
-		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindValidationFailed, "Direct Release preparation requires its native work snapshot")
+		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(
+			errs.KindValidationFailed,
+			"Direct Release preparation requires its native work snapshot",
+		)
 	}
 	if ids.Validate(ids.KindReleaseGroup, task.TargetID) == nil {
 		return ledger.readGroupReleasePreparation(ctx, work)
@@ -34,7 +40,10 @@ func (ledger *ReleaseLedger) ReadDirectReleasePreparation(ctx context.Context, w
 		return DirectReleasePreparation{}, keyvalue.Condition{}, err
 	}
 	if request.Configuration.WorkItemID != item.ID {
-		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Direct Release preparation belongs to another work item")
+		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Direct Release preparation belongs to another work item",
+		)
 	}
 	return request, guard, nil
 }
@@ -45,7 +54,10 @@ func (ledger *ReleaseLedger) ReadDirectReleaseTaskPreparation(ctx context.Contex
 	task := snapshot.Task
 	if ledger == nil || ledger.store == nil || ctx == nil || snapshot.Revision <= 0 || revision < snapshot.Revision ||
 		task.Validate() != nil || task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback {
-		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindValidationFailed, "Direct Release preparation requires its accepted Task")
+		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(
+			errs.KindValidationFailed,
+			"Direct Release preparation requires its accepted Task",
+		)
 	}
 	key := DirectReleasePreparationKey(task.ID)
 	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: revision})
@@ -53,12 +65,18 @@ func (ledger *ReleaseLedger) ReadDirectReleaseTaskPreparation(ctx context.Contex
 		return DirectReleasePreparation{}, keyvalue.Condition{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 {
-		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Direct Release preparation snapshot is incomplete")
+		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Direct Release preparation snapshot is incomplete",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	value := read.Values[0]
 	if value == nil || value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision {
-		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Direct Release has no accepted preparation")
+		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Direct Release has no accepted preparation",
+		)
 	}
 	request, err := DecodeDirectReleasePreparation(value.Value, task.Intent)
 	if err != nil {
@@ -66,7 +84,10 @@ func (ledger *ReleaseLedger) ReadDirectReleaseTaskPreparation(ctx context.Contex
 	}
 	if request.Configuration.TaskID != task.ID || request.Intent.ServiceID != task.TargetID ||
 		request.Source.ReadRevision > value.ModRevision {
-		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Direct Release preparation belongs to another work item")
+		return DirectReleasePreparation{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Direct Release preparation belongs to another work item",
+		)
 	}
 	return request, keyvalue.Condition{Key: key, ModRevision: value.ModRevision}, nil
 }
@@ -99,12 +120,22 @@ func (ledger *ReleaseLedger) DirectReleasePreparationConditions(ctx context.Cont
 	if !bytes.Equal(expectedBytes, storedBytes) || rollout.Revision <= 0 || rollout.Revision > work.ReadRevision {
 		return nil, errs.New(errs.KindStateConflict, "Direct Release preparation changed before publication")
 	}
-	guards, err := ledger.directReleaseSourceConditions(ctx, work.Task.Task.Scope, request.Source, request.Intent.ServiceID, work.ReadRevision)
+	guards, err := ledger.directReleaseSourceConditions(
+		ctx,
+		work.Task.Task.Scope,
+		request.Source,
+		request.Intent.ServiceID,
+		work.ReadRevision,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return append(guards, condition, keyvalue.Condition{
-		Key:         releaserender.ServiceRolloutKey(work.Task.Task.Scope.EnvironmentID, work.Task.Task.ID, work.Item.Item.ID),
+		Key: releaserender.ServiceRolloutKey(
+			work.Task.Task.Scope.EnvironmentID,
+			work.Task.Task.ID,
+			work.Item.Item.ID,
+		),
 		ModRevision: rollout.Revision,
 	}), nil
 }
@@ -117,7 +148,10 @@ func (ledger *ReleaseLedger) directReleaseSourceConditions(ctx context.Context, 
 		return nil, err
 	}
 	if !current {
-		return nil, errs.New(errs.KindStateConflict, "Service or Environment configuration changed after this Release was accepted; submit a new Deploy or Rollback")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Service or Environment configuration changed after this Release was accepted; submit a new Deploy or Rollback",
+		)
 	}
 	return conditions, nil
 }
@@ -125,15 +159,22 @@ func (ledger *ReleaseLedger) directReleaseSourceConditions(ctx context.Context, 
 // MatchDirectReleaseSource returns current comparisons even after supersession,
 // allowing the owner to settle unstarted work atomically instead of repeatedly
 // trying to prepare an input whose accepted source is no longer current.
-func (ledger *ReleaseLedger) MatchDirectReleaseSource(ctx context.Context, work workqueue.View, request DirectReleasePreparation) (bool, []keyvalue.Condition, error) {
+func (ledger *ReleaseLedger) MatchDirectReleaseSource(
+	ctx context.Context,
+	work workqueue.View,
+	request DirectReleasePreparation,
+) (bool, []keyvalue.Condition, error) {
 	value, expected, err := EncodeDirectReleasePreparation(request)
 	if err != nil {
 		return false, nil, err
 	}
 	defer clear(value)
-	if work.Task.Task.Validate() != nil || work.Item.Item.Validate() != nil || request.GroupID == "" && work.Task.Task.Intent != expected ||
-		work.Task.Task.ID != request.Configuration.TaskID || work.Item.Item.ID != request.Configuration.WorkItemID ||
-		work.Item.Item.TaskID != work.Task.Task.ID || work.Item.Item.TargetID != request.Intent.ServiceID ||
+	if work.Task.Task.Validate() != nil || work.Item.Item.Validate() != nil ||
+		request.GroupID == "" && work.Task.Task.Intent != expected ||
+		work.Task.Task.ID != request.Configuration.TaskID ||
+		work.Item.Item.ID != request.Configuration.WorkItemID ||
+		work.Item.Item.TaskID != work.Task.Task.ID ||
+		work.Item.Item.TargetID != request.Intent.ServiceID ||
 		work.Task.Task.Scope.EnvironmentID != request.Intent.EnvironmentID {
 		return false, nil, errs.New(errs.KindStateConflict, "Direct Release source does not own this native work")
 	}
@@ -148,7 +189,13 @@ func (ledger *ReleaseLedger) MatchDirectReleaseSource(ctx context.Context, work 
 			return false, nil, errs.New(errs.KindStateConflict, "Group Release source differs from its captured member")
 		}
 	}
-	return ledger.readDirectReleaseSourceMatch(ctx, work.Task.Task.Scope, request.Source, work.Item.Item.TargetID, work.ReadRevision)
+	return ledger.readDirectReleaseSourceMatch(
+		ctx,
+		work.Task.Task.Scope,
+		request.Source,
+		work.Item.Item.TargetID,
+		work.ReadRevision,
+	)
 }
 
 func (ledger *ReleaseLedger) readDirectReleaseSourceMatch(ctx context.Context, scope workexecution.Scope,
@@ -156,7 +203,10 @@ func (ledger *ReleaseLedger) readDirectReleaseSourceMatch(ctx context.Context, s
 ) (bool, []keyvalue.Condition, error) {
 	if ledger == nil || ledger.store == nil || ctx == nil || scope.Validate() != nil ||
 		scope.EnvironmentID == "" || revision < source.ReadRevision {
-		return false, nil, errs.New(errs.KindValidationFailed, "Direct Release source requires its captured hierarchy snapshot")
+		return false, nil, errs.New(
+			errs.KindValidationFailed,
+			"Direct Release source requires its captured hierarchy snapshot",
+		)
 	}
 	guards := []keyvalue.Condition{
 		{Key: hierarchy.EnvironmentKey(scope.EnvironmentID), ModRevision: source.EnvironmentRevision},
@@ -168,8 +218,11 @@ func (ledger *ReleaseLedger) readDirectReleaseSourceMatch(ctx context.Context, s
 		{Key: deletions.TombstoneKey("service", serviceID)},
 	}
 	if scope.TenantID != "" {
-		guards = append(guards, keyvalue.Condition{Key: hierarchy.TenantKey(scope.TenantID), ModRevision: source.TenantRevision},
-			keyvalue.Condition{Key: deletions.TombstoneKey("tenant", scope.TenantID)})
+		guards = append(
+			guards,
+			keyvalue.Condition{Key: hierarchy.TenantKey(scope.TenantID), ModRevision: source.TenantRevision},
+			keyvalue.Condition{Key: deletions.TombstoneKey("tenant", scope.TenantID)},
+		)
 	}
 	keys := make([]string, len(guards))
 	for index, guard := range guards {
@@ -187,7 +240,10 @@ func (ledger *ReleaseLedger) readDirectReleaseSourceMatch(ctx context.Context, s
 	for index, guard := range guards {
 		value := read.Values[index]
 		if value != nil && (value.Key != guard.Key || value.ModRevision <= 0 || value.ModRevision > revision) {
-			return false, nil, errs.New(errs.KindStateConflict, "Direct Release source snapshot has an invalid record revision")
+			return false, nil, errs.New(
+				errs.KindStateConflict,
+				"Direct Release source snapshot has an invalid record revision",
+			)
 		}
 		if guard.ModRevision == 0 && value != nil || guard.ModRevision > 0 &&
 			(value == nil || value.Key != guard.Key || value.ModRevision != guard.ModRevision) {

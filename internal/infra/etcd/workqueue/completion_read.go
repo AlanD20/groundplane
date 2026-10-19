@@ -58,7 +58,10 @@ func (repository *Repository) ReadInterruptedReleaseAt(ctx context.Context, view
 		view.Work.Item.Item.Operation != workexecution.Release || view.Attempt.Attempt.FinishedAt != nil ||
 		view.Attempt.Attempt.Direction != workexecution.Forward || view.Checkpoint.Record == nil ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Release interruption requires a replaced forward attempt with retained effects")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Release interruption requires a replaced forward attempt with retained effects",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }
@@ -71,7 +74,10 @@ func (repository *Repository) ReadInterruptedRecoveryAt(ctx context.Context, vie
 		view.Work.Item.Item.Operation != workexecution.Release || view.Attempt.Attempt.FinishedAt != nil ||
 		view.Attempt.Attempt.Direction != workexecution.Recovery || (view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Recovery reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Recovery reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }
@@ -85,20 +91,29 @@ func (repository *Repository) ReadInterruptedScriptAt(ctx context.Context, view 
 		view.Attempt.Attempt.Direction != workexecution.Forward ||
 		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Script reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Script reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }
 
 // Interrupted Script cleanup never proves absence. Its owner can finish the
 // attempt with retained claims, allowing an explicit cleanup retry.
-func (repository *Repository) ReadInterruptedScriptRecoveryAt(ctx context.Context, view ResumeView) (Completion, error) {
+func (repository *Repository) ReadInterruptedScriptRecoveryAt(
+	ctx context.Context,
+	view ResumeView,
+) (Completion, error) {
 	if !view.ActiveAttempt || view.CurrentExecutor || view.ExecutorRevision <= 0 || view.Work.ReadRevision <= 0 ||
 		view.Work.Task.Revision <= 0 || view.Work.Item.Revision <= 0 || view.Attempt.Revision <= 0 ||
 		view.Work.Item.Item.Operation != workexecution.Script || view.Attempt.Attempt.FinishedAt != nil ||
 		view.Attempt.Attempt.Direction != workexecution.Recovery || view.Checkpoint.Record != nil || view.Checkpoint.Revision != 0 ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Script cleanup interruption requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Script cleanup interruption requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }
@@ -111,7 +126,10 @@ func (repository *Repository) ReadInterruptedHierarchyAt(ctx context.Context, vi
 		view.Work.Item.Item.Operation != workexecution.Hierarchy || view.Attempt.Attempt.FinishedAt != nil ||
 		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "removal reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"removal reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }
@@ -124,7 +142,10 @@ func (repository *Repository) ReadInterruptedVolumeAt(ctx context.Context, view 
 		view.Work.Item.Item.Operation != workexecution.Volume || view.Attempt.Attempt.FinishedAt != nil ||
 		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Volume reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Volume reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }
@@ -137,7 +158,10 @@ func (repository *Repository) ReadInterruptedNetworkAt(ctx context.Context, view
 		view.Work.Item.Item.Operation != workexecution.Network || view.Attempt.Attempt.FinishedAt != nil ||
 		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Network reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Network reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }
@@ -148,7 +172,10 @@ func (repository *Repository) ReadInterruptedComponentAt(ctx context.Context, vi
 		view.Work.Item.Item.Operation != workexecution.Component || view.Attempt.Attempt.FinishedAt != nil ||
 		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Component reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Component reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }
@@ -159,7 +186,10 @@ func (repository *Repository) ReadInterruptedEntryAt(ctx context.Context, view R
 		view.Work.Item.Item.Operation != workexecution.EntryConfiguration || view.Attempt.Attempt.FinishedAt != nil ||
 		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Entry reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Entry reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }
@@ -171,18 +201,27 @@ func (repository *Repository) ReadInterruptedLifecycleAt(ctx context.Context, vi
 		view.Work.Item.Item.Operation != workexecution.ServiceLifecycle || view.Attempt.Attempt.FinishedAt != nil ||
 		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Service lifecycle reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }
 
-func (repository *Repository) ReadInterruptedServiceRemovalAt(ctx context.Context, view ResumeView) (Completion, error) {
+func (repository *Repository) ReadInterruptedServiceRemovalAt(
+	ctx context.Context,
+	view ResumeView,
+) (Completion, error) {
 	if !view.ActiveAttempt || view.CurrentExecutor || view.ExecutorRevision <= 0 || view.Work.ReadRevision <= 0 ||
 		view.Work.Task.Revision <= 0 || view.Work.Item.Revision <= 0 || view.Attempt.Revision <= 0 ||
 		view.Work.Item.Item.Operation != workexecution.ServiceRemoval || view.Attempt.Attempt.FinishedAt != nil ||
 		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "service removal reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"service removal reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }

@@ -75,7 +75,10 @@ func (executor *Executor) deliverFailure(ctx context.Context, input attachexecut
 	}
 	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	ack, err := exchange.FailAttachProvision(bounded, &agentpb.AttachProvisionFailureRequest{Attempt: identity, Reason: string(failure.Reason)})
+	ack, err := exchange.FailAttachProvision(
+		bounded,
+		&agentpb.AttachProvisionFailureRequest{Attempt: identity, Reason: string(failure.Reason)},
+	)
 	if err != nil {
 		return Execution{}, err
 	}

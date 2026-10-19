@@ -55,14 +55,20 @@ func PrepareInput(item workexecution.Item, input *agentpb.BackupWorkInput) (work
 	return change, nil
 }
 
-func (repository *InputRepository) Load(ctx context.Context, view workqueue.View) (*agentpb.BackupWorkInput, keyvalue.Condition, error) {
+func (repository *InputRepository) Load(
+	ctx context.Context,
+	view workqueue.View,
+) (*agentpb.BackupWorkInput, keyvalue.Condition, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if view.ReadRevision <= 0 || task.Validate() != nil || item.Validate() != nil ||
 		item.TaskID != task.ID || item.Input == nil || item.Placement.Executor != workexecution.Agent {
 		return nil, keyvalue.Condition{}, conflict("Backup work has no captured input")
 	}
 	key := InputKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return nil, keyvalue.Condition{}, err
 	}

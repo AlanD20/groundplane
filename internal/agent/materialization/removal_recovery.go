@@ -12,7 +12,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (runtime *Runtime) StopRemovalRecoveryFiles(ctx context.Context, request *agentpb.ServiceRemovalRecoveryHelperRequest,
+func (runtime *Runtime) StopRemovalRecoveryFiles(
+	ctx context.Context,
+	request *agentpb.ServiceRemovalRecoveryHelperRequest,
 	manifest *agentpb.ServiceRemovalConfigurationManifest,
 ) error {
 	if runtime == nil || runtime.helper == nil || ctx == nil {
@@ -30,8 +32,13 @@ func (runtime *Runtime) StopRemovalRecoveryFiles(ctx context.Context, request *a
 	return nil
 }
 
-func (runtime *Runtime) RunRemovalRecoveryFile(ctx context.Context, request *agentpb.ServiceRemovalRecoveryHelperRequest,
-	manifest *agentpb.ServiceRemovalConfigurationManifest, header entrymaterialization.Header, source io.ReadCloser, verifyOnly bool,
+func (runtime *Runtime) RunRemovalRecoveryFile(
+	ctx context.Context,
+	request *agentpb.ServiceRemovalRecoveryHelperRequest,
+	manifest *agentpb.ServiceRemovalConfigurationManifest,
+	header entrymaterialization.Header,
+	source io.ReadCloser,
+	verifyOnly bool,
 ) (err error) {
 	if source == nil {
 		return errs.New(errs.KindInternal, "Removal recovery file source is missing")

@@ -25,7 +25,10 @@ func ValidateServingProof(configuration Configuration, proof *agentpb.DNSResolve
 	if proof.ServiceId != service.ServiceId || proof.ArtifactId != configuration.Apply.ArtifactId ||
 		proof.RenderGeneration != configuration.Generation || !bytes.Equal(proof.ArtifactSha256, configuration.Apply.ArtifactDigest) ||
 		proof.ImageReference != service.ImageReference || proof.ImageRepository != service.ImageRepository ||
-		!bytes.Equal(proof.ImageIndexDigest, service.ImageIndexDigest) || !bytes.Equal(proof.ImageConfigDigest, service.ImageConfigDigest) ||
+		!bytes.Equal(
+			proof.ImageIndexDigest,
+			service.ImageIndexDigest,
+		) || !bytes.Equal(proof.ImageConfigDigest, service.ImageConfigDigest) ||
 		!bytes.Equal(proof.VerifiedImageDigest, service.ImageChildDigest) || proof.ImageOs != service.ImageOs ||
 		proof.ImageArchitecture != service.ImageArchitecture || proof.ImageVariant != service.ImageVariant ||
 		proof.ListenEndpoint != "127.0.0.1:53" {
@@ -34,7 +37,11 @@ func ValidateServingProof(configuration Configuration, proof *agentpb.DNSResolve
 	return nil
 }
 
-func ServingObservation(attempt workexecution.Attempt, input Input, proof *agentpb.DNSResolverObservationEvidence) (Observation, error) {
+func ServingObservation(
+	attempt workexecution.Attempt,
+	input Input,
+	proof *agentpb.DNSResolverObservationEvidence,
+) (Observation, error) {
 	layout, err := CaptureLayout(attempt, input)
 	if err != nil || !input.Enabled || ValidateServingProof(*input.Candidate, proof) != nil ||
 		attempt.StartedAt == nil || proof.ObservedAt.AsTime().Before(*attempt.StartedAt) || !proof.ObservedAt.AsTime().Before(attempt.Deadline) {
@@ -55,10 +62,15 @@ func CompletionEvidence(attempt workexecution.Attempt, input Input, final Progre
 	}
 	if input.Enabled {
 		observed, err := ServingObservation(attempt, input, proof)
-		if err != nil || verification == nil || verification.Validate(attempt, layout) != nil || verification.InFlight ||
-			verification.Last == nil || *verification.Last != observed || verification.Sequence+2 != final.Sequence ||
+		if err != nil || verification == nil || verification.Validate(attempt, layout) != nil ||
+			verification.InFlight ||
+			verification.Last == nil ||
+			*verification.Last != observed ||
+			verification.Sequence+2 != final.Sequence ||
 			verification.UpdatedAt.After(final.UpdatedAt) {
-			return workexecution.Input{}, invalid("DNS resolver completion is missing its exact acknowledged serving proof")
+			return workexecution.Input{}, invalid(
+				"DNS resolver completion is missing its exact acknowledged serving proof",
+			)
 		}
 	} else if verification != nil || proof != nil {
 		return workexecution.Input{}, invalid("disabled DNS resolver cannot report a running serving proof")
@@ -70,7 +82,11 @@ func CompletionEvidence(attempt workexecution.Attempt, input Input, final Progre
 // settlement permission; Controller admission still uses CompletionEvidence.
 // This lets the compact Agent journal check a saved receipt without copying
 // the captured Corefile and Compose artifacts into every local record.
-func CompletionDigest(attempt workexecution.Attempt, final Progress, proof *agentpb.DNSResolverObservationEvidence) (workexecution.Input, error) {
+func CompletionDigest(
+	attempt workexecution.Attempt,
+	final Progress,
+	proof *agentpb.DNSResolverObservationEvidence,
+) (workexecution.Input, error) {
 	if attempt.Validate() != nil || final.AttemptID != attempt.ID || final.Stage != Complete || final.InFlight {
 		return workexecution.Input{}, invalid("DNS resolver completion digest has no final captured boundary")
 	}

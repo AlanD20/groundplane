@@ -16,7 +16,11 @@ import (
 // PrepareHierarchyControllerRetention removes only metadata-action evidence.
 // An unfinished removal retains its sealed plan: successful sibling actions must
 // still be identifiable if the operator resumes the same removal later.
-func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerRetention(ctx context.Context, view workqueue.View, at time.Time) (bool, workqueue.Change, error) {
+func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerRetention(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Validate() != nil || item.Validate() != nil || task.Action != workexecution.ActionRemove ||
 		(item.Operation != workexecution.Hierarchy && item.Operation != workexecution.RemovalBackupObject) || item.Placement.Executor != workexecution.Controller ||
@@ -24,7 +28,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerRetenti
 		(item.Operation == workexecution.Hierarchy && item.AttemptNumber != 0) ||
 		(item.Operation == workexecution.RemovalBackupObject && item.AttemptNumber == 0) || item.ActiveAttemptID != "" || task.CollectionStartedAt == nil ||
 		task.RetainUntil == nil || at.Before(*task.RetainUntil) || view.ReadRevision <= 0 {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "removal metadata is not eligible for retention")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"removal metadata is not eligible for retention",
+		)
 	}
 	if task.Outcome != workexecution.Succeeded {
 		return false, workqueue.Change{}, nil
@@ -34,16 +41,26 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerRetenti
 		return false, workqueue.Change{}, err
 	}
 	operation := captured.Operation
-	if operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionRetained || operation.Fence.Dispatch != hierarchydeletion.HierarchyDeletionDispatchClosed {
+	if operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionRetained ||
+		operation.Fence.Dispatch != hierarchydeletion.HierarchyDeletionDispatchClosed {
 		return false, workqueue.Change{}, nil
 	}
-	completionKey, err := hierarchydeletion.HierarchyDeletionCompletionKey(captured.Action.ParentOperationID, captured.Action.Ordinal)
+	completionKey, err := hierarchydeletion.HierarchyDeletionCompletionKey(
+		captured.Action.ParentOperationID,
+		captured.Action.Ordinal,
+	)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
 	summaryKey := hierarchydeletion.WorkSummaryKey(task.ID)
-	lockKey := hierarchydeletion.HierarchyDeletionLockKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{summaryKey, completionKey, lockKey}, Revision: view.ReadRevision})
+	lockKey := hierarchydeletion.HierarchyDeletionLockKey(
+		string(operation.Tombstone.TargetKind),
+		operation.Tombstone.TargetID,
+	)
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{summaryKey, completionKey, lockKey}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
@@ -66,15 +83,24 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerRetenti
 		item.Result.SHA256 != hierarchydeletion.HierarchyDeletionBytesDigest(read.Values[1].Value) {
 		return false, workqueue.Change{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	actionKey, err := hierarchydeletion.HierarchyDeletionActionKey(captured.Action.ParentOperationID, captured.Action.Ordinal)
+	actionKey, err := hierarchydeletion.HierarchyDeletionActionKey(
+		captured.Action.ParentOperationID,
+		captured.Action.Ordinal,
+	)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
-	change := workqueue.Change{Conditions: append(captured.Conditions,
+	change := workqueue.Change{Conditions: append(
+		captured.Conditions,
 		keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
 		keyvalue.Condition{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision},
 		keyvalue.Condition{Key: summaryKey, ModRevision: read.Values[0].ModRevision},
-		keyvalue.Condition{Key: completionKey, ModRevision: read.Values[1].ModRevision}, keyvalue.Condition{Key: lockKey})}
+		keyvalue.Condition{
+			Key:         completionKey,
+			ModRevision: read.Values[1].ModRevision,
+		},
+		keyvalue.Condition{Key: lockKey},
+	)}
 	for _, key := range []string{actionKey, completionKey, hierarchydeletion.WorkBindingKey(item.ID), hierarchydeletion.WorkStopKey(item.ID)} {
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})
 	}

@@ -28,11 +28,20 @@ func NewWork(records *backingprovisionwork.Repository, queue *workqueue.Reposito
 	return &Work{records: records, queue: queue}, nil
 }
 
-func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Work) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item, task := request.Item.Item, request.Task.Task
-	if request.DecisionOnly || item.Operation != workexecution.BackingProvision || item.Placement.Executor != workexecution.Agent ||
-		request.Executor.Record.Identity.HostID != item.Placement.HostID || item.Input == nil {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "backing creation cannot acquire this host assignment")
+	if request.DecisionOnly || item.Operation != workexecution.BackingProvision ||
+		item.Placement.Executor != workexecution.Agent ||
+		request.Executor.Record.Identity.HostID != item.Placement.HostID ||
+		item.Input == nil {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"backing creation cannot acquire this host assignment",
+		)
 	}
 	view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
 	if request.Direction == workexecution.Recovery {
@@ -45,7 +54,10 @@ func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at t
 			Change: workqueue.Change{Conditions: source.Conditions}}, err
 	}
 	if request.Direction != workexecution.Forward {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "backing creation assignment direction is invalid")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"backing creation assignment direction is invalid",
+		)
 	}
 	if task.Stop != nil || item.ForwardRevoked || !at.Before(item.Deadline) {
 		outcome := workexecution.Failed
@@ -75,12 +87,18 @@ func (owner *Work) AuthorizeAgentStart(ctx context.Context, view workqueue.Resum
 	input, change, current, err := owner.records.ReadAdmission(ctx, view.Work)
 	clear(input.Wire)
 	if err == nil && !current {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "backing creation source changed before Start; submit a new action")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"backing creation source changed before Start; submit a new action",
+		)
 	}
 	return change, err
 }
 
-func (owner *Work) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.BackingProvisionAssignment, error) {
+func (owner *Work) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.BackingProvisionAssignment, error) {
 	if !view.ActiveAttempt || view.Work.Item.Item.Operation != workexecution.BackingProvision ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
 		return nil, errs.New(errs.KindStateConflict, "backing creation delivery has no retained active assignment")
@@ -105,8 +123,14 @@ func (owner *Work) LoadWorkAssignment(ctx context.Context, view workqueue.Resume
 	return backingprovision.EncodeAssignment(assignment)
 }
 
-func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
-	if task.Task.Stop == nil || item.Item.Operation != workexecution.BackingProvision || item.Item.TaskID != task.Task.ID {
+func (owner *Work) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
+	if task.Task.Stop == nil || item.Item.Operation != workexecution.BackingProvision ||
+		item.Item.TaskID != task.Task.ID {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "backing creation has no matching stop request")
 	}
 	view, err := owner.queue.ReadWork(ctx, task.Task.ID, item.Item.ID, 0)
@@ -122,8 +146,12 @@ func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item w
 func (owner *Work) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot,
 	previous workqueue.AttemptSnapshot, revision int64, at time.Time,
 ) (workqueue.Change, error) {
-	if item.Item.Operation != workexecution.BackingProvision || item.Item.ActiveAttemptID != "" || task.Task.CollectionStartedAt != nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "backing creation still has active execution or expired input")
+	if item.Item.Operation != workexecution.BackingProvision || item.Item.ActiveAttemptID != "" ||
+		task.Task.CollectionStartedAt != nil {
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"backing creation still has active execution or expired input",
+		)
 	}
 	view := workqueue.View{Task: task, Item: item, ReadRevision: revision}
 	input, guard, err := owner.records.Load(ctx, view)
@@ -138,13 +166,19 @@ func (owner *Work) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnap
 	deadline := at.Add(procedure.Deadline.AsTime().Sub(procedure.CreatedAt.AsTime()))
 	if item.Item.AttemptNumber != 0 && (previous.Attempt.Result == nil || previous.Attempt.FinishedAt == nil ||
 		previous.Attempt.Number != item.Item.AttemptNumber || previous.Attempt.TaskID != task.Task.ID || previous.Attempt.WorkItemID != item.Item.ID) {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "backing creation Retry needs its exact previous attempt")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"backing creation Retry needs its exact previous attempt",
+		)
 	}
 	authority := workqueue.Change{Conditions: []keyvalue.Condition{guard}}
 	var retry workqueue.Change
 	if item.Item.Phase == workexecution.Attention {
 		if item.Item.AttemptNumber == 0 || previous.Attempt.Result == nil {
-			return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "backing creation cleanup has no preceding attempt result")
+			return workqueue.Change{}, errs.New(
+				errs.KindTaskNotRetryable,
+				"backing creation cleanup has no preceding attempt result",
+			)
 		}
 		source, sourceErr := owner.records.LoadRecovery(ctx, view)
 		if sourceErr != nil {

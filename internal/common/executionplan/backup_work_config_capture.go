@@ -24,8 +24,11 @@ type BackupConfigWorkEvidence struct {
 	TransferTranscriptSHA256 []byte
 }
 
-func AdvanceBackupConfigCapture(assignment *agentpb.BackupWorkAssignment,
-	request *agentpb.BackupWorkCheckpointRequest, authenticated workexecution.Identity, evidence *BackupConfigWorkEvidence,
+func AdvanceBackupConfigCapture(
+	assignment *agentpb.BackupWorkAssignment,
+	request *agentpb.BackupWorkCheckpointRequest,
+	authenticated workexecution.Identity,
+	evidence *BackupConfigWorkEvidence,
 ) (*agentpb.BackupStepResume, error) {
 	owned, attempt, err := OpenBackupWorkAssignment(assignment, authenticated)
 	if err != nil {
@@ -67,8 +70,10 @@ func AdvanceBackupConfigCapture(assignment *agentpb.BackupWorkAssignment,
 			}
 		case checkpoint.GetTransferCompleted() != nil:
 			value := checkpoint.GetTransferCompleted()
-			if !proto.Equal(value.Content, config.Content) || value.RestoreGenerationId != "" || value.RenderGeneration != 0 ||
-				value.CommittedRecordCount != evidence.CommittedRecords || evidence.NextOrdinal != config.Content.EntryCount+1 ||
+			if !proto.Equal(value.Content, config.Content) || value.RestoreGenerationId != "" ||
+				value.RenderGeneration != 0 ||
+				value.CommittedRecordCount != evidence.CommittedRecords ||
+				evidence.NextOrdinal != config.Content.EntryCount+1 ||
 				!bytes.Equal(value.ValueChainSha256, evidence.ValueChainSHA256) ||
 				!backupCheckpointDigest(evidence.TransferTranscriptSHA256) ||
 				!bytes.Equal(value.TransferTranscriptSha256, evidence.TransferTranscriptSHA256) {

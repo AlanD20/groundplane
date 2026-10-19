@@ -68,7 +68,11 @@ func (journal *Journal) PrepareBacking(ctx context.Context, attempt workexecutio
 	return state.Backing, nil
 }
 
-func (journal *Journal) Backing(ctx context.Context, attempt workexecution.Attempt, input *agentpb.BackingProvisionInput) (*BackingRecord, error) {
+func (journal *Journal) Backing(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.BackingProvisionInput,
+) (*BackingRecord, error) {
 	layout, err := backingprovision.CaptureLayout(attempt, input)
 	if err != nil {
 		return nil, err
@@ -104,7 +108,8 @@ func (journal *Journal) AcknowledgeBacking(ctx context.Context, attempt workexec
 		return err
 	}
 	checkpoint, err := progress.Checkpoint(attempt, layout)
-	if err != nil || checkpoint.Evidence.ID != ack.Evidence.InputId || checkpoint.Evidence.SHA256 != hex.EncodeToString(ack.Evidence.Sha256) {
+	if err != nil || checkpoint.Evidence.ID != ack.Evidence.InputId ||
+		checkpoint.Evidence.SHA256 != hex.EncodeToString(ack.Evidence.Sha256) {
 		return invalid()
 	}
 	unlock, err := journal.lock(ctx)
@@ -117,7 +122,10 @@ func (journal *Journal) AcknowledgeBacking(ctx context.Context, attempt workexec
 		return err
 	}
 	if !matchesBacking(state, attempt, layout) || state.Backing.Progress == nil ||
-		!backingprovision.EqualProgress(*state.Backing.Progress, progress) || state.Backing.Completion != nil || state.Backing.Failure != nil {
+		!backingprovision.EqualProgress(
+			*state.Backing.Progress,
+			progress,
+		) || state.Backing.Completion != nil || state.Backing.Failure != nil {
 		return conflict()
 	}
 	if state.Backing.Acknowledged {
@@ -128,7 +136,8 @@ func (journal *Journal) AcknowledgeBacking(ctx context.Context, attempt workexec
 }
 
 func matchesBacking(state *attemptRecord, attempt workexecution.Attempt, layout backingprovision.Layout) bool {
-	if state == nil || state.Backing == nil || state.Backing.Layout != layout || !workexecution.SameAssignment(state.Attempt, attempt) ||
+	if state == nil || state.Backing == nil || state.Backing.Layout != layout ||
+		!workexecution.SameAssignment(state.Attempt, attempt) ||
 		(state.Attempt.StartedAt == nil) != (attempt.StartedAt == nil) {
 		return false
 	}

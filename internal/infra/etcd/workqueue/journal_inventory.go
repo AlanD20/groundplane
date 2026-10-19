@@ -23,7 +23,10 @@ func (repository *Repository) ReadJournalAttempt(ctx context.Context, attemptID 
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.Values[0] == nil {
-		return AttemptSnapshot{}, errs.New(errs.KindStateConflict, "local work journal has no retained Controller attempt; preserve it for operator reconciliation")
+		return AttemptSnapshot{}, errs.New(
+			errs.KindStateConflict,
+			"local work journal has no retained Controller attempt; preserve it for operator reconciliation",
+		)
 	}
 	attempt, err := DecodeAttempt(read.Values[0].Value)
 	if err != nil || attempt.ID != attemptID {
@@ -37,9 +40,17 @@ func journalInventoryKey(attemptID string) string { return root + "journal-inven
 // ConfirmJournalOwnership stores only the latest authenticated inventory sighting.
 // Its acknowledgement never means effects stopped or cleanup succeeded. No
 // execution record, reservation, checkpoint or partial local file is changed.
-func (repository *Repository) ConfirmJournalOwnership(ctx context.Context, view ResumeView, observer workexecution.Identity, authentication []keyvalue.Condition) error {
-	if len(authentication) == 0 || !view.CanSettleResult() || view.Attempt.Revision <= 0 || view.Work.Task.Revision <= 0 ||
-		observer.Validate() != nil || observer.Executor != workexecution.Agent || observer.HostID != view.Attempt.Attempt.Executor.HostID {
+func (repository *Repository) ConfirmJournalOwnership(
+	ctx context.Context,
+	view ResumeView,
+	observer workexecution.Identity,
+	authentication []keyvalue.Condition,
+) error {
+	if len(authentication) == 0 || !view.CanSettleResult() || view.Attempt.Revision <= 0 ||
+		view.Work.Task.Revision <= 0 ||
+		observer.Validate() != nil ||
+		observer.Executor != workexecution.Agent ||
+		observer.HostID != view.Attempt.Attempt.Executor.HostID {
 		return invalid("journal accounting requires retained ownership and current authentication")
 	}
 	conditions := append([]keyvalue.Condition(nil), authentication...)

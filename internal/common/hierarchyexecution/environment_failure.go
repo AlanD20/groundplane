@@ -42,17 +42,25 @@ func EnvironmentFailureID(attemptID string) (string, error) {
 	return ids.DeriveAt(ids.KindPlan, at, attemptID, "environment-removal/failure"), nil
 }
 
-func EncodeEnvironmentFailure(attempt workexecution.Attempt, failure EnvironmentFailure) ([]byte, workexecution.Input, error) {
+func EncodeEnvironmentFailure(
+	attempt workexecution.Attempt,
+	failure EnvironmentFailure,
+) ([]byte, workexecution.Input, error) {
 	if attempt.Validate() != nil || failure.AttemptID != attempt.ID ||
 		failure.Input != attempt.Input || !failure.Reason.Valid() || failure.RecordedAt.IsZero() || failure.RecordedAt.Location() != time.UTC ||
-		failure.RecordedAt.Before(attempt.AssignedAt) || attempt.StartedAt != nil && failure.RecordedAt.Before(*attempt.StartedAt) ||
+		failure.RecordedAt.Before(
+			attempt.AssignedAt,
+		) || attempt.StartedAt != nil && failure.RecordedAt.Before(*attempt.StartedAt) ||
 		failure.Reason == DeadlineExpired && failure.RecordedAt.Before(attempt.Deadline) {
 		return nil, workexecution.Input{}, invalidEnvironmentProgress()
 	}
 	if checkpoint := failure.Checkpoint; checkpoint != nil {
-		if attempt.StartedAt == nil || checkpoint.AttemptID != attempt.ID || checkpoint.Sequence < 1 || checkpoint.Sequence > 3 ||
-			ids.Validate(ids.KindStep, checkpoint.StageID) != nil || checkpoint.Evidence.Validate() != nil ||
-			checkpoint.RecordedAt.Before(*attempt.StartedAt) || checkpoint.RecordedAt.After(failure.RecordedAt) {
+		if attempt.StartedAt == nil || checkpoint.AttemptID != attempt.ID || checkpoint.Sequence < 1 ||
+			checkpoint.Sequence > 3 ||
+			ids.Validate(ids.KindStep, checkpoint.StageID) != nil ||
+			checkpoint.Evidence.Validate() != nil ||
+			checkpoint.RecordedAt.Before(*attempt.StartedAt) ||
+			checkpoint.RecordedAt.After(failure.RecordedAt) {
 			return nil, workexecution.Input{}, invalidEnvironmentProgress()
 		}
 	}
@@ -72,7 +80,11 @@ func EncodeEnvironmentFailure(attempt workexecution.Attempt, failure Environment
 	return raw, workexecution.Input{ID: id, SHA256: hex.EncodeToString(digest[:])}, nil
 }
 
-func DecodeEnvironmentFailure(attempt workexecution.Attempt, raw []byte, reference workexecution.Input) (EnvironmentFailure, error) {
+func DecodeEnvironmentFailure(
+	attempt workexecution.Attempt,
+	raw []byte,
+	reference workexecution.Input,
+) (EnvironmentFailure, error) {
 	if len(raw) == 0 || len(raw) > MaximumEnvironmentReportBytes {
 		return EnvironmentFailure{}, invalidEnvironmentProgress()
 	}

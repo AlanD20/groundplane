@@ -15,7 +15,8 @@ import (
 func CapturedRequest(artifact *agentpb.ComposeArtifact, action *agentpb.ComponentApply,
 	recipe registeredcatalog.DNSResolverObservationRecipe,
 ) (Request, error) {
-	if artifact == nil || action == nil || artifact.ProjectName == "" || len(artifact.Services) != 1 || artifact.Services[0] == nil {
+	if artifact == nil || action == nil || artifact.ProjectName == "" || len(artifact.Services) != 1 ||
+		artifact.Services[0] == nil {
 		return Request{}, errs.New(errs.KindValidationFailed, "DNS resolver observation requires one captured runtime")
 	}
 	service := artifact.Services[0]
@@ -28,7 +29,10 @@ func CapturedRequest(artifact *agentpb.ComposeArtifact, action *agentpb.Componen
 		hex.EncodeToString(service.ImageConfigDigest) != platform.ConfigDigest ||
 		service.ImageOs != platform.OS || service.ImageArchitecture != platform.Architecture || service.ImageVariant != platform.Variant ||
 		len(action.ArtifactDigest) != sha256.Size {
-		return Request{}, errs.New(errs.KindValidationFailed, "DNS resolver observation image or Service differs from the compiled recipe")
+		return Request{}, errs.New(
+			errs.KindValidationFailed,
+			"DNS resolver observation image or Service differs from the compiled recipe",
+		)
 	}
 	labels := make(map[string]string, len(service.ExpectedLabels))
 	for _, label := range service.ExpectedLabels {

@@ -55,7 +55,12 @@ func (executor *Executor) recordFailure(ctx context.Context, delivery workqueue.
 		return err
 	}
 	attempt := delivery.Attempt.Attempt
-	journal, journalErr := checkrecord.NewJournal(executor.repository, loaded.Record.Owner, attempt.ID, attempt.Executor)
+	journal, journalErr := checkrecord.NewJournal(
+		executor.repository,
+		loaded.Record.Owner,
+		attempt.ID,
+		attempt.Executor,
+	)
 	if journalErr != nil {
 		return errs.WrapJoined(errs.KindStateConflict, err, journalErr)
 	}
@@ -191,7 +196,12 @@ func (executor *Executor) recordResult(ctx context.Context, record checkrecord.R
 	return failureError(latest.Record.ProbeFailure)
 }
 
-func (executor *Executor) resume(ctx context.Context, record checkrecord.Record, journal *checkrecord.Journal, cleanupRetry bool) error {
+func (executor *Executor) resume(
+	ctx context.Context,
+	record checkrecord.Record,
+	journal *checkrecord.Journal,
+	cleanupRetry bool,
+) error {
 	settlement, cancel := context.WithTimeout(context.WithoutCancel(ctx), backingaccess.ExchangeTimeout+15*time.Second)
 	defer cancel()
 	if record.Phase == checkrecord.Checking && record.ProbeRecorded && !record.CleanupPending {

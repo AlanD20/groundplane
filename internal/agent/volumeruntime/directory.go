@@ -9,7 +9,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (host *RuntimeHost) removeDirectory(ctx context.Context, input Input, request *agentpb.VolumeWorkHelperRequest) (volumeexecution.Observation, error) {
+func (host *RuntimeHost) removeDirectory(
+	ctx context.Context,
+	input Input,
+	request *agentpb.VolumeWorkHelperRequest,
+) (volumeexecution.Observation, error) {
 	for {
 		if err := ctx.Err(); err != nil {
 			return volumeexecution.Observation{}, err
@@ -17,7 +21,12 @@ func (host *RuntimeHost) removeDirectory(ctx context.Context, input Input, reque
 		if err := host.ownership.Check(); err != nil {
 			return volumeexecution.Observation{}, err
 		}
-		saved, fresh, err := host.journal.PrepareVolumeDirectoryBatch(ctx, input.attempt, input.procedure.VolumeId, time.Now().UTC())
+		saved, fresh, err := host.journal.PrepareVolumeDirectoryBatch(
+			ctx,
+			input.attempt,
+			input.procedure.VolumeId,
+			time.Now().UTC(),
+		)
 		if err != nil {
 			return volumeexecution.Observation{}, err
 		}
@@ -44,7 +53,12 @@ func (host *RuntimeHost) removeDirectory(ctx context.Context, input Input, reque
 		if err := executionplan.ValidateVolumeHelperResponse(captured, response); err != nil {
 			return volumeexecution.Observation{}, err
 		}
-		result, err := volumeexecution.DecodeDirectoryResult(input.attempt, saved.Boundary, saved.Batch, response.DirectoryResult)
+		result, err := volumeexecution.DecodeDirectoryResult(
+			input.attempt,
+			saved.Boundary,
+			saved.Batch,
+			response.DirectoryResult,
+		)
 		if err != nil {
 			return volumeexecution.Observation{}, err
 		}

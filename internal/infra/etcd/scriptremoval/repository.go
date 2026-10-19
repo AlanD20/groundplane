@@ -36,7 +36,10 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 		return Input{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Script removal work is invalid")
 	}
 	key := InputKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}
@@ -55,15 +58,25 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 	if err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}
-	if input.TaskID != task.ID || input.WorkItemID != item.ID || input.ScriptID != item.TargetID || ref != *item.Input ||
-		task.Action != workexecution.ActionRemove || task.TargetID != input.ScriptID ||
+	if input.TaskID != task.ID || input.WorkItemID != item.ID || input.ScriptID != item.TargetID ||
+		ref != *item.Input ||
+		task.Action != workexecution.ActionRemove ||
+		task.TargetID != input.ScriptID ||
 		task.Scope != (workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID}) {
-		return Input{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Script removal differs from its captured resource")
+		return Input{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Script removal differs from its captured resource",
+		)
 	}
 	return input, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
 }
 
-func (repository *Repository) PrepareDecision(ctx context.Context, view workqueue.View, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareDecision(
+	ctx context.Context,
+	view workqueue.View,
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	input, capture, err := repository.Load(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -89,11 +102,16 @@ func (repository *Repository) PrepareDecision(ctx context.Context, view workqueu
 	record := storage.Script.Record
 	if storage.Script.Revision != input.ScriptRevision || record.EnvironmentID != input.EnvironmentID ||
 		record.ServiceID != input.ServiceID || record.ScriptSetGeneration != input.ScriptSetGeneration || record.ActiveReferences != 0 {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Script changed or has active executions after removal was accepted")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Script changed or has active executions after removal was accepted",
+		)
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(stored.Values[0].Value)
-	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetScript || tombstone.TargetID != input.ScriptID ||
-		tombstone.TargetRevision != storage.Script.Revision || tombstone.TaskID != input.TaskID ||
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetScript ||
+		tombstone.TargetID != input.ScriptID ||
+		tombstone.TargetRevision != storage.Script.Revision ||
+		tombstone.TaskID != input.TaskID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Script deletion tombstone does not match its Task")
 	}
@@ -110,8 +128,11 @@ func (repository *Repository) PrepareDecision(ctx context.Context, view workqueu
 	if indexes != nil {
 		defer keyvalue.ClearValues(indexes.Values)
 	}
-	if indexes == nil || indexes.ReadRevision != view.ReadRevision || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-		string(indexes.Values[0].Value) != record.Desired.ID || string(indexes.Values[1].Value) != record.Desired.ID {
+	if indexes == nil || indexes.ReadRevision != view.ReadRevision || len(indexes.Values) != 2 ||
+		indexes.Values[0] == nil ||
+		indexes.Values[1] == nil ||
+		string(indexes.Values[0].Value) != record.Desired.ID ||
+		string(indexes.Values[1].Value) != record.Desired.ID {
 		return workqueue.Change{}, errs.New(errs.KindInternal, "Script deletion indexes are corrupt")
 	}
 	resource := workqueue.Change{

@@ -31,7 +31,13 @@ func (repository *Repository) LoadRecoveryFailure(ctx context.Context, view work
 	if read.Values[0] == nil {
 		return nil, removalexecution.Failure{}, conflict("Service removal recovery failure evidence is missing")
 	}
-	failure, err := removalexecution.DecodeFailure(attempt, delivery, saved.Capture, read.Values[0].Value, *attempt.Result)
+	failure, err := removalexecution.DecodeFailure(
+		attempt,
+		delivery,
+		saved.Capture,
+		read.Values[0].Value,
+		*attempt.Result,
+	)
 	if err != nil {
 		return nil, removalexecution.Failure{}, err
 	}

@@ -39,7 +39,12 @@ func (report RecoveryReport) Validate(attempt workexecution.Attempt, source Reco
 	return report.ValidateRestoration(attempt, source, restoration, boundary)
 }
 
-func (report RecoveryReport) ValidateRestoration(attempt workexecution.Attempt, source Recovery, restoration Restoration, boundary Progress) error {
+func (report RecoveryReport) ValidateRestoration(
+	attempt workexecution.Attempt,
+	source Recovery,
+	restoration Restoration,
+	boundary Progress,
+) error {
 	if restoration.Validate(attempt) != nil || source.ValidateLayoutFor(attempt, restoration.Layout) != nil ||
 		report.AttemptID != attempt.ID || report.ForwardID != source.Forward.ID || report.Failure != source.Evidence ||
 		report.EnvironmentID != restoration.Layout.EnvironmentID || report.Input != attempt.Input ||
@@ -98,7 +103,13 @@ func EncodeRecoveryReport(attempt workexecution.Attempt, source Recovery, input 
 	return EncodeRestorationReport(attempt, source, restoration, boundary, report)
 }
 
-func EncodeRestorationReport(attempt workexecution.Attempt, source Recovery, restoration Restoration, boundary Progress, report RecoveryReport) ([]byte, workexecution.Input, error) {
+func EncodeRestorationReport(
+	attempt workexecution.Attempt,
+	source Recovery,
+	restoration Restoration,
+	boundary Progress,
+	report RecoveryReport,
+) ([]byte, workexecution.Input, error) {
 	if err := report.ValidateRestoration(attempt, source, restoration, boundary); err != nil {
 		return nil, workexecution.Input{}, err
 	}

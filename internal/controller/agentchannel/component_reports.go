@@ -11,20 +11,49 @@ import (
 )
 
 type ComponentReporter interface {
-	LoadComponentConfiguration(context.Context, agentregistration.WorkAuthorization, *agentpb.ComponentConfigurationRequest) (*agentpb.ComponentConfigurationManifest, error)
-	LoadComponentConfigurationFile(context.Context, agentregistration.WorkAuthorization, *agentpb.ComponentConfigurationFileRequest) (*agentpb.ComponentConfigurationFileDelivery, error)
-	CheckpointComponent(context.Context, agentregistration.WorkAuthorization, *agentpb.ComponentWorkCheckpointRequest) (*agentpb.ComponentWorkCheckpointAck, error)
-	CompleteComponent(context.Context, agentregistration.WorkAuthorization, *agentpb.ComponentWorkCompletionRequest) (*agentpb.ComponentWorkCompletionAck, error)
-	FailComponent(context.Context, agentregistration.WorkAuthorization, *agentpb.ComponentWorkFailureRequest) (*agentpb.ComponentWorkFailureAck, error)
-	RecoverComponent(context.Context, agentregistration.WorkAuthorization, *agentpb.ComponentWorkRecoveryReportRequest) (*agentpb.ComponentWorkRecoveryReportAck, error)
+	LoadComponentConfiguration(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ComponentConfigurationRequest,
+	) (*agentpb.ComponentConfigurationManifest, error)
+	LoadComponentConfigurationFile(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ComponentConfigurationFileRequest,
+	) (*agentpb.ComponentConfigurationFileDelivery, error)
+	CheckpointComponent(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ComponentWorkCheckpointRequest,
+	) (*agentpb.ComponentWorkCheckpointAck, error)
+	CompleteComponent(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ComponentWorkCompletionRequest,
+	) (*agentpb.ComponentWorkCompletionAck, error)
+	FailComponent(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ComponentWorkFailureRequest,
+	) (*agentpb.ComponentWorkFailureAck, error)
+	RecoverComponent(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ComponentWorkRecoveryReportRequest,
+	) (*agentpb.ComponentWorkRecoveryReportAck, error)
 }
 
 func (server *Server) ConfigureComponentWork(reports ComponentReporter) {
 	server.componentReports = reports
 }
 
-func (server *Server) componentReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetComponentConfigurationRequest() == nil && message.GetComponentConfigurationFileRequest() == nil && message.GetComponentWorkCheckpointRequest() == nil {
+func (server *Server) componentReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
+	if message.GetComponentConfigurationRequest() == nil && message.GetComponentConfigurationFileRequest() == nil &&
+		message.GetComponentWorkCheckpointRequest() == nil {
 		return false, nil, nil
 	}
 	if server.componentReports == nil {

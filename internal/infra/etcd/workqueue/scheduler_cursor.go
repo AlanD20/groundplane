@@ -25,7 +25,10 @@ func schedulerCursorKey(target workexecution.Placement) string {
 	return root + "scheduler-cursors/" + placement(target.Executor, target.HostID)
 }
 
-func (repository *Repository) ReadSchedulerCursor(ctx context.Context, target workexecution.Placement) (SchedulerCursorSnapshot, error) {
+func (repository *Repository) ReadSchedulerCursor(
+	ctx context.Context,
+	target workexecution.Placement,
+) (SchedulerCursorSnapshot, error) {
 	if err := target.Validate(); err != nil {
 		return SchedulerCursorSnapshot{}, err
 	}
@@ -37,7 +40,8 @@ func (repository *Repository) ReadSchedulerCursor(ctx context.Context, target wo
 		return SchedulerCursorSnapshot{Record: SchedulerCursor{Placement: target}}, nil
 	}
 	record, err := recordcodec.Decode[SchedulerCursor](read.Values[0].Value, "execution_scheduler_cursor")
-	if err != nil || record.Placement != target || record.After != "" && ids.Validate(ids.KindWorkItem, record.After) != nil {
+	if err != nil || record.Placement != target ||
+		record.After != "" && ids.Validate(ids.KindWorkItem, record.After) != nil {
 		return SchedulerCursorSnapshot{}, corrupt()
 	}
 	return SchedulerCursorSnapshot{Record: record, Revision: read.Values[0].ModRevision}, nil

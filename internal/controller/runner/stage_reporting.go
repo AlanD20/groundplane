@@ -17,11 +17,21 @@ type runtimeStage struct {
 	sequence uint64
 }
 
-func (lifecycle *Lifecycle) beginStage(ctx context.Context, attempt Attempt, step runnerallocation.RunnerRuntimeStep) *runtimeStage {
+func (lifecycle *Lifecycle) beginStage(
+	ctx context.Context,
+	attempt Attempt,
+	step runnerallocation.RunnerRuntimeStep,
+) *runtimeStage {
 	name, expected := runnerStageText(step)
 	now := time.Now().UTC()
 	report := &runtimeStage{records: lifecycle.diagnostics, attempt: attempt,
-		stage: workexecution.Stage{Key: string(step), Name: name, Expected: expected, State: workexecution.StageRunning, StartedAt: &now}}
+		stage: workexecution.Stage{
+			Key:       string(step),
+			Name:      name,
+			Expected:  expected,
+			State:     workexecution.StageRunning,
+			StartedAt: &now,
+		}}
 	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	snapshot, err := report.records.Read(bounded, attempt.TaskID, attempt.WorkItemID, attempt.AttemptID, 0)
@@ -66,7 +76,14 @@ func (report *runtimeStage) write(ctx context.Context, at time.Time) {
 func (report *runtimeStage) lost(ctx context.Context, err error) {
 	slog.WarnContext(ctx, "Runner stage diagnostics incomplete", "attempt_id", report.attempt.AttemptID, "error", err)
 	if err := report.records.MarkIncomplete(ctx, report.attempt.TaskID, report.attempt.WorkItemID, report.attempt.AttemptID, report.attempt.Executor); err != nil {
-		slog.WarnContext(ctx, "could not record Runner diagnostic loss", "attempt_id", report.attempt.AttemptID, "error", err)
+		slog.WarnContext(
+			ctx,
+			"could not record Runner diagnostic loss",
+			"attempt_id",
+			report.attempt.AttemptID,
+			"error",
+			err,
+		)
 	}
 }
 

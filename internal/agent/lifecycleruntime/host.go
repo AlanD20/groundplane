@@ -19,7 +19,11 @@ import (
 )
 
 type Helper interface {
-	ExecuteLifecycleWork(context.Context, string, *agentpb.ServiceLifecycleHelperRequest) (*agentpb.ServiceLifecycleHelperResponse, error)
+	ExecuteLifecycleWork(
+		context.Context,
+		string,
+		*agentpb.ServiceLifecycleHelperRequest,
+	) (*agentpb.ServiceLifecycleHelperResponse, error)
 }
 
 type RuntimeHost struct {
@@ -31,26 +35,60 @@ type RuntimeHost struct {
 	runner    runner.Runner
 }
 
-func NewHost(root string, journal *agentworkjournal.Journal, helper Helper, ownership *agentownership.Lease, commands *backingcommand.Executor, taskRunner runner.Runner) (*RuntimeHost, error) {
-	if environmentpath.ValidateRoot(root) != nil || journal == nil || helper == nil || ownership == nil || commands == nil || taskRunner == nil {
-		return nil, errs.New(errs.KindInternal, "Service lifecycle host requires its root, journal, helper and ownership")
+func NewHost(
+	root string,
+	journal *agentworkjournal.Journal,
+	helper Helper,
+	ownership *agentownership.Lease,
+	commands *backingcommand.Executor,
+	taskRunner runner.Runner,
+) (*RuntimeHost, error) {
+	if environmentpath.ValidateRoot(root) != nil || journal == nil || helper == nil || ownership == nil ||
+		commands == nil ||
+		taskRunner == nil {
+		return nil, errs.New(
+			errs.KindInternal,
+			"Service lifecycle host requires its root, journal, helper and ownership",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
 	}
-	return &RuntimeHost{root: root, journal: journal, helper: helper, ownership: ownership, commands: commands, runner: taskRunner}, nil
+	return &RuntimeHost{
+		root:      root,
+		journal:   journal,
+		helper:    helper,
+		ownership: ownership,
+		commands:  commands,
+		runner:    taskRunner,
+	}, nil
 }
 
-func (host *RuntimeHost) Apply(ctx context.Context, input Input, stage lifecycleexecution.Stage, exchange Exchange) error {
+func (host *RuntimeHost) Apply(
+	ctx context.Context,
+	input Input,
+	stage lifecycleexecution.Stage,
+	exchange Exchange,
+) error {
 	_, err := host.execute(ctx, input, stage, false, exchange)
 	return err
 }
 
-func (host *RuntimeHost) Inspect(ctx context.Context, input Input, stage lifecycleexecution.Stage) (*lifecycleexecution.Receipt, error) {
+func (host *RuntimeHost) Inspect(
+	ctx context.Context,
+	input Input,
+	stage lifecycleexecution.Stage,
+) (*lifecycleexecution.Receipt, error) {
 	return host.execute(ctx, input, stage, true, nil)
 }
 
-func (host *RuntimeHost) execute(ctx context.Context, input Input, stage lifecycleexecution.Stage, inspectOnly bool, exchange Exchange) (*lifecycleexecution.Receipt, error) {
+func (host *RuntimeHost) execute(
+	ctx context.Context,
+	input Input,
+	stage lifecycleexecution.Stage,
+	inspectOnly bool,
+	exchange Exchange,
+) (*lifecycleexecution.Receipt, error) {
 	if input.procedure == nil || input.attempt.StartedAt == nil {
 		return nil, invalidInput()
 	}
@@ -61,9 +99,14 @@ func (host *RuntimeHost) execute(ctx context.Context, input Input, stage lifecyc
 	if err != nil {
 		return nil, err
 	}
-	if saved == nil || !saved.Acknowledged || saved.Completion != nil || saved.Failure != nil || saved.Progress.BeganAt == nil ||
-		len(saved.Progress.Completed) >= len(saved.Stages) || saved.Stages[len(saved.Progress.Completed)] != stage {
-		return nil, errs.New(errs.KindStateConflict, "Service lifecycle host operation has no matching acknowledged checkpoint")
+	if saved == nil || !saved.Acknowledged || saved.Completion != nil || saved.Failure != nil ||
+		saved.Progress.BeganAt == nil ||
+		len(saved.Progress.Completed) >= len(saved.Stages) ||
+		saved.Stages[len(saved.Progress.Completed)] != stage {
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle host operation has no matching acknowledged checkpoint",
+		)
 	}
 	if stage.Expected == lifecycleexecution.HookSucceeded {
 		return host.executeHook(ctx, input, stage, saved, inspectOnly, exchange)
@@ -89,10 +132,16 @@ func (host *RuntimeHost) execute(ctx context.Context, input Input, stage lifecyc
 		Start:      &agentpb.WorkStartAck{Attempt: attempt, StartedAt: timestamppb.New(*input.attempt.StartedAt)},
 		Report:     report, Acknowledgement: &agentpb.ServiceLifecycleCheckpointAck{Attempt: attempt,
 			Sequence: checkpoint.Sequence, StageId: checkpoint.StageID, RecordedAt: timestamppb.New(checkpoint.RecordedAt),
-			Evidence: &agentpb.WorkInputReference{InputId: checkpoint.Evidence.ID, Sha256: digest}}, InspectOnly: inspectOnly,
+			Evidence: &agentpb.WorkInputReference{
+				InputId: checkpoint.Evidence.ID,
+				Sha256:  digest,
+			}}, InspectOnly: inspectOnly,
 	}
 	if input.continuation != nil {
-		request.Assignment.Continuation, err = lifecycleexecution.EncodeContinuation(input.procedure, *input.continuation)
+		request.Assignment.Continuation, err = lifecycleexecution.EncodeContinuation(
+			input.procedure,
+			*input.continuation,
+		)
 		if err != nil {
 			return nil, err
 		}

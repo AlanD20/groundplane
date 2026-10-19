@@ -23,7 +23,9 @@ func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, vi
 	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || attempt.FinishedAt != nil ||
 		attempt.Direction != workexecution.Recovery || view.Work.Task.Task.CollectionStartedAt != nil ||
 		at.IsZero() || at.Location() != time.UTC || at.Before(view.Work.Item.Item.UpdatedAt) {
-		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict("Attach inspection no longer owns active execution")
+		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict(
+			"Attach inspection no longer owns active execution",
+		)
 	}
 	saved, err := repository.LoadRecovery(ctx, view.Work)
 	if err != nil {
@@ -35,7 +37,9 @@ func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, vi
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	if report.ObservedAt.After(at) || interrupted && report.State != attachexecution.InspectionInterrupted {
-		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict("Attach inspection cannot claim unobserved execution state")
+		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict(
+			"Attach inspection cannot claim unobserved execution state",
+		)
 	}
 	source, err := repository.LoadCaptured(ctx, view.Work)
 	if err != nil {
@@ -47,7 +51,9 @@ func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, vi
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	if expected != input.Source.Failure.Authority || source.Generation.Record.SettlesInController() {
-		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict("Attach inspection changed its captured binding")
+		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict(
+			"Attach inspection changed its captured binding",
+		)
 	}
 	guards := append(source.Conditions,
 		keyvalue.Condition{Key: RecoveryKey(attempt.WorkItemID), ModRevision: saved.Revision},
@@ -60,15 +66,30 @@ func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, vi
 	if report.ExecutionStopped() {
 		outcome = workexecution.Succeeded
 	}
-	settlement, err := repository.prepareConsumerRecoverySettlement(ctx, view, source.Generation.Record, report, evidence)
+	settlement, err := repository.prepareConsumerRecoverySettlement(
+		ctx,
+		view,
+		source.Generation.Record,
+		report,
+		evidence,
+	)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	settlement.Conditions = append(settlement.Conditions, guards...)
-	settlement.Mutations = append(settlement.Mutations,
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: RecoveryResultKey(attempt.ID), Value: append([]byte(nil), raw...)},
+	settlement.Mutations = append(
+		settlement.Mutations,
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   RecoveryResultKey(attempt.ID),
+			Value: append([]byte(nil), raw...),
+		},
 	)
-	return settlement, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: report.ExecutionStopped()}, nil
+	return settlement, workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       evidence,
+		EffectsSettled: report.ExecutionStopped(),
+	}, nil
 }
 
 func (repository *InputRepository) LoadRecoveryResult(ctx context.Context, view workqueue.ResumeView) ([]byte, error) {
@@ -81,7 +102,10 @@ func (repository *InputRepository) LoadRecoveryResult(ctx context.Context, view 
 		return nil, err
 	}
 	key := RecoveryResultKey(attempt.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -93,11 +117,16 @@ func (repository *InputRepository) LoadRecoveryResult(ctx context.Context, view 
 		return nil, checkpointConflict("Attach inspection result is unavailable")
 	}
 	raw := read.Values[0].Value
-	report, err := attachexecution.DecodeProvisionInspection(attachexecution.ProvisionRecoveryInput{Attempt: attempt, Source: saved.Source}, raw, *attempt.Result)
+	report, err := attachexecution.DecodeProvisionInspection(
+		attachexecution.ProvisionRecoveryInput{Attempt: attempt, Source: saved.Source},
+		raw,
+		*attempt.Result,
+	)
 	if err != nil {
 		return nil, err
 	}
-	if report.ObservedAt.After(*attempt.FinishedAt) || (attempt.Outcome == workexecution.Succeeded) != report.ExecutionStopped() {
+	if report.ObservedAt.After(*attempt.FinishedAt) ||
+		(attempt.Outcome == workexecution.Succeeded) != report.ExecutionStopped() {
 		return nil, checkpointConflict("Attach inspection result differs from its terminal outcome")
 	}
 	return append([]byte(nil), raw...), nil

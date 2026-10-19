@@ -12,13 +12,20 @@ import (
 
 // prepareWorkUnavailable joins credential revocation, so deleting an Agent
 // cannot leave a dispatchable executor. It deliberately retains every slot.
-func (repository *Repository) prepareWorkUnavailable(ctx context.Context, agentID string, revision int64) (workqueue.Change, error) {
+func (repository *Repository) prepareWorkUnavailable(
+	ctx context.Context,
+	agentID string,
+	revision int64,
+) (workqueue.Change, error) {
 	binding, err := hostbindings.Read(ctx, repository.store, agentID, revision)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	key := workqueue.ExecutorKey(workexecution.Identity{Executor: workexecution.Agent, HostID: binding.Binding.HostID})
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: binding.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: binding.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -37,10 +44,17 @@ func (repository *Repository) prepareWorkUnavailable(ctx context.Context, agentI
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if record.Identity.Executor != workexecution.Agent || record.Identity.HostID != binding.Binding.HostID || record.Identity.AgentID != agentID {
+	if record.Identity.Executor != workexecution.Agent || record.Identity.HostID != binding.Binding.HostID ||
+		record.Identity.AgentID != agentID {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Agent does not own the registered host executor")
 	}
-	change, err := workqueue.PrepareAvailability(workqueue.ExecutorSnapshot{Record: record, Revision: value.ModRevision}, record.Identity, false, record.Capacity, record.UnavailableOperations)
+	change, err := workqueue.PrepareAvailability(
+		workqueue.ExecutorSnapshot{Record: record, Revision: value.ModRevision},
+		record.Identity,
+		false,
+		record.Capacity,
+		record.UnavailableOperations,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

@@ -8,8 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareVolumeFailure(ctx context.Context, attempt workexecution.Attempt, action agentpb.VolumeWorkAction,
-	volumeID string, reason volumeexecution.FailureReason,
+func (journal *Journal) PrepareVolumeFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	reason volumeexecution.FailureReason,
 ) (*VolumeFailureDelivery, error) {
 	if attempt.Validate() != nil || attempt.StartedAt == nil || attempt.FinishedAt != nil || !reason.Valid() {
 		return nil, invalid()
@@ -38,7 +42,8 @@ func (journal *Journal) PrepareVolumeFailure(ctx context.Context, attempt workex
 		state = &attemptRecord{Attempt: attempt, UpdatedAt: progress.UpdatedAt,
 			Volume: &VolumeRecord{Action: action, VolumeID: volumeID, Progress: progress}}
 	}
-	if !matchesVolume(state, attempt, action, volumeID) || state.Volume.Completion != nil || state.Volume.Progress.Stage == volumeexecution.Complete {
+	if !matchesVolume(state, attempt, action, volumeID) || state.Volume.Completion != nil ||
+		state.Volume.Progress.Stage == volumeexecution.Complete {
 		return nil, conflict()
 	}
 	if state.Volume.Failure != nil {
@@ -51,8 +56,12 @@ func (journal *Journal) PrepareVolumeFailure(ctx context.Context, attempt workex
 	return state.Volume.Failure, nil
 }
 
-func (journal *Journal) AcknowledgeVolumeFailure(ctx context.Context, attempt workexecution.Attempt, action agentpb.VolumeWorkAction,
-	volumeID string, ack *agentpb.VolumeWorkFailureAck,
+func (journal *Journal) AcknowledgeVolumeFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	ack *agentpb.VolumeWorkFailureAck,
 ) (workexecution.Attempt, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
@@ -75,7 +84,8 @@ func (journal *Journal) AcknowledgeVolumeFailure(ctx context.Context, attempt wo
 		return workexecution.Attempt{}, conflict()
 	}
 	if previous := failure.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result || !previous.FinishedAt.Equal(*terminal.FinishedAt) {
+		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result ||
+			!previous.FinishedAt.Equal(*terminal.FinishedAt) {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *previous, nil

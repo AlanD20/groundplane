@@ -110,7 +110,9 @@ func (capture *ComponentConfigurationCapture) PrepareRouteWork(ctx context.Conte
 	return input, nil
 }
 
-func componentConfigurationReference(reference runtimeconfiguration.Reference) (*agentpb.WorkConfigurationReference, error) {
+func componentConfigurationReference(
+	reference runtimeconfiguration.Reference,
+) (*agentpb.WorkConfigurationReference, error) {
 	if err := runtimeconfiguration.ValidateReference(reference); err != nil {
 		return nil, err
 	}

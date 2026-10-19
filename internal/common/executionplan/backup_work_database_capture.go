@@ -107,7 +107,10 @@ func advanceBackupCapturedObject(next, current *agentpb.BackupCaptureResume, ste
 	case report.GetUploadVerified() != nil:
 		value, uploaded := report.GetUploadVerified(), current.GetUploadCompleted()
 		if uploaded == nil || value.PointId != uploaded.PointId || !proto.Equal(value.Evidence, uploaded.Evidence) ||
-			!backupResumeObjectMatchesTarget(value.Object, uploaded.Target) || value.MetadataCount != uploaded.MetadataCount ||
+			!backupResumeObjectMatchesTarget(
+				value.Object,
+				uploaded.Target,
+			) || value.MetadataCount != uploaded.MetadataCount ||
 			!bytes.Equal(value.MetadataSha256, uploaded.MetadataSha256) ||
 			(uploaded.GetReturnedObject() != nil && !proto.Equal(uploaded.GetReturnedObject(), value.Object)) {
 			return backupResumeHistoryInvalid()

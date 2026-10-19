@@ -44,7 +44,13 @@ func (platform *Platform) newProvisioningWork(queue *workqueue.Repository, depen
 	if err != nil {
 		return provisioningWork{}, err
 	}
-	reports, err := backingservices.NewWorkReports(queue, backingRecords, dependencies.CapturedFiles, dependencies.AttachFacts, diagnostics)
+	reports, err := backingservices.NewWorkReports(
+		queue,
+		backingRecords,
+		dependencies.CapturedFiles,
+		dependencies.AttachFacts,
+		diagnostics,
+	)
 	if err != nil {
 		return provisioningWork{}, err
 	}
@@ -55,11 +61,20 @@ func (platform *Platform) newProvisioningWork(queue *workqueue.Repository, depen
 		admission: []workdispatch.Registration{
 			{Operation: workexecution.Environment, Executor: workexecution.Agent, Owner: owner},
 			{Operation: workexecution.BackingProvision, Executor: workexecution.Agent, Owner: backing}},
-		retry:     []workdispatch.RetryRegistration{{Operation: workexecution.Environment, Owner: owner}, {Operation: workexecution.BackingProvision, Owner: backing}},
-		retention: []operationretention.WorkRegistration{{Operation: workexecution.Environment, Owner: owner}, {Operation: workexecution.BackingProvision, Owner: backing}},
+		retry: []workdispatch.RetryRegistration{
+			{Operation: workexecution.Environment, Owner: owner},
+			{Operation: workexecution.BackingProvision, Owner: backing},
+		},
+		retention: []operationretention.WorkRegistration{
+			{Operation: workexecution.Environment, Owner: owner},
+			{Operation: workexecution.BackingProvision, Owner: backing},
+		},
 		completion: []workdispatch.CompletionRegistration{
 			{Action: workexecution.ActionCreate, Operation: workexecution.Environment, Owner: owner},
 			{Action: workexecution.ActionCreate, Operation: workexecution.BackingProvision, Owner: backing}},
-		starts: []workdispatch.AgentStartRegistration{{Operation: workexecution.Environment, Owner: owner}, {Operation: workexecution.BackingProvision, Owner: backing}},
+		starts: []workdispatch.AgentStartRegistration{
+			{Operation: workexecution.Environment, Owner: owner},
+			{Operation: workexecution.BackingProvision, Owner: backing},
+		},
 	}, nil
 }

@@ -130,7 +130,8 @@ func NeedsAgent(input Input) bool {
 		return false
 	}
 	if input.Backing.Desired.Adapter == "custom" {
-		return input.Attach.HookBundle && input.Backing.Desired.Hooks != nil && input.Backing.Desired.Hooks.Detach != nil
+		return input.Attach.HookBundle && input.Backing.Desired.Hooks != nil &&
+			input.Backing.Desired.Hooks.Detach != nil
 	}
 	return input.Backing.Desired.Authentication != "none"
 }

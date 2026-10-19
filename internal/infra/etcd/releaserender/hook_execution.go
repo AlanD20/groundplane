@@ -22,22 +22,37 @@ func CaptureHookExecution(task workexecution.Task, item workexecution.Item, oper
 		item.Input == nil || item.AttemptNumber != 0 || item.ForwardRevoked || task.Stop != nil ||
 		task.FinishedAt != nil || at.Before(task.CreatedAt) ||
 		validateReleaseHookRenderInputs([]ReleaseHookRenderInput{hook}, item.TargetID) != nil {
-		return scriptexecutions.ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "Release hook requires unstarted native Service work")
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(
+			errs.KindValidationFailed,
+			"Release hook requires unstarted native Service work",
+		)
 	}
 	var snapshot agentpb.ResolvedRunnerSnapshot
 	var projection agentpb.ScriptRunnerProjection
-	if proto.Unmarshal(hook.RunnerSnapshot, &snapshot) != nil || proto.Unmarshal(hook.RunnerProjection, &projection) != nil ||
-		snapshot.TenantId != task.Scope.TenantID || snapshot.ProjectId != task.Scope.ProjectID ||
-		snapshot.EnvironmentId != task.Scope.EnvironmentID || snapshot.ServiceId != item.TargetID {
-		return scriptexecutions.ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "Release hook snapshot belongs to another resource scope")
+	if proto.Unmarshal(hook.RunnerSnapshot, &snapshot) != nil ||
+		proto.Unmarshal(hook.RunnerProjection, &projection) != nil ||
+		snapshot.TenantId != task.Scope.TenantID ||
+		snapshot.ProjectId != task.Scope.ProjectID ||
+		snapshot.EnvironmentId != task.Scope.EnvironmentID ||
+		snapshot.ServiceId != item.TargetID {
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(
+			errs.KindValidationFailed,
+			"Release hook snapshot belongs to another resource scope",
+		)
 	}
 	bodySHA, err := hex.DecodeString(hook.BodySHA256)
 	if err != nil || len(bodySHA) != sha256.Size {
-		return scriptexecutions.ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "Release hook body digest is invalid")
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(
+			errs.KindValidationFailed,
+			"Release hook body digest is invalid",
+		)
 	}
 	serviceSHA, err := hex.DecodeString(hook.ServiceDefinitionSHA256)
 	if err != nil || len(serviceSHA) != sha256.Size {
-		return scriptexecutions.ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "Release hook Service digest is invalid")
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(
+			errs.KindValidationFailed,
+			"Release hook Service digest is invalid",
+		)
 	}
 	snapshotSHA := sha256.Sum256(hook.RunnerSnapshot)
 	record, err := scriptexecutions.NewExecution(scriptexecutions.ExecutionInput{
@@ -59,7 +74,10 @@ func CaptureHookExecution(task workexecution.Task, item workexecution.Item, oper
 	}
 	if record.Input != hook.Input {
 		record.Clear()
-		return scriptexecutions.ScriptExecutionRecord{}, errs.New(errs.KindStateConflict, "Release hook captured input changed before publication")
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(
+			errs.KindStateConflict,
+			"Release hook captured input changed before publication",
+		)
 	}
 	parent := *item.Input
 	record.WorkInput = &parent

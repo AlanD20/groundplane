@@ -10,5 +10,9 @@ import (
 // publication capability without exposing retired hidden-Task transactions.
 type EnvironmentBlueprintStore interface {
 	etcdstore.Store
-	TransactEnvironmentBlueprint(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
+	TransactEnvironmentBlueprint(
+		context.Context,
+		[]etcdstore.Condition,
+		[]etcdstore.Mutation,
+	) (etcdstore.TransactionResult, error)
 }

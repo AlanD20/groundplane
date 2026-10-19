@@ -70,10 +70,17 @@ func (repository *HierarchyRepository) CreateEnvironmentWithWork(
 	}
 	if input.Environment != record || input.Scope.ProjectID != project.Record.ID ||
 		input.Scope.TenantID != project.Record.TenantID || input.VolumeRoot != volumeRoot {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Environment creation capture does not own its provisioning record")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment creation capture does not own its provisioning record",
+		)
 	}
-	if marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject || marker.Locator.ScopeID != project.Record.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Environment creation replay must be Project-scoped")
+	if marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject ||
+		marker.Locator.ScopeID != project.Record.ID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment creation replay must be Project-scoped",
+		)
 	}
 	task, item, err := input.Work()
 	if err != nil {
@@ -215,7 +222,14 @@ func (repository *HierarchyRepository) CreateEnvironmentWithWork(
 	conditions = append(conditions, etcdstore.Condition{Key: environmentprovision.InputKey(input.WorkItemID)})
 	conditions = append(conditions, host.Conditions...)
 	mutations = append(mutations, work.Mutations...)
-	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentprovision.InputKey(input.WorkItemID), Value: captured})
+	mutations = append(
+		mutations,
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   environmentprovision.InputKey(input.WorkItemID),
+			Value: captured,
+		},
+	)
 	compareCount := len(conditions)
 	classify := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != compareCount {
@@ -233,7 +247,12 @@ func (repository *HierarchyRepository) CreateEnvironmentWithWork(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotencyrecord.IdempotencyMarkerTask, conditions, mutations, classify)
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotencyrecord.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

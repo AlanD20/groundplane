@@ -14,7 +14,11 @@ import (
 // RecordTagOutcome consumes an inspected Docker outcome, never a transport-error
 // guess. Unknown retains the write fence; applied/unchanged release it atomically
 // with the saved result. An applied tag stays readable after Task retention.
-func (journal *Journal) RecordTagOutcome(ctx context.Context, outcome imagefetch.TagAssignmentOutcome, at time.Time) error {
+func (journal *Journal) RecordTagOutcome(
+	ctx context.Context,
+	outcome imagefetch.TagAssignmentOutcome,
+	at time.Time,
+) error {
 	owned, err := journal.read(ctx, false)
 	if err != nil {
 		return err
@@ -56,7 +60,10 @@ func (journal *Journal) RecordTagOutcome(ctx context.Context, outcome imagefetch
 		return conflict()
 	}
 	change := workqueue.Change{Conditions: []keyvalue.Condition{
-		{Key: selectionKey, ModRevision: read.Values[0].ModRevision}, {Key: writeKey, ModRevision: read.Values[1].ModRevision}}}
+		{
+			Key:         selectionKey,
+			ModRevision: read.Values[0].ModRevision,
+		}, {Key: writeKey, ModRevision: read.Values[1].ModRevision}}}
 	record.UpdatedAt = at
 	switch outcome {
 	case imagefetch.TagAssignmentUnknown:

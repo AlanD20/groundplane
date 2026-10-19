@@ -24,7 +24,10 @@ func (exchange *nativeExchange) ReleaseBackupConfigs(attemptID string) {
 	exchange.backupConfigs.Release(attemptID)
 }
 
-func (exchange *nativeExchange) acceptBackupConfig(ctx context.Context, message *agentpb.ControllerMessage) (bool, error) {
+func (exchange *nativeExchange) acceptBackupConfig(
+	ctx context.Context,
+	message *agentpb.ControllerMessage,
+) (bool, error) {
 	frame, credit := message.GetBackupConfigTransfer(), message.GetBackupConfigCredit()
 	if frame == nil && credit == nil {
 		return false, nil
@@ -46,21 +49,38 @@ func (exchange *nativeExchange) acceptBackupConfig(ctx context.Context, message 
 	return true, exchange.backupConfigs.AcceptCredit(ctx, credit)
 }
 
-func (exchange *nativeExchange) CaptureConfigStream(binding backupconfigtransfer.Binding) (*backupconfiguration.CaptureStream, error) {
+func (exchange *nativeExchange) CaptureConfigStream(
+	binding backupconfigtransfer.Binding,
+) (*backupconfiguration.CaptureStream, error) {
 	return exchange.backupConfigs.Stream(binding, func(ctx context.Context, credit *agentpb.BackupConfigCredit) error {
-		return exchange.sendConfig(ctx, &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupConfigCredit{BackupConfigCredit: proto.CloneOf(credit)}})
+		return exchange.sendConfig(
+			ctx,
+			&agentpb.AgentMessage{
+				Payload: &agentpb.AgentMessage_BackupConfigCredit{BackupConfigCredit: proto.CloneOf(credit)},
+			},
+		)
 	})
 }
 
-func (exchange *nativeExchange) RestoreConfigStream(ctx context.Context, binding backupconfigtransfer.Binding) (*backupconfiguration.RestoreStream, error) {
-	return exchange.backupConfigs.RestoreStream(ctx, binding, func(ctx context.Context, frame *agentpb.BackupConfigTransfer) error {
-		owned := proto.CloneOf(frame)
-		err := exchange.sendConfig(ctx, &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupConfigTransfer{BackupConfigTransfer: owned}})
-		if err != nil {
-			backupconfigtransfer.ClearFrame(owned)
-		}
-		return err
-	})
+func (exchange *nativeExchange) RestoreConfigStream(
+	ctx context.Context,
+	binding backupconfigtransfer.Binding,
+) (*backupconfiguration.RestoreStream, error) {
+	return exchange.backupConfigs.RestoreStream(
+		ctx,
+		binding,
+		func(ctx context.Context, frame *agentpb.BackupConfigTransfer) error {
+			owned := proto.CloneOf(frame)
+			err := exchange.sendConfig(
+				ctx,
+				&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupConfigTransfer{BackupConfigTransfer: owned}},
+			)
+			if err != nil {
+				backupconfigtransfer.ClearFrame(owned)
+			}
+			return err
+		},
+	)
 }
 
 func (exchange *nativeExchange) sendConfig(ctx context.Context, message *agentpb.AgentMessage) error {

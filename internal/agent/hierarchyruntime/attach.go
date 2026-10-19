@@ -18,7 +18,12 @@ type AttachCheckpoints interface {
 // container. inspectOnly may return a retained exact result, but must never
 // execute an ambiguous command again or infer completion from process absence.
 type AttachHost interface {
-	ExecuteRemovalCommand(context.Context, attachexecution.RemovalInput, attachexecution.RemovalProgress, bool) (attachexecution.RemovalCommandResult, error)
+	ExecuteRemovalCommand(
+		context.Context,
+		attachexecution.RemovalInput,
+		attachexecution.RemovalProgress,
+		bool,
+	) (attachexecution.RemovalCommandResult, error)
 	InspectRemoval(context.Context, attachexecution.RecoveryInput) (attachexecution.RemovalInspection, error)
 }
 
@@ -26,7 +31,10 @@ func RunAttachRemoval(ctx context.Context, input attachexecution.RemovalInput, c
 	host AttachHost,
 ) (*attachexecution.RemovalProgress, error) {
 	if ctx == nil || checkpoints == nil || host == nil || input.Validate() != nil || input.Attempt.StartedAt == nil {
-		return nil, errs.New(errs.KindInternal, "Attach removal runtime requires its captured input, checkpoints and host executor")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Attach removal runtime requires its captured input, checkpoints and host executor",
+		)
 	}
 	if err := checkpoints.Resume(ctx); err != nil {
 		return nil, err
@@ -95,7 +103,10 @@ func RunAttachRemoval(ctx context.Context, input attachexecution.RemovalInput, c
 		}
 	}
 	if !progress.Complete(input) {
-		return progress, errs.New(errs.KindStateConflict, "Attach removal ended before every captured command completed")
+		return progress, errs.New(
+			errs.KindStateConflict,
+			"Attach removal ended before every captured command completed",
+		)
 	}
 	return progress, nil
 }
@@ -115,8 +126,12 @@ func acknowledgedAttachProgress(ctx context.Context, checkpoints AttachCheckpoin
 		return nil, err
 	}
 	got, err := (attachexecution.RemovalReport{Progress: *actual}).Checkpoint(input)
-	if err != nil || got.Sequence != want.Sequence || got.Evidence != want.Evidence || got.StageID != want.StageID || !got.RecordedAt.Equal(want.RecordedAt) {
-		return nil, errs.New(errs.KindStateConflict, "Attach removal journal differs from the acknowledged command boundary")
+	if err != nil || got.Sequence != want.Sequence || got.Evidence != want.Evidence || got.StageID != want.StageID ||
+		!got.RecordedAt.Equal(want.RecordedAt) {
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Attach removal journal differs from the acknowledged command boundary",
+		)
 	}
 	return actual, nil
 }

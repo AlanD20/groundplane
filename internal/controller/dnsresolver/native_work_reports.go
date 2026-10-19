@@ -24,7 +24,11 @@ type WorkReports struct {
 	diagnostics *executiondiagnostics.Repository
 }
 
-func NewWorkReports(queue *workqueue.Repository, records *resolverwork.Repository, diagnostics *executiondiagnostics.Repository) (*WorkReports, error) {
+func NewWorkReports(
+	queue *workqueue.Repository,
+	records *resolverwork.Repository,
+	diagnostics *executiondiagnostics.Repository,
+) (*WorkReports, error) {
 	if queue == nil || records == nil || diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "CoreDNS reporting requires native execution and diagnostic storage")
 	}
@@ -42,9 +46,15 @@ func (service *WorkReports) reportView(ctx context.Context, authorization agentr
 	if err != nil {
 		return workqueue.ResumeView{}, err
 	}
-	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || started && view.Attempt.Attempt.StartedAt == nil ||
-		view.Work.Item.Item.Operation != workexecution.Resolver || !view.Work.Task.Task.PublicationComplete || view.Work.Task.Task.CollectionStartedAt != nil {
-		return workqueue.ResumeView{}, errs.New(errs.KindStateConflict, "CoreDNS report has no retained captured execution")
+	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
+		started && view.Attempt.Attempt.StartedAt == nil ||
+		view.Work.Item.Item.Operation != workexecution.Resolver ||
+		!view.Work.Task.Task.PublicationComplete ||
+		view.Work.Task.Task.CollectionStartedAt != nil {
+		return workqueue.ResumeView{}, errs.New(
+			errs.KindStateConflict,
+			"CoreDNS report has no retained captured execution",
+		)
 	}
 	return view, nil
 }
@@ -52,7 +62,8 @@ func (service *WorkReports) reportView(ctx context.Context, authorization agentr
 func (service *WorkReports) CheckpointResolver(ctx context.Context, authorization agentregistration.WorkAuthorization,
 	request *agentpb.ResolverWorkCheckpointRequest,
 ) (*agentpb.ResolverWorkCheckpointAck, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Progress) == 0 || len(request.Progress) > resolverexecution.MaximumReportBytes {
+	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Progress) == 0 ||
+		len(request.Progress) > resolverexecution.MaximumReportBytes {
 		return nil, errs.New(errs.KindValidationFailed, "CoreDNS checkpoint is missing or oversized")
 	}
 	guards, err := authorization.Conditions()
@@ -98,10 +109,18 @@ func (service *WorkReports) CheckpointResolver(ctx context.Context, authorizatio
 	if err != nil {
 		return nil, err
 	}
-	return &agentpb.ResolverWorkCheckpointAck{Attempt: proto.CloneOf(request.Attempt), Progress: append([]byte(nil), request.Progress...), Evidence: evidence}, nil
+	return &agentpb.ResolverWorkCheckpointAck{
+		Attempt:  proto.CloneOf(request.Attempt),
+		Progress: append([]byte(nil), request.Progress...),
+		Evidence: evidence,
+	}, nil
 }
 
-func (service *WorkReports) commitReport(ctx context.Context, guards []keyvalue.Condition, change workqueue.Change) error {
+func (service *WorkReports) commitReport(
+	ctx context.Context,
+	guards []keyvalue.Condition,
+	change workqueue.Change,
+) error {
 	result, err := service.queue.Commit(ctx, workqueue.Change{Conditions: guards}, change)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
@@ -113,7 +132,11 @@ func (service *WorkReports) commitReport(ctx context.Context, guards []keyvalue.
 	return nil
 }
 
-func resolverResultAck(request *agentpb.WorkAttemptIdentity, attempt workexecution.Attempt, kind string) (*agentpb.ResolverWorkResultAck, error) {
+func resolverResultAck(
+	request *agentpb.WorkAttemptIdentity,
+	attempt workexecution.Attempt,
+	kind string,
+) (*agentpb.ResolverWorkResultAck, error) {
 	if attempt.FinishedAt == nil || attempt.Result == nil {
 		return nil, errs.New(errs.KindStateConflict, "CoreDNS result has no terminal receipt")
 	}

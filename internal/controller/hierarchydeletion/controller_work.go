@@ -24,9 +24,16 @@ func NewControllerWork(records *etcd.HierarchyDeletionRepository) (*ControllerWo
 	return &ControllerWork{records: records}, nil
 }
 
-func (owner *ControllerWork) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *ControllerWork) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	if request.Item.Item.Placement.Executor != workexecution.Controller || !request.DecisionOnly {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "metadata removal requires Controller decision admission")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"metadata removal requires Controller decision admission",
+		)
 	}
 	renewal, err := owner.records.PrepareHierarchyDeadline(ctx, request, at)
 	if err != nil {
@@ -36,7 +43,13 @@ func (owner *ControllerWork) Admit(ctx context.Context, request workqueue.Assign
 		return workdispatch.Decision{Disposition: workdispatch.Advance, Change: renewal}, nil
 	}
 	if !at.Before(request.Item.Item.Deadline) {
-		change, err := owner.records.PrepareHierarchyUnstartedStop(ctx, request.Task, request.Item, workexecution.Failed, at)
+		change, err := owner.records.PrepareHierarchyUnstartedStop(
+			ctx,
+			request.Task,
+			request.Item,
+			workexecution.Failed,
+			at,
+		)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
 	progress, err := owner.records.PrepareHierarchyControllerProgress(ctx, request, at)
@@ -50,7 +63,12 @@ func (owner *ControllerWork) Admit(ctx context.Context, request workqueue.Assign
 	return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 }
 
-func (owner *ControllerWork) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *ControllerWork) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "removal work has no stop request")
 	}

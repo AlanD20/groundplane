@@ -76,5 +76,7 @@ func (reader *Reader) PostgresPatchConditions(
 			return nil, err
 		}
 	}
-	return []etcdstore.Condition{{Key: backingpostgresruntime.Key(artifact.OwnerId, serviceID), ModRevision: prior.Revision}}, nil
+	return []etcdstore.Condition{
+		{Key: backingpostgresruntime.Key(artifact.OwnerId, serviceID), ModRevision: prior.Revision},
+	}, nil
 }

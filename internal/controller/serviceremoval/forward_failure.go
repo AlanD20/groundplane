@@ -33,7 +33,14 @@ func (service *WorkReports) FailLifecycle(ctx context.Context, authorization age
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
 		at := time.Now().UTC()
-		proof, result, err := service.inputs.PrepareFailure(ctx, view, input, lifecycleexecution.FailureReason(request.Reason), at, false)
+		proof, result, err := service.inputs.PrepareFailure(
+			ctx,
+			view,
+			input,
+			lifecycleexecution.FailureReason(request.Reason),
+			at,
+			false,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +61,10 @@ func (service *WorkReports) FailLifecycle(ctx context.Context, authorization age
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Service removal failure ownership changed; resend the saved report")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Service removal failure ownership changed; resend the saved report",
+			)
 		}
 		view, input, err = service.forwardReport(ctx, authorization, request.Attempt)
 		if err != nil {

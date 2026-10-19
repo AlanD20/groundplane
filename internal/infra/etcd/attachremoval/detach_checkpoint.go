@@ -75,10 +75,18 @@ func validateDetachDeliverySource(ctx context.Context, capture DetachCapture, vi
 	digest := sha256.Sum256(raw)
 	clear(raw)
 	source, target := input.Removal.CapturedSource, capture.Input.Snapshot.Source
-	if source.InputId != ids.DeriveAt(ids.KindPlan, view.Work.Task.Task.CreatedAt, view.Work.Item.Item.ID, "attach-removal-source") ||
-		!bytes.Equal(source.Sha256, digest[:]) || input.Removal.AttachId != target.Attach.ID ||
-		input.Removal.BackingServiceId != target.Attach.BackingServiceID || input.Removal.TenantId != target.TenantID ||
-		input.Removal.ProjectId != target.ProjectID || input.Removal.EnvironmentId != target.Attach.EnvironmentID ||
+	if source.InputId != ids.DeriveAt(
+		ids.KindPlan,
+		view.Work.Task.Task.CreatedAt,
+		view.Work.Item.Item.ID,
+		"attach-removal-source",
+	) ||
+		!bytes.Equal(source.Sha256, digest[:]) ||
+		input.Removal.AttachId != target.Attach.ID ||
+		input.Removal.BackingServiceId != target.Attach.BackingServiceID ||
+		input.Removal.TenantId != target.TenantID ||
+		input.Removal.ProjectId != target.ProjectID ||
+		input.Removal.EnvironmentId != target.Attach.EnvironmentID ||
 		input.Removal.ServiceId != target.Attach.ServiceID {
 		return recordcodec.CorruptRecord()
 	}
@@ -140,7 +148,9 @@ func (repository *InputRepository) prepareConsumerAcknowledgement(ctx context.Co
 	next, err := serviceruntimerecord.AcknowledgeAttach(previous, serviceruntimerecord.AttachPreparation{
 		EnvironmentID: previous.EnvironmentID, WorkItemID: source.WorkItemID, Input: source.Input,
 		StageID: source.Checkpoint.StageID, RenderGeneration: source.RenderGeneration,
-		Updates: []serviceruntimerecord.AttachUpdate{{PreviousRevision: captured.Snapshot.RuntimeRevision, Runtime: updatedRuntime}},
+		Updates: []serviceruntimerecord.AttachUpdate{
+			{PreviousRevision: captured.Snapshot.RuntimeRevision, Runtime: updatedRuntime},
+		},
 	}, source)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -185,23 +195,33 @@ func (repository *InputRepository) prepareConsumerAcknowledgement(ctx context.Co
 		if !same {
 			return workqueue.Change{}, checkpointConflict("Detach Retry cannot replace a changed consumer runtime")
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: runtimeKey, ModRevision: current.ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: runtimeKey, ModRevision: current.ModRevision},
+		)
 		return change, nil
 	}
 	current := read.Values[1]
 	if current == nil || current.ModRevision != captured.Snapshot.RuntimeRevision {
-		return workqueue.Change{}, checkpointConflict("Detach consumer runtime changed before its network result could be saved")
+		return workqueue.Change{}, checkpointConflict(
+			"Detach consumer runtime changed before its network result could be saved",
+		)
 	}
 	raw, err := releases.EncodeReleaseRecord("service-acknowledged-runtime", next)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	receipt, err := recordcodec.Encode("detach-consumer-settlement", consumerSettlement{Source: source, CandidateSHA256: digest})
+	receipt, err := recordcodec.Encode(
+		"detach-consumer-settlement",
+		consumerSettlement{Source: source, CandidateSHA256: digest},
+	)
 	if err != nil {
 		clear(raw)
 		return workqueue.Change{}, err
 	}
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key}, {Key: runtimeKey, ModRevision: current.ModRevision}},
+	return workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: key}, {Key: runtimeKey, ModRevision: current.ModRevision}},
 		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: runtimeKey, Value: raw},
-			{Type: keyvalue.MutationPut, Key: key, Value: receipt}}}, nil
+			{Type: keyvalue.MutationPut, Key: key, Value: receipt}},
+	}, nil
 }

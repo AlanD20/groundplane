@@ -181,8 +181,12 @@ func (service *serviceMutationService) removeServiceOnce(
 	}
 	input := serviceremovalwork.Input{
 		TaskID: taskID, WorkItemID: serviceStableIDFromRevision(ids.KindWorkItem, taskID),
-		PlanID:    serviceStableIDFromRevision(ids.KindPlan, taskID),
-		Scope:     workexecution.Scope{TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID},
+		PlanID: serviceStableIDFromRevision(ids.KindPlan, taskID),
+		Scope: workexecution.Scope{
+			TenantID:      tenant.Record.ID,
+			ProjectID:     project.Record.ID,
+			EnvironmentID: environment.Record.ID,
+		},
 		ServiceID: serviceID, ServiceName: current.Record.Desired.Name, ServiceRevision: current.Revision,
 		RuntimeRevision: servicerecord.ServiceRuntimeRevision(current), RuntimeSourceRevision: runtimeSource.Revision,
 		DesiredRevisionID: claim.RevisionID, DesiredSHA256: hex.EncodeToString(seal.ProjectionSHA256[:]),

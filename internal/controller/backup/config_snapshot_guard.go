@@ -28,7 +28,10 @@ func NewConfigSnapshotWriteGuard(store keyvalue.Store) (backupconfiguration.Capt
 	return func(ctx context.Context, input backupconfiguration.CaptureSnapshotWriteAuthority, revision int64) ([]keyvalue.Condition, error) {
 		if revision <= 0 || ids.Validate(ids.KindTask, input.TaskID) != nil ||
 			input.SnapshotID != input.TaskID || ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
-			ids.Validate(ids.KindBackupSource, input.SourceID) != nil || input.ReadRevision <= 0 || input.Expected == nil {
+			ids.Validate(
+				ids.KindBackupSource,
+				input.SourceID,
+			) != nil || input.ReadRevision <= 0 || input.Expected == nil {
 			return nil, configSnapshotGuardConflict()
 		}
 		page, err := queue.ListWork(ctx, input.TaskID, "", 1, revision)

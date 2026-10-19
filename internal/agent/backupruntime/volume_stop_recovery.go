@@ -28,10 +28,24 @@ func (executor *Executor) finishVolumeConsumerStop(ctx context.Context, assignme
 	}
 	return stopVolumeConsumerSet(ctx, assignment.Input, 0, cursor.GetRestore(), publisher, volumeStopCommands{
 		observe: func(ctx context.Context, serviceID string) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
-			return host.RunRecovery(ctx, assignment, 0, serviceID, agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_UNSPECIFIED, true)
+			return host.RunRecovery(
+				ctx,
+				assignment,
+				0,
+				serviceID,
+				agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_UNSPECIFIED,
+				true,
+			)
 		},
 		stop: func(ctx context.Context, serviceID string) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
-			return host.RunRecovery(ctx, assignment, 0, serviceID, agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_STOP, false)
+			return host.RunRecovery(
+				ctx,
+				assignment,
+				0,
+				serviceID,
+				agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_STOP,
+				false,
+			)
 		},
 		resumeIntent: func(ctx context.Context, ordinal uint32, serviceID string, digest [sha256.Size]byte) error {
 			return publishVolumeServiceProgress(ctx, publisher, ordinal, serviceID,

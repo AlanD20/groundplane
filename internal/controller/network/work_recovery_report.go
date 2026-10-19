@@ -17,8 +17,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (service *WorkReports) RecoverNetwork(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.NetworkWorkRecoveryReportRequest) (*agentpb.NetworkWorkRecoveryReportAck, error) {
-	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 || len(request.Report) > networkexecution.MaximumProgressBytes {
+func (service *WorkReports) RecoverNetwork(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.NetworkWorkRecoveryReportRequest,
+) (*agentpb.NetworkWorkRecoveryReportAck, error) {
+	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 ||
+		len(request.Report) > networkexecution.MaximumProgressBytes {
 		return nil, errs.New(errs.KindValidationFailed, "Network recovery report is missing or invalid")
 	}
 	guards, err := authorization.Conditions()

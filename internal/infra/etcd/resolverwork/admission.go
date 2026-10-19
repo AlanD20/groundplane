@@ -13,7 +13,10 @@ import (
 
 // ReadAdmission permits only captured intent against the same applied
 // predecessor. New desired DNS input revokes future grants, not cleanup.
-func (repository *Repository) ReadAdmission(ctx context.Context, view workqueue.View) (StoredInput, workqueue.Change, bool, error) {
+func (repository *Repository) ReadAdmission(
+	ctx context.Context,
+	view workqueue.View,
+) (StoredInput, workqueue.Change, bool, error) {
 	stored, err := repository.Load(ctx, view)
 	if err != nil {
 		return StoredInput{}, workqueue.Change{}, false, err
@@ -28,7 +31,10 @@ func (repository *Repository) ReadAdmission(ctx context.Context, view workqueue.
 	defer keyvalue.ClearValues(read.Values)
 	change := workqueue.Change{Conditions: append([]keyvalue.Condition(nil), stored.Guards...)}
 	for index, key := range keys {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])},
+		)
 	}
 	if read.Values[0] == nil || read.Values[2] == nil || read.Values[3] == nil ||
 		read.Values[4] == nil || string(read.Values[4].Value) != input.WorkID ||
@@ -62,15 +68,20 @@ func (repository *Repository) ReadAdmission(ctx context.Context, view workqueue.
 		if err != nil {
 			return StoredInput{}, workqueue.Change{}, false, err
 		}
-		if applied.HostID != input.HostID || applied.ComponentID != input.ComponentID || applied.Generation >= input.Generation ||
-			applied.Desired.Enabled != input.PreviousEnabled || applied.FileOwner != input.PreviousFileOwner ||
+		if applied.HostID != input.HostID || applied.ComponentID != input.ComponentID ||
+			applied.Generation >= input.Generation ||
+			applied.Desired.Enabled != input.PreviousEnabled ||
+			applied.FileOwner != input.PreviousFileOwner ||
 			(applied.Configuration == nil) != (input.Previous == nil) {
 			return stored, change, false, nil
 		}
 		if input.Previous != nil {
 			prior := applied.Configuration
 			if prior.PlanID != input.Previous.PlanID || prior.Generation != input.Previous.Generation ||
-				!proto.Equal(prior.Runtime, input.Previous.Runtime) || !proto.Equal(prior.Apply, input.Previous.Apply) ||
+				!proto.Equal(
+					prior.Runtime,
+					input.Previous.Runtime,
+				) || !proto.Equal(prior.Apply, input.Previous.Apply) ||
 				!proto.Equal(prior.Observe, input.Previous.Observe) {
 				return stored, change, false, nil
 			}

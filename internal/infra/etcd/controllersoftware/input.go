@@ -76,8 +76,11 @@ func (capture Capture) Match(item workexecution.Item) error {
 	if err != nil {
 		return err
 	}
-	if item.Operation != workexecution.ControllerSoftware || item.ID != capture.WorkItemID || item.TaskID != capture.TaskID ||
-		item.TargetID != TargetID() || item.Input == nil || *item.Input != reference ||
+	if item.Operation != workexecution.ControllerSoftware || item.ID != capture.WorkItemID ||
+		item.TaskID != capture.TaskID ||
+		item.TargetID != TargetID() ||
+		item.Input == nil ||
+		*item.Input != reference ||
 		item.Placement != (workexecution.Placement{Executor: workexecution.Controller}) ||
 		!slices.Equal(item.Claims, Claims()) ||
 		!item.CreatedAt.Equal(capture.CreatedAt) {

@@ -29,7 +29,10 @@ func (repository *ServiceRepository) PublishServiceLifecycle(ctx context.Context
 		return IdempotencyTransactionResult{}, err
 	}
 	if input.Scope != (workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID}) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Service lifecycle scope differs from its Environment")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Service lifecycle scope differs from its Environment",
+		)
 	}
 	route := "/services/{id}/" + string(input.Action)
 	target := idempotency.IdempotencyReplayTarget{Kind: idempotency.IdempotencyReplayTargetService, ID: input.ServiceID}
@@ -37,8 +40,14 @@ func (repository *ServiceRepository) PublishServiceLifecycle(ctx context.Context
 		marker.State != idempotency.IdempotencyMarkerPending || marker.TaskID != input.TaskID ||
 		marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment || marker.Locator.ScopeID != environment.Record.ID ||
 		marker.Locator.Method != http.MethodPost || marker.Locator.Route != route || marker.ReplayTarget == nil || *marker.ReplayTarget != target ||
-		!idempotency.ValidTaskResponse(marker.Response, input.TaskID) || !marker.CreatedAt.Equal(input.CreatedAt) || !marker.UpdatedAt.Equal(input.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Service lifecycle replay marker differs from its action")
+		!idempotency.ValidTaskResponse(
+			marker.Response,
+			input.TaskID,
+		) || !marker.CreatedAt.Equal(input.CreatedAt) || !marker.UpdatedAt.Equal(input.CreatedAt) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Service lifecycle replay marker differs from its action",
+		)
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
 		return existing, err
@@ -92,7 +101,10 @@ func (repository *ServiceRepository) PublishServiceLifecycle(ctx context.Context
 		return IdempotencyTransactionResult{}, err
 	}
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*keyvalue.KeyValue) error {
-		return errs.New(errs.KindStateConflict, "Service runtime or Environment changed before lifecycle publication; retry the action")
+		return errs.New(
+			errs.KindStateConflict,
+			"Service runtime or Environment changed before lifecycle publication; retry the action",
+		)
 	})
 	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {

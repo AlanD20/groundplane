@@ -33,7 +33,10 @@ func (preparer *Preparer) Reconcile(ctx context.Context, input Input, checkpoint
 	if err == nil {
 		status, ok := info.Sys().(*syscall.Stat_t)
 		if !info.IsDir() || info.Mode().Perm() != 0o700 || !ok || status.Uid != uint32(os.Geteuid()) {
-			return Reconciliation{}, errs.New(errs.KindStateConflict, "software preparation cleanup workspace ownership is unsafe")
+			return Reconciliation{}, errs.New(
+				errs.KindStateConflict,
+				"software preparation cleanup workspace ownership is unsafe",
+			)
 		}
 		if err := staleDockerOperation(preparer, workspace, input.OperationID, input.Source).cleanup(ctx); err != nil {
 			return Reconciliation{}, err

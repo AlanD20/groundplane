@@ -20,12 +20,18 @@ type HelperInput struct {
 }
 
 func OpenHelperRequest(request *agentpb.ResolverWorkHelperRequest) (HelperInput, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || request.Assignment == nil || request.Assignment.Attempt == nil ||
+	if request == nil || executionplan.RejectUnknown(request) != nil || request.Assignment == nil ||
+		request.Assignment.Attempt == nil ||
 		proto.Size(request) > MaximumInputBytes+4*MaximumReportBytes {
 		return HelperInput{}, invalid("DNS resolver helper request is missing or oversized")
 	}
 	claimed := request.Assignment.Attempt
-	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: claimed.HostId, AgentID: claimed.AgentId, Generation: claimed.ExecutorGeneration}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     claimed.HostId,
+		AgentID:    claimed.AgentId,
+		Generation: claimed.ExecutorGeneration,
+	}
 	assignment, err := DecodeAssignment(request.Assignment, identity)
 	if err != nil {
 		return HelperInput{}, err
@@ -63,13 +69,27 @@ func OpenHelperRequest(request *agentpb.ResolverWorkHelperRequest) (HelperInput,
 	return input, nil
 }
 
-func HelperObservation(input HelperInput, observation Observation, proof *agentpb.DNSResolverObservationEvidence) (*agentpb.ResolverWorkHelperResponse, error) {
-	if input.Assignment.Recovery != nil || input.Progress == nil || input.Progress.Validate(input.Assignment.Attempt, input.Layout) != nil ||
-		!input.Progress.InFlight || observation.Input != input.Layout.Input || observation.ComponentID != input.Layout.ComponentID ||
-		observation.Stage != input.Progress.Stage || !canonicalTime(observation.At) || observation.At.Before(*input.Progress.BeganAt) {
+func HelperObservation(
+	input HelperInput,
+	observation Observation,
+	proof *agentpb.DNSResolverObservationEvidence,
+) (*agentpb.ResolverWorkHelperResponse, error) {
+	if input.Assignment.Recovery != nil || input.Progress == nil ||
+		input.Progress.Validate(input.Assignment.Attempt, input.Layout) != nil ||
+		!input.Progress.InFlight ||
+		observation.Input != input.Layout.Input ||
+		observation.ComponentID != input.Layout.ComponentID ||
+		observation.Stage != input.Progress.Stage ||
+		!canonicalTime(observation.At) ||
+		observation.At.Before(*input.Progress.BeganAt) {
 		return nil, invalid("DNS resolver helper observation has no matching active boundary")
 	}
-	empty := Observation{Input: input.Layout.Input, ComponentID: input.Layout.ComponentID, Stage: input.Progress.Stage, At: observation.At}
+	empty := Observation{
+		Input:       input.Layout.Input,
+		ComponentID: input.Layout.ComponentID,
+		Stage:       input.Progress.Stage,
+		At:          observation.At,
+	}
 	if !observation.Satisfies(input.Progress.Stage, input.Layout) && (!input.InspectOnly || observation != empty) {
 		return nil, invalid("DNS resolver helper did not prove its selected stage")
 	}
@@ -92,8 +112,13 @@ func HelperObservation(input HelperInput, observation Observation, proof *agentp
 	return &agentpb.ResolverWorkHelperResponse{Observation: canonical, ServingProof: proto.CloneOf(proof)}, nil
 }
 
-func ReadHelperObservation(input HelperInput, response *agentpb.ResolverWorkHelperResponse) (Observation, *agentpb.DNSResolverObservationEvidence, error) {
-	if response == nil || executionplan.RejectUnknown(response) != nil || len(response.Observation) == 0 || len(response.Observation) > MaximumReportBytes || len(response.Restoration) != 0 {
+func ReadHelperObservation(
+	input HelperInput,
+	response *agentpb.ResolverWorkHelperResponse,
+) (Observation, *agentpb.DNSResolverObservationEvidence, error) {
+	if response == nil || executionplan.RejectUnknown(response) != nil || len(response.Observation) == 0 ||
+		len(response.Observation) > MaximumReportBytes ||
+		len(response.Restoration) != 0 {
 		return Observation{}, nil, invalid("DNS resolver helper response is missing or invalid")
 	}
 	observed, err := jcs.Decode[Observation](response.Observation)
@@ -120,12 +145,20 @@ type RestorationObservation struct {
 	ObservedAt            time.Time                               `json:"observed_at"`
 }
 
-func HelperRestoration(input HelperInput, observation RestorationObservation) (*agentpb.ResolverWorkHelperResponse, error) {
+func HelperRestoration(
+	input HelperInput,
+	observation RestorationObservation,
+) (*agentpb.ResolverWorkHelperResponse, error) {
 	assignment := input.Assignment
-	if assignment.Recovery == nil || observation.Input != input.Layout.Input || observation.ComponentID != input.Layout.ComponentID ||
-		observation.ForwardID != assignment.Recovery.Forward.ID || assignment.Attempt.StartedAt == nil ||
-		!observation.ConfigurationRestored || !observation.RuntimeRestored || !observation.HostResolverRestored ||
-		!canonicalTime(observation.ObservedAt) || observation.ObservedAt.Before(*assignment.Attempt.StartedAt) {
+	if assignment.Recovery == nil || observation.Input != input.Layout.Input ||
+		observation.ComponentID != input.Layout.ComponentID ||
+		observation.ForwardID != assignment.Recovery.Forward.ID ||
+		assignment.Attempt.StartedAt == nil ||
+		!observation.ConfigurationRestored ||
+		!observation.RuntimeRestored ||
+		!observation.HostResolverRestored ||
+		!canonicalTime(observation.ObservedAt) ||
+		observation.ObservedAt.Before(*assignment.Attempt.StartedAt) {
 		return nil, invalid("DNS resolver helper restoration has no exact captured authority")
 	}
 	previous := assignment.Input.Previous
@@ -145,9 +178,14 @@ func HelperRestoration(input HelperInput, observation RestorationObservation) (*
 	return &agentpb.ResolverWorkHelperResponse{Restoration: canonical}, nil
 }
 
-func ReadHelperRestoration(input HelperInput, response *agentpb.ResolverWorkHelperResponse) (RestorationObservation, error) {
-	if response == nil || executionplan.RejectUnknown(response) != nil || len(response.Restoration) == 0 || len(response.Restoration) > MaximumReportBytes ||
-		len(response.Observation) != 0 || response.ServingProof != nil {
+func ReadHelperRestoration(
+	input HelperInput,
+	response *agentpb.ResolverWorkHelperResponse,
+) (RestorationObservation, error) {
+	if response == nil || executionplan.RejectUnknown(response) != nil || len(response.Restoration) == 0 ||
+		len(response.Restoration) > MaximumReportBytes ||
+		len(response.Observation) != 0 ||
+		response.ServingProof != nil {
 		return RestorationObservation{}, invalid("DNS resolver helper restoration response is invalid")
 	}
 	observation, err := jcs.Decode[RestorationObservation](response.Restoration)

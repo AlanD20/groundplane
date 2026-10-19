@@ -86,7 +86,10 @@ func (repository *InputRepository) retainedCaptureOrphan(ctx context.Context, cu
 	}
 	var change workqueue.Change
 	for index, value := range read.Values {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: keys[index], ModRevision: value.ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: keys[index], ModRevision: value.ModRevision},
+		)
 	}
 	return change, nil
 }

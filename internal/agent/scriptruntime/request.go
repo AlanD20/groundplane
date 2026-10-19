@@ -34,21 +34,30 @@ func scriptExecutionRequest(
 	if ctx == nil || checkpoint == nil || invocation.Attempt.Validate() != nil ||
 		invocation.Attempt.Executor.Executor != workexecution.Agent || invocation.Attempt.FinishedAt != nil ||
 		ids.Validate(ids.KindOperation, invocation.OperationID) != nil || invocation.Input.Validate() != nil {
-		return scriptexecution.Request{}, nil, errs.New(errs.KindValidationFailed, "agent: Script work identity is invalid")
+		return scriptexecution.Request{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"agent: Script work identity is invalid",
+		)
 	}
 	run, snapshot, projection, body := invocation.Run, invocation.Snapshot, invocation.Projection, invocation.Body
 	if run == nil || snapshot == nil || projection == nil || body == nil || body.Metadata == nil ||
 		snapshot.SnapshotId != run.RunnerSnapshotId || projection.SnapshotId != run.RunnerSnapshotId ||
 		body.Metadata.ScriptExecutionId != run.ScriptExecutionId || body.Metadata.ScriptId != run.ScriptId ||
 		body.Metadata.Generation != run.ScriptGeneration {
-		return scriptexecution.Request{}, nil, errs.New(errs.KindValidationFailed, "agent: captured Script artifacts do not match execution")
+		return scriptexecution.Request{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"agent: captured Script artifacts do not match execution",
+		)
 	}
 	durable, err := executionplan.ValidateScriptExecutionCheckpoint(invocation.Checkpoint)
 	if err != nil {
 		return scriptexecution.Request{}, nil, err
 	}
 	if durable.ScriptExecutionId != run.ScriptExecutionId {
-		return scriptexecution.Request{}, nil, errs.New(errs.KindValidationFailed, "agent: Script checkpoint belongs to another execution")
+		return scriptexecution.Request{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"agent: Script checkpoint belongs to another execution",
+		)
 	}
 	entries, err := cloneScriptEntriesForSnapshot(invocation.Entries, snapshot)
 	if err != nil {

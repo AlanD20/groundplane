@@ -46,8 +46,10 @@ func (ledger *ReleaseLedger) BlueprintProxyHookSourceMembers(ctx context.Context
 	for _, hook := range render.Hooks {
 		snapshot := new(agentpb.ResolvedRunnerSnapshot)
 		if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(hook.RunnerSnapshot, snapshot); err != nil ||
-			snapshot.GetScriptExecutionId() != hook.ScriptExecutionID || snapshot.GetSnapshotId() != hook.RunnerSnapshotID ||
-			snapshot.GetServiceId() != render.ServiceID || snapshot.GetReleaseId() != render.ReleaseID {
+			snapshot.GetScriptExecutionId() != hook.ScriptExecutionID ||
+			snapshot.GetSnapshotId() != hook.RunnerSnapshotID ||
+			snapshot.GetServiceId() != render.ServiceID ||
+			snapshot.GetReleaseId() != render.ReleaseID {
 			return nil, errs.New(errs.KindStateConflict, "Captured rollout hook snapshot does not match its Release")
 		}
 		sources, found := preparation.Hooks[snapshot.GetScriptExecutionId()]

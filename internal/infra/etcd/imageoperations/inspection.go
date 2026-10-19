@@ -28,7 +28,10 @@ func (repository *Repository) Inspect(ctx context.Context, taskID string, revisi
 		return result, nil
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
-		Keys: []string{workqueue.AttemptKey(record.AttemptID), ProgressKey(record.AttemptID)}, Revision: loaded.ReadRevision})
+		Keys: []string{
+			workqueue.AttemptKey(record.AttemptID),
+			ProgressKey(record.AttemptID),
+		}, Revision: loaded.ReadRevision})
 	if err != nil {
 		return Inspection{}, err
 	}
@@ -47,7 +50,8 @@ func (repository *Repository) Inspect(ctx context.Context, taskID string, revisi
 	if err != nil {
 		return Inspection{}, err
 	}
-	if attempt.ID != record.AttemptID || attempt.WorkItemID != record.Input.WorkItemID || attempt.TaskID != taskID || attempt.Input != input {
+	if attempt.ID != record.AttemptID || attempt.WorkItemID != record.Input.WorkItemID || attempt.TaskID != taskID ||
+		attempt.Input != input {
 		return Inspection{}, conflict()
 	}
 	if read.Values[1] == nil {

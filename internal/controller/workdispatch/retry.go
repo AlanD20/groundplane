@@ -34,7 +34,8 @@ func NewRetries(queue *workqueue.Repository, registrations []RetryRegistration) 
 	}
 	owners := make(map[workexecution.Operation]RetryOwner, len(registrations))
 	for _, registration := range registrations {
-		if !workexecution.ValidOperation(registration.Operation) || registration.Owner == nil || owners[registration.Operation] != nil {
+		if !workexecution.ValidOperation(registration.Operation) || registration.Owner == nil ||
+			owners[registration.Operation] != nil {
 			return nil, errs.New(errs.KindInternal, "work retry operation registration is invalid or duplicated")
 		}
 		owners[registration.Operation] = registration.Owner
@@ -49,15 +50,25 @@ func NewRetries(queue *workqueue.Repository, registrations []RetryRegistration) 
 func (retries *Retries) Prepare(ctx context.Context, taskID, workID string,
 	expectedAttempt uint64, queuedFailureAt *time.Time, at time.Time,
 ) (workqueue.Change, error) {
-	if expectedAttempt == 0 && (queuedFailureAt == nil || queuedFailureAt.IsZero()) || expectedAttempt != 0 && queuedFailureAt != nil {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Retry of unexecuted work requires its exact failure time")
+	if expectedAttempt == 0 && (queuedFailureAt == nil || queuedFailureAt.IsZero()) ||
+		expectedAttempt != 0 && queuedFailureAt != nil {
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Retry of unexecuted work requires its exact failure time",
+		)
 	}
 	return retries.prepareAt(ctx, taskID, workID, expectedAttempt, queuedFailureAt, 0, at)
 }
 
 // Availability evaluates the same read-only preparation as admission at the
 // inspection revision. It grants no authority; submission rechecks current state.
-func (retries *Retries) Availability(ctx context.Context, taskID, workID string, expectedAttempt uint64, revision int64, at time.Time) (bool, string, error) {
+func (retries *Retries) Availability(
+	ctx context.Context,
+	taskID, workID string,
+	expectedAttempt uint64,
+	revision int64,
+	at time.Time,
+) (bool, string, error) {
 	if revision <= 0 {
 		return false, "", errs.New(errs.KindValidationFailed, "retry availability requires a snapshot revision")
 	}
@@ -75,9 +86,19 @@ func (retries *Retries) Availability(ctx context.Context, taskID, workID string,
 	return false, "", err
 }
 
-func (retries *Retries) prepareAt(ctx context.Context, taskID, workID string, expectedAttempt uint64, queuedFailureAt *time.Time, revision int64, at time.Time) (workqueue.Change, error) {
+func (retries *Retries) prepareAt(
+	ctx context.Context,
+	taskID, workID string,
+	expectedAttempt uint64,
+	queuedFailureAt *time.Time,
+	revision int64,
+	at time.Time,
+) (workqueue.Change, error) {
 	if at.IsZero() {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "work retry requires an identified attempt and timestamp")
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"work retry requires an identified attempt and timestamp",
+		)
 	}
 	var view workqueue.View
 	var previous workqueue.AttemptSnapshot
@@ -92,14 +113,23 @@ func (retries *Retries) prepareAt(ctx context.Context, taskID, workID string, ex
 	}
 	item := view.Item.Item
 	if queuedFailureAt != nil && !queuedFailureAt.Equal(item.UpdatedAt) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "queued work changed since this failure was selected; refresh Task details")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"queued work changed since this failure was selected; refresh Task details",
+		)
 	}
-	cleanup := item.Phase == workexecution.Attention && (item.Cleanup == workexecution.CleanupRequired || item.Cleanup == workexecution.CleanupStopped)
+	cleanup := item.Phase == workexecution.Attention &&
+		(item.Cleanup == workexecution.CleanupRequired || item.Cleanup == workexecution.CleanupStopped)
 	forward := item.Phase == workexecution.Settled && item.Outcome == workexecution.Failed && !item.ForwardRevoked &&
 		(item.Cleanup == workexecution.CleanupNone || item.Cleanup == workexecution.CleanupComplete)
-	if view.Task.Task.CollectionStartedAt != nil || item.AttemptNumber != expectedAttempt || item.ActiveAttemptID != "" ||
-		expectedAttempt != 0 && (previous.Attempt.FinishedAt == nil || previous.Attempt.Result == nil) || !cleanup && !forward {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "this attempt has no settled failure or stopped cleanup to retry")
+	if view.Task.Task.CollectionStartedAt != nil || item.AttemptNumber != expectedAttempt ||
+		item.ActiveAttemptID != "" ||
+		expectedAttempt != 0 && (previous.Attempt.FinishedAt == nil || previous.Attempt.Result == nil) ||
+		!cleanup && !forward {
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"this attempt has no settled failure or stopped cleanup to retry",
+		)
 	}
 	owner := retries.owners[item.Operation]
 	if owner == nil {

@@ -22,7 +22,12 @@ func (repository *Preparer) prepareHierarchyDeletionAttachFinalizer(ctx context.
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	inputKey := attachremoval.FrozenKey(operation.Tombstone.OperationID, record.ID)
-	input, inputRevision, err := attachremoval.ReadFrozen(ctx, repository.store, operation.Tombstone.OperationID, record.ID)
+	input, inputRevision, err := attachremoval.ReadFrozen(
+		ctx,
+		repository.store,
+		operation.Tombstone.OperationID,
+		record.ID,
+	)
 	if err != nil {
 		return Effects{}, err
 	}

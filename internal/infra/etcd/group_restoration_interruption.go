@@ -26,7 +26,10 @@ func (ledger *ReleaseLedger) ReconcileInterruptedGroupRestoration(ctx context.Co
 	identity, original := authorization.Identity(), input.Input.Attempt.Executor
 	if ledger == nil || ledger.store == nil || input.Group == nil || input.Validate() != nil || view.CurrentExecutor ||
 		identity.Executor != workexecution.Agent || identity.HostID != original.HostID || identity.Generation <= original.Generation {
-		return errs.New(errs.KindStateConflict, "Group restoration interruption requires its replacement Agent on the same host")
+		return errs.New(
+			errs.KindStateConflict,
+			"Group restoration interruption requires its replacement Agent on the same host",
+		)
 	}
 	queue, err := workqueue.NewRepository(ledger.store)
 	if err != nil {

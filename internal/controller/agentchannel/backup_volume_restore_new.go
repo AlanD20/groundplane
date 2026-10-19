@@ -14,7 +14,8 @@ func (server *Server) sendBackupVolumeRestoreNew(stream agentpb.AgentChannel_Con
 	authorization agentregistration.WorkAuthorization, assignment *agentpb.BackupWorkAssignment, ordinal uint32,
 	exchange *volumeManifestExchange,
 ) error {
-	if server.backupWorkReports == nil || exchange == nil || assignment == nil || assignment.Input == nil || uint64(ordinal) >= uint64(len(assignment.Input.Steps)) {
+	if server.backupWorkReports == nil || exchange == nil || assignment == nil || assignment.Input == nil ||
+		uint64(ordinal) >= uint64(len(assignment.Input.Steps)) {
 		return errs.New(errs.KindInternal, "Volume Restore manifest sender is unavailable")
 	}
 	step := assignment.Input.Steps[ordinal]
@@ -26,7 +27,12 @@ func (server *Server) sendBackupVolumeRestoreNew(stream agentpb.AgentChannel_Con
 	if err != nil {
 		return err
 	}
-	complete, err := server.backupWorkReports.ReadRestoreNewVolumeManifest(stream.Context(), authorization, assignment.Attempt, ordinal)
+	complete, err := server.backupWorkReports.ReadRestoreNewVolumeManifest(
+		stream.Context(),
+		authorization,
+		assignment.Attempt,
+		ordinal,
+	)
 	if err != nil {
 		return err
 	}

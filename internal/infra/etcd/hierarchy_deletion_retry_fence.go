@@ -13,7 +13,8 @@ func prepareHierarchyRetryFence(task workqueue.TaskSnapshot, operation hierarchy
 	summaryValue *keyvalue.KeyValue, at time.Time,
 ) (workqueue.Change, error) {
 	key := hierarchydeletion.WorkSummaryKey(task.Task.ID)
-	if operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionExecuting || operation.Fence.Generation == math.MaxInt64 {
+	if operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionExecuting ||
+		operation.Fence.Generation == math.MaxInt64 {
 		return workqueue.Change{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if task.Task.FinishedAt == nil {
@@ -33,7 +34,10 @@ func prepareHierarchyRetryFence(task workqueue.TaskSnapshot, operation hierarchy
 	}
 	fence := operation.Fence
 	fence.Dispatch, fence.Generation, fence.UpdatedAt = hierarchydeletion.HierarchyDeletionDispatchOpen, fence.Generation+1, at
-	value, err := hierarchydeletion.EncodeHierarchyDeletionRecord(fence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	value, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		fence,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -43,5 +47,8 @@ func prepareHierarchyRetryFence(task workqueue.TaskSnapshot, operation hierarchy
 		return workqueue.Change{}, err
 	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: summaryValue.ModRevision}},
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: key}, {Type: keyvalue.MutationPut, Key: fenceKey, Value: value}}}, nil
+		Mutations: []keyvalue.Mutation{
+			{Type: keyvalue.MutationDelete, Key: key},
+			{Type: keyvalue.MutationPut, Key: fenceKey, Value: value},
+		}}, nil
 }

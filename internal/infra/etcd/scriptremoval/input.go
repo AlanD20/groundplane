@@ -36,7 +36,10 @@ func InputKey(workID string) string { return "/v1/execution/script-removal/input
 func (input Input) Validate() error {
 	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil ||
 		ids.Validate(ids.KindPlan, input.PlanID) != nil || ids.Validate(ids.KindScript, input.ScriptID) != nil ||
-		ids.Validate(ids.KindProject, input.ProjectID) != nil || ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
+		ids.Validate(
+			ids.KindProject,
+			input.ProjectID,
+		) != nil || ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
 		input.TenantID != "" && ids.Validate(ids.KindTenant, input.TenantID) != nil ||
 		input.ScriptRevision <= 0 || ids.Validate(ids.KindService, input.ServiceID) != nil || input.ScriptSetGeneration == "" || len(input.ScriptSetGeneration) > 128 || strings.Contains(input.ScriptSetGeneration, "/") || !recordcodec.IsCanonicalUTC(input.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Script removal capture is invalid")
@@ -84,5 +87,9 @@ func PreparePublication(input Input) ([]keyvalue.Condition, []keyvalue.Mutation,
 		return nil, nil, err
 	}
 	key := InputKey(input.WorkItemID)
-	return []keyvalue.Condition{{Key: key}}, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}}, nil
+	return []keyvalue.Condition{
+		{Key: key},
+	}, []keyvalue.Mutation{
+		{Type: keyvalue.MutationPut, Key: key, Value: value},
+	}, nil
 }

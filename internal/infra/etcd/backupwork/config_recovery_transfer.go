@@ -34,11 +34,17 @@ func (repository *InputRepository) LoadConfigRecoveryTransfer(ctx context.Contex
 	if err != nil {
 		return nil, nil, err
 	}
-	expected, err := backupconfigtransfer.BindRecoverySource(assignment, recovery.Executor, binding.SourceOrdinal, binding.Direction)
+	expected, err := backupconfigtransfer.BindRecoverySource(
+		assignment,
+		recovery.Executor,
+		binding.SourceOrdinal,
+		binding.Direction,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
-	if expected != binding || assignment.RestoreMode != agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION {
+	if expected != binding ||
+		assignment.RestoreMode != agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION {
 		return nil, nil, conflict("Config recovery transfer differs from the captured mutation")
 	}
 	conditions := append(change.Conditions,

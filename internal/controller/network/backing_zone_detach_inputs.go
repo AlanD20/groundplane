@@ -35,7 +35,10 @@ func prepareBackingZoneDetachInputs(ctx context.Context, task workexecution.Task
 		task.Scope.TenantID != "" || task.Scope.ProjectID == "" || task.Scope.EnvironmentID == "" ||
 		ids.Validate(ids.KindNetwork, task.TargetID) != nil || placement.Validate() != nil ||
 		placement.Executor != workexecution.Agent || revision <= 0 || len(snapshots) >= int(workexecution.MaximumTaskItems) {
-		return nil, nil, errs.New(errs.KindValidationFailed, "Backing Zone removal requires its unpublished Task and frozen consumer snapshots")
+		return nil, nil, errs.New(
+			errs.KindValidationFailed,
+			"Backing Zone removal requires its unpublished Task and frozen consumer snapshots",
+		)
 	}
 	captured := make([]keyvalue.Versioned[attachments.Record], 0, len(snapshots))
 	byID := make(map[string]int, len(snapshots))
@@ -44,7 +47,10 @@ func prepareBackingZoneDetachInputs(ctx context.Context, task workexecution.Task
 		if snapshot.Validate() != nil || source.SnapshotRevision != revision ||
 			source.Attach.BackingNetworkID != task.TargetID || source.Attach.BackingProjectID != task.Scope.ProjectID ||
 			source.Attach.BackingEnvironmentID != task.Scope.EnvironmentID {
-			return nil, nil, errs.New(errs.KindStateConflict, "Backing Zone consumer snapshot differs from the approved removal")
+			return nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Backing Zone consumer snapshot differs from the approved removal",
+			)
 		}
 		if _, exists := byID[source.Attach.ID]; exists {
 			return nil, nil, errs.New(errs.KindValidationFailed, "Backing Zone consumer snapshot is duplicated")
@@ -86,9 +92,15 @@ func prepareBackingZoneDetachInputs(ctx context.Context, task workexecution.Task
 		if !input.HasHostEffects() {
 			itemPlacement.Executor = workexecution.Controller
 		}
-		plans = append(plans, CascadeDetachPlan{AttachID: source.Record.ID, Placement: itemPlacement, Input: &reference})
+		plans = append(
+			plans,
+			CascadeDetachPlan{AttachID: source.Record.ID, Placement: itemPlacement, Input: &reference},
+		)
 		if source.Record.Status != "detached" {
-			removedByService[source.Record.ServiceID] = append(removedByService[source.Record.ServiceID], source.Record.ID)
+			removedByService[source.Record.ServiceID] = append(
+				removedByService[source.Record.ServiceID],
+				source.Record.ID,
+			)
 		}
 	}
 	return inputs, plans, nil

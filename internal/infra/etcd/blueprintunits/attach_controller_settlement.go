@@ -19,8 +19,15 @@ func ControllerAttachResultKey(workID string) string {
 
 // PrepareAttachControllerSettlement records a decision, not a synthetic Agent
 // attempt. The caller joins the exact encrypted input and binding publication.
-func PrepareAttachControllerSettlement(snapshot Snapshot, view workqueue.View, unit Unit,
-	operationID string, inputRevision int64, bindingSHA256 string, references []attachments.BindingReference, at time.Time,
+func PrepareAttachControllerSettlement(
+	snapshot Snapshot,
+	view workqueue.View,
+	unit Unit,
+	operationID string,
+	inputRevision int64,
+	bindingSHA256 string,
+	references []attachments.BindingReference,
+	at time.Time,
 ) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if view.ReadRevision != snapshot.ReadRevision || task.Validate() != nil || item.Validate() != nil ||
@@ -34,7 +41,14 @@ func PrepareAttachControllerSettlement(snapshot Snapshot, view workqueue.View, u
 		!at.Before(task.Deadline) || !at.Before(item.Deadline) {
 		return workqueue.Change{}, invalidRecord()
 	}
-	receipt, err := PrepareControllerAttachBinding(snapshot, unit, operationID, inputRevision, bindingSHA256, references)
+	receipt, err := PrepareControllerAttachBinding(
+		snapshot,
+		unit,
+		operationID,
+		inputRevision,
+		bindingSHA256,
+		references,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -55,7 +69,10 @@ func PrepareAttachControllerSettlement(snapshot Snapshot, view workqueue.View, u
 	digest := sha256.Sum256(value)
 	change, err := workqueue.PrepareUnstartedSettlement(view.Task, view.Item, workexecution.Completion{
 		Outcome: workexecution.Succeeded, EffectsSettled: true,
-		Evidence: workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, task.CreatedAt, item.ID, "attach-controller-result"), SHA256: hex.EncodeToString(digest[:])},
+		Evidence: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, task.CreatedAt, item.ID, "attach-controller-result"),
+			SHA256: hex.EncodeToString(digest[:]),
+		},
 	}, at)
 	if err != nil {
 		receipt.Clear()

@@ -10,17 +10,37 @@ import (
 )
 
 type ResolverReporter interface {
-	CheckpointResolver(context.Context, agentregistration.WorkAuthorization, *agentpb.ResolverWorkCheckpointRequest) (*agentpb.ResolverWorkCheckpointAck, error)
-	CompleteResolver(context.Context, agentregistration.WorkAuthorization, *agentpb.ResolverWorkCompletionRequest) (*agentpb.ResolverWorkResultAck, error)
-	FailResolver(context.Context, agentregistration.WorkAuthorization, *agentpb.ResolverWorkFailureRequest) (*agentpb.ResolverWorkResultAck, error)
-	RecoverResolver(context.Context, agentregistration.WorkAuthorization, *agentpb.ResolverWorkRecoveryRequest) (*agentpb.ResolverWorkResultAck, error)
+	CheckpointResolver(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ResolverWorkCheckpointRequest,
+	) (*agentpb.ResolverWorkCheckpointAck, error)
+	CompleteResolver(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ResolverWorkCompletionRequest,
+	) (*agentpb.ResolverWorkResultAck, error)
+	FailResolver(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ResolverWorkFailureRequest,
+	) (*agentpb.ResolverWorkResultAck, error)
+	RecoverResolver(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ResolverWorkRecoveryRequest,
+	) (*agentpb.ResolverWorkResultAck, error)
 }
 
 func (server *Server) ConfigureResolverWork(reports ResolverReporter) {
 	server.resolverReports = reports
 }
 
-func (server *Server) resolverReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
+func (server *Server) resolverReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
 	if message.GetResolverWorkCheckpointRequest() == nil {
 		return false, nil, nil
 	}

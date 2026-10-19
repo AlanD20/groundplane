@@ -18,7 +18,10 @@ func (service *FactService) SealCapturedProvisionFacts(
 ) (attachrecord.EncryptedFacts, error) {
 	if ctx == nil || blueprintattachinputs.Validate(generation) != nil || generation.Provision != nil ||
 		generation.SettlesInController() || generation.Hook.Attach == nil {
-		return attachrecord.EncryptedFacts{}, errs.New(errs.KindStateConflict, "captured Attach hook result owner is unavailable")
+		return attachrecord.EncryptedFacts{}, errs.New(
+			errs.KindStateConflict,
+			"captured Attach hook result owner is unavailable",
+		)
 	}
 	createdAt, err := ids.Timestamp(ids.KindTask, generation.ParentTaskID)
 	if err != nil {

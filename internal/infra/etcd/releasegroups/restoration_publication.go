@@ -14,13 +14,20 @@ import (
 // PrepareRestorationInput derives executable authority only after captured
 // policy selects this earlier successful member. The returned transaction
 // compares the source, later failure, complete Group policy and native Task CAS.
-func (repository *ExecutionRepository) PrepareRestorationInput(ctx context.Context, work workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *ExecutionRepository) PrepareRestorationInput(
+	ctx context.Context,
+	work workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	item, task := work.Item.Item, work.Task.Task
 	if item.Operation != workexecution.ReleaseRestoration || item.Input != nil || item.AttemptNumber != 0 ||
 		item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput || item.ForwardRevoked ||
 		!task.PublicationComplete || task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
 		at.Before(task.UpdatedAt) || !at.Before(task.Deadline) || !at.Before(item.Deadline) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Group restoration is not waiting for captured executable input")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Group restoration is not waiting for captured executable input",
+		)
 	}
 	decision, err := repository.Decide(ctx, work.Task, work.ReadRevision, at)
 	if err != nil {
@@ -33,7 +40,11 @@ func (repository *ExecutionRepository) PrepareRestorationInput(ctx context.Conte
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	input := RestorationInput{Preparation: source.Preparation, Authority: source.Authority, Source: source.SourceAttempt.Attempt}
+	input := RestorationInput{
+		Preparation: source.Preparation,
+		Authority:   source.Authority,
+		Source:      source.SourceAttempt.Attempt,
+	}
 	value, reference, err := EncodeRestorationInput(input)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -46,6 +57,9 @@ func (repository *ExecutionRepository) PrepareRestorationInput(ctx context.Conte
 	key := RestorationInputKey(item.ID)
 	change.Conditions = append(change.Conditions, source.Conditions...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), value...)})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), value...)},
+	)
 	return change, nil
 }

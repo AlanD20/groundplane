@@ -31,9 +31,14 @@ func (repository *ServiceRepository) PrepareServiceRemovalCompletion(ctx context
 	delivery *agentpb.ServiceLifecycleWorkInput, at time.Time,
 ) (workqueue.Change, error) {
 	task, item, attempt := view.Work.Task.Task, view.Work.Item.Item, view.Attempt.Attempt
-	if task.Action != workexecution.ActionRemove && task.Action != workexecution.ActionApply || task.Stop != nil || item.ForwardRevoked ||
-		attempt.Direction != workexecution.Forward || attempt.Executor.Executor != workexecution.Agent {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service removal cannot publish a stopped or replaced desired revision")
+	if task.Action != workexecution.ActionRemove && task.Action != workexecution.ActionApply || task.Stop != nil ||
+		item.ForwardRevoked ||
+		attempt.Direction != workexecution.Forward ||
+		attempt.Executor.Executor != workexecution.Agent {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Service removal cannot publish a stopped or replaced desired revision",
+		)
 	}
 	inputs, err := serviceremovalwork.NewRepository(repository.store)
 	if err != nil {
@@ -101,8 +106,11 @@ func (repository *ServiceRepository) PrepareServiceRemovalCompletion(ctx context
 	return proof, nil
 }
 
-func (repository *ServiceRepository) prepareDirectServiceRemovalState(ctx context.Context, inputs *serviceremovalwork.Repository,
-	input serviceremovalwork.Input, revision int64,
+func (repository *ServiceRepository) prepareDirectServiceRemovalState(
+	ctx context.Context,
+	inputs *serviceremovalwork.Repository,
+	input serviceremovalwork.Input,
+	revision int64,
 ) (workqueue.Change, error) {
 	conditions, err := inputs.RuntimeGuards(ctx, input, revision)
 	if err != nil {
@@ -117,7 +125,10 @@ func (repository *ServiceRepository) prepareDirectServiceRemovalState(ctx contex
 		return workqueue.Change{}, err
 	}
 	if !found || baseline.Revision != input.HeadRevision || baseline.Record.RevisionID != input.BaseRevisionID {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service removal baseline was replaced before finalization")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Service removal baseline was replaced before finalization",
+		)
 	}
 	keys := []string{
 		blueprints.EnvironmentBlueprintEffectiveProjectionKey(input.Scope.EnvironmentID, input.DesiredRevisionID),
@@ -132,11 +143,17 @@ func (repository *ServiceRepository) prepareDirectServiceRemovalState(ctx contex
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service removal prepared revision read is incomplete")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Service removal prepared revision read is incomplete",
+		)
 	}
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > revision {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service removal prepared revision is unavailable")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Service removal prepared revision is unavailable",
+			)
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision})
 	}
@@ -181,10 +198,20 @@ func (repository *ServiceRepository) prepareDirectServiceRemovalState(ctx contex
 	conditions = append(conditions, scripts...)
 	conditions = append(conditions, addresses.Conditions()...)
 	conditions = append(conditions, fence.TransactionConditions()...)
-	mutations := append(addresses.Mutations(), epoch,
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(input.Scope.EnvironmentID), Value: head},
+	mutations := append(
+		addresses.Mutations(),
+		epoch,
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   blueprints.EnvironmentBlueprintHeadKey(input.Scope.EnvironmentID),
+			Value: head,
+		},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: services.ServiceRuntimeKey(input.ServiceID)},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: serviceruntimerecord.Key(input.ServiceID)},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: deletions.TombstoneKey(string(deletions.DeletionTargetService), input.ServiceID)})
+		keyvalue.Mutation{
+			Type: keyvalue.MutationDelete,
+			Key:  deletions.TombstoneKey(string(deletions.DeletionTargetService), input.ServiceID),
+		},
+	)
 	return workqueue.Change{Conditions: conditions, Mutations: mutations}, nil
 }

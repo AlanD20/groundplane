@@ -16,7 +16,11 @@ import (
 // including shared files and retained release members, from the operation's
 // captured file snapshot. File updates can be newer than the last deployment.
 // The caller authenticates that snapshot's immutable reference before selection.
-func ConfigurationFiles(ctx context.Context, record Record, snapshot runtimeconfiguration.Snapshot) ([]taskmaterialization.Record, error) {
+func ConfigurationFiles(
+	ctx context.Context,
+	record Record,
+	snapshot runtimeconfiguration.Snapshot,
+) ([]taskmaterialization.Record, error) {
 	if err := Validate(record); err != nil {
 		return nil, err
 	}
@@ -39,14 +43,19 @@ func ConfigurationFiles(ctx context.Context, record Record, snapshot runtimeconf
 		for _, use := range uses {
 			found := false
 			for _, file := range snapshot.Files {
-				if file.Destination != use.Destination && !(use.Bind && strings.HasPrefix(file.Destination, use.Destination+"/")) {
+				if file.Destination != use.Destination &&
+					!(use.Bind && strings.HasPrefix(file.Destination, use.Destination+"/")) {
 					continue
 				}
 				if file.Source.Kind == taskmaterialization.SourceRemoval {
 					continue
 				}
-				if file.EnvironmentID != record.EnvironmentID || taskmaterialization.ValidateRecord(file, snapshot.Generation) != nil {
-					return nil, errs.New(errs.KindStateConflict, "Runtime configuration contains an invalid file source")
+				if file.EnvironmentID != record.EnvironmentID ||
+					taskmaterialization.ValidateRecord(file, snapshot.Generation) != nil {
+					return nil, errs.New(
+						errs.KindStateConflict,
+						"Runtime configuration contains an invalid file source",
+					)
 				}
 				selected[file.Destination], found = true, true
 			}

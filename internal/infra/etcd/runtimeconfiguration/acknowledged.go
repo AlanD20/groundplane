@@ -11,11 +11,21 @@ import (
 // ReadAcknowledged reads the file authority at the caller's planning revision.
 // A missing head means no configuration has been acknowledged, not permission
 // to reconstruct it from desired state or a historical Task.
-func (repository *Repository) ReadAcknowledged(ctx context.Context, environmentID string, revision int64) (Snapshot, int64, error) {
+func (repository *Repository) ReadAcknowledged(
+	ctx context.Context,
+	environmentID string,
+	revision int64,
+) (Snapshot, int64, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || revision <= 0 {
-		return Snapshot{}, 0, errs.New(errs.KindValidationFailed, "configuration read requires an Environment and captured revision")
+		return Snapshot{}, 0, errs.New(
+			errs.KindValidationFailed,
+			"configuration read requires an Environment and captured revision",
+		)
 	}
-	keys := []string{HeadKey(environmentID), environmentprojection.EnvironmentComposeProjectionStorageKey(environmentID)}
+	keys := []string{
+		HeadKey(environmentID),
+		environmentprojection.EnvironmentComposeProjectionStorageKey(environmentID),
+	}
 	read, err := repository.read(ctx, keys, revision)
 	if err != nil {
 		return Snapshot{}, 0, err
@@ -27,7 +37,10 @@ func (repository *Repository) ReadAcknowledged(ctx context.Context, environmentI
 	value := read.Values[0]
 	if value == nil {
 		if read.Values[1] != nil {
-			return Snapshot{}, 0, errs.New(errs.KindStateConflict, "applied Environment has no acknowledged configuration")
+			return Snapshot{}, 0, errs.New(
+				errs.KindStateConflict,
+				"applied Environment has no acknowledged configuration",
+			)
 		}
 		return Snapshot{}, 0, nil
 	}
@@ -39,7 +52,10 @@ func (repository *Repository) ReadAcknowledged(ctx context.Context, environmentI
 		return Snapshot{}, 0, err
 	}
 	if reference.EnvironmentID != environmentID {
-		return Snapshot{}, 0, errs.New(errs.KindStateConflict, "acknowledged configuration belongs to another Environment")
+		return Snapshot{}, 0, errs.New(
+			errs.KindStateConflict,
+			"acknowledged configuration belongs to another Environment",
+		)
 	}
 	snapshot, err := repository.Load(ctx, reference, revision)
 	return snapshot, value.ModRevision, err

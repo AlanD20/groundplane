@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) CompleteBackup(ctx context.Context, attempt workexecution.Attempt, input *agentpb.BackupWorkInput,
+func (journal *Journal) CompleteBackup(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.BackupWorkInput,
 	ack *agentpb.BackupWorkCompletionAck,
 ) (workexecution.Attempt, error) {
 	unlock, err := journal.lock(ctx)
@@ -35,7 +38,8 @@ func (journal *Journal) CompleteBackup(ctx context.Context, attempt workexecutio
 		return workexecution.Attempt{}, err
 	}
 	if previous := state.Backup.Completion; previous != nil {
-		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) || *previous.Result != *terminal.Result {
+		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*previous.Result != *terminal.Result {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *previous, nil

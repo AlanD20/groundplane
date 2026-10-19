@@ -20,7 +20,12 @@ func restoreConfig(ctx context.Context, assignment *agentpb.BackupWorkAssignment
 	volumeRoot string, materializer backupconfiguration.ConfigFileMaterializer,
 	delivery *checkpointdelivery.Backup, exchange Exchange,
 ) (resultErr error) {
-	binding, err := backupconfigtransfer.Bind(assignment, identity, ordinal, agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_RESTORE)
+	binding, err := backupconfigtransfer.Bind(
+		assignment,
+		identity,
+		ordinal,
+		agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_RESTORE,
+	)
 	if err != nil {
 		return err
 	}

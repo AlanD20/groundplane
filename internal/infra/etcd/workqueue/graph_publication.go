@@ -19,7 +19,8 @@ import (
 func (repository *Repository) PrepareGraphBatch(ctx context.Context, task TaskSnapshot,
 	graph []workexecution.Item, at time.Time,
 ) (Change, bool, error) {
-	if task.Revision <= 0 || task.Task.PublicationComplete || task.Task.FinishedAt != nil || at.Before(task.Task.UpdatedAt) {
+	if task.Revision <= 0 || task.Task.PublicationComplete || task.Task.FinishedAt != nil ||
+		at.Before(task.Task.UpdatedAt) {
 		return Change{}, false, errs.New(errs.KindStateConflict, "task graph publication is no longer open")
 	}
 	if err := workexecution.ValidateGraph(task.Task, graph); err != nil {

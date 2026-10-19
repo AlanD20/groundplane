@@ -56,7 +56,10 @@ func NewBackupWorkSecretValidator(transfer *agentpb.BackupWorkSecretTransfer,
 		total: header.TotalBytes, chunks: header.ChunkCount, next: 1}, nil
 }
 
-func openBackupCredentialInput(attempt workexecution.Attempt, input *agentpb.BackupWorkInput) (*agentpb.BackupWorkInput, error) {
+func openBackupCredentialInput(
+	attempt workexecution.Attempt,
+	input *agentpb.BackupWorkInput,
+) (*agentpb.BackupWorkInput, error) {
 	if attempt.Direction == workexecution.Forward {
 		return OpenBackupWorkInput(attempt, input)
 	}

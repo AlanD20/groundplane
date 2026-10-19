@@ -18,15 +18,22 @@ import (
 func (repository *HierarchyDeletionRepository) hierarchyAttachRetryBasis(ctx context.Context, view workqueue.View,
 	attempt workexecution.Attempt,
 ) (workexecution.Attempt, []keyvalue.Condition, error) {
-	if attempt.Direction != workexecution.Recovery || attempt.FinishedAt == nil || attempt.Result == nil || attempt.Outcome != workexecution.Succeeded {
-		return workexecution.Attempt{}, nil, errs.New(errs.KindTaskNotRetryable, "Attach Retry requires a completed command inspection")
+	if attempt.Direction != workexecution.Recovery || attempt.FinishedAt == nil || attempt.Result == nil ||
+		attempt.Outcome != workexecution.Succeeded {
+		return workexecution.Attempt{}, nil, errs.New(
+			errs.KindTaskNotRetryable,
+			"Attach Retry requires a completed command inspection",
+		)
 	}
 	source, err := repository.LoadHierarchyAttachRecovery(ctx, view)
 	if err != nil {
 		return workexecution.Attempt{}, nil, err
 	}
 	key := attachremoval.WorkInspectionKey(attempt.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -37,13 +44,19 @@ func (repository *HierarchyDeletionRepository) hierarchyAttachRetryBasis(ctx con
 		read.Values[0].Key != key || read.Values[0].ModRevision <= 0 {
 		return workexecution.Attempt{}, nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	report, err := attachexecution.DecodeRemovalInspection(attachexecution.RecoveryInput{Attempt: attempt, Source: source.Source},
-		read.Values[0].Value, *attempt.Result)
+	report, err := attachexecution.DecodeRemovalInspection(
+		attachexecution.RecoveryInput{Attempt: attempt, Source: source.Source},
+		read.Values[0].Value,
+		*attempt.Result,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, nil, err
 	}
 	if !report.ExecutionStopped() || report.ObservedAt.After(*attempt.FinishedAt) {
-		return workexecution.Attempt{}, nil, errs.New(errs.KindTaskNotRetryable, "previous Attach command is not confirmed stopped")
+		return workexecution.Attempt{}, nil, errs.New(
+			errs.KindTaskNotRetryable,
+			"previous Attach command is not confirmed stopped",
+		)
 	}
 	return source.Source.Forward, []keyvalue.Condition{
 		{Key: attachremoval.WorkRecoveryKey(view.Item.Item.ID), ModRevision: source.Revision},

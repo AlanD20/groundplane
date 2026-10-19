@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func EncodeInspectionRequest(input RecoveryInput, report RemovalInspection) (*agentpb.AttachRecoveryCompletionRequest, error) {
+func EncodeInspectionRequest(
+	input RecoveryInput,
+	report RemovalInspection,
+) (*agentpb.AttachRecoveryCompletionRequest, error) {
 	raw, reference, err := EncodeRemovalInspection(input, report)
 	if err != nil {
 		return nil, err
@@ -25,7 +28,11 @@ func EncodeInspectionRequest(input RecoveryInput, report RemovalInspection) (*ag
 		Evidence: &agentpb.WorkInputReference{InputId: reference.ID, Sha256: digest}}, nil
 }
 
-func DecodeInspectionAck(input RecoveryInput, report RemovalInspection, ack *agentpb.AttachRecoveryCompletionAck) (workexecution.Attempt, error) {
+func DecodeInspectionAck(
+	input RecoveryInput,
+	report RemovalInspection,
+	ack *agentpb.AttachRecoveryCompletionAck,
+) (workexecution.Attempt, error) {
 	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil ||
 		ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil {
 		return workexecution.Attempt{}, invalid("Attach inspection acknowledgement is malformed")

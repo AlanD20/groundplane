@@ -9,7 +9,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (input Input) checkpointRequest(progress componentexecution.Progress) (*agentpb.ComponentWorkCheckpointRequest, error) {
+func (input Input) checkpointRequest(
+	progress componentexecution.Progress,
+) (*agentpb.ComponentWorkCheckpointRequest, error) {
 	if input.procedure == nil {
 		return nil, invalidInput()
 	}
@@ -24,7 +26,10 @@ func (input Input) checkpointRequest(progress componentexecution.Progress) (*age
 	return &agentpb.ComponentWorkCheckpointRequest{Attempt: attempt, Progress: raw}, nil
 }
 
-func (input Input) checkpointAck(progress componentexecution.Progress, ack *agentpb.ComponentWorkCheckpointAck) (workexecution.Checkpoint, error) {
+func (input Input) checkpointAck(
+	progress componentexecution.Progress,
+	ack *agentpb.ComponentWorkCheckpointAck,
+) (workexecution.Checkpoint, error) {
 	if input.procedure == nil || ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil ||
 		ack.RecordedAt == nil || ack.RecordedAt.CheckValid() != nil {
 		return workexecution.Checkpoint{}, invalidInput()
@@ -45,7 +50,9 @@ func (input Input) checkpointAck(progress componentexecution.Progress, ack *agen
 	return expected, nil
 }
 
-func (input Input) completionRequest(progress componentexecution.Progress) (*agentpb.ComponentWorkCompletionRequest, error) {
+func (input Input) completionRequest(
+	progress componentexecution.Progress,
+) (*agentpb.ComponentWorkCompletionRequest, error) {
 	if input.procedure == nil || progress.Stage != componentexecution.Complete {
 		return nil, invalidInput()
 	}
@@ -66,7 +73,10 @@ func (input Input) completionRequest(progress componentexecution.Progress) (*age
 	}}, nil
 }
 
-func (input Input) completionAck(progress componentexecution.Progress, ack *agentpb.ComponentWorkCompletionAck) (workexecution.Attempt, error) {
+func (input Input) completionAck(
+	progress componentexecution.Progress,
+	ack *agentpb.ComponentWorkCompletionAck,
+) (workexecution.Attempt, error) {
 	if input.procedure == nil || ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil ||
 		ack.StartedAt == nil || ack.StartedAt.CheckValid() != nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil ||
 		input.attempt.StartedAt == nil || !input.attempt.StartedAt.Equal(ack.StartedAt.AsTime()) || progress.Stage != componentexecution.Complete {

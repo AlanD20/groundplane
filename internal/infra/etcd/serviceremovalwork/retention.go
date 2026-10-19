@@ -13,7 +13,12 @@ import (
 // PrepareRetention removes only expired execution input. Desired revisions,
 // applied receipts, Service state and Volume data have separate owners and are
 // never removed as a side effect of collecting a Task's history.
-func (repository *Repository) PrepareRetention(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (repository *Repository) PrepareRetention(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Validate() != nil || item.Validate() != nil || view.Task.Revision <= 0 || view.Item.Revision <= 0 ||
 		task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil ||
@@ -47,10 +52,16 @@ func (repository *Repository) PrepareRetention(ctx context.Context, view workque
 		return false, workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, guards...)
-	change.Mutations = append(change.Mutations,
+	change.Mutations = append(
+		change.Mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: InputKey(item.ID)},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: RecoveryKey(item.ID)},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: servicelifecyclework.ContinuationPrefix(item.ID), Prefix: true})
+		keyvalue.Mutation{
+			Type:   keyvalue.MutationDelete,
+			Key:    servicelifecyclework.ContinuationPrefix(item.ID),
+			Prefix: true,
+		},
+	)
 	return true, change, nil
 }
 

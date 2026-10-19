@@ -42,8 +42,10 @@ func PrepareCaptureRetirement(ctx context.Context, reader captureRetirementReade
 		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[index]})
 	}
 	record, err := DecodeBackupConfigSnapshotRecord(read.Values[0].Value)
-	if err != nil || record.SnapshotID != taskID || record.EnvironmentID != environmentID || record.SourceID != sourceID ||
-		string(read.Values[1].Value) != taskID || string(read.Values[2].Value) != taskID {
+	if err != nil || record.SnapshotID != taskID || record.EnvironmentID != environmentID ||
+		record.SourceID != sourceID ||
+		string(read.Values[1].Value) != taskID ||
+		string(read.Values[2].Value) != taskID {
 		return nil, nil, captureSnapshotConflict()
 	}
 	for _, prefix := range []string{backupConfigSnapshotTaskReferencePrefix(taskID), backupConfigSnapshotReferenceTaskPrefix(taskID)} {

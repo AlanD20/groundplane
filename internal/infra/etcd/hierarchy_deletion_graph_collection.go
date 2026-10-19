@@ -11,7 +11,8 @@ import (
 // action evidence is absent. Current resource state and coordination epochs are
 // not Task history and are never removed by this operation.
 func PrepareHierarchyGraphCollection(task workqueue.TaskSnapshot, guard HierarchyCollection) (workqueue.Change, error) {
-	if !guard.Present || !guard.Eligible || guard.Operation.Tombstone.CurrentTaskID != task.Task.ID || len(guard.Authority.Conditions) == 0 {
+	if !guard.Present || !guard.Eligible || guard.Operation.Tombstone.CurrentTaskID != task.Task.ID ||
+		len(guard.Authority.Conditions) == 0 {
 		return workqueue.Change{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	change, err := workqueue.PrepareTaskCollection(task)
@@ -26,7 +27,10 @@ func PrepareHierarchyGraphCollection(task workqueue.TaskSnapshot, guard Hierarch
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Prefix: true,
 		Key: hierarchydeletionplanning.MembershipCapturePrefix(id)})
 	change.Conditions = append(change.Conditions, guard.Authority.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: hierarchydeletion.EnvironmentInputPrefix(id), Prefix: true})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: hierarchydeletion.EnvironmentInputPrefix(id), Prefix: true},
+	)
 	for _, prefixFor := range []func(string) (string, error){hierarchydeletion.HierarchyDeletionActionPrefix, hierarchydeletion.HierarchyDeletionCompletionPrefix} {
 		prefix, err := prefixFor(id)
 		if err != nil {
@@ -48,7 +52,11 @@ func PrepareHierarchyGraphCollection(task workqueue.TaskSnapshot, guard Hierarch
 	return change, nil
 }
 
-func prepareRejectedHierarchyCollection(task workqueue.TaskSnapshot, guard HierarchyCollection, change workqueue.Change) (workqueue.Change, error) {
+func prepareRejectedHierarchyCollection(
+	task workqueue.TaskSnapshot,
+	guard HierarchyCollection,
+	change workqueue.Change,
+) (workqueue.Change, error) {
 	id := guard.Operation.Tombstone.OperationID
 	prefixes, err := planningArtifactPrefixes(id)
 	if err != nil {

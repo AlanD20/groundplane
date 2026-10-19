@@ -19,7 +19,10 @@ func (journal *Journal) RetireAcknowledgedScript(ctx context.Context, attempt wo
 	return journal.Retire(ctx, *terminal)
 }
 
-func (journal *Journal) scriptTerminal(ctx context.Context, attempt workexecution.Attempt) (*workexecution.Attempt, error) {
+func (journal *Journal) scriptTerminal(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (*workexecution.Attempt, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err

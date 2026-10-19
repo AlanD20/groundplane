@@ -19,11 +19,21 @@ func restoreVolume(ctx context.Context, assignment *agentpb.BackupWorkAssignment
 	ordinal uint32, staging *Staging, volumeRoot string, consumers BackupConsumers,
 	delivery *checkpointdelivery.Backup, exchange Exchange,
 ) (mutationAttempted bool, resultErr error) {
-	binding, err := backupvolumetransfer.Bind(assignment, identity, ordinal, agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW)
+	binding, err := backupvolumetransfer.Bind(
+		assignment,
+		identity,
+		ordinal,
+		agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW,
+	)
 	if err != nil {
 		return false, err
 	}
-	oldBinding, err := backupvolumetransfer.Bind(assignment, identity, ordinal, agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_OLD)
+	oldBinding, err := backupvolumetransfer.Bind(
+		assignment,
+		identity,
+		ordinal,
+		agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_OLD,
+	)
 	if err != nil {
 		return false, err
 	}
@@ -56,7 +66,16 @@ func restoreVolume(ctx context.Context, assignment *agentpb.BackupWorkAssignment
 			resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, closeErr)
 		}
 	}()
-	artifact, err := downloadVolumeRestore(ctx, assignment, identity, ordinal, staging, exchange, newEntries, newManifest)
+	artifact, err := downloadVolumeRestore(
+		ctx,
+		assignment,
+		identity,
+		ordinal,
+		staging,
+		exchange,
+		newEntries,
+		newManifest,
+	)
 	if err != nil {
 		return mutationAttempted, err
 	}
@@ -101,7 +120,10 @@ func restoreVolume(ctx context.Context, assignment *agentpb.BackupWorkAssignment
 	}
 	newManifestSHA, err := backupvolume.ContentManifestSHA256(newManifest)
 	if err != nil || !bytes.Equal(newManifestSHA[:], step.GetRestore().GetVolume().Archive.ContentManifestSha256) {
-		return mutationAttempted, errs.New(errs.KindStateConflict, "Volume Restore filesystem differs from its captured journal")
+		return mutationAttempted, errs.New(
+			errs.KindStateConflict,
+			"Volume Restore filesystem differs from its captured journal",
+		)
 	}
 	journalConfig := agentvolumejournal.Config{JournalRoot: agentvolumejournal.AgentRoot,
 		Binding: binding,
@@ -138,7 +160,10 @@ func restoreVolume(ctx context.Context, assignment *agentpb.BackupWorkAssignment
 		return mutationAttempted, err
 	}
 	if state.UncommittedPrefix {
-		return mutationAttempted, errs.New(errs.KindStateConflict, "Volume Restore filesystem differs from its captured journal")
+		return mutationAttempted, errs.New(
+			errs.KindStateConflict,
+			"Volume Restore filesystem differs from its captured journal",
+		)
 	}
 	if err := reconcileVolumeRestoreJournal(ctx, state, mutationJournal, resume); err != nil {
 		return mutationAttempted, err

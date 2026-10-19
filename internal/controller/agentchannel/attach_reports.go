@@ -9,17 +9,37 @@ import (
 )
 
 type AttachReporter interface {
-	FailAttachRemoval(context.Context, agentregistration.WorkAuthorization, *agentpb.AttachRemovalFailureRequest) (*agentpb.AttachRemovalFailureAck, error)
-	CompleteAttachRemoval(context.Context, agentregistration.WorkAuthorization, *agentpb.AttachRemovalCompletionRequest) (*agentpb.AttachRemovalCompletionAck, error)
-	CheckpointAttachRemoval(context.Context, agentregistration.WorkAuthorization, *agentpb.AttachRemovalCheckpointRequest) (*agentpb.AttachRemovalCheckpointAck, error)
-	CompleteAttachRecovery(context.Context, agentregistration.WorkAuthorization, *agentpb.AttachRecoveryCompletionRequest) (*agentpb.AttachRecoveryCompletionAck, error)
+	FailAttachRemoval(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.AttachRemovalFailureRequest,
+	) (*agentpb.AttachRemovalFailureAck, error)
+	CompleteAttachRemoval(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.AttachRemovalCompletionRequest,
+	) (*agentpb.AttachRemovalCompletionAck, error)
+	CheckpointAttachRemoval(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.AttachRemovalCheckpointRequest,
+	) (*agentpb.AttachRemovalCheckpointAck, error)
+	CompleteAttachRecovery(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.AttachRecoveryCompletionRequest,
+	) (*agentpb.AttachRecoveryCompletionAck, error)
 }
 
 func (server *Server) ConfigureAttachWork(reports AttachReporter) { server.attachReports = reports }
 
 // attachReport keeps typed Attach reporting on the authenticated session. The
 // stream loop owns transport; operation owners own evidence and settlement.
-func (server *Server) attachReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
+func (server *Server) attachReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
 	if handled, reply, err := server.attachProvisionReport(session, generation, message); handled {
 		return handled, reply, err
 	}

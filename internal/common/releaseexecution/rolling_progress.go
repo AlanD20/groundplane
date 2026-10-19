@@ -27,7 +27,12 @@ func (progress Progress) BeginReplica(input Input, at time.Time) (Progress, erro
 	return progress, progress.Validate(input)
 }
 
-func (progress Progress) ConfirmReplica(input Input, phase rollingrelease.Phase, evidence workexecution.Input, at time.Time) (Progress, error) {
+func (progress Progress) ConfirmReplica(
+	input Input,
+	phase rollingrelease.Phase,
+	evidence workexecution.Input,
+	at time.Time,
+) (Progress, error) {
 	if err := progress.Validate(input); err != nil {
 		return Progress{}, err
 	}

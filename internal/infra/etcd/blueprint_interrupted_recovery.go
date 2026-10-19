@@ -79,7 +79,11 @@ func (ledger *ReleaseLedger) QueueInterruptedBlueprintRecovery(ctx context.Conte
 	} else if view.Work.Item.Item.ForwardRevoked {
 		outcome = workexecution.Superseded
 	}
-	completion.At, completion.Result = at, workexecution.Completion{Outcome: outcome, Evidence: reference, EffectsSettled: false}
+	completion.At, completion.Result = at, workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       reference,
+		EffectsSettled: false,
+	}
 	change, err := workqueue.PrepareCompletionWithRecovery(completion, at.Add(budget))
 	if err != nil {
 		return err
@@ -91,7 +95,13 @@ func (ledger *ReleaseLedger) QueueInterruptedBlueprintRecovery(ctx context.Conte
 		{Key: releasework.ProgressKey(attempt.ID), ModRevision: progress.Revision},
 		{Key: releasework.FailureKey(reference.ID)},
 	}, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: releasework.FailureKey(reference.ID), Value: raw}}}
-	result, err := queue.Commit(ctx, workqueue.Change{Conditions: guards}, workqueue.Change{Conditions: sources.Conditions}, evidence, change)
+	result, err := queue.Commit(
+		ctx,
+		workqueue.Change{Conditions: guards},
+		workqueue.Change{Conditions: sources.Conditions},
+		evidence,
+		change,
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return err

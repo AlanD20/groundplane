@@ -14,13 +14,24 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (owner *AgentWork) admitRecovery(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *AgentWork) admitRecovery(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
-	if request.DecisionOnly || item.Operation != workexecution.ServiceLifecycle || item.Placement.Executor != workexecution.Agent ||
-		item.Phase != workexecution.Ready || item.ActiveAttemptID != "" || at.IsZero() || at.Before(item.UpdatedAt) ||
+	if request.DecisionOnly || item.Operation != workexecution.ServiceLifecycle ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Ready ||
+		item.ActiveAttemptID != "" ||
+		at.IsZero() ||
+		at.Before(item.UpdatedAt) ||
 		(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped) ||
 		request.Executor.Record.Identity.HostID != item.Placement.HostID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Service lifecycle recovery cannot obtain this host assignment")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle recovery cannot obtain this host assignment",
+		)
 	}
 	if !at.Before(item.Deadline) {
 		change, err := workqueue.PrepareCleanupRetryExpiry(request.Task, request.Item, at)
@@ -45,12 +56,21 @@ func (owner *AgentWork) admitRecovery(ctx context.Context, request workqueue.Ass
 		}}}, nil
 }
 
-func (owner *AgentWork) recoveryAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ServiceLifecycleAssignment, workqueue.Change, error) {
+func (owner *AgentWork) recoveryAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ServiceLifecycleAssignment, workqueue.Change, error) {
 	item, task, attempt := view.Work.Item.Item, view.Work.Task.Task, view.Attempt.Attempt
 	if !view.CurrentExecutor || !view.ActiveAttempt || item.Operation != workexecution.ServiceLifecycle ||
 		attempt.Direction != workexecution.Recovery || attempt.Executor.Executor != workexecution.Agent ||
-		workexecution.ValidateDelivery(item, attempt) != nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil {
-		return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "Service lifecycle recovery no longer owns active host execution")
+		workexecution.ValidateDelivery(
+			item,
+			attempt,
+		) != nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil {
+		return nil, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle recovery no longer owns active host execution",
+		)
 	}
 	captured, guard, err := owner.inputs.Load(ctx, view.Work)
 	if err != nil {

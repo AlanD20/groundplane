@@ -20,7 +20,11 @@ func ValidateCapturedArtifact(planID string, generation uint64, artifact *agentp
 
 // ValidateCapturedMaterializations checks the complete bounded ordered file
 // manifest without carrying or authorizing its private content.
-func ValidateCapturedMaterializations(generation uint64, artifact *agentpb.ComposeArtifact, files []*agentpb.MaterializeFile) error {
+func ValidateCapturedMaterializations(
+	generation uint64,
+	artifact *agentpb.ComposeArtifact,
+	files []*agentpb.MaterializeFile,
+) error {
 	if artifact == nil || generation == 0 || len(files) > 512 {
 		return errs.New(errs.KindValidationFailed, "captured file manifest is missing or oversized")
 	}

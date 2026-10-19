@@ -21,7 +21,9 @@ func (repository *InputRepository) PrepareStoppedFailure(ctx context.Context, vi
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
 	if !view.CanSettleResult() || !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
 		attempt.Direction != workexecution.Forward || attempt.StartedAt == nil || attempt.FinishedAt != nil || !reason.Valid() {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Backup failure no longer owns the active forward execution")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Backup failure no longer owns the active forward execution",
+		)
 	}
 	var change workqueue.Change
 	var err error
@@ -60,7 +62,10 @@ func (repository *InputRepository) PrepareStoppedFailure(ctx context.Context, vi
 		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision},
 		keyvalue.Condition{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision},
 		keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: FailureKey(attempt.ID), Value: raw})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: FailureKey(attempt.ID), Value: raw},
+	)
 	result := workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: settled}
 	if !settled {
 		if err := retainFailedExecution(&change, item, attempt, result, raw, at); err != nil {
@@ -74,7 +79,9 @@ func (repository *InputRepository) PrepareStoppedFailure(ctx context.Context, vi
 func (repository *InputRepository) LoadFailure(ctx context.Context, view workqueue.ResumeView) ([]byte, error) {
 	attempt := view.Attempt.Attempt
 	operation := view.Work.Item.Item.Operation
-	if (operation != workexecution.BackupPrune && operation != workexecution.Restore && operation != workexecution.Backup) || attempt.FinishedAt == nil || attempt.Result == nil {
+	if (operation != workexecution.BackupPrune && operation != workexecution.Restore && operation != workexecution.Backup) ||
+		attempt.FinishedAt == nil ||
+		attempt.Result == nil {
 		return nil, conflict("Backup failure has no retained result")
 	}
 	read, err := repository.readSettlementKeys(ctx, []string{FailureKey(attempt.ID)}, view.Work.ReadRevision)

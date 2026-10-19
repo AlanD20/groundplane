@@ -41,9 +41,13 @@ func DecodeWorkSummary(raw []byte) (WorkSummary, error) {
 }
 
 func validateWorkSummary(summary WorkSummary) error {
-	if ids.Validate(ids.KindTask, summary.TaskID) != nil || !ValidHierarchyDeletionPrivateID(summary.OperationID, "del") ||
-		!ValidHierarchyDeletionDigest(summary.PlanDigest) || !ValidHierarchyDeletionDigest(summary.ResultDigest) ||
-		summary.Count == 0 || summary.Count > workexecution.MaximumTaskItems || !ValidHierarchyDeletionTimestamp(summary.CompletedAt) {
+	if ids.Validate(ids.KindTask, summary.TaskID) != nil ||
+		!ValidHierarchyDeletionPrivateID(summary.OperationID, "del") ||
+		!ValidHierarchyDeletionDigest(summary.PlanDigest) ||
+		!ValidHierarchyDeletionDigest(summary.ResultDigest) ||
+		summary.Count == 0 ||
+		summary.Count > workexecution.MaximumTaskItems ||
+		!ValidHierarchyDeletionTimestamp(summary.CompletedAt) {
 		return CorruptHierarchyDeletion()
 	}
 	switch summary.Outcome {

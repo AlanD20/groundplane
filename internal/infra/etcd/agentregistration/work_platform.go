@@ -10,12 +10,21 @@ import (
 
 // RecordWorkPlatform accepts only the authenticated current host process. The
 // immutable record survives process replacement without borrowing Controller OS.
-func (repository *Repository) RecordWorkPlatform(ctx context.Context, authority WorkAuthorization, operatingSystem, architecture, variant string) error {
+func (repository *Repository) RecordWorkPlatform(
+	ctx context.Context,
+	authority WorkAuthorization,
+	operatingSystem, architecture, variant string,
+) error {
 	guards, err := authority.Conditions()
 	if err != nil {
 		return err
 	}
-	platform := hostbindings.Platform{HostID: authority.Identity().HostID, OS: operatingSystem, Architecture: architecture, Variant: variant}
+	platform := hostbindings.Platform{
+		HostID:       authority.Identity().HostID,
+		OS:           operatingSystem,
+		Architecture: architecture,
+		Variant:      variant,
+	}
 	value, err := hostbindings.EncodePlatform(platform)
 	if err != nil {
 		return err

@@ -20,10 +20,18 @@ type ConsumerRestoration struct {
 	At        time.Time           `json:"at"`
 }
 
-func HelperRestoration(input HelperInput, observed ConsumerRestoration) (*agentpb.EntryConfigurationWorkHelperResponse, error) {
-	if input.Recovery == nil || input.Recovery.ValidateFor(input.Attempt, input.Procedure) != nil || input.Attempt.StartedAt == nil ||
-		observed.AttemptID != input.Attempt.ID || observed.Input != input.Attempt.Input || observed.At.IsZero() ||
-		observed.At.Location() != time.UTC || observed.At.Before(*input.Attempt.StartedAt) || !observed.Restored && !input.InspectOnly {
+func HelperRestoration(
+	input HelperInput,
+	observed ConsumerRestoration,
+) (*agentpb.EntryConfigurationWorkHelperResponse, error) {
+	if input.Recovery == nil || input.Recovery.ValidateFor(input.Attempt, input.Procedure) != nil ||
+		input.Attempt.StartedAt == nil ||
+		observed.AttemptID != input.Attempt.ID ||
+		observed.Input != input.Attempt.Input ||
+		observed.At.IsZero() ||
+		observed.At.Location() != time.UTC ||
+		observed.At.Before(*input.Attempt.StartedAt) ||
+		!observed.Restored && !input.InspectOnly {
 		return nil, invalidLayout()
 	}
 	raw, err := json.Marshal(observed)
@@ -37,8 +45,12 @@ func HelperRestoration(input HelperInput, observed ConsumerRestoration) (*agentp
 	return &agentpb.EntryConfigurationWorkHelperResponse{Observation: raw}, nil
 }
 
-func ReadHelperRestoration(input HelperInput, response *agentpb.EntryConfigurationWorkHelperResponse) (ConsumerRestoration, error) {
-	if response == nil || executionplan.RejectUnknown(response) != nil || len(response.Observation) == 0 || len(response.Observation) > MaximumProgressBytes {
+func ReadHelperRestoration(
+	input HelperInput,
+	response *agentpb.EntryConfigurationWorkHelperResponse,
+) (ConsumerRestoration, error) {
+	if response == nil || executionplan.RejectUnknown(response) != nil || len(response.Observation) == 0 ||
+		len(response.Observation) > MaximumProgressBytes {
 		return ConsumerRestoration{}, invalidLayout()
 	}
 	observed, err := jcs.Decode[ConsumerRestoration](response.Observation)

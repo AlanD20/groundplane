@@ -26,7 +26,13 @@ const (
 )
 
 type attachMutationFacts interface {
-	SealBackingHookInputsAtRevision(context.Context, string, string, backinghook.Configuration, int64) (*taskconfiguration.BackingHookEncryptedInputs, error)
+	SealBackingHookInputsAtRevision(
+		context.Context,
+		string,
+		string,
+		backinghook.Configuration,
+		int64,
+	) (*taskconfiguration.BackingHookEncryptedInputs, error)
 	SealCustomHookBundle(
 		context.Context,
 		string,

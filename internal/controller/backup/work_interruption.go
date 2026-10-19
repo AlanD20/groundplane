@@ -32,7 +32,13 @@ func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue
 	var proof workqueue.Change
 	var result workexecution.Completion
 	if view.Attempt.Attempt.Direction == workexecution.Recovery {
-		proof, result, err = owner.inputs.PrepareRecoveryFailure(ctx, view, executionplan.BackupExecutionInterrupted, at, true)
+		proof, result, err = owner.inputs.PrepareRecoveryFailure(
+			ctx,
+			view,
+			executionplan.BackupExecutionInterrupted,
+			at,
+			true,
+		)
 	} else {
 		proof, result, err = owner.inputs.PrepareInterrupted(ctx, view, at)
 	}
@@ -42,7 +48,8 @@ func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue
 	defer keyvalue.ClearMutationValues(proof.Mutations)
 	completion.Result, completion.At = result, at
 	var change workqueue.Change
-	if result.EffectsSettled || view.Attempt.Attempt.Direction == workexecution.Recovery || view.Work.Item.Item.Operation != workexecution.BackupPrune {
+	if result.EffectsSettled || view.Attempt.Attempt.Direction == workexecution.Recovery ||
+		view.Work.Item.Item.Operation != workexecution.BackupPrune {
 		change, err = workqueue.PrepareCompletion(completion)
 	} else {
 		// One captured cleanup attempt; a failed cleanup is not automatically

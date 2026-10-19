@@ -34,8 +34,12 @@ func ValidateBackupWorkCheckpoint(request *agentpb.BackupWorkCheckpointRequest,
 	return validateBackupSourceCheckpoint(request, ownedInput)
 }
 
-func validateBackupSourceCheckpoint(request *agentpb.BackupWorkCheckpointRequest, ownedInput *agentpb.BackupWorkInput) (*agentpb.BackupWorkCheckpointRequest, error) {
-	if request == nil || proto.Size(request) > MaximumPlanBytes || RejectUnknown(request) != nil || request.CheckpointSequence == 0 {
+func validateBackupSourceCheckpoint(
+	request *agentpb.BackupWorkCheckpointRequest,
+	ownedInput *agentpb.BackupWorkInput,
+) (*agentpb.BackupWorkCheckpointRequest, error) {
+	if request == nil || proto.Size(request) > MaximumPlanBytes || RejectUnknown(request) != nil ||
+		request.CheckpointSequence == 0 {
 		return nil, invalidBackupCheckpoint("work report is invalid")
 	}
 	if uint64(request.SourceOrdinal) >= uint64(len(ownedInput.Steps)) {
@@ -81,7 +85,11 @@ func ValidateBackupWorkCheckpointAck(ack *agentpb.BackupWorkCheckpointAck,
 	return validateBackupSourceCheckpointAck(ack, validated, input)
 }
 
-func validateBackupSourceCheckpointAck(ack *agentpb.BackupWorkCheckpointAck, validated *agentpb.BackupWorkCheckpointRequest, input *agentpb.BackupWorkInput) (*agentpb.BackupWorkCheckpointAck, error) {
+func validateBackupSourceCheckpointAck(
+	ack *agentpb.BackupWorkCheckpointAck,
+	validated *agentpb.BackupWorkCheckpointRequest,
+	input *agentpb.BackupWorkInput,
+) (*agentpb.BackupWorkCheckpointAck, error) {
 	digest, err := BackupWorkCheckpointDigest(validated)
 	if err != nil {
 		return nil, err

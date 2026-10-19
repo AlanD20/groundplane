@@ -308,7 +308,11 @@ func (service *MutationService) apply(
 	now := service.now().UTC()
 	capture := groupstore.RemovalInput{
 		TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
-		Scope:   workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID},
+		Scope: workexecution.Scope{
+			TenantID:      project.Record.TenantID,
+			ProjectID:     project.Record.ID,
+			EnvironmentID: environment.Record.ID,
+		},
 		GroupID: desired.ID, GroupName: desired.Name, GroupRevision: prepared.GroupRevision(), CreatedAt: now,
 	}
 	if err := capture.Validate(); err != nil {
@@ -333,7 +337,14 @@ func (service *MutationService) apply(
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending, Locator: locator,
 		ReplayTarget: &target, Intent: durable, Response: response, TaskID: capture.TaskID, CreatedAt: now, UpdatedAt: now,
 	}
-	result, mutationErr := service.tasks.PublishReleaseGroupRemoval(ctx, environment, project, prepared, capture, marker)
+	result, mutationErr := service.tasks.PublishReleaseGroupRemoval(
+		ctx,
+		environment,
+		project,
+		prepared,
+		capture,
+		marker,
+	)
 	if mutationErr != nil {
 		if !releaseGroupUnknownOutcome(mutationErr) {
 			return idempotencyrecord.IdempotencyResponse{}, mutationErr

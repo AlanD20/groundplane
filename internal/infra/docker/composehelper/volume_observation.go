@@ -24,7 +24,10 @@ func ObserveVolumeWork(ctx context.Context, taskRunner runner.Runner, volumeRoot
 		return volumeexecution.Observation{}, errs.New(errs.KindInternal, "Volume observation requires a context")
 	}
 	if _, bounded := ctx.Deadline(); !bounded {
-		return volumeexecution.Observation{}, errs.New(errs.KindValidationFailed, "Volume observation requires a deadline")
+		return volumeexecution.Observation{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume observation requires a deadline",
+		)
 	}
 	// Observation serves both forward execution and read-only recovery. Its
 	// caller has opened the corresponding helper envelope; bind these bytes to
@@ -36,11 +39,17 @@ func ObserveVolumeWork(ctx context.Context, taskRunner runner.Runner, volumeRoot
 	}
 	if attempt.Validate() != nil || attempt.StartedAt == nil || attempt.FinishedAt != nil ||
 		attempt.Executor.Executor != workexecution.Agent || reference != attempt.Input {
-		return volumeexecution.Observation{}, errs.New(errs.KindStateConflict, "Volume observation requires a started attempt")
+		return volumeexecution.Observation{}, errs.New(
+			errs.KindStateConflict,
+			"Volume observation requires a started attempt",
+		)
 	}
 	scope, err := environmentpath.Parse(volumeRoot, owned.Candidate.AuthorizedVolumeDir)
 	if err != nil || scope.EnvironmentID != owned.EnvironmentId {
-		return volumeexecution.Observation{}, errs.New(errs.KindValidationFailed, "Volume observation directory is outside its configured owner")
+		return volumeexecution.Observation{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume observation directory is outside its configured owner",
+		)
 	}
 	directory, err := (environmentdirectoryhelper.Creator{}).InspectManagedVolume(ctx,
 		environmentdirectoryhelper.ManagedVolumeInspectRequest{

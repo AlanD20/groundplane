@@ -60,19 +60,25 @@ func Stages(input *agentpb.ServiceLifecycleWorkInput) ([]Stage, error) {
 		return nil, invalid()
 	}
 	stages := make([]Stage, 0, len(input.Members)+1)
-	if hook := input.Hook; hook != nil && input.Action != agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_START {
+	if hook := input.Hook; hook != nil &&
+		input.Action != agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_START {
 		if hook.Event != agentpb.BackingHookEvent_BACKING_HOOK_EVENT_BEFORE_STOP {
 			return nil, invalid()
 		}
 		stages = append(stages, Stage{ID: hook.StageId, Expected: HookSucceeded})
 	}
 	for _, member := range input.Members {
-		if member == nil || member.Ownership == nil || len(member.Ownership.ComposeNames) != 1 || member.Ownership.ComposeNames[0] == "" {
+		if member == nil || member.Ownership == nil || len(member.Ownership.ComposeNames) != 1 ||
+			member.Ownership.ComposeNames[0] == "" {
 			return nil, invalid()
 		}
-		stages = append(stages, Stage{ID: member.Ownership.StepId, Member: member.Ownership.ComposeNames[0], Expected: state})
+		stages = append(
+			stages,
+			Stage{ID: member.Ownership.StepId, Member: member.Ownership.ComposeNames[0], Expected: state},
+		)
 	}
-	if hook := input.Hook; hook != nil && input.Action == agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_START {
+	if hook := input.Hook; hook != nil &&
+		input.Action == agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_START {
 		if hook.Event != agentpb.BackingHookEvent_BACKING_HOOK_EVENT_AFTER_START {
 			return nil, invalid()
 		}
@@ -88,7 +94,11 @@ func Stages(input *agentpb.ServiceLifecycleWorkInput) ([]Stage, error) {
 	return stages, nil
 }
 
-func NewProgress(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, at time.Time) (Progress, error) {
+func NewProgress(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	at time.Time,
+) (Progress, error) {
 	progress := Progress{AttemptID: attempt.ID, UpdatedAt: at.UTC()}
 	if !at.Before(attempt.Deadline) {
 		return Progress{}, invalid()
@@ -101,7 +111,8 @@ func (progress Progress) Validate(attempt workexecution.Attempt, input *agentpb.
 	if err != nil {
 		return err
 	}
-	if input.CapturedSource == nil || input.CapturedSource.InputId != attempt.Input.ID || hex.EncodeToString(input.CapturedSource.Sha256) != attempt.Input.SHA256 {
+	if input.CapturedSource == nil || input.CapturedSource.InputId != attempt.Input.ID ||
+		hex.EncodeToString(input.CapturedSource.Sha256) != attempt.Input.SHA256 {
 		return invalid()
 	}
 	return progress.ValidateStages(attempt, stages)
@@ -151,9 +162,12 @@ func (progress Progress) validateReceipts(attempt workexecution.Attempt, stages 
 			previous = *attempt.StartedAt
 		}
 		stage := stages[index]
-		if receipt.StageID != stage.ID || receipt.Member != stage.Member || receipt.State != stage.Expected || receipt.Evidence.Validate() != nil ||
+		if receipt.StageID != stage.ID || receipt.Member != stage.Member || receipt.State != stage.Expected ||
+			receipt.Evidence.Validate() != nil ||
 			(index < progress.Inherited && receipt.ObservedAt.After(*attempt.StartedAt)) ||
-			receipt.ObservedAt.Location() != time.UTC || receipt.ObservedAt.Before(previous) || receipt.ObservedAt.After(progress.UpdatedAt) {
+			receipt.ObservedAt.Location() != time.UTC ||
+			receipt.ObservedAt.Before(previous) ||
+			receipt.ObservedAt.After(progress.UpdatedAt) {
 			return invalid()
 		}
 		previous = receipt.ObservedAt
@@ -161,7 +175,8 @@ func (progress Progress) validateReceipts(attempt workexecution.Attempt, stages 
 	if previous.Before(*attempt.StartedAt) {
 		previous = *attempt.StartedAt
 	}
-	if began := progress.BeganAt; began != nil && (began.Location() != time.UTC || began.Before(previous) || !began.Before(attempt.Deadline) || began.After(progress.UpdatedAt)) {
+	if began := progress.BeganAt; began != nil &&
+		(began.Location() != time.UTC || began.Before(previous) || !began.Before(attempt.Deadline) || began.After(progress.UpdatedAt)) {
 		return invalid()
 	}
 	return nil
@@ -178,8 +193,13 @@ func (progress Progress) expectedSequence() uint64 {
 	return sequence
 }
 
-func (progress Progress) Begin(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, at time.Time) (Progress, error) {
-	if progress.Validate(attempt, input) != nil || progress.BeganAt != nil || at.Before(progress.UpdatedAt) || !at.Before(attempt.Deadline) {
+func (progress Progress) Begin(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	at time.Time,
+) (Progress, error) {
+	if progress.Validate(attempt, input) != nil || progress.BeganAt != nil || at.Before(progress.UpdatedAt) ||
+		!at.Before(attempt.Deadline) {
 		return Progress{}, invalid()
 	}
 	stages, err := Stages(input)
@@ -192,8 +212,15 @@ func (progress Progress) Begin(attempt workexecution.Attempt, input *agentpb.Ser
 	return next, next.Validate(attempt, input)
 }
 
-func (progress Progress) Confirm(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, receipt Receipt, at time.Time) (Progress, error) {
-	if progress.Validate(attempt, input) != nil || progress.BeganAt == nil || at.Before(progress.UpdatedAt) || receipt.ObservedAt.Before(*progress.BeganAt) || receipt.ObservedAt.After(at) {
+func (progress Progress) Confirm(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	receipt Receipt,
+	at time.Time,
+) (Progress, error) {
+	if progress.Validate(attempt, input) != nil || progress.BeganAt == nil || at.Before(progress.UpdatedAt) ||
+		receipt.ObservedAt.Before(*progress.BeganAt) ||
+		receipt.ObservedAt.After(at) {
 		return Progress{}, invalid()
 	}
 	next := progress

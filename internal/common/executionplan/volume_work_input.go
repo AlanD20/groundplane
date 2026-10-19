@@ -49,7 +49,8 @@ func ValidateVolumeWorkInput(input *agentpb.VolumeWorkInput) error {
 			if volume.GetVolumeId() != input.VolumeId {
 				continue
 			}
-			if selected || volume.ComposeName != input.ComposeKey || volume.DockerName != "gp_vol_"+strings.ToLower(input.VolumeId) {
+			if selected || volume.ComposeName != input.ComposeKey ||
+				volume.DockerName != "gp_vol_"+strings.ToLower(input.VolumeId) {
 				return invalidVolumeWork()
 			}
 			selected = true
@@ -80,12 +81,18 @@ func ValidateVolumeWorkInput(input *agentpb.VolumeWorkInput) error {
 }
 
 func invalidVolumeWork() error {
-	return errs.New(errs.KindValidationFailed, "Volume execution requires its captured operation, owner, immutable key and removal approval")
+	return errs.New(
+		errs.KindValidationFailed,
+		"Volume execution requires its captured operation, owner, immutable key and removal approval",
+	)
 }
 
 // CaptureVolumeWorkInput returns an owned message and deterministic bytes for
 // immutable input storage. Its reference must be published atomically with work.
-func CaptureVolumeWorkInput(inputID string, input *agentpb.VolumeWorkInput) (*agentpb.VolumeWorkInput, []byte, workexecution.Input, error) {
+func CaptureVolumeWorkInput(
+	inputID string,
+	input *agentpb.VolumeWorkInput,
+) (*agentpb.VolumeWorkInput, []byte, workexecution.Input, error) {
 	if err := ValidateVolumeWorkInput(input); err != nil {
 		return nil, nil, workexecution.Input{}, err
 	}
@@ -102,7 +109,10 @@ func CaptureVolumeWorkInput(inputID string, input *agentpb.VolumeWorkInput) (*ag
 	return owned, raw, reference, nil
 }
 
-func OpenVolumeWorkInput(attempt workexecution.Attempt, input *agentpb.VolumeWorkInput) (*agentpb.VolumeWorkInput, error) {
+func OpenVolumeWorkInput(
+	attempt workexecution.Attempt,
+	input *agentpb.VolumeWorkInput,
+) (*agentpb.VolumeWorkInput, error) {
 	if attempt.Validate() != nil || attempt.Executor.Executor != workexecution.Agent ||
 		attempt.Direction != workexecution.Forward || attempt.FinishedAt != nil {
 		return nil, invalidVolumeWork()

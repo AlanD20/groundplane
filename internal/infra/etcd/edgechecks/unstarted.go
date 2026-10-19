@@ -20,7 +20,10 @@ func (repository *Repository) PrepareUnstarted(ctx context.Context, task workque
 	item workqueue.ItemSnapshot, outcome workexecution.Outcome, at time.Time,
 ) (workqueue.Change, workexecution.Completion, error) {
 	invalid := func() (workqueue.Change, workexecution.Completion, error) {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "edge check cannot settle as unstarted")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"edge check cannot settle as unstarted",
+		)
 	}
 	if task.Revision <= 0 || item.Revision <= 0 || task.Task.ID != item.Item.TaskID ||
 		item.Item.Operation != workexecution.EdgeCheck || item.Item.AttemptNumber != 0 || item.Item.ActiveAttemptID != "" ||
@@ -62,7 +65,10 @@ func (repository *Repository) PrepareUnstarted(ctx context.Context, task workque
 		if read.Values[index] == nil || string(read.Values[index].Value) != task.Task.ID {
 			return invalid()
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision},
+		)
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})
 	}
 	failure := "interrupted"
@@ -76,8 +82,14 @@ func (repository *Repository) PrepareUnstarted(ctx context.Context, task workque
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: Key(task.Task.ID), Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: Key(task.Task.ID), Value: value},
+	)
 	hash := sha256.Sum256(value)
 	return change, workexecution.Completion{Outcome: outcome, EffectsSettled: true,
-		Evidence: workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, record.CreatedAt, item.Item.ID, "edge-unstarted-result"), SHA256: hex.EncodeToString(hash[:])}}, nil
+		Evidence: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, record.CreatedAt, item.Item.ID, "edge-unstarted-result"),
+			SHA256: hex.EncodeToString(hash[:]),
+		}}, nil
 }

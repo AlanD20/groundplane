@@ -25,7 +25,10 @@ func (planner *RemovalPlanner) ResolveDetachInput(ctx context.Context, captured 
 		capture.Validate() != nil || attempt.TaskID != captured.TaskID || attempt.WorkItemID != captured.WorkItemID ||
 		capture.TaskID != attempt.TaskID || capture.WorkItemID != attempt.WorkItemID || capture.Action != attempt.Input ||
 		capture.BackingProjectID != captured.Snapshot.Source.Attach.BackingProjectID {
-		return attachexecution.RemovalInput{}, errs.New(errs.KindStateConflict, "Detach delivery has no matching captured work and hook ownership")
+		return attachexecution.RemovalInput{}, errs.New(
+			errs.KindStateConflict,
+			"Detach delivery has no matching captured work and hook ownership",
+		)
 	}
 	timestamp, err := ids.Timestamp(ids.KindWorkItem, attempt.WorkItemID)
 	if err != nil {
@@ -34,10 +37,17 @@ func (planner *RemovalPlanner) ResolveDetachInput(ctx context.Context, captured 
 	operationID := ids.DeriveAt(ids.KindOperation, timestamp, attempt.WorkItemID, "attach-removal-input")
 	digest, err := attachremoval.Digest(captured.Snapshot.Source)
 	if err != nil || digest != capture.FrozenSHA256 || capture.OperationID != operationID {
-		return attachexecution.RemovalInput{}, errs.New(errs.KindStateConflict, "Detach delivery source differs from the admitted encrypted capture")
+		return attachexecution.RemovalInput{}, errs.New(
+			errs.KindStateConflict,
+			"Detach delivery source differs from the admitted encrypted capture",
+		)
 	}
-	if runtime := captured.Snapshot.Runtime; runtime != nil && runtime.Source.Executor.HostID != attempt.Executor.HostID {
-		return attachexecution.RemovalInput{}, errs.New(errs.KindStateConflict, "Detach delivery is assigned to a different host than its consumer runtime")
+	if runtime := captured.Snapshot.Runtime; runtime != nil &&
+		runtime.Source.Executor.HostID != attempt.Executor.HostID {
+		return attachexecution.RemovalInput{}, errs.New(
+			errs.KindStateConflict,
+			"Detach delivery is assigned to a different host than its consumer runtime",
+		)
 	}
 	consumer, err := captured.ConsumerTransition(ctx)
 	if err != nil {
@@ -58,7 +68,12 @@ func (planner *RemovalPlanner) ResolveDetachInput(ctx context.Context, captured 
 	hash := sha256.Sum256(raw)
 	clear(raw)
 	input, err := planner.Build(ctx, source, &agentpb.WorkInputReference{
-		InputId: ids.DeriveAt(ids.KindPlan, timestamp, attempt.WorkItemID, "attach-removal-source"), Sha256: hash[:]}, consumer)
+		InputId: ids.DeriveAt(
+			ids.KindPlan,
+			timestamp,
+			attempt.WorkItemID,
+			"attach-removal-source",
+		), Sha256: hash[:]}, consumer)
 	if err != nil {
 		return attachexecution.RemovalInput{}, err
 	}

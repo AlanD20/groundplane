@@ -57,10 +57,19 @@ func New(
 	evidence requestidempotency.EvidenceRepository,
 	intents *requestidempotency.Coordinator,
 ) (*Service, error) {
-	if document == nil || runtime == nil || tasks == nil || inputs == nil || queue == nil || evidence == nil || intents == nil {
+	if document == nil || runtime == nil || tasks == nil || inputs == nil || queue == nil || evidence == nil ||
+		intents == nil {
 		return nil, errs.New(errs.KindInternal, "etcd config dependencies are required")
 	}
-	return &Service{document: document, runtime: runtime, tasks: tasks, inputs: inputs, queue: queue, evidence: evidence, intents: intents}, nil
+	return &Service{
+		document: document,
+		runtime:  runtime,
+		tasks:    tasks,
+		inputs:   inputs,
+		queue:    queue,
+		evidence: evidence,
+		intents:  intents,
+	}, nil
 }
 
 func (s *Service) Apply(
@@ -115,7 +124,9 @@ func (s *Service) Apply(
 	}
 	now := time.Now().UTC()
 	captured := etcdconfiguration.Input{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
-		PlanID: ids.New(ids.KindPlan), SelectedRevision: revision, Candidate: candidate, Previous: previous, CreatedAt: now}
+		PlanID: ids.New(
+			ids.KindPlan,
+		), SelectedRevision: revision, Candidate: candidate, Previous: previous, CreatedAt: now}
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: captured.TaskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)

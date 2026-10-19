@@ -15,7 +15,10 @@ import (
 // existing container ownership before running it; this function neither launches
 // Docker nor permits replay of an interrupted mutation. Stable proxies are left
 // to the separately acknowledged traffic-switch boundary.
-func ReleaseStartupCommands(input releaseexecution.Input, report releaseexecution.CheckpointReport) ([]runner.RunCmdOpts, error) {
+func ReleaseStartupCommands(
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+) ([]runner.RunCmdOpts, error) {
 	if report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil || report.Progress.Validate(input) != nil ||
 		!report.Progress.InFlight || report.Progress.Phase != releaseexecution.Rollout {
 		return nil, errs.New(errs.KindStateConflict, "candidate startup requires its acknowledged Release boundary")
@@ -56,7 +59,10 @@ func ReleaseStartupCommands(input releaseexecution.Input, report releaseexecutio
 	return candidateStartupCommands(artifacts.Candidate, workloads)
 }
 
-func candidateStartupCommands(artifact *agentpb.ComposeArtifact, workloads []*agentpb.ComposeService) ([]runner.RunCmdOpts, error) {
+func candidateStartupCommands(
+	artifact *agentpb.ComposeArtifact,
+	workloads []*agentpb.ComposeService,
+) ([]runner.RunCmdOpts, error) {
 	if len(workloads) == 0 {
 		return nil, errs.New(errs.KindValidationFailed, "candidate startup requires explicit workload names")
 	}
@@ -76,7 +82,16 @@ func candidateStartupCommands(artifact *agentpb.ComposeArtifact, workloads []*ag
 	validation := base
 	validation.Args = append(slices.Clone(prefix), "config", "--quiet", "--no-interpolate")
 	mutation := base
-	mutation.Args = append(slices.Clone(prefix), "up", "--detach", "--no-deps", "--no-build", "--pull", "never", "--force-recreate")
+	mutation.Args = append(
+		slices.Clone(prefix),
+		"up",
+		"--detach",
+		"--no-deps",
+		"--no-build",
+		"--pull",
+		"never",
+		"--force-recreate",
+	)
 	mutation.Args = append(mutation.Args, names...)
 	return []runner.RunCmdOpts{validation, mutation}, nil
 }

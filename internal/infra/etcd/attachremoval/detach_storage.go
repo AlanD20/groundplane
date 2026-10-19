@@ -55,7 +55,9 @@ func (repository *InputRepository) StageDetach(ctx context.Context, inputID stri
 	guards []keyvalue.Condition,
 ) (workexecution.Input, workqueue.Change, error) {
 	if len(guards) == 0 {
-		return workexecution.Input{}, workqueue.Change{}, checkpointConflict("Detach staging requires its admission owner")
+		return workexecution.Input{}, workqueue.Change{}, checkpointConflict(
+			"Detach staging requires its admission owner",
+		)
 	}
 	raw, reference, err := captureDetachInput(ctx, inputID, input)
 	if err != nil {
@@ -81,7 +83,9 @@ func (repository *InputRepository) StageDetach(ctx context.Context, inputID stri
 			revision = value.ModRevision
 			keyvalue.ClearValues(read.Values)
 			if !same {
-				return workexecution.Input{}, workqueue.Change{}, checkpointConflict("Detach staging contains a different immutable source")
+				return workexecution.Input{}, workqueue.Change{}, checkpointConflict(
+					"Detach staging contains a different immutable source",
+				)
 			}
 		} else {
 			keyvalue.ClearValues(read.Values)
@@ -110,9 +114,13 @@ func (repository *InputRepository) StageDetach(ctx context.Context, inputID stri
 
 // LoadDetach verifies the root and every captured byte at the work view's MVCC
 // revision. No current desired state or Task-history input is consulted.
-func (repository *InputRepository) LoadDetach(ctx context.Context, view workqueue.View) (DetachInput, []keyvalue.Condition, error) {
+func (repository *InputRepository) LoadDetach(
+	ctx context.Context,
+	view workqueue.View,
+) (DetachInput, []keyvalue.Condition, error) {
 	item := view.Item.Item
-	if item.Operation != workexecution.Detach || item.Input == nil || item.TaskID != view.Task.Task.ID || view.ReadRevision <= 0 {
+	if item.Operation != workexecution.Detach || item.Input == nil || item.TaskID != view.Task.Task.ID ||
+		view.ReadRevision <= 0 {
 		return DetachInput{}, nil, checkpointConflict("Detach work has no captured input")
 	}
 	key := DetachInputKey(item.ID)
@@ -170,19 +178,25 @@ func (repository *InputRepository) LoadDetach(ctx context.Context, view workqueu
 	return input, conditions, nil
 }
 
-func (repository *InputRepository) read(ctx context.Context, keys []string, revision int64) (*keyvalue.GetManyResult, error) {
+func (repository *InputRepository) read(
+	ctx context.Context,
+	keys []string,
+	revision int64,
+) (*keyvalue.GetManyResult, error) {
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != len(keys) {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		len(read.Values) != len(keys) {
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
 		return nil, errs.New(errs.KindStateConflict, "Detach captured-input read is incomplete")
 	}
 	for index, value := range read.Values {
-		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
+		if value != nil &&
+			(value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
 			keyvalue.ClearValues(read.Values)
 			return nil, recordcodec.CorruptRecord()
 		}

@@ -15,8 +15,12 @@ func BackupPruneObjectAuthority(
 	if object == nil || object.Object == nil || object.Object.Connector == nil || object.Evidence == nil {
 		return backupobject.PruneAuthority{}, errs.New(errs.KindValidationFailed, "Backup prune object is missing")
 	}
-	if len(object.Evidence.SourceSha256) != 32 || len(object.Evidence.StoredSha256) != 32 || len(object.MetadataSha256) != 32 {
-		return backupobject.PruneAuthority{}, errs.New(errs.KindValidationFailed, "Backup prune object evidence is incomplete")
+	if len(object.Evidence.SourceSha256) != 32 || len(object.Evidence.StoredSha256) != 32 ||
+		len(object.MetadataSha256) != 32 {
+		return backupobject.PruneAuthority{}, errs.New(
+			errs.KindValidationFailed,
+			"Backup prune object evidence is incomplete",
+		)
 	}
 	key := object.Object.ObjectKey
 	prefix := strings.Trim(object.Object.Connector.Prefix, "/")
@@ -25,7 +29,10 @@ func BackupPruneObjectAuthority(
 	}
 	parts := strings.Split(key, "/")
 	if len(parts) != 4 || parts[0] != environmentID || parts[2] != object.PointId {
-		return backupobject.PruneAuthority{}, errs.New(errs.KindValidationFailed, "Backup prune object scope is invalid")
+		return backupobject.PruneAuthority{}, errs.New(
+			errs.KindValidationFailed,
+			"Backup prune object scope is invalid",
+		)
 	}
 	authority := backupobject.PruneAuthority{
 		Key:             object.Object.ObjectKey,

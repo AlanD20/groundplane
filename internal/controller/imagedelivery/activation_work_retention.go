@@ -13,7 +13,12 @@ import (
 // complete artifact/predecessor authority is the accepted activation capture;
 // absence of a unit input is not missing image protection or permission to
 // waive protection for unrelated malformed work.
-func (service *Service) retainActivationInputImages(ctx context.Context, retention *imageRetention, item workexecution.Item, revision int64) error {
+func (service *Service) retainActivationInputImages(
+	ctx context.Context,
+	retention *imageRetention,
+	item workexecution.Item,
+	revision int64,
+) error {
 	queue, err := workqueue.NewRepository(service.store)
 	if err != nil {
 		return err
@@ -39,7 +44,9 @@ func (service *Service) retainActivationInputImages(ctx context.Context, retenti
 	}
 	matched := false
 	for _, expected := range graph {
-		if expected.ID == item.ID && expected.TaskID == item.TaskID && expected.Operation == item.Operation && expected.TargetID == item.TargetID && expected.Input == nil {
+		if expected.ID == item.ID && expected.TaskID == item.TaskID && expected.Operation == item.Operation &&
+			expected.TargetID == item.TargetID &&
+			expected.Input == nil {
 			matched = true
 		}
 	}

@@ -56,9 +56,16 @@ func (source DNSCheckSource) Request(action *agentpb.ComponentApply,
 	return request, nil
 }
 
-func (repository *ComponentRepository) LoadDNSCheckSource(ctx context.Context, componentID string, revision int64) (DNSCheckSource, error) {
+func (repository *ComponentRepository) LoadDNSCheckSource(
+	ctx context.Context,
+	componentID string,
+	revision int64,
+) (DNSCheckSource, error) {
 	if ids.Validate(ids.KindComponent, componentID) != nil || revision <= 0 {
-		return DNSCheckSource{}, errs.New(errs.KindValidationFailed, "DNS check requires a Component and its current revision")
+		return DNSCheckSource{}, errs.New(
+			errs.KindValidationFailed,
+			"DNS check requires a Component and its current revision",
+		)
 	}
 	host, err := hostbindings.ReadLocal(ctx, repository.store, 0)
 	if err != nil {
@@ -68,7 +75,12 @@ func (repository *ComponentRepository) LoadDNSCheckSource(ctx context.Context, c
 	if err != nil {
 		return DNSCheckSource{}, err
 	}
-	keys := []string{components.RecordKey(componentID), localagents.LocalAgentSingletonKey, dnschecks.LatestKey(componentID), dnschecks.ActiveKey(componentID)}
+	keys := []string{
+		components.RecordKey(componentID),
+		localagents.LocalAgentSingletonKey,
+		dnschecks.LatestKey(componentID),
+		dnschecks.ActiveKey(componentID),
+	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: state.ReadRevision})
 	if err != nil {
 		return DNSCheckSource{}, err
@@ -81,24 +93,41 @@ func (repository *ComponentRepository) LoadDNSCheckSource(ctx context.Context, c
 		return DNSCheckSource{}, errs.New(errs.KindRequestNotFound, "CoreDNS Component was not found")
 	}
 	if read.Values[0].ModRevision != revision {
-		return DNSCheckSource{}, errs.New(errs.KindStateConflict, "CoreDNS changed; refresh its settings before testing DNS")
+		return DNSCheckSource{}, errs.New(
+			errs.KindStateConflict,
+			"CoreDNS changed; refresh its settings before testing DNS",
+		)
 	}
 	component, err := components.DecodeRecord(read.Values[0].Value)
 	if err != nil {
 		return DNSCheckSource{}, err
 	}
-	if component.Desired.ID != componentID || component.Desired.Kind != core.ComponentKindCoreDNS || component.Desired.Owner != core.ComponentOwnerPlatform {
-		return DNSCheckSource{}, errs.New(errs.KindValidationFailed, "DNS checks require the platform CoreDNS Component")
+	if component.Desired.ID != componentID || component.Desired.Kind != core.ComponentKindCoreDNS ||
+		component.Desired.Owner != core.ComponentOwnerPlatform {
+		return DNSCheckSource{}, errs.New(
+			errs.KindValidationFailed,
+			"DNS checks require the platform CoreDNS Component",
+		)
 	}
 	if !component.Desired.Enabled || state.Applied == nil || !state.Applied.Desired.Enabled || read.Values[1] == nil {
-		return DNSCheckSource{}, errs.New(errs.KindStateConflict, "enable CoreDNS and wait for its configuration to be applied before testing DNS")
+		return DNSCheckSource{}, errs.New(
+			errs.KindStateConflict,
+			"enable CoreDNS and wait for its configuration to be applied before testing DNS",
+		)
 	}
 	if state.Pending != nil || state.ActiveItem != nil || read.Values[3] != nil {
-		return DNSCheckSource{}, errs.New(errs.KindResourceInUse, "CoreDNS has unfinished configuration or check work; finish it before testing DNS")
+		return DNSCheckSource{}, errs.New(
+			errs.KindResourceInUse,
+			"CoreDNS has unfinished configuration or check work; finish it before testing DNS",
+		)
 	}
 	applied := state.Applied
-	if len(component.Runtime.GeneratedServices) != 1 || component.Runtime.GeneratedServices[0] != applied.Configuration.Runtime.Services[0].ServiceId {
-		return DNSCheckSource{}, errs.New(errs.KindStateConflict, "CoreDNS runtime differs from its applied configuration")
+	if len(component.Runtime.GeneratedServices) != 1 ||
+		component.Runtime.GeneratedServices[0] != applied.Configuration.Runtime.Services[0].ServiceId {
+		return DNSCheckSource{}, errs.New(
+			errs.KindStateConflict,
+			"CoreDNS runtime differs from its applied configuration",
+		)
 	}
 	agentID, err := localagents.DecodeLocalAgentReference(read.Values[1].Value)
 	if err != nil {
@@ -108,12 +137,19 @@ func (repository *ComponentRepository) LoadDNSCheckSource(ctx context.Context, c
 		return DNSCheckSource{}, errs.New(errs.KindStateConflict, "CoreDNS host has a different enrolled Agent")
 	}
 	agentKey := localagents.LocalAgentPrimaryKey(agentID)
-	agentRead, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{agentKey}, Revision: state.ReadRevision})
+	agentRead, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{agentKey}, Revision: state.ReadRevision},
+	)
 	if err != nil {
 		return DNSCheckSource{}, err
 	}
-	if agentRead == nil || agentRead.ReadRevision != state.ReadRevision || len(agentRead.Values) != 1 || agentRead.Values[0] == nil {
-		return DNSCheckSource{}, errs.New(errs.KindStateConflict, "installed Agent is unavailable; wait for it before testing DNS")
+	if agentRead == nil || agentRead.ReadRevision != state.ReadRevision || len(agentRead.Values) != 1 ||
+		agentRead.Values[0] == nil {
+		return DNSCheckSource{}, errs.New(
+			errs.KindStateConflict,
+			"installed Agent is unavailable; wait for it before testing DNS",
+		)
 	}
 	defer keyvalue.ClearValues(agentRead.Values)
 	agent, err := localagents.DecodeLocalAgentPrimary(agentRead.Values[0].Value)
@@ -121,7 +157,10 @@ func (repository *ComponentRepository) LoadDNSCheckSource(ctx context.Context, c
 		return DNSCheckSource{}, err
 	}
 	if agent.ID != agentID || agent.Phase != localagents.LocalAgentPhaseReady {
-		return DNSCheckSource{}, errs.New(errs.KindStateConflict, "wait for Agent installation or update to finish before testing DNS")
+		return DNSCheckSource{}, errs.New(
+			errs.KindStateConflict,
+			"wait for Agent installation or update to finish before testing DNS",
+		)
 	}
 	proof := applied.ServingProof
 	configuration := dnschecks.Source{ComponentID: componentID, ComponentRevision: revision, HostID: state.HostID,
@@ -135,22 +174,42 @@ func (repository *ComponentRepository) LoadDNSCheckSource(ctx context.Context, c
 	source := DNSCheckSource{configuration: configuration, runtime: proto.CloneOf(applied.Configuration.Runtime),
 		proof: proto.CloneOf(proof), readRevision: state.ReadRevision, requestID: ids.NewULID(),
 		conditions: append(state.Conditions, host.Conditions...)}
-	source.conditions = append(source.conditions, keyvalue.Condition{Key: agentKey, ModRevision: configuration.AgentRevision})
+	source.conditions = append(
+		source.conditions,
+		keyvalue.Condition{Key: agentKey, ModRevision: configuration.AgentRevision},
+	)
 	for i, key := range keys {
-		source.conditions = append(source.conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[i])})
+		source.conditions = append(
+			source.conditions,
+			keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[i])},
+		)
 	}
 	return source, nil
 }
 
 // Retained results compare resource revisions only. Display never reruns a DNS
 // query, resolves a newer image or depends on the applying Task's retention.
-func (repository *ComponentRepository) DNSCheckSourcesChanged(ctx context.Context, source dnschecks.Source) (bool, error) {
+func (repository *ComponentRepository) DNSCheckSourcesChanged(
+	ctx context.Context,
+	source dnschecks.Source,
+) (bool, error) {
 	if err := source.Validate(); err != nil {
 		return false, err
 	}
-	keys := []string{components.RecordKey(source.ComponentID), resolverwork.AppliedKey(source.HostID, source.ComponentID),
-		localagents.LocalAgentSingletonKey, localagents.LocalAgentPrimaryKey(source.AgentID), resolverwork.IntentKey(source.HostID, source.ComponentID)}
-	revisions := []int64{source.ComponentRevision, source.AppliedRevision, source.SingletonRevision, source.AgentRevision, source.IntentRevision}
+	keys := []string{
+		components.RecordKey(source.ComponentID),
+		resolverwork.AppliedKey(source.HostID, source.ComponentID),
+		localagents.LocalAgentSingletonKey,
+		localagents.LocalAgentPrimaryKey(source.AgentID),
+		resolverwork.IntentKey(source.HostID, source.ComponentID),
+	}
+	revisions := []int64{
+		source.ComponentRevision,
+		source.AppliedRevision,
+		source.SingletonRevision,
+		source.AgentRevision,
+		source.IntentRevision,
+	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		return false, err

@@ -16,12 +16,22 @@ import (
 
 // PrepareUnstartedStop releases never-executed resource reservations. It cannot
 // release ownership for assigned or retried work.
-func (repository *InputRepository) PrepareUnstartedStop(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareUnstartedStop(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if (item.Operation != workexecution.BackupPrune && item.Operation != workexecution.Backup && item.Operation != workexecution.Restore) ||
-		item.Input == nil || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
-		item.Cleanup != workexecution.CleanupNone || !task.PublicationComplete || task.FinishedAt != nil ||
-		task.CollectionStartedAt != nil || !backupruntime.ValidBackupRuntimeInstant(at) || at.Before(item.UpdatedAt) {
+		item.Input == nil ||
+		item.AttemptNumber != 0 ||
+		item.ActiveAttemptID != "" ||
+		item.Cleanup != workexecution.CleanupNone ||
+		!task.PublicationComplete ||
+		task.FinishedAt != nil ||
+		task.CollectionStartedAt != nil ||
+		!backupruntime.ValidBackupRuntimeInstant(at) ||
+		at.Before(item.UpdatedAt) {
 		return workqueue.Change{}, conflict("Backup work cannot settle as never assigned")
 	}
 	outcome := workexecution.Failed
@@ -49,7 +59,11 @@ func (repository *InputRepository) PrepareUnstartedStop(ctx context.Context, vie
 
 // Callers must establish either no assignment or no start grant, and compare
 // that execution state in the transaction that releases these selections.
-func (repository *InputRepository) prepareUnexecutedPruneResources(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) prepareUnexecutedPruneResources(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task := view.Task.Task
 	input, guards, err := repository.PrepareAdmission(ctx, view)
 	if err != nil {
@@ -71,7 +85,8 @@ func (repository *InputRepository) prepareUnexecutedPruneResources(ctx context.C
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if dispatch.TaskID != task.ID || dispatch.EnvironmentID != input.EnvironmentId || len(dispatch.RecoveryPointIDs) != len(input.Steps) {
+	if dispatch.TaskID != task.ID || dispatch.EnvironmentID != input.EnvironmentId ||
+		len(dispatch.RecoveryPointIDs) != len(input.Steps) {
 		return workqueue.Change{}, conflict("Backup prune dispatch differs from captured input")
 	}
 	change := guards
@@ -132,10 +147,22 @@ func (repository *InputRepository) prepareUnexecutedPruneResources(ctx context.C
 			keyvalue.ClearMutationValues(change.Mutations)
 			return workqueue.Change{}, err
 		}
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: encoded})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: encoded},
+		)
 	}
-	fence, err := environmentfence.LoadOwned(ctx, repository.store, input.EnvironmentId, view.ReadRevision,
-		environmentfence.Owner{Kind: backupruntime.BackupOperationPrune, OperationID: dispatch.OperationID, TaskID: task.ID})
+	fence, err := environmentfence.LoadOwned(
+		ctx,
+		repository.store,
+		input.EnvironmentId,
+		view.ReadRevision,
+		environmentfence.Owner{
+			Kind:        backupruntime.BackupOperationPrune,
+			OperationID: dispatch.OperationID,
+			TaskID:      task.ID,
+		},
+	)
 	if err != nil {
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err
@@ -146,8 +173,14 @@ func (repository *InputRepository) prepareUnexecutedPruneResources(ctx context.C
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, fence.TransactionConditions()...)
-	change.Mutations = append(change.Mutations, epoch,
+	change.Mutations = append(
+		change.Mutations,
+		epoch,
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: dispatchKey},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: hierarchy.EnvironmentOperationLockKey(input.EnvironmentId)})
+		keyvalue.Mutation{
+			Type: keyvalue.MutationDelete,
+			Key:  hierarchy.EnvironmentOperationLockKey(input.EnvironmentId),
+		},
+	)
 	return change, nil
 }

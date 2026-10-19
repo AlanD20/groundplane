@@ -9,7 +9,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (repository *Repository) PrepareQueuedStop(ctx context.Context, view workqueue.View, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareQueuedStop(
+	ctx context.Context,
+	view workqueue.View,
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	stored, err := repository.Load(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err

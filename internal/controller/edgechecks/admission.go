@@ -195,7 +195,11 @@ func (service *Service) admitSource(ctx context.Context, environmentID string, s
 	}
 	task := workexecution.Task{
 		ID: checkOwner.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionCheck,
-		Scope:    workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID},
+		Scope: workexecution.Scope{
+			TenantID:      project.Record.TenantID,
+			ProjectID:     project.Record.ID,
+			EnvironmentID: environment.Record.ID,
+		},
 		TargetID: configuration.Request.TargetID(), TargetName: targetName,
 		Intent: workexecution.Input{ID: checkOwner.PlanID, SHA256: hash}, ExpectedItems: 1,
 		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(contract.TaskTimeoutSeconds) * time.Second),

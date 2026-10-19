@@ -49,22 +49,38 @@ type Capture struct {
 }
 
 func (capture Capture) Validate(input resolverexecution.Input) error {
-	if input.Validate() != nil || capture.TaskID != input.TaskID || capture.WorkID != input.WorkID || capture.HostID != input.HostID ||
-		capture.Desired.ID != input.ComponentID || capture.Desired.Owner != core.ComponentOwnerPlatform || capture.Desired.OwnerID != "" ||
-		capture.Desired.Kind != core.ComponentKindCoreDNS || capture.Desired.Enabled != input.Enabled ||
+	if input.Validate() != nil || capture.TaskID != input.TaskID || capture.WorkID != input.WorkID ||
+		capture.HostID != input.HostID ||
+		capture.Desired.ID != input.ComponentID ||
+		capture.Desired.Owner != core.ComponentOwnerPlatform ||
+		capture.Desired.OwnerID != "" ||
+		capture.Desired.Kind != core.ComponentKindCoreDNS ||
+		capture.Desired.Enabled != input.Enabled ||
 		componentrecord.ValidateRecord(componentrecord.Record{Desired: capture.Desired}) != nil ||
-		capture.ReadRevision <= 0 || capture.ComponentRevision <= 0 || capture.ComponentRevision > capture.ReadRevision ||
-		capture.AppliedRevision < 0 || capture.AppliedRevision > capture.ReadRevision ||
-		capture.IntentRevision < 0 || capture.IntentRevision > capture.ReadRevision ||
-		capture.RequestRevision < 0 || capture.RequestRevision > capture.ReadRevision ||
-		capture.BaselineRevision <= 0 || capture.BaselineRevision > capture.ReadRevision || !recordcodec.ValidSHA256(capture.BaselineSHA256) ||
+		capture.ReadRevision <= 0 ||
+		capture.ComponentRevision <= 0 ||
+		capture.ComponentRevision > capture.ReadRevision ||
+		capture.AppliedRevision < 0 ||
+		capture.AppliedRevision > capture.ReadRevision ||
+		capture.IntentRevision < 0 ||
+		capture.IntentRevision > capture.ReadRevision ||
+		capture.RequestRevision < 0 ||
+		capture.RequestRevision > capture.ReadRevision ||
+		capture.BaselineRevision <= 0 ||
+		capture.BaselineRevision > capture.ReadRevision ||
+		!recordcodec.ValidSHA256(capture.BaselineSHA256) ||
 		capture.BaselineSHA256 != input.BaselineSHA256 ||
-		capture.ProjectionRevision < 0 || capture.ProjectionRevision > capture.ReadRevision ||
-		capture.TargetName == "" || len(capture.TargetName) > 256 || !utf8.ValidString(capture.TargetName) || len(capture.References) > 256 {
+		capture.ProjectionRevision < 0 ||
+		capture.ProjectionRevision > capture.ReadRevision ||
+		capture.TargetName == "" ||
+		len(capture.TargetName) > 256 ||
+		!utf8.ValidString(capture.TargetName) ||
+		len(capture.References) > 256 {
 		return invalid("DNS resolver resource capture differs from its executable input")
 	}
 	if capture.Actor != workexecution.OperatorActor && capture.Actor != workexecution.SystemActor ||
-		capture.Action != workexecution.ActionUpdate && capture.Action != workexecution.ActionStart && capture.Action != workexecution.ActionStop {
+		capture.Action != workexecution.ActionUpdate && capture.Action != workexecution.ActionStart &&
+			capture.Action != workexecution.ActionStop {
 		return invalid("DNS resolver capture has no supported initiating action")
 	}
 	if _, err := hostresolution.EncodeHostResolutionProjectionRecord(capture.Projection); err != nil {
@@ -123,14 +139,29 @@ func decodeCapture(raw []byte, input resolverexecution.Input) (Capture, error) {
 
 func invalid(message string) error { return errs.New(errs.KindStateConflict, message) }
 
-func matchesWork(input resolverexecution.Input, reference workexecution.Input, task workexecution.Task, item workexecution.Item) error {
-	if task.Validate() != nil || item.Validate() != nil || task.ID != input.TaskID || item.ID != input.WorkID || item.TaskID != task.ID ||
-		item.Operation != workexecution.Resolver || task.TargetID != input.ComponentID || item.TargetID != input.ComponentID ||
+func matchesWork(
+	input resolverexecution.Input,
+	reference workexecution.Input,
+	task workexecution.Task,
+	item workexecution.Item,
+) error {
+	if task.Validate() != nil || item.Validate() != nil || task.ID != input.TaskID || item.ID != input.WorkID ||
+		item.TaskID != task.ID ||
+		item.Operation != workexecution.Resolver ||
+		task.TargetID != input.ComponentID ||
+		item.TargetID != input.ComponentID ||
 		item.Placement != (workexecution.Placement{Executor: workexecution.Agent, HostID: input.HostID}) ||
-		item.Input == nil || *item.Input != reference || task.Intent != reference || task.Scope != (workexecution.Scope{}) ||
-		!task.CreatedAt.Equal(input.CreatedAt) || !item.CreatedAt.Equal(input.CreatedAt) ||
-		task.ExpectedItems != 1 || !task.PublicationComplete || len(item.Dependencies) != 0 ||
-		len(item.Claims) != 1 || item.Claims[0] != (workexecution.Claim{HostID: input.HostID, ScopeID: input.ComponentID}) {
+		item.Input == nil ||
+		*item.Input != reference ||
+		task.Intent != reference ||
+		task.Scope != (workexecution.Scope{}) ||
+		!task.CreatedAt.Equal(input.CreatedAt) ||
+		!item.CreatedAt.Equal(input.CreatedAt) ||
+		task.ExpectedItems != 1 ||
+		!task.PublicationComplete ||
+		len(item.Dependencies) != 0 ||
+		len(item.Claims) != 1 ||
+		item.Claims[0] != (workexecution.Claim{HostID: input.HostID, ScopeID: input.ComponentID}) {
 		return invalid("DNS resolver work differs from its captured action and host")
 	}
 	return nil

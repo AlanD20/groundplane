@@ -21,7 +21,10 @@ func (ledger *ReleaseLedger) PrepareBlueprintRecoveryRetry(ctx context.Context, 
 		previous.Attempt.Result == nil || previous.Attempt.FinishedAt == nil ||
 		item.ActiveAttemptID != "" || item.Phase != workexecution.Attention ||
 		(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped) {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Release has no stopped captured cleanup to retry")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Release has no stopped captured cleanup to retry",
+		)
 	}
 	origin, err := releasework.LoadRecoverySource(ctx, ledger.store, view)
 	if err != nil {
@@ -36,7 +39,10 @@ func (ledger *ReleaseLedger) PrepareBlueprintRecoveryRetry(ctx context.Context, 
 	// retry or current platform settings. Every explicitly admitted cleanup is finite.
 	budget := sources.Rollout.Record.Deadline.Sub(sources.Rollout.Record.CreatedAt)
 	if budget <= 0 || budget > 24*time.Hour {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release cleanup has no valid captured execution budget")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Release cleanup has no valid captured execution budget",
+		)
 	}
 	change, err := workqueue.PrepareRetry(view.Task, view.Item, previous, workexecution.RetryDecision{
 		Direction: workexecution.Recovery, Result: *previous.Attempt.Result, NotBefore: at, Deadline: at.Add(budget),

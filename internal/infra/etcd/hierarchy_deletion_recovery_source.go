@@ -11,11 +11,16 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (repository *HierarchyDeletionRepository) LoadHierarchyEnvironmentRecovery(ctx context.Context, view workqueue.View) (hierarchydeletion.EnvironmentRecoverySnapshot, error) {
+func (repository *HierarchyDeletionRepository) LoadHierarchyEnvironmentRecovery(
+	ctx context.Context,
+	view workqueue.View,
+) (hierarchydeletion.EnvironmentRecoverySnapshot, error) {
 	return hierarchydeletion.LoadEnvironmentRecovery(ctx, repository.store, view)
 }
 
-func (repository *HierarchyDeletionRepository) hierarchyEnvironmentRecoveryConditions(ctx context.Context, view workqueue.ResumeView,
+func (repository *HierarchyDeletionRepository) hierarchyEnvironmentRecoveryConditions(
+	ctx context.Context,
+	view workqueue.ResumeView,
 	input hierarchyexecution.EnvironmentInput,
 ) ([]keyvalue.Condition, error) {
 	if input.Attempt.Direction == workexecution.Forward {
@@ -39,5 +44,7 @@ func (repository *HierarchyDeletionRepository) hierarchyEnvironmentRecoveryCondi
 	if err != nil || !bytes.Equal(expected, provided) {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	return []keyvalue.Condition{{Key: hierarchydeletion.EnvironmentRecoveryKey(view.Work.Item.Item.ID), ModRevision: snapshot.Revision}}, nil
+	return []keyvalue.Condition{
+		{Key: hierarchydeletion.EnvironmentRecoveryKey(view.Work.Item.Item.ID), ModRevision: snapshot.Revision},
+	}, nil
 }

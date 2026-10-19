@@ -86,7 +86,12 @@ func DecodeReference(reference *agentpb.WorkInputReference) (workexecution.Input
 	return decoded, decoded.Validate()
 }
 
-func CheckpointAck(attempt workexecution.Attempt, layout Layout, progress Progress, ack *agentpb.ResolverWorkCheckpointAck) error {
+func CheckpointAck(
+	attempt workexecution.Attempt,
+	layout Layout,
+	progress Progress,
+	ack *agentpb.ResolverWorkCheckpointAck,
+) error {
 	if ack == nil || executionplan.RejectUnknown(ack) != nil {
 		return invalid("DNS resolver checkpoint acknowledgement names a different assignment")
 	}
@@ -138,7 +143,8 @@ func DecodeTerminal(attempt workexecution.Attempt, kind string, evidence workexe
 	if err := terminal.Validate(); err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if kind == "completion" && terminal.StartedAt == nil || kind == "failure" && terminal.Outcome == workexecution.Succeeded {
+	if kind == "completion" && terminal.StartedAt == nil ||
+		kind == "failure" && terminal.Outcome == workexecution.Succeeded {
 		return workexecution.Attempt{}, invalid("DNS resolver terminal outcome contradicts its report")
 	}
 	return terminal, nil

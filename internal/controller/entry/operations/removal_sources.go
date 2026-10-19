@@ -36,9 +36,12 @@ func (service *entryDesiredMutationService) removalSources(ctx context.Context, 
 				return nil, errs.New(errs.KindStateConflict, "acknowledged Entry environment file has no sources")
 			}
 			values := file.Source.GeneratedEnvironment.Values
-			file.Source.GeneratedEnvironment.Values = slices.DeleteFunc(values, func(value taskmaterialization.GeneratedEnvironmentEntryReference) bool {
-				return value.Value.EntryID == entryID
-			})
+			file.Source.GeneratedEnvironment.Values = slices.DeleteFunc(
+				values,
+				func(value taskmaterialization.GeneratedEnvironmentEntryReference) bool {
+					return value.Value.EntryID == entryID
+				},
+			)
 			changed = len(values) != len(file.Source.GeneratedEnvironment.Values)
 			remove = file.ServiceID != "" && len(file.Source.GeneratedEnvironment.Values) == 0
 		}

@@ -12,7 +12,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (executor *CheckExecutor) AuthorizeStart(ctx context.Context, delivery workqueue.Delivery) (workqueue.Change, error) {
+func (executor *CheckExecutor) AuthorizeStart(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (workqueue.Change, error) {
 	loaded, err := executor.loadDelivery(ctx, delivery)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -21,9 +24,16 @@ func (executor *CheckExecutor) AuthorizeStart(ctx context.Context, delivery work
 	phase, direction := loaded.Record.Phase, delivery.Attempt.Attempt.Direction
 	if direction == workexecution.Forward && phase != connectorchecks.Ready ||
 		direction == workexecution.Recovery && phase != connectorchecks.CleanupRequired {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "connector check start differs from its captured phase")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"connector check start differs from its captured phase",
+		)
 	}
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: connectorchecks.Key(loaded.Record.Owner.TaskID), ModRevision: loaded.Revision}}}, nil
+	return workqueue.Change{
+		Conditions: []keyvalue.Condition{
+			{Key: connectorchecks.Key(loaded.Record.Owner.TaskID), ModRevision: loaded.Revision},
+		},
+	}, nil
 }
 
 // RejectUnstarted records the absence of probe effects without inventing a
@@ -37,7 +47,10 @@ func (executor *CheckExecutor) RejectUnstarted(ctx context.Context, delivery wor
 	defer loaded.Record.Clear()
 	attempt := delivery.Attempt.Attempt
 	if attempt.StartedAt != nil || delivery.Item.Item.Phase != workexecution.Assigned {
-		return errs.New(errs.KindStateConflict, "connector check requires effect reconciliation, not unstarted rejection")
+		return errs.New(
+			errs.KindStateConflict,
+			"connector check requires effect reconciliation, not unstarted rejection",
+		)
 	}
 	if attempt.Direction == workexecution.Recovery {
 		// This cleanup attempt never started, but the original probe's effects
@@ -89,12 +102,18 @@ func (executor *CheckExecutor) Reconcile(ctx context.Context, delivery workqueue
 	return executor.resumeCheckCleanup(ctx, loaded.Record, journal, attempt.Direction == workexecution.Recovery)
 }
 
-func (executor *CheckExecutor) loadDelivery(ctx context.Context, delivery workqueue.Delivery) (keyvalue.Versioned[connectorchecks.Record], error) {
+func (executor *CheckExecutor) loadDelivery(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (keyvalue.Versioned[connectorchecks.Record], error) {
 	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
 	if item.Validate() != nil || attempt.Validate() != nil || item.Operation != workexecution.ConnectorCheck ||
 		attempt.Executor.Executor != workexecution.Controller || attempt.TaskID != item.TaskID || attempt.WorkItemID != item.ID ||
 		item.ActiveAttemptID != attempt.ID || item.Input == nil || *item.Input != attempt.Input || attempt.FinishedAt != nil {
-		return keyvalue.Versioned[connectorchecks.Record]{}, errs.New(errs.KindStateConflict, "connector check delivery is not its active captured attempt")
+		return keyvalue.Versioned[connectorchecks.Record]{}, errs.New(
+			errs.KindStateConflict,
+			"connector check delivery is not its active captured attempt",
+		)
 	}
 	loaded, err := executor.repository.Load(ctx, item.TaskID)
 	if err != nil {
@@ -105,7 +124,10 @@ func (executor *CheckExecutor) loadDelivery(ctx context.Context, delivery workqu
 	if err != nil || record.Owner.TaskID != item.TaskID || record.Owner.WorkItemID != item.ID ||
 		record.Owner.PlanID != attempt.Input.ID || digest != attempt.Input.SHA256 || record.Connector.Connector.ID != item.TargetID {
 		loaded.Record.Clear()
-		return keyvalue.Versioned[connectorchecks.Record]{}, errs.New(errs.KindStateConflict, "connector check delivery differs from captured input")
+		return keyvalue.Versioned[connectorchecks.Record]{}, errs.New(
+			errs.KindStateConflict,
+			"connector check delivery differs from captured input",
+		)
 	}
 	return loaded, nil
 }

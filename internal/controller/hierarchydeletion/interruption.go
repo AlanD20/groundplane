@@ -16,7 +16,11 @@ import (
 // ReconcileInterrupted can account for durable proof without asking the new
 // process to impersonate its predecessor. An in-flight boundary records failure
 // with retained claims; it is never interpreted as proof that deletion stopped.
-func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (owner *AgentWork) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
@@ -50,7 +54,11 @@ func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue
 	var proof workqueue.Change
 	if checkpoint := view.Checkpoint.Record; checkpoint != nil && checkpoint.Sequence == 4 {
 		proof, err = owner.records.PrepareInterruptedHierarchyEnvironmentCompletion(ctx, view, input, at)
-		completion.Result = workexecution.Completion{Outcome: workexecution.Succeeded, Evidence: checkpoint.Evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        workexecution.Succeeded,
+			Evidence:       checkpoint.Evidence,
+			EffectsSettled: true,
+		}
 	} else {
 		proof, completion.Result, err = owner.records.PrepareInterruptedHierarchyEnvironmentFailure(ctx, view, input, at)
 	}

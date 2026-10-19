@@ -19,7 +19,11 @@ import (
 )
 
 type executionJournal interface {
-	ReadAttempt(context.Context, runnerallocation.RunnerRuntimeAttempt, runnerallocation.RuntimeOperation) (runnerallocation.RunnerRuntimeProgress, bool, error)
+	ReadAttempt(
+		context.Context,
+		runnerallocation.RunnerRuntimeAttempt,
+		runnerallocation.RuntimeOperation,
+	) (runnerallocation.RunnerRuntimeProgress, bool, error)
 }
 
 // Executor runs only captured native Runner work. The local journal accounts for
@@ -40,7 +44,14 @@ func NewExecutor(repository *etcd.RunnerRepository, inputs *runnerwork.Repositor
 	if repository == nil || inputs == nil || lifecycle == nil || journal == nil || broker == nil {
 		return nil, errs.New(errs.KindInternal, "Runner execution dependencies are required")
 	}
-	return &Executor{repository: repository, inputs: inputs, lifecycle: lifecycle, journal: journal, broker: broker, now: time.Now}, nil
+	return &Executor{
+		repository: repository,
+		inputs:     inputs,
+		lifecycle:  lifecycle,
+		journal:    journal,
+		broker:     broker,
+		now:        time.Now,
+	}, nil
 }
 
 type runnerEffectAuthority struct {
@@ -48,17 +59,27 @@ type runnerEffectAuthority struct {
 	attempt workexecution.Attempt
 }
 
-func (authority runnerEffectAuthority) Grant(ctx context.Context, step runnerallocation.RunnerRuntimeStep, at time.Time) error {
+func (authority runnerEffectAuthority) Grant(
+	ctx context.Context,
+	step runnerallocation.RunnerRuntimeStep,
+	at time.Time,
+) error {
 	return authority.records.Grant(ctx, authority.attempt, step, at)
 }
 
-func (executor *Executor) loadDelivery(ctx context.Context, delivery workqueue.Delivery) (keyvalue.Versioned[runnerwork.Input], error) {
+func (executor *Executor) loadDelivery(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (keyvalue.Versioned[runnerwork.Input], error) {
 	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
 	if item.Validate() != nil || attempt.Validate() != nil || item.ActiveAttemptID != attempt.ID ||
 		attempt.TaskID != item.TaskID || attempt.WorkItemID != item.ID || attempt.Number != item.AttemptNumber ||
 		attempt.Executor.Executor != workexecution.Controller || attempt.Executor.HostID != item.Placement.HostID ||
 		attempt.FinishedAt != nil || item.Input == nil || *item.Input != attempt.Input {
-		return keyvalue.Versioned[runnerwork.Input]{}, errs.New(errs.KindStateConflict, "Runner delivery no longer owns this attempt")
+		return keyvalue.Versioned[runnerwork.Input]{}, errs.New(
+			errs.KindStateConflict,
+			"Runner delivery no longer owns this attempt",
+		)
 	}
 	input, err := executor.inputs.Load(ctx, item.ID, 0)
 	if err != nil {
@@ -98,7 +119,8 @@ func (executor *Executor) Execute(ctx context.Context, delivery workqueue.Delive
 	}
 	bound := runtimeAttempt(input.Record, attempt)
 	authority := runnerEffectAuthority{records: executor.inputs, attempt: attempt}
-	if attempt.Direction == workexecution.Recovery || input.Record.Operation == runnerallocation.RuntimeOperationRemove {
+	if attempt.Direction == workexecution.Recovery ||
+		input.Record.Operation == runnerallocation.RuntimeOperationRemove {
 		err = executor.lifecycle.Remove(ctx, bound, authority)
 	} else {
 		token, _ := executor.broker.Consume(TokenKey{TaskID: attempt.TaskID, WorkItemID: attempt.WorkItemID, Attempt: attempt.Number})
@@ -134,10 +156,20 @@ func (executor *Executor) Reconcile(ctx context.Context, delivery workqueue.Deli
 	} else if kind, _ := errs.KindOf(err); kind != errs.KindRequestNotFound {
 		return err
 	}
-	return executor.recordObserved(ctx, input.Record, attempt, errs.New(errs.KindStateConflict, "Runner attempt was interrupted"))
+	return executor.recordObserved(
+		ctx,
+		input.Record,
+		attempt,
+		errs.New(errs.KindStateConflict, "Runner attempt was interrupted"),
+	)
 }
 
-func (executor *Executor) recordObserved(ctx context.Context, input runnerwork.Input, attempt workexecution.Attempt, cause error) error {
+func (executor *Executor) recordObserved(
+	ctx context.Context,
+	input runnerwork.Input,
+	attempt workexecution.Attempt,
+	cause error,
+) error {
 	operation := input.Operation
 	if attempt.Direction == workexecution.Recovery {
 		operation = runnerallocation.RuntimeOperationRemove

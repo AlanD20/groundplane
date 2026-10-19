@@ -11,7 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (repository *Repository) LoadFailure(ctx context.Context, view workqueue.ResumeView, delivery *agentpb.ServiceLifecycleWorkInput) ([]byte, keyvalue.Condition, error) {
+func (repository *Repository) LoadFailure(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	delivery *agentpb.ServiceLifecycleWorkInput,
+) ([]byte, keyvalue.Condition, error) {
 	attempt := view.Attempt.Attempt
 	input, _, err := repository.Load(ctx, view.Work)
 	if err != nil {
@@ -33,5 +37,10 @@ func (repository *Repository) LoadFailure(ctx context.Context, view workqueue.Re
 	if _, err := lifecycleexecution.DecodeFailure(attempt, delivery, read.Values[0].Value, *attempt.Result); err != nil {
 		return nil, keyvalue.Condition{}, err
 	}
-	return append([]byte(nil), read.Values[0].Value...), keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
+	return append(
+		[]byte(nil),
+		read.Values[0].Value...), keyvalue.Condition{
+		Key:         key,
+		ModRevision: read.Values[0].ModRevision,
+	}, nil
 }

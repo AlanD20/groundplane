@@ -8,7 +8,11 @@ import (
 // DiagnosticStage describes a recorded boundary, not inferred provider output.
 // Confirm has already moved the cursor, so its saved Begin supplies the action
 // and real start time. Configuration contents and commands are never exposed.
-func DiagnosticStage(attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, begin, progress Progress) (workexecution.Stage, error) {
+func DiagnosticStage(
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	begin, progress Progress,
+) (workexecution.Stage, error) {
 	if begin.Validate(attempt, input) != nil || progress.Validate(attempt, input) != nil || !begin.InFlight ||
 		(progress.InFlight && progress.Sequence != begin.Sequence) ||
 		(!progress.InFlight && (progress.Sequence != begin.Sequence+1 || progress.Observation == nil ||

@@ -15,19 +15,80 @@ import (
 )
 
 type BackupWorkReporter interface {
-	PrepareConfigRecovery(context.Context, agentregistration.WorkAuthorization, *agentpb.WorkAttemptIdentity, uint32) (*agentpb.BackupConfigRecoveryPrepareAck, error)
-	StreamConfigRestore(context.Context, agentregistration.WorkAuthorization, backupconfigtransfer.Binding, backupconfigtransfer.ReceiverTransport) error
-	StreamConfigCapture(context.Context, agentregistration.WorkAuthorization, backupconfigtransfer.Binding, *agentpb.BackupConfigCredit, backupconfigtransfer.StreamTransport) error
-	CommitConfigCaptureCredit(context.Context, agentregistration.WorkAuthorization, backupconfigtransfer.Binding, *agentpb.BackupConfigCredit) error
-	ResolveSourceRecovery(context.Context, workexecution.Identity, *agentpb.BackupRecoveredStage) (*agentpb.BackupStagingDisposition, []keyvalue.Condition, error)
-	ResolveVolumeRecovery(context.Context, workexecution.Identity, *agentpb.BackupRecoveredVolumeRestore) (*agentpb.BackupVolumeRestoreRecoveryDisposition, []keyvalue.Condition, error)
-	ReadRestoreNewVolumeManifest(context.Context, agentregistration.WorkAuthorization, *agentpb.WorkAttemptIdentity, uint32) (backupvolumemanifest.Complete, error)
-	BeginVolumeManifest(context.Context, agentregistration.WorkAuthorization, *agentpb.WorkAttemptIdentity, uint32, agentpb.BackupVolumeManifestDirection) (*agentpb.BackupVolumeManifestAckCredit, bool, error)
-	AcceptVolumeManifestFrame(context.Context, agentregistration.WorkAuthorization, *agentpb.WorkAttemptIdentity, *agentpb.BackupVolumeManifestTransfer) (*agentpb.BackupVolumeManifestAckCredit, error)
-	Checkpoint(context.Context, agentregistration.WorkAuthorization, *agentpb.BackupWorkCheckpointRequest) (*agentpb.BackupWorkCheckpointAck, error)
-	Complete(context.Context, agentregistration.WorkAuthorization, *agentpb.BackupWorkCompletionRequest) (*agentpb.BackupWorkCompletionAck, error)
-	Fail(context.Context, agentregistration.WorkAuthorization, *agentpb.BackupWorkFailureRequest) (*agentpb.BackupWorkFailureAck, error)
-	Recover(context.Context, agentregistration.WorkAuthorization, *agentpb.BackupRecoveryRequest) (*agentpb.BackupRecoveryAck, error)
+	PrepareConfigRecovery(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.WorkAttemptIdentity,
+		uint32,
+	) (*agentpb.BackupConfigRecoveryPrepareAck, error)
+	StreamConfigRestore(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		backupconfigtransfer.Binding,
+		backupconfigtransfer.ReceiverTransport,
+	) error
+	StreamConfigCapture(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		backupconfigtransfer.Binding,
+		*agentpb.BackupConfigCredit,
+		backupconfigtransfer.StreamTransport,
+	) error
+	CommitConfigCaptureCredit(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		backupconfigtransfer.Binding,
+		*agentpb.BackupConfigCredit,
+	) error
+	ResolveSourceRecovery(
+		context.Context,
+		workexecution.Identity,
+		*agentpb.BackupRecoveredStage,
+	) (*agentpb.BackupStagingDisposition, []keyvalue.Condition, error)
+	ResolveVolumeRecovery(
+		context.Context,
+		workexecution.Identity,
+		*agentpb.BackupRecoveredVolumeRestore,
+	) (*agentpb.BackupVolumeRestoreRecoveryDisposition, []keyvalue.Condition, error)
+	ReadRestoreNewVolumeManifest(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.WorkAttemptIdentity,
+		uint32,
+	) (backupvolumemanifest.Complete, error)
+	BeginVolumeManifest(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.WorkAttemptIdentity,
+		uint32,
+		agentpb.BackupVolumeManifestDirection,
+	) (*agentpb.BackupVolumeManifestAckCredit, bool, error)
+	AcceptVolumeManifestFrame(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.WorkAttemptIdentity,
+		*agentpb.BackupVolumeManifestTransfer,
+	) (*agentpb.BackupVolumeManifestAckCredit, error)
+	Checkpoint(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackupWorkCheckpointRequest,
+	) (*agentpb.BackupWorkCheckpointAck, error)
+	Complete(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackupWorkCompletionRequest,
+	) (*agentpb.BackupWorkCompletionAck, error)
+	Fail(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackupWorkFailureRequest,
+	) (*agentpb.BackupWorkFailureAck, error)
+	Recover(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackupRecoveryRequest,
+	) (*agentpb.BackupRecoveryAck, error)
 }
 
 func (server *Server) ConfigureBackupWork(reports BackupWorkReporter) error {
@@ -38,7 +99,11 @@ func (server *Server) ConfigureBackupWork(reports BackupWorkReporter) error {
 	return nil
 }
 
-func (server *Server) backupWorkReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
+func (server *Server) backupWorkReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
 	if message.GetBackupWorkCheckpointRequest() == nil && message.GetBackupConfigRecoveryPrepareRequest() == nil {
 		return false, nil, nil
 	}
@@ -50,15 +115,28 @@ func (server *Server) backupWorkReport(session *Session, generation uint64, mess
 		return true, nil, taskStoreStatus(err)
 	}
 	if request := message.GetBackupConfigRecoveryPrepareRequest(); request != nil {
-		ack, err := server.backupWorkReports.PrepareConfigRecovery(session.ctx, authorization, request.Attempt, request.SourceOrdinal)
+		ack, err := server.backupWorkReports.PrepareConfigRecovery(
+			session.ctx,
+			authorization,
+			request.Attempt,
+			request.SourceOrdinal,
+		)
 		if err != nil {
 			return true, nil, taskStoreStatus(err)
 		}
-		return true, &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupConfigRecoveryPrepareAck{BackupConfigRecoveryPrepareAck: ack}}, nil
+		return true, &agentpb.ControllerMessage{
+			Payload: &agentpb.ControllerMessage_BackupConfigRecoveryPrepareAck{BackupConfigRecoveryPrepareAck: ack},
+		}, nil
 	}
-	ack, err := server.backupWorkReports.Checkpoint(session.ctx, authorization, message.GetBackupWorkCheckpointRequest())
+	ack, err := server.backupWorkReports.Checkpoint(
+		session.ctx,
+		authorization,
+		message.GetBackupWorkCheckpointRequest(),
+	)
 	if err != nil {
 		return true, nil, taskStoreStatus(err)
 	}
-	return true, &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_BackupWorkCheckpointAck{BackupWorkCheckpointAck: ack}}, nil
+	return true, &agentpb.ControllerMessage{
+		Payload: &agentpb.ControllerMessage_BackupWorkCheckpointAck{BackupWorkCheckpointAck: ack},
+	}, nil
 }

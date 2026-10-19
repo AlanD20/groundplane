@@ -12,7 +12,12 @@ import (
 
 // Entry edits can recreate captured running consumers, while recovery needs
 // their predecessor images. Protect those images independently of Task logs.
-func (service *Service) retainEntryWorkImages(ctx context.Context, retention *imageRetention, value keyvalue.KeyValue, revision int64) error {
+func (service *Service) retainEntryWorkImages(
+	ctx context.Context,
+	retention *imageRetention,
+	value keyvalue.KeyValue,
+	revision int64,
+) error {
 	item, err := workqueue.DecodeItem(value.Value)
 	if err != nil {
 		return err

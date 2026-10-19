@@ -32,9 +32,18 @@ type backingContainerInspection struct {
 	} `json:"State"`
 }
 
-func observeBackingProvision(ctx context.Context, taskRunner runner.Runner, input backingprovision.HelperInput) (backingprovision.Observation, *backingruntimefact.Observation, error) {
+func observeBackingProvision(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input backingprovision.HelperInput,
+) (backingprovision.Observation, *backingruntimefact.Observation, error) {
 	procedure, attempt := input.Assignment.Procedure, input.Assignment.Attempt
-	observation := backingprovision.Observation{ServiceID: input.Layout.ServiceID, Input: attempt.Input, Stage: input.Progress.Stage, At: time.Now().UTC()}
+	observation := backingprovision.Observation{
+		ServiceID: input.Layout.ServiceID,
+		Input:     attempt.Input,
+		Stage:     input.Progress.Stage,
+		At:        time.Now().UTC(),
+	}
 	workload := procedure.Runtime.Services[0]
 	containers, err := inspectCapturedContainers(ctx, taskRunner, procedure.Runtime, workload)
 	if err != nil {
@@ -44,7 +53,10 @@ func observeBackingProvision(ctx context.Context, taskRunner runner.Runner, inpu
 		return observation, nil, nil
 	}
 	if len(containers) != 1 {
-		return observation, nil, errs.New(errs.KindStateConflict, "backing creation found more than its captured singleton container")
+		return observation, nil, errs.New(
+			errs.KindStateConflict,
+			"backing creation found more than its captured singleton container",
+		)
 	}
 	result, err := taskRunner.Run(ctx, runner.RunCmdOpts{Name: DockerExecutable,
 		Args: []string{"container", "inspect", "--format", "{{json .}}", containers[0]}, Dir: WorkDirectory,
@@ -52,23 +64,38 @@ func observeBackingProvision(ctx context.Context, taskRunner runner.Runner, inpu
 	defer clear(result.Stdout)
 	defer clear(result.Stderr)
 	if err != nil || result.ExitCode != 0 || len(result.Stdout) >= 128*1024 {
-		return observation, nil, errs.New(errs.KindRequestFailed, "backing creation could not inspect its captured container")
+		return observation, nil, errs.New(
+			errs.KindRequestFailed,
+			"backing creation could not inspect its captured container",
+		)
 	}
 	var inspected backingContainerInspection
-	if json.Unmarshal(result.Stdout, &inspected) != nil || inspected.ID != containers[0] || inspected.Image != workload.ImageReference ||
-		inspected.Config.Image != workload.ImageReference || !hasAllExpectedLabels(inspected.Config.Labels, workload.ExpectedLabels) ||
+	if json.Unmarshal(result.Stdout, &inspected) != nil || inspected.ID != containers[0] ||
+		inspected.Image != workload.ImageReference ||
+		inspected.Config.Image != workload.ImageReference ||
+		!hasAllExpectedLabels(inspected.Config.Labels, workload.ExpectedLabels) ||
 		inspected.Config.Labels["com.docker.compose.project"] != procedure.Runtime.ProjectName ||
 		inspected.Config.Labels["com.docker.compose.service"] != workload.ComposeName {
-		return observation, nil, errs.New(errs.KindStateConflict, "backing creation container differs from its captured image and ownership")
+		return observation, nil, errs.New(
+			errs.KindStateConflict,
+			"backing creation container differs from its captured image and ownership",
+		)
 	}
 	for _, key := range []string{"com.groundplane.release-id", "com.groundplane.slot", "com.groundplane.runtime-role", "com.groundplane.component-id", "com.groundplane.tenant-id"} {
 		if inspected.Config.Labels[key] != "" {
-			return observation, nil, errs.New(errs.KindStateConflict, "backing creation found a container owned by a different runtime operation")
+			return observation, nil, errs.New(
+				errs.KindStateConflict,
+				"backing creation found a container owned by a different runtime operation",
+			)
 		}
 	}
 	observation.At = time.Now().UTC()
-	if input.Progress.Last != nil && input.Progress.Last.ContainerID != "" && input.Progress.Last.ContainerID != inspected.ID {
-		return observation, nil, errs.New(errs.KindStateConflict, "backing creation container changed between acknowledged execution stages")
+	if input.Progress.Last != nil && input.Progress.Last.ContainerID != "" &&
+		input.Progress.Last.ContainerID != inspected.ID {
+		return observation, nil, errs.New(
+			errs.KindStateConflict,
+			"backing creation container changed between acknowledged execution stages",
+		)
 	}
 	if observation.Stage == backingprovision.ReconcileRuntime {
 		if inspected.State.Running && !inspected.State.Restarting && !inspected.State.Paused && !inspected.State.Dead {
@@ -76,11 +103,16 @@ func observeBackingProvision(ctx context.Context, taskRunner runner.Runner, inpu
 		}
 		return observation, nil, nil
 	}
-	running := inspected.State.Status == "running" && inspected.State.Running && !inspected.State.Restarting && !inspected.State.Paused && !inspected.State.Dead
+	running := inspected.State.Status == "running" && inspected.State.Running && !inspected.State.Restarting &&
+		!inspected.State.Paused &&
+		!inspected.State.Dead
 	health := agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE
 	if workload.HasHealthcheck {
 		if inspected.State.Health == nil {
-			return observation, nil, errs.New(errs.KindStateConflict, "backing container is missing its configured Docker healthcheck")
+			return observation, nil, errs.New(
+				errs.KindStateConflict,
+				"backing container is missing its configured Docker healthcheck",
+			)
 		}
 		switch inspected.State.Health.Status {
 		case "healthy":
@@ -90,12 +122,18 @@ func observeBackingProvision(ctx context.Context, taskRunner runner.Runner, inpu
 		case "unhealthy":
 			return observation, nil, errs.New(errs.KindRequestFailed, "backing container healthcheck failed")
 		default:
-			return observation, nil, errs.New(errs.KindStateConflict, "backing container reported an unknown healthcheck state")
+			return observation, nil, errs.New(
+				errs.KindStateConflict,
+				"backing container reported an unknown healthcheck state",
+			)
 		}
 	}
 	if !running {
 		if inspected.State.Dead || inspected.State.Status == "exited" {
-			return observation, nil, errs.New(errs.KindRequestFailed, "backing container stopped before it became ready")
+			return observation, nil, errs.New(
+				errs.KindRequestFailed,
+				"backing container stopped before it became ready",
+			)
 		}
 		return observation, nil, nil
 	}

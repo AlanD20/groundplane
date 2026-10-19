@@ -26,11 +26,21 @@ func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if ledger == nil || ledger.store == nil || task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback ||
-		task.TargetID != item.TargetID || item.TaskID != task.ID || item.Operation != workexecution.Release ||
-		item.Input != nil || item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput ||
-		marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment || marker.Locator.ScopeID != task.Scope.EnvironmentID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Direct Release acceptance requires its pending native Service work")
+	if ledger == nil || ledger.store == nil ||
+		task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback ||
+		task.TargetID != item.TargetID ||
+		item.TaskID != task.ID ||
+		item.Operation != workexecution.Release ||
+		item.Input != nil ||
+		item.Phase != workexecution.Waiting ||
+		item.Wait == nil ||
+		item.Wait.Reason != workexecution.WaitInput ||
+		marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != task.Scope.EnvironmentID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Direct Release acceptance requires its pending native Service work",
+		)
 	}
 	if err := request.Matches(task, item, rollout); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -59,7 +69,13 @@ func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(rolloutValue)
-	guards, err := ledger.directReleaseSourceConditions(ctx, task.Scope, request.Source, item.TargetID, request.Source.ReadRevision)
+	guards, err := ledger.directReleaseSourceConditions(
+		ctx,
+		task.Scope,
+		request.Source,
+		item.TargetID,
+		request.Source.ReadRevision,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -68,22 +84,35 @@ func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
 		return IdempotencyTransactionResult{}, err
 	}
 	if host.Binding.HostID != item.Placement.HostID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Direct Release target host changed during acceptance")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Direct Release target host changed during acceptance",
+		)
 	}
 	rolloutKey := releaserender.ServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID)
 	preparationKey := DirectReleasePreparationKey(task.ID)
 	change.Conditions = append(change.Conditions, guards...)
 	change.Conditions = append(change.Conditions, host.Conditions...)
 	change.Conditions = append(change.Conditions, addresses.Conditions()...)
-	change.Conditions = append(change.Conditions,
-		keyvalue.Condition{Key: rolloutKey}, keyvalue.Condition{Key: preparationKey},
-		keyvalue.Condition{Key: releases.ReleaseManifestStagingKey(rollout.PublicationID), ModRevision: request.Manifest.Revision},
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: rolloutKey},
+		keyvalue.Condition{Key: preparationKey},
+		keyvalue.Condition{
+			Key:         releases.ReleaseManifestStagingKey(rollout.PublicationID),
+			ModRevision: request.Manifest.Revision,
+		},
 		keyvalue.Condition{Key: releases.ReleasePublicationKey(rollout.PublicationID)},
 	)
 	change.Mutations = append(change.Mutations, addresses.Mutations()...)
-	change.Mutations = append(change.Mutations,
+	change.Mutations = append(
+		change.Mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: rolloutKey, Value: append([]byte(nil), rolloutValue...)},
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: preparationKey, Value: append([]byte(nil), preparationValue...)},
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   preparationKey,
+			Value: append([]byte(nil), preparationValue...),
+		},
 	)
 	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask,
 		change.Conditions, change.Mutations, resourceWorkPublicationConflict(change.Conditions))
@@ -99,7 +128,10 @@ func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
 
 func (ledger *ReleaseLedger) ResolveReleaseHost(ctx context.Context, revision int64) (workexecution.Placement, error) {
 	if ledger == nil || ledger.store == nil || revision <= 0 {
-		return workexecution.Placement{}, errs.New(errs.KindValidationFailed, "Release host selection requires a fixed planning snapshot")
+		return workexecution.Placement{}, errs.New(
+			errs.KindValidationFailed,
+			"Release host selection requires a fixed planning snapshot",
+		)
 	}
 	host, err := hostbindings.ReadLocal(ctx, ledger.store, revision)
 	if err != nil {

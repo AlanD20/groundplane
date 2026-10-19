@@ -13,7 +13,10 @@ import (
 // Callers must prove no effects started or that recovery settled all effects.
 // Releasing the fence keeps the bridge reservation. Explicit Retry reacquires
 // captured authority under the unchanged desired-head guard.
-func (repository *InputRepository) prepareRemovalFenceRelease(ctx context.Context, view workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) prepareRemovalFenceRelease(
+	ctx context.Context,
+	view workqueue.View,
+) (workqueue.Change, error) {
 	if view.Task.Task.Action != workexecution.ActionRemove {
 		return workqueue.Change{}, nil
 	}
@@ -37,13 +40,18 @@ func (repository *InputRepository) prepareRemovalFenceRelease(ctx context.Contex
 		// This fence also owns consumer removals. Stopping the bridge says
 		// nothing about an earlier Detach's external effects; the cascade
 		// owner must account for the whole graph before releasing it.
-		return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}, nil
+		return workqueue.Change{
+			Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}},
+		}, nil
 	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}},
 		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: key}}}, nil
 }
 
-func (repository *InputRepository) prepareRemovalRetryFence(ctx context.Context, view workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) prepareRemovalRetryFence(
+	ctx context.Context,
+	view workqueue.View,
+) (workqueue.Change, error) {
 	if view.Task.Task.Action != workexecution.ActionRemove {
 		return workqueue.Change{}, nil
 	}
@@ -82,7 +90,9 @@ func (repository *InputRepository) prepareRemovalRetryFence(ctx context.Context,
 		}
 		return change, nil
 	}
-	change.Mutations = []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), read.Values[1].Value...)}}
+	change.Mutations = []keyvalue.Mutation{
+		{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), read.Values[1].Value...)},
+	}
 	return change, nil
 }
 

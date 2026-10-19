@@ -20,12 +20,28 @@ type AttachProvisionRecord struct {
 }
 
 func (record attemptRecord) validateAttachProvision() error {
-	if record.AttachProvision == nil || record.AttachProvisionFailure != nil || record.EntryRecovery != nil || record.EntryConfiguration != nil ||
-		record.ComponentRecovery != nil || record.Component != nil || record.NetworkRecovery != nil || record.Network != nil ||
-		record.VolumeRecovery != nil || record.Volume != nil || record.AttachRecovery != nil || record.AttachFailure != nil ||
-		record.AttachRemoval != nil || record.EnvironmentFailure != nil || record.EnvironmentRemoval != nil ||
-		record.ScriptFailure != nil || record.ScriptRecovery != nil || len(record.Script) != 0 || record.Release != nil ||
-		record.Effect != nil || record.Completion != nil || record.Failure != nil || record.Recovery != nil || record.ScriptCompletion != nil {
+	if record.AttachProvision == nil || record.AttachProvisionFailure != nil || record.EntryRecovery != nil ||
+		record.EntryConfiguration != nil ||
+		record.ComponentRecovery != nil ||
+		record.Component != nil ||
+		record.NetworkRecovery != nil ||
+		record.Network != nil ||
+		record.VolumeRecovery != nil ||
+		record.Volume != nil ||
+		record.AttachRecovery != nil ||
+		record.AttachFailure != nil ||
+		record.AttachRemoval != nil ||
+		record.EnvironmentFailure != nil ||
+		record.EnvironmentRemoval != nil ||
+		record.ScriptFailure != nil ||
+		record.ScriptRecovery != nil ||
+		len(record.Script) != 0 ||
+		record.Release != nil ||
+		record.Effect != nil ||
+		record.Completion != nil ||
+		record.Failure != nil ||
+		record.Recovery != nil ||
+		record.ScriptCompletion != nil {
 		return invalid()
 	}
 	saved := record.AttachProvision

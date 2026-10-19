@@ -57,16 +57,22 @@ type DirectReleasePreparation struct {
 }
 
 func (request DirectReleasePreparation) validate() error {
-	if request.Rollout.Validate() != nil || request.Configuration.Validate() != nil || domain.ValidateIntent(request.Intent) != nil ||
-		request.Intent.OperationKind != domain.OperationDeploy && request.Intent.OperationKind != domain.OperationRollback ||
+	if request.Rollout.Validate() != nil || request.Configuration.Validate() != nil ||
+		domain.ValidateIntent(request.Intent) != nil ||
+		request.Intent.OperationKind != domain.OperationDeploy &&
+			request.Intent.OperationKind != domain.OperationRollback ||
 		request.Configuration.TaskID != request.Intent.OriginatingTaskID ||
 		request.Configuration.Current.EnvironmentID != request.Intent.EnvironmentID ||
-		request.Source.ReadRevision <= 0 || request.Configuration.ReadRevision != request.Source.ReadRevision ||
-		request.Manifest.Revision <= 0 || request.Manifest.ReadRevision < request.Manifest.Revision ||
+		request.Source.ReadRevision <= 0 ||
+		request.Configuration.ReadRevision != request.Source.ReadRevision ||
+		request.Manifest.Revision <= 0 ||
+		request.Manifest.ReadRevision < request.Manifest.Revision ||
 		request.Manifest.Revision < request.Source.ReadRevision ||
 		request.Manifest.Record.OperationID != request.Intent.OperationID ||
 		releases.ValidatePublicationID(request.Manifest.Record.PublicationID) != nil ||
-		len(request.Manifest.Record.Members) != 1 || len(request.Hooks) > 16 || len(request.Networks) > 256 ||
+		len(request.Manifest.Record.Members) != 1 ||
+		len(request.Hooks) > 16 ||
+		len(request.Networks) > 256 ||
 		request.Predecessor.ServiceID != request.Intent.ServiceID ||
 		request.Predecessor.FixedReadRevision != request.Source.ReadRevision {
 		return errs.New(errs.KindValidationFailed, "Direct Release preparation identity or source is invalid")
@@ -126,7 +132,10 @@ func EncodeDirectReleasePreparation(request DirectReleasePreparation) ([]byte, w
 	}
 	if len(value) > keyvalue.MaximumBytes {
 		clear(value)
-		return nil, workexecution.Input{}, errs.New(errs.KindReleasePlanTooLarge, "Direct Release preparation exceeds the storage budget")
+		return nil, workexecution.Input{}, errs.New(
+			errs.KindReleasePlanTooLarge,
+			"Direct Release preparation exceeds the storage budget",
+		)
 	}
 	digest := sha256.Sum256(value)
 	return value, workexecution.Input{ID: request.Rollout.ID, SHA256: hex.EncodeToString(digest[:])}, nil
@@ -134,7 +143,10 @@ func EncodeDirectReleasePreparation(request DirectReleasePreparation) ([]byte, w
 
 func DecodeDirectReleasePreparation(value []byte, expected workexecution.Input) (DirectReleasePreparation, error) {
 	if len(value) == 0 || len(value) > keyvalue.MaximumBytes || expected.Validate() != nil {
-		return DirectReleasePreparation{}, errs.New(errs.KindValidationFailed, "Direct Release preparation reference is invalid")
+		return DirectReleasePreparation{}, errs.New(
+			errs.KindValidationFailed,
+			"Direct Release preparation reference is invalid",
+		)
 	}
 	digest := sha256.Sum256(value)
 	if hex.EncodeToString(digest[:]) != expected.SHA256 {
@@ -148,12 +160,19 @@ func DecodeDirectReleasePreparation(value []byte, expected workexecution.Input) 
 		return DirectReleasePreparation{}, err
 	}
 	if request.Rollout.ID != expected.ID {
-		return DirectReleasePreparation{}, errs.New(errs.KindStateConflict, "Direct Release preparation identity changed")
+		return DirectReleasePreparation{}, errs.New(
+			errs.KindStateConflict,
+			"Direct Release preparation identity changed",
+		)
 	}
 	return request, nil
 }
 
-func (request DirectReleasePreparation) Matches(task workexecution.Task, item workexecution.Item, capture releaserender.ServiceRolloutCapture) error {
+func (request DirectReleasePreparation) Matches(
+	task workexecution.Task,
+	item workexecution.Item,
+	capture releaserender.ServiceRolloutCapture,
+) error {
 	if err := request.validate(); err != nil {
 		return err
 	}
@@ -179,7 +198,10 @@ func (request DirectReleasePreparation) Matches(task workexecution.Task, item wo
 	if request.GroupID == "" {
 		if task.Intent != reference || task.ExpectedItems != uint32(len(request.Networks)+1) || capture.Group != nil ||
 			!slices.Equal(item.Dependencies, request.releaseDependencies()) {
-			return errs.New(errs.KindStateConflict, "Standalone Release membership differs from its accepted preparation")
+			return errs.New(
+				errs.KindStateConflict,
+				"Standalone Release membership differs from its accepted preparation",
+			)
 		}
 	} else if capture.Group == nil || capture.Group.GroupID != request.GroupID || task.TargetID != request.GroupID ||
 		capture.Group.OperationID != request.Intent.GroupOperationID || capture.Group.Ordinal != request.Intent.GroupMemberOrdinal {

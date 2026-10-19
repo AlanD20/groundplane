@@ -23,7 +23,10 @@ func PrepareRetry(input keyvalue.Versioned[Input], task workqueue.TaskSnapshot,
 		work.Phase != workexecution.Settled || work.Outcome != workexecution.Failed ||
 		work.ActiveAttemptID != "" || work.ForwardRevoked || work.AttemptNumber == ^uint64(0) ||
 		(work.Cleanup != workexecution.CleanupNone && work.Cleanup != workexecution.CleanupComplete) {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Runner creation must finish cleanup before retrying with a fresh registration token")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Runner creation must finish cleanup before retrying with a fresh registration token",
+		)
 	}
 	deadline := at.Add(5 * time.Minute)
 	var change workqueue.Change
@@ -42,6 +45,9 @@ func PrepareRetry(input keyvalue.Versioned[Input], task workqueue.TaskSnapshot,
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: InputKey(work.ID), ModRevision: input.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: InputKey(work.ID), ModRevision: input.Revision},
+	)
 	return change, nil
 }

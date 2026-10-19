@@ -58,7 +58,12 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	if err := session.RecordProcessAuthentication(authenticate); err != nil {
 		return status.Error(codes.FailedPrecondition, "agent session authentication is not current")
 	}
-	registration, err := s.registerWorkProcess(session.ctx, session, authorization.Generation, authorization.Config.MaxConcurrentTasks)
+	registration, err := s.registerWorkProcess(
+		session.ctx,
+		session,
+		authorization.Generation,
+		authorization.Config.MaxConcurrentTasks,
+	)
 	if err != nil {
 		return taskStoreStatus(err)
 	}
@@ -79,20 +84,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	payloads := newAssignmentPayloadDelivery(session.ctx, authorization.Config.MaxConcurrentTasks)
 	defer payloads.close()
 	received := make(chan agentReceiveResult, 1)
-	go func() {
-		for {
-			message, recvErr := stream.Recv()
-			select {
-			case received <- agentReceiveResult{message: message, err: recvErr}:
-			case <-session.Done():
-				return
-			}
-			if recvErr != nil {
-				return
-			}
-		}
-	}()
-
+	go receiveAgentMessages(stream, session, received)
 	observations := &observationExchange{}
 	backingAccess := &backingAccessExchange{}
 	dnsChecks := &dnsCheckExchange{}
@@ -197,8 +189,12 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				return unauthenticated()
 			}
 			if request := result.message.GetWorkJournalReplayRequest(); request != nil {
-				if journalReplayComplete || journalReplayReports >= 1024 && !request.Complete || executionplan.RejectUnknown(result.message) != nil {
-					return status.Error(codes.InvalidArgument, "startup result replay is complete, oversized or malformed")
+				if journalReplayComplete || journalReplayReports >= 1024 && !request.Complete ||
+					executionplan.RejectUnknown(result.message) != nil {
+					return status.Error(
+						codes.InvalidArgument,
+						"startup result replay is complete, oversized or malformed",
+					)
 				}
 				ack, err := s.replayWorkJournal(session.ctx, session, authorization.Generation, request)
 				if err != nil {
@@ -539,7 +535,13 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					releaseexecution.ClearConfigurationDelivery(delivery)
 					return taskStoreStatus(err)
 				}
-				err = stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseConfigurationFileDelivery{ReleaseConfigurationFileDelivery: delivery}})
+				err = stream.Send(
+					&agentpb.ControllerMessage{
+						Payload: &agentpb.ControllerMessage_ReleaseConfigurationFileDelivery{
+							ReleaseConfigurationFileDelivery: delivery,
+						},
+					},
+				)
 				releaseexecution.ClearConfigurationDelivery(delivery)
 				if err != nil {
 					return err
@@ -559,7 +561,11 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					releaseexecution.ClearHookDelivery(delivery)
 					return taskStoreStatus(err)
 				}
-				err = stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseHookDelivery{ReleaseHookDelivery: delivery}})
+				err = stream.Send(
+					&agentpb.ControllerMessage{
+						Payload: &agentpb.ControllerMessage_ReleaseHookDelivery{ReleaseHookDelivery: delivery},
+					},
+				)
 				releaseexecution.ClearHookDelivery(delivery)
 				if err != nil {
 					return err

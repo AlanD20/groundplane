@@ -42,8 +42,13 @@ func retainScriptWorkImages(retention *imageRetention, value keyvalue.KeyValue) 
 	return retainScriptExecutionImage(retention, execution)
 }
 
-func (service *Service) retainGroupPreflightImages(ctx context.Context, retention *imageRetention,
-	queue *workqueue.Repository, task workqueue.TaskSnapshot, root keyvalue.Versioned[releasegroups.ExecutionCapture], revision int64,
+func (service *Service) retainGroupPreflightImages(
+	ctx context.Context,
+	retention *imageRetention,
+	queue *workqueue.Repository,
+	task workqueue.TaskSnapshot,
+	root keyvalue.Versioned[releasegroups.ExecutionCapture],
+	revision int64,
 ) error {
 	for _, hook := range root.Record.Preflight {
 		key := etcd.GroupReleasePreflightCaptureKey(task.Task.ID, hook.WorkItemID)
@@ -74,9 +79,13 @@ func (service *Service) retainGroupPreflightImages(ctx context.Context, retentio
 			return err
 		}
 		execution := capture.Execution
-		if value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision || execution.CurrentTaskID != task.Task.ID ||
-			execution.WorkItemID != hook.WorkItemID || execution.Input != hook.Input || execution.ScriptID != hook.ScriptID ||
-			execution.ServiceID != hook.ServiceID || execution.EnvironmentID != task.Task.Scope.EnvironmentID {
+		if value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision ||
+			execution.CurrentTaskID != task.Task.ID ||
+			execution.WorkItemID != hook.WorkItemID ||
+			execution.Input != hook.Input ||
+			execution.ScriptID != hook.ScriptID ||
+			execution.ServiceID != hook.ServiceID ||
+			execution.EnvironmentID != task.Task.Scope.EnvironmentID {
 			execution.Clear()
 			return errs.New(errs.KindStateConflict, "Group preflight image capture differs from its accepted member")
 		}

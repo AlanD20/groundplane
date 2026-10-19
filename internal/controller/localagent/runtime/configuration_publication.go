@@ -11,7 +11,11 @@ import (
 
 // Apply joins the captured Agent update and the exact protected replay response
 // in one transaction. Registration storage does not depend on its parent package.
-func (service *durableLocalAgentConfigIdempotency) Apply(ctx context.Context, update agentregistration.ConfigurationUpdate, marker idempotency.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error) {
+func (service *durableLocalAgentConfigIdempotency) Apply(
+	ctx context.Context,
+	update agentregistration.ConfigurationUpdate,
+	marker idempotency.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
 	conditions, mutations, err := update.Changes()
 	if err != nil {
 		return etcd.IdempotencyTransactionResult{}, err

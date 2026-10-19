@@ -39,7 +39,9 @@ func (admitted CheckpointAdmission) Sources() []*agentpb.BackupStepResume {
 	return admitted.Assignment.GetSources()
 }
 
-func (admitted CheckpointAdmission) ConfigBinding(identity workexecution.Identity) (backupconfigtransfer.Binding, error) {
+func (admitted CheckpointAdmission) ConfigBinding(
+	identity workexecution.Identity,
+) (backupconfigtransfer.Binding, error) {
 	if admitted.Request == nil {
 		return backupconfigtransfer.Binding{}, conflict("Config checkpoint request is missing")
 	}
@@ -69,7 +71,11 @@ func (repository *InputRepository) InspectCheckpoint(ctx context.Context, view w
 	if err != nil {
 		return CheckpointAdmission{}, err
 	}
-	validated, err := executionplan.ValidateBackupWorkCheckpoint(request, assignment.Input, view.Attempt.Attempt.Executor)
+	validated, err := executionplan.ValidateBackupWorkCheckpoint(
+		request,
+		assignment.Input,
+		view.Attempt.Attempt.Executor,
+	)
 	if err != nil {
 		return CheckpointAdmission{}, err
 	}
@@ -91,7 +97,11 @@ func (repository *InputRepository) InspectRestoreRecoveryCheckpoint(ctx context.
 	if err != nil {
 		return CheckpointAdmission{}, err
 	}
-	validated, err := executionplan.ValidateBackupRestoreRecoveryCheckpoint(request, assignment, view.Attempt.Attempt.Executor)
+	validated, err := executionplan.ValidateBackupRestoreRecoveryCheckpoint(
+		request,
+		assignment,
+		view.Attempt.Attempt.Executor,
+	)
 	if err != nil {
 		return CheckpointAdmission{}, err
 	}
@@ -105,7 +115,10 @@ func (repository *InputRepository) inspectCheckpointReceipt(ctx context.Context,
 ) (CheckpointAdmission, error) {
 	validated := result.Request
 	key := CheckpointKey(view.Work.Item.Item.ID, validated.SourceOrdinal, validated.CheckpointSequence)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if err != nil {
 		return CheckpointAdmission{}, err
 	}
@@ -135,7 +148,12 @@ func (repository *InputRepository) inspectCheckpointReceipt(ctx context.Context,
 		if result.Recovery != nil {
 			result.Replay, err = checkpointReceiptAcknowledgement(saved.Value, validated, input, saved.ModRevision)
 			if err == nil {
-				result.Replay, err = executionplan.ValidateBackupRestoreRecoveryCheckpointAck(result.Replay, validated, result.Recovery, view.Attempt.Attempt.Executor)
+				result.Replay, err = executionplan.ValidateBackupRestoreRecoveryCheckpointAck(
+					result.Replay,
+					validated,
+					result.Recovery,
+					view.Attempt.Attempt.Executor,
+				)
 			}
 		} else {
 			result.Replay, err = checkpointAcknowledgement(saved.Value, validated, input, view.Attempt.Attempt.Executor, saved.ModRevision)

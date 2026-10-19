@@ -22,7 +22,8 @@ type AttachRemoval struct {
 func NewAttachRemoval(input attachexecution.RemovalInput, journal *agentworkjournal.Journal,
 	exchange AttachRemovalExchange,
 ) (*AttachRemoval, error) {
-	if input.Validate() != nil || input.Attempt.StartedAt == nil || input.Attempt.FinishedAt != nil || journal == nil || exchange == nil {
+	if input.Validate() != nil || input.Attempt.StartedAt == nil || input.Attempt.FinishedAt != nil || journal == nil ||
+		exchange == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach removal reporting requires a started Agent attempt")
 	}
 	return &AttachRemoval{input: input, journal: journal, exchange: exchange}, nil
@@ -57,7 +58,10 @@ func (delivery *AttachRemoval) Current(ctx context.Context) (*attachexecution.Re
 		return nil, err
 	}
 	if !record.Acknowledged {
-		return nil, errs.New(errs.KindStateConflict, "Attach removal command boundary is not acknowledged by the Controller")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Attach removal command boundary is not acknowledged by the Controller",
+		)
 	}
 	return &record.Report.Progress, nil
 }

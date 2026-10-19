@@ -19,14 +19,25 @@ func (executor *Executor) fail(ctx context.Context, input Input, exchange Exchan
 	// This context only persists/reports failure; it cannot execute host effects.
 	deliveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
-	failure, err := executor.journal.PrepareRemovalRecoveryFailure(deliveryCtx, input.attempt, input.procedure, input.capture, reason)
+	failure, err := executor.journal.PrepareRemovalRecoveryFailure(
+		deliveryCtx,
+		input.attempt,
+		input.procedure,
+		input.capture,
+		reason,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
 	return executor.deliverFailure(deliveryCtx, input, exchange, failure)
 }
 
-func (executor *Executor) deliverFailure(ctx context.Context, input Input, exchange Exchange, failure *agentworkjournal.LifecycleFailureDelivery) (workexecution.Attempt, error) {
+func (executor *Executor) deliverFailure(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	failure *agentworkjournal.LifecycleFailureDelivery,
+) (workexecution.Attempt, error) {
 	if failure.Receipt != nil {
 		return *failure.Receipt, nil
 	}

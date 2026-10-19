@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+
 	"github.com/AlanD20/groundplane/internal/app/controllerbackup"
 	"github.com/AlanD20/groundplane/internal/app/hostplatform"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
@@ -15,6 +16,7 @@ import (
 	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
+	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/releasegroup"
@@ -156,7 +158,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		return nil, err
 	}
-	hierarchyDeletions, err := newHierarchyDeletionRuntime(store, authority)
+	hierarchyDeletions, err := hierarchydeletion.NewRuntime(
+		store,
+		authority.idempotency,
+		authority.intentCoordinator,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize hierarchy deletion runtime: %w", err)

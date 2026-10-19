@@ -53,10 +53,18 @@ func CascadeBridgeAdmission(ctx context.Context, store Store, view workqueue.Vie
 		return nil, err
 	}
 	last := previous.Item.Item
-	if last.Operation != workexecution.Detach || last.Phase != workexecution.Settled || last.Outcome != workexecution.Succeeded ||
-		last.ActiveAttemptID != "" || last.Result == nil || last.Input == nil || *last.Input != *progress.LastInput ||
-		last.Placement.HostID != progress.HostID || last.Cleanup != workexecution.CleanupNone && last.Cleanup != workexecution.CleanupComplete {
-		return nil, errs.New(errs.KindStateConflict, "Backing Zone final consumer removal has no successful settled result")
+	if last.Operation != workexecution.Detach || last.Phase != workexecution.Settled ||
+		last.Outcome != workexecution.Succeeded ||
+		last.ActiveAttemptID != "" ||
+		last.Result == nil ||
+		last.Input == nil ||
+		*last.Input != *progress.LastInput ||
+		last.Placement.HostID != progress.HostID ||
+		last.Cleanup != workexecution.CleanupNone && last.Cleanup != workexecution.CleanupComplete {
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Backing Zone final consumer removal has no successful settled result",
+		)
 	}
 	return []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision},
 		{Key: fenceKey, ModRevision: read.Values[1].ModRevision},

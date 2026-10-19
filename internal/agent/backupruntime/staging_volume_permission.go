@@ -15,13 +15,19 @@ type volumeRecoveryPermission struct {
 	disposition *agentpb.BackupVolumeRestoreRecoveryDisposition
 }
 
-func volumeRecoveryPermissions(inventory *agentpb.BackupStagingInventory, plan *agentpb.BackupStagingRecoveryPlan) ([]volumeRecoveryPermission, error) {
+func volumeRecoveryPermissions(
+	inventory *agentpb.BackupStagingInventory,
+	plan *agentpb.BackupStagingRecoveryPlan,
+) ([]volumeRecoveryPermission, error) {
 	if err := executionplan.ValidateBackupStagingRecoveryPlan(inventory, plan); err != nil {
 		return nil, err
 	}
 	permissions := make([]volumeRecoveryPermission, len(inventory.VolumeRestores))
 	for index, entry := range inventory.VolumeRestores {
-		permissions[index] = volumeRecoveryPermission{entry: proto.CloneOf(entry), disposition: proto.CloneOf(plan.VolumeDispositions[index])}
+		permissions[index] = volumeRecoveryPermission{
+			entry:       proto.CloneOf(entry),
+			disposition: proto.CloneOf(plan.VolumeDispositions[index]),
+		}
 	}
 	return permissions, nil
 }
@@ -29,7 +35,10 @@ func volumeRecoveryPermissions(inventory *agentpb.BackupStagingInventory, plan *
 // AuthorizeVolumeResume checks the startup decision before obtaining Start or
 // opening retained mutation journals. A held source never becomes executable
 // merely because its files are present or another assignment names the Point.
-func (state *Staging) AuthorizeVolumeResume(assignment *agentpb.BackupWorkAssignment, identity workexecution.Identity) error {
+func (state *Staging) AuthorizeVolumeResume(
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+) error {
 	owned, attempt, err := executionplan.OpenBackupWorkAssignment(assignment, identity)
 	if err != nil {
 		return err
@@ -63,7 +72,10 @@ func (state *Staging) AuthorizeVolumeResume(assignment *agentpb.BackupWorkAssign
 		}
 		resume := permission.disposition.GetResume()
 		if resume == nil {
-			return errs.New(errs.KindStateConflict, "Recovered Volume is retained pending recovery, not authorized to resume")
+			return errs.New(
+				errs.KindStateConflict,
+				"Recovered Volume is retained pending recovery, not authorized to resume",
+			)
 		}
 		if resumeDigest == nil {
 			resumeDigest, err = executionplan.BackupWorkStagingResumeSHA256(owned, identity)

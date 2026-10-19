@@ -59,7 +59,11 @@ func (repository *InputRepository) PrepareNetworkWorkCompletion(ctx context.Cont
 			keyvalue.ZeroMutationBytes(proof.Mutations)
 			return workqueue.Change{}, err
 		}
-		receipt, err := ledger.PrepareNetworkCompletionReceipt(ctx, view, input.Action == agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE)
+		receipt, err := ledger.PrepareNetworkCompletionReceipt(
+			ctx,
+			view,
+			input.Action == agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE,
+		)
 		if err != nil {
 			keyvalue.ZeroMutationBytes(proof.Mutations)
 			return workqueue.Change{}, err
@@ -70,7 +74,11 @@ func (repository *InputRepository) PrepareNetworkWorkCompletion(ctx context.Cont
 	return proof, nil
 }
 
-func (repository *InputRepository) prepareApplied(ctx context.Context, view workqueue.ResumeView, input *agentpb.NetworkWorkInput) (workqueue.Change, error) {
+func (repository *InputRepository) prepareApplied(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input *agentpb.NetworkWorkInput,
+) (workqueue.Change, error) {
 	return repository.prepareObservedApplied(ctx, view, input,
 		input.Action == agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE, false, view.Checkpoint.Record.RecordedAt)
 }
@@ -134,7 +142,10 @@ func decodeApplied(raw []byte) (AppliedNetwork, error) {
 	}
 	state, err := jcs.Decode[AppliedNetwork](raw)
 	if err != nil || ids.Validate(ids.KindNetwork, state.NetworkID) != nil ||
-		ids.Validate(ids.KindEnvironment, state.EnvironmentID) != nil || ids.Validate(ids.KindHost, state.HostID) != nil ||
+		ids.Validate(
+			ids.KindEnvironment,
+			state.EnvironmentID,
+		) != nil || ids.Validate(ids.KindHost, state.HostID) != nil ||
 		state.Input.Validate() != nil || state.ObservedAt.IsZero() || len(state.IntentSHA256) != 64 {
 		return AppliedNetwork{}, conflict("applied Network state is invalid")
 	}
@@ -148,7 +159,11 @@ func decodeApplied(raw []byte) (AppliedNetwork, error) {
 	return state, nil
 }
 
-func (repository *InputRepository) ReadApplied(ctx context.Context, networkID string, revision int64) (*AppliedNetwork, error) {
+func (repository *InputRepository) ReadApplied(
+	ctx context.Context,
+	networkID string,
+	revision int64,
+) (*AppliedNetwork, error) {
 	if ids.Validate(ids.KindNetwork, networkID) != nil || revision < 0 {
 		return nil, conflict("applied Network read identity is invalid")
 	}

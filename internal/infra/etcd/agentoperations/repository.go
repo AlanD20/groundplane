@@ -23,20 +23,36 @@ func New(backend store) (*Repository, error) {
 	return &Repository{store: backend}, nil
 }
 
-func (repository *Repository) Load(ctx context.Context, item workexecution.Item, revision int64) (keyvalue.Versioned[Capture], error) {
-	if item.Validate() != nil || item.Operation != workexecution.AgentLifecycle && item.Operation != workexecution.AgentSoftware || revision < 0 {
+func (repository *Repository) Load(
+	ctx context.Context,
+	item workexecution.Item,
+	revision int64,
+) (keyvalue.Versioned[Capture], error) {
+	if item.Validate() != nil ||
+		item.Operation != workexecution.AgentLifecycle && item.Operation != workexecution.AgentSoftware ||
+		revision < 0 {
 		return keyvalue.Versioned[Capture]{}, errs.New(errs.KindValidationFailed, "Agent lifecycle work is invalid")
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{InputKey(item.ID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{InputKey(item.ID)}, Revision: revision},
+	)
 	if err != nil {
 		return keyvalue.Versioned[Capture]{}, err
 	}
 	if read == nil {
-		return keyvalue.Versioned[Capture]{}, errs.New(errs.KindStorageUnavailable, "Agent lifecycle input read is unavailable")
+		return keyvalue.Versioned[Capture]{}, errs.New(
+			errs.KindStorageUnavailable,
+			"Agent lifecycle input read is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return keyvalue.Versioned[Capture]{}, errs.New(errs.KindStateConflict, "Agent lifecycle captured input is missing")
+	if read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 ||
+		read.Values[0] == nil {
+		return keyvalue.Versioned[Capture]{}, errs.New(
+			errs.KindStateConflict,
+			"Agent lifecycle captured input is missing",
+		)
 	}
 	capture, err := recordcodec.Decode[Capture](read.Values[0].Value, "agent_lifecycle_input")
 	if err != nil {
@@ -45,5 +61,9 @@ func (repository *Repository) Load(ctx context.Context, item workexecution.Item,
 	if err := capture.Match(item); err != nil {
 		return keyvalue.Versioned[Capture]{}, err
 	}
-	return keyvalue.Versioned[Capture]{Record: capture, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[Capture]{
+		Record:       capture,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }

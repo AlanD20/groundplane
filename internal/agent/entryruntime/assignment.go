@@ -17,8 +17,12 @@ type Input struct {
 	boundary  entryexecution.Progress
 }
 
-func DecodeAssignment(message *agentpb.EntryConfigurationWorkAssignment, authenticated workexecution.Identity) (Input, error) {
-	if message == nil || proto.Size(message) > executionplan.MaximumPlanBytes || executionplan.RejectUnknown(message) != nil {
+func DecodeAssignment(
+	message *agentpb.EntryConfigurationWorkAssignment,
+	authenticated workexecution.Identity,
+) (Input, error) {
+	if message == nil || proto.Size(message) > executionplan.MaximumPlanBytes ||
+		executionplan.RejectUnknown(message) != nil {
 		return Input{}, invalidInput()
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(message.Attempt, authenticated)
@@ -47,7 +51,8 @@ func DecodeAssignment(message *agentpb.EntryConfigurationWorkAssignment, authent
 		}
 		return Input{attempt: attempt, procedure: procedure, recovery: &source, boundary: boundary}, nil
 	}
-	if attempt.Direction != workexecution.Forward || len(message.RecoverySource) != 0 || len(message.RecoveryBoundary) != 0 {
+	if attempt.Direction != workexecution.Forward || len(message.RecoverySource) != 0 ||
+		len(message.RecoveryBoundary) != 0 {
 		return Input{}, invalidInput()
 	}
 	return Input{attempt: attempt, procedure: procedure}, nil

@@ -41,7 +41,10 @@ func NewCompletions(queue *workqueue.Repository, registrations []CompletionRegis
 	owners := make(map[completionKey]CompletionOwner, len(registrations))
 	for _, registration := range registrations {
 		key := completionKey{registration.Action, registration.Operation}
-		if !workexecution.ValidAction(registration.Action) || registration.Operation != "" && !workexecution.ValidOperation(registration.Operation) || registration.Owner == nil || owners[key] != nil {
+		if !workexecution.ValidAction(registration.Action) ||
+			registration.Operation != "" && !workexecution.ValidOperation(registration.Operation) ||
+			registration.Owner == nil ||
+			owners[key] != nil {
 			return nil, errs.New(errs.KindInternal, "task completion action is invalid or duplicated")
 		}
 		owners[key] = registration.Owner
@@ -49,7 +52,12 @@ func NewCompletions(queue *workqueue.Repository, registrations []CompletionRegis
 	return &Completions{queue: queue, owners: owners}, nil
 }
 
-func (completions *Completions) Finish(ctx context.Context, taskID string, at time.Time, retention time.Duration) error {
+func (completions *Completions) Finish(
+	ctx context.Context,
+	taskID string,
+	at time.Time,
+	retention time.Duration,
+) error {
 	if at.IsZero() || retention <= 0 {
 		return errs.New(errs.KindInternal, "task completion requires a timestamp and positive retention")
 	}

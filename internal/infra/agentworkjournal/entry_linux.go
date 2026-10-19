@@ -8,7 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareEntryConfiguration(ctx context.Context, attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, next entryexecution.Progress) (*EntryConfigurationRecord, error) {
+func (journal *Journal) PrepareEntryConfiguration(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	next entryexecution.Progress,
+) (*EntryConfigurationRecord, error) {
 	layout, err := entryexecution.CaptureLayout(attempt, input)
 	if err != nil || next.ValidateLayout(attempt, layout) != nil || next.Sequence == 0 {
 		return nil, invalid()
@@ -55,7 +60,11 @@ func (journal *Journal) PrepareEntryConfiguration(ctx context.Context, attempt w
 	return state.EntryConfiguration, nil
 }
 
-func (journal *Journal) EntryConfiguration(ctx context.Context, attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput) (*EntryConfigurationRecord, error) {
+func (journal *Journal) EntryConfiguration(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+) (*EntryConfigurationRecord, error) {
 	layout, err := entryexecution.CaptureLayout(attempt, input)
 	if err != nil {
 		return nil, err
@@ -76,7 +85,10 @@ func (journal *Journal) EntryConfiguration(ctx context.Context, attempt workexec
 }
 
 func matchesEntryConfiguration(state *attemptRecord, attempt workexecution.Attempt, layout entryexecution.Layout) bool {
-	return state != nil && state.EntryConfiguration != nil && sameEntryLayout(state.EntryConfiguration.Layout, layout) &&
-		workexecution.SameAssignment(state.Attempt, attempt) && state.Attempt.StartedAt != nil &&
-		attempt.StartedAt != nil && state.Attempt.StartedAt.Equal(*attempt.StartedAt)
+	return state != nil && state.EntryConfiguration != nil &&
+		sameEntryLayout(state.EntryConfiguration.Layout, layout) &&
+		workexecution.SameAssignment(state.Attempt, attempt) &&
+		state.Attempt.StartedAt != nil &&
+		attempt.StartedAt != nil &&
+		state.Attempt.StartedAt.Equal(*attempt.StartedAt)
 }

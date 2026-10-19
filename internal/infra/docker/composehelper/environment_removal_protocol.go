@@ -22,7 +22,10 @@ func MarshalEnvironmentRemovalRequest(request *agentpb.EnvironmentRemovalHelperR
 	return frame(raw)
 }
 
-func ReadEnvironmentRemovalRequest(ctx context.Context, input io.Reader) (*agentpb.EnvironmentRemovalHelperRequest, error) {
+func ReadEnvironmentRemovalRequest(
+	ctx context.Context,
+	input io.Reader,
+) (*agentpb.EnvironmentRemovalHelperRequest, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
@@ -38,7 +41,11 @@ func ReadEnvironmentRemovalRequest(ctx context.Context, input io.Reader) (*agent
 	return request, nil
 }
 
-func WriteEnvironmentRemovalResponse(ctx context.Context, output io.Writer, response *agentpb.EnvironmentRemovalHelperResponse) error {
+func WriteEnvironmentRemovalResponse(
+	ctx context.Context,
+	output io.Writer,
+	response *agentpb.EnvironmentRemovalHelperResponse,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -69,7 +76,10 @@ func WriteEnvironmentRemovalResponse(ctx context.Context, output io.Writer, resp
 	return nil
 }
 
-func ReadEnvironmentRemovalResponse(ctx context.Context, input io.Reader) (*agentpb.EnvironmentRemovalHelperResponse, error) {
+func ReadEnvironmentRemovalResponse(
+	ctx context.Context,
+	input io.Reader,
+) (*agentpb.EnvironmentRemovalHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err

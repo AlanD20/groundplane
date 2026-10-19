@@ -57,7 +57,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteSettlemen
 	defer keyvalue.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route settlement authority is unavailable")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Route settlement authority is unavailable",
+			)
 		}
 	}
 	if read.Values[0].ModRevision != work.Task.Revision || read.Values[1].ModRevision != work.Item.Revision {
@@ -91,14 +94,20 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteSettlemen
 	digest := sha256.Sum256(encoded)
 	clear(encoded)
 	if hex.EncodeToString(digest[:]) != parent.Intent.SHA256 {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Route desired input differs from captured intent")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Route desired input differs from captured intent",
+		)
 	}
 	change, err := blueprintunits.PrepareDefinitionWorkSettlement(snapshot, work, unit, read.Values[2].ModRevision, at)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	for index, key := range keys {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision},
+		)
 	}
 	return change, nil
 }

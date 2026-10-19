@@ -17,10 +17,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (service *Reports) CompleteEnvironmentRemoval(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *Reports) CompleteEnvironmentRemoval(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.EnvironmentRemovalCompletionRequest,
 ) (*agentpb.EnvironmentRemovalCompletionAck, error) {
-	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || request.CheckpointSequence != 4 || request.CheckpointEvidence == nil {
+	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || request.CheckpointSequence != 4 ||
+		request.CheckpointEvidence == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Environment removal completion requires its final checkpoint")
 	}
 	guards, err := authorization.Conditions()
@@ -31,7 +34,10 @@ func (service *Reports) CompleteEnvironmentRemoval(ctx context.Context, authoriz
 	if err != nil {
 		return nil, err
 	}
-	evidence := workexecution.Input{ID: request.CheckpointEvidence.InputId, SHA256: hex.EncodeToString(request.CheckpointEvidence.Sha256)}
+	evidence := workexecution.Input{
+		ID:     request.CheckpointEvidence.InputId,
+		SHA256: hex.EncodeToString(request.CheckpointEvidence.Sha256),
+	}
 	if evidence.Validate() != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Environment removal completion evidence is invalid")
 	}
@@ -39,8 +45,11 @@ func (service *Reports) CompleteEnvironmentRemoval(ctx context.Context, authoriz
 	if err != nil {
 		return nil, err
 	}
-	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Work.Item.Item.Operation != workexecution.Hierarchy ||
-		view.Checkpoint.Record == nil || view.Checkpoint.Record.Sequence != 4 || view.Checkpoint.Record.Evidence != evidence {
+	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
+		view.Work.Item.Item.Operation != workexecution.Hierarchy ||
+		view.Checkpoint.Record == nil ||
+		view.Checkpoint.Record.Sequence != 4 ||
+		view.Checkpoint.Record.Evidence != evidence {
 		return nil, errs.New(errs.KindStateConflict, "Environment removal completion differs from its saved checkpoint")
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
@@ -63,7 +72,11 @@ func (service *Reports) CompleteEnvironmentRemoval(ctx context.Context, authoriz
 		if err != nil {
 			return nil, err
 		}
-		completion.Result = workexecution.Completion{Outcome: workexecution.Succeeded, Evidence: evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        workexecution.Succeeded,
+			Evidence:       evidence,
+			EffectsSettled: true,
+		}
 		completion.At = at
 		change, err := workqueue.PrepareCompletion(completion)
 		if err != nil {
@@ -76,7 +89,10 @@ func (service *Reports) CompleteEnvironmentRemoval(ctx context.Context, authoriz
 			return nil, err
 		}
 		if !result.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Environment removal completion ownership changed; resend the saved result")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Environment removal completion ownership changed; resend the saved result",
+			)
 		}
 		view, err = authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 		if err != nil {
@@ -84,9 +100,15 @@ func (service *Reports) CompleteEnvironmentRemoval(ctx context.Context, authoriz
 		}
 	}
 	attempt := view.Attempt.Attempt
-	if attempt.FinishedAt == nil || attempt.Result == nil || *attempt.Result != evidence || attempt.Outcome != workexecution.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "saved Environment removal result does not acknowledge completed absence")
+	if attempt.FinishedAt == nil || attempt.Result == nil || *attempt.Result != evidence ||
+		attempt.Outcome != workexecution.Succeeded {
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"saved Environment removal result does not acknowledge completed absence",
+		)
 	}
 	return &agentpb.EnvironmentRemovalCompletionAck{Attempt: proto.CloneOf(request.Attempt), CheckpointSequence: 4,
-		CheckpointEvidence: proto.CloneOf(request.CheckpointEvidence), FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
+		CheckpointEvidence: proto.CloneOf(
+			request.CheckpointEvidence,
+		), FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
 }

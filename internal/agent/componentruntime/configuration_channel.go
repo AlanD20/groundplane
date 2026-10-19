@@ -16,8 +16,14 @@ import (
 )
 
 type ConfigurationExchange interface {
-	ComponentConfiguration(context.Context, *agentpb.ComponentConfigurationRequest) (*agentpb.ComponentConfigurationManifest, error)
-	ComponentConfigurationFile(context.Context, *agentpb.ComponentConfigurationFileRequest) (*agentpb.ComponentConfigurationFileDelivery, error)
+	ComponentConfiguration(
+		context.Context,
+		*agentpb.ComponentConfigurationRequest,
+	) (*agentpb.ComponentConfigurationManifest, error)
+	ComponentConfigurationFile(
+		context.Context,
+		*agentpb.ComponentConfigurationFileRequest,
+	) (*agentpb.ComponentConfigurationFileDelivery, error)
 }
 
 type ChannelConfigurationSource struct{ exchange ConfigurationExchange }
@@ -29,7 +35,10 @@ func NewChannelConfigurationSource(exchange ConfigurationExchange) (*ChannelConf
 	return &ChannelConfigurationSource{exchange: exchange}, nil
 }
 
-func (source *ChannelConfigurationSource) DescribeComponent(ctx context.Context, input componentexecution.HelperInput) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error) {
+func (source *ChannelConfigurationSource) DescribeComponent(
+	ctx context.Context,
+	input componentexecution.HelperInput,
+) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error) {
 	reference, stage, _, err := componentexecution.ConfigurationSelection(input)
 	if err != nil {
 		return nil, nil, err
@@ -38,12 +47,18 @@ func (source *ChannelConfigurationSource) DescribeComponent(ctx context.Context,
 	if err != nil {
 		return nil, nil, err
 	}
-	manifest, err := source.exchange.ComponentConfiguration(ctx, &agentpb.ComponentConfigurationRequest{Attempt: identity, StageId: stage})
+	manifest, err := source.exchange.ComponentConfiguration(
+		ctx,
+		&agentpb.ComponentConfigurationRequest{Attempt: identity, StageId: stage},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
-	if manifest == nil || executionplan.RejectUnknown(manifest) != nil || !proto.Equal(manifest.Attempt, identity) || manifest.StageId != stage ||
-		!proto.Equal(manifest.Configuration, reference) || len(manifest.Files) > 512 || len(manifest.Files) != len(input.Procedure.Files) {
+	if manifest == nil || executionplan.RejectUnknown(manifest) != nil || !proto.Equal(manifest.Attempt, identity) ||
+		manifest.StageId != stage ||
+		!proto.Equal(manifest.Configuration, reference) ||
+		len(manifest.Files) > 512 ||
+		len(manifest.Files) != len(input.Procedure.Files) {
 		return nil, nil, invalidConfigurationDelivery()
 	}
 	files := make([]entrymaterialization.Header, len(manifest.Files))
@@ -63,7 +78,11 @@ func (source *ChannelConfigurationSource) DescribeComponent(ctx context.Context,
 	return proto.CloneOf(manifest.Configuration), files, nil
 }
 
-func (source *ChannelConfigurationSource) OpenComponentFile(ctx context.Context, input componentexecution.HelperInput, header entrymaterialization.Header) (io.ReadCloser, error) {
+func (source *ChannelConfigurationSource) OpenComponentFile(
+	ctx context.Context,
+	input componentexecution.HelperInput,
+	header entrymaterialization.Header,
+) (io.ReadCloser, error) {
 	reference, _, generation, err := componentexecution.ConfigurationSelection(input)
 	if err != nil {
 		return nil, err
@@ -77,13 +96,22 @@ func (source *ChannelConfigurationSource) OpenComponentFile(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	delivery, err := source.exchange.ComponentConfigurationFile(ctx, &agentpb.ComponentConfigurationFileRequest{Attempt: identity, StageId: header.StepID(), Destination: header.Destination()})
+	delivery, err := source.exchange.ComponentConfigurationFile(
+		ctx,
+		&agentpb.ComponentConfigurationFileRequest{
+			Attempt:     identity,
+			StageId:     header.StepID(),
+			Destination: header.Destination(),
+		},
+	)
 	defer componentexecution.ClearConfigurationDelivery(delivery)
 	if err != nil {
 		return nil, err
 	}
-	if delivery == nil || executionplan.RejectUnknown(delivery) != nil || !proto.Equal(delivery.Attempt, identity) || delivery.StageId != header.StepID() ||
-		!proto.Equal(delivery.Configuration, reference) || !proto.Equal(delivery.File, componentexecution.EncodeConfigurationFile(header)) ||
+	if delivery == nil || executionplan.RejectUnknown(delivery) != nil || !proto.Equal(delivery.Attempt, identity) ||
+		delivery.StageId != header.StepID() ||
+		!proto.Equal(delivery.Configuration, reference) ||
+		!proto.Equal(delivery.File, componentexecution.EncodeConfigurationFile(header)) ||
 		uint64(len(delivery.Content)) != header.Length() {
 		return nil, invalidConfigurationDelivery()
 	}

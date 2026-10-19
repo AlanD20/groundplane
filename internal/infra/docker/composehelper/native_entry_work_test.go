@@ -26,8 +26,10 @@ func TestNativeEntryHelperRefusesStoppedConsumerAndChangedAcknowledgement(t *tes
 	request := nativeEntryConsumerRequest(t)
 	fake := runner.NewFake()
 	fake.RunFunc = func(_ context.Context, command runner.RunCmdOpts) (runner.Result, error) {
-		if command.Name != DockerExecutable || !slices.Contains(command.Args, "label=com.docker.compose.service=app--blue") ||
-			len(command.Args) < 2 || command.Args[0] != "container" ||
+		if command.Name != DockerExecutable ||
+			!slices.Contains(command.Args, "label=com.docker.compose.service=app--blue") ||
+			len(command.Args) < 2 ||
+			command.Args[0] != "container" ||
 			command.Args[1] != "ls" {
 			t.Fatalf("stopped Entry consumer triggered runtime changes or selected another workload: %v", command.Args)
 		}

@@ -25,9 +25,13 @@ func (progress Progress) ValidateTrafficEvidence(input Input, evidence *agentpb.
 	if err != nil {
 		return err
 	}
-	if evidence == nil || executionplan.RejectUnknown(evidence) != nil || evidence.ServiceId != input.Release.ServiceId ||
-		evidence.ReleaseId != input.Release.ReleaseId || evidence.Target != traffic.Target || evidence.ProxyGeneration != traffic.Generation ||
-		evidence.Compensated || !bytes.Equal(evidence.ConfigSha256, traffic.AfterSHA256[:]) {
+	if evidence == nil || executionplan.RejectUnknown(evidence) != nil ||
+		evidence.ServiceId != input.Release.ServiceId ||
+		evidence.ReleaseId != input.Release.ReleaseId ||
+		evidence.Target != traffic.Target ||
+		evidence.ProxyGeneration != traffic.Generation ||
+		evidence.Compensated ||
+		!bytes.Equal(evidence.ConfigSha256, traffic.AfterSHA256[:]) {
 		return invalidProgress()
 	}
 	return nil
@@ -52,8 +56,10 @@ func (progress Progress) Traffic(input Input) (TrafficChange, error) {
 		target = "singleton"
 	}
 	if progress.Rolling != nil {
-		if progress.Rolling.Phase != rollingrelease.SwitchTraffic && progress.Rolling.Phase != rollingrelease.DrainPredecessor &&
-			progress.Rolling.Phase != rollingrelease.RemovePredecessor && progress.Rolling.Phase != rollingrelease.RemoveRetained {
+		if progress.Rolling.Phase != rollingrelease.SwitchTraffic &&
+			progress.Rolling.Phase != rollingrelease.DrainPredecessor &&
+			progress.Rolling.Phase != rollingrelease.RemovePredecessor &&
+			progress.Rolling.Phase != rollingrelease.RemoveRetained {
 			return TrafficChange{}, invalidProgress()
 		}
 		index, target = int(progress.Rolling.Change)-1, "rolling"
@@ -81,5 +87,12 @@ func (progress Progress) Traffic(input Input) (TrafficChange, error) {
 	if err != nil {
 		return TrafficChange{}, err
 	}
-	return TrafficChange{Before: slices.Clone(before), After: slices.Clone(after), BeforeSHA256: sha256.Sum256(before), AfterSHA256: sha256.Sum256(after), Generation: configuration.Generation, Target: target}, nil
+	return TrafficChange{
+		Before:       slices.Clone(before),
+		After:        slices.Clone(after),
+		BeforeSHA256: sha256.Sum256(before),
+		AfterSHA256:  sha256.Sum256(after),
+		Generation:   configuration.Generation,
+		Target:       target,
+	}, nil
 }

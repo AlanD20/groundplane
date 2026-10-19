@@ -45,7 +45,11 @@ func (service *Service) captureServiceWork(ctx context.Context, scope releaseque
 	if candidate.rollbackSource != "" {
 		action = workexecution.ActionRollback
 	}
-	scopeID := workexecution.Scope{TenantID: scope.Project.Record.TenantID, ProjectID: scope.Project.Record.ID, EnvironmentID: scope.Environment.Record.ID}
+	scopeID := workexecution.Scope{
+		TenantID:      scope.Project.Record.TenantID,
+		ProjectID:     scope.Project.Record.ID,
+		EnvironmentID: scope.Environment.Record.ID,
+	}
 	task = workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor, Scope: scopeID, Action: action,
 		TargetID: candidate.planning.Service.Record.Desired.ID, TargetName: candidate.planning.Service.Record.Desired.Name,
 		Intent: workexecution.Input{ID: planID, SHA256: requestSHA}, CreatedAt: at, UpdatedAt: at,
@@ -88,9 +92,20 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 	at, taskID, workID, scopeID, placement := task.CreatedAt, task.ID, item.ID, task.Scope, item.Placement
 	operationID, publicationID, releaseID := ids.New(ids.KindOperation), ids.NewULID(), ids.New(ids.KindDeployment)
 	if task.Validate() != nil || item.Validate() != nil {
-		return task, item, request, capture, errs.New(errs.KindValidationFailed, "Direct Release native identity is invalid")
+		return task, item, request, capture, errs.New(
+			errs.KindValidationFailed,
+			"Direct Release native identity is invalid",
+		)
 	}
-	render, predecessor, err := service.captureServiceWorkRender(ctx, scope, projection, candidate, addresses, releaseID, planID)
+	render, predecessor, err := service.captureServiceWorkRender(
+		ctx,
+		scope,
+		projection,
+		candidate,
+		addresses,
+		releaseID,
+		planID,
+	)
 	if err != nil {
 		return task, item, request, capture, err
 	}
@@ -115,17 +130,27 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 	}
 	if group != nil {
 		if group.Validate() != nil || task.TargetID != group.GroupID {
-			return task, item, request, capture, errs.New(errs.KindValidationFailed, "Group Release member binding is invalid")
+			return task, item, request, capture, errs.New(
+				errs.KindValidationFailed,
+				"Group Release member binding is invalid",
+			)
 		}
 		intent.GroupOperationID, intent.GroupMemberOrdinal = group.OperationID, group.Ordinal
 	}
-	manifest, err := service.ledger.Stage(ctx, releases.ReleaseStage{PublicationID: publicationID, OperationID: operationID,
-		CreatedAt: at, Members: []releases.ReleaseStageMember{{Intent: intent, RenderInput: raw,
-			Checkpoint: domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: at}}}})
+	manifest, err := service.ledger.Stage(
+		ctx,
+		releases.ReleaseStage{PublicationID: publicationID, OperationID: operationID,
+			CreatedAt: at, Members: []releases.ReleaseStageMember{{Intent: intent, RenderInput: raw,
+				Checkpoint: domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: at}}}},
+	)
 	if err != nil {
 		return task, item, request, capture, err
 	}
-	work := workqueue.View{Task: workqueue.TaskSnapshot{Task: task}, Item: workqueue.ItemSnapshot{Item: item}, ReadRevision: scope.ReadRevision}
+	work := workqueue.View{
+		Task:         workqueue.TaskSnapshot{Task: task},
+		Item:         workqueue.ItemSnapshot{Item: item},
+		ReadRevision: scope.ReadRevision,
+	}
 	hooks, err := service.prepareReleaseHooks(ctx, scope, manifest.ReadRevision, operation, work, operationID, planID,
 		[]releaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}})
 	if err != nil {
@@ -156,11 +181,17 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 	if err != nil {
 		return task, item, request, capture, err
 	}
-	request = etcd.DirectReleasePreparation{Rollout: rollout, Intent: intent, Manifest: manifest, Predecessor: predecessor,
-		Configuration: configuration, Source: etcd.DirectReleaseSource{ReadRevision: scope.ReadRevision,
+	request = etcd.DirectReleasePreparation{
+		Rollout:       rollout,
+		Intent:        intent,
+		Manifest:      manifest,
+		Predecessor:   predecessor,
+		Configuration: configuration,
+		Source: etcd.DirectReleaseSource{ReadRevision: scope.ReadRevision,
 			EnvironmentRevision: scope.Environment.Revision, ProjectRevision: scope.Project.Revision,
 			TenantRevision: scope.Tenant.Revision, DesiredRevision: candidate.planning.Service.Revision,
-			EpochRevision: scope.EnvironmentEpochRevision}}
+			EpochRevision: scope.EnvironmentEpochRevision},
+	}
 	if group != nil {
 		request.GroupID = group.GroupID
 	}
@@ -168,7 +199,10 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 	// so a shared bridge has one byte-identical native prerequisite.
 	intentSHA, err := hex.DecodeString(task.Intent.SHA256)
 	if err != nil {
-		return task, item, request, capture, errs.New(errs.KindValidationFailed, "Release request intent digest is invalid")
+		return task, item, request, capture, errs.New(
+			errs.KindValidationFailed,
+			"Release request intent digest is invalid",
+		)
 	}
 	networks, err := executionplan.ReleaseNetworkWorkInputs(artifact, intentSHA, networkSeed)
 	if err != nil {
@@ -188,9 +222,15 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 	for _, hook := range render.Hooks {
 		sources, found := hooks.sources[hook.ScriptExecutionID]
 		if !found {
-			return task, item, request, capture, errs.New(errs.KindInternal, "Direct Release hook has no captured source")
+			return task, item, request, capture, errs.New(
+				errs.KindInternal,
+				"Direct Release hook has no captured source",
+			)
 		}
-		request.Hooks = append(request.Hooks, etcd.DirectReleaseHookSources{ExecutionID: hook.ScriptExecutionID, Sources: sources})
+		request.Hooks = append(
+			request.Hooks,
+			etcd.DirectReleaseHookSources{ExecutionID: hook.ScriptExecutionID, Sources: sources},
+		)
 	}
 	return task, item, request, capture, nil
 }
@@ -202,22 +242,37 @@ func capturedReleaseItem(task workexecution.Task, workID, serviceID string, plac
 		TargetID: serviceID, Placement: placement, Phase: workexecution.Waiting,
 		Wait: &workexecution.Wait{Reason: workexecution.WaitInput}, Cleanup: workexecution.CleanupNone,
 		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline,
-		Claims: []workexecution.Claim{{ScopeID: task.Scope.EnvironmentID}, {HostID: placement.HostID, ScopeID: task.Scope.EnvironmentID},
-			{ScopeID: serviceID}, {HostID: placement.HostID, ScopeID: serviceID}}}
+		Claims: []workexecution.Claim{
+			{ScopeID: task.Scope.EnvironmentID},
+			{HostID: placement.HostID, ScopeID: task.Scope.EnvironmentID},
+			{ScopeID: serviceID},
+			{HostID: placement.HostID, ScopeID: serviceID},
+		}}
 }
 
-func (service *Service) validateServiceWorkBudget(candidate releaseCandidateInput, hooks preparedReleaseHooks, render releaserender.ReleaseRenderInput) error {
+func (service *Service) validateServiceWorkBudget(
+	candidate releaseCandidateInput,
+	hooks preparedReleaseHooks,
+	render releaserender.ReleaseRenderInput,
+) error {
 	budget := 30 * time.Minute
 	if candidate.onFailure == domain.OnFailureSwitchBack {
 		budget += 10 * time.Minute
 	}
 	if render.Rolling != nil {
 		changes := max(len(render.Rolling.Prior), len(render.Rolling.Candidate))
-		budget += time.Duration(changes+1)*time.Duration(render.Rolling.ReplicaTimeoutSeconds)*time.Second - 10*time.Minute
+		budget += time.Duration(
+			changes+1,
+		)*time.Duration(
+			render.Rolling.ReplicaTimeoutSeconds,
+		)*time.Second - 10*time.Minute
 	}
 	budget += time.Duration(hooks.executions) * time.Duration(executionplan.ScriptExecutionTimeoutSeconds) * time.Second
 	if service.timeout < budget {
-		return errs.New(errs.KindReleaseDeadlineTooShort, "configured Release deadline is below its captured rollout and hook budget")
+		return errs.New(
+			errs.KindReleaseDeadlineTooShort,
+			"configured Release deadline is below its captured rollout and hook budget",
+		)
 	}
 	return nil
 }
@@ -230,17 +285,33 @@ func (service *Service) captureServiceWorkRender(ctx context.Context, scope rele
 	if candidate.priorStrategy != domain.StrategyBlueGreen {
 		priorSlot = ""
 	}
-	render := releaserender.ReleaseRenderInput{ProxyAddresses: addresses.ForService(candidate.planning.Service.Record.Desired.ID),
-		ReleaseID: releaseID, PlanID: planID, ArtifactID: ids.New(ids.KindConfig),
-		ServiceID: candidate.planning.Service.Record.Desired.ID, ServiceName: candidate.planning.Service.Record.Desired.Name,
-		CandidateWorkload: candidate.workload, Strategy: candidate.strategy, PriorStrategy: candidate.priorStrategy,
-		Slot: candidate.slot, PriorSlot: priorSlot, ServiceDependencyPlans: scope.Compose.Record.ServiceDependencyPlans.Clone(),
-		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
-		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
-		EnvironmentID: scope.Environment.Record.ID, EnvironmentName: scope.Environment.Record.Name,
-		AuthorizedVolumeDir: scope.Environment.Record.VolumeDir, Projection: projection}
-	predecessor := etcd.BlueprintNativePredecessorCapture{ServiceID: render.ServiceID, FixedReadRevision: scope.ReadRevision,
-		ProjectionRevision: candidate.planning.ProjectionRevision}
+	render := releaserender.ReleaseRenderInput{
+		ProxyAddresses:         addresses.ForService(candidate.planning.Service.Record.Desired.ID),
+		ReleaseID:              releaseID,
+		PlanID:                 planID,
+		ArtifactID:             ids.New(ids.KindConfig),
+		ServiceID:              candidate.planning.Service.Record.Desired.ID,
+		ServiceName:            candidate.planning.Service.Record.Desired.Name,
+		CandidateWorkload:      candidate.workload,
+		Strategy:               candidate.strategy,
+		PriorStrategy:          candidate.priorStrategy,
+		Slot:                   candidate.slot,
+		PriorSlot:              priorSlot,
+		ServiceDependencyPlans: scope.Compose.Record.ServiceDependencyPlans.Clone(),
+		TenantID:               scope.Tenant.Record.ID,
+		TenantSlug:             scope.Tenant.Record.Slug,
+		ProjectID:              scope.Project.Record.ID,
+		ProjectSlug:            scope.Project.Record.Slug,
+		EnvironmentID:          scope.Environment.Record.ID,
+		EnvironmentName:        scope.Environment.Record.Name,
+		AuthorizedVolumeDir:    scope.Environment.Record.VolumeDir,
+		Projection:             projection,
+	}
+	predecessor := etcd.BlueprintNativePredecessorCapture{
+		ServiceID:          render.ServiceID,
+		FixedReadRevision:  scope.ReadRevision,
+		ProjectionRevision: candidate.planning.ProjectionRevision,
+	}
 	var err error
 	render.CandidateTarget, err = domain.TargetFor(render.Strategy, render.Slot)
 	if err != nil {

@@ -14,9 +14,14 @@ import (
 
 // Admit binds assignment to the captured permission check. It never reloads the
 // current Connector or replaces credentials with a newly edited value.
-func (executor *CheckExecutor) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (executor *CheckExecutor) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
-	if item.Operation != workexecution.ConnectorCheck || item.Placement.Executor != workexecution.Controller || item.Input == nil {
+	if item.Operation != workexecution.ConnectorCheck || item.Placement.Executor != workexecution.Controller ||
+		item.Input == nil {
 		return workdispatch.Decision{}, errs.New(errs.KindValidationFailed, "connector check work is invalid")
 	}
 	loaded, err := executor.repository.Load(ctx, item.TaskID)
@@ -28,7 +33,10 @@ func (executor *CheckExecutor) Admit(ctx context.Context, request workqueue.Assi
 	digest, err := connectorchecks.PlanHash(record)
 	if err != nil || record.Owner.TaskID != item.TaskID || record.Owner.WorkItemID != item.ID ||
 		record.Owner.PlanID != item.Input.ID || digest != item.Input.SHA256 || record.Connector.Connector.ID != item.TargetID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "connector check captured input does not match its work")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"connector check captured input does not match its work",
+		)
 	}
 	if !item.Deadline.After(at) {
 		if item.AttemptNumber == 0 {
@@ -39,26 +47,42 @@ func (executor *CheckExecutor) Admit(ctx context.Context, request workqueue.Assi
 			return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, nil
 		}
 		if record.Phase != connectorchecks.CleanupRequired || request.Direction != workexecution.Recovery {
-			return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "expired connector work does not match captured cleanup")
+			return workdispatch.Decision{}, errs.New(
+				errs.KindStateConflict,
+				"expired connector work does not match captured cleanup",
+			)
 		}
 		change, err := workqueue.PrepareCleanupRetryExpiry(request.Task, request.Item, at)
 		if err != nil {
 			return workdispatch.Decision{}, err
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: connectorchecks.Key(item.TaskID), ModRevision: loaded.Revision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: connectorchecks.Key(item.TaskID), ModRevision: loaded.Revision},
+		)
 		return workdispatch.Decision{Disposition: workdispatch.NeedsAttention, Change: change}, nil
 	}
 	if request.Direction == workexecution.Recovery && record.Phase == connectorchecks.Ready {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "connector check has no started probe to clean up")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"connector check has no started probe to clean up",
+		)
 	}
 	return workdispatch.Decision{
 		Disposition: workdispatch.Dispatch,
 		Deadline:    item.Deadline,
-		Change:      workqueue.Change{Conditions: []keyvalue.Condition{{Key: connectorchecks.Key(item.TaskID), ModRevision: loaded.Revision}}},
+		Change: workqueue.Change{
+			Conditions: []keyvalue.Condition{{Key: connectorchecks.Key(item.TaskID), ModRevision: loaded.Revision}},
+		},
 	}, nil
 }
 
-func (executor *CheckExecutor) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (executor *CheckExecutor) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "connector check has no stop request")
 	}

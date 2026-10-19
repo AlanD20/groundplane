@@ -52,7 +52,10 @@ func PrepareDecisionFence(request Assignment) (Change, error) {
 			dependency.Item.Outcome != workexecution.Succeeded {
 			return Change{}, invalid("Controller decision dependency is not settled")
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ItemKey(dependency.Item.ID), ModRevision: dependency.Revision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: ItemKey(dependency.Item.ID), ModRevision: dependency.Revision},
+		)
 	}
 	for index, claim := range request.Claims {
 		if claim.Claim != item.Claims[index] || claim.Owner != nil || claim.Revision != 0 {

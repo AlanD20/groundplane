@@ -27,7 +27,10 @@ func ReadLocal(ctx context.Context, store Reader, revision int64) (Snapshot, err
 	if anchor.Revision == 0 {
 		return Snapshot{}, errs.New(errs.KindStateConflict, "enroll an Agent before creating host work")
 	}
-	owners, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{HostKey(anchor.Record)}, Revision: anchor.ReadRevision})
+	owners, err := store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{HostKey(anchor.Record)}, Revision: anchor.ReadRevision},
+	)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -50,7 +53,10 @@ func ReadLocal(ctx context.Context, store Reader, revision int64) (Snapshot, err
 	if err != nil {
 		return Snapshot{}, err
 	}
-	snapshot.Conditions = append(snapshot.Conditions, keyvalue.Condition{Key: localHostKey, ModRevision: anchor.Revision})
+	snapshot.Conditions = append(
+		snapshot.Conditions,
+		keyvalue.Condition{Key: localHostKey, ModRevision: anchor.Revision},
+	)
 	return snapshot, nil
 }
 
@@ -97,7 +103,10 @@ func PrepareLocalEnrollment(ctx context.Context, store Reader, agentID string) (
 			keyvalue.ClearMutationValues(change.Mutations)
 			return workqueue.Change{}, err
 		}
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: localHostKey, Value: value})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: localHostKey, Value: value},
+		)
 	}
 	return change, nil
 }

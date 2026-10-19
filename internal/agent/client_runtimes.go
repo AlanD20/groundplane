@@ -239,7 +239,10 @@ func (c *Client) SetEnvironmentExecutor(executor *environmentruntime.Executor) e
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.started || c.environmentExecutor != nil {
-		return errs.New(errs.KindStateConflict, "Agent Environment provisioning executor cannot change after configuration")
+		return errs.New(
+			errs.KindStateConflict,
+			"Agent Environment provisioning executor cannot change after configuration",
+		)
 	}
 	c.environmentExecutor = executor
 	return nil

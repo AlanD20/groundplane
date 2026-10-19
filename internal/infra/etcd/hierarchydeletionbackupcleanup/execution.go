@@ -78,10 +78,14 @@ func (execution Execution) conditions(forward bool) ([]keyvalue.Condition, error
 	if err != nil {
 		return nil, err
 	}
-	return append(conditions,
+	return append(
+		conditions,
 		keyvalue.Condition{Key: workqueue.TaskKey(view.Work.Task.Task.ID), ModRevision: view.Work.Task.Revision},
 		keyvalue.Condition{Key: workqueue.ItemKey(view.Work.Item.Item.ID), ModRevision: view.Work.Item.Revision},
 		keyvalue.Condition{Key: workqueue.AttemptKey(view.Attempt.Attempt.ID), ModRevision: view.Attempt.Revision},
-		keyvalue.Condition{Key: workqueue.ExecutorKey(view.Attempt.Attempt.Executor), ModRevision: view.ExecutorRevision},
+		keyvalue.Condition{
+			Key:         workqueue.ExecutorKey(view.Attempt.Attempt.Executor),
+			ModRevision: view.ExecutorRevision,
+		},
 	), nil
 }

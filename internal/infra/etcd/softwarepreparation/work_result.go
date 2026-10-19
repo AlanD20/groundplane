@@ -34,20 +34,36 @@ func encodeOutcome(outcome Outcome) ([]byte, error) {
 	return recordcodec.Encode("software_preparation_outcome", outcome)
 }
 
-func (repository *Repository) ReadOutcome(ctx context.Context, attempt workexecution.Attempt, revision int64) (keyvalue.Versioned[Outcome], bool, error) {
+func (repository *Repository) ReadOutcome(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	revision int64,
+) (keyvalue.Versioned[Outcome], bool, error) {
 	if attempt.Validate() != nil {
-		return keyvalue.Versioned[Outcome]{}, false, errs.New(errs.KindValidationFailed, "software outcome attempt is invalid")
+		return keyvalue.Versioned[Outcome]{}, false, errs.New(
+			errs.KindValidationFailed,
+			"software outcome attempt is invalid",
+		)
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{ResultKey(attempt.ID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{ResultKey(attempt.ID)}, Revision: revision},
+	)
 	if err != nil {
 		return keyvalue.Versioned[Outcome]{}, false, err
 	}
 	if read == nil {
-		return keyvalue.Versioned[Outcome]{}, false, errs.New(errs.KindStorageUnavailable, "software outcome read is unavailable")
+		return keyvalue.Versioned[Outcome]{}, false, errs.New(
+			errs.KindStorageUnavailable,
+			"software outcome read is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 {
-		return keyvalue.Versioned[Outcome]{}, false, errs.New(errs.KindStateConflict, "software outcome snapshot is unavailable")
+		return keyvalue.Versioned[Outcome]{}, false, errs.New(
+			errs.KindStateConflict,
+			"software outcome snapshot is unavailable",
+		)
 	}
 	if read.Values[0] == nil {
 		return keyvalue.Versioned[Outcome]{ReadRevision: read.ReadRevision}, false, nil
@@ -58,19 +74,34 @@ func (repository *Repository) ReadOutcome(ctx context.Context, attempt workexecu
 	}
 	raw, err := encodeOutcome(value)
 	clear(raw)
-	if err != nil || value.TaskID != attempt.TaskID || value.WorkItemID != attempt.WorkItemID || value.AttemptID != attempt.ID || value.Input != attempt.Input {
+	if err != nil || value.TaskID != attempt.TaskID || value.WorkItemID != attempt.WorkItemID ||
+		value.AttemptID != attempt.ID ||
+		value.Input != attempt.Input {
 		return keyvalue.Versioned[Outcome]{}, false, errs.New(errs.KindInternal, "software outcome owner is corrupt")
 	}
-	return keyvalue.Versioned[Outcome]{Record: value, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, true, nil
+	return keyvalue.Versioned[Outcome]{
+		Record:       value,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, true, nil
 }
 
 // RecordOutcome joins terminal artifact progress with exact-attempt cleanup
 // proof. Unknown cleanup can later be refined, never rewritten after settlement.
-func (repository *Repository) RecordOutcome(ctx context.Context, queue *workqueue.Repository, attempt workexecution.Attempt,
-	progress preparation.Progress, cleaned bool, at time.Time,
+func (repository *Repository) RecordOutcome(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	attempt workexecution.Attempt,
+	progress preparation.Progress,
+	cleaned bool,
+	at time.Time,
 ) error {
-	if progress.Phase != preparation.PhaseFailed && progress.Phase != preparation.PhaseVerified || progress.Phase == preparation.PhaseVerified && !cleaned {
-		return errs.New(errs.KindValidationFailed, "software outcome requires a terminal preparation and explicit cleanup proof")
+	if progress.Phase != preparation.PhaseFailed && progress.Phase != preparation.PhaseVerified ||
+		progress.Phase == preparation.PhaseVerified && !cleaned {
+		return errs.New(
+			errs.KindValidationFailed,
+			"software outcome requires a terminal preparation and explicit cleanup proof",
+		)
 	}
 	view, snapshot, err := repository.activeWork(ctx, queue, attempt)
 	if err != nil {
@@ -105,12 +136,22 @@ func (repository *Repository) RecordOutcome(ctx context.Context, queue *workqueu
 	if err != nil {
 		return err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ResultKey(attempt.ID), ModRevision: previous.Revision})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ResultKey(attempt.ID), Value: raw})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: ResultKey(attempt.ID), ModRevision: previous.Revision},
+	)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ResultKey(attempt.ID), Value: raw},
+	)
 	return repository.commitWork(ctx, view, change)
 }
 
-func PrepareResult(snapshot WorkSnapshot, saved keyvalue.Versioned[Outcome], attempt workexecution.Attempt) (workqueue.Change, workexecution.Completion, error) {
+func PrepareResult(
+	snapshot WorkSnapshot,
+	saved keyvalue.Versioned[Outcome],
+	attempt workexecution.Attempt,
+) (workqueue.Change, workexecution.Completion, error) {
 	outcome := saved.Record
 	rawRecord, err := Encode(snapshot.Record.Record)
 	if err != nil {
@@ -124,7 +165,10 @@ func PrepareResult(snapshot WorkSnapshot, saved keyvalue.Versioned[Outcome], att
 	}
 	if saved.Revision <= 0 || outcome.RecordSHA256 != hex.EncodeToString(digest[:]) || reference != attempt.Input ||
 		outcome.Input != reference || outcome.TaskID != attempt.TaskID || outcome.WorkItemID != attempt.WorkItemID || outcome.AttemptID != attempt.ID {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "software preparation result differs from its accepted evidence")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"software preparation result differs from its accepted evidence",
+		)
 	}
 	raw, err := encodeOutcome(outcome)
 	if err != nil {
@@ -133,11 +177,18 @@ func PrepareResult(snapshot WorkSnapshot, saved keyvalue.Versioned[Outcome], att
 	defer clear(raw)
 	digest = sha256.Sum256(raw)
 	result := workexecution.Completion{Outcome: workexecution.Failed, EffectsSettled: outcome.Cleaned,
-		Evidence: workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, snapshot.Capture.CreatedAt, attempt.ID, "software-preparation-result"), SHA256: hex.EncodeToString(digest[:])}}
-	if outcome.Cleaned && (snapshot.Record.Record.Progress.Phase == preparation.PhaseVerified || attempt.Direction == workexecution.Recovery) {
+		Evidence: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, snapshot.Capture.CreatedAt, attempt.ID, "software-preparation-result"),
+			SHA256: hex.EncodeToString(digest[:]),
+		}}
+	if outcome.Cleaned &&
+		(snapshot.Record.Record.Progress.Phase == preparation.PhaseVerified || attempt.Direction == workexecution.Recovery) {
 		result.Outcome = workexecution.Succeeded
 	}
 	change := snapshot.Guard()
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ResultKey(attempt.ID), ModRevision: saved.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: ResultKey(attempt.ID), ModRevision: saved.Revision},
+	)
 	return change, result, nil
 }

@@ -46,7 +46,10 @@ func InputKey(workID string) string { return "/v1/execution/service-lifecycle/in
 func (input Input) Validate() error {
 	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil ||
 		ids.Validate(ids.KindPlan, input.PlanID) != nil || ids.Validate(ids.KindService, input.ServiceID) != nil ||
-		ids.Validate(ids.KindEnvironment, input.Scope.EnvironmentID) != nil || ids.Validate(ids.KindProject, input.Scope.ProjectID) != nil ||
+		ids.Validate(
+			ids.KindEnvironment,
+			input.Scope.EnvironmentID,
+		) != nil || ids.Validate(ids.KindProject, input.Scope.ProjectID) != nil ||
 		input.Scope.TenantID != "" && ids.Validate(ids.KindTenant, input.Scope.TenantID) != nil ||
 		input.ServiceRevision <= 0 || !recordcodec.IsCanonicalUTC(input.CreatedAt) ||
 		(input.Action != workexecution.ActionStart && input.Action != workexecution.ActionStop && input.Action != workexecution.ActionDestroy) {
@@ -59,9 +62,13 @@ func (input Input) Validate() error {
 		return nil
 	}
 	runtime := input.Runtime
-	if ids.Validate(ids.KindHost, input.HostID) != nil || releaserender.ValidateServiceLifecycleRenderInput(*runtime) != nil ||
-		runtime.PlanID != input.PlanID || runtime.ServiceID != input.ServiceID || runtime.EnvironmentID != input.Scope.EnvironmentID ||
-		runtime.ProjectID != input.Scope.ProjectID || runtime.TenantID != input.Scope.TenantID ||
+	if ids.Validate(ids.KindHost, input.HostID) != nil ||
+		releaserender.ValidateServiceLifecycleRenderInput(*runtime) != nil ||
+		runtime.PlanID != input.PlanID ||
+		runtime.ServiceID != input.ServiceID ||
+		runtime.EnvironmentID != input.Scope.EnvironmentID ||
+		runtime.ProjectID != input.Scope.ProjectID ||
+		runtime.TenantID != input.Scope.TenantID ||
 		runtime.AcknowledgedRuntime != nil && runtime.AcknowledgedRuntime.Source.Executor.HostID != input.HostID {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle runtime differs from its captured target")
 	}

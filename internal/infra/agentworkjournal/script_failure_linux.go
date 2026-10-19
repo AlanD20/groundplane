@@ -9,7 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareScriptFailure(ctx context.Context, attempt workexecution.Attempt) (ScriptFailureDelivery, error) {
+func (journal *Journal) PrepareScriptFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (ScriptFailureDelivery, error) {
 	if attempt.Validate() != nil || attempt.FinishedAt != nil {
 		return ScriptFailureDelivery{}, invalid()
 	}
@@ -45,7 +48,10 @@ func (journal *Journal) PrepareScriptFailure(ctx context.Context, attempt workex
 	return *state.ScriptFailure, nil
 }
 
-func (journal *Journal) LoadScriptFailure(ctx context.Context, attempt workexecution.Attempt) (*ScriptFailureDelivery, error) {
+func (journal *Journal) LoadScriptFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (*ScriptFailureDelivery, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -61,8 +67,13 @@ func (journal *Journal) LoadScriptFailure(ctx context.Context, attempt workexecu
 	return state.ScriptFailure, nil
 }
 
-func (journal *Journal) AcknowledgeScriptFailure(ctx context.Context, attempt workexecution.Attempt, ack *agentpb.ScriptWorkFailureAck) (workexecution.Attempt, error) {
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil {
+func (journal *Journal) AcknowledgeScriptFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	ack *agentpb.ScriptWorkFailureAck,
+) (workexecution.Attempt, error) {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil {
 		return workexecution.Attempt{}, invalid()
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, attempt.Executor)

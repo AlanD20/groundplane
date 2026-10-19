@@ -74,7 +74,8 @@ func (ledger *ReleaseLedger) prepareBlueprintReleaseHistory(
 	}
 	member := manifest.Members[0]
 	intent, err := releases.DecodeReleaseRecord[domain.Intent](read.Values[0].Value, "release-intent")
-	if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != release.ReleaseId || intent.ServiceID != release.ServiceId ||
+	if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != release.ReleaseId ||
+		intent.ServiceID != release.ServiceId ||
 		intent.EnvironmentID != release.EnvironmentId ||
 		intent.OperationID != release.OperationId ||
 		intent.OriginatingTaskID != input.Attempt.TaskID ||

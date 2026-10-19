@@ -99,7 +99,8 @@ func (record Record) Validate() error {
 	if record.Phase != Uncertain && record.UncertainPhase != "" {
 		return invalid()
 	}
-	if record.Input.Validate() != nil || !recordcodec.IsCanonicalUTC(record.UpdatedAt) || record.UpdatedAt.Before(record.Input.CreatedAt) {
+	if record.Input.Validate() != nil || !recordcodec.IsCanonicalUTC(record.UpdatedAt) ||
+		record.UpdatedAt.Before(record.Input.CreatedAt) {
 		return invalid()
 	}
 	if record.AttemptID != "" && ids.Validate(ids.KindAttempt, record.AttemptID) != nil {
@@ -114,7 +115,8 @@ func (record Record) Validate() error {
 		}
 		switch record.Outcome {
 		case workexecution.Succeeded:
-			if record.AttemptID == "" || record.Input.Fetch != nil && record.ImageID != record.Input.Fetch.ConfigDigest {
+			if record.AttemptID == "" ||
+				record.Input.Fetch != nil && record.ImageID != record.Input.Fetch.ConfigDigest {
 				return invalid()
 			}
 		case workexecution.Failed, workexecution.Cancelled, workexecution.Superseded:
@@ -148,7 +150,8 @@ func (record Record) Validate() error {
 			return invalid()
 		}
 	case Uncertain:
-		if record.AttemptID == "" || record.UncertainPhase != Fetching && record.UncertainPhase != Tagging && record.UncertainPhase != Removing {
+		if record.AttemptID == "" ||
+			record.UncertainPhase != Fetching && record.UncertainPhase != Tagging && record.UncertainPhase != Removing {
 			return invalid()
 		}
 		previous := record

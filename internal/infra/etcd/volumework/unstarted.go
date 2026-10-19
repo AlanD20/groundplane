@@ -24,7 +24,11 @@ type UnstartedResult struct {
 	At         time.Time             `json:"at"`
 }
 
-func (repository *InputRepository) PrepareUnstarted(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareUnstarted(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Cleanup != workexecution.CleanupNone ||
 		item.Input == nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
@@ -54,7 +58,12 @@ func (repository *InputRepository) PrepareUnstarted(ctx context.Context, view wo
 	digest := sha256.Sum256(value)
 	change, err := workqueue.PrepareUnstartedSettlement(view.Task, view.Item, workexecution.Completion{
 		Outcome: outcome, EffectsSettled: true, Evidence: workexecution.Input{
-			ID: ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "volume-unstarted"), SHA256: hex.EncodeToString(digest[:])},
+			ID: ids.DeriveAt(
+				ids.KindPlan,
+				item.CreatedAt,
+				item.ID,
+				"volume-unstarted",
+			), SHA256: hex.EncodeToString(digest[:])},
 	}, at)
 	if err != nil {
 		clear(value)
@@ -62,6 +71,9 @@ func (repository *InputRepository) PrepareUnstarted(ctx context.Context, view wo
 	}
 	change.Conditions = append(change.Conditions, guards...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: UnstartedKey(item.ID)})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: UnstartedKey(item.ID), Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: UnstartedKey(item.ID), Value: value},
+	)
 	return change, nil
 }

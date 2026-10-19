@@ -35,14 +35,19 @@ type ProvisionInspection struct {
 func (report ProvisionInspection) Validate(input ProvisionRecoveryInput) error {
 	if input.Validate() != nil || input.Attempt.StartedAt == nil && report.State != InspectionInterrupted ||
 		report.AttemptID != input.Attempt.ID || report.ForwardID != input.Source.Forward.ID || report.Failure != input.Source.Evidence ||
-		report.CommandOrdinal != uint32((input.Source.Failure.Checkpoint.Sequence-1)/2) || report.PreparedCommands > 16 ||
+		report.CommandOrdinal != uint32(
+			(input.Source.Failure.Checkpoint.Sequence-1)/2,
+		) || report.PreparedCommands > 16 ||
 		report.ObservedAt.IsZero() || report.ObservedAt.Location() != time.UTC || report.ObservedAt.Before(input.Attempt.AssignedAt) ||
 		input.Attempt.StartedAt != nil && report.ObservedAt.Before(*input.Attempt.StartedAt) {
 		return invalid("Attach provisioning inspection does not match its captured command")
 	}
 	completed := input.Source.Failure.Checkpoint.Sequence%2 == 0
-	if input.RequiresConsumer() && report.State != ProvisionConsumerInspected && report.State != CommandJournalLost && report.State != InspectionInterrupted {
-		return invalid("Attach connection inspection requires network-helper evidence, not backing-container exec state")
+	if input.RequiresConsumer() && report.State != ProvisionConsumerInspected && report.State != CommandJournalLost &&
+		report.State != InspectionInterrupted {
+		return invalid(
+			"Attach connection inspection requires network-helper evidence, not backing-container exec state",
+		)
 	}
 	if report.State != ProvisionConsumerInspected && (report.Consumer != nil || report.HelperStopped) {
 		return invalid("Attach inspection contains unrelated network evidence")
@@ -50,20 +55,30 @@ func (report ProvisionInspection) Validate(input ProvisionRecoveryInput) error {
 	switch report.State {
 	case ProvisionConsumerInspected:
 		consumer, authority := report.Consumer, input.Source.Failure.Authority
-		if !input.RequiresConsumer() || consumer == nil || !report.HelperStopped || report.PreparedCommands != 0 || report.ContainerID != "" || report.ExecID != "" || report.ExitCode != nil ||
-			consumer.NetworkID != authority.ConsumerNetworkID || consumer.ServiceID != authority.ConsumerServiceID || consumer.CandidateSHA256 != authority.ConsumerCandidateSHA256 || !consumer.ObservedAt.Equal(report.ObservedAt) {
+		if !input.RequiresConsumer() || consumer == nil || !report.HelperStopped || report.PreparedCommands != 0 ||
+			report.ContainerID != "" ||
+			report.ExecID != "" ||
+			report.ExitCode != nil ||
+			consumer.NetworkID != authority.ConsumerNetworkID ||
+			consumer.ServiceID != authority.ConsumerServiceID ||
+			consumer.CandidateSHA256 != authority.ConsumerCandidateSHA256 ||
+			!consumer.ObservedAt.Equal(report.ObservedAt) {
 			return invalid("Attach connection inspection has incomplete helper or membership evidence")
 		}
 	case ProvisionCommandCompleted:
-		if !completed || report.PreparedCommands != 0 || report.ContainerID != "" || report.ExecID != "" || report.ExitCode != nil {
+		if !completed || report.PreparedCommands != 0 || report.ContainerID != "" || report.ExecID != "" ||
+			report.ExitCode != nil {
 			return invalid("Attach completion inspection requires the acknowledged command result")
 		}
 	case CommandNotCreated, CommandJournalLost, InspectionInterrupted:
-		if report.State == CommandNotCreated && completed || report.PreparedCommands != 0 || report.ContainerID != "" || report.ExecID != "" || report.ExitCode != nil {
+		if report.State == CommandNotCreated && completed || report.PreparedCommands != 0 || report.ContainerID != "" ||
+			report.ExecID != "" ||
+			report.ExitCode != nil {
 			return invalid("Attach inspection claims command state without its journal")
 		}
 	case CommandNotPermitted, CommandExited, CommandRunning, CommandUnobservable:
-		if completed || report.PreparedCommands == 0 || !ids.ValidContainerID(report.ContainerID) || !ids.ValidContainerID(report.ExecID) ||
+		if completed || report.PreparedCommands == 0 || !ids.ValidContainerID(report.ContainerID) ||
+			!ids.ValidContainerID(report.ExecID) ||
 			(report.State == CommandExited) != (report.ExitCode != nil) {
 			return invalid("Attach provisioning inspection process evidence is incomplete")
 		}
@@ -74,10 +89,17 @@ func (report ProvisionInspection) Validate(input ProvisionRecoveryInput) error {
 }
 
 func (report ProvisionInspection) ExecutionStopped() bool {
-	return report.State == ProvisionCommandCompleted || report.State == ProvisionConsumerInspected && report.HelperStopped || report.State == CommandNotCreated || report.State == CommandNotPermitted || report.State == CommandExited
+	return report.State == ProvisionCommandCompleted ||
+		report.State == ProvisionConsumerInspected && report.HelperStopped ||
+		report.State == CommandNotCreated ||
+		report.State == CommandNotPermitted ||
+		report.State == CommandExited
 }
 
-func EncodeProvisionInspection(input ProvisionRecoveryInput, report ProvisionInspection) ([]byte, workexecution.Input, error) {
+func EncodeProvisionInspection(
+	input ProvisionRecoveryInput,
+	report ProvisionInspection,
+) ([]byte, workexecution.Input, error) {
 	if err := report.Validate(input); err != nil {
 		return nil, workexecution.Input{}, err
 	}
@@ -94,10 +116,17 @@ func EncodeProvisionInspection(input ProvisionRecoveryInput, report ProvisionIns
 		return nil, workexecution.Input{}, err
 	}
 	digest := sha256.Sum256(raw)
-	return raw, workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, at, input.Attempt.ID, "attach-provision/inspection"), SHA256: hex.EncodeToString(digest[:])}, nil
+	return raw, workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, at, input.Attempt.ID, "attach-provision/inspection"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }
 
-func DecodeProvisionInspection(input ProvisionRecoveryInput, raw []byte, evidence workexecution.Input) (ProvisionInspection, error) {
+func DecodeProvisionInspection(
+	input ProvisionRecoveryInput,
+	raw []byte,
+	evidence workexecution.Input,
+) (ProvisionInspection, error) {
 	if len(raw) == 0 || len(raw) > MaximumProvisionRecoveryBytes {
 		return ProvisionInspection{}, invalid("Attach provisioning inspection is missing or oversized")
 	}

@@ -10,7 +10,10 @@ import (
 
 // InspectRemoval never invokes an adapter or hook, changes a container, or
 // infers that a missing journal means the command did not execute.
-func (host *BackingHost) InspectRemoval(ctx context.Context, input attachexecution.RecoveryInput) (attachexecution.RemovalInspection, error) {
+func (host *BackingHost) InspectRemoval(
+	ctx context.Context,
+	input attachexecution.RecoveryInput,
+) (attachexecution.RemovalInspection, error) {
 	if err := input.Validate(); err != nil {
 		return attachexecution.RemovalInspection{}, err
 	}

@@ -10,11 +10,31 @@ import (
 )
 
 type LifecycleReporter interface {
-	RecoverLifecycle(context.Context, agentregistration.WorkAuthorization, *agentpb.ServiceLifecycleRecoveryReportRequest) (*agentpb.ServiceLifecycleRecoveryReportAck, error)
-	DeliverLifecycleHook(context.Context, agentregistration.WorkAuthorization, *agentpb.ServiceLifecycleHookRequest) (*agentpb.ServiceLifecycleHookDelivery, error)
-	CheckpointLifecycle(context.Context, agentregistration.WorkAuthorization, *agentpb.ServiceLifecycleCheckpointRequest) (*agentpb.ServiceLifecycleCheckpointAck, error)
-	CompleteLifecycle(context.Context, agentregistration.WorkAuthorization, *agentpb.ServiceLifecycleCompletionRequest) (*agentpb.ServiceLifecycleCompletionAck, error)
-	FailLifecycle(context.Context, agentregistration.WorkAuthorization, *agentpb.ServiceLifecycleFailureRequest) (*agentpb.ServiceLifecycleFailureAck, error)
+	RecoverLifecycle(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ServiceLifecycleRecoveryReportRequest,
+	) (*agentpb.ServiceLifecycleRecoveryReportAck, error)
+	DeliverLifecycleHook(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ServiceLifecycleHookRequest,
+	) (*agentpb.ServiceLifecycleHookDelivery, error)
+	CheckpointLifecycle(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ServiceLifecycleCheckpointRequest,
+	) (*agentpb.ServiceLifecycleCheckpointAck, error)
+	CompleteLifecycle(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ServiceLifecycleCompletionRequest,
+	) (*agentpb.ServiceLifecycleCompletionAck, error)
+	FailLifecycle(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ServiceLifecycleFailureRequest,
+	) (*agentpb.ServiceLifecycleFailureAck, error)
 }
 
 func (server *Server) ConfigureServiceLifecycle(reports LifecycleReporter) {
@@ -33,7 +53,11 @@ func clearLifecycleHookReply(message *agentpb.ControllerMessage) {
 	}
 }
 
-func (server *Server) lifecycleReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
+func (server *Server) lifecycleReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
 	if message.GetServiceLifecycleHookRequest() == nil && message.GetServiceLifecycleCheckpointRequest() == nil {
 		return false, nil, nil
 	}

@@ -14,9 +14,16 @@ import (
 // ReleaseNetworkWorkInputs selects only internal-DNS bridges from the frozen
 // release artifact. Each returned input owns one bridge and can use the native
 // Network executor; no hidden Task or generic plan is manufactured.
-func ReleaseNetworkWorkInputs(source *agentpb.ComposeArtifact, intentSHA []byte, seed string) ([]*agentpb.NetworkWorkInput, error) {
+func ReleaseNetworkWorkInputs(
+	source *agentpb.ComposeArtifact,
+	intentSHA []byte,
+	seed string,
+) ([]*agentpb.NetworkWorkInput, error) {
 	if source == nil || len(intentSHA) != sha256.Size || ids.Validate(ids.KindConfig, seed) != nil {
-		return nil, errs.New(errs.KindValidationFailed, "Release network preparation requires its captured artifact and intent")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Release network preparation requires its captured artifact and intent",
+		)
 	}
 	at, err := ids.Timestamp(ids.KindConfig, seed)
 	if err != nil {

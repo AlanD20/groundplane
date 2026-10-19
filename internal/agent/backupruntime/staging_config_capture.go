@@ -34,8 +34,12 @@ func (state *Staging) ConfigCapture(ctx context.Context, assignment *agentpb.Bac
 	if err != nil {
 		return CaptureStage{}, err
 	}
-	if content.SourceSizeBytes > math.MaxUint64-storedSize || content.SourceSizeBytes+storedSize > math.MaxUint64-journalGrowth {
-		return CaptureStage{}, errs.New(errs.KindStateConflict, "Config capture staging reservation exceeds its size limit")
+	if content.SourceSizeBytes > math.MaxUint64-storedSize ||
+		content.SourceSizeBytes+storedSize > math.MaxUint64-journalGrowth {
+		return CaptureStage{}, errs.New(
+			errs.KindStateConflict,
+			"Config capture staging reservation exceeds its size limit",
+		)
 	}
 	ids := backupstage.IDs{Task: attempt.TaskID, Step: step.ExecutionId, Point: step.GetCapture().PointId}
 	state.mu.Lock()
@@ -52,33 +56,51 @@ func (state *Staging) ConfigCapture(ctx context.Context, assignment *agentpb.Bac
 			switch file.Evidence.Name {
 			case executionplan.BackupSourceStagingFinal:
 				if result.Source != nil || file.Evidence.Size > content.SourceSizeBytes {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Config source exceeds its captured size")
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Recovered Config source exceeds its captured size",
+					)
 				}
 				result.Source, result.SourceEvidence = file.Artifact, file.Evidence
 			case executionplan.BackupStoredStagingFinal:
 				if result.Stored != nil || file.Evidence.Size != storedSize {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Config object has an invalid size")
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Recovered Config object has an invalid size",
+					)
 				}
 				result.Stored = file.Artifact
 			default:
-				return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Config stage contains an unexpected file")
+				return CaptureStage{}, errs.New(
+					errs.KindStateConflict,
+					"Recovered Config stage contains an unexpected file",
+				)
 			}
 			if prepared := resume.GetPreparedArtifact(); prepared != nil {
 				evidence := prepared.GetEvidence()
 				if evidence == nil || prepared.PointId != ids.Point {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Config capture lacks acknowledged artifact evidence")
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Config capture lacks acknowledged artifact evidence",
+					)
 				}
 				size, digest := evidence.SourceSizeBytes, evidence.SourceSha256
 				if file.Evidence.Name == executionplan.BackupStoredStagingFinal {
 					size, digest = evidence.StoredSizeBytes, evidence.StoredSha256
 				}
 				if size != file.Evidence.Size || !bytes.Equal(digest, file.Evidence.SHA256[:]) {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Config bytes differ from acknowledged evidence")
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Recovered Config bytes differ from acknowledged evidence",
+					)
 				}
 			}
 		}
 		if result.Source == nil || resume.GetPreparedArtifact() != nil && result.Stored == nil {
-			return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Config capture is missing required files")
+			return CaptureStage{}, errs.New(
+				errs.KindStateConflict,
+				"Recovered Config capture is missing required files",
+			)
 		}
 		result.Stage = retained.Stage
 		state.active[ids] = retained.Stage

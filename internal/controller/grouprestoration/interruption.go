@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (service *Service) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (service *Service) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	input, err := service.LoadRecoveryInput(ctx, view)
 	if err != nil {
 		return err

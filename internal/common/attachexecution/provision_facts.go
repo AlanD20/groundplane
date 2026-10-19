@@ -11,7 +11,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func EncodeProvisionFacts(input ProvisionInput, output backinghook.Output) (*agentpb.AttachProvisionFactsRequest, error) {
+func EncodeProvisionFacts(
+	input ProvisionInput,
+	output backinghook.Output,
+) (*agentpb.AttachProvisionFactsRequest, error) {
 	if input.Validate() != nil || input.Provision.GetCustomAttach() == nil {
 		return nil, invalid("Attach facts require a captured Custom hook")
 	}
@@ -31,7 +34,10 @@ func EncodeProvisionFacts(input ProvisionInput, output backinghook.Output) (*age
 	for _, definition := range schema {
 		for _, fact := range output.Facts {
 			if fact.Key == definition.Key {
-				request.Facts = append(request.Facts, &agentpb.BackingHookValue{Key: fact.Key, Value: append([]byte(nil), fact.Value...)})
+				request.Facts = append(
+					request.Facts,
+					&agentpb.BackingHookValue{Key: fact.Key, Value: append([]byte(nil), fact.Value...)},
+				)
 				break
 			}
 		}
@@ -39,7 +45,10 @@ func EncodeProvisionFacts(input ProvisionInput, output backinghook.Output) (*age
 	return request, nil
 }
 
-func DecodeProvisionFacts(input ProvisionInput, request *agentpb.AttachProvisionFactsRequest) (backinghook.Output, []byte, error) {
+func DecodeProvisionFacts(
+	input ProvisionInput,
+	request *agentpb.AttachProvisionFactsRequest,
+) (backinghook.Output, []byte, error) {
 	if input.Validate() != nil || input.Provision.GetCustomAttach() == nil || request == nil ||
 		executionplan.RejectUnknown(request) != nil || proto.Size(request) > executionplan.MaximumPlanBytes {
 		return backinghook.Output{}, nil, invalid("Attach facts request is malformed or oversized")
@@ -62,7 +71,10 @@ func DecodeProvisionFacts(input ProvisionInput, request *agentpb.AttachProvision
 			output.Clear()
 			return backinghook.Output{}, nil, invalid("Attach facts are not in captured schema order")
 		}
-		output.Facts = append(output.Facts, backinghook.Fact{Key: fact.Key, Secret: definition.Secret, Value: append([]byte(nil), fact.Value...)})
+		output.Facts = append(
+			output.Facts,
+			backinghook.Fact{Key: fact.Key, Secret: definition.Secret, Value: append([]byte(nil), fact.Value...)},
+		)
 	}
 	if err := backinghook.ValidateOutput(schema, output); err != nil {
 		output.Clear()
@@ -78,7 +90,11 @@ func DecodeProvisionFacts(input ProvisionInput, request *agentpb.AttachProvision
 	return output, append([]byte(nil), digest[:]...), nil
 }
 
-func ValidateProvisionFactsAck(input ProvisionInput, request *agentpb.AttachProvisionFactsRequest, ack *agentpb.AttachProvisionFactsAck) error {
+func ValidateProvisionFactsAck(
+	input ProvisionInput,
+	request *agentpb.AttachProvisionFactsRequest,
+	ack *agentpb.AttachProvisionFactsAck,
+) error {
 	if ack == nil || executionplan.RejectUnknown(ack) != nil {
 		return invalid("Attach facts acknowledgement is malformed")
 	}

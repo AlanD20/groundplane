@@ -29,7 +29,10 @@ func NewAbortService(queue *workqueue.Repository) (*taskAbortService, error) {
 // each work item through its operation owner; claims and active attempts remain
 // protected until their effects have been reconciled. Repeated cancellation is
 // naturally idempotent on this Task and never creates another execution.
-func (service *taskAbortService) AbortTask(ctx context.Context, taskID, _ string) (idempotencyrecord.IdempotencyResponse, error) {
+func (service *taskAbortService) AbortTask(
+	ctx context.Context,
+	taskID, _ string,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "task abort context is required")
 	}
@@ -49,7 +52,10 @@ func (service *taskAbortService) AbortTask(ctx context.Context, taskID, _ string
 			if task.Outcome == workexecution.Cancelled {
 				return taskAbortResponse(taskID)
 			}
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindTaskNotAbortable, "task has already finished")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindTaskNotAbortable,
+				"task has already finished",
+			)
 		}
 		if err := workexecution.CancellationFailure(task); err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
@@ -58,7 +64,10 @@ func (service *taskAbortService) AbortTask(ctx context.Context, taskID, _ string
 			if task.Stop.Outcome == workexecution.Cancelled {
 				return taskAbortResponse(taskID)
 			}
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindTaskNotAbortable, "task is already superseded")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindTaskNotAbortable,
+				"task is already superseded",
+			)
 		}
 		at := time.Now().UTC()
 		if at.Before(task.UpdatedAt) {
@@ -76,7 +85,10 @@ func (service *taskAbortService) AbortTask(ctx context.Context, taskID, _ string
 			return taskAbortResponse(taskID)
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "task changed repeatedly while requesting cancellation; retry the request")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindStateConflict,
+		"task changed repeatedly while requesting cancellation; retry the request",
+	)
 }
 
 func taskAbortResponse(taskID string) (idempotencyrecord.IdempotencyResponse, error) {
@@ -84,5 +96,9 @@ func taskAbortResponse(taskID string) (idempotencyrecord.IdempotencyResponse, er
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return idempotencyrecord.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}, nil
+	return idempotencyrecord.IdempotencyResponse{
+		Status:      http.StatusAccepted,
+		ContentKind: "application/json",
+		Body:        body,
+	}, nil
 }

@@ -29,7 +29,12 @@ type InputPreparation struct {
 	groups *releasegroups.ExecutionRepository
 }
 
-func NewInputPreparation(ledger *etcd.ReleaseLedger, queue *workqueue.Repository, work *blueprintrelease.Service, groups *releasegroups.ExecutionRepository) (*InputPreparation, error) {
+func NewInputPreparation(
+	ledger *etcd.ReleaseLedger,
+	queue *workqueue.Repository,
+	work *blueprintrelease.Service,
+	groups *releasegroups.ExecutionRepository,
+) (*InputPreparation, error) {
 	if ledger == nil || queue == nil || work == nil || groups == nil {
 		return nil, errs.New(errs.KindInternal, "Direct Release preparation dependencies are not configured")
 	}
@@ -126,7 +131,10 @@ func (owner *InputPreparation) Prepare(ctx context.Context, taskID, workID strin
 	}
 	defer keyvalue.ZeroMutationBytes(change.Mutations)
 	if !time.Now().Before(view.Task.Task.Deadline) || !time.Now().Before(view.Item.Item.Deadline) {
-		return errors.Join(errs.New(errs.KindStateConflict, "Direct Release input preparation exceeded its deadline"), prepared.Abandon(ctx))
+		return errors.Join(
+			errs.New(errs.KindStateConflict, "Direct Release input preparation exceeded its deadline"),
+			prepared.Abandon(ctx),
+		)
 	}
 	result, err := owner.queue.Commit(ctx, change)
 	if err != nil {
@@ -136,7 +144,10 @@ func (owner *InputPreparation) Prepare(ctx context.Context, taskID, workID strin
 	}
 	keyvalue.ClearValues(result.FailureReads)
 	if !result.Succeeded {
-		return errors.Join(errs.New(errs.KindStateConflict, "Direct Release inputs changed during preparation"), prepared.Abandon(ctx))
+		return errors.Join(
+			errs.New(errs.KindStateConflict, "Direct Release inputs changed during preparation"),
+			prepared.Abandon(ctx),
+		)
 	}
 	return nil
 }

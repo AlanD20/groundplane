@@ -16,7 +16,11 @@ type EnvironmentRecoverySnapshot struct {
 	Revision int64
 }
 
-func LoadEnvironmentRecovery(ctx context.Context, reader EnvironmentReportReader, view workqueue.View) (EnvironmentRecoverySnapshot, error) {
+func LoadEnvironmentRecovery(
+	ctx context.Context,
+	reader EnvironmentReportReader,
+	view workqueue.View,
+) (EnvironmentRecoverySnapshot, error) {
 	item := view.Item.Item
 	if item.Operation != workexecution.Hierarchy || item.Input == nil || view.ReadRevision <= 0 {
 		return EnvironmentRecoverySnapshot{}, CorruptHierarchyDeletion()
@@ -40,7 +44,8 @@ func LoadEnvironmentRecovery(ctx context.Context, reader EnvironmentReportReader
 	if source.Forward.TaskID != view.Task.Task.ID || source.Forward.WorkItemID != item.ID ||
 		source.Forward.Input != *item.Input || source.Forward.Executor.HostID != item.Placement.HostID ||
 		source.Forward.Number > item.AttemptNumber ||
-		source.Forward.Number == item.AttemptNumber && item.Phase != workexecution.Ready && item.Phase != workexecution.Waiting {
+		source.Forward.Number == item.AttemptNumber && item.Phase != workexecution.Ready &&
+			item.Phase != workexecution.Waiting {
 		return EnvironmentRecoverySnapshot{}, CorruptHierarchyDeletion()
 	}
 	return EnvironmentRecoverySnapshot{Source: source, Revision: read.Values[0].ModRevision}, nil

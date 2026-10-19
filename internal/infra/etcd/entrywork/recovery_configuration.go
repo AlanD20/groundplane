@@ -10,10 +10,15 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (repository *InputRepository) LoadRecoveryConfiguration(ctx context.Context, view workqueue.ResumeView) (entryexecution.FileInput, []taskmaterialization.Record, error) {
+func (repository *InputRepository) LoadRecoveryConfiguration(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (entryexecution.FileInput, []taskmaterialization.Record, error) {
 	var empty entryexecution.FileInput
-	if !view.ActiveAttempt || !view.CurrentExecutor || view.Attempt.Attempt.FinishedAt != nil || view.Attempt.Attempt.StartedAt == nil ||
-		view.Work.Task.Task.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil {
+	if !view.ActiveAttempt || !view.CurrentExecutor || view.Attempt.Attempt.FinishedAt != nil ||
+		view.Attempt.Attempt.StartedAt == nil ||
+		view.Work.Task.Task.FinishedAt != nil ||
+		view.Work.Task.Task.CollectionStartedAt != nil {
 		return empty, nil, conflict("Entry configuration restoration requires an active recovery attempt")
 	}
 	if _, err := repository.ExecutionSecretConditions(ctx, view.Work); err != nil {
@@ -55,7 +60,12 @@ func (repository *InputRepository) LoadRecoveryConfiguration(ctx context.Context
 		}
 		changes = append(changes, file)
 	}
-	selected, err := runtimeconfiguration.SelectRestorations(recovery.Input.EnvironmentId, recovery.Input.RenderGeneration, prior, changes)
+	selected, err := runtimeconfiguration.SelectRestorations(
+		recovery.Input.EnvironmentId,
+		recovery.Input.RenderGeneration,
+		prior,
+		changes,
+	)
 	if err != nil {
 		return empty, nil, err
 	}
@@ -72,5 +82,10 @@ func (repository *InputRepository) LoadRecoveryConfiguration(ctx context.Context
 		}
 		return 0
 	})
-	return entryexecution.FileInput{Attempt: view.Attempt.Attempt, Procedure: recovery.Input, Recovery: &recovery.Source, Progress: recovery.Boundary}, files, nil
+	return entryexecution.FileInput{
+		Attempt:   view.Attempt.Attempt,
+		Procedure: recovery.Input,
+		Recovery:  &recovery.Source,
+		Progress:  recovery.Boundary,
+	}, files, nil
 }

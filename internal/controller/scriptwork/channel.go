@@ -23,8 +23,16 @@ func (service *Service) CompleteScript(ctx context.Context, authorization agentr
 	if err != nil {
 		return nil, err
 	}
-	attempt, err := service.Complete(ctx, authorization, claimed, request.CheckpointSequence,
-		workexecution.Input{ID: request.CheckpointEvidence.InputId, SHA256: hex.EncodeToString(request.CheckpointEvidence.Sha256)})
+	attempt, err := service.Complete(
+		ctx,
+		authorization,
+		claimed,
+		request.CheckpointSequence,
+		workexecution.Input{
+			ID:     request.CheckpointEvidence.InputId,
+			SHA256: hex.EncodeToString(request.CheckpointEvidence.Sha256),
+		},
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -49,7 +49,12 @@ func OpenVolumeHelperRequest(request *agentpb.VolumeWorkHelperRequest) (VolumeHe
 	if err != nil || !workexecution.SameAssignment(attempt, reported) {
 		return VolumeHelperInput{}, invalidVolumeWork()
 	}
-	progress, err := volumeexecution.DecodeProgress(attempt, procedure.Action, procedure.VolumeId, request.Report.Progress)
+	progress, err := volumeexecution.DecodeProgress(
+		attempt,
+		procedure.Action,
+		procedure.VolumeId,
+		request.Report.Progress,
+	)
 	if err != nil {
 		return VolumeHelperInput{}, err
 	}
@@ -71,7 +76,12 @@ func OpenVolumeHelperRequest(request *agentpb.VolumeWorkHelperRequest) (VolumeHe
 		!checkpoint.RecordedAt.Equal(ack.RecordedAt.AsTime()) {
 		return VolumeHelperInput{}, invalidVolumeWork()
 	}
-	input := VolumeHelperInput{Attempt: attempt, Procedure: procedure, Progress: progress, InspectOnly: request.InspectOnly}
+	input := VolumeHelperInput{
+		Attempt:     attempt,
+		Procedure:   procedure,
+		Progress:    progress,
+		InspectOnly: request.InspectOnly,
+	}
 	needsBatch := progress.Stage == volumeexecution.RemoveDirectory && !request.InspectOnly
 	if needsBatch != (len(request.DirectoryBatch) != 0) {
 		return VolumeHelperInput{}, invalidVolumeWork()
@@ -104,14 +114,23 @@ func ValidateVolumeHelperResponse(input VolumeHelperInput, response *agentpb.Vol
 	if evidence != input.Attempt.Input {
 		return invalidVolumeWork()
 	}
-	result, err := volumeexecution.DecodeDirectoryResult(input.Attempt, input.Progress, *input.DirectoryBatch, response.DirectoryResult)
-	if err != nil || result.Absent != response.DirectoryAbsent || !result.ObservedAt.Equal(response.ObservedAt.AsTime()) {
+	result, err := volumeexecution.DecodeDirectoryResult(
+		input.Attempt,
+		input.Progress,
+		*input.DirectoryBatch,
+		response.DirectoryResult,
+	)
+	if err != nil || result.Absent != response.DirectoryAbsent ||
+		!result.ObservedAt.Equal(response.ObservedAt.AsTime()) {
 		return invalidVolumeWork()
 	}
 	return nil
 }
 
-func ReadVolumeHelperObservation(input VolumeHelperInput, response *agentpb.VolumeWorkHelperResponse) (volumeexecution.Observation, error) {
+func ReadVolumeHelperObservation(
+	input VolumeHelperInput,
+	response *agentpb.VolumeWorkHelperResponse,
+) (volumeexecution.Observation, error) {
 	if input.Procedure == nil || response == nil || RejectUnknown(response) != nil || response.Input == nil ||
 		response.ObservedAt == nil || response.ObservedAt.CheckValid() != nil || response.Inspection != input.InspectOnly {
 		return volumeexecution.Observation{}, invalidVolumeWork()
@@ -132,7 +151,9 @@ func ReadVolumeHelperObservation(input VolumeHelperInput, response *agentpb.Volu
 	if input.InspectOnly {
 		if input.Progress.Validate(input.Attempt, input.Procedure.Action, input.Procedure.VolumeId) != nil ||
 			!input.Progress.InFlight || observation.VolumeID != input.Procedure.VolumeId || observation.Input != input.Attempt.Input ||
-			observation.At.Before(*input.Progress.BeganAt) || observation.DirectoryReady && observation.DirectoryAbsent ||
+			observation.At.Before(
+				*input.Progress.BeganAt,
+			) || observation.DirectoryReady && observation.DirectoryAbsent ||
 			observation.VolumeReady && observation.VolumeAbsent {
 			return volumeexecution.Observation{}, invalidVolumeWork()
 		}

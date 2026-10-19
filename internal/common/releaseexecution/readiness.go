@@ -19,7 +19,8 @@ func Readiness(input Input, progress Progress, observed *agentpb.ObservedProject
 	if err != nil {
 		return false, err
 	}
-	if observed == nil || executionplan.RejectUnknown(observed) != nil || observed.ProjectName != input.Artifacts.Candidate.ProjectName ||
+	if observed == nil || executionplan.RejectUnknown(observed) != nil ||
+		observed.ProjectName != input.Artifacts.Candidate.ProjectName ||
 		observed.ObservedAt == nil ||
 		observed.ObservedAt.CheckValid() != nil ||
 		observed.ObservedAt.AsTime().Before(progress.UpdatedAt) {

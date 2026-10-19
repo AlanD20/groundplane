@@ -25,7 +25,12 @@ func (runtime *Runtime) RunBackingFile(ctx context.Context, input backingprovisi
 	if err != nil {
 		return err
 	}
-	return runtime.runFile(ctx, input.Assignment.Procedure.VolumeDirectory, Payload{Header: header, Source: source}, verifyOnly)
+	return runtime.runFile(
+		ctx,
+		input.Assignment.Procedure.VolumeDirectory,
+		Payload{Header: header, Source: source},
+		verifyOnly,
+	)
 }
 
 func (runtime *Runtime) StopBackingFiles(ctx context.Context, input backingprovision.HelperInput) error {

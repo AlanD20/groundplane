@@ -15,11 +15,19 @@ func RecoveryResultKey(attemptID string) string {
 	return "/v1/execution/service-lifecycle/recovery-results/" + attemptID
 }
 
-func (repository *Repository) PrepareRecoveryResult(ctx context.Context, view workqueue.ResumeView, input *agentpb.ServiceLifecycleWorkInput, raw []byte, at time.Time) (workqueue.Change, workexecution.Completion, error) {
+func (repository *Repository) PrepareRecoveryResult(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input *agentpb.ServiceLifecycleWorkInput,
+	raw []byte,
+	at time.Time,
+) (workqueue.Change, workexecution.Completion, error) {
 	attempt := view.Attempt.Attempt
 	if !view.CanSettleResult() || !view.ActiveAttempt || attempt.FinishedAt != nil || attempt.StartedAt == nil ||
 		view.Work.Task.Task.CollectionStartedAt != nil || at.Before(view.Work.Item.Item.UpdatedAt) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Service lifecycle recovery no longer owns active inspection")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Service lifecycle recovery no longer owns active inspection",
+		)
 	}
 	captured, guard, err := repository.Load(ctx, view.Work)
 	if err != nil {
@@ -37,7 +45,9 @@ func (repository *Repository) PrepareRecoveryResult(ctx context.Context, view wo
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	if report.ObservedAt.After(at) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Service lifecycle recovery observation is newer than settlement")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Service lifecycle recovery observation is newer than settlement",
+		)
 	}
 	completed := report.BoundaryCompleted()
 	outcome := workexecution.Failed
@@ -57,7 +67,11 @@ func (repository *Repository) PrepareRecoveryResult(ctx context.Context, view wo
 	}}, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: completed}, nil
 }
 
-func (repository *Repository) LoadRecoveryResult(ctx context.Context, view workqueue.ResumeView, input *agentpb.ServiceLifecycleWorkInput) ([]byte, bool, error) {
+func (repository *Repository) LoadRecoveryResult(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input *agentpb.ServiceLifecycleWorkInput,
+) ([]byte, bool, error) {
 	attempt := view.Attempt.Attempt
 	if attempt.FinishedAt == nil || attempt.Result == nil {
 		return nil, false, conflict("Service lifecycle recovery has no terminal result")
@@ -80,7 +94,8 @@ func (repository *Repository) LoadRecoveryResult(ctx context.Context, view workq
 		return nil, false, err
 	}
 	completed := report.BoundaryCompleted()
-	if evidence != *attempt.Result || completed != (attempt.Outcome == workexecution.Succeeded) || report.ObservedAt.After(*attempt.FinishedAt) {
+	if evidence != *attempt.Result || completed != (attempt.Outcome == workexecution.Succeeded) ||
+		report.ObservedAt.After(*attempt.FinishedAt) {
 		return nil, false, conflict("Service lifecycle recovery result differs from its terminal evidence")
 	}
 	return append([]byte(nil), raw...), completed, nil

@@ -80,7 +80,10 @@ func (repository *RunnerRepository) PrepareRunnerRemovalResult(ctx context.Conte
 		return workqueue.Change{}, err
 	}
 	for _, value := range []*keyvalue.KeyValue{allocation.Owner, allocation.Slug, allocation.Quota, allocation.Host, allocation.System} {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision},
+		)
 	}
 	change.Mutations = []keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: allocation.Quota.Key, Value: quotaValue},

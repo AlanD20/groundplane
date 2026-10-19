@@ -45,7 +45,9 @@ func (report RecoveryReport) Validate(attempt workexecution.Attempt, source Reco
 	if source.ValidateFor(active, layout) != nil || report.AttemptID != attempt.ID ||
 		report.ForwardID != source.Forward.ID || report.Failure != source.Evidence || report.Input != attempt.Input ||
 		report.ServiceID != layout.ServiceID || report.ObservedAt.IsZero() || report.ObservedAt.Location() != time.UTC ||
-		report.ObservedAt.Before(attempt.AssignedAt) || attempt.StartedAt != nil && report.ObservedAt.Before(*attempt.StartedAt) ||
+		report.ObservedAt.Before(
+			attempt.AssignedAt,
+		) || attempt.StartedAt != nil && report.ObservedAt.Before(*attempt.StartedAt) ||
 		report.ObservedAt.Before(source.Failure.RecordedAt) ||
 		attempt.FinishedAt != nil && report.ObservedAt.After(*attempt.FinishedAt) {
 		return invalid("backing creation cleanup report differs from its actual captured failure and assignment")
@@ -66,7 +68,12 @@ func (report RecoveryReport) Validate(attempt workexecution.Attempt, source Reco
 	return nil
 }
 
-func EncodeRecoveryReport(attempt workexecution.Attempt, source Recovery, layout Layout, report RecoveryReport) ([]byte, workexecution.Input, error) {
+func EncodeRecoveryReport(
+	attempt workexecution.Attempt,
+	source Recovery,
+	layout Layout,
+	report RecoveryReport,
+) ([]byte, workexecution.Input, error) {
 	if err := report.Validate(attempt, source, layout); err != nil {
 		return nil, workexecution.Input{}, err
 	}
@@ -83,12 +90,22 @@ func EncodeRecoveryReport(attempt workexecution.Attempt, source Recovery, layout
 		return nil, workexecution.Input{}, err
 	}
 	digest := sha256.Sum256(canonical)
-	return canonical, workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, at, attempt.ID, "backing-creation/cleanup"), SHA256: hex.EncodeToString(digest[:])}, nil
+	return canonical, workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, at, attempt.ID, "backing-creation/cleanup"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }
 
-func DecodeRecoveryReport(attempt workexecution.Attempt, source Recovery, layout Layout, raw []byte) (RecoveryReport, workexecution.Input, error) {
+func DecodeRecoveryReport(
+	attempt workexecution.Attempt,
+	source Recovery,
+	layout Layout,
+	raw []byte,
+) (RecoveryReport, workexecution.Input, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
-		return RecoveryReport{}, workexecution.Input{}, invalid("backing creation cleanup report is missing or oversized")
+		return RecoveryReport{}, workexecution.Input{}, invalid(
+			"backing creation cleanup report is missing or oversized",
+		)
 	}
 	report, err := jcs.Decode[RecoveryReport](raw)
 	if err != nil {
@@ -96,7 +113,9 @@ func DecodeRecoveryReport(attempt workexecution.Attempt, source Recovery, layout
 	}
 	canonical, evidence, err := EncodeRecoveryReport(attempt, source, layout, report)
 	if err != nil || !bytes.Equal(canonical, raw) {
-		return RecoveryReport{}, workexecution.Input{}, invalid("backing creation cleanup report differs from its canonical evidence")
+		return RecoveryReport{}, workexecution.Input{}, invalid(
+			"backing creation cleanup report differs from its canonical evidence",
+		)
 	}
 	return report, evidence, nil
 }
@@ -141,9 +160,15 @@ func HelperRecovery(input HelperInput, observedAt time.Time) (*agentpb.BackingPr
 		observedAt.Location() != time.UTC || observedAt.Before(*input.Assignment.Attempt.StartedAt) {
 		return nil, invalid("backing creation cleanup helper has no matching captured recovery")
 	}
-	report := RuntimeCleanupObservation{AttemptID: input.Assignment.Attempt.ID, ForwardID: input.Assignment.Recovery.Forward.ID,
-		Failure: input.Assignment.Recovery.Evidence, Input: input.Assignment.Attempt.Input, ServiceID: input.Layout.ServiceID,
-		RuntimeAbsent: true, ObservedAt: observedAt}
+	report := RuntimeCleanupObservation{
+		AttemptID:     input.Assignment.Attempt.ID,
+		ForwardID:     input.Assignment.Recovery.Forward.ID,
+		Failure:       input.Assignment.Recovery.Evidence,
+		Input:         input.Assignment.Attempt.Input,
+		ServiceID:     input.Layout.ServiceID,
+		RuntimeAbsent: true,
+		ObservedAt:    observedAt,
+	}
 	raw, err := json.Marshal(report)
 	if err != nil {
 		return nil, err
@@ -155,9 +180,14 @@ func HelperRecovery(input HelperInput, observedAt time.Time) (*agentpb.BackingPr
 	return &agentpb.BackingProvisionHelperResponse{RecoveryReport: canonical}, nil
 }
 
-func ReadHelperRecovery(input HelperInput, response *agentpb.BackingProvisionHelperResponse) (RuntimeCleanupObservation, error) {
+func ReadHelperRecovery(
+	input HelperInput,
+	response *agentpb.BackingProvisionHelperResponse,
+) (RuntimeCleanupObservation, error) {
 	if input.Assignment.Recovery == nil || response == nil || executionplan.RejectUnknown(response) != nil ||
-		len(response.Observation) != 0 || len(response.RuntimeObservation) != 0 || len(response.RecoveryReport) == 0 || len(response.RecoveryReport) > MaximumProgressBytes {
+		len(
+			response.Observation,
+		) != 0 || len(response.RuntimeObservation) != 0 || len(response.RecoveryReport) == 0 || len(response.RecoveryReport) > MaximumProgressBytes {
 		return RuntimeCleanupObservation{}, invalid("backing creation cleanup helper response is invalid")
 	}
 	report, err := jcs.Decode[RuntimeCleanupObservation](response.RecoveryReport)
@@ -166,7 +196,9 @@ func ReadHelperRecovery(input HelperInput, response *agentpb.BackingProvisionHel
 	}
 	expected, err := HelperRecovery(input, report.ObservedAt)
 	if err != nil || !bytes.Equal(expected.RecoveryReport, response.RecoveryReport) {
-		return RuntimeCleanupObservation{}, invalid("backing creation cleanup helper did not prove the captured runtime absent")
+		return RuntimeCleanupObservation{}, invalid(
+			"backing creation cleanup helper did not prove the captured runtime absent",
+		)
 	}
 	return report, nil
 }

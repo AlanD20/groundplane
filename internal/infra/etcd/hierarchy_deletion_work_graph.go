@@ -11,7 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyDeletionRepository) LoadWorkGraph(ctx context.Context, task workqueue.TaskSnapshot, revision int64) ([]workexecution.Item, workqueue.Change, error) {
+func (repository *HierarchyDeletionRepository) LoadWorkGraph(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	revision int64,
+) ([]workexecution.Item, workqueue.Change, error) {
 	if task.Revision <= 0 || revision < task.Revision {
 		return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "hierarchy publication revision is invalid")
 	}
@@ -21,13 +25,20 @@ func (repository *HierarchyDeletionRepository) LoadWorkGraph(ctx context.Context
 	}
 	count := operation.Tombstone.PlanCount
 	if count == nil || *count <= 0 || *count > int64(workexecution.MaximumTaskItems) {
-		return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "hierarchy plan is not sealed or exceeds the work limit")
+		return nil, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy plan is not sealed or exceeds the work limit",
+		)
 	}
-	bindingRead, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{hierarchydeletion.TaskBindingKey(task.Task.ID)}, Revision: revision})
+	bindingRead, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{hierarchydeletion.TaskBindingKey(task.Task.ID)}, Revision: revision},
+	)
 	if err != nil {
 		return nil, workqueue.Change{}, err
 	}
-	if bindingRead == nil || bindingRead.ReadRevision != revision || len(bindingRead.Values) != 1 || bindingRead.Values[0] == nil {
+	if bindingRead == nil || bindingRead.ReadRevision != revision || len(bindingRead.Values) != 1 ||
+		bindingRead.Values[0] == nil {
 		return nil, workqueue.Change{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer keyvalue.ClearValues(bindingRead.Values)
@@ -93,6 +104,12 @@ func (repository *HierarchyDeletionRepository) LoadWorkGraph(ctx context.Context
 	if err := workexecution.ValidateGraph(captured, graph); err != nil {
 		return nil, workqueue.Change{}, err
 	}
-	conditions = append(conditions, keyvalue.Condition{Key: hierarchydeletion.TaskBindingKey(task.Task.ID), ModRevision: bindingRead.Values[0].ModRevision})
+	conditions = append(
+		conditions,
+		keyvalue.Condition{
+			Key:         hierarchydeletion.TaskBindingKey(task.Task.ID),
+			ModRevision: bindingRead.Values[0].ModRevision,
+		},
+	)
 	return graph, workqueue.Change{Conditions: conditions}, nil
 }

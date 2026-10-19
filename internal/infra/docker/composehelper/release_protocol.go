@@ -15,9 +15,12 @@ import (
 // OpenReleaseRequest validates a local, trusted-parent helper envelope. Network
 // authentication remains the Agent channel's responsibility; these receipts are
 // bound to each other, not treated as independently signed credentials.
-func OpenReleaseRequest(request *agentpb.ReleaseHelperRequest) (releaseexecution.Input, releaseexecution.CheckpointReport, error) {
+func OpenReleaseRequest(
+	request *agentpb.ReleaseHelperRequest,
+) (releaseexecution.Input, releaseexecution.CheckpointReport, error) {
 	empty, noReport := releaseexecution.Input{}, releaseexecution.CheckpointReport{}
-	if request == nil || executionplan.RejectUnknown(request) != nil || request.Assignment == nil || request.Assignment.Attempt == nil {
+	if request == nil || executionplan.RejectUnknown(request) != nil || request.Assignment == nil ||
+		request.Assignment.Attempt == nil {
 		return empty, noReport, invalidReleaseHelper()
 	}
 	identity := request.Assignment.Attempt
@@ -30,7 +33,9 @@ func OpenReleaseRequest(request *agentpb.ReleaseHelperRequest) (releaseexecution
 	if err != nil {
 		return empty, noReport, err
 	}
-	input, _, err := (releaseexecution.Input{Attempt: attempt, Release: release, Artifacts: artifacts}).WithStart(request.Start)
+	input, _, err := (releaseexecution.Input{Attempt: attempt, Release: release, Artifacts: artifacts}).WithStart(
+		request.Start,
+	)
 	if err != nil {
 		return empty, noReport, err
 	}
@@ -120,7 +125,8 @@ func ReadReleaseResponse(ctx context.Context, input io.Reader) (*agentpb.Release
 
 func validateReleaseResponse(response *agentpb.ReleaseHelperResponse) error {
 	if response == nil || executionplan.RejectUnknown(response) != nil || response.ExitCode < 0 ||
-		response.Succeeded && response.ExitCode != 0 || response.AbsenceObserved && !response.Succeeded || response.Inspection && response.MutationAttempted {
+		response.Succeeded &&
+			response.ExitCode != 0 || response.AbsenceObserved && !response.Succeeded || response.Inspection && response.MutationAttempted {
 		return invalidReleaseHelper()
 	}
 	return nil

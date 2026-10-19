@@ -26,7 +26,11 @@ type EntryWorkResult struct {
 
 func EntryWorkResultKey(workID string) string { return recordPrefix + "entry-results/" + workID }
 
-func prepareEntryWorkResult(view workqueue.View, generationID string, at time.Time) (workexecution.Input, workqueue.Change, error) {
+func prepareEntryWorkResult(
+	view workqueue.View,
+	generationID string,
+	at time.Time,
+) (workexecution.Input, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if item.Input == nil || ids.Validate(ids.KindConfig, generationID) != nil {
 		return workexecution.Input{}, workqueue.Change{}, invalidRecord()
@@ -38,7 +42,10 @@ func prepareEntryWorkResult(view workqueue.View, generationID string, at time.Ti
 		return workexecution.Input{}, workqueue.Change{}, err
 	}
 	digest := sha256.Sum256(value)
-	evidence := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, task.CreatedAt, item.ID, "entry-result"), SHA256: hex.EncodeToString(digest[:])}
+	evidence := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, task.CreatedAt, item.ID, "entry-result"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	key := EntryWorkResultKey(item.ID)
 	return evidence, workqueue.Change{
 		Conditions: []keyvalue.Condition{{Key: key}},

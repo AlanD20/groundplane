@@ -64,7 +64,8 @@ func (publication *InputPublication) Finish(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !task.PublicationComplete || !stored.MatchesWork(task, item) || expected != actual || item.Input == nil || *item.Input != expected {
+	if !task.PublicationComplete || !stored.MatchesWork(task, item) || expected != actual || item.Input == nil ||
+		*item.Input != expected {
 		return checkpointConflict("Attach publication differs from the submitted capture; pins remain retained")
 	}
 	return nil

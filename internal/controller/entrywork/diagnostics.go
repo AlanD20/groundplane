@@ -26,8 +26,16 @@ func (service *WorkReports) reportProgress(ctx context.Context, view workqueue.R
 			stage, stageErr := entryexecution.DiagnosticStage(attempt, input, begin, begin)
 			err = stageErr
 			if err == nil {
-				err = service.diagnostics.Report(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor,
-					begin.Sequence, stage, begin.UpdatedAt)
+				err = service.diagnostics.Report(
+					bounded,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+					begin.Sequence,
+					stage,
+					begin.UpdatedAt,
+				)
 			}
 		}
 	}

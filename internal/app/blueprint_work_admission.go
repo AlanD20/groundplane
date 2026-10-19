@@ -6,7 +6,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 )
 
-func newBlueprintWorkAdmission(hosts hostbindings.Reader, removals blueprintcoordinator.ServiceRemovalReader) (*blueprintcoordinator.Admission, error) {
+func newBlueprintWorkAdmission(
+	hosts hostbindings.Reader,
+	removals blueprintcoordinator.ServiceRemovalReader,
+) (*blueprintcoordinator.Admission, error) {
 	services, err := blueprintcoordinator.NewServicePlanner(hosts, removals)
 	if err != nil {
 		return nil, err

@@ -13,7 +13,10 @@ import (
 // ReadExecutor returns a revision-zero snapshot for an unregistered placement.
 // Authentication and host ownership are checked by the channel owner, not inferred
 // from a worker-supplied generation or host label.
-func (repository *Repository) ReadExecutor(ctx context.Context, target workexecution.Placement) (ExecutorSnapshot, error) {
+func (repository *Repository) ReadExecutor(
+	ctx context.Context,
+	target workexecution.Placement,
+) (ExecutorSnapshot, error) {
 	if err := target.Validate(); err != nil {
 		return ExecutorSnapshot{}, err
 	}
@@ -52,10 +55,15 @@ func PrepareRegistration(previous ExecutorSnapshot, requested ExecutorRecord) (C
 		}
 		old := previous.Record.Identity
 		if old.Executor == workexecution.Agent && previous.Record.ProcessGeneration == requested.ProcessGeneration {
-			return Change{}, ExecutorRecord{}, invalid("reconnecting Agent must resume its registered executor instead of creating a generation")
+			return Change{}, ExecutorRecord{}, invalid(
+				"reconnecting Agent must resume its registered executor instead of creating a generation",
+			)
 		}
-		if old.Executor != next.Identity.Executor || old.HostID != next.Identity.HostID || old.Generation == math.MaxUint64 {
-			return Change{}, ExecutorRecord{}, invalid("executor registration does not match its host or generation is exhausted")
+		if old.Executor != next.Identity.Executor || old.HostID != next.Identity.HostID ||
+			old.Generation == math.MaxUint64 {
+			return Change{}, ExecutorRecord{}, invalid(
+				"executor registration does not match its host or generation is exhausted",
+			)
 		}
 		next.Identity.Generation = old.Generation + 1
 	}
@@ -68,7 +76,13 @@ func PrepareRegistration(previous ExecutorSnapshot, requested ExecutorRecord) (C
 // PrepareAvailability requires the exact registered process identity, preventing
 // an old disconnect callback from disabling its replacement. Capacity changes
 // retain all occupied slots, including slots beyond a newly reduced limit.
-func PrepareAvailability(previous ExecutorSnapshot, identity workexecution.Identity, ready bool, capacity uint16, unavailable []workexecution.Operation) (Change, error) {
+func PrepareAvailability(
+	previous ExecutorSnapshot,
+	identity workexecution.Identity,
+	ready bool,
+	capacity uint16,
+	unavailable []workexecution.Operation,
+) (Change, error) {
 	if previous.Revision <= 0 || previous.Record.Identity != identity {
 		return Change{}, errs.New(errs.KindStateConflict, "executor registration has changed")
 	}

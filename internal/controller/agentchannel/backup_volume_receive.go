@@ -44,7 +44,13 @@ func (server *Server) receiveBoundVolumeManifest(stream agentpb.AgentChannel_Con
 	authorization agentregistration.WorkAuthorization, attempt *agentpb.WorkAttemptIdentity,
 	binding backupvolumetransfer.Binding, exchange *volumeManifestExchange,
 ) error {
-	credit, complete, err := server.backupWorkReports.BeginVolumeManifest(stream.Context(), authorization, attempt, binding.SourceOrdinal, binding.Direction)
+	credit, complete, err := server.backupWorkReports.BeginVolumeManifest(
+		stream.Context(),
+		authorization,
+		attempt,
+		binding.SourceOrdinal,
+		binding.Direction,
+	)
 	if err != nil {
 		return err
 	}
@@ -56,7 +62,12 @@ func (server *Server) receiveBoundVolumeManifest(stream agentpb.AgentChannel_Con
 		if err != nil {
 			return err
 		}
-		credit, err = server.backupWorkReports.AcceptVolumeManifestFrame(stream.Context(), authorization, attempt, frame)
+		credit, err = server.backupWorkReports.AcceptVolumeManifestFrame(
+			stream.Context(),
+			authorization,
+			attempt,
+			frame,
+		)
 		if err != nil {
 			return err
 		}

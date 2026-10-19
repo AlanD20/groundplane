@@ -12,7 +12,10 @@ import (
 
 // LoadHookInputs returns only the operation's retained envelope and comparisons.
 // Its caller must authorize the current hook boundary before opening any values.
-func (repository *Repository) LoadHookInputs(ctx context.Context, view workqueue.View) (Input, *taskconfiguration.BackingHookEncryptedInputs, []keyvalue.Condition, error) {
+func (repository *Repository) LoadHookInputs(
+	ctx context.Context,
+	view workqueue.View,
+) (Input, *taskconfiguration.BackingHookEncryptedInputs, []keyvalue.Condition, error) {
 	input, capture, err := repository.Load(ctx, view)
 	if err != nil {
 		return Input{}, nil, nil, err
@@ -55,7 +58,10 @@ func (repository *Repository) LoadHookInputs(ctx context.Context, view workqueue
 		return input, nil, guards, nil
 	}
 	key := taskconfiguration.BackingHookTaskInputKey(reference.InputId)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return Input{}, nil, nil, err
 	}
@@ -71,7 +77,8 @@ func (repository *Repository) LoadHookInputs(ctx context.Context, view workqueue
 	if err != nil {
 		return Input{}, nil, nil, err
 	}
-	if envelope.OperationID != procedure.OperationId || envelope.CiphertextSHA256 != hex.EncodeToString(reference.Sha256) {
+	if envelope.OperationID != procedure.OperationId ||
+		envelope.CiphertextSHA256 != hex.EncodeToString(reference.Sha256) {
 		clear(envelope.Ciphertext)
 		return Input{}, nil, nil, invalid("backing creation hook envelope differs from its captured input")
 	}

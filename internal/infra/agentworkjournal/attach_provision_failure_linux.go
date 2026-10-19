@@ -46,7 +46,10 @@ func (journal *Journal) PrepareAttachProvisionFailure(ctx context.Context, attem
 	return *state.AttachProvisionFailure, nil
 }
 
-func (journal *Journal) LoadAttachProvisionFailure(ctx context.Context, attempt workexecution.Attempt) (*AttachProvisionFailureDelivery, error) {
+func (journal *Journal) LoadAttachProvisionFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (*AttachProvisionFailureDelivery, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -77,7 +80,11 @@ func (journal *Journal) AcknowledgeAttachProvisionFailure(ctx context.Context, a
 	if state == nil || state.AttachProvisionFailure == nil || !workexecution.SameAssignment(state.Attempt, attempt) {
 		return workexecution.Attempt{}, conflict()
 	}
-	terminal, _, err := attachexecution.DecodeProvisionFailureAck(state.Attempt, state.AttachProvisionFailure.Reason, ack)
+	terminal, _, err := attachexecution.DecodeProvisionFailureAck(
+		state.Attempt,
+		state.AttachProvisionFailure.Reason,
+		ack,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -85,13 +92,16 @@ func (journal *Journal) AcknowledgeAttachProvisionFailure(ctx context.Context, a
 		return workexecution.Attempt{}, conflict()
 	}
 	if prior := state.AttachProvisionFailure.Receipt; prior != nil {
-		if prior.Outcome != terminal.Outcome || !prior.FinishedAt.Equal(*terminal.FinishedAt) || *prior.Result != *terminal.Result {
+		if prior.Outcome != terminal.Outcome || !prior.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*prior.Result != *terminal.Result {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *prior, nil
 	}
 	state.Attempt.StartedAt = terminal.StartedAt
-	state.AttachProvisionFailure.Receipt, state.AttachProvisionFailure.Evidence = &terminal, append([]byte(nil), ack.Failure...)
+	state.AttachProvisionFailure.Receipt, state.AttachProvisionFailure.Evidence = &terminal, append(
+		[]byte(nil),
+		ack.Failure...)
 	if err := journal.writeRecord(ctx, *state); err != nil {
 		return workexecution.Attempt{}, err
 	}

@@ -63,7 +63,10 @@ func (capture *RouteProviderCapture) RenderWork(ctx context.Context, task workex
 		}
 	}
 	if len(selected.Services) != 1 {
-		return RouteWorkRender{}, errs.New(errs.KindStateConflict, "Route router has no unique generated workload identity")
+		return RouteWorkRender{}, errs.New(
+			errs.KindStateConflict,
+			"Route router has no unique generated workload identity",
+		)
 	}
 	inputID := ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "captured-input")
 	artifactID := ids.DeriveAt(ids.KindConfig, item.CreatedAt, item.ID, "router-artifact")
@@ -85,7 +88,9 @@ func (capture *RouteProviderCapture) RenderWork(ctx context.Context, task workex
 		StepID:            ids.DeriveAt(ids.KindStep, item.CreatedAt, item.ID, "router-configuration"),
 		MaterializationID: ids.DeriveAt(ids.KindConfig, item.CreatedAt, item.ID, "router-file"),
 		EnvironmentID:     environment.ID, Destination: pin.Destination, OutputKind: taskmaterialization.OutputPlainFile,
-		Mode: uint32(entrymaterialization.ModeReadOnly), Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]),
+		Mode: uint32(
+			entrymaterialization.ModeReadOnly,
+		), Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]),
 		Source: taskmaterialization.Source{Kind: taskmaterialization.SourceComponentFile,
 			ComponentFile: &taskmaterialization.ComponentFileValueReference{RevisionID: task.ID,
 				ComponentID: pin.ComponentID, Path: pin.Destination}},

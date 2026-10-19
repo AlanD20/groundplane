@@ -32,8 +32,10 @@ func AdvanceBackupPrune(assignment *agentpb.BackupWorkAssignment,
 		return nil, invalidBackupCheckpoint("prune report does not follow saved progress")
 	}
 	object := step.GetPrune().Objects[0]
-	if deleted.Ordinal != object.Ordinal || deleted.PointId != object.PointId || !proto.Equal(deleted.Object, object.Object) ||
-		current.NextObjectOrdinal != object.Ordinal || object.Ordinal == ^uint32(0) {
+	if deleted.Ordinal != object.Ordinal || deleted.PointId != object.PointId ||
+		!proto.Equal(deleted.Object, object.Object) ||
+		current.NextObjectOrdinal != object.Ordinal ||
+		object.Ordinal == ^uint32(0) {
 		return nil, invalidBackupCheckpoint("prune report names a different captured object")
 	}
 	return &agentpb.BackupStepResume{StepId: step.StepId, ExecutionId: step.ExecutionId,

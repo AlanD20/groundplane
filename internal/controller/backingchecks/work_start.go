@@ -21,9 +21,16 @@ func (executor *Executor) AuthorizeStart(ctx context.Context, delivery workqueue
 	phase, direction := loaded.Record.Phase, delivery.Attempt.Attempt.Direction
 	if direction == workexecution.Forward && phase != checkrecord.Ready ||
 		direction == workexecution.Recovery && phase != checkrecord.CleanupRequired {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Backing check start no longer matches its captured operation")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Backing check start no longer matches its captured operation",
+		)
 	}
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: checkrecord.Key(loaded.Record.Owner.TaskID), ModRevision: loaded.Revision}}}, nil
+	return workqueue.Change{
+		Conditions: []keyvalue.Condition{
+			{Key: checkrecord.Key(loaded.Record.Owner.TaskID), ModRevision: loaded.Revision},
+		},
+	}, nil
 }
 
 func (executor *Executor) RejectUnstarted(ctx context.Context, delivery workqueue.Delivery) error {
@@ -87,12 +94,18 @@ func (executor *Executor) reconcile(ctx context.Context, delivery workqueue.Deli
 	return executor.resume(ctx, loaded.Record, journal, attempt.Direction == workexecution.Recovery)
 }
 
-func (executor *Executor) loadDelivery(ctx context.Context, delivery workqueue.Delivery) (keyvalue.Versioned[checkrecord.Record], error) {
+func (executor *Executor) loadDelivery(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (keyvalue.Versioned[checkrecord.Record], error) {
 	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
 	if item.Validate() != nil || attempt.Validate() != nil || item.Operation != workexecution.BackingCheck ||
 		attempt.Executor.Executor != workexecution.Controller || attempt.TaskID != item.TaskID || attempt.WorkItemID != item.ID ||
 		item.ActiveAttemptID != attempt.ID || item.Input == nil || *item.Input != attempt.Input || attempt.FinishedAt != nil {
-		return keyvalue.Versioned[checkrecord.Record]{}, errs.New(errs.KindStateConflict, "Backing check delivery does not own its captured attempt")
+		return keyvalue.Versioned[checkrecord.Record]{}, errs.New(
+			errs.KindStateConflict,
+			"Backing check delivery does not own its captured attempt",
+		)
 	}
 	loaded, err := executor.repository.Load(ctx, item.TaskID)
 	if err != nil {
@@ -103,7 +116,10 @@ func (executor *Executor) loadDelivery(ctx context.Context, delivery workqueue.D
 		loaded.Record.Owner.PlanID != attempt.Input.ID || digest != attempt.Input.SHA256 ||
 		loaded.Record.Source.Parameters.AttachID != item.TargetID {
 		loaded.Record.Clear()
-		return keyvalue.Versioned[checkrecord.Record]{}, errs.New(errs.KindStateConflict, "Backing check delivery differs from captured input")
+		return keyvalue.Versioned[checkrecord.Record]{}, errs.New(
+			errs.KindStateConflict,
+			"Backing check delivery differs from captured input",
+		)
 	}
 	return loaded, nil
 }

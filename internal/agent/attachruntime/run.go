@@ -18,15 +18,28 @@ type Checkpoints interface {
 // container. inspectOnly may return a retained exact result, but must never
 // execute an ambiguous command again or infer completion from process absence.
 type Host interface {
-	InspectProvision(context.Context, attachexecution.ProvisionRecoveryInput) (attachexecution.ProvisionInspection, error)
-	ExecuteProvisionCommand(context.Context, attachexecution.ProvisionInput, attachexecution.ProvisionProgress, bool, FactStore) (attachexecution.ProvisionCommandResult, error)
+	InspectProvision(
+		context.Context,
+		attachexecution.ProvisionRecoveryInput,
+	) (attachexecution.ProvisionInspection, error)
+	ExecuteProvisionCommand(
+		context.Context,
+		attachexecution.ProvisionInput,
+		attachexecution.ProvisionProgress,
+		bool,
+		FactStore,
+	) (attachexecution.ProvisionCommandResult, error)
 }
 
 func Run(ctx context.Context, input attachexecution.ProvisionInput, checkpoints Checkpoints,
 	host Host, facts FactStore,
 ) (*attachexecution.ProvisionProgress, error) {
-	if ctx == nil || checkpoints == nil || host == nil || facts == nil || input.Validate() != nil || input.Attempt.StartedAt == nil {
-		return nil, errs.New(errs.KindInternal, "Attach provisioning runtime requires its captured input, checkpoints and host executor")
+	if ctx == nil || checkpoints == nil || host == nil || facts == nil || input.Validate() != nil ||
+		input.Attempt.StartedAt == nil {
+		return nil, errs.New(
+			errs.KindInternal,
+			"Attach provisioning runtime requires its captured input, checkpoints and host executor",
+		)
 	}
 	authority, err := input.Authority()
 	if err != nil {
@@ -99,7 +112,10 @@ func Run(ctx context.Context, input attachexecution.ProvisionInput, checkpoints 
 		}
 	}
 	if !progress.Complete(input.Attempt, authority) {
-		return progress, errs.New(errs.KindStateConflict, "Attach provisioning ended before every captured command completed")
+		return progress, errs.New(
+			errs.KindStateConflict,
+			"Attach provisioning ended before every captured command completed",
+		)
 	}
 	return progress, nil
 }
@@ -123,8 +139,12 @@ func acknowledgedProgress(ctx context.Context, checkpoints Checkpoints, input at
 		return nil, err
 	}
 	got, err := (attachexecution.ProvisionReport{Progress: *actual}).CheckpointAuthority(input.Attempt, authority)
-	if err != nil || got.Sequence != want.Sequence || got.Evidence != want.Evidence || got.StageID != want.StageID || !got.RecordedAt.Equal(want.RecordedAt) {
-		return nil, errs.New(errs.KindStateConflict, "Attach provisioning journal differs from the acknowledged command boundary")
+	if err != nil || got.Sequence != want.Sequence || got.Evidence != want.Evidence || got.StageID != want.StageID ||
+		!got.RecordedAt.Equal(want.RecordedAt) {
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Attach provisioning journal differs from the acknowledged command boundary",
+		)
 	}
 	return actual, nil
 }

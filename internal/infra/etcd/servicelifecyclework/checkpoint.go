@@ -43,8 +43,11 @@ func PrepareCheckpoint(ctx context.Context, reader ReportReader, view workqueue.
 		!task.PublicationComplete || task.CollectionStartedAt != nil {
 		return workqueue.Change{}, conflict("Service lifecycle report does not match a published execution")
 	}
-	if executionplan.ValidateServiceLifecycleWorkInput(input) != nil || attempt.Validate() != nil || attempt.Direction != workexecution.Forward ||
-		attempt.Executor.Executor != workexecution.Agent || input.CapturedSource.InputId != attempt.Input.ID || hex.EncodeToString(input.CapturedSource.Sha256) != attempt.Input.SHA256 {
+	if executionplan.ValidateServiceLifecycleWorkInput(input) != nil || attempt.Validate() != nil ||
+		attempt.Direction != workexecution.Forward ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		input.CapturedSource.InputId != attempt.Input.ID ||
+		hex.EncodeToString(input.CapturedSource.Sha256) != attempt.Input.SHA256 {
 		return workqueue.Change{}, conflict("Service lifecycle report input differs from its captured assignment")
 	}
 	raw, err := lifecycleexecution.EncodeProgress(attempt, input, progress)
@@ -102,8 +105,11 @@ func PrepareCheckpoint(ctx context.Context, reader ReportReader, view workqueue.
 	if !view.ActiveAttempt || task.FinishedAt != nil {
 		return workqueue.Change{}, conflict("Service lifecycle execution no longer accepts new reports")
 	}
-	if (progress.BeganAt != nil) && (!view.CurrentExecutor || item.ForwardRevoked || task.Stop != nil || !at.Before(attempt.Deadline)) {
-		return workqueue.Change{}, conflict("Service lifecycle cannot start another stage after execution was stopped or replaced")
+	if (progress.BeganAt != nil) &&
+		(!view.CurrentExecutor || item.ForwardRevoked || task.Stop != nil || !at.Before(attempt.Deadline)) {
+		return workqueue.Change{}, conflict(
+			"Service lifecycle cannot start another stage after execution was stopped or replaced",
+		)
 	}
 	if err := lifecycleexecution.ValidateTransition(attempt, input, previous, progress); err != nil {
 		return workqueue.Change{}, err
@@ -119,7 +125,10 @@ func PrepareCheckpoint(ctx context.Context, reader ReportReader, view workqueue.
 			Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision,
 		})
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)},
+	)
 	return change, nil
 }
 

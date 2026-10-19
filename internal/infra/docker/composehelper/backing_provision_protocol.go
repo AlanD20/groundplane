@@ -38,14 +38,21 @@ func ReadBackingProvisionRequest(ctx context.Context, input io.Reader) (*agentpb
 	return request, nil
 }
 
-func ReadBackingProvisionResponse(ctx context.Context, input io.Reader, captured backingprovision.HelperInput) (*agentpb.BackingProvisionHelperResponse, error) {
+func ReadBackingProvisionResponse(
+	ctx context.Context,
+	input io.Reader,
+	captured backingprovision.HelperInput,
+) (*agentpb.BackingProvisionHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
 	}
 	defer clear(raw)
 	if len(raw) > 4*backingprovision.MaximumProgressBytes+32*1024 {
-		return nil, errs.New(errs.KindValidationFailed, "backing creation helper response exceeds its observation bound")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"backing creation helper response exceeds its observation bound",
+		)
 	}
 	response := &agentpb.BackingProvisionHelperResponse{}
 	if proto.Unmarshal(raw, response) != nil {
@@ -89,7 +96,10 @@ func WriteBackingProvisionResponse(ctx context.Context, output io.Writer, captur
 	return nil
 }
 
-func validateBackingHelperResponse(captured backingprovision.HelperInput, response *agentpb.BackingProvisionHelperResponse) error {
+func validateBackingHelperResponse(
+	captured backingprovision.HelperInput,
+	response *agentpb.BackingProvisionHelperResponse,
+) error {
 	if captured.Assignment.Recovery != nil {
 		_, err := backingprovision.ReadHelperRecovery(captured, response)
 		return err

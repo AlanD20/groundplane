@@ -29,7 +29,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupRetry(ctx c
 		attempt.FinishedAt == nil || attempt.Result == nil ||
 		attempt.Input != *item.Input || attempt.Number != item.AttemptNumber ||
 		attempt.TaskID != task.ID || attempt.WorkItemID != item.ID || previous.Revision <= 0 {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "backup removal requires its saved terminal attempt")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"backup removal requires its saved terminal attempt",
+		)
 	}
 	basis := item.Result
 	if attempt.Direction == workexecution.Recovery && item.Cleanup != workexecution.CleanupNone {
@@ -43,7 +46,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupRetry(ctx c
 		return workqueue.Change{}, err
 	}
 	failureKey, summaryKey := HierarchyBackupResultKey(attempt.ID), hierarchydeletion.WorkSummaryKey(task.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{failureKey, summaryKey}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{failureKey, summaryKey}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -54,7 +60,8 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupRetry(ctx c
 		return workqueue.Change{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	failure, err := recordcodec.Decode[hierarchyBackupResult](read.Values[0].Value, "hierarchy-backup-result")
-	if err != nil || len(read.Values[0].Value) > 4096 || failure.AttemptID != attempt.ID || failure.Input != attempt.Input ||
+	if err != nil || len(read.Values[0].Value) > 4096 || failure.AttemptID != attempt.ID ||
+		failure.Input != attempt.Input ||
 		!failure.RecordedAt.Equal(*attempt.FinishedAt) ||
 		attempt.Result.ID != ids.DeriveAt(ids.KindPlan, task.CreatedAt, attempt.ID, "backup-removal-result") ||
 		attempt.Result.SHA256 != hierarchydeletion.HierarchyDeletionBytesDigest(read.Values[0].Value) {
@@ -71,7 +78,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupRetry(ctx c
 		direction = workexecution.Recovery
 	case item.Phase == workexecution.Settled && item.Outcome == workexecution.Failed:
 		if task.Stop != nil || item.ForwardRevoked {
-			return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "cancelled backup removal cannot resume forward")
+			return workqueue.Change{}, errs.New(
+				errs.KindTaskNotRetryable,
+				"cancelled backup removal cannot resume forward",
+			)
 		}
 		if attempt.Direction == workexecution.Recovery {
 			confirmed := attempt.Outcome == workexecution.Succeeded && failure.Reason == "object_absence_confirmed"
@@ -101,7 +111,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupRetry(ctx c
 	}
 	change.Conditions = append(change.Conditions, captured.Conditions...)
 	change.Conditions = append(change.Conditions, fence.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: failureKey, ModRevision: read.Values[0].ModRevision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: failureKey, ModRevision: read.Values[0].ModRevision},
+	)
 	change.Mutations = append(change.Mutations, fence.Mutations...)
 	return change, nil
 }

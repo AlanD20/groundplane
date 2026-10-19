@@ -33,9 +33,12 @@ func PrepareEnvironmentCheckpoint(ctx context.Context, reader EnvironmentReportR
 	input hierarchyexecution.EnvironmentInput, report hierarchyexecution.EnvironmentReport,
 ) (workqueue.Change, error) {
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
-	if !workexecution.SameAssignment(input.Attempt, attempt) || input.Attempt.StartedAt == nil || attempt.StartedAt == nil ||
-		!input.Attempt.StartedAt.Equal(*attempt.StartedAt) || item.Operation != workexecution.Hierarchy ||
-		task.Action != workexecution.ActionRemove || view.Work.ReadRevision <= 0 {
+	if !workexecution.SameAssignment(input.Attempt, attempt) || input.Attempt.StartedAt == nil ||
+		attempt.StartedAt == nil ||
+		!input.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
+		item.Operation != workexecution.Hierarchy ||
+		task.Action != workexecution.ActionRemove ||
+		view.Work.ReadRevision <= 0 {
 		return workqueue.Change{}, checkpointConflict("removal report does not match its captured execution")
 	}
 	raw, err := hierarchyexecution.EncodeEnvironmentReport(input, report)
@@ -73,8 +76,10 @@ func PrepareEnvironmentCheckpoint(ctx context.Context, reader EnvironmentReportR
 			return workqueue.Change{}, err
 		}
 		cursor, err := saved.Checkpoint(input)
-		if err != nil || cursor.AttemptID != view.Checkpoint.Record.AttemptID || cursor.Sequence != view.Checkpoint.Record.Sequence ||
-			cursor.StageID != view.Checkpoint.Record.StageID || cursor.Evidence != view.Checkpoint.Record.Evidence ||
+		if err != nil || cursor.AttemptID != view.Checkpoint.Record.AttemptID ||
+			cursor.Sequence != view.Checkpoint.Record.Sequence ||
+			cursor.StageID != view.Checkpoint.Record.StageID ||
+			cursor.Evidence != view.Checkpoint.Record.Evidence ||
 			!cursor.RecordedAt.Equal(view.Checkpoint.Record.RecordedAt) {
 			return workqueue.Change{}, checkpointConflict("removal report differs from its acknowledged checkpoint")
 		}
@@ -95,7 +100,9 @@ func PrepareEnvironmentCheckpoint(ctx context.Context, reader EnvironmentReportR
 	}
 	if report.Progress.InFlight && (!view.CurrentExecutor ||
 		attempt.Direction == workexecution.Forward && (item.ForwardRevoked || task.Stop != nil) || !time.Now().UTC().Before(attempt.Deadline)) {
-		return workqueue.Change{}, checkpointConflict("removal cannot start another stage after execution was stopped or replaced")
+		return workqueue.Change{}, checkpointConflict(
+			"removal cannot start another stage after execution was stopped or replaced",
+		)
 	}
 	if err := hierarchyexecution.ValidateEnvironmentTransition(input, previous, report.Progress); err != nil {
 		return workqueue.Change{}, err
@@ -111,7 +118,10 @@ func PrepareEnvironmentCheckpoint(ctx context.Context, reader EnvironmentReportR
 			Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision,
 		})
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)},
+	)
 	return change, nil
 }
 

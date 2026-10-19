@@ -61,10 +61,16 @@ func (source Recovery) Validate(layout Layout) error {
 	}
 	if previous := source.Previous; previous != nil {
 		prior := previous.Attempt
-		if prior.Validate() != nil || prior.Direction != workexecution.Recovery || prior.FinishedAt == nil || prior.Result == nil ||
-			prior.Outcome == workexecution.Succeeded || prior.Number <= forward.Number || prior.TaskID != forward.TaskID ||
-			prior.WorkItemID != forward.WorkItemID || prior.Input != forward.Input || prior.Executor.HostID != forward.Executor.HostID ||
-			previous.Report.Status == RecoveryComplete || previous.Report.validateEnvelope(prior, source) != nil {
+		if prior.Validate() != nil || prior.Direction != workexecution.Recovery || prior.FinishedAt == nil ||
+			prior.Result == nil ||
+			prior.Outcome == workexecution.Succeeded ||
+			prior.Number <= forward.Number ||
+			prior.TaskID != forward.TaskID ||
+			prior.WorkItemID != forward.WorkItemID ||
+			prior.Input != forward.Input ||
+			prior.Executor.HostID != forward.Executor.HostID ||
+			previous.Report.Status == RecoveryComplete ||
+			previous.Report.validateEnvelope(prior, source) != nil {
 			return invalid("DNS resolver cleanup source has no valid previous interruption")
 		}
 		id, err := derivedReferenceID(prior.ID, "cleanup")
@@ -81,10 +87,15 @@ func (source Recovery) Validate(layout Layout) error {
 
 func (source Recovery) ValidateFor(attempt workexecution.Attempt, layout Layout) error {
 	forward := source.Forward
-	if source.Validate(layout) != nil || layout.Validate(attempt) != nil || attempt.Direction != workexecution.Recovery ||
-		forward.ID == attempt.ID || forward.TaskID != attempt.TaskID || forward.WorkItemID != attempt.WorkItemID ||
-		forward.Input != attempt.Input || forward.Executor.HostID != attempt.Executor.HostID ||
-		forward.Number >= attempt.Number || attempt.AssignedAt.Before(*forward.FinishedAt) {
+	if source.Validate(layout) != nil || layout.Validate(attempt) != nil ||
+		attempt.Direction != workexecution.Recovery ||
+		forward.ID == attempt.ID ||
+		forward.TaskID != attempt.TaskID ||
+		forward.WorkItemID != attempt.WorkItemID ||
+		forward.Input != attempt.Input ||
+		forward.Executor.HostID != attempt.Executor.HostID ||
+		forward.Number >= attempt.Number ||
+		attempt.AssignedAt.Before(*forward.FinishedAt) {
 		return invalid("DNS resolver cleanup has no actual failed forward attempt on this host")
 	}
 	if previous := source.Previous; previous != nil {
@@ -106,7 +117,9 @@ func (report RecoveryReport) validateEnvelope(attempt workexecution.Attempt, sou
 		return invalid("DNS resolver cleanup report differs from its captured assignment and failure")
 	}
 	if report.Status == RecoveryComplete {
-		if attempt.StartedAt == nil || !report.HelpersStopped || !report.ConfigurationRestored || !report.RuntimeRestored || !report.HostResolverRestored {
+		if attempt.StartedAt == nil || !report.HelpersStopped || !report.ConfigurationRestored ||
+			!report.RuntimeRestored ||
+			!report.HostResolverRestored {
 			return invalid("DNS resolver cleanup lacks termination or exact restoration proof")
 		}
 	} else if report.Status != RecoveryFailed && report.Status != RecoveryInterrupted && report.Status != RecoveryTimedOut ||
@@ -140,7 +153,12 @@ func RecoveryDigest(attemptID string, report RecoveryReport) (workexecution.Inpu
 	return evidence, err
 }
 
-func EncodeRecoveryReport(attempt workexecution.Attempt, input Input, source Recovery, report RecoveryReport) ([]byte, workexecution.Input, error) {
+func EncodeRecoveryReport(
+	attempt workexecution.Attempt,
+	input Input,
+	source Recovery,
+	report RecoveryReport,
+) ([]byte, workexecution.Input, error) {
 	layout, err := CaptureLayout(attempt, input)
 	if err != nil || source.ValidateFor(attempt, layout) != nil || report.validateEnvelope(attempt, source) != nil {
 		return nil, workexecution.Input{}, invalid("DNS resolver cleanup report has no matching captured authority")
@@ -149,7 +167,9 @@ func EncodeRecoveryReport(attempt workexecution.Attempt, input Input, source Rec
 		if !input.PreviousEnabled && report.ServingProof != nil || input.PreviousEnabled &&
 			(ValidateServingProof(*input.Previous, report.ServingProof) != nil || report.ServingProof.ObservedAt.AsTime().Before(*attempt.StartedAt) ||
 				report.ServingProof.ObservedAt.AsTime().After(report.ObservedAt)) {
-			return nil, workexecution.Input{}, invalid("DNS resolver cleanup did not prove its exact previous serving configuration")
+			return nil, workexecution.Input{}, invalid(
+				"DNS resolver cleanup did not prove its exact previous serving configuration",
+			)
 		}
 	}
 	id, err := derivedReferenceID(attempt.ID, "cleanup")
@@ -159,7 +179,12 @@ func EncodeRecoveryReport(attempt workexecution.Attempt, input Input, source Rec
 	return captureEvidence(id, report)
 }
 
-func DecodeRecoveryReport(attempt workexecution.Attempt, input Input, source Recovery, raw []byte) (RecoveryReport, workexecution.Input, error) {
+func DecodeRecoveryReport(
+	attempt workexecution.Attempt,
+	input Input,
+	source Recovery,
+	raw []byte,
+) (RecoveryReport, workexecution.Input, error) {
 	if len(raw) == 0 || len(raw) > MaximumReportBytes {
 		return RecoveryReport{}, workexecution.Input{}, invalid("DNS resolver cleanup report is missing or oversized")
 	}

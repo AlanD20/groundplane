@@ -62,7 +62,10 @@ func (repository *Repository) ListAttempts(ctx context.Context, taskID, workID s
 // CollectionAttempts reads the oldest remaining batch. Unlike a public history
 // page, earlier batches may already be gone; the Task collection fence prevents
 // this view from ever authorizing Retry or execution.
-func (repository *Repository) CollectionAttempts(ctx context.Context, taskID, workID string) (View, AttemptPage, error) {
+func (repository *Repository) CollectionAttempts(
+	ctx context.Context,
+	taskID, workID string,
+) (View, AttemptPage, error) {
 	// Leave room for operation-owned results and independently bounded stage,
 	// event and loss records in the same retention transaction.
 	return repository.listAttempts(ctx, taskID, workID, 0, 8, 0, true)
@@ -136,7 +139,8 @@ func (repository *Repository) listAttempts(ctx context.Context, taskID, workID s
 
 func decodeAttemptOwner(value []byte, taskID, workID string) (Slot, error) {
 	owner, err := recordcodec.Decode[Slot](value, "execution_slot")
-	if err != nil || owner.TaskID != taskID || owner.WorkItemID != workID || ids.Validate(ids.KindAttempt, owner.AttemptID) != nil {
+	if err != nil || owner.TaskID != taskID || owner.WorkItemID != workID ||
+		ids.Validate(ids.KindAttempt, owner.AttemptID) != nil {
 		return Slot{}, corrupt()
 	}
 	return owner, nil
@@ -150,7 +154,8 @@ func indexedAttempt(value *keyvalue.KeyValue, owner Slot, number uint64) (Attemp
 	if err != nil {
 		return AttemptSnapshot{}, err
 	}
-	if attempt.ID != owner.AttemptID || attempt.TaskID != owner.TaskID || attempt.WorkItemID != owner.WorkItemID || attempt.Number != number {
+	if attempt.ID != owner.AttemptID || attempt.TaskID != owner.TaskID || attempt.WorkItemID != owner.WorkItemID ||
+		attempt.Number != number {
 		return AttemptSnapshot{}, corrupt()
 	}
 	return AttemptSnapshot{Attempt: attempt, Revision: value.ModRevision}, nil

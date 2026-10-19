@@ -30,13 +30,17 @@ type ControllerExecutor struct {
 	owners map[workexecution.Operation]ControllerOperation
 }
 
-func NewControllerExecutor(queue *workqueue.Repository, registrations []ControllerRegistration) (*ControllerExecutor, error) {
+func NewControllerExecutor(
+	queue *workqueue.Repository,
+	registrations []ControllerRegistration,
+) (*ControllerExecutor, error) {
 	if queue == nil || len(registrations) == 0 {
 		return nil, errs.New(errs.KindInternal, "controller execution requires storage and operation owners")
 	}
 	owners := make(map[workexecution.Operation]ControllerOperation, len(registrations))
 	for _, registration := range registrations {
-		if !workexecution.ValidOperation(registration.Operation) || registration.Owner == nil || owners[registration.Operation] != nil {
+		if !workexecution.ValidOperation(registration.Operation) || registration.Owner == nil ||
+			owners[registration.Operation] != nil {
 			return nil, errs.New(errs.KindInternal, "controller operation registration is invalid or duplicated")
 		}
 		owners[registration.Operation] = registration.Owner
@@ -87,7 +91,13 @@ func (executor *ControllerExecutor) execute(ctx context.Context, delivery workqu
 		if err != nil {
 			return err
 		}
-		start, err := workqueue.PrepareStart(view.Work.Task, view.Work.Item, view.Attempt, registration, time.Now().UTC())
+		start, err := workqueue.PrepareStart(
+			view.Work.Task,
+			view.Work.Item,
+			view.Attempt,
+			registration,
+			time.Now().UTC(),
+		)
 		if err != nil {
 			return err
 		}

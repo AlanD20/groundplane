@@ -23,11 +23,18 @@ func NewRepository(backend store) (*Repository, error) {
 	return &Repository{store: backend}, nil
 }
 
-func (repository *Repository) Load(ctx context.Context, workID string, revision int64) (keyvalue.Versioned[Input], error) {
+func (repository *Repository) Load(
+	ctx context.Context,
+	workID string,
+	revision int64,
+) (keyvalue.Versioned[Input], error) {
 	if ids.Validate(ids.KindWorkItem, workID) != nil || revision < 0 {
 		return keyvalue.Versioned[Input]{}, errs.New(errs.KindValidationFailed, "Runner work input identity is invalid")
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{InputKey(workID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{InputKey(workID)}, Revision: revision},
+	)
 	if err != nil {
 		return keyvalue.Versioned[Input]{}, err
 	}
@@ -48,14 +55,25 @@ func (repository *Repository) Load(ctx context.Context, workID string, revision 
 	if input.WorkItemID != workID {
 		return keyvalue.Versioned[Input]{}, errs.New(errs.KindInternal, "Runner execution input owner is corrupt")
 	}
-	return keyvalue.Versioned[Input]{Record: input, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[Input]{
+		Record:       input,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }
 
-func (repository *Repository) LoadTask(ctx context.Context, taskID string, revision int64) (keyvalue.Versioned[Input], error) {
+func (repository *Repository) LoadTask(
+	ctx context.Context,
+	taskID string,
+	revision int64,
+) (keyvalue.Versioned[Input], error) {
 	if ids.Validate(ids.KindTask, taskID) != nil || revision < 0 {
 		return keyvalue.Versioned[Input]{}, errs.New(errs.KindValidationFailed, "Runner Task input identity is invalid")
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{TaskInputKey(taskID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{TaskInputKey(taskID)}, Revision: revision},
+	)
 	if err != nil {
 		return keyvalue.Versioned[Input]{}, err
 	}

@@ -115,8 +115,20 @@ func restorePostgres(ctx context.Context, assignment *agentpb.BackupWorkAssignme
 		if _, err := executor.RecoverExecution(ctx, container, original, execID); err != nil {
 			return true, err
 		}
-		return finishPostgresRestore(ctx, assignment, identity, ordinal, staging, consumers, authority, executor, container,
-			artifact, publisher, resume.ApplyStart)
+		return finishPostgresRestore(
+			ctx,
+			assignment,
+			identity,
+			ordinal,
+			staging,
+			consumers,
+			authority,
+			executor,
+			container,
+			artifact,
+			publisher,
+			resume.ApplyStart,
+		)
 	}
 	if resume.Phase == agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_SERVICE_RECOVERY {
 		if _, err := postgresVerifyRestore(ctx, executor, container, step, authority); err != nil {
@@ -182,10 +194,18 @@ func restorePostgres(ctx context.Context, assignment *agentpb.BackupWorkAssignme
 		artifact, publisher, recorder.applyStart)
 }
 
-func finishPostgresRestore(ctx context.Context, assignment *agentpb.BackupWorkAssignment,
-	identity workexecution.Identity, ordinal uint32, staging *Staging, consumers BackupConsumers,
-	authority postgresStepAuthority, executor *postgres16execution.Executor,
-	container postgres16execution.Container, artifact *databaseRestoreArtifact, publisher *checkpointdelivery.BackupSource,
+func finishPostgresRestore(
+	ctx context.Context,
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+	ordinal uint32,
+	staging *Staging,
+	consumers BackupConsumers,
+	authority postgresStepAuthority,
+	executor *postgres16execution.Executor,
+	container postgres16execution.Container,
+	artifact *databaseRestoreArtifact,
+	publisher *checkpointdelivery.BackupSource,
 	start *agentpb.BackupPostgresRestoreApplyStartCheckpoint,
 ) (bool, error) {
 	step := assignment.Input.Steps[ordinal]

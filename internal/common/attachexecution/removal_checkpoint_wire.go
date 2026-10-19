@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func EncodeRemovalCheckpointRequest(input RemovalInput, report RemovalReport) (*agentpb.AttachRemovalCheckpointRequest, error) {
+func EncodeRemovalCheckpointRequest(
+	input RemovalInput,
+	report RemovalReport,
+) (*agentpb.AttachRemovalCheckpointRequest, error) {
 	raw, err := EncodeRemovalReport(input, report)
 	if err != nil {
 		return nil, err
@@ -20,7 +23,10 @@ func EncodeRemovalCheckpointRequest(input RemovalInput, report RemovalReport) (*
 	return &agentpb.AttachRemovalCheckpointRequest{Attempt: attempt, Report: raw}, nil
 }
 
-func DecodeRemovalCheckpointRequest(input RemovalInput, request *agentpb.AttachRemovalCheckpointRequest) (RemovalReport, error) {
+func DecodeRemovalCheckpointRequest(
+	input RemovalInput,
+	request *agentpb.AttachRemovalCheckpointRequest,
+) (RemovalReport, error) {
 	if request == nil || executionplan.RejectUnknown(request) != nil {
 		return RemovalReport{}, invalid("Attach removal checkpoint request is malformed")
 	}
@@ -39,7 +45,11 @@ func EncodeRemovalCheckpointAck(input RemovalInput, report RemovalReport) (*agen
 	return &agentpb.AttachRemovalCheckpointAck{Attempt: request.Attempt, Report: request.Report}, nil
 }
 
-func ValidateRemovalCheckpointAck(input RemovalInput, report RemovalReport, ack *agentpb.AttachRemovalCheckpointAck) error {
+func ValidateRemovalCheckpointAck(
+	input RemovalInput,
+	report RemovalReport,
+	ack *agentpb.AttachRemovalCheckpointAck,
+) error {
 	if ack == nil || executionplan.RejectUnknown(ack) != nil {
 		return invalid("Attach removal acknowledgement is malformed")
 	}

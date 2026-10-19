@@ -27,9 +27,15 @@ func (repository *EnvironmentBlueprintRepository) ReadZoneDNSActivation(
 // Direct Release preparation waits without holding an Agent slot. Successful
 // serving acknowledgement is joined to its final input publication, exactly as
 // it is for authored Apply work; bridge existence alone is not DNS readiness.
-func (ledger *ReleaseLedger) ReadReleaseZoneDNSActivation(ctx context.Context, upstreams []string) (ZoneDNSActivation, bool, error) {
+func (ledger *ReleaseLedger) ReadReleaseZoneDNSActivation(
+	ctx context.Context,
+	upstreams []string,
+) (ZoneDNSActivation, bool, error) {
 	if ledger == nil || ledger.store == nil {
-		return ZoneDNSActivation{}, false, errs.New(errs.KindInternal, "Release DNS activation reader is not configured")
+		return ZoneDNSActivation{}, false, errs.New(
+			errs.KindInternal,
+			"Release DNS activation reader is not configured",
+		)
 	}
 	activation, err := readZoneDNSActivation(ctx, ledger.store, upstreams)
 	if kind, found := errs.KindOf(err); found && kind == errs.KindResourceInUse {
@@ -86,7 +92,8 @@ func readZoneDNSActivation(ctx context.Context, store hierarchyStore, upstreams 
 	}
 	if ready {
 		for _, address := range addresses {
-			if ack.state.Applied == nil || !ack.state.Applied.Desired.Enabled || !slices.Contains(ack.state.Applied.ZoneListeners, address) {
+			if ack.state.Applied == nil || !ack.state.Applied.Desired.Enabled ||
+				!slices.Contains(ack.state.Applied.ZoneListeners, address) {
 				ready = false
 				break
 			}

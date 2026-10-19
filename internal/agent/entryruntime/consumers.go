@@ -14,7 +14,10 @@ import (
 
 type Helper interface {
 	StopEntryConfigurationWork(context.Context, *agentpb.EntryConfigurationWorkHelperRequest) error
-	ExecuteEntryConfigurationWork(context.Context, *agentpb.EntryConfigurationWorkHelperRequest) (*agentpb.EntryConfigurationWorkHelperResponse, error)
+	ExecuteEntryConfigurationWork(
+		context.Context,
+		*agentpb.EntryConfigurationWorkHelperRequest,
+	) (*agentpb.EntryConfigurationWorkHelperResponse, error)
 }
 
 type HelperConsumers struct{ helper Helper }
@@ -35,7 +38,11 @@ func (consumers *HelperConsumers) Inspect(ctx context.Context, input entryexecut
 	return consumers.execute(ctx, input, true)
 }
 
-func (consumers *HelperConsumers) execute(ctx context.Context, input entryexecution.FileInput, inspectOnly bool) (bool, error) {
+func (consumers *HelperConsumers) execute(
+	ctx context.Context,
+	input entryexecution.FileInput,
+	inspectOnly bool,
+) (bool, error) {
 	if ctx == nil || input.Progress.Validate(input.Attempt, input.Procedure) != nil || !input.Progress.InFlight {
 		return false, invalidInput()
 	}

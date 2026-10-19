@@ -37,11 +37,24 @@ type Server struct {
 
 // New creates the native channel. Every executable operation is configured
 // through its typed reporting/dispatch owner, not a generic plan resolver.
-func New(auth Authenticator, sessions *Registry, staging BackupStagingStore, secrets RestoreIdentityReleaser, scriptCheckpoints ScriptCheckpointer) *Server {
+func New(
+	auth Authenticator,
+	sessions *Registry,
+	staging BackupStagingStore,
+	secrets RestoreIdentityReleaser,
+	scriptCheckpoints ScriptCheckpointer,
+) *Server {
 	if sessions == nil {
 		sessions = NewRegistry()
 	}
-	return &Server{auth: auth, sessions: sessions, staging: staging, secrets: secrets, scriptCheckpoints: scriptCheckpoints, now: time.Now}
+	return &Server{
+		auth:              auth,
+		sessions:          sessions,
+		staging:           staging,
+		secrets:           secrets,
+		scriptCheckpoints: scriptCheckpoints,
+		now:               time.Now,
+	}
 }
 
 // Connect authenticates the first message, publishes the authorized config,

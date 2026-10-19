@@ -2,8 +2,13 @@ package resolverexecution
 
 import "github.com/AlanD20/groundplane/internal/common/workexecution"
 
-func DiagnosticStage(attempt workexecution.Attempt, layout Layout, begin, progress Progress) (workexecution.Stage, error) {
-	if begin.Validate(attempt, layout) != nil || !begin.InFlight || progress.InFlight && !EqualProgress(begin, progress) ||
+func DiagnosticStage(
+	attempt workexecution.Attempt,
+	layout Layout,
+	begin, progress Progress,
+) (workexecution.Stage, error) {
+	if begin.Validate(attempt, layout) != nil || !begin.InFlight ||
+		progress.InFlight && !EqualProgress(begin, progress) ||
 		!progress.InFlight && ValidateTransition(attempt, layout, &begin, progress) != nil {
 		return workexecution.Stage{}, invalid("DNS resolver diagnostic has no matching recorded execution boundary")
 	}

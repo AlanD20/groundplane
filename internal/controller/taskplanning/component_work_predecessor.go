@@ -21,15 +21,22 @@ func (resolver *ComponentConfigurationCapture) PrepareComponentWorkPredecessorCo
 ) (*agentpb.ComponentWorkRetainedConfiguration, error) {
 	if resolver == nil || ctx == nil || artifact == nil || capture.Validate() != nil ||
 		artifact.OwnerId != capture.Current.EnvironmentID {
-		return nil, errs.New(errs.KindStateConflict, "Component recovery requires its captured runtime and configuration")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Component recovery requires its captured runtime and configuration",
+		)
 	}
 	for _, registration := range resolver.componentCatalog {
 		managed := registration.ManagedConfiguration
 		if registration.Kind != kind || managed == nil {
 			continue
 		}
-		if capture.Prior == nil || prior.ID != capture.Prior.ID || prior.EnvironmentID != capture.Prior.EnvironmentID || prior.Generation != capture.Prior.Generation {
-			return nil, errs.New(errs.KindStateConflict, "Serving discovery Component has no retained configuration snapshot")
+		if capture.Prior == nil || prior.ID != capture.Prior.ID || prior.EnvironmentID != capture.Prior.EnvironmentID ||
+			prior.Generation != capture.Prior.Generation {
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Serving discovery Component has no retained configuration snapshot",
+			)
 		}
 		for _, file := range prior.Files {
 			if file.Destination != managed.SourcePath {
@@ -54,15 +61,32 @@ func (resolver *ComponentConfigurationCapture) PrepareComponentWorkPredecessorCo
 			}
 			definition := registration.Definition.Digest()
 			return &agentpb.ComponentWorkRetainedConfiguration{
-				File: &agentpb.MaterializeFile{ArtifactId: artifact.ArtifactId, MaterializationId: file.MaterializationID,
-					EnvironmentId: file.EnvironmentID, Destination: file.Destination, ServiceId: file.ServiceID, ServiceName: file.ServiceName,
-					OutputKind: agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE,
-					Uid:        file.UID, Gid: file.GID, Mode: file.Mode, Length: file.Length, Sha256: append([]byte(nil), digest[:]...)},
-				DefinitionDigest: append([]byte(nil), definition[:]...), CatalogDigest: append([]byte(nil), registration.CatalogDigest[:]...),
-				ActionId: string(managed.ActionID), Source: append([]byte(nil), content...), Generation: prior.Generation,
+				File: &agentpb.MaterializeFile{
+					ArtifactId:        artifact.ArtifactId,
+					MaterializationId: file.MaterializationID,
+					EnvironmentId:     file.EnvironmentID,
+					Destination:       file.Destination,
+					ServiceId:         file.ServiceID,
+					ServiceName:       file.ServiceName,
+					OutputKind:        agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE,
+					Uid:               file.UID,
+					Gid:               file.GID,
+					Mode:              file.Mode,
+					Length:            file.Length,
+					Sha256:            append([]byte(nil), digest[:]...),
+				},
+				DefinitionDigest: append(
+					[]byte(nil),
+					definition[:]...), CatalogDigest: append([]byte(nil), registration.CatalogDigest[:]...),
+				ActionId: string(
+					managed.ActionID,
+				), Source: append([]byte(nil), content...), Generation: prior.Generation,
 			}, nil
 		}
-		return nil, errs.New(errs.KindStateConflict, "Component recovery configuration is missing from its retained snapshot")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Component recovery configuration is missing from its retained snapshot",
+		)
 	}
 	return nil, nil
 }

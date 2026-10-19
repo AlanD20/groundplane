@@ -16,7 +16,9 @@ func PrepareDatabaseRestoreRecoveryCheckpoint(current BackupRestoreRecord,
 	if ValidateBackupRestoreRecord(current) != nil || current.State != BackupRestoreRecoveryRequired ||
 		current.Point.SourceKind != BackupRuntimeSourceAttach || current.DatabaseProgress == nil ||
 		current.DatabaseProgress.SourceCleanupCompleted || request == nil {
-		return BackupRestoreRecord{}, invalidBackupRuntimeRecord("database recovery requires its recorded, unfinished apply")
+		return BackupRestoreRecord{}, invalidBackupRuntimeRecord(
+			"database recovery requires its recorded, unfinished apply",
+		)
 	}
 	if err := executionplan.RejectUnknown(request); err != nil {
 		return BackupRestoreRecord{}, err
@@ -38,10 +40,18 @@ func PrepareDatabaseRestoreRecoveryCheckpoint(current BackupRestoreRecord,
 	// durable acknowledgement for that already-authorized restart.
 	var restart *databaseServiceCheckpoint
 	if value := request.GetPostgresServiceProgress(); value != nil && current.CurrentTarget.Postgres != nil {
-		restart = &databaseServiceCheckpoint{cursor: value.ServiceCursor, serviceID: value.ServiceId, phase: value.Phase}
+		restart = &databaseServiceCheckpoint{
+			cursor:    value.ServiceCursor,
+			serviceID: value.ServiceId,
+			phase:     value.Phase,
+		}
 	}
 	if value := request.GetMysqlServiceProgress(); value != nil && current.CurrentTarget.MySQL != nil {
-		restart = &databaseServiceCheckpoint{cursor: value.ServiceCursor, serviceID: value.ServiceId, phase: value.Phase}
+		restart = &databaseServiceCheckpoint{
+			cursor:    value.ServiceCursor,
+			serviceID: value.ServiceId,
+			phase:     value.Phase,
+		}
 	}
 	progress := current.DatabaseProgress
 	if restart != nil && restart.phase == agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_RESTART_INTENT &&

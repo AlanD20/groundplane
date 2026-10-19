@@ -19,7 +19,12 @@ func (journal *Journal) SaveBackingRuntime(ctx context.Context, attempt workexec
 	if err != nil {
 		return err
 	}
-	workload, err := backingruntimefact.Workload(input.Runtime, input.ServiceId, attempt.Input.ID, input.RenderGeneration)
+	workload, err := backingruntimefact.Workload(
+		input.Runtime,
+		input.ServiceId,
+		attempt.Input.ID,
+		input.RenderGeneration,
+	)
 	if err != nil || !backingruntimefact.MatchesObservation(observation, input.Runtime, workload) {
 		return invalid()
 	}
@@ -73,7 +78,13 @@ func (journal *Journal) CompleteBacking(ctx context.Context, attempt workexecuti
 		state.Backing.Progress == nil || !state.Backing.Acknowledged {
 		return workexecution.Attempt{}, conflict()
 	}
-	terminal, err := backingprovision.DecodeCompletionAck(attempt, layout, *state.Backing.Progress, *state.Backing.Runtime, ack)
+	terminal, err := backingprovision.DecodeCompletionAck(
+		attempt,
+		layout,
+		*state.Backing.Progress,
+		*state.Backing.Runtime,
+		ack,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -92,7 +103,8 @@ func (journal *Journal) PrepareBackingFailure(ctx context.Context, attempt worke
 ) (*BackingFailureDelivery, error) {
 	layout, err := backingprovision.CaptureLayout(attempt, input)
 	if err != nil || attempt.Direction != workexecution.Forward || attempt.FinishedAt != nil ||
-		reason != backingprovision.ExecutionFailed && reason != backingprovision.DeadlineExpired && reason != backingprovision.Interrupted ||
+		reason != backingprovision.ExecutionFailed && reason != backingprovision.DeadlineExpired &&
+			reason != backingprovision.Interrupted ||
 		at.Before(attempt.AssignedAt) || attempt.StartedAt != nil && at.Before(*attempt.StartedAt) ||
 		reason == backingprovision.DeadlineExpired && at.Before(attempt.Deadline) {
 		return nil, invalid()
@@ -117,7 +129,8 @@ func (journal *Journal) PrepareBackingFailure(ctx context.Context, attempt worke
 		state = &attemptRecord{Attempt: attempt, UpdatedAt: at.UTC(), Backing: &BackingRecord{Layout: layout}}
 	}
 	if !matchesBacking(state, attempt, layout) || state.Backing.Completion != nil ||
-		state.Backing.Progress != nil && state.Backing.Progress.Stage == backingprovision.Complete || at.Before(state.UpdatedAt) {
+		state.Backing.Progress != nil &&
+			state.Backing.Progress.Stage == backingprovision.Complete || at.Before(state.UpdatedAt) {
 		return nil, conflict()
 	}
 	if saved := state.Backing.Failure; saved != nil {

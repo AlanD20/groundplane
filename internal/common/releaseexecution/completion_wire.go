@@ -32,7 +32,11 @@ func EncodeCompletionRequest(input Input, report CheckpointReport) (*agentpb.Rel
 		CheckpointEvidence: &agentpb.WorkInputReference{InputId: report.Ack.Evidence.ID, Sha256: digest}}, nil
 }
 
-func DecodeCompletionAck(input Input, report CheckpointReport, ack *agentpb.ReleaseWorkCompletionAck) (CompletionReceipt, error) {
+func DecodeCompletionAck(
+	input Input,
+	report CheckpointReport,
+	ack *agentpb.ReleaseWorkCompletionAck,
+) (CompletionReceipt, error) {
 	request, err := EncodeCompletionRequest(input, report)
 	if err != nil {
 		return CompletionReceipt{}, err

@@ -14,11 +14,23 @@ import (
 
 type Exchange interface {
 	FactStore
-	ReportProvisionRecovery(context.Context, *agentpb.AttachProvisionRecoveryReportRequest) (*agentpb.AttachProvisionRecoveryReportAck, error)
-	FailAttachProvision(context.Context, *agentpb.AttachProvisionFailureRequest) (*agentpb.AttachProvisionFailureAck, error)
+	ReportProvisionRecovery(
+		context.Context,
+		*agentpb.AttachProvisionRecoveryReportRequest,
+	) (*agentpb.AttachProvisionRecoveryReportAck, error)
+	FailAttachProvision(
+		context.Context,
+		*agentpb.AttachProvisionFailureRequest,
+	) (*agentpb.AttachProvisionFailureAck, error)
 	Start(context.Context, *agentpb.WorkStartRequest) (*agentpb.WorkStartAck, error)
-	AttachProvisionCheckpoint(context.Context, *agentpb.AttachProvisionCheckpointRequest) (*agentpb.AttachProvisionCheckpointAck, error)
-	CompleteAttachProvision(context.Context, *agentpb.AttachProvisionCompletionRequest) (*agentpb.AttachProvisionCompletionAck, error)
+	AttachProvisionCheckpoint(
+		context.Context,
+		*agentpb.AttachProvisionCheckpointRequest,
+	) (*agentpb.AttachProvisionCheckpointAck, error)
+	CompleteAttachProvision(
+		context.Context,
+		*agentpb.AttachProvisionCompletionRequest,
+	) (*agentpb.AttachProvisionCompletionAck, error)
 }
 
 type Executor struct {
@@ -28,7 +40,10 @@ type Executor struct {
 
 func NewExecutor(journal *agentworkjournal.Journal, host Host) (*Executor, error) {
 	if journal == nil || host == nil {
-		return nil, errs.New(errs.KindInternal, "Attach provisioning executor requires its durable journal and host runtime")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Attach provisioning executor requires its durable journal and host runtime",
+		)
 	}
 	return &Executor{journal: journal, host: host}, nil
 }
@@ -43,7 +58,8 @@ func (executor *Executor) Execute(ctx context.Context, input attachexecution.Pro
 	if err != nil {
 		return nil, err
 	}
-	if saved != nil && saved.Acknowledged && !saved.Report.Progress.InFlight && saved.Report.Progress.Completed == saved.Authority.Commands {
+	if saved != nil && saved.Acknowledged && !saved.Report.Progress.InFlight &&
+		saved.Report.Progress.Completed == saved.Authority.Commands {
 		input.Attempt = *savedAttempt
 		if saved.Completion == nil {
 			if err := executor.complete(ctx, input, saved.Report.Progress, exchange); err != nil {
@@ -70,9 +86,16 @@ func (executor *Executor) Execute(ctx context.Context, input attachexecution.Pro
 		return nil, err
 	}
 	if sequence < ack.CheckpointSequence {
-		return nil, errs.New(errs.KindStateConflict, "Agent Attach journal is missing acknowledged progress; command execution requires reconciliation")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Agent Attach journal is missing acknowledged progress; command execution requires reconciliation",
+		)
 	}
-	checkpoints, err := checkpointdelivery.NewAttachProvision(input, executor.journal, exchange.AttachProvisionCheckpoint)
+	checkpoints, err := checkpointdelivery.NewAttachProvision(
+		input,
+		executor.journal,
+		exchange.AttachProvisionCheckpoint,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -53,7 +53,12 @@ func DecodeAgentAttempt(value *agentpb.WorkAttemptIdentity, authenticated Identi
 		len(value.AssignedAt.ProtoReflect().GetUnknown()) != 0 || len(value.Deadline.ProtoReflect().GetUnknown()) != 0 {
 		return Attempt{}, invalid("Agent assignment identity is incomplete or invalid")
 	}
-	identity := Identity{Executor: Agent, HostID: value.HostId, AgentID: value.AgentId, Generation: value.ExecutorGeneration}
+	identity := Identity{
+		Executor:   Agent,
+		HostID:     value.HostId,
+		AgentID:    value.AgentId,
+		Generation: value.ExecutorGeneration,
+	}
 	if identity != authenticated {
 		return Attempt{}, conflict("assignment belongs to a different host or Agent generation")
 	}

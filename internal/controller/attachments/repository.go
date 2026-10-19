@@ -39,7 +39,10 @@ type attachMutationRepository interface {
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
-	GetAttachFactsVersioned(context.Context, etcdstore.Versioned[attachrecord.Record]) (etcdstore.Versioned[attachrecord.EncryptedFacts], bool, error)
+	GetAttachFactsVersioned(
+		context.Context,
+		etcdstore.Versioned[attachrecord.Record],
+	) (etcdstore.Versioned[attachrecord.EncryptedFacts], bool, error)
 	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
 	RenameAttachIdempotent(
 		context.Context,
@@ -50,7 +53,10 @@ type attachMutationRepository interface {
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	PublishAttachWork(context.Context, etcd.AttachWorkPublication) (etcd.IdempotencyTransactionResult, error)
-	CaptureDetachSnapshot(context.Context, etcdstore.Versioned[attachrecord.Record]) (attachremoval.DetachSnapshot, error)
+	CaptureDetachSnapshot(
+		context.Context,
+		etcdstore.Versioned[attachrecord.Record],
+	) (attachremoval.DetachSnapshot, error)
 	ResolveDetachHost(context.Context) (workexecution.Placement, error)
 	PublishDetachWork(context.Context, etcd.DetachWorkPublication) (etcd.IdempotencyTransactionResult, error)
 }
@@ -162,7 +168,10 @@ func (repository *durableAttachMutationRepository) RenameAttachIdempotent(
 	return repository.attaches.RenameAttachIdempotent(ctx, environment, project, current, name, marker)
 }
 
-func (repository *durableAttachMutationRepository) PublishAttachWork(ctx context.Context, request etcd.AttachWorkPublication) (etcd.IdempotencyTransactionResult, error) {
+func (repository *durableAttachMutationRepository) PublishAttachWork(
+	ctx context.Context,
+	request etcd.AttachWorkPublication,
+) (etcd.IdempotencyTransactionResult, error) {
 	return repository.attaches.PublishAttachWork(ctx, request)
 }
 
@@ -172,7 +181,9 @@ func (repository *durableAttachMutationRepository) CaptureDetachSnapshot(ctx con
 	return repository.attaches.CaptureDetachSnapshot(ctx, current)
 }
 
-func (repository *durableAttachMutationRepository) ResolveDetachHost(ctx context.Context) (workexecution.Placement, error) {
+func (repository *durableAttachMutationRepository) ResolveDetachHost(
+	ctx context.Context,
+) (workexecution.Placement, error) {
 	return repository.attaches.ResolveDetachHost(ctx)
 }
 

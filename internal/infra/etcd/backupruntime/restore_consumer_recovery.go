@@ -12,15 +12,23 @@ func prepareDatabaseConsumerRecovery(current BackupRestoreRecord, input *agentpb
 	request *agentpb.BackupWorkCheckpointRequest, at time.Time,
 ) (BackupRestoreRecord, error) {
 	if current.DatabaseProgress.ApplyStarted || request.GetAttempt().GetTaskId() != current.TaskID ||
-		ValidateRestoreWorkInput(current, input) != nil || !ValidBackupRuntimeInstant(at) || !at.After(current.UpdatedAt) {
-		return BackupRestoreRecord{}, invalidBackupRuntimeRecord("consumer recovery authority differs from the interrupted Restore")
+		ValidateRestoreWorkInput(
+			current,
+			input,
+		) != nil || !ValidBackupRuntimeInstant(at) || !at.After(current.UpdatedAt) {
+		return BackupRestoreRecord{}, invalidBackupRuntimeRecord(
+			"consumer recovery authority differs from the interrupted Restore",
+		)
 	}
 	next := CloneBackupRestoreRecord(current)
 	progress := next.DatabaseProgress
 	switch {
 	case request.GetDatabaseConsumerRecovery() != nil:
-		if progress.ConsumersOnly || progress.ContainerID == "" || request.GetDatabaseConsumerRecovery().PointId != current.Point.ID {
-			return BackupRestoreRecord{}, invalidBackupRuntimeRecord("consumer recovery lacks its original database observation")
+		if progress.ConsumersOnly || progress.ContainerID == "" ||
+			request.GetDatabaseConsumerRecovery().PointId != current.Point.ID {
+			return BackupRestoreRecord{}, invalidBackupRuntimeRecord(
+				"consumer recovery lacks its original database observation",
+			)
 		}
 		progress.ConsumersOnly = true
 	case !progress.ConsumersOnly:
@@ -29,13 +37,19 @@ func prepareDatabaseConsumerRecovery(current BackupRestoreRecord, input *agentpb
 		cleanup := request.GetSourceCleanupCompleted()
 		if progress.RecoveryCursor != current.ServiceCount || cleanup.PointId != current.Point.ID ||
 			!BackupArtifactEvidenceMatchesWire(current.Point.Evidence, cleanup.Evidence) {
-			return BackupRestoreRecord{}, invalidBackupRuntimeRecord("consumer recovery cleanup precedes restored workloads")
+			return BackupRestoreRecord{}, invalidBackupRuntimeRecord(
+				"consumer recovery cleanup precedes restored workloads",
+			)
 		}
 		progress.SourceCleanupCompleted = true
 	default:
 		var value databaseServiceCheckpoint
 		if report := request.GetPostgresServiceProgress(); report != nil && current.CurrentTarget.Postgres != nil {
-			value = databaseServiceCheckpoint{cursor: report.ServiceCursor, serviceID: report.ServiceId, phase: report.Phase}
+			value = databaseServiceCheckpoint{
+				cursor:    report.ServiceCursor,
+				serviceID: report.ServiceId,
+				phase:     report.Phase,
+			}
 		} else if report := request.GetMysqlServiceProgress(); report != nil && current.CurrentTarget.MySQL != nil {
 			value = databaseServiceCheckpoint{cursor: report.ServiceCursor, serviceID: report.ServiceId, phase: report.Phase}
 		} else {

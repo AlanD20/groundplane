@@ -49,7 +49,12 @@ func phaseIndex(phase Phase) (uint64, bool) {
 	}
 }
 
-func NewProgress(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture, at time.Time) (Progress, error) {
+func NewProgress(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+	at time.Time,
+) (Progress, error) {
 	progress := Progress{AttemptID: attempt.ID, Phase: QuiesceExecutors, UpdatedAt: at.UTC()}
 	if attempt.FinishedAt != nil || !at.Before(attempt.Deadline) {
 		return Progress{}, invalid()
@@ -57,7 +62,11 @@ func NewProgress(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleW
 	return progress, progress.Validate(attempt, input, capture)
 }
 
-func (progress Progress) Validate(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture) error {
+func (progress Progress) Validate(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+) error {
 	if err := capture.ValidateFor(attempt, input); err != nil {
 		return err
 	}
@@ -85,7 +94,12 @@ func (progress Progress) ValidateEnvelope(attempt workexecution.Attempt) error {
 	return nil
 }
 
-func (progress Progress) Begin(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture, at time.Time) (Progress, error) {
+func (progress Progress) Begin(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, input, capture) != nil || attempt.FinishedAt != nil || progress.InFlight ||
 		progress.Phase == Complete || at.Before(progress.UpdatedAt) || !at.Before(attempt.Deadline) {
 		return Progress{}, invalid()
@@ -95,7 +109,13 @@ func (progress Progress) Begin(attempt workexecution.Attempt, input *agentpb.Ser
 	return progress, nil
 }
 
-func (progress Progress) Confirm(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture, evidence workexecution.Input, at time.Time) (Progress, error) {
+func (progress Progress) Confirm(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+	evidence workexecution.Input,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, input, capture) != nil || attempt.FinishedAt != nil || !progress.InFlight ||
 		evidence.Validate() != nil || at.Before(progress.UpdatedAt) {
 		return Progress{}, invalid()
@@ -129,7 +149,13 @@ func EqualProgress(a, b Progress) bool {
 
 // ValidateTransition admits exact replay or one grant/receipt boundary, never a
 // jump straight to restoration or a replacement of previously recorded proof.
-func ValidateTransition(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture, previous *Progress, next Progress) error {
+func ValidateTransition(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+	previous *Progress,
+	next Progress,
+) error {
 	if next.Validate(attempt, input, capture) != nil {
 		return invalid()
 	}

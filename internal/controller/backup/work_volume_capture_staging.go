@@ -21,7 +21,8 @@ func (owner *AgentWork) volumeCaptureStaging(ctx context.Context, identity worke
 		return nil, nil, invalidCaptureStaging()
 	}
 	item := source.View.Item.Item
-	settled := item.Phase == workexecution.Settled && (item.Cleanup == workexecution.CleanupNone || item.Cleanup == workexecution.CleanupComplete)
+	settled := item.Phase == workexecution.Settled &&
+		(item.Cleanup == workexecution.CleanupNone || item.Cleanup == workexecution.CleanupComplete)
 	terminal := run.State == backupruntime.BackupRunCompleted || run.State == backupruntime.BackupRunFailed ||
 		run.State == backupruntime.BackupRunAborted || run.State == backupruntime.BackupRunTimedOut
 	guards := append(append([]keyvalue.Condition(nil), source.Conditions...), guard)
@@ -54,5 +55,7 @@ func (owner *AgentWork) volumeCaptureStaging(ctx context.Context, identity worke
 
 func discardCapturedFiles(entry *agentpb.BackupRecoveredStage) *agentpb.BackupStagingDisposition {
 	return &agentpb.BackupStagingDisposition{RecoveryKeySha256: append([]byte(nil), entry.RecoveryKeySha256...),
-		Disposition: &agentpb.BackupStagingDisposition_DiscardRecovered{DiscardRecovered: &agentpb.BackupDiscardRecovered{}}}
+		Disposition: &agentpb.BackupStagingDisposition_DiscardRecovered{
+			DiscardRecovered: &agentpb.BackupDiscardRecovered{},
+		}}
 }

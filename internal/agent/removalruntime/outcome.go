@@ -10,7 +10,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (input Input) FailureRequest(reason lifecycleexecution.FailureReason) (*agentpb.ServiceRemovalRecoveryFailureRequest, error) {
+func (input Input) FailureRequest(
+	reason lifecycleexecution.FailureReason,
+) (*agentpb.ServiceRemovalRecoveryFailureRequest, error) {
 	if !reason.Valid() || input.capture.ValidateFor(input.attempt, input.procedure) != nil {
 		return nil, invalidInput()
 	}
@@ -21,7 +23,10 @@ func (input Input) FailureRequest(reason lifecycleexecution.FailureReason) (*age
 	return &agentpb.ServiceRemovalRecoveryFailureRequest{Attempt: identity, Reason: string(reason)}, nil
 }
 
-func (input Input) AcknowledgeFailure(reason lifecycleexecution.FailureReason, ack *agentpb.ServiceRemovalRecoveryFailureAck) (workexecution.Attempt, error) {
+func (input Input) AcknowledgeFailure(
+	reason lifecycleexecution.FailureReason,
+	ack *agentpb.ServiceRemovalRecoveryFailureAck,
+) (workexecution.Attempt, error) {
 	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil ||
 		ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil {
 		return workexecution.Attempt{}, invalidInput()
@@ -41,7 +46,10 @@ func (input Input) AcknowledgeFailure(reason lifecycleexecution.FailureReason, a
 	return attempt, attempt.Validate()
 }
 
-func (input Input) AcknowledgeCompletion(progress removalexecution.Progress, ack *agentpb.ServiceRemovalRecoveryCompletionAck) (workexecution.Attempt, error) {
+func (input Input) AcknowledgeCompletion(
+	progress removalexecution.Progress,
+	ack *agentpb.ServiceRemovalRecoveryCompletionAck,
+) (workexecution.Attempt, error) {
 	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil ||
 		ack.StartedAt == nil || ack.StartedAt.CheckValid() != nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil ||
 		input.attempt.StartedAt == nil || !ack.StartedAt.AsTime().Equal(*input.attempt.StartedAt) ||

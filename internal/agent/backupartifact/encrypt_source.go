@@ -37,7 +37,10 @@ func EncryptSource(ctx context.Context, authority *agentpb.BackupEncryptionAutho
 		}
 		expected, err := backupformat.AgeStoredSize(sourceEvidence.SizeBytes)
 		if err != nil || evidence.Size != expected {
-			return nil, backupstage.ArtifactEvidence{}, errs.New(errs.KindStateConflict, "Encrypted Volume artifact differs from its captured source")
+			return nil, backupstage.ArtifactEvidence{}, errs.New(
+				errs.KindStateConflict,
+				"Encrypted Volume artifact differs from its captured source",
+			)
 		}
 		reader, err := retained.Open(ctx)
 		if err != nil {
@@ -54,7 +57,10 @@ func EncryptSource(ctx context.Context, authority *agentpb.BackupEncryptionAutho
 			return nil, backupstage.ArtifactEvidence{}, err
 		}
 		if proof.size != sourceEvidence.SizeBytes || proof.sum() != sourceEvidence.SHA256 {
-			return nil, backupstage.ArtifactEvidence{}, errs.New(errs.KindStateConflict, "Encrypted Volume artifact differs from its captured source")
+			return nil, backupstage.ArtifactEvidence{}, errs.New(
+				errs.KindStateConflict,
+				"Encrypted Volume artifact differs from its captured source",
+			)
 		}
 		return retained, evidence, nil
 	}
@@ -81,7 +87,10 @@ func EncryptSource(ctx context.Context, authority *agentpb.BackupEncryptionAutho
 	}
 	expected, err := backupformat.AgeStoredSize(sourceEvidence.SizeBytes)
 	if err != nil || evidence.Size != expected {
-		return nil, backupstage.ArtifactEvidence{}, errs.New(errs.KindStateConflict, "Encrypted Volume artifact differs from its captured source")
+		return nil, backupstage.ArtifactEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"Encrypted Volume artifact differs from its captured source",
+		)
 	}
 	return stored, evidence, nil
 }

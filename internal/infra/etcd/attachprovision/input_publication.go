@@ -46,7 +46,10 @@ func (repository *InputRepository) PrepareInput(ctx context.Context, task workex
 		(task.Action != workexecution.ActionApply && task.Action != workexecution.ActionAttach) ||
 		(task.Action == workexecution.ActionAttach && (task.TargetID != generation.AttachID || generation.Binding != nil)) ||
 		(task.Action == workexecution.ActionApply && task.TargetID != generation.EnvironmentID) {
-		return InputPublication{}, errs.New(errs.KindValidationFailed, "Attach input publication requires its unpublished native owner")
+		return InputPublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach input publication requires its unpublished native owner",
+		)
 	}
 	publication := InputPublication{Generation: generation, store: repository.store}
 	publication.Change.Conditions = append([]keyvalue.Condition(nil), guards...)
@@ -78,7 +81,14 @@ func (repository *InputRepository) PrepareInput(ctx context.Context, task workex
 			{Key: workqueue.TaskKey(task.ID)}, {Key: workqueue.ItemKey(workID)},
 			{Key: blueprintattachinputs.Key(task.ID, generation.AttachID)},
 		}
-		prepared, err := pins.PrepareOwned(ctx, generation.OperationID, task.ID, workID, generation.SecretSources, pinGuards)
+		prepared, err := pins.PrepareOwned(
+			ctx,
+			generation.OperationID,
+			task.ID,
+			workID,
+			generation.SecretSources,
+			pinGuards,
+		)
 		if err != nil {
 			return InputPublication{}, err
 		}

@@ -43,7 +43,8 @@ func (captured RuntimePredecessor) Runtime(input *agentpb.ComponentWorkInput) (c
 	runtime := componentplanning.Runtime{EnvironmentID: input.EnvironmentId, Component: captured.Component,
 		RevisionID: captured.RevisionID, RenderGeneration: captured.RenderGeneration, Zones: captured.Zones,
 		Execution: captured.Execution, ProxyPreflight: captured.Proxy, Artifact: artifact}
-	if input.Predecessor.Absent == captured.Component.Desired.Enabled || componentplanning.ValidateRuntime(runtime) != nil {
+	if input.Predecessor.Absent == captured.Component.Desired.Enabled ||
+		componentplanning.ValidateRuntime(runtime) != nil {
 		clear(artifact)
 		return componentplanning.Runtime{}, conflict("Component predecessor metadata differs from captured runtime")
 	}

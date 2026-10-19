@@ -23,7 +23,10 @@ type FactStore interface {
 }
 
 type ConsumerHelper interface {
-	ExecuteAttachConsumer(context.Context, *agentpb.AttachConsumerHelperRequest) (*agentpb.AttachConsumerHelperResponse, error)
+	ExecuteAttachConsumer(
+		context.Context,
+		*agentpb.AttachConsumerHelperRequest,
+	) (*agentpb.AttachConsumerHelperResponse, error)
 }
 
 type BackingHost struct {
@@ -38,12 +41,21 @@ func NewBackingHost(journal *agentworkjournal.Journal, adapter *backingadapter.R
 	ownership *agentownership.Lease, commands *backingcommand.Executor, consumer ConsumerHelper,
 ) (*BackingHost, error) {
 	if journal == nil || adapter == nil || commands == nil || consumer == nil {
-		return nil, errs.New(errs.KindInternal, "Attach provisioning host requires its journal, adapter catalog and durable command executor")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Attach provisioning host requires its journal, adapter catalog and durable command executor",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
 	}
-	return &BackingHost{journal: journal, adapter: adapter, ownership: ownership, commands: commands, consumer: consumer}, nil
+	return &BackingHost{
+		journal:   journal,
+		adapter:   adapter,
+		ownership: ownership,
+		commands:  commands,
+		consumer:  consumer,
+	}, nil
 }
 
 func (host *BackingHost) ExecuteProvisionCommand(ctx context.Context, input attachexecution.ProvisionInput,
@@ -54,14 +66,20 @@ func (host *BackingHost) ExecuteProvisionCommand(ctx context.Context, input atta
 		return attachexecution.ProvisionCommandResult{}, err
 	}
 	if ctx == nil || factsStore == nil || progress.Validate(input.Attempt, authority) != nil || !progress.InFlight {
-		return attachexecution.ProvisionCommandResult{}, errs.New(errs.KindStateConflict, "Attach command requires an acknowledged in-flight boundary")
+		return attachexecution.ProvisionCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Attach command requires an acknowledged in-flight boundary",
+		)
 	}
 	saved, err := host.journal.AttachProvision(ctx, input)
 	if err != nil {
 		return attachexecution.ProvisionCommandResult{}, err
 	}
 	if saved == nil || !saved.Acknowledged {
-		return attachexecution.ProvisionCommandResult{}, errs.New(errs.KindStateConflict, "Attach command has no acknowledged Agent journal boundary")
+		return attachexecution.ProvisionCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Attach command has no acknowledged Agent journal boundary",
+		)
 	}
 	want, err := (attachexecution.ProvisionReport{Progress: progress}).CheckpointAuthority(input.Attempt, authority)
 	if err != nil {
@@ -69,7 +87,10 @@ func (host *BackingHost) ExecuteProvisionCommand(ctx context.Context, input atta
 	}
 	got, err := saved.Report.CheckpointAuthority(input.Attempt, authority)
 	if err != nil || got.Sequence != want.Sequence || got.Evidence != want.Evidence {
-		return attachexecution.ProvisionCommandResult{}, errs.New(errs.KindStateConflict, "Attach command differs from its saved authorization")
+		return attachexecution.ProvisionCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Attach command differs from its saved authorization",
+		)
 	}
 	if result := saved.CommandResult; result != nil {
 		return *result, nil
@@ -81,7 +102,10 @@ func (host *BackingHost) ExecuteProvisionCommand(ctx context.Context, input atta
 		if err := host.observeProvisionExecs(ctx, input, saved); err != nil {
 			return attachexecution.ProvisionCommandResult{}, err
 		}
-		return attachexecution.ProvisionCommandResult{}, errs.New(errs.KindStateConflict, "Attach command was interrupted without a saved result; automatic replay is disabled")
+		return attachexecution.ProvisionCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Attach command was interrupted without a saved result; automatic replay is disabled",
+		)
 	}
 	if err := host.ownership.Check(); err != nil {
 		return attachexecution.ProvisionCommandResult{}, err
@@ -99,7 +123,15 @@ func (host *BackingHost) ExecuteProvisionCommand(ctx context.Context, input atta
 			return attachexecution.ProvisionCommandResult{}, err
 		}
 		recorder := commandRecorder{journal: host.journal, input: input, ownership: host.ownership}
-		facts, err := backinghookruntime.ExecuteAttach(ctx, host.commands, recorder, containerID, definition, values, schema)
+		facts, err := backinghookruntime.ExecuteAttach(
+			ctx,
+			host.commands,
+			recorder,
+			containerID,
+			definition,
+			values,
+			schema,
+		)
 		if err != nil {
 			return attachexecution.ProvisionCommandResult{}, err
 		}
@@ -122,7 +154,11 @@ func (host *BackingHost) ExecuteProvisionCommand(ctx context.Context, input atta
 			return attachexecution.ProvisionCommandResult{}, err
 		}
 	}
-	result := attachexecution.ProvisionCommandResult{Ordinal: progress.Completed, StartedAt: *progress.BeganAt, FinishedAt: time.Now().UTC()}
+	result := attachexecution.ProvisionCommandResult{
+		Ordinal:    progress.Completed,
+		StartedAt:  *progress.BeganAt,
+		FinishedAt: time.Now().UTC(),
+	}
 	// A cancelled delivery still must durably save its observed successful
 	// return; this bounded write does not authorize another external effect.
 	storage, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)

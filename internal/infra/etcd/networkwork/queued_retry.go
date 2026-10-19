@@ -12,7 +12,11 @@ import (
 // PrepareQueuedRetryStop settles an unassigned forward retry, not its preceding
 // execution. Admission of that retry already required settled external effects;
 // stopping the queue must neither run cleanup again nor discard the saved result.
-func (repository *InputRepository) PrepareQueuedRetryStop(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareQueuedRetryStop(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if item.Operation != workexecution.Network || item.AttemptNumber == 0 || item.Input == nil ||
 		item.ActiveAttemptID != "" || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
@@ -27,7 +31,13 @@ func (repository *InputRepository) PrepareQueuedRetryStop(ctx context.Context, v
 	} else if at.Before(task.Deadline) && at.Before(item.Deadline) {
 		return workqueue.Change{}, conflict("Network queued Retry has not stopped or expired")
 	}
-	_, previous, err := repository.transactions.ReadAttempt(ctx, task.ID, item.ID, item.AttemptNumber, view.ReadRevision)
+	_, previous, err := repository.transactions.ReadAttempt(
+		ctx,
+		task.ID,
+		item.ID,
+		item.AttemptNumber,
+		view.ReadRevision,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -54,6 +64,9 @@ func (repository *InputRepository) PrepareQueuedRetryStop(ctx context.Context, v
 	change.Conditions = append(change.Conditions, fence.Conditions...)
 	change.Mutations = append(change.Mutations, fence.Mutations...)
 	change.Conditions = append(change.Conditions, guards...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: previous.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: previous.Revision},
+	)
 	return change, nil
 }

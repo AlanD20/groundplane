@@ -20,7 +20,12 @@ func captureConfig(ctx context.Context, assignment *agentpb.BackupWorkAssignment
 	identity workexecution.Identity, ordinal uint32, staging *Staging,
 	delivery *checkpointdelivery.Backup, exchange Exchange,
 ) (resultErr error) {
-	binding, err := backupconfigtransfer.Bind(assignment, identity, ordinal, agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_CAPTURE)
+	binding, err := backupconfigtransfer.Bind(
+		assignment,
+		identity,
+		ordinal,
+		agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_CAPTURE,
+	)
 	if err != nil {
 		return err
 	}

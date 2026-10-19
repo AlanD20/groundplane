@@ -17,22 +17,37 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (service *ReleaseCheckpointService) PublishReleaseEffect(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.ReleaseEffectEvidenceRequest) (*agentpb.ReleaseEffectEvidenceAck, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || request.Evidence == nil || len(request.Evidence.Sha256) != sha256.Size {
+func (service *ReleaseCheckpointService) PublishReleaseEffect(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.ReleaseEffectEvidenceRequest,
+) (*agentpb.ReleaseEffectEvidenceAck, error) {
+	if request == nil || executionplan.RejectUnknown(request) != nil || request.Evidence == nil ||
+		len(request.Evidence.Sha256) != sha256.Size {
 		return nil, errs.New(errs.KindValidationFailed, "Release effect evidence request is invalid")
 	}
 	reference := workexecution.Input{ID: request.Evidence.InputId, SHA256: hex.EncodeToString(request.Evidence.Sha256)}
 	if err := service.RecordReleaseEffect(ctx, authorization, request.Attempt, request.Record, reference); err != nil {
 		return nil, err
 	}
-	return &agentpb.ReleaseEffectEvidenceAck{Attempt: proto.CloneOf(request.Attempt), Evidence: proto.CloneOf(request.Evidence)}, nil
+	return &agentpb.ReleaseEffectEvidenceAck{
+		Attempt:  proto.CloneOf(request.Attempt),
+		Evidence: proto.CloneOf(request.Evidence),
+	}, nil
 }
 
 // RecordReleaseEffect retains an already-authorized effect's proof. It neither
 // grants a new mutation nor advances the execution cursor; Confirm consumes the
 // immutable evidence in its own guarded transaction.
-func (service *ReleaseCheckpointService) RecordReleaseEffect(ctx context.Context, authorization agentregistration.WorkAuthorization, identity *agentpb.WorkAttemptIdentity, raw []byte, reference workexecution.Input) error {
-	if service == nil || ctx == nil || len(raw) == 0 || len(raw) > releaseexecution.MaximumCheckpointBytes || reference.Validate() != nil {
+func (service *ReleaseCheckpointService) RecordReleaseEffect(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	identity *agentpb.WorkAttemptIdentity,
+	raw []byte,
+	reference workexecution.Input,
+) error {
+	if service == nil || ctx == nil || len(raw) == 0 || len(raw) > releaseexecution.MaximumCheckpointBytes ||
+		reference.Validate() != nil {
 		return errs.New(errs.KindValidationFailed, "Release effect evidence is invalid")
 	}
 	guards, err := authorization.Conditions()

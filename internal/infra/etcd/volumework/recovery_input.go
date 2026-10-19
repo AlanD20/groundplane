@@ -17,7 +17,11 @@ type RecoveryInput struct {
 	Conditions []keyvalue.Condition
 }
 
-func (repository *InputRepository) LoadRecoveryInput(ctx context.Context, view workqueue.View, attempt workexecution.Attempt) (RecoveryInput, error) {
+func (repository *InputRepository) LoadRecoveryInput(
+	ctx context.Context,
+	view workqueue.View,
+	attempt workexecution.Attempt,
+) (RecoveryInput, error) {
 	input, guards, err := repository.Load(ctx, view)
 	if err != nil {
 		return RecoveryInput{}, err
@@ -42,7 +46,12 @@ func (repository *InputRepository) LoadRecoveryInput(ctx context.Context, view w
 	if read.Values[0] == nil {
 		return RecoveryInput{}, conflict("Volume recovery checkpoint report is unavailable")
 	}
-	boundary, err := volumeexecution.DecodeProgress(saved.Source.Forward, input.Action, input.VolumeId, read.Values[0].Value)
+	boundary, err := volumeexecution.DecodeProgress(
+		saved.Source.Forward,
+		input.Action,
+		input.VolumeId,
+		read.Values[0].Value,
+	)
 	if err != nil {
 		return RecoveryInput{}, err
 	}

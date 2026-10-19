@@ -37,14 +37,23 @@ func (repository *TaskRepository) CreateSoftwarePreparationWork(ctx context.Cont
 		return IdempotencyTransactionResult{}, err
 	}
 	defer keyvalue.ClearMutationValues(work.Mutations)
-	work.Conditions = append(work.Conditions, keyvalue.Condition{Key: preparation.Key(task.ID)}, keyvalue.Condition{Key: preparation.InputKey(item.ID)})
+	work.Conditions = append(
+		work.Conditions,
+		keyvalue.Condition{Key: preparation.Key(task.ID)},
+		keyvalue.Condition{Key: preparation.InputKey(item.ID)},
+	)
 	work.Mutations = append(work.Mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: preparation.Key(task.ID), Value: value},
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: preparation.InputKey(item.ID), Value: input})
 	classify := func(_ int64, _ []*keyvalue.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "software preparation publication changed")
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, work.Conditions, work.Mutations, classify)
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerTask,
+		work.Conditions,
+		work.Mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

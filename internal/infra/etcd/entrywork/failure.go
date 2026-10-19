@@ -24,7 +24,9 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 		attempt.FinishedAt != nil || attempt.Direction != workexecution.Forward ||
 		item.Operation != workexecution.EntryConfiguration || !task.PublicationComplete || task.CollectionStartedAt != nil ||
 		interrupted && reason != entryexecution.ExecutionInterrupted {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Entry failure no longer owns the active execution")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Entry failure no longer owns the active execution",
+		)
 	}
 	input, _, guards, err := repository.Load(ctx, view.Work)
 	if err != nil {
@@ -40,7 +42,9 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 		}
 		defer keyvalue.ClearValues(read.Values)
 		if read.Values[0] == nil {
-			return workqueue.Change{}, workexecution.Completion{}, conflict("Entry failure is missing its acknowledged progress")
+			return workqueue.Change{}, workexecution.Completion{}, conflict(
+				"Entry failure is missing its acknowledged progress",
+			)
 		}
 		progress, err := entryexecution.DecodeProgress(attempt, input, read.Values[0].Value)
 		if err != nil {
@@ -48,7 +52,9 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 		}
 		expected, err := progress.Checkpoint(attempt, input)
 		if err != nil || expected != *checkpoint || progress.Stage == entryexecution.Complete {
-			return workqueue.Change{}, workexecution.Completion{}, conflict("Entry failure differs from acknowledged progress; completed work must report completion")
+			return workqueue.Change{}, workexecution.Completion{}, conflict(
+				"Entry failure differs from acknowledged progress; completed work must report completion",
+			)
 		}
 		settled = false
 		guards = append(guards, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
@@ -85,7 +91,8 @@ func (repository *InputRepository) LoadFailure(ctx context.Context, view workque
 		return nil, err
 	}
 	attempt := view.Attempt.Attempt
-	if view.Work.Item.Item.Operation != workexecution.EntryConfiguration || attempt.FinishedAt == nil || attempt.Result == nil {
+	if view.Work.Item.Item.Operation != workexecution.EntryConfiguration || attempt.FinishedAt == nil ||
+		attempt.Result == nil {
 		return nil, conflict("Entry failure has no retained result")
 	}
 	read, err := repository.read(ctx, []string{FailureKey(attempt.ID)}, view.Work.ReadRevision)

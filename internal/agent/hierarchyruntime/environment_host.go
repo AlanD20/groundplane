@@ -15,7 +15,11 @@ import (
 
 type EnvironmentHelper interface {
 	StopEnvironmentHelpers(context.Context, workexecution.Attempt, workexecution.Attempt) error
-	ExecuteEnvironmentRemoval(context.Context, string, *agentpb.EnvironmentRemovalHelperRequest) (*agentpb.EnvironmentRemovalHelperResponse, error)
+	ExecuteEnvironmentRemoval(
+		context.Context,
+		string,
+		*agentpb.EnvironmentRemovalHelperRequest,
+	) (*agentpb.EnvironmentRemovalHelperResponse, error)
 }
 
 type Host struct {
@@ -25,9 +29,17 @@ type Host struct {
 	ownership *agentownership.Lease
 }
 
-func NewHost(volumeRoot string, journal *agentworkjournal.Journal, helper EnvironmentHelper, ownership *agentownership.Lease) (*Host, error) {
+func NewHost(
+	volumeRoot string,
+	journal *agentworkjournal.Journal,
+	helper EnvironmentHelper,
+	ownership *agentownership.Lease,
+) (*Host, error) {
 	if environmentpath.ValidateRoot(volumeRoot) != nil || journal == nil || helper == nil {
-		return nil, errs.New(errs.KindInternal, "Environment removal host requires its configured root, journal and helper")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Environment removal host requires its configured root, journal and helper",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
@@ -35,33 +47,52 @@ func NewHost(volumeRoot string, journal *agentworkjournal.Journal, helper Enviro
 	return &Host{root: volumeRoot, journal: journal, helper: helper, ownership: ownership}, nil
 }
 
-func (host *Host) RemoveRuntime(ctx context.Context, input hierarchyexecution.EnvironmentInput, progress hierarchyexecution.EnvironmentProgress,
+func (host *Host) RemoveRuntime(
+	ctx context.Context,
+	input hierarchyexecution.EnvironmentInput,
+	progress hierarchyexecution.EnvironmentProgress,
 	inspectOnly bool,
 ) (hierarchyexecution.EnvironmentObservation, error) {
 	if progress.Phase != hierarchyexecution.RemoveRuntime {
-		return hierarchyexecution.EnvironmentObservation{}, errs.New(errs.KindStateConflict, "Environment runtime removal requires its acknowledged runtime stage")
+		return hierarchyexecution.EnvironmentObservation{}, errs.New(
+			errs.KindStateConflict,
+			"Environment runtime removal requires its acknowledged runtime stage",
+		)
 	}
 	return host.execute(ctx, input, progress, inspectOnly)
 }
 
-func (host *Host) RemoveDirectory(ctx context.Context, input hierarchyexecution.EnvironmentInput, progress hierarchyexecution.EnvironmentProgress,
+func (host *Host) RemoveDirectory(
+	ctx context.Context,
+	input hierarchyexecution.EnvironmentInput,
+	progress hierarchyexecution.EnvironmentProgress,
 	inspectOnly bool,
 ) (hierarchyexecution.EnvironmentObservation, error) {
 	if progress.Phase != hierarchyexecution.RemoveDirectory {
-		return hierarchyexecution.EnvironmentObservation{}, errs.New(errs.KindStateConflict, "Environment directory removal requires its acknowledged directory stage")
+		return hierarchyexecution.EnvironmentObservation{}, errs.New(
+			errs.KindStateConflict,
+			"Environment directory removal requires its acknowledged directory stage",
+		)
 	}
 	return host.execute(ctx, input, progress, inspectOnly)
 }
 
-func (host *Host) execute(ctx context.Context, input hierarchyexecution.EnvironmentInput, progress hierarchyexecution.EnvironmentProgress,
+func (host *Host) execute(
+	ctx context.Context,
+	input hierarchyexecution.EnvironmentInput,
+	progress hierarchyexecution.EnvironmentProgress,
 	inspectOnly bool,
 ) (hierarchyexecution.EnvironmentObservation, error) {
 	saved, err := host.journal.EnvironmentRemoval(ctx, input)
 	if err != nil {
 		return hierarchyexecution.EnvironmentObservation{}, err
 	}
-	if saved == nil || !saved.Acknowledged || !progress.InFlight || !hierarchyexecution.EqualEnvironmentProgress(saved.Report.Progress, progress) {
-		return hierarchyexecution.EnvironmentObservation{}, errs.New(errs.KindStateConflict, "Environment removal host action has no acknowledged journal boundary")
+	if saved == nil || !saved.Acknowledged || !progress.InFlight ||
+		!hierarchyexecution.EqualEnvironmentProgress(saved.Report.Progress, progress) {
+		return hierarchyexecution.EnvironmentObservation{}, errs.New(
+			errs.KindStateConflict,
+			"Environment removal host action has no acknowledged journal boundary",
+		)
 	}
 	if input.Recovery != nil {
 		if err := host.ownership.CheckRecovery(input.Recovery.Forward, input.Attempt); err != nil {

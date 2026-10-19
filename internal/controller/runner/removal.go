@@ -25,7 +25,14 @@ const (
 
 type removalRepository interface {
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
-	PrepareRunnerRemoval(context.Context, etcdstore.Versioned[runnerrecord.RunnerRecord], string, string, string, time.Time) (etcd.RunnerRemovalSource, error)
+	PrepareRunnerRemoval(
+		context.Context,
+		etcdstore.Versioned[runnerrecord.RunnerRecord],
+		string,
+		string,
+		string,
+		time.Time,
+	) (etcd.RunnerRemovalSource, error)
 	PublishRunnerRemoval(
 		context.Context,
 		etcd.RunnerRemovalSource,
@@ -116,7 +123,14 @@ func (service *RemovalService) RemoveRunner(
 	}
 
 	now := service.now().UTC()
-	source, err := service.repository.PrepareRunnerRemoval(ctx, current, ids.New(ids.KindTask), ids.New(ids.KindWorkItem), ids.New(ids.KindPlan), now)
+	source, err := service.repository.PrepareRunnerRemoval(
+		ctx,
+		current,
+		ids.New(ids.KindTask),
+		ids.New(ids.KindWorkItem),
+		ids.New(ids.KindPlan),
+		now,
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -129,7 +143,11 @@ func (service *RemovalService) RemoveRunner(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task := workexecution.Task{ID: input.TaskID, Actor: workexecution.OperatorActor,
-		Scope:  workexecution.Scope{TenantID: input.Desired.TenantID, ProjectID: input.Desired.ProjectID(), EnvironmentID: input.Desired.EnvironmentID()},
+		Scope: workexecution.Scope{
+			TenantID:      input.Desired.TenantID,
+			ProjectID:     input.Desired.ProjectID(),
+			EnvironmentID: input.Desired.EnvironmentID(),
+		},
 		Action: workexecution.ActionRemove, TargetID: runnerID, TargetName: input.Desired.Slug, Intent: ref, ExpectedItems: 1,
 		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(runnerRemoveTimeoutSeconds) * time.Second)}
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})

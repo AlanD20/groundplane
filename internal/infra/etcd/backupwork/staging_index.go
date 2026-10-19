@@ -52,7 +52,10 @@ func prepareSourceStagingIndexes(item workexecution.Item, input *agentpb.BackupW
 			return workqueue.Change{}, err
 		}
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: encoded})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: encoded},
+		)
 	}
 	return change, nil
 }
@@ -99,7 +102,8 @@ func (repository *InputRepository) ReadStagingSource(ctx context.Context, queue 
 	if err != nil {
 		return zero, err
 	}
-	if view.Item.Item.Input == nil || *view.Item.Item.Input != index.Input || view.Item.Item.Placement.HostID != identity.HostID {
+	if view.Item.Item.Input == nil || *view.Item.Item.Input != index.Input ||
+		view.Item.Item.Placement.HostID != identity.HostID {
 		return zero, conflict("Backup source staging differs from its retained work")
 	}
 	input, inputGuard, err := repository.Load(ctx, view)

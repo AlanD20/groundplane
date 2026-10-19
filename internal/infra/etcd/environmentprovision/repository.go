@@ -28,15 +28,24 @@ func NewRepository(store reader) (*Repository, error) {
 // desired input. Every read is bound to the native scheduler's snapshot.
 func (repository *Repository) Load(ctx context.Context, view workqueue.View) (Input, keyvalue.Condition, error) {
 	if view.ReadRevision <= 0 {
-		return Input{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Environment provisioning snapshot is unavailable")
+		return Input{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Environment provisioning snapshot is unavailable",
+		)
 	}
 	key := InputKey(view.Item.Item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}
 	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
-		return Input{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Environment provisioning capture is unavailable")
+		return Input{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Environment provisioning capture is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	input, err := Decode(read.Values[0].Value)
@@ -52,7 +61,11 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 // PrepareResourceResult contributes only the provisioning-state change. The
 // operation owner must join authenticated directory evidence and native attempt
 // settlement before committing it. Mutable labels are preserved, not restored.
-func (repository *Repository) PrepareResourceResult(ctx context.Context, view workqueue.View, succeeded bool) (workqueue.Change, error) {
+func (repository *Repository) PrepareResourceResult(
+	ctx context.Context,
+	view workqueue.View,
+	succeeded bool,
+) (workqueue.Change, error) {
 	input, capture, err := repository.Load(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -73,7 +86,10 @@ func (repository *Repository) PrepareResourceResult(ctx context.Context, view wo
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append([]keyvalue.Condition{capture}, change.Conditions...)
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: hierarchy.EnvironmentKey(current.ID), Value: raw})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: hierarchy.EnvironmentKey(current.ID), Value: raw},
+	)
 	return change, nil
 }
 
@@ -86,13 +102,22 @@ func (repository *Repository) ReadyForHost(ctx context.Context, view workqueue.V
 	}
 	keys := []string{hierarchy.EnvironmentKey(input.Environment.ID), hierarchy.ProjectKey(input.Scope.ProjectID),
 		hierarchy.TenantKey(input.Scope.TenantID), deletions.TombstoneKey("environment", input.Scope.EnvironmentID),
-		deletions.TombstoneKey("project", input.Scope.ProjectID), deletions.TombstoneKey("tenant", input.Scope.TenantID)}
+		deletions.TombstoneKey(
+			"project",
+			input.Scope.ProjectID,
+		), deletions.TombstoneKey("tenant", input.Scope.TenantID)}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: view.ReadRevision})
 	if err != nil {
 		return Input{}, workqueue.Change{}, err
 	}
-	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != len(keys) || read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil {
-		return Input{}, workqueue.Change{}, errs.New(errs.KindStateConflict, "Environment provisioning hierarchy is unavailable")
+	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != len(keys) ||
+		read.Values[0] == nil ||
+		read.Values[1] == nil ||
+		read.Values[2] == nil {
+		return Input{}, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Environment provisioning hierarchy is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	environment, err := hierarchy.DecodeEnvironment(read.Values[0].Value)
@@ -107,12 +132,25 @@ func (repository *Repository) ReadyForHost(ctx context.Context, view workqueue.V
 	if err != nil {
 		return Input{}, workqueue.Change{}, err
 	}
-	if environment.ID != input.Environment.ID || environment.ProjectID != input.Scope.ProjectID || environment.VolumeDir != input.Environment.VolumeDir ||
-		environment.CreateTaskID != input.TaskID || environment.ProvisioningState != hierarchy.EnvironmentProvisioningProvisioning || environment.DeletionTaskID != "" ||
-		project.ID != input.Scope.ProjectID || project.TenantID != input.Scope.TenantID || project.Kind != hierarchy.ProjectKindTenant || project.DeletionTaskID != "" ||
-		tenant.ID != input.Scope.TenantID || tenant.DeletionTaskID != "" ||
-		read.Values[3] != nil || read.Values[4] != nil || read.Values[5] != nil || view.Item.Item.Operation != workexecution.Environment {
-		return Input{}, workqueue.Change{}, errs.New(errs.KindStateConflict, "Environment provisioning no longer owns its hierarchy")
+	if environment.ID != input.Environment.ID || environment.ProjectID != input.Scope.ProjectID ||
+		environment.VolumeDir != input.Environment.VolumeDir ||
+		environment.CreateTaskID != input.TaskID ||
+		environment.ProvisioningState != hierarchy.EnvironmentProvisioningProvisioning ||
+		environment.DeletionTaskID != "" ||
+		project.ID != input.Scope.ProjectID ||
+		project.TenantID != input.Scope.TenantID ||
+		project.Kind != hierarchy.ProjectKindTenant ||
+		project.DeletionTaskID != "" ||
+		tenant.ID != input.Scope.TenantID ||
+		tenant.DeletionTaskID != "" ||
+		read.Values[3] != nil ||
+		read.Values[4] != nil ||
+		read.Values[5] != nil ||
+		view.Item.Item.Operation != workexecution.Environment {
+		return Input{}, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Environment provisioning no longer owns its hierarchy",
+		)
 	}
 	change := workqueue.Change{Conditions: []keyvalue.Condition{capture}}
 	for index, key := range keys {

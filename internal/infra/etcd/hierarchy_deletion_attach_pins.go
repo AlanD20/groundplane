@@ -15,9 +15,14 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachPins(ctx co
 	capture attachremoval.WorkCapture,
 ) (tasksecretpins.Prepared, error) {
 	if capture.TaskID != view.Task.Task.ID || capture.WorkItemID != view.Item.Item.ID ||
-		capture.OperationID != HierarchyAttachOperation(view) || capture.Hook == nil || len(capture.Sources) == 0 || capture.Pins != nil ||
+		capture.OperationID != HierarchyAttachOperation(
+			view,
+		) || capture.Hook == nil || len(capture.Sources) == 0 || capture.Pins != nil ||
 		!hierarchyCaptureMayActivate(view) {
-		return tasksecretpins.Prepared{}, errs.New(errs.KindValidationFailed, "Attach Secret preparation has invalid captured ownership")
+		return tasksecretpins.Prepared{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach Secret preparation has invalid captured ownership",
+		)
 	}
 	source, err := repository.LoadHierarchyAttachInput(ctx, view)
 	if err != nil {
@@ -25,7 +30,8 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachPins(ctx co
 	}
 	defer attachremoval.Clear(&source.Input)
 	digest, err := attachremoval.Digest(source.Input)
-	if err != nil || capture.FrozenSHA256 != digest || capture.BackingProjectID != source.Input.Attach.BackingProjectID {
+	if err != nil || capture.FrozenSHA256 != digest ||
+		capture.BackingProjectID != source.Input.Attach.BackingProjectID {
 		return tasksecretpins.Prepared{}, errs.New(errs.KindStateConflict, "Attach Secret preparation source changed")
 	}
 	pins, err := tasksecretpins.NewEtcdRepository(repository.store, capture.BackingProjectID)
@@ -36,10 +42,17 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachPins(ctx co
 	if err != nil {
 		return tasksecretpins.Prepared{}, err
 	}
-	return pins.PrepareOwned(ctx, capture.OperationID, capture.TaskID, capture.WorkItemID, capture.Sources, []tasksecretpins.Condition{
-		{Key: envelope.Key, ModRevision: envelope.ModRevision},
-		{Key: workqueue.TaskKey(view.Task.Task.ID), ModRevision: view.Task.Revision},
-		{Key: workqueue.ItemKey(view.Item.Item.ID), ModRevision: view.Item.Revision},
-		{Key: attachremoval.WorkCaptureKey(view.Item.Item.ID)},
-	})
+	return pins.PrepareOwned(
+		ctx,
+		capture.OperationID,
+		capture.TaskID,
+		capture.WorkItemID,
+		capture.Sources,
+		[]tasksecretpins.Condition{
+			{Key: envelope.Key, ModRevision: envelope.ModRevision},
+			{Key: workqueue.TaskKey(view.Task.Task.ID), ModRevision: view.Task.Revision},
+			{Key: workqueue.ItemKey(view.Item.Item.ID), ModRevision: view.Item.Revision},
+			{Key: attachremoval.WorkCaptureKey(view.Item.Item.ID)},
+		},
+	)
 }

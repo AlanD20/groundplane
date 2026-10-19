@@ -20,7 +20,10 @@ func (service *Service) PrepareForwardAssignment(ctx context.Context,
 	if service == nil || service.ledger == nil || request.DecisionOnly || request.Direction != workexecution.Forward ||
 		item.Placement.Executor != workexecution.Agent || request.Executor.Record.Identity.HostID != item.Placement.HostID ||
 		at.IsZero() || !at.Before(task.Deadline) || !at.Before(item.Deadline) {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Blueprint Release cannot obtain this forward assignment")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Release cannot obtain this forward assignment",
+		)
 	}
 	view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
 	sources, err := service.ledger.LoadReleaseForwardSources(ctx, view)

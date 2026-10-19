@@ -17,7 +17,11 @@ import (
 // stopped; reconciliation must account for its retained slots and claims.
 // On an uncertain transaction response, fail startup rather than blindly create
 // another generation. This method does not adopt an identity by reading it back.
-func (runtime *Runtime) RegisterController(ctx context.Context, ownership *controllerownership.Lease, capacity uint16) (workexecution.Identity, error) {
+func (runtime *Runtime) RegisterController(
+	ctx context.Context,
+	ownership *controllerownership.Lease,
+	capacity uint16,
+) (workexecution.Identity, error) {
 	if err := ownership.Check(); err != nil {
 		return workexecution.Identity{}, err
 	}
@@ -35,13 +39,18 @@ func (runtime *Runtime) RegisterController(ctx context.Context, ownership *contr
 	}
 	for _, operation := range runtime.scheduler.decisions {
 		if runtime.controller.owners[operation] != nil {
-			return workexecution.Identity{}, errs.New(errs.KindInternal, "Controller decision also has an execution owner")
+			return workexecution.Identity{}, errs.New(
+				errs.KindInternal,
+				"Controller decision also has an execution owner",
+			)
 		}
 		operations = append(operations, operation)
 	}
 	slices.Sort(operations)
 	change, record, err := workqueue.PrepareRegistration(previous, workqueue.ExecutorRecord{
-		Identity: workexecution.Identity{Executor: workexecution.Controller}, Capacity: capacity, Operations: operations,
+		Identity: workexecution.Identity{
+			Executor: workexecution.Controller,
+		}, Capacity: capacity, Operations: operations,
 	})
 	if err != nil {
 		return workexecution.Identity{}, err
@@ -52,7 +61,10 @@ func (runtime *Runtime) RegisterController(ctx context.Context, ownership *contr
 		return workexecution.Identity{}, err
 	}
 	if !result.Succeeded {
-		return workexecution.Identity{}, errs.New(errs.KindStateConflict, "controller executor registration changed during startup")
+		return workexecution.Identity{}, errs.New(
+			errs.KindStateConflict,
+			"controller executor registration changed during startup",
+		)
 	}
 	return record.Identity, nil
 }

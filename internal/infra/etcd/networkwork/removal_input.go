@@ -15,7 +15,10 @@ import (
 // CaptureRemovalInput uses stable ownership, never a desired declaration that
 // has already been omitted. The caller must join the accepted removal graph and
 // completed consumer dependencies to publication of this input.
-func (repository *InputRepository) CaptureRemovalInput(ctx context.Context, view workqueue.View) (*agentpb.NetworkWorkInput, []keyvalue.Condition, error) {
+func (repository *InputRepository) CaptureRemovalInput(
+	ctx context.Context,
+	view workqueue.View,
+) (*agentpb.NetworkWorkInput, []keyvalue.Condition, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Action != workexecution.ActionApply || item.Operation != workexecution.Network ||
 		item.TaskID != task.ID || item.Placement.Executor != workexecution.Agent ||

@@ -17,12 +17,20 @@ import (
 func (service *Service) PrepareProxySourceHold(ctx context.Context, work workqueue.View,
 	rollouts []componentplanning.ProxyServiceRolloutReference, preflight componentplanning.ProxyServicePreflight,
 ) (*componentplanning.ProxyServicePreflight, workqueue.Change, error) {
-	if work.Item.Item.Validate() != nil || work.Task.Revision <= 0 || work.Item.Revision <= 0 || work.ReadRevision <= 0 ||
-		work.Item.Item.TaskID != work.Task.Task.ID || work.Item.Item.Operation != workexecution.Component ||
-		work.Item.Item.AttemptNumber != 0 || work.Item.Item.ActiveAttemptID != "" || work.Item.Item.ForwardRevoked ||
+	if work.Item.Item.Validate() != nil || work.Task.Revision <= 0 || work.Item.Revision <= 0 ||
+		work.ReadRevision <= 0 ||
+		work.Item.Item.TaskID != work.Task.Task.ID ||
+		work.Item.Item.Operation != workexecution.Component ||
+		work.Item.Item.AttemptNumber != 0 ||
+		work.Item.Item.ActiveAttemptID != "" ||
+		work.Item.Item.ForwardRevoked ||
 		(work.Item.Item.Phase != workexecution.Waiting && work.Item.Item.Phase != workexecution.Ready) ||
-		preflight.ParentTaskID != work.Task.Task.ID || preflight.EnvironmentID != work.Task.Task.Scope.EnvironmentID {
-		return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "Proxy source preparation does not match unstarted Component work")
+		preflight.ParentTaskID != work.Task.Task.ID ||
+		preflight.EnvironmentID != work.Task.Task.Scope.EnvironmentID {
+		return nil, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Proxy source preparation does not match unstarted Component work",
+		)
 	}
 	prepared, err := service.prepareProxySourceHold(ctx, work, rollouts)
 	if err != nil {
@@ -31,11 +39,19 @@ func (service *Service) PrepareProxySourceHold(ctx context.Context, work workque
 	defer prepared.fragment.Clear()
 	if prepared.reference == nil {
 		if preflight.SourceHold != nil {
-			return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "Proxy work retains a source hold absent from its captured rollouts")
+			return nil, workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Proxy work retains a source hold absent from its captured rollouts",
+			)
 		}
 		return &preflight, workqueue.Change{}, nil
 	}
-	result, change, err := componentplanning.BindWorkProxySourceHold(work, preflight, *prepared.reference, prepared.fragment)
+	result, change, err := componentplanning.BindWorkProxySourceHold(
+		work,
+		preflight,
+		*prepared.reference,
+		prepared.fragment,
+	)
 	if err != nil {
 		return nil, workqueue.Change{}, err
 	}

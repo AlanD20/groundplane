@@ -30,7 +30,10 @@ func (service *FactService) ResolveCapturedLifecycleHook(ctx context.Context, ca
 	}
 	input := backinghook.Input{Context: backinghook.Context{Event: event, BackingServiceID: captured.ServiceID}}
 	defer clearBackingHookInput(&input)
-	input.Values = append(input.Values, backinghook.Value{Key: "HOST", Value: []byte(backingendpoint.New(captured.ServiceID))})
+	input.Values = append(
+		input.Values,
+		backinghook.Value{Key: "HOST", Value: []byte(backingendpoint.New(captured.ServiceID))},
+	)
 	if stored != nil {
 		expected := taskconfiguration.TaskBackingHookInputSet{ProjectID: captured.Scope.ProjectID,
 			CiphertextSHA256: captured.HookInputs.CiphertextSHA256, SecretSources: captured.HookInputs.SecretSources}

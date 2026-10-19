@@ -17,7 +17,11 @@ func InspectDatabaseStaging(ctx context.Context, disposition *agentpb.BackupStag
 	return inspectDatabaseStaging(ctx, disposition, true)
 }
 
-func inspectDatabaseStaging(ctx context.Context, disposition *agentpb.BackupStagingDisposition, allowRestoreApply bool) error {
+func inspectDatabaseStaging(
+	ctx context.Context,
+	disposition *agentpb.BackupStagingDisposition,
+	allowRestoreApply bool,
+) error {
 	if disposition == nil {
 		return invalidDatabaseStaging()
 	}
@@ -73,7 +77,10 @@ func inspectMySQLStaging(ctx context.Context, disposition *agentpb.BackupStaging
 	heldFound := heldNonce == (mysql84protocol.Nonce{})
 	for _, record := range inventory {
 		if !allowRestoreApply && record.Operation == mysql84protocol.OperationRestoreApply {
-			return errs.New(errs.KindStateConflict, "MySQL cleanup found unexpected Restore apply evidence; retaining it for recovery")
+			return errs.New(
+				errs.KindStateConflict,
+				"MySQL cleanup found unexpected Restore apply evidence; retaining it for recovery",
+			)
 		}
 		if record.Nonce == heldNonce {
 			if record.Operation != mysql84protocol.OperationRestoreApply {
@@ -148,7 +155,10 @@ func inspectPostgresStaging(ctx context.Context, disposition *agentpb.BackupStag
 	heldFound := heldNonce == (postgres16protocol.Nonce{})
 	for _, record := range inventory.Records {
 		if !allowRestoreApply && record.Operation == postgres16protocol.OperationRestoreApply {
-			return errs.New(errs.KindStateConflict, "PostgreSQL cleanup found unexpected Restore apply evidence; retaining it for recovery")
+			return errs.New(
+				errs.KindStateConflict,
+				"PostgreSQL cleanup found unexpected Restore apply evidence; retaining it for recovery",
+			)
 		}
 		if record.Nonce == heldNonce {
 			if record.RequestSHA256 != heldDigest || record.Operation != postgres16protocol.OperationRestoreApply {

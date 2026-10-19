@@ -16,7 +16,10 @@ type Exchange interface {
 	NetworkCheckpoint(context.Context, *agentpb.NetworkWorkCheckpointRequest) (*agentpb.NetworkWorkCheckpointAck, error)
 	CompleteNetwork(context.Context, *agentpb.NetworkWorkCompletionRequest) (*agentpb.NetworkWorkCompletionAck, error)
 	FailNetwork(context.Context, *agentpb.NetworkWorkFailureRequest) (*agentpb.NetworkWorkFailureAck, error)
-	RecoverNetwork(context.Context, *agentpb.NetworkWorkRecoveryReportRequest) (*agentpb.NetworkWorkRecoveryReportAck, error)
+	RecoverNetwork(
+		context.Context,
+		*agentpb.NetworkWorkRecoveryReportRequest,
+	) (*agentpb.NetworkWorkRecoveryReportAck, error)
 }
 
 // Host owns exact bridge authority and joins any helper before
@@ -66,7 +69,15 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 		return executor.deliverFailure(ctx, input, exchange, saved.Failure)
 	}
 	if saved == nil && reconcile {
-		return executor.fail(ctx, input, exchange, errs.New(errs.KindStateConflict, "Network execution started previously but its local checkpoint is unavailable; inspection is required"))
+		return executor.fail(
+			ctx,
+			input,
+			exchange,
+			errs.New(
+				errs.KindStateConflict,
+				"Network execution started previously but its local checkpoint is unavailable; inspection is required",
+			),
+		)
 	}
 	var progress networkexecution.Progress
 	if saved != nil {
@@ -91,7 +102,12 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 		}
 		fresh := !progress.InFlight
 		if fresh {
-			progress, err = progress.Begin(input.attempt, input.procedure.Action, input.procedure.NetworkId, time.Now().UTC())
+			progress, err = progress.Begin(
+				input.attempt,
+				input.procedure.Action,
+				input.procedure.NetworkId,
+				time.Now().UTC(),
+			)
 			if err != nil {
 				return executor.fail(ctx, input, exchange, err)
 			}
@@ -124,7 +140,13 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 				return executor.fail(ctx, input, exchange, inspectErr)
 			}
 		}
-		progress, err = progress.Confirm(input.attempt, input.procedure.Action, input.procedure.NetworkId, observation, time.Now().UTC())
+		progress, err = progress.Confirm(
+			input.attempt,
+			input.procedure.Action,
+			input.procedure.NetworkId,
+			observation,
+			time.Now().UTC(),
+		)
 		if err != nil {
 			return executor.fail(ctx, input, exchange, err)
 		}
@@ -150,14 +172,24 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 	return terminal, nil
 }
 
-func (executor *Executor) save(ctx context.Context, input Input, exchange Exchange, progress networkexecution.Progress) error {
+func (executor *Executor) save(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress networkexecution.Progress,
+) error {
 	if _, err := executor.journal.PrepareNetwork(ctx, input.attempt, input.procedure.Action, input.procedure.NetworkId, progress); err != nil {
 		return err
 	}
 	return executor.acknowledge(ctx, input, exchange, progress)
 }
 
-func (executor *Executor) acknowledge(ctx context.Context, input Input, exchange Exchange, progress networkexecution.Progress) error {
+func (executor *Executor) acknowledge(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress networkexecution.Progress,
+) error {
 	request, err := input.checkpointRequest(progress)
 	if err != nil {
 		return err
@@ -170,5 +202,11 @@ func (executor *Executor) acknowledge(ctx context.Context, input Input, exchange
 	if err != nil {
 		return err
 	}
-	return executor.journal.AcknowledgeNetwork(ctx, input.attempt, input.procedure.Action, input.procedure.NetworkId, checkpoint)
+	return executor.journal.AcknowledgeNetwork(
+		ctx,
+		input.attempt,
+		input.procedure.Action,
+		input.procedure.NetworkId,
+		checkpoint,
+	)
 }

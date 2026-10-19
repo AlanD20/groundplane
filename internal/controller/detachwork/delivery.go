@@ -14,12 +14,19 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (owner *Owner) admitRecovery(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Owner) admitRecovery(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
 	if request.DecisionOnly || item.Placement.Executor != workexecution.Agent ||
 		item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped ||
 		request.Executor.Record.Identity.HostID != item.Placement.HostID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Detach recovery requires its captured host and unresolved effects")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Detach recovery requires its captured host and unresolved effects",
+		)
 	}
 	if !at.Before(item.Deadline) {
 		change, err := workqueue.PrepareCleanupRetryExpiry(request.Task, request.Item, at)
@@ -48,17 +55,26 @@ func (owner *Owner) recoveryAdmission(ctx context.Context, view workqueue.View) 
 	}
 	if len(resource.Mutations) != 0 {
 		keyvalue.ClearMutationValues(resource.Mutations)
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach original failure has not settled its resource metadata")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Detach original failure has not settled its resource metadata",
+		)
 	}
 	change.Conditions = append(change.Conditions, resource.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: attachremoval.WorkRecoveryKey(view.Item.Item.ID), ModRevision: source.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: attachremoval.WorkRecoveryKey(view.Item.Item.ID), ModRevision: source.Revision},
+	)
 	return change, nil
 }
 
 func (owner *Owner) AuthorizeAgentStart(ctx context.Context, view workqueue.ResumeView) (workqueue.Change, error) {
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
-	if !view.CurrentExecutor || !view.ActiveAttempt || attempt.StartedAt != nil || item.Operation != workexecution.Detach ||
-		workexecution.ValidateDelivery(item, attempt) != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil {
+	if !view.CurrentExecutor || !view.ActiveAttempt || attempt.StartedAt != nil ||
+		item.Operation != workexecution.Detach ||
+		workexecution.ValidateDelivery(item, attempt) != nil ||
+		task.FinishedAt != nil ||
+		task.CollectionStartedAt != nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach no longer owns a new start grant")
 	}
 	if attempt.Direction == workexecution.Recovery {
@@ -84,10 +100,16 @@ func (owner *Owner) AuthorizeAgentStart(ctx context.Context, view workqueue.Resu
 	return change, nil
 }
 
-func (owner *Owner) DetachAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ControllerMessage, error) {
+func (owner *Owner) DetachAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ControllerMessage, error) {
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
 	if !view.CurrentExecutor || !view.ActiveAttempt || item.Operation != workexecution.Detach ||
-		workexecution.ValidateDelivery(item, attempt) != nil || task.CollectionStartedAt != nil || task.FinishedAt != nil ||
+		workexecution.ValidateDelivery(
+			item,
+			attempt,
+		) != nil || task.CollectionStartedAt != nil || task.FinishedAt != nil ||
 		!task.PublicationComplete {
 		return nil, errs.New(errs.KindStateConflict, "Detach delivery no longer owns active execution")
 	}
@@ -101,7 +123,9 @@ func (owner *Owner) DetachAssignment(ctx context.Context, view workqueue.ResumeV
 		if err != nil {
 			return nil, err
 		}
-		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_AttachRecoveryAssignment{AttachRecoveryAssignment: assignment}}, nil
+		return &agentpb.ControllerMessage{
+			Payload: &agentpb.ControllerMessage_AttachRecoveryAssignment{AttachRecoveryAssignment: assignment},
+		}, nil
 	}
 	input, err := owner.forwardInput(ctx, view)
 	if err != nil {
@@ -112,14 +136,20 @@ func (owner *Owner) DetachAssignment(ctx context.Context, view workqueue.ResumeV
 	if err != nil {
 		return nil, err
 	}
-	return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_AttachRemovalAssignment{AttachRemovalAssignment: assignment}}, nil
+	return &agentpb.ControllerMessage{
+		Payload: &agentpb.ControllerMessage_AttachRemovalAssignment{AttachRemovalAssignment: assignment},
+	}, nil
 }
 
 // forwardInput reconstructs only the immutable authority. Reconciliation may
 // use it for a replaced process without giving that process a new grant.
 func (owner *Owner) forwardInput(ctx context.Context, view workqueue.ResumeView) (attachexecution.RemovalInput, error) {
-	if view.Work.Item.Item.Operation != workexecution.Detach || view.Attempt.Attempt.Direction != workexecution.Forward {
-		return attachexecution.RemovalInput{}, errs.New(errs.KindStateConflict, "Detach has no matching captured forward attempt")
+	if view.Work.Item.Item.Operation != workexecution.Detach ||
+		view.Attempt.Attempt.Direction != workexecution.Forward {
+		return attachexecution.RemovalInput{}, errs.New(
+			errs.KindStateConflict,
+			"Detach has no matching captured forward attempt",
+		)
 	}
 	capture, err := owner.inputs.LoadDetachCapture(ctx, view.Work)
 	if err != nil {
@@ -127,7 +157,10 @@ func (owner *Owner) forwardInput(ctx context.Context, view workqueue.ResumeView)
 	}
 	defer capture.Clear()
 	if capture.Revision <= 0 {
-		return attachexecution.RemovalInput{}, errs.New(errs.KindStateConflict, "Detach command inputs have not been captured")
+		return attachexecution.RemovalInput{}, errs.New(
+			errs.KindStateConflict,
+			"Detach command inputs have not been captured",
+		)
 	}
 	return owner.planner.ResolveDetachInput(ctx, capture.Input, capture.Capture, view.Attempt.Attempt)
 }

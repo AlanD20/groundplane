@@ -18,7 +18,11 @@ import (
 // ConsumerConditions prevents publication, assignment or completion against a
 // replaced serving runtime. The admission owner also fences selection of the
 // complete running-consumer set with the Environment mutation epoch.
-func (repository *InputRepository) ConsumerConditions(ctx context.Context, capture Capture, revision int64) ([]keyvalue.Condition, error) {
+func (repository *InputRepository) ConsumerConditions(
+	ctx context.Context,
+	capture Capture,
+	revision int64,
+) ([]keyvalue.Condition, error) {
 	if len(capture.Consumers) == 0 {
 		return nil, nil
 	}
@@ -92,7 +96,10 @@ func (repository *InputRepository) PrepareAppliedState(ctx context.Context, view
 		return workqueue.Change{}, err
 	}
 	for _, condition := range configuration {
-		proof.Conditions = append(proof.Conditions, keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision})
+		proof.Conditions = append(
+			proof.Conditions,
+			keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision},
+		)
 	}
 	if capture.Configuration.Prior == nil || capture.Configuration.Current != *capture.Configuration.Prior {
 		value, err := runtimeconfiguration.EncodeReference(capture.Configuration.Current)

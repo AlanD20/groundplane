@@ -11,15 +11,25 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (executor *ConnectionCheckExecutor) AuthorizeStart(ctx context.Context, delivery workqueue.Delivery) (workqueue.Change, error) {
+func (executor *ConnectionCheckExecutor) AuthorizeStart(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (workqueue.Change, error) {
 	loaded, err := executor.loadDelivery(ctx, delivery)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	if loaded.Record.Phase != dnschecks.Ready {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "DNS check has already started; reconcile its result")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"DNS check has already started; reconcile its result",
+		)
 	}
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: dnschecks.RecordKey(loaded.Record.Owner.TaskID), ModRevision: loaded.Revision}}}, nil
+	return workqueue.Change{
+		Conditions: []keyvalue.Condition{
+			{Key: dnschecks.RecordKey(loaded.Record.Owner.TaskID), ModRevision: loaded.Revision},
+		},
+	}, nil
 }
 
 func (executor *ConnectionCheckExecutor) Reconcile(ctx context.Context, delivery workqueue.Delivery) error {
@@ -66,13 +76,19 @@ func (executor *ConnectionCheckExecutor) RejectUnstarted(ctx context.Context, de
 	return journal.RejectAssigned(ctx, failure, time.Now().UTC())
 }
 
-func (executor *ConnectionCheckExecutor) loadDelivery(ctx context.Context, delivery workqueue.Delivery) (keyvalue.Versioned[dnschecks.Record], error) {
+func (executor *ConnectionCheckExecutor) loadDelivery(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (keyvalue.Versioned[dnschecks.Record], error) {
 	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
 	if item.Validate() != nil || attempt.Validate() != nil || item.Operation != workexecution.DNSCheck ||
 		attempt.Executor.Executor != workexecution.Controller || attempt.Direction != workexecution.Forward ||
 		attempt.TaskID != item.TaskID || attempt.WorkItemID != item.ID || item.ActiveAttemptID != attempt.ID ||
 		item.Input == nil || *item.Input != attempt.Input || attempt.FinishedAt != nil {
-		return keyvalue.Versioned[dnschecks.Record]{}, errs.New(errs.KindStateConflict, "DNS delivery does not own its captured attempt")
+		return keyvalue.Versioned[dnschecks.Record]{}, errs.New(
+			errs.KindStateConflict,
+			"DNS delivery does not own its captured attempt",
+		)
 	}
 	loaded, err := executor.records.Load(ctx, item.TaskID)
 	if err != nil {
@@ -81,7 +97,10 @@ func (executor *ConnectionCheckExecutor) loadDelivery(ctx context.Context, deliv
 	digest, err := dnschecks.PlanHash(loaded.Record)
 	if err != nil || loaded.Record.Owner.TaskID != item.TaskID || loaded.Record.Owner.WorkItemID != item.ID ||
 		loaded.Record.Owner.PlanID != attempt.Input.ID || digest != attempt.Input.SHA256 || loaded.Record.Source.ComponentID != item.TargetID {
-		return keyvalue.Versioned[dnschecks.Record]{}, errs.New(errs.KindStateConflict, "DNS delivery differs from captured resolver input")
+		return keyvalue.Versioned[dnschecks.Record]{}, errs.New(
+			errs.KindStateConflict,
+			"DNS delivery differs from captured resolver input",
+		)
 	}
 	return loaded, nil
 }

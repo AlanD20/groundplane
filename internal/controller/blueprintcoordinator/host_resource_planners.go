@@ -77,7 +77,15 @@ func (planner *AttachPlanner) PrepareBlueprintWork(ctx context.Context, task wor
 func (planner *ComponentPlanner) PrepareBlueprintWork(ctx context.Context, task workexecution.Task,
 	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
 ) (PreparedUnit, error) {
-	selected, err := prepareHostResource(ctx, planner.hosts, task, unit, baseline, ids.KindComponent, workexecution.Component)
+	selected, err := prepareHostResource(
+		ctx,
+		planner.hosts,
+		task,
+		unit,
+		baseline,
+		ids.KindComponent,
+		workexecution.Component,
+	)
 	if err != nil {
 		return PreparedUnit{}, err
 	}
@@ -103,7 +111,10 @@ func prepareHostResource(ctx context.Context, hosts hostbindings.Reader, task wo
 	if task.Validate() != nil || task.Action != workexecution.ActionApply || task.PublicationComplete ||
 		task.Scope.EnvironmentID != baseline.EnvironmentID || baseline.ReadRevision <= 0 ||
 		blueprintunits.ValidateUnit(unit) != nil || unit.Target.Kind != kind {
-		return PreparedUnit{}, errs.New(errs.KindValidationFailed, "Blueprint resource admission requires captured intent and ownership")
+		return PreparedUnit{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint resource admission requires captured intent and ownership",
+		)
 	}
 	host, err := hostbindings.ReadLocal(ctx, hosts, baseline.ReadRevision)
 	if err != nil {

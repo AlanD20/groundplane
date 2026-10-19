@@ -30,7 +30,9 @@ func (stager *Stager) Cleanup(ctx context.Context, record preparationrecord.Reco
 	name := "groundplane-stage-" + record.TaskID
 	existing, err := engine.ContainerInspect(ctx, name, client.ContainerInspectOptions{})
 	if err == nil {
-		if existing.Container.Config == nil || existing.Container.Config.Labels[ownerLabel] != record.TaskID || existing.Container.State == nil || existing.Container.State.Running {
+		if existing.Container.Config == nil || existing.Container.Config.Labels[ownerLabel] != record.TaskID ||
+			existing.Container.State == nil ||
+			existing.Container.State.Running {
 			return errs.New(errs.KindStateConflict, "software staging helper is not a safely stopped owned container")
 		}
 		if _, err := engine.ContainerRemove(ctx, existing.Container.ID, client.ContainerRemoveOptions{}); err != nil {

@@ -33,7 +33,10 @@ func (record attemptRecord) validateScriptCompletion() error {
 
 // LoadScriptCompletion bypasses Start when command cleanup is already durable.
 // A missing receipt means only settlement must be replayed, never the command.
-func (journal *Journal) LoadScriptCompletion(ctx context.Context, attempt workexecution.Attempt) (*ScriptCompletion, error) {
+func (journal *Journal) LoadScriptCompletion(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (*ScriptCompletion, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -50,14 +53,21 @@ func (journal *Journal) LoadScriptCompletion(ctx context.Context, attempt workex
 	if err != nil {
 		return nil, err
 	}
-	if script == nil || script.Ack == nil || script.Report.State != agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN {
+	if script == nil || script.Ack == nil ||
+		script.Report.State != agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN {
 		return nil, nil
 	}
 	return &ScriptCompletion{Record: *script, Receipt: state.ScriptCompletion}, nil
 }
 
-func (journal *Journal) AcknowledgeScriptCompletion(ctx context.Context, attempt workexecution.Attempt, ack *agentpb.ScriptWorkCompletionAck) (workexecution.Attempt, error) {
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.CheckpointEvidence == nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil {
+func (journal *Journal) AcknowledgeScriptCompletion(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	ack *agentpb.ScriptWorkCompletionAck,
+) (workexecution.Attempt, error) {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.CheckpointEvidence == nil ||
+		ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil {
 		return workexecution.Attempt{}, invalid()
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, attempt.Executor)
@@ -73,14 +83,18 @@ func (journal *Journal) AcknowledgeScriptCompletion(ctx context.Context, attempt
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if state == nil || !workexecution.SameAssignment(state.Attempt, attempt) || state.Sequence != ack.CheckpointSequence {
+	if state == nil || !workexecution.SameAssignment(state.Attempt, attempt) ||
+		state.Sequence != ack.CheckpointSequence {
 		return workexecution.Attempt{}, conflict()
 	}
 	terminal := state.Attempt
 	finished := ack.FinishedAt.AsTime().UTC()
 	terminal.FinishedAt = &finished
 	terminal.Outcome = workexecution.Outcome(ack.Outcome)
-	terminal.Result = &workexecution.Input{ID: ack.CheckpointEvidence.InputId, SHA256: hex.EncodeToString(ack.CheckpointEvidence.Sha256)}
+	terminal.Result = &workexecution.Input{
+		ID:     ack.CheckpointEvidence.InputId,
+		SHA256: hex.EncodeToString(ack.CheckpointEvidence.Sha256),
+	}
 	if saved := state.ScriptCompletion; saved != nil {
 		if saved.Outcome != terminal.Outcome || !saved.FinishedAt.Equal(finished) || *saved.Result != *terminal.Result {
 			return workexecution.Attempt{}, conflict()

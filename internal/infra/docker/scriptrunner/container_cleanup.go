@@ -25,7 +25,13 @@ func (runner *Runner) Cleanup(
 	}
 	var prepared *preparedBody
 	if body != nil {
-		value, err := preparedCapturedBody(runner.bodies, request.WorkItemID, request.ExecutionID, request.BodyMetadata, *body)
+		value, err := preparedCapturedBody(
+			runner.bodies,
+			request.WorkItemID,
+			request.ExecutionID,
+			request.BodyMetadata,
+			*body,
+		)
 		if err != nil {
 			return proof, err
 		}
@@ -61,8 +67,12 @@ func (runner *Runner) cleanup(
 	// container. Inspect its captured name before removing any mounted files.
 	named, nameErr := runner.client.ContainerInspect(ctx, request.Projection.Name, client.ContainerInspectOptions{})
 	if nameErr == nil {
-		if containerID == "" || named.Container.ID != containerID || named.Container.Name != "/"+request.Projection.Name {
-			return errs.New(errs.KindStateConflict, "Script cleanup requires the captured container receipt; artifacts retained")
+		if containerID == "" || named.Container.ID != containerID ||
+			named.Container.Name != "/"+request.Projection.Name {
+			return errs.New(
+				errs.KindStateConflict,
+				"Script cleanup requires the captured container receipt; artifacts retained",
+			)
 		}
 		if err := validateCleanupProjection(named, containerID, request.Projection); err != nil {
 			return err

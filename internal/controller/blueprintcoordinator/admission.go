@@ -16,7 +16,13 @@ import (
 // executable input remains waiting until the operation owner captures it from
 // this Task's intent and exact dependency results.
 type ResourceWorkPlanner interface {
-	PrepareBlueprintWork(context.Context, workexecution.Task, blueprintunits.Unit, blueprintunits.Snapshot, map[string]core.ComponentSpec) (PreparedUnit, error)
+	PrepareBlueprintWork(
+		context.Context,
+		workexecution.Task,
+		blueprintunits.Unit,
+		blueprintunits.Snapshot,
+		map[string]core.ComponentSpec,
+	) (PreparedUnit, error)
 }
 
 type ResourceRegistration struct {
@@ -57,7 +63,10 @@ func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task
 	if admission == nil || ctx == nil || !plan.Complete || plan.ParentTaskID != task.ID ||
 		plan.EnvironmentID != task.Scope.EnvironmentID || baseline.EnvironmentID != plan.EnvironmentID ||
 		baseline.ReadRevision <= 0 || len(plan.Units) != int(task.ExpectedItems) {
-		return blueprintunits.CapturedGraph{}, errs.New(errs.KindValidationFailed, "Blueprint admission does not describe one complete captured plan")
+		return blueprintunits.CapturedGraph{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint admission does not describe one complete captured plan",
+		)
 	}
 	prepared := make([]PreparedUnit, 0, len(plan.Units))
 	for _, unit := range plan.Units {
@@ -81,11 +90,20 @@ func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task
 		default:
 			owner := admission.planners[unit.Target.Kind]
 			if owner == nil {
-				return blueprintunits.CapturedGraph{}, errs.New(errs.KindInternal, "Blueprint resource has no work planner")
+				return blueprintunits.CapturedGraph{}, errs.New(
+					errs.KindInternal,
+					"Blueprint resource has no work planner",
+				)
 			}
 			// An owner cannot mutate the captured dependency or conflict lists.
 			copy := unit
-			copy.Reads, copy.Writes, copy.After = slices.Clone(unit.Reads), slices.Clone(unit.Writes), slices.Clone(unit.After)
+			copy.Reads, copy.Writes, copy.After = slices.Clone(
+				unit.Reads,
+			), slices.Clone(
+				unit.Writes,
+			), slices.Clone(
+				unit.After,
+			)
 			var err error
 			selected, err = owner.PrepareBlueprintWork(ctx, task, copy, baseline, components)
 			if err != nil {
@@ -94,7 +112,10 @@ func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task
 			if selected.Unit.Target != unit.Target || selected.Unit.Removal != unit.Removal ||
 				selected.Unit.Fingerprint != unit.Fingerprint || !slices.Equal(selected.Unit.Reads, unit.Reads) ||
 				!slices.Equal(selected.Unit.Writes, unit.Writes) || !slices.Equal(selected.Unit.After, unit.After) {
-				return blueprintunits.CapturedGraph{}, errs.New(errs.KindInternal, "Blueprint work planner changed the captured resource plan")
+				return blueprintunits.CapturedGraph{}, errs.New(
+					errs.KindInternal,
+					"Blueprint work planner changed the captured resource plan",
+				)
 			}
 		}
 		prepared = append(prepared, selected)

@@ -9,7 +9,11 @@ import (
 )
 
 type EnvironmentProvisionReporter interface {
-	ReportEnvironmentProvision(context.Context, agentregistration.WorkAuthorization, *agentpb.EnvironmentProvisionResultRequest) (*agentpb.EnvironmentProvisionResultAck, error)
+	ReportEnvironmentProvision(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.EnvironmentProvisionResultRequest,
+	) (*agentpb.EnvironmentProvisionResultAck, error)
 }
 
 func (server *Server) ConfigureEnvironmentProvision(owner EnvironmentProvisionReporter) error {

@@ -26,7 +26,10 @@ func (owner *AgentWork) prepareRestorePublication(ctx context.Context, view work
 		return nil, err
 	}
 	step := admitted.Input().Steps[report.SourceOrdinal]
-	transfer, err := configRestoreTransferOwner(backupconfiguration.ConfigTransferOwner{Binding: binding}, step.GetRestore())
+	transfer, err := configRestoreTransferOwner(
+		backupconfiguration.ConfigTransferOwner{Binding: binding},
+		step.GetRestore(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -43,8 +46,14 @@ func (owner *AgentWork) prepareRestorePublication(ctx context.Context, view work
 	}
 	var candidate *ConfigRestorePublication
 	if admitted.Recovery != nil {
-		candidate, err = owner.configRestores.PrepareRecoveryCandidate(ctx, transfer, content, step.GetRestore().PointId,
-			admitted.Recovery, view.Attempt.Attempt.Executor)
+		candidate, err = owner.configRestores.PrepareRecoveryCandidate(
+			ctx,
+			transfer,
+			content,
+			step.GetRestore().PointId,
+			admitted.Recovery,
+			view.Attempt.Attempt.Executor,
+		)
 	} else {
 		candidate, err = owner.configRestores.PrepareCandidate(ctx, transfer, content, step.GetRestore().PointId)
 	}

@@ -14,7 +14,9 @@ import (
 // disappeared or that a connection survived; removal has its own boundary.
 func WaitDrain(ctx context.Context, input releaseexecution.Input, report releaseexecution.CheckpointReport) error {
 	if ctx == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil ||
-		report.Progress.Validate(input) != nil || !report.Progress.InFlight || report.Progress.Phase != releaseexecution.Rollout ||
+		report.Progress.Validate(
+			input,
+		) != nil || !report.Progress.InFlight || report.Progress.Phase != releaseexecution.Rollout ||
 		report.Progress.Rolling == nil || report.Progress.Rolling.Phase != rollingrelease.DrainPredecessor {
 		return errs.New(errs.KindStateConflict, "Release has no acknowledged rolling drain boundary")
 	}

@@ -63,7 +63,10 @@ func (input Input) Validate() error {
 	if pins := input.ConfigurationPins; pins != nil && (pins.Validate() != nil ||
 		input.Configuration == nil || pins.TaskID != input.TaskID || pins.WorkItemID != input.WorkItemID ||
 		pins.OperationID != input.ConfigurationOperationID()) {
-		return errs.New(errs.KindValidationFailed, "Service removal Secret retention differs from its captured configuration owner")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Service removal Secret retention differs from its captured configuration owner",
+		)
 	}
 	if input.Configuration != nil && (runtimeconfiguration.ValidateReference(*input.Configuration) != nil ||
 		input.Configuration.EnvironmentID != input.Scope.EnvironmentID || input.Configuration.Generation > input.Generation) {
@@ -72,12 +75,18 @@ func (input Input) Validate() error {
 	if input.Runtime == nil {
 		if input.RuntimeSourceRevision != 0 || input.Configuration != nil ||
 			input.HostID != "" && ids.Validate(ids.KindHost, input.HostID) != nil {
-			return errs.New(errs.KindValidationFailed, "Service removal without runtime cannot authorize host execution")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Service removal without runtime cannot authorize host execution",
+			)
 		}
 		return nil
 	}
 	if input.Runtime.Configuration != nil && input.Configuration == nil {
-		return errs.New(errs.KindValidationFailed, "Service removal must capture current configuration before removing a configured runtime")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Service removal must capture current configuration before removing a configured runtime",
+		)
 	}
 	if input.RuntimeSourceRevision == 0 || serviceruntimerecord.Validate(*input.Runtime) != nil ||
 		input.Runtime.EnvironmentID != input.Scope.EnvironmentID || input.Runtime.Runtime.ServiceID != input.ServiceID ||

@@ -40,5 +40,9 @@ func ReadLocalIdentity(ctx context.Context, store Reader, revision int64) (keyva
 	if err != nil || ids.Validate(ids.KindHost, host.ID) != nil {
 		return keyvalue.Versioned[string]{}, errs.New(errs.KindInternal, "local host identity is corrupt")
 	}
-	return keyvalue.Versioned[string]{Record: host.ID, Revision: value.ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[string]{
+		Record:       host.ID,
+		Revision:     value.ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }

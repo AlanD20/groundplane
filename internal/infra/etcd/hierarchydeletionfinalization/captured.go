@@ -12,8 +12,13 @@ import (
 // PrepareCaptured binds current resource comparisons to the finalizer sealed in
 // the removal plan. The caller owns the returned buffers and must commit these
 // effects together with its execution result, never in a separate transaction.
-func (repository *Preparer) PrepareCaptured(ctx context.Context, operation hierarchydeletion.HierarchyDeletionOperation, action hierarchydeletion.HierarchyDeletionAction) (Effects, error) {
-	if action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureController || action.ControllerProcedure == nil {
+func (repository *Preparer) PrepareCaptured(
+	ctx context.Context,
+	operation hierarchydeletion.HierarchyDeletionOperation,
+	action hierarchydeletion.HierarchyDeletionAction,
+) (Effects, error) {
+	if action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureController ||
+		action.ControllerProcedure == nil {
 		return Effects{}, errs.New(errs.KindStateConflict, "removal action is not a captured Controller finalizer")
 	}
 	effects, err := repository.Prepare(ctx, operation, action)

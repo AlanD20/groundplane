@@ -24,25 +24,53 @@ type TaskDetailOptions struct {
 	Revision int64
 }
 
-func (c *Client) TaskAttemptEvents(ctx context.Context, taskID, workID, attemptID string, after uint64, revision int64) (apiTypes.TaskAttemptEvents, error) {
+func (c *Client) TaskAttemptEvents(
+	ctx context.Context,
+	taskID, workID, attemptID string,
+	after uint64,
+	revision int64,
+) (apiTypes.TaskAttemptEvents, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAttemptEvents{}, err
 	}
-	response, err := client.TaskAttemptEvents(ctx, taskID, workID, attemptID, &generated.TaskAttemptEventsParams{After: &after, Revision: &revision})
-	return readTaskResponse[apiTypes.TaskAttemptEvents](ctx, "/api/v1/tasks/"+taskID+"/work/"+workID+"/attempts/"+attemptID+"/events", response, err)
+	response, err := client.TaskAttemptEvents(
+		ctx,
+		taskID,
+		workID,
+		attemptID,
+		&generated.TaskAttemptEventsParams{After: &after, Revision: &revision},
+	)
+	return readTaskResponse[apiTypes.TaskAttemptEvents](
+		ctx,
+		"/api/v1/tasks/"+taskID+"/work/"+workID+"/attempts/"+attemptID+"/events",
+		response,
+		err,
+	)
 }
 
-func (c *Client) TaskStages(ctx context.Context, taskID, workID, attemptID string, revision int64) (apiTypes.TaskStages, error) {
+func (c *Client) TaskStages(
+	ctx context.Context,
+	taskID, workID, attemptID string,
+	revision int64,
+) (apiTypes.TaskStages, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskStages{}, err
 	}
 	response, err := client.TaskStages(ctx, taskID, workID, attemptID, &generated.TaskStagesParams{Revision: &revision})
-	return readTaskResponse[apiTypes.TaskStages](ctx, "/api/v1/tasks/"+taskID+"/work/"+workID+"/attempts/"+attemptID+"/stages", response, err)
+	return readTaskResponse[apiTypes.TaskStages](
+		ctx,
+		"/api/v1/tasks/"+taskID+"/work/"+workID+"/attempts/"+attemptID+"/stages",
+		response,
+		err,
+	)
 }
 
-func (c *Client) ListTasks(ctx context.Context, options TaskListOptions) (apiTypes.ExecutionPage[apiTypes.TaskSummary], error) {
+func (c *Client) ListTasks(
+	ctx context.Context,
+	options TaskListOptions,
+) (apiTypes.ExecutionPage[apiTypes.TaskSummary], error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.ExecutionPage[apiTypes.TaskSummary]{}, err
@@ -52,7 +80,10 @@ func (c *Client) ListTasks(ctx context.Context, options TaskListOptions) (apiTyp
 	return readTaskResponse[apiTypes.ExecutionPage[apiTypes.TaskSummary]](ctx, "/api/v1/tasks", response, err)
 }
 
-func (c *Client) ListActivity(ctx context.Context, options TaskListOptions) (apiTypes.ExecutionPage[apiTypes.TaskSummary], error) {
+func (c *Client) ListActivity(
+	ctx context.Context,
+	options TaskListOptions,
+) (apiTypes.ExecutionPage[apiTypes.TaskSummary], error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.ExecutionPage[apiTypes.TaskSummary]{}, err
@@ -82,11 +113,20 @@ func (c *Client) ShowTask(ctx context.Context, id string, options TaskDetailOpti
 	if options.Limit == 0 {
 		options.Limit = 25
 	}
-	response, err := client.TaskShow(ctx, id, &generated.TaskShowParams{Limit: &options.Limit, After: &options.After, Revision: &options.Revision})
+	response, err := client.TaskShow(
+		ctx,
+		id,
+		&generated.TaskShowParams{Limit: &options.Limit, After: &options.After, Revision: &options.Revision},
+	)
 	return readTaskResponse[apiTypes.TaskDetails](ctx, "/api/v1/tasks/"+id, response, err)
 }
 
-func (c *Client) TaskAttempts(ctx context.Context, taskID, workID string, after uint64, limit, revision int64) (apiTypes.TaskAttemptPage, error) {
+func (c *Client) TaskAttempts(
+	ctx context.Context,
+	taskID, workID string,
+	after uint64,
+	limit, revision int64,
+) (apiTypes.TaskAttemptPage, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAttemptPage{}, err
@@ -94,17 +134,36 @@ func (c *Client) TaskAttempts(ctx context.Context, taskID, workID string, after 
 	if limit == 0 {
 		limit = 25
 	}
-	response, err := client.TaskAttempts(ctx, taskID, workID, &generated.TaskAttemptsParams{After: &after, Limit: &limit, Revision: &revision})
-	return readTaskResponse[apiTypes.TaskAttemptPage](ctx, "/api/v1/tasks/"+taskID+"/work/"+workID+"/attempts", response, err)
+	response, err := client.TaskAttempts(
+		ctx,
+		taskID,
+		workID,
+		&generated.TaskAttemptsParams{After: &after, Limit: &limit, Revision: &revision},
+	)
+	return readTaskResponse[apiTypes.TaskAttemptPage](
+		ctx,
+		"/api/v1/tasks/"+taskID+"/work/"+workID+"/attempts",
+		response,
+		err,
+	)
 }
 
-func (c *Client) TaskImage(ctx context.Context, taskID, workID string, revision int64) (apiTypes.TaskImageExecution, error) {
+func (c *Client) TaskImage(
+	ctx context.Context,
+	taskID, workID string,
+	revision int64,
+) (apiTypes.TaskImageExecution, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskImageExecution{}, err
 	}
 	response, err := client.TaskImage(ctx, taskID, workID, &generated.TaskImageParams{Revision: &revision})
-	return readTaskResponse[apiTypes.TaskImageExecution](ctx, "/api/v1/tasks/"+taskID+"/work/"+workID+"/image", response, err)
+	return readTaskResponse[apiTypes.TaskImageExecution](
+		ctx,
+		"/api/v1/tasks/"+taskID+"/work/"+workID+"/image",
+		response,
+		err,
+	)
 }
 
 // Decode the wire body once into the public API model. Generated requests own

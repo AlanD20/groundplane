@@ -13,13 +13,20 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (owner *Reports) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.AttachProvisionAssignment, error) {
+func (owner *Reports) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.AttachProvisionAssignment, error) {
 	return owner.inputs.LoadWorkAssignment(ctx, view)
 }
 
 // ReconcileInterrupted settles only saved proof. A replacement Agent never
 // inherits permission to repeat a provisioning command from the old process.
-func (owner *Reports) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (owner *Reports) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
@@ -59,7 +66,11 @@ func (owner *Reports) ReconcileInterrupted(ctx context.Context, view workqueue.R
 		}
 		defer keyvalue.ZeroMutationBytes(proof.Mutations)
 		binding, err = owner.units.PrepareAttachCompletionReceipt(ctx, view, evidence)
-		completion.Result = workexecution.Completion{Outcome: workexecution.Succeeded, Evidence: evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        workexecution.Succeeded,
+			Evidence:       evidence,
+			EffectsSettled: true,
+		}
 		if view.Work.Task.Task.Stop != nil {
 			completion.Result.Outcome = view.Work.Task.Task.Stop.Outcome
 		} else if view.Work.Item.Item.ForwardRevoked {

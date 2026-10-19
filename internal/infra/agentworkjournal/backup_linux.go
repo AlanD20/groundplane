@@ -18,7 +18,8 @@ func (journal *Journal) PrepareBackup(ctx context.Context, assignment *agentpb.B
 	if err != nil {
 		return nil, err
 	}
-	if !workexecution.SameAssignment(decoded, attempt) || attempt.StartedAt == nil || attempt.FinishedAt != nil || at.Before(*attempt.StartedAt) {
+	if !workexecution.SameAssignment(decoded, attempt) || attempt.StartedAt == nil || attempt.FinishedAt != nil ||
+		at.Before(*attempt.StartedAt) {
 		return nil, invalid()
 	}
 	report, err := executionplan.ValidateBackupWorkCheckpoint(request, owned.Input, attempt.Executor)
@@ -67,7 +68,8 @@ func (journal *Journal) PrepareBackup(ctx context.Context, assignment *agentpb.B
 		}
 		sequence, fence = ack.CheckpointSequence, ack.Committed
 	}
-	if sequence == ^uint64(0) || report.CheckpointSequence != sequence+1 || !proto.Equal(report.PrecedingCheckpoint, fence) {
+	if sequence == ^uint64(0) || report.CheckpointSequence != sequence+1 ||
+		!proto.Equal(report.PrecedingCheckpoint, fence) {
 		return nil, conflict()
 	}
 	state.Backup.Sources[report.SourceOrdinal] = BackupSourceReport{Request: raw}

@@ -18,7 +18,12 @@ import (
 )
 
 type LifecycleHookResolver interface {
-	ResolveCapturedLifecycleHook(context.Context, servicelifecyclework.Input, *taskconfiguration.BackingHookEncryptedInputs, attachplan.HookInputConsumer) error
+	ResolveCapturedLifecycleHook(
+		context.Context,
+		servicelifecyclework.Input,
+		*taskconfiguration.BackingHookEncryptedInputs,
+		attachplan.HookInputConsumer,
+	) error
 }
 
 func (service *WorkReports) DeliverLifecycleHook(ctx context.Context, authorization agentregistration.WorkAuthorization,
@@ -64,7 +69,10 @@ func (service *WorkReports) DeliverLifecycleHook(ctx context.Context, authorizat
 			Command: append([]string(nil), input.Hook.Command...), TimeoutSeconds: input.Hook.TimeoutSeconds,
 			BackingServiceId: captured.ServiceID}
 		for _, value := range values.Values {
-			delivery.Hook.Inputs = append(delivery.Hook.Inputs, &agentpb.BackingHookValue{Key: value.Key, Value: append([]byte(nil), value.Value...)})
+			delivery.Hook.Inputs = append(
+				delivery.Hook.Inputs,
+				&agentpb.BackingHookValue{Key: value.Key, Value: append([]byte(nil), value.Value...)},
+			)
 		}
 		return executionplan.ValidateLifecycleHookDelivery(view.Attempt.Attempt, input, delivery)
 	})

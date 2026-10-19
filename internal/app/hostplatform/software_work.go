@@ -23,7 +23,9 @@ func (platform *Platform) softwareWork() softwareWorkRegistrations {
 		return softwareWorkRegistrations{}
 	}
 	return softwareWorkRegistrations{
-		admission:  []workdispatch.Registration{{Operation: workexecution.SoftwareStaging, Executor: workexecution.Controller, Owner: owner}},
+		admission: []workdispatch.Registration{
+			{Operation: workexecution.SoftwareStaging, Executor: workexecution.Controller, Owner: owner},
+		},
 		controller: []workdispatch.ControllerRegistration{{Operation: workexecution.SoftwareStaging, Owner: owner}},
 		retry:      []workdispatch.RetryRegistration{{Operation: workexecution.SoftwareStaging, Owner: owner}},
 		retention:  []operationretention.WorkRegistration{{Operation: workexecution.SoftwareStaging, Owner: owner}},

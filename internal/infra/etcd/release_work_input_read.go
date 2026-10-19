@@ -46,36 +46,56 @@ func (ledger *ReleaseLedger) LoadReleaseWorkInput(ctx context.Context,
 		if err != nil {
 			return ReleaseWorkSources{}, err
 		}
-		return ReleaseWorkSources{}, errs.New(errs.KindStateConflict, "Service Release no longer retains its recovery Secret values")
+		return ReleaseWorkSources{}, errs.New(
+			errs.KindStateConflict,
+			"Service Release no longer retains its recovery Secret values",
+		)
 	}
 	condition, err := root.AdmissionCondition(*sources.Input.Secrets)
 	if err != nil {
 		clear(sources.Rollout.Record.CandidateArtifact)
 		return ReleaseWorkSources{}, err
 	}
-	sources.Conditions = append(sources.Conditions, keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision})
+	sources.Conditions = append(
+		sources.Conditions,
+		keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision},
+	)
 	return sources, nil
 }
 
 // LoadRetiringReleaseWorkInput reads captured metadata only after the
 // collection fence. It cannot authorize assignment, execution or recovery.
-func (ledger *ReleaseLedger) LoadRetiringReleaseWorkInput(ctx context.Context, work workqueue.View) (ReleaseWorkSources, error) {
+func (ledger *ReleaseLedger) LoadRetiringReleaseWorkInput(
+	ctx context.Context,
+	work workqueue.View,
+) (ReleaseWorkSources, error) {
 	if work.Task.Task.CollectionStartedAt == nil || work.Task.Task.FinishedAt == nil ||
 		work.Task.Task.Progress.Unsettled() != 0 || work.Item.Item.Phase != workexecution.Settled || work.Item.Item.ActiveAttemptID != "" {
-		return ReleaseWorkSources{}, errs.New(errs.KindStateConflict, "Release metadata retirement requires settled collecting work")
+		return ReleaseWorkSources{}, errs.New(
+			errs.KindStateConflict,
+			"Release metadata retirement requires settled collecting work",
+		)
 	}
 	return ledger.loadCapturedReleaseWorkInput(ctx, work)
 }
 
-func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(ctx context.Context, work workqueue.View) (ReleaseWorkSources, error) {
+func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(
+	ctx context.Context,
+	work workqueue.View,
+) (ReleaseWorkSources, error) {
 	var empty ReleaseWorkSources
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return empty, err
 	}
 	task, item := work.Task.Task, work.Item.Item
-	if ledger == nil || ledger.store == nil || work.ReadRevision <= 0 || work.Task.Revision <= 0 || work.Item.Revision <= 0 ||
-		task.Validate() != nil || item.Validate() != nil || item.TaskID != task.ID ||
-		!releaserender.IsReleaseAction(task.Action) || item.Operation != workexecution.Release || item.Input == nil {
+	if ledger == nil || ledger.store == nil || work.ReadRevision <= 0 || work.Task.Revision <= 0 ||
+		work.Item.Revision <= 0 ||
+		task.Validate() != nil ||
+		item.Validate() != nil ||
+		item.TaskID != task.ID ||
+		!releaserender.IsReleaseAction(task.Action) ||
+		item.Operation != workexecution.Release ||
+		item.Input == nil {
 		return empty, errs.New(errs.KindValidationFailed, "Service Release input requires captured native work")
 	}
 	key := ReleaseWorkInputKey(item.ID)
@@ -141,7 +161,10 @@ func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(ctx context.Context, w
 	if err != nil {
 		return empty, err
 	}
-	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](published.Values[1].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		published.Values[1].Value,
+		"release-staged-manifest",
+	)
 	if err != nil || marker.PublicationID != rollout.Record.PublicationID || marker.OperationID != input.OperationID ||
 		marker.TaskID != task.ID || marker.WorkItemID != item.ID || marker.Input != *item.Input ||
 		marker.EnvironmentID != task.Scope.EnvironmentID || marker.ServiceID != item.TargetID ||
@@ -154,7 +177,10 @@ func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(ctx context.Context, w
 		{Key: workqueue.TaskKey(task.ID), ModRevision: work.Task.Revision},
 		{Key: workqueue.ItemKey(item.ID), ModRevision: work.Item.Revision},
 		{Key: key, ModRevision: value.ModRevision},
-		{Key: releaserender.ServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID), ModRevision: rollout.Revision},
+		{
+			Key:         releaserender.ServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID),
+			ModRevision: rollout.Revision,
+		},
 		{Key: publicationKey, ModRevision: published.Values[0].ModRevision},
 		{Key: manifestKey, ModRevision: published.Values[1].ModRevision},
 	}
@@ -163,12 +189,19 @@ func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(ctx context.Context, w
 	}
 	member, memberConditions, err := ledger.releaseWorkManifestMember(ctx, ReleaseWorkPublicationEvidence{
 		Work: work, ServiceRollout: &rollout,
-		Manifest: releases.VersionedReleaseManifest{Record: manifest, Revision: published.Values[1].ModRevision, ReadRevision: work.ReadRevision},
+		Manifest: releases.VersionedReleaseManifest{
+			Record:       manifest,
+			Revision:     published.Values[1].ModRevision,
+			ReadRevision: work.ReadRevision,
+		},
 	})
 	if err != nil {
 		return empty, err
 	}
-	predecessors, err := resolveBlueprintNativePredecessors(marker.NativePredecessors, []releaserender.ReleaseTaskRenderMember{member})
+	predecessors, err := resolveBlueprintNativePredecessors(
+		marker.NativePredecessors,
+		[]releaserender.ReleaseTaskRenderMember{member},
+	)
 	if err != nil {
 		return empty, err
 	}
@@ -178,5 +211,11 @@ func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(ctx context.Context, w
 		}
 	}
 	conditions = append(conditions, memberConditions...)
-	return ReleaseWorkSources{Intent: member.Intent, Input: input, Rollout: rollout, Conditions: conditions, Predecessors: predecessors}, nil
+	return ReleaseWorkSources{
+		Intent:       member.Intent,
+		Input:        input,
+		Rollout:      rollout,
+		Conditions:   conditions,
+		Predecessors: predecessors,
+	}, nil
 }

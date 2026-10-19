@@ -52,8 +52,17 @@ func (repository *InputRepository) prepareRestoreRelease(ctx context.Context, vi
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, guards...)
-	fence, err := environmentfence.LoadOwned(ctx, repository.store, record.EnvironmentID, view.ReadRevision,
-		environmentfence.Owner{Kind: backupruntime.BackupOperationRestore, OperationID: record.OperationID, TaskID: record.TaskID})
+	fence, err := environmentfence.LoadOwned(
+		ctx,
+		repository.store,
+		record.EnvironmentID,
+		view.ReadRevision,
+		environmentfence.Owner{
+			Kind:        backupruntime.BackupOperationRestore,
+			OperationID: record.OperationID,
+			TaskID:      record.TaskID,
+		},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -69,15 +78,33 @@ func (repository *InputRepository) prepareRestoreRelease(ctx context.Context, vi
 		if !found {
 			return workqueue.Change{}, conflict("Restore backing ownership is missing")
 		}
-		backing, err := postgresbackingguard.PrepareOwnership(ctx, repository.store, []string{environment}, record.EnvironmentID,
-			postgresbackingguard.Owner(backupruntime.BackupOperationRestore, record.OperationID, record.TaskID), view.ReadRevision, true)
+		backing, err := postgresbackingguard.PrepareOwnership(
+			ctx,
+			repository.store,
+			[]string{environment},
+			record.EnvironmentID,
+			postgresbackingguard.Owner(
+				backupruntime.BackupOperationRestore,
+				record.OperationID,
+				record.TaskID,
+			),
+			view.ReadRevision,
+			true,
+		)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
 		defer backing.Clear()
 		change.Conditions = append(change.Conditions, backing.Conditions...)
 		for _, mutation := range backing.Mutations {
-			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...)})
+			change.Mutations = append(
+				change.Mutations,
+				keyvalue.Mutation{
+					Type:  mutation.Type,
+					Key:   mutation.Key,
+					Value: append([]byte(nil), mutation.Value...),
+				},
+			)
 		}
 	}
 	encoded, err := backupruntime.EncodeBackupRestoreRecord(next)
@@ -86,10 +113,20 @@ func (repository *InputRepository) prepareRestoreRelease(ctx context.Context, vi
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, fence.TransactionConditions()...)
-	change.Mutations = append(change.Mutations,
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: backupruntime.BackupRestoreKey(record.TaskID), Value: encoded},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: hierarchy.EnvironmentOperationLockKey(record.EnvironmentID)},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: credentialGrantKey(view.Item.Item.ID, 0)}, epoch)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   backupruntime.BackupRestoreKey(record.TaskID),
+			Value: encoded,
+		},
+		keyvalue.Mutation{
+			Type: keyvalue.MutationDelete,
+			Key:  hierarchy.EnvironmentOperationLockKey(record.EnvironmentID),
+		},
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: credentialGrantKey(view.Item.Item.ID, 0)},
+		epoch,
+	)
 	return change, nil
 }
 
@@ -134,12 +171,17 @@ func (repository *InputRepository) restoreTerminalGuards(ctx context.Context,
 		if completed || record.ConfigProgress.PublishedHeadRevision > 0 {
 			expectedID, expectedRevision = record.TaskID, record.ConfigProgress.PublishedHeadRevision
 		}
-		if !completed && record.MutationStarted && id == record.TaskID && record.ConfigProgress.PublishedHeadRevision == 0 &&
+		if !completed && record.MutationStarted && id == record.TaskID &&
+			record.ConfigProgress.PublishedHeadRevision == 0 &&
 			record.ConfigProgress.DeleteEntryOrdinal == record.ConfigProgress.DeleteEntryCount &&
 			record.ConfigProgress.UpsertEntryOrdinal == record.Point.ConfigArchive.EntryCount {
 			// Publication and the source record share one transaction. An absent
 			// receipt is not permission to invent a successful publication.
-			publication, readErr := repository.readSettlementKeys(ctx, []string{backupruntime.BackupRestoreKey(record.TaskID)}, revision)
+			publication, readErr := repository.readSettlementKeys(
+				ctx,
+				[]string{backupruntime.BackupRestoreKey(record.TaskID)},
+				revision,
+			)
 			if readErr != nil {
 				return nil, readErr
 			}
@@ -147,7 +189,13 @@ func (repository *InputRepository) restoreTerminalGuards(ctx context.Context,
 			if publication.Values[0] != nil && publication.Values[0].ModRevision == head.ModRevision &&
 				head.ModRevision > record.ConfigProgress.RevisionRootRevision {
 				expectedID, expectedRevision = record.TaskID, head.ModRevision
-				guards = append(guards, keyvalue.Condition{Key: backupruntime.BackupRestoreKey(record.TaskID), ModRevision: head.ModRevision})
+				guards = append(
+					guards,
+					keyvalue.Condition{
+						Key:         backupruntime.BackupRestoreKey(record.TaskID),
+						ModRevision: head.ModRevision,
+					},
+				)
 			}
 		}
 		if err != nil || id != expectedID || head.ModRevision != expectedRevision {

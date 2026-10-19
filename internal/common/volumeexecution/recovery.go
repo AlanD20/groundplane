@@ -36,9 +36,12 @@ func (source Recovery) ValidateFor(attempt workexecution.Attempt) error {
 	if err := source.Validate(); err != nil {
 		return err
 	}
-	if attempt.Validate() != nil || attempt.Direction != workexecution.Recovery || attempt.TaskID != source.Forward.TaskID ||
-		attempt.WorkItemID != source.Forward.WorkItemID || attempt.Input != source.Forward.Input ||
-		attempt.Number <= source.Forward.Number || attempt.Executor.HostID != source.Forward.Executor.HostID {
+	if attempt.Validate() != nil || attempt.Direction != workexecution.Recovery ||
+		attempt.TaskID != source.Forward.TaskID ||
+		attempt.WorkItemID != source.Forward.WorkItemID ||
+		attempt.Input != source.Forward.Input ||
+		attempt.Number <= source.Forward.Number ||
+		attempt.Executor.HostID != source.Forward.Executor.HostID {
 		return invalidProgress()
 	}
 	return nil

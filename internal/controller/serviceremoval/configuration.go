@@ -34,8 +34,12 @@ func (service *WorkReports) removalFiles(ctx context.Context, authorization agen
 	if err != nil {
 		return removalFileSelection{}, err
 	}
-	if view.Checkpoint.Record == nil || view.Checkpoint.Record.StageID != stage || !time.Now().UTC().Before(view.Attempt.Attempt.Deadline) {
-		return removalFileSelection{}, errs.New(errs.KindStateConflict, "Removal file delivery requires its active recovery step")
+	if view.Checkpoint.Record == nil || view.Checkpoint.Record.StageID != stage ||
+		!time.Now().UTC().Before(view.Attempt.Attempt.Deadline) {
+		return removalFileSelection{}, errs.New(
+			errs.KindStateConflict,
+			"Removal file delivery requires its active recovery step",
+		)
 	}
 	captured, _, err := service.inputs.Load(ctx, view.Work)
 	if err != nil {
@@ -63,7 +67,9 @@ func (service *WorkReports) removalFiles(ctx context.Context, authorization agen
 	return selection, nil
 }
 
-func (service *WorkReports) LoadRemovalConfiguration(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *WorkReports) LoadRemovalConfiguration(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.ServiceRemovalConfigurationRequest,
 ) (*agentpb.ServiceRemovalConfigurationManifest, error) {
 	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil {
@@ -73,9 +79,18 @@ func (service *WorkReports) LoadRemovalConfiguration(ctx context.Context, author
 	if err != nil {
 		return nil, err
 	}
-	manifest := &agentpb.ServiceRemovalConfigurationManifest{Attempt: proto.CloneOf(request.Attempt), StageId: request.StageId, Configuration: selection.reference}
+	manifest := &agentpb.ServiceRemovalConfigurationManifest{
+		Attempt:       proto.CloneOf(request.Attempt),
+		StageId:       request.StageId,
+		Configuration: selection.reference,
+	}
 	for _, file := range selection.files {
-		header, err := materialization.CapturedFileHeader(request.Attempt.TaskId, request.StageId, selection.reference.Generation, file)
+		header, err := materialization.CapturedFileHeader(
+			request.Attempt.TaskId,
+			request.StageId,
+			selection.reference.Generation,
+			file,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -89,6 +104,16 @@ func (service *WorkReports) LoadRemovalConfiguration(ctx context.Context, author
 
 func removalFileHeader(header entrymaterialization.Header) *agentpb.ServiceRemovalConfigurationFile {
 	digest := header.Digest()
-	return &agentpb.ServiceRemovalConfigurationFile{Destination: header.Destination(), ServiceId: header.ServiceID(), ServiceName: header.ServiceName(),
-		OutputKind: header.OutputKind().String(), Uid: header.UID(), Gid: header.GID(), Mode: uint32(header.Mode()), Length: header.Length(), Sha256: slices.Clone(digest[:])}
+	return &agentpb.ServiceRemovalConfigurationFile{
+		Destination: header.Destination(),
+		ServiceId:   header.ServiceID(),
+		ServiceName: header.ServiceName(),
+		OutputKind: header.OutputKind().
+			String(),
+		Uid:    header.UID(),
+		Gid:    header.GID(),
+		Mode:   uint32(header.Mode()),
+		Length: header.Length(),
+		Sha256: slices.Clone(digest[:]),
+	}
 }

@@ -26,7 +26,8 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 		ids.Validate(ids.KindService, input.ServiceId) != nil {
 		return invalidAttachConsumer()
 	}
-	if input.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT && input.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT {
+	if input.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT &&
+		input.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT {
 		return invalidAttachConsumer()
 	}
 	if _, err := networkname.New(input.NetworkId); err != nil {
@@ -36,7 +37,8 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 		if err := validateArtifactContent(artifact); err != nil {
 			return err
 		}
-		if artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT || artifact.OwnerId != input.EnvironmentId {
+		if artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+			artifact.OwnerId != input.EnvironmentId {
 			return invalidAttachConsumer()
 		}
 	}
@@ -66,7 +68,10 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 	}
 	defer clear(got)
 	if !bytes.Equal(want, got) {
-		return errs.New(errs.KindValidationFailed, "Attach consumer update changes more than the captured backing-network membership")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Attach consumer update changes more than the captured backing-network membership",
+		)
 	}
 	return nil
 }
@@ -76,7 +81,16 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 func PrepareAttachConsumerTransition(ctx context.Context, baseline *agentpb.ComposeArtifact,
 	environmentID, backingEnvironmentID, serviceID, networkID, artifactID string,
 ) (*agentpb.AttachConsumerTransition, error) {
-	return prepareConsumerTransition(ctx, baseline, environmentID, backingEnvironmentID, serviceID, networkID, artifactID, agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT)
+	return prepareConsumerTransition(
+		ctx,
+		baseline,
+		environmentID,
+		backingEnvironmentID,
+		serviceID,
+		networkID,
+		artifactID,
+		agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT,
+	)
 }
 
 // PrepareAttachConsumerConnection adds one backing-network edge without
@@ -84,7 +98,16 @@ func PrepareAttachConsumerTransition(ctx context.Context, baseline *agentpb.Comp
 func PrepareAttachConsumerConnection(ctx context.Context, baseline *agentpb.ComposeArtifact,
 	environmentID, backingEnvironmentID, serviceID, networkID, artifactID string,
 ) (*agentpb.AttachConsumerTransition, error) {
-	return prepareConsumerTransition(ctx, baseline, environmentID, backingEnvironmentID, serviceID, networkID, artifactID, agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT)
+	return prepareConsumerTransition(
+		ctx,
+		baseline,
+		environmentID,
+		backingEnvironmentID,
+		serviceID,
+		networkID,
+		artifactID,
+		agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT,
+	)
 }
 
 func prepareConsumerTransition(ctx context.Context, baseline *agentpb.ComposeArtifact,
@@ -92,7 +115,10 @@ func prepareConsumerTransition(ctx context.Context, baseline *agentpb.ComposeArt
 ) (*agentpb.AttachConsumerTransition, error) {
 	if ctx == nil || baseline == nil || validateArtifactContent(baseline) != nil ||
 		baseline.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT || baseline.OwnerId != environmentID ||
-		ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindEnvironment, backingEnvironmentID) != nil ||
+		ids.Validate(
+			ids.KindEnvironment,
+			environmentID,
+		) != nil || ids.Validate(ids.KindEnvironment, backingEnvironmentID) != nil ||
 		ids.Validate(ids.KindService, serviceID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil ||
 		artifactID == baseline.ArtifactId {
 		return nil, invalidAttachConsumer()
@@ -118,7 +144,10 @@ func prepareConsumerTransition(ctx context.Context, baseline *agentpb.ComposeArt
 	return input, nil
 }
 
-func transitionedConsumerProject(ctx context.Context, input *agentpb.AttachConsumerTransition) (*composetypes.Project, error) {
+func transitionedConsumerProject(
+	ctx context.Context,
+	input *agentpb.AttachConsumerTransition,
+) (*composetypes.Project, error) {
 	dockerName, err := networkname.New(input.NetworkId)
 	if err != nil {
 		return nil, invalidAttachConsumer()
@@ -185,7 +214,8 @@ func AttachConsumerNames(input *agentpb.AttachConsumerTransition) ([]string, err
 		if service == nil {
 			return nil, invalidAttachConsumer()
 		}
-		if service.ServiceId != input.ServiceId || service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+		if service.ServiceId != input.ServiceId ||
+			service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 			continue
 		}
 		if validateComposeName(service.ComposeName) != nil || validateNativePredecessorWorkload(service) != nil {
@@ -219,5 +249,8 @@ func loadCapturedComposeProject(ctx context.Context, artifact *agentpb.ComposeAr
 }
 
 func invalidAttachConsumer() error {
-	return errs.New(errs.KindValidationFailed, "Attach consumer transition requires captured native runtime and one explicit backing-network action")
+	return errs.New(
+		errs.KindValidationFailed,
+		"Attach consumer transition requires captured native runtime and one explicit backing-network action",
+	)
 }

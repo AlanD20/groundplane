@@ -116,7 +116,11 @@ func (progress Progress) ValidateLayout(attempt workexecution.Attempt, layout La
 	return nil
 }
 
-func (progress Progress) Begin(attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, at time.Time) (Progress, error) {
+func (progress Progress) Begin(
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, input) != nil || progress.InFlight || progress.Stage == Complete ||
 		at.Before(progress.UpdatedAt) || !at.Before(attempt.Deadline) {
 		return Progress{}, invalidProgress()
@@ -127,9 +131,16 @@ func (progress Progress) Begin(attempt workexecution.Attempt, input *agentpb.Com
 	return next, next.Validate(attempt, input)
 }
 
-func (progress Progress) Confirm(attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, observation Observation, at time.Time) (Progress, error) {
+func (progress Progress) Confirm(
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	observation Observation,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, input) != nil || !progress.InFlight || at.Before(progress.UpdatedAt) ||
-		observation.At.Before(*progress.BeganAt) || observation.At.After(at) || !observation.Satisfies(progress.Stage, input.Remove) {
+		observation.At.Before(
+			*progress.BeganAt,
+		) || observation.At.After(at) || !observation.Satisfies(progress.Stage, input.Remove) {
 		return Progress{}, invalidProgress()
 	}
 	next := progress
@@ -148,7 +159,12 @@ func (observation Observation) Satisfies(stage Stage, removal bool) bool {
 	}
 	// Each report carries only its stage's proof; contradictory or extraneous
 	// facts cannot accidentally qualify another stage.
-	expected := Observation{ComponentID: observation.ComponentID, Input: observation.Input, Stage: stage, At: observation.At}
+	expected := Observation{
+		ComponentID: observation.ComponentID,
+		Input:       observation.Input,
+		Stage:       stage,
+		At:          observation.At,
+	}
 	switch stage {
 	case WriteConfiguration:
 		expected.ConfigurationWritten = true
@@ -167,5 +183,8 @@ func (observation Observation) Satisfies(stage Stage, removal bool) bool {
 }
 
 func invalidProgress() error {
-	return errs.New(errs.KindStateConflict, "Component progress does not confirm its captured configuration and runtime")
+	return errs.New(
+		errs.KindStateConflict,
+		"Component progress does not confirm its captured configuration and runtime",
+	)
 }

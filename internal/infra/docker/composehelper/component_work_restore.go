@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/runner"
 )
 
-func restoreComponentRuntime(ctx context.Context, taskRunner runner.Runner, input componentexecution.HelperInput) error {
+func restoreComponentRuntime(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input componentexecution.HelperInput,
+) error {
 	if input.Recovery == nil {
 		return invalidComponentInventory()
 	}
@@ -38,7 +42,12 @@ func restoreComponentRuntime(ctx context.Context, taskRunner runner.Runner, inpu
 	return waitComponentRuntime(ctx, taskRunner, input, true)
 }
 
-func waitComponentRuntime(ctx context.Context, taskRunner runner.Runner, input componentexecution.HelperInput, predecessor bool) error {
+func waitComponentRuntime(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input componentexecution.HelperInput,
+	predecessor bool,
+) error {
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -55,7 +64,8 @@ func waitComponentRuntime(ctx context.Context, taskRunner runner.Runner, input c
 		if absent && len(containers) == 0 {
 			return nil
 		}
-		if !absent && len(containers) == 1 && componentWorkMatches(containers[0], artifact) && componentWorkReady(containers) {
+		if !absent && len(containers) == 1 && componentWorkMatches(containers[0], artifact) &&
+			componentWorkReady(containers) {
 			return nil
 		}
 		select {

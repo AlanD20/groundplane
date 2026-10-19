@@ -34,15 +34,26 @@ type BackingRuntimeReceipt struct {
 // proof. No Task journal or live executor slot is needed after publication.
 func ValidateBackingProvisioningReceipt(source BackingRuntimeReceipt) error {
 	attempt, checkpoint := source.Attempt, source.Checkpoint
-	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward || attempt.Executor.Executor != workexecution.Agent ||
-		attempt.StartedAt == nil || attempt.FinishedAt == nil || attempt.Result == nil ||
-		attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled && attempt.Outcome != workexecution.Superseded ||
-		checkpoint.AttemptID != attempt.ID || checkpoint.Sequence == 0 || checkpoint.Evidence.Validate() != nil ||
-		checkpoint.Evidence.ID != attempt.Input.ID || !source.AcknowledgedAt.Equal(*attempt.FinishedAt) ||
-		checkpoint.RecordedAt.IsZero() || checkpoint.RecordedAt.Location() != time.UTC ||
-		checkpoint.RecordedAt.Before(*attempt.StartedAt) || checkpoint.RecordedAt.After(source.AcknowledgedAt) ||
-		backingruntimefact.ValidateObservation(source.Observation) != nil || source.Observation.ServiceID != source.ServiceID ||
-		source.Observation.ObservedAt.Before(*attempt.StartedAt) || source.Observation.ObservedAt.After(source.AcknowledgedAt) ||
+	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		attempt.StartedAt == nil ||
+		attempt.FinishedAt == nil ||
+		attempt.Result == nil ||
+		attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled &&
+			attempt.Outcome != workexecution.Superseded ||
+		checkpoint.AttemptID != attempt.ID ||
+		checkpoint.Sequence == 0 ||
+		checkpoint.Evidence.Validate() != nil ||
+		checkpoint.Evidence.ID != attempt.Input.ID ||
+		!source.AcknowledgedAt.Equal(*attempt.FinishedAt) ||
+		checkpoint.RecordedAt.IsZero() ||
+		checkpoint.RecordedAt.Location() != time.UTC ||
+		checkpoint.RecordedAt.Before(*attempt.StartedAt) ||
+		checkpoint.RecordedAt.After(source.AcknowledgedAt) ||
+		backingruntimefact.ValidateObservation(source.Observation) != nil ||
+		source.Observation.ServiceID != source.ServiceID ||
+		source.Observation.ObservedAt.Before(*attempt.StartedAt) ||
+		source.Observation.ObservedAt.After(source.AcknowledgedAt) ||
 		source.Observation.LocalImageID != source.LocalImageID {
 		return invalidBackingRuntime()
 	}

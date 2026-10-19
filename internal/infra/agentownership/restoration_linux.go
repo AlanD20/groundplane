@@ -26,8 +26,12 @@ func (lease *Lease) CheckRestoration(input releaseexecution.RecoveryInput) error
 	defer lease.mu.Unlock()
 	current, exists := lease.active[input.Input.Attempt.WorkItemID]
 	_, sourceRunning := lease.active[input.Forward.WorkItemID]
-	if lease.closed || !lease.held || sourceRunning || !exists || !workexecution.SameAssignment(current, input.Input.Attempt) {
-		return errs.New(errs.KindStateConflict, "Group restoration must exclusively own its local worker after the successful member stops executing")
+	if lease.closed || !lease.held || sourceRunning || !exists ||
+		!workexecution.SameAssignment(current, input.Input.Attempt) {
+		return errs.New(
+			errs.KindStateConflict,
+			"Group restoration must exclusively own its local worker after the successful member stops executing",
+		)
 	}
 	return nil
 }

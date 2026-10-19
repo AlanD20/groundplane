@@ -8,7 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 )
 
-func (repository *Repository) retireHookPins(ctx context.Context, revision int64, captured Input, guards []keyvalue.Condition) (bool, []keyvalue.Condition, error) {
+func (repository *Repository) retireHookPins(
+	ctx context.Context,
+	revision int64,
+	captured Input,
+	guards []keyvalue.Condition,
+) (bool, []keyvalue.Condition, error) {
 	hook := captured.HookInputs
 	absence := []keyvalue.Condition{
 		{Key: tasksecretpins.RootKey(hook.OperationID)},

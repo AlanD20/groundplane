@@ -17,7 +17,8 @@ import (
 func (repository *InputRepository) prepareConsumerRecoverySettlement(ctx context.Context, view workqueue.ResumeView,
 	capture blueprintattachinputs.Generation, report attachexecution.ProvisionInspection, evidence workexecution.Input,
 ) (workqueue.Change, error) {
-	if report.State != attachexecution.ProvisionConsumerInspected || report.Consumer == nil || !report.Consumer.Connected {
+	if report.State != attachexecution.ProvisionConsumerInspected || report.Consumer == nil ||
+		!report.Consumer.Connected {
 		return workqueue.Change{}, nil
 	}
 	consumer, err := capture.Consumer()
@@ -35,9 +36,16 @@ func (repository *InputRepository) prepareConsumerRecoverySettlement(ctx context
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	source := serviceruntimerecord.Acknowledgement{TaskID: attempt.TaskID, WorkItemID: attempt.WorkItemID, AttemptID: attempt.ID,
-		Executor: attempt.Executor, Input: attempt.Input, Checkpoint: checkpoint,
-		RenderGeneration: capture.ConsumerRuntime.Source.RenderGeneration, AcknowledgedAt: report.ObservedAt}
+	source := serviceruntimerecord.Acknowledgement{
+		TaskID:           attempt.TaskID,
+		WorkItemID:       attempt.WorkItemID,
+		AttemptID:        attempt.ID,
+		Executor:         attempt.Executor,
+		Input:            attempt.Input,
+		Checkpoint:       checkpoint,
+		RenderGeneration: capture.ConsumerRuntime.Source.RenderGeneration,
+		AcknowledgedAt:   report.ObservedAt,
+	}
 	settlement, err := repository.prepareConsumerAcknowledgement(ctx, view, capture, consumer.Candidate, &source)
 	if err != nil {
 		keyvalue.ZeroMutationBytes(change.Mutations)

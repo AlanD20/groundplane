@@ -13,7 +13,11 @@ import (
 // abandonUnstartedAttachPins is called only while settling stopped/expired
 // unstarted work. Published captures retain their pins; abandoned preparations
 // are removed in bounded batches under the same work/publication guards.
-func (repository *HierarchyDeletionRepository) abandonUnstartedAttachPins(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot) (bool, []keyvalue.Condition, error) {
+func (repository *HierarchyDeletionRepository) abandonUnstartedAttachPins(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+) (bool, []keyvalue.Condition, error) {
 	if item.Item.AttemptNumber != 0 || ids.Validate(ids.KindAttach, item.Item.TargetID) != nil {
 		return true, nil, nil
 	}

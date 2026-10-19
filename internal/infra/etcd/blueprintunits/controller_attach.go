@@ -12,7 +12,12 @@ import (
 )
 
 func PrepareControllerAttachBinding(
-	snapshot Snapshot, unit Unit, operationID string, inputRevision int64, bindingSHA256 string, references []attachments.BindingReference,
+	snapshot Snapshot,
+	unit Unit,
+	operationID string,
+	inputRevision int64,
+	bindingSHA256 string,
+	references []attachments.BindingReference,
 ) (MutationPlan, error) {
 	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
 		unit.Target.Kind != ids.KindAttach || unit.Removal || inputRevision <= 0 || inputRevision > snapshot.ReadRevision ||

@@ -13,11 +13,17 @@ import (
 
 // routeWorkResponse binds replay to the accepted Task, not to a completed
 // metadata write. Queue settlement owns completion of this marker.
-func routeWorkResponse(claim blueprints.EnvironmentBlueprintStageClaim, record routes.Record) (idempotency.IdempotencyMarker, error) {
+func routeWorkResponse(
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	record routes.Record,
+) (idempotency.IdempotencyMarker, error) {
 	if blueprints.ValidateEnvironmentBlueprintStageClaim(claim) != nil || routes.ValidateRecord(record) != nil ||
 		claim.EnvironmentID != record.EnvironmentID || claim.TaskID != claim.RevisionID ||
 		claim.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment || claim.Locator.ScopeID != record.EnvironmentID {
-		return idempotency.IdempotencyMarker{}, errs.New(errs.KindValidationFailed, "Route acceptance does not match its staged action")
+		return idempotency.IdempotencyMarker{}, errs.New(
+			errs.KindValidationFailed,
+			"Route acceptance does not match its staged action",
+		)
 	}
 	body, err := json.Marshal(api.RouteTaskAccepted{Route: routeAPIResponse(record), TaskID: claim.TaskID})
 	if claim.Locator.Method == http.MethodDelete {
@@ -31,8 +37,15 @@ func routeWorkResponse(claim blueprints.EnvironmentBlueprintStageClaim, record r
 	return idempotency.IdempotencyMarker{
 		Kind: idempotency.IdempotencyMarkerTask, State: idempotency.IdempotencyMarkerPending,
 		Locator: claim.Locator, Intent: intent, TaskID: claim.TaskID,
-		ReplayTarget: &idempotency.IdempotencyReplayTarget{Kind: idempotency.IdempotencyReplayTargetRoute, ID: record.Desired.ID},
-		Response:     idempotency.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
-		CreatedAt:    claim.CreatedAt, UpdatedAt: claim.CreatedAt,
+		ReplayTarget: &idempotency.IdempotencyReplayTarget{
+			Kind: idempotency.IdempotencyReplayTargetRoute,
+			ID:   record.Desired.ID,
+		},
+		Response: idempotency.IdempotencyResponse{
+			Status:      http.StatusAccepted,
+			ContentKind: "application/json",
+			Body:        body,
+		},
+		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}, nil
 }

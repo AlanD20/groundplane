@@ -34,7 +34,10 @@ func PrepareAssignment(request Assignment) (Change, workexecution.Attempt, error
 		return Change{}, workexecution.Attempt{}, invalid("Controller decision cannot acquire an execution slot")
 	}
 	if request.Task.Task.Stop != nil && request.Direction == workexecution.Forward {
-		return Change{}, workexecution.Attempt{}, errs.New(errs.KindStateConflict, "task no longer permits forward execution")
+		return Change{}, workexecution.Attempt{}, errs.New(
+			errs.KindStateConflict,
+			"task no longer permits forward execution",
+		)
 	}
 	if request.Item.Revision <= 0 || request.Executor.Revision <= 0 || request.QueueRevision <= 0 {
 		return Change{}, workexecution.Attempt{}, invalid("assignment requires versioned execution state")
@@ -44,7 +47,10 @@ func PrepareAssignment(request Assignment) (Change, workexecution.Attempt, error
 		return Change{}, workexecution.Attempt{}, err
 	}
 	if !executor.Allows(request.Item.Item.Operation) || request.Slot >= executor.Capacity {
-		return Change{}, workexecution.Attempt{}, errs.New(errs.KindStateConflict, "executor is not eligible for this work")
+		return Change{}, workexecution.Attempt{}, errs.New(
+			errs.KindStateConflict,
+			"executor is not eligible for this work",
+		)
 	}
 	next, attempt, err := workexecution.Assign(request.Item.Item, executor.Identity,
 		request.AttemptID, request.Direction, request.At, request.Deadline)
@@ -161,7 +167,10 @@ func addClaims(change *Change, item workexecution.Item, snapshots []ClaimSnapsho
 		if snapshot.Owner != nil && *snapshot.Owner != owner {
 			return errs.New(errs.KindResourceInUse, "another operation owns an execution resource")
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ClaimKey(claim), ModRevision: snapshot.Revision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: ClaimKey(claim), ModRevision: snapshot.Revision},
+		)
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{
 			Type: keyvalue.MutationPut, Key: ClaimKey(claim), Value: ownerBytes,
 		})

@@ -21,7 +21,10 @@ func (repository *Repository) ResumeForward(ctx context.Context, agentID string,
 		return err
 	}
 	key := localagents.LocalAgentPrimaryKey(agentID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: binding.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: binding.ReadRevision},
+	)
 	if err != nil {
 		return err
 	}
@@ -36,13 +39,18 @@ func (repository *Repository) ResumeForward(ctx context.Context, agentID string,
 	if err != nil {
 		return err
 	}
-	if primary.ID != agentID || primary.Generation != generation || primary.Phase == localagents.LocalAgentPhaseDeleting {
+	if primary.ID != agentID || primary.Generation != generation ||
+		primary.Phase == localagents.LocalAgentPhaseDeleting {
 		return errs.New(errs.KindStateConflict, "revoked Agent removal cannot reopen forward work")
 	}
 	conditions := append([]keyvalue.Condition(nil), binding.Conditions...)
 	conditions = append(conditions, guard)
 	result, err := repository.store.Transact(ctx, conditions, []keyvalue.Mutation{
-		{Type: keyvalue.MutationPut, Key: key, Value: read.Values[0].Value}, {Type: keyvalue.MutationDelete, Key: guard.Key},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   key,
+			Value: read.Values[0].Value,
+		}, {Type: keyvalue.MutationDelete, Key: guard.Key},
 	})
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {

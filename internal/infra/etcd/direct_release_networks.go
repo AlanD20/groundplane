@@ -21,8 +21,11 @@ type DirectReleaseNetwork struct {
 }
 
 func (network DirectReleaseNetwork) Open(environmentID string) (*agentpb.NetworkWorkInput, error) {
-	if ids.Validate(ids.KindWorkItem, network.WorkItemID) != nil || ids.Validate(ids.KindNetwork, network.NetworkID) != nil ||
-		network.Input.Validate() != nil || len(network.Data) == 0 || len(network.Data) > executionplan.MaximumPlanBytes {
+	if ids.Validate(ids.KindWorkItem, network.WorkItemID) != nil ||
+		ids.Validate(ids.KindNetwork, network.NetworkID) != nil ||
+		network.Input.Validate() != nil ||
+		len(network.Data) == 0 ||
+		len(network.Data) > executionplan.MaximumPlanBytes {
 		return nil, errs.New(errs.KindValidationFailed, "Direct Release network prerequisite is invalid")
 	}
 	input := &agentpb.NetworkWorkInput{}
@@ -51,7 +54,10 @@ func (request DirectReleasePreparation) releaseDependencies() []string {
 // WorkGraph preserves the previous ordered bridge preparation, then allows the
 // selected Service release to prepare and run. One visible Task owns all items;
 // chained dependencies avoid imposing a smaller limit than 256 DNS bridges.
-func (request DirectReleasePreparation) WorkGraph(task workexecution.Task, release workexecution.Item) ([]workexecution.Item, error) {
+func (request DirectReleasePreparation) WorkGraph(
+	task workexecution.Task,
+	release workexecution.Item,
+) ([]workexecution.Item, error) {
 	if err := request.validate(); err != nil {
 		return nil, err
 	}

@@ -22,11 +22,16 @@ func (repository *InputRepository) PrepareDetachRetry(ctx context.Context, view 
 	item, task := view.Item.Item, view.Task.Task
 	if task.Action == workexecution.ActionRemove && item.AttemptNumber == 0 && item.Result != nil &&
 		item.Result.ID == ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "cascade-publication-rejection") {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable,
-			"Zone removal was rejected before execution; submit a new removal to capture current consumers and approval")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Zone removal was rejected before execution; submit a new removal to capture current consumers and approval",
+		)
 	}
-	if item.Operation != workexecution.Detach || item.Input == nil || item.ActiveAttemptID != "" || task.CollectionStartedAt != nil ||
-		item.TaskID != task.ID || at.IsZero() || at.Before(item.UpdatedAt) {
+	if item.Operation != workexecution.Detach || item.Input == nil || item.ActiveAttemptID != "" ||
+		task.CollectionStartedAt != nil ||
+		item.TaskID != task.ID ||
+		at.IsZero() ||
+		at.Before(item.UpdatedAt) {
 		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Detach has no retained idle work to retry")
 	}
 	input, conditions, err := repository.LoadDetach(ctx, view)
@@ -38,7 +43,10 @@ func (repository *InputRepository) PrepareDetachRetry(ctx context.Context, view 
 		return repository.prepareDetachRecoveryRetry(ctx, view, previous, at)
 	}
 	if task.Stop != nil || item.ForwardRevoked {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "stopped or replaced Detach requires a new action")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"stopped or replaced Detach requires a new action",
+		)
 	}
 	budget := attachexecution.RemovalBudget(0)
 	source := input.Snapshot.Source
@@ -61,9 +69,13 @@ func (repository *InputRepository) PrepareDetachRetry(ctx context.Context, view 
 		}
 		decision, err := recordcodec.Decode[detachDecision](read.Values[0].Value, "detach-decision")
 		digest := sha256.Sum256(read.Values[0].Value)
-		if err != nil || decision.ID != item.Result.ID || decision.TaskID != task.ID || decision.WorkItemID != item.ID ||
-			decision.AttachID != item.TargetID || decision.Input != *item.Input || decision.Outcome != workexecution.Failed ||
-			!decision.At.Equal(item.UpdatedAt) || hex.EncodeToString(digest[:]) != item.Result.SHA256 {
+		if err != nil || decision.ID != item.Result.ID || decision.TaskID != task.ID ||
+			decision.WorkItemID != item.ID ||
+			decision.AttachID != item.TargetID ||
+			decision.Input != *item.Input ||
+			decision.Outcome != workexecution.Failed ||
+			!decision.At.Equal(item.UpdatedAt) ||
+			hex.EncodeToString(digest[:]) != item.Result.SHA256 {
 			return workqueue.Change{}, recordcodec.CorruptRecord()
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
@@ -130,7 +142,9 @@ func (repository *InputRepository) prepareDetachRetryBinding(ctx context.Context
 		return workqueue.Change{}, err
 	}
 	return workqueue.Change{Conditions: conditions,
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: attachrecord.AttachKey(retrying.ID), Value: raw}}}, nil
+		Mutations: []keyvalue.Mutation{
+			{Type: keyvalue.MutationPut, Key: attachrecord.AttachKey(retrying.ID), Value: raw},
+		}}, nil
 }
 
 func (repository *InputRepository) detachForwardRetryBasis(ctx context.Context, view workqueue.View,
@@ -185,8 +199,11 @@ func (repository *InputRepository) prepareDetachRecoveryRetry(ctx context.Contex
 	previous workqueue.AttemptSnapshot, at time.Time,
 ) (workqueue.Change, error) {
 	item, attempt := view.Item.Item, previous.Attempt
-	if previous.Revision <= 0 || attempt.FinishedAt == nil || attempt.Result == nil || attempt.Number != item.AttemptNumber ||
-		attempt.TaskID != item.TaskID || attempt.WorkItemID != item.ID || attempt.Input != *item.Input ||
+	if previous.Revision <= 0 || attempt.FinishedAt == nil || attempt.Result == nil ||
+		attempt.Number != item.AttemptNumber ||
+		attempt.TaskID != item.TaskID ||
+		attempt.WorkItemID != item.ID ||
+		attempt.Input != *item.Input ||
 		attempt.Executor.HostID != item.Placement.HostID ||
 		(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped) {
 		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Detach has no stopped inspection to retry")
@@ -195,8 +212,10 @@ func (repository *InputRepository) prepareDetachRecoveryRetry(ctx context.Contex
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if attempt.Direction == workexecution.Forward && (source.Source.Forward.ID != attempt.ID || source.Source.Evidence != *attempt.Result) ||
-		attempt.Direction == workexecution.Recovery && (item.CleanupResult == nil || *item.CleanupResult != *attempt.Result || source.Source.Forward.Number >= attempt.Number) {
+	if attempt.Direction == workexecution.Forward &&
+		(source.Source.Forward.ID != attempt.ID || source.Source.Evidence != *attempt.Result) ||
+		attempt.Direction == workexecution.Recovery &&
+			(item.CleanupResult == nil || *item.CleanupResult != *attempt.Result || source.Source.Forward.Number >= attempt.Number) {
 		return workqueue.Change{}, recordcodec.CorruptRecord()
 	}
 	authority, err := repository.DetachCaptureAdmission(ctx, view)
@@ -218,6 +237,9 @@ func (repository *InputRepository) prepareDetachRecoveryRetry(ctx context.Contex
 	}
 	change.Conditions = append(change.Conditions, authority.Conditions...)
 	change.Conditions = append(change.Conditions, resource.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: WorkRecoveryKey(item.ID), ModRevision: source.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: WorkRecoveryKey(item.ID), ModRevision: source.Revision},
+	)
 	return change, nil
 }

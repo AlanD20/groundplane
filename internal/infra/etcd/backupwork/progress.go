@@ -75,7 +75,10 @@ func (repository *InputRepository) LoadProgress(ctx context.Context, view workqu
 		return nil, keyvalue.Condition{}, conflict("Backup progress input digest changed")
 	}
 	key := ProgressKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return nil, keyvalue.Condition{}, err
 	}

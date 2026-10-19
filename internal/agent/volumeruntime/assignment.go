@@ -18,7 +18,8 @@ type Input struct {
 }
 
 func DecodeAssignment(message *agentpb.VolumeWorkAssignment, authenticated workexecution.Identity) (Input, error) {
-	if message == nil || proto.Size(message) > executionplan.MaximumPlanBytes || executionplan.RejectUnknown(message) != nil {
+	if message == nil || proto.Size(message) > executionplan.MaximumPlanBytes ||
+		executionplan.RejectUnknown(message) != nil {
 		return Input{}, invalidInput()
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(message.Attempt, authenticated)

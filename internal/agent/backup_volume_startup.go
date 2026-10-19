@@ -54,7 +54,12 @@ func inventoryBackupVolumeRestores(ctx context.Context) ([]*agentpb.BackupRecove
 			binding.Direction != agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW {
 			return nil, nil, invalidAgentStaging()
 		}
-		key, err := executionplan.BackupVolumeRecoveryKey(binding.Attempt, binding.SourceOrdinal, row.Config.PointID, row.Config.RestoreGenerationID)
+		key, err := executionplan.BackupVolumeRecoveryKey(
+			binding.Attempt,
+			binding.SourceOrdinal,
+			row.Config.PointID,
+			row.Config.RestoreGenerationID,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -95,7 +100,12 @@ func inventoryBackupVolumeRestores(ctx context.Context) ([]*agentpb.BackupRecove
 			binding.Direction != agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW {
 			return nil, nil, invalidAgentStaging()
 		}
-		key, err := executionplan.BackupVolumeRecoveryKey(binding.Attempt, binding.SourceOrdinal, row.Config.PointID, row.Config.RestoreGenerationID)
+		key, err := executionplan.BackupVolumeRecoveryKey(
+			binding.Attempt,
+			binding.SourceOrdinal,
+			row.Config.PointID,
+			row.Config.RestoreGenerationID,
+		)
 		if err != nil {
 			return nil, nil, err
 		}

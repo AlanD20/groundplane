@@ -28,7 +28,10 @@ func PrepareEntryWorkSettlement(snapshot Snapshot, view workqueue.View, unit Uni
 		unit.Target.Kind != ids.KindEnvEntry || item.Input == nil ||
 		item.ForwardRevoked || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
 		item.Phase != workexecution.Ready {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Entry value cannot settle outside its current ready Apply work")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Entry value cannot settle outside its current ready Apply work",
+		)
 	}
 	operationID := ids.DeriveAt(ids.KindOperation, task.CreatedAt, task.ID, "entry-value/"+item.ID)
 	receipt, err := prepareControllerEntryReceipt(snapshot, unit, operationID, valueGenerationID)

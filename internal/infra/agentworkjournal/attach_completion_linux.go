@@ -42,7 +42,10 @@ func (journal *Journal) CompleteAttachRemoval(ctx context.Context, input attache
 
 // LoadAttachRemoval reconstructs the exact saved Start time before completion
 // replay; a fresh assignment does not carry started or terminal timestamps.
-func (journal *Journal) LoadAttachRemoval(ctx context.Context, input attachexecution.RemovalInput) (*workexecution.Attempt, *AttachRemovalRecord, error) {
+func (journal *Journal) LoadAttachRemoval(
+	ctx context.Context,
+	input attachexecution.RemovalInput,
+) (*workexecution.Attempt, *AttachRemovalRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -52,7 +55,8 @@ func (journal *Journal) LoadAttachRemoval(ctx context.Context, input attachexecu
 	if err != nil || state == nil {
 		return nil, nil, err
 	}
-	if !workexecution.SameAssignment(state.Attempt, input.Attempt) || state.AttachRemoval == nil || state.Attempt.StartedAt == nil ||
+	if !workexecution.SameAssignment(state.Attempt, input.Attempt) || state.AttachRemoval == nil ||
+		state.Attempt.StartedAt == nil ||
 		!state.AttachRemoval.matches(input) {
 		return nil, nil, conflict()
 	}

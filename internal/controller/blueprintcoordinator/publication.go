@@ -24,7 +24,10 @@ func (publication *Publication) PreparePublication(ctx context.Context, task wor
 	revision int64, at time.Time,
 ) (workdispatch.PublicationBatch, error) {
 	if task.Revision <= 0 || task.Revision > revision || at.Before(task.Task.UpdatedAt) {
-		return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "Blueprint publication snapshot is invalid")
+		return workdispatch.PublicationBatch{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint publication snapshot is invalid",
+		)
 	}
 	graph, err := publication.records.LoadCapturedGraph(ctx, task.Task, revision)
 	if err != nil {

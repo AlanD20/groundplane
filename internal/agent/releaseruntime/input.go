@@ -10,7 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func Open(message *agentpb.ReleaseWorkAssignment, identity workexecution.Identity, volumeRoot string) (releaseexecution.Input, error) {
+func Open(
+	message *agentpb.ReleaseWorkAssignment,
+	identity workexecution.Identity,
+	volumeRoot string,
+) (releaseexecution.Input, error) {
 	attempt, release, err := workexecution.DecodeReleaseDelivery(message, identity)
 	if err != nil {
 		return releaseexecution.Input{}, err
@@ -26,7 +30,11 @@ func Open(message *agentpb.ReleaseWorkAssignment, identity workexecution.Identit
 	return input, nil
 }
 
-func OpenRecovery(message *agentpb.ReleaseRecoveryAssignment, identity workexecution.Identity, volumeRoot string) (releaseexecution.RecoveryInput, error) {
+func OpenRecovery(
+	message *agentpb.ReleaseRecoveryAssignment,
+	identity workexecution.Identity,
+	volumeRoot string,
+) (releaseexecution.RecoveryInput, error) {
 	input, err := releaseexecution.DecodeRecoveryAssignment(message, identity)
 	if err != nil {
 		return releaseexecution.RecoveryInput{}, err
@@ -52,7 +60,10 @@ func validateStorage(input releaseexecution.Input, volumeRoot string) error {
 	for _, artifact := range owned {
 		scope, err := environmentpath.Parse(volumeRoot, artifact.AuthorizedVolumeDir)
 		if err != nil || scope.EnvironmentID != input.Release.EnvironmentId {
-			return errs.New(errs.KindValidationFailed, "Release artifact volume directory is outside this Agent's Environment storage root")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Release artifact volume directory is outside this Agent's Environment storage root",
+			)
 		}
 	}
 	return nil

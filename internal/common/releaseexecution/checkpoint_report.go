@@ -55,5 +55,7 @@ func (record CheckpointReport) Checkpoint(attempt workexecution.Attempt) (workex
 }
 
 func EqualCheckpoint(a, b workexecution.Checkpoint) bool {
-	return a.AttemptID == b.AttemptID && a.Sequence == b.Sequence && a.StageID == b.StageID && a.Evidence == b.Evidence && a.RecordedAt.Equal(b.RecordedAt)
+	return a.AttemptID == b.AttemptID && a.Sequence == b.Sequence && a.StageID == b.StageID &&
+		a.Evidence == b.Evidence &&
+		a.RecordedAt.Equal(b.RecordedAt)
 }

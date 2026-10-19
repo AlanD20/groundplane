@@ -9,8 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (delivery *assignmentPayloadDelivery) prepareBackupRecoveryPayloads(stream agentpb.AgentChannel_ConnectServer,
-	assignment *agentpb.BackupRecoveryAssignment, authorization agentregistration.WorkAuthorization,
+func (delivery *assignmentPayloadDelivery) prepareBackupRecoveryPayloads(
+	stream agentpb.AgentChannel_ConnectServer,
+	assignment *agentpb.BackupRecoveryAssignment,
+	authorization agentregistration.WorkAuthorization,
 	send func(agentpb.AgentChannel_ConnectServer, agentregistration.WorkAuthorization, *agentpb.BackupRecoveryAssignment, uint32, *volumeManifestExchange) error,
 ) (func(), error) {
 	owned, attempt, _, err := executionplan.OpenBackupRecoveryAssignment(assignment, authorization.Identity())

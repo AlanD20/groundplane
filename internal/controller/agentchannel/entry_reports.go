@@ -11,20 +11,49 @@ import (
 )
 
 type EntryReporter interface {
-	RecoverEntry(context.Context, agentregistration.WorkAuthorization, *agentpb.EntryConfigurationWorkRecoveryReportRequest) (*agentpb.EntryConfigurationWorkRecoveryReportAck, error)
-	LoadEntryConfiguration(context.Context, agentregistration.WorkAuthorization, *agentpb.EntryConfigurationRequest) (*agentpb.EntryConfigurationManifest, error)
-	LoadEntryConfigurationFile(context.Context, agentregistration.WorkAuthorization, *agentpb.EntryConfigurationFileRequest) (*agentpb.EntryConfigurationFileDelivery, error)
-	CheckpointEntry(context.Context, agentregistration.WorkAuthorization, *agentpb.EntryConfigurationWorkCheckpointRequest) (*agentpb.EntryConfigurationWorkCheckpointAck, error)
-	CompleteEntry(context.Context, agentregistration.WorkAuthorization, *agentpb.EntryConfigurationWorkCompletionRequest) (*agentpb.EntryConfigurationWorkCompletionAck, error)
-	FailEntry(context.Context, agentregistration.WorkAuthorization, *agentpb.EntryConfigurationWorkFailureRequest) (*agentpb.EntryConfigurationWorkFailureAck, error)
+	RecoverEntry(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.EntryConfigurationWorkRecoveryReportRequest,
+	) (*agentpb.EntryConfigurationWorkRecoveryReportAck, error)
+	LoadEntryConfiguration(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.EntryConfigurationRequest,
+	) (*agentpb.EntryConfigurationManifest, error)
+	LoadEntryConfigurationFile(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.EntryConfigurationFileRequest,
+	) (*agentpb.EntryConfigurationFileDelivery, error)
+	CheckpointEntry(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.EntryConfigurationWorkCheckpointRequest,
+	) (*agentpb.EntryConfigurationWorkCheckpointAck, error)
+	CompleteEntry(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.EntryConfigurationWorkCompletionRequest,
+	) (*agentpb.EntryConfigurationWorkCompletionAck, error)
+	FailEntry(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.EntryConfigurationWorkFailureRequest,
+	) (*agentpb.EntryConfigurationWorkFailureAck, error)
 }
 
 func (server *Server) ConfigureEntryConfigurationWork(reports EntryReporter) {
 	server.entryReports = reports
 }
 
-func (server *Server) entryReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetEntryConfigurationRequest() == nil && message.GetEntryConfigurationFileRequest() == nil && message.GetEntryConfigurationWorkCheckpointRequest() == nil {
+func (server *Server) entryReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
+	if message.GetEntryConfigurationRequest() == nil && message.GetEntryConfigurationFileRequest() == nil &&
+		message.GetEntryConfigurationWorkCheckpointRequest() == nil {
 		return false, nil, nil
 	}
 	if server.entryReports == nil {

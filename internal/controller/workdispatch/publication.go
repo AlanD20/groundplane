@@ -40,7 +40,8 @@ func NewPublications(queue *workqueue.Repository, registrations []PublicationReg
 	}
 	owners := make(map[workexecution.Action]PublicationOwner, len(registrations))
 	for _, registration := range registrations {
-		if !workexecution.ValidAction(registration.Action) || registration.Owner == nil || owners[registration.Action] != nil {
+		if !workexecution.ValidAction(registration.Action) || registration.Owner == nil ||
+			owners[registration.Action] != nil {
 			return nil, errs.New(errs.KindInternal, "task publication action is invalid or duplicated")
 		}
 		owners[registration.Action] = registration.Owner
@@ -72,7 +73,8 @@ func (publications *Publications) Advance(ctx context.Context, taskID string, at
 		return err
 	}
 	if batch.Planning {
-		if batch.Rejected || len(batch.Graph) != 0 || len(batch.Authority.Conditions) != 0 || len(batch.Authority.Mutations) != 0 {
+		if batch.Rejected || len(batch.Graph) != 0 || len(batch.Authority.Conditions) != 0 ||
+			len(batch.Authority.Mutations) != 0 {
 			return errs.New(errs.KindInternal, "planning publication cannot also publish execution work")
 		}
 		return nil
@@ -105,7 +107,10 @@ func (publications *Publications) Advance(ctx context.Context, taskID string, at
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "task or captured publication inputs changed before the batch was stored")
+		return errs.New(
+			errs.KindStateConflict,
+			"task or captured publication inputs changed before the batch was stored",
+		)
 	}
 	return nil
 }

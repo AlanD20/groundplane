@@ -23,7 +23,9 @@ func (repository *Repository) LoadRecoveryProgress(ctx context.Context, view wor
 		view.Work.Item.Item.Input == nil || attempt.Input != *view.Work.Item.Item.Input ||
 		attempt.Number > view.Work.Item.Item.AttemptNumber || view.Checkpoint.Record == nil ||
 		view.Checkpoint.Revision <= 0 || view.Work.ReadRevision <= 0 {
-		return removalexecution.Progress{}, keyvalue.Condition{}, conflict("Service removal recovery has no acknowledged checkpoint")
+		return removalexecution.Progress{}, keyvalue.Condition{}, conflict(
+			"Service removal recovery has no acknowledged checkpoint",
+		)
 	}
 	key := RecoveryReportKey(attempt.ID, view.Checkpoint.Record.Sequence)
 	read, err := repository.read(ctx, []string{key}, view.Work.ReadRevision)
@@ -32,7 +34,9 @@ func (repository *Repository) LoadRecoveryProgress(ctx context.Context, view wor
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.Values[0] == nil {
-		return removalexecution.Progress{}, keyvalue.Condition{}, conflict("Service removal recovery checkpoint report is unavailable")
+		return removalexecution.Progress{}, keyvalue.Condition{}, conflict(
+			"Service removal recovery checkpoint report is unavailable",
+		)
 	}
 	progress, err := removalexecution.DecodeProgress(attempt, delivery, capture, read.Values[0].Value)
 	if err != nil {
@@ -40,7 +44,9 @@ func (repository *Repository) LoadRecoveryProgress(ctx context.Context, view wor
 	}
 	checkpoint, err := progress.Checkpoint(attempt, delivery, capture)
 	if err != nil || checkpoint != *view.Checkpoint.Record {
-		return removalexecution.Progress{}, keyvalue.Condition{}, conflict("Service removal recovery report differs from its acknowledged checkpoint")
+		return removalexecution.Progress{}, keyvalue.Condition{}, conflict(
+			"Service removal recovery report differs from its acknowledged checkpoint",
+		)
 	}
 	return progress, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
 }

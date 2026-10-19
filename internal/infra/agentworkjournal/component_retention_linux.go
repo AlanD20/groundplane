@@ -9,7 +9,11 @@ import (
 
 // retireComponent retains every failed forward checkpoint until the exact
 // predecessor-restoration receipt arrives, including between-stage failures.
-func (journal *Journal) retireComponent(ctx context.Context, record attemptRecord, terminal workexecution.Attempt) (bool, error) {
+func (journal *Journal) retireComponent(
+	ctx context.Context,
+	record attemptRecord,
+	terminal workexecution.Attempt,
+) (bool, error) {
 	if recovery := record.ComponentRecovery; recovery != nil {
 		receipt := recovery.Receipt
 		if recovery.Failure != nil {
@@ -30,7 +34,8 @@ func (journal *Journal) retireComponent(ctx context.Context, record attemptRecor
 				forward.Component.Layout != recovery.Restoration.Layout || !workexecution.SameAssignment(forward.Attempt, recovery.Source.Forward) {
 				return false, conflict()
 			}
-			if failure := forward.Component.Failure; failure != nil && failure.Receipt != nil && !sameComponentReceipt(failure.Receipt, recovery.Source.Forward) {
+			if failure := forward.Component.Failure; failure != nil && failure.Receipt != nil &&
+				!sameComponentReceipt(failure.Receipt, recovery.Source.Forward) {
 				return false, conflict()
 			}
 			// Remove forward evidence first; the recovery receipt remains
@@ -49,7 +54,12 @@ func (journal *Journal) retireComponent(ctx context.Context, record attemptRecor
 			return false, conflict()
 		}
 		if component.Failure != nil {
-			failure, err := componentexecution.DecodeLayoutFailure(terminal, component.Layout, component.Failure.Evidence, *terminal.Result)
+			failure, err := componentexecution.DecodeLayoutFailure(
+				terminal,
+				component.Layout,
+				component.Failure.Evidence,
+				*terminal.Result,
+			)
 			if err != nil {
 				return false, err
 			}

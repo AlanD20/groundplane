@@ -21,7 +21,9 @@ func PrepareCompletionProof(ctx context.Context, reader ReportReader, view workq
 	if reader == nil || input == nil || !view.ActiveAttempt || attempt.FinishedAt != nil ||
 		checkpoint == nil || checkpoint.AttemptID != attempt.ID || view.Work.ReadRevision <= 0 ||
 		at.IsZero() || at.Before(checkpoint.RecordedAt) {
-		return workqueue.Change{}, conflict("Entry configuration completion requires its final acknowledged observation")
+		return workqueue.Change{}, conflict(
+			"Entry configuration completion requires its final acknowledged observation",
+		)
 	}
 	key := ReportKey(attempt.ID, checkpoint.Sequence)
 	read, err := reader.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})

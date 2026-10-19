@@ -52,13 +52,17 @@ func advanceDatabaseRestoreSource(input *agentpb.BackupWorkInput, sources []*age
 			current.MysqlApplyStart != nil || next.DatabaseProgress.ConsumersOnly ||
 			(next.DatabaseProgress.PostgresObserved == nil && next.DatabaseProgress.MysqlObserved == nil) ||
 			current.Phase != agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_TARGET_PREPARATION {
-			return nil, invalidBackupCheckpoint("consumer-only recovery requires proof that no database apply was authorized")
+			return nil, invalidBackupCheckpoint(
+				"consumer-only recovery requires proof that no database apply was authorized",
+			)
 		}
 		next.DatabaseProgress.ConsumersOnly = true
 		next.DatabaseProgress.ConsumerPhase = agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_UNSPECIFIED
 		next.Phase = agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_SERVICE_RECOVERY
 		if next.DatabaseProgress.PostgresObserved != nil {
-			next.Checkpoint = &agentpb.BackupRestoreResume_PostgresContainerObserved{PostgresContainerObserved: proto.CloneOf(next.DatabaseProgress.PostgresObserved)}
+			next.Checkpoint = &agentpb.BackupRestoreResume_PostgresContainerObserved{
+				PostgresContainerObserved: proto.CloneOf(next.DatabaseProgress.PostgresObserved),
+			}
 		} else {
 			next.Checkpoint = &agentpb.BackupRestoreResume_MysqlContainerObserved{MysqlContainerObserved: proto.CloneOf(next.DatabaseProgress.MysqlObserved)}
 		}
@@ -70,13 +74,17 @@ func advanceDatabaseRestoreSource(input *agentpb.BackupWorkInput, sources []*age
 		next.Phase = agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_TARGET_PREPARATION
 		next.Checkpoint = &agentpb.BackupRestoreResume_ArtifactValidated{ArtifactValidated: value}
 	case current.Checkpoint == nil || current.GetSourceCleanupCompleted() != nil:
-		return nil, invalidBackupCheckpoint("database restore must validate its archive and cannot continue after cleanup")
+		return nil, invalidBackupCheckpoint(
+			"database restore must validate its archive and cannot continue after cleanup",
+		)
 	case report.GetSourceCleanupCompleted() != nil:
 		value, progress := report.GetSourceCleanupCompleted(), next.DatabaseProgress
 		if (!progress.ConsumersOnly && progress.PostgresVerified == nil && progress.MysqlVerified == nil) ||
 			int(progress.RecoveredConsumers) != len(step.ConsumerServiceIds) ||
 			value.PointId != restore.PointId || !proto.Equal(value.Evidence, restore.ExpectedEvidence) {
-			return nil, invalidBackupCheckpoint("database restore cleanup requires verified restore and recovered consumers")
+			return nil, invalidBackupCheckpoint(
+				"database restore cleanup requires verified restore and recovered consumers",
+			)
 		}
 		next.Phase = agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_TERMINAL
 		next.Checkpoint = &agentpb.BackupRestoreResume_SourceCleanupCompleted{SourceCleanupCompleted: value}

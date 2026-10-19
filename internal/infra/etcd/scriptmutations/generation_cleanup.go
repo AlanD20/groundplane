@@ -45,7 +45,12 @@ func CleanupEnvironmentDeletionScriptLocators(
 // PrepareEnvironmentDeletionScriptLocatorBatch prepares one bounded cleanup
 // transaction without executing it. The caller joins its Task authority before
 // committing; an empty mutation list means all locators have been removed.
-func PrepareEnvironmentDeletionScriptLocatorBatch(ctx context.Context, store mutationStore, environmentID string, authority etcdstore.Condition) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
+func PrepareEnvironmentDeletionScriptLocatorBatch(
+	ctx context.Context,
+	store mutationStore,
+	environmentID string,
+	authority etcdstore.Condition,
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if authority.Key == "" || authority.ModRevision <= 0 || authority.Prefix {
 		return nil, nil, errs.New(errs.KindInternal, "Script locator cleanup authority is invalid")
 	}

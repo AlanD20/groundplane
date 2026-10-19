@@ -25,7 +25,10 @@ func NewAgentWork(inputs *entryrecord.InputRepository, queue *workqueue.Reposito
 	return &AgentWork{inputs: inputs, queue: queue}, nil
 }
 
-func (owner *AgentWork) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.EntryConfigurationWorkAssignment, error) {
+func (owner *AgentWork) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.EntryConfigurationWorkAssignment, error) {
 	assignment, _, err := owner.capturedAssignment(ctx, view)
 	return assignment, err
 }
@@ -55,7 +58,10 @@ func (owner *AgentWork) AuthorizeAgentStart(ctx context.Context, view workqueue.
 		return workqueue.Change{}, err
 	}
 	if !current {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Entry configuration changed before execution could start")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Entry configuration changed before execution could start",
+		)
 	}
 	resources, err := owner.inputs.AdmissionConditions(ctx, view.Work)
 	if err != nil {
@@ -63,12 +69,18 @@ func (owner *AgentWork) AuthorizeAgentStart(ctx context.Context, view workqueue.
 	}
 	guards = append(guards, desired...)
 	guards = append(guards, resources...)
-	guards = append(guards, keyvalue.Condition{Key: workqueue.TaskKey(view.Work.Task.Task.ID), ModRevision: view.Work.Task.Revision},
-		keyvalue.Condition{Key: workqueue.ItemKey(view.Work.Item.Item.ID), ModRevision: view.Work.Item.Revision})
+	guards = append(
+		guards,
+		keyvalue.Condition{Key: workqueue.TaskKey(view.Work.Task.Task.ID), ModRevision: view.Work.Task.Revision},
+		keyvalue.Condition{Key: workqueue.ItemKey(view.Work.Item.Item.ID), ModRevision: view.Work.Item.Revision},
+	)
 	return workqueue.Change{Conditions: guards}, nil
 }
 
-func (owner *AgentWork) capturedAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.EntryConfigurationWorkAssignment, []keyvalue.Condition, error) {
+func (owner *AgentWork) capturedAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.EntryConfigurationWorkAssignment, []keyvalue.Condition, error) {
 	item, task, attempt := view.Work.Item.Item, view.Work.Task.Task, view.Attempt.Attempt
 	if !view.CurrentExecutor || !view.ActiveAttempt || item.Operation != workexecution.EntryConfiguration ||
 		attempt.Executor.Executor != workexecution.Agent ||
@@ -101,7 +113,11 @@ func (owner *AgentWork) capturedAssignment(ctx context.Context, view workqueue.R
 		if err != nil {
 			return nil, nil, err
 		}
-		assignment.RecoveryBoundary, err = entryexecution.EncodeProgress(captured.Source.Forward, owned, captured.Boundary)
+		assignment.RecoveryBoundary, err = entryexecution.EncodeProgress(
+			captured.Source.Forward,
+			owned,
+			captured.Boundary,
+		)
 		if err != nil {
 			return nil, nil, err
 		}

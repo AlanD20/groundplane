@@ -15,11 +15,18 @@ import (
 // PrepareFinish proves membership and the captured Group policy after each
 // operation has settled its effects. Failed restoration cannot release the
 // Environment reservation merely because no Agent is still running.
-func (repository *ExecutionRepository) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, at time.Time) (workqueue.Change, error) {
+func (repository *ExecutionRepository) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	at time.Time,
+) (workqueue.Change, error) {
 	task := finished.Task.Task
 	if !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
 		task.Progress.Unsettled() != 0 || len(finished.Items) != int(task.ExpectedItems) || at.Before(task.UpdatedAt) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Group completion requires its complete settled work graph")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Group completion requires its complete settled work graph",
+		)
 	}
 	root, err := repository.Load(ctx, finished.Task, finished.ReadRevision)
 	if err != nil {
@@ -35,19 +42,31 @@ func (repository *ExecutionRepository) PrepareFinish(ctx context.Context, finish
 		captured, found := expected[item.ID]
 		if !found || snapshot.Revision <= 0 || snapshot.Revision > finished.ReadRevision || item.TaskID != task.ID ||
 			item.Operation != captured.Operation || item.TargetID != captured.TargetID || item.Placement != captured.Placement ||
-			!item.CreatedAt.Equal(captured.CreatedAt) || item.AttemptNumber == 0 && !item.Deadline.Equal(captured.Deadline) ||
+			!item.CreatedAt.Equal(
+				captured.CreatedAt,
+			) || item.AttemptNumber == 0 && !item.Deadline.Equal(captured.Deadline) ||
 			!slices.Equal(item.Claims, captured.Claims) || !slices.Equal(item.Dependencies, captured.Dependencies) ||
 			item.Phase != workexecution.Settled || item.Result == nil || item.ActiveAttemptID != "" ||
-			item.Operation == workexecution.Network && (item.Input == nil || captured.Input == nil || *item.Input != *captured.Input) {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Group completion differs from its accepted work membership")
+			item.Operation == workexecution.Network &&
+				(item.Input == nil || captured.Input == nil || *item.Input != *captured.Input) {
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Group completion differs from its accepted work membership",
+			)
 		}
 		if item.Operation == workexecution.Release || item.Operation == workexecution.ReleaseRestoration {
 			members = append(members, item)
 		}
 		if item.Operation == workexecution.Script && item.Input != nil {
-			index := slices.IndexFunc(root.Record.Preflight, func(hook PreflightHook) bool { return hook.WorkItemID == item.ID })
+			index := slices.IndexFunc(
+				root.Record.Preflight,
+				func(hook PreflightHook) bool { return hook.WorkItemID == item.ID },
+			)
 			if index < 0 || *item.Input != root.Record.Preflight[index].Input {
-				return workqueue.Change{}, errs.New(errs.KindStateConflict, "Group completion has a different preflight Script input")
+				return workqueue.Change{}, errs.New(
+					errs.KindStateConflict,
+					"Group completion has a different preflight Script input",
+				)
 			}
 		}
 		delete(expected, item.ID)
@@ -57,7 +76,10 @@ func (repository *ExecutionRepository) PrepareFinish(ctx context.Context, finish
 		return workqueue.Change{}, err
 	}
 	if len(expected) != 0 || task.Stop == nil && decision.Action != domain.GroupWorkFinish {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Group completion still needs member or restoration settlement")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Group completion still needs member or restoration settlement",
+		)
 	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{
 		{Key: workqueue.TaskKey(task.ID), ModRevision: finished.Task.Revision},

@@ -19,16 +19,30 @@ import (
 )
 
 type CapturedFileReader interface {
-	OpenCapturedFile(context.Context, string, string, uint64, taskmaterialization.Record) (entrymaterialization.Header, io.ReadCloser, error)
+	OpenCapturedFile(
+		context.Context,
+		string,
+		string,
+		uint64,
+		taskmaterialization.Record,
+	) (entrymaterialization.Header, io.ReadCloser, error)
 }
 
-func (service *WorkReports) LoadBackingProvisionConfiguration(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *WorkReports) LoadBackingProvisionConfiguration(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.BackingProvisionConfigurationRequest,
 ) (*agentpb.BackingProvisionConfigurationManifest, error) {
 	if request == nil || executionplan.RejectUnknown(request) != nil {
 		return nil, invalidBackingDelivery()
 	}
-	selection, err := service.activeDelivery(ctx, authorization, request.Attempt, request.StageId, backingprovision.WriteConfiguration)
+	selection, err := service.activeDelivery(
+		ctx,
+		authorization,
+		request.Attempt,
+		request.StageId,
+		backingprovision.WriteConfiguration,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -36,8 +50,11 @@ func (service *WorkReports) LoadBackingProvisionConfiguration(ctx context.Contex
 		return nil, err
 	}
 	procedure := selection.input.Assignment.Procedure
-	manifest := &agentpb.BackingProvisionConfigurationManifest{Attempt: proto.CloneOf(request.Attempt), StageId: request.StageId,
-		Configuration: proto.CloneOf(procedure.Configuration)}
+	manifest := &agentpb.BackingProvisionConfigurationManifest{
+		Attempt:       proto.CloneOf(request.Attempt),
+		StageId:       request.StageId,
+		Configuration: proto.CloneOf(procedure.Configuration),
+	}
 	for _, file := range procedure.Files {
 		if _, err := backingprovision.ConfigurationHeader(selection.input, file); err != nil {
 			return nil, err
@@ -47,13 +64,22 @@ func (service *WorkReports) LoadBackingProvisionConfiguration(ctx context.Contex
 	return manifest, service.grantDelivery(ctx, selection)
 }
 
-func (service *WorkReports) LoadBackingProvisionFile(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *WorkReports) LoadBackingProvisionFile(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.BackingProvisionFileRequest,
 ) (delivery *agentpb.BackingProvisionFileDelivery, resultErr error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || entrymaterialization.ValidateDesiredDestination(request.Destination) != nil {
+	if request == nil || executionplan.RejectUnknown(request) != nil ||
+		entrymaterialization.ValidateDesiredDestination(request.Destination) != nil {
 		return nil, invalidBackingDelivery()
 	}
-	selection, err := service.activeDelivery(ctx, authorization, request.Attempt, request.StageId, backingprovision.WriteConfiguration)
+	selection, err := service.activeDelivery(
+		ctx,
+		authorization,
+		request.Attempt,
+		request.StageId,
+		backingprovision.WriteConfiguration,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +87,10 @@ func (service *WorkReports) LoadBackingProvisionFile(ctx context.Context, author
 	if err != nil {
 		return nil, err
 	}
-	index := slices.IndexFunc(files, func(file taskmaterialization.Record) bool { return file.Destination == request.Destination })
+	index := slices.IndexFunc(
+		files,
+		func(file taskmaterialization.Record) bool { return file.Destination == request.Destination },
+	)
 	if index < 0 {
 		return nil, invalidBackingDelivery()
 	}
@@ -71,7 +100,13 @@ func (service *WorkReports) LoadBackingProvisionFile(ctx context.Context, author
 	if err != nil {
 		return nil, err
 	}
-	header, source, err := service.files.OpenCapturedFile(ctx, procedure.TaskId, request.StageId, procedure.RenderGeneration, files[index])
+	header, source, err := service.files.OpenCapturedFile(
+		ctx,
+		procedure.TaskId,
+		request.StageId,
+		procedure.RenderGeneration,
+		files[index],
+	)
 	if source != nil {
 		defer func() {
 			resultErr = errors.Join(resultErr, source.Close())
@@ -102,7 +137,10 @@ func (service *WorkReports) LoadBackingProvisionFile(ctx context.Context, author
 	clear(extra[:])
 	digest, wanted := sha256.Sum256(content), expected.Digest()
 	if n != 0 || !errors.Is(err, io.EOF) || subtle.ConstantTimeCompare(digest[:], wanted[:]) != 1 {
-		return nil, errs.New(errs.KindStateConflict, "captured backing configuration transfer differs from its metadata")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"captured backing configuration transfer differs from its metadata",
+		)
 	}
 	if err := service.grantDelivery(ctx, selection); err != nil {
 		return nil, err

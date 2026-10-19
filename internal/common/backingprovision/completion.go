@@ -17,10 +17,16 @@ import (
 func CompletionEvidence(attempt workexecution.Attempt, checkpoint workexecution.Checkpoint,
 	observation backingruntimefact.Observation,
 ) (workexecution.Input, error) {
-	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward || attempt.Executor.Executor != workexecution.Agent ||
-		attempt.StartedAt == nil || checkpoint.AttemptID != attempt.ID || checkpoint.Sequence == 0 || checkpoint.Sequence%2 != 0 ||
-		checkpoint.Evidence.Validate() != nil || checkpoint.Evidence.ID != attempt.Input.ID ||
-		checkpoint.RecordedAt.Before(*attempt.StartedAt) || backingruntimefact.ValidateObservation(observation) != nil ||
+	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		attempt.StartedAt == nil ||
+		checkpoint.AttemptID != attempt.ID ||
+		checkpoint.Sequence == 0 ||
+		checkpoint.Sequence%2 != 0 ||
+		checkpoint.Evidence.Validate() != nil ||
+		checkpoint.Evidence.ID != attempt.Input.ID ||
+		checkpoint.RecordedAt.Before(*attempt.StartedAt) ||
+		backingruntimefact.ValidateObservation(observation) != nil ||
 		observation.ObservedAt.Before(*attempt.StartedAt) {
 		return workexecution.Input{}, invalid("backing creation completion has no matching final runtime observation")
 	}

@@ -9,7 +9,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func recoveryRequest(input entryexecution.FileInput, inspectOnly bool) (*agentpb.EntryConfigurationWorkHelperRequest, error) {
+func recoveryRequest(
+	input entryexecution.FileInput,
+	inspectOnly bool,
+) (*agentpb.EntryConfigurationWorkHelperRequest, error) {
 	if input.Recovery == nil || input.Attempt.StartedAt == nil {
 		return nil, invalidInput()
 	}
@@ -26,8 +29,16 @@ func recoveryRequest(input entryexecution.FileInput, inspectOnly bool) (*agentpb
 		return nil, err
 	}
 	request := &agentpb.EntryConfigurationWorkHelperRequest{
-		Assignment: &agentpb.EntryConfigurationWorkAssignment{Attempt: identity, Input: input.Procedure, RecoverySource: source, RecoveryBoundary: boundary},
-		Start:      &agentpb.WorkStartAck{Attempt: identity, StartedAt: timestamppb.New(*input.Attempt.StartedAt)}, InspectOnly: inspectOnly,
+		Assignment: &agentpb.EntryConfigurationWorkAssignment{
+			Attempt:          identity,
+			Input:            input.Procedure,
+			RecoverySource:   source,
+			RecoveryBoundary: boundary,
+		},
+		Start: &agentpb.WorkStartAck{
+			Attempt:   identity,
+			StartedAt: timestamppb.New(*input.Attempt.StartedAt),
+		}, InspectOnly: inspectOnly,
 	}
 	_, err = entryexecution.OpenHelperRequest(request)
 	return request, err
@@ -41,7 +52,11 @@ func (consumers *HelperConsumers) Stop(ctx context.Context, input entryexecution
 	return consumers.helper.StopEntryConfigurationWork(ctx, request)
 }
 
-func (consumers *HelperConsumers) Restore(ctx context.Context, input entryexecution.FileInput, inspectOnly bool) (bool, error) {
+func (consumers *HelperConsumers) Restore(
+	ctx context.Context,
+	input entryexecution.FileInput,
+	inspectOnly bool,
+) (bool, error) {
 	request, err := recoveryRequest(input, inspectOnly)
 	if err != nil {
 		return false, err

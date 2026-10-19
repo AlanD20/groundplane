@@ -74,7 +74,10 @@ func (repository *InputRepository) LoadCompleted(ctx context.Context, view workq
 		return completed, nil
 	}
 	key := blueprintattachoutputs.Key(capture.AttachID, attempt.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -90,14 +93,22 @@ func (repository *InputRepository) LoadCompleted(ctx context.Context, view workq
 		return CompletedInput{}, err
 	}
 	defer blueprintattachoutputs.Clear(&output)
-	if output.EnvironmentID != capture.EnvironmentID || output.TaskID != attempt.TaskID || output.WorkItemID != attempt.WorkItemID ||
-		output.AttemptID != attempt.ID || output.Executor != attempt.Executor || output.Input != attempt.Input ||
-		output.AttachID != capture.AttachID || output.OperationID != capture.OperationID ||
-		output.CreatedAt.Before(*attempt.StartedAt) || output.CreatedAt.After(progress.LastResult.FinishedAt) {
+	if output.EnvironmentID != capture.EnvironmentID || output.TaskID != attempt.TaskID ||
+		output.WorkItemID != attempt.WorkItemID ||
+		output.AttemptID != attempt.ID ||
+		output.Executor != attempt.Executor ||
+		output.Input != attempt.Input ||
+		output.AttachID != capture.AttachID ||
+		output.OperationID != capture.OperationID ||
+		output.CreatedAt.Before(*attempt.StartedAt) ||
+		output.CreatedAt.After(progress.LastResult.FinishedAt) {
 		return CompletedInput{}, checkpointConflict("Custom Attach facts differ from the completed execution")
 	}
 	completed.Facts = output.Facts
 	completed.Facts.Ciphertext = append([]byte(nil), output.Facts.Ciphertext...)
-	completed.Conditions = append(completed.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
+	completed.Conditions = append(
+		completed.Conditions,
+		keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision},
+	)
 	return completed, nil
 }

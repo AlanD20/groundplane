@@ -9,7 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (repository *InputRepository) LoadAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.BackupWorkAssignment, workqueue.Change, error) {
+func (repository *InputRepository) LoadAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.BackupWorkAssignment, workqueue.Change, error) {
 	task, item, attempt := view.Work.Task.Task, view.Work.Item.Item, view.Attempt.Attempt
 	if !view.CurrentExecutor || !view.ActiveAttempt || !task.PublicationComplete || task.FinishedAt != nil ||
 		task.CollectionStartedAt != nil || attempt.Direction != workexecution.Forward ||

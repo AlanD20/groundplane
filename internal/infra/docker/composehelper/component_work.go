@@ -10,7 +10,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func ExecuteComponentWork(ctx context.Context, taskRunner runner.Runner, request *agentpb.ComponentWorkHelperRequest, catalog ComponentActionCatalog) (*agentpb.ComponentWorkHelperResponse, error) {
+func ExecuteComponentWork(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	request *agentpb.ComponentWorkHelperRequest,
+	catalog ComponentActionCatalog,
+) (*agentpb.ComponentWorkHelperResponse, error) {
 	input, err := componentexecution.OpenHelperRequest(request)
 	if err != nil {
 		return nil, err
@@ -41,7 +46,13 @@ func ExecuteComponentWork(ctx context.Context, taskRunner runner.Runner, request
 		case componentexecution.RemoveRuntime:
 			err = removeComponentRuntime(bounded, taskRunner, input)
 		case componentexecution.ActivateConfiguration:
-			err = activateComponentWork(bounded, taskRunner, input.Procedure.Candidate, input.Procedure.ConfigurationAction, catalog)
+			err = activateComponentWork(
+				bounded,
+				taskRunner,
+				input.Procedure.Candidate,
+				input.Procedure.ConfigurationAction,
+				catalog,
+			)
 		case componentexecution.VerifyRuntime:
 			err = waitComponentRuntime(bounded, taskRunner, input, false)
 		default:
@@ -58,8 +69,17 @@ func ExecuteComponentWork(ctx context.Context, taskRunner runner.Runner, request
 	return componentexecution.HelperObservation(input, observation)
 }
 
-func observeComponentWork(ctx context.Context, taskRunner runner.Runner, input componentexecution.HelperInput, catalog ComponentActionCatalog) (componentexecution.Observation, error) {
-	observed := componentexecution.Observation{ComponentID: input.Procedure.ComponentId, Input: input.Attempt.Input, Stage: input.Progress.Stage}
+func observeComponentWork(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input componentexecution.HelperInput,
+	catalog ComponentActionCatalog,
+) (componentexecution.Observation, error) {
+	observed := componentexecution.Observation{
+		ComponentID: input.Procedure.ComponentId,
+		Input:       input.Attempt.Input,
+		Stage:       input.Progress.Stage,
+	}
 	inventory, err := inspectComponentWork(ctx, taskRunner, input)
 	if err != nil {
 		return observed, err
@@ -73,7 +93,13 @@ func observeComponentWork(ctx context.Context, taskRunner runner.Runner, input c
 		observed.RuntimeAbsent = absent
 	case componentexecution.ActivateConfiguration:
 		if ready {
-			observed.ConfigurationActivated, err = observeComponentActivation(ctx, taskRunner, input.Procedure.Candidate, input.Procedure.ConfigurationAction, catalog)
+			observed.ConfigurationActivated, err = observeComponentActivation(
+				ctx,
+				taskRunner,
+				input.Procedure.Candidate,
+				input.Procedure.ConfigurationAction,
+				catalog,
+			)
 		}
 	case componentexecution.VerifyRuntime:
 		if input.Procedure.Remove {
@@ -82,7 +108,10 @@ func observeComponentWork(ctx context.Context, taskRunner runner.Runner, input c
 			observed.RuntimeReady, err = observeComponentActivation(ctx, taskRunner, input.Procedure.Candidate, input.Procedure.ConfigurationAction, catalog)
 		}
 	default:
-		return observed, errs.New(errs.KindValidationFailed, "Component observation stage is not a Docker runtime operation")
+		return observed, errs.New(
+			errs.KindValidationFailed,
+			"Component observation stage is not a Docker runtime operation",
+		)
 	}
 	observed.At = time.Now().UTC()
 	return observed, err

@@ -25,13 +25,28 @@ import (
 )
 
 type scriptArtifactRepository interface {
-	ResolveReleaseScriptOwnership(context.Context, workqueue.View, string, workexecution.Input) (*etcd.ScriptWorkOwnership, error)
+	ResolveReleaseScriptOwnership(
+		context.Context,
+		workqueue.View,
+		string,
+		workexecution.Input,
+	) (*etcd.ScriptWorkOwnership, error)
 	ResolveScriptWorkArtifacts(context.Context, workqueue.View) (*etcd.ScriptWorkArtifacts, error)
-	ResolveReleaseScriptWorkArtifacts(context.Context, workqueue.View, string, workexecution.Input) (*etcd.ScriptWorkArtifacts, error)
+	ResolveReleaseScriptWorkArtifacts(
+		context.Context,
+		workqueue.View,
+		string,
+		workexecution.Input,
+	) (*etcd.ScriptWorkArtifacts, error)
 }
 
 // ResolveReleaseScriptOwnership does not resolve or decrypt Script Entry values.
-func (service *ScriptArtifactService) ResolveReleaseScriptOwnership(ctx context.Context, view workqueue.View, executionID string, reference workexecution.Input) (*etcd.ScriptWorkOwnership, error) {
+func (service *ScriptArtifactService) ResolveReleaseScriptOwnership(
+	ctx context.Context,
+	view workqueue.View,
+	executionID string,
+	reference workexecution.Input,
+) (*etcd.ScriptWorkOwnership, error) {
 	if ctx == nil || service == nil || service.repository == nil {
 		return nil, errs.New(errs.KindInternal, "Script ownership delivery is not configured")
 	}
@@ -150,7 +165,10 @@ func (delivery *ScriptWorkDelivery) Clear() {
 	}
 }
 
-func (service *ScriptArtifactService) ResolveScriptWorkArtifacts(ctx context.Context, view workqueue.View) (*ScriptWorkDelivery, error) {
+func (service *ScriptArtifactService) ResolveScriptWorkArtifacts(
+	ctx context.Context,
+	view workqueue.View,
+) (*ScriptWorkDelivery, error) {
 	if ctx == nil || service == nil || service.repository == nil || service.values == nil {
 		return nil, errs.New(errs.KindInternal, "Script artifact service is not configured")
 	}
@@ -174,7 +192,10 @@ func (service *ScriptArtifactService) ResolveReleaseScriptWorkArtifacts(ctx cont
 	return service.resolveCapturedScriptValues(ctx, captured)
 }
 
-func (service *ScriptArtifactService) resolveCapturedScriptValues(ctx context.Context, captured *etcd.ScriptWorkArtifacts) (*ScriptWorkDelivery, error) {
+func (service *ScriptArtifactService) resolveCapturedScriptValues(
+	ctx context.Context,
+	captured *etcd.ScriptWorkArtifacts,
+) (*ScriptWorkDelivery, error) {
 	if captured == nil || captured.Snapshot == nil || captured.Body == nil {
 		captured.Clear()
 		return nil, errs.New(errs.KindInternal, "Script captured artifacts are missing")
@@ -206,7 +227,8 @@ func (service *ScriptArtifactService) resolveCapturedScriptValues(ctx context.Co
 		}
 		digest := sha256.Sum256(value)
 		if !bytes.Equal(digest[:], binding.Sha256) ||
-			binding.Kind == agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV && (!utf8.Valid(value) || bytes.IndexByte(value, 0) >= 0) {
+			binding.Kind == agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV &&
+				(!utf8.Valid(value) || bytes.IndexByte(value, 0) >= 0) {
 			clear(value)
 			return fail(errs.New(errs.KindInternal, "Script Entry value does not match its captured binding"))
 		}

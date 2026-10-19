@@ -24,7 +24,12 @@ func ValidateDatabaseRestoreExecutionPlan(record BackupRestoreRecord, plan *agen
 		validated.TargetId != record.EnvironmentID || len(validated.Steps) != 1 || validated.BackupScope == nil {
 		return invalidBackupRuntimeRecord("database Restore execution plan is invalid")
 	}
-	return validateDatabaseRestoreInput(record, validated.BackupScope, validated.Steps[0].GetBackupStep(), validated.Artifacts)
+	return validateDatabaseRestoreInput(
+		record,
+		validated.BackupScope,
+		validated.Steps[0].GetBackupStep(),
+		validated.Artifacts,
+	)
 }
 
 func validateDatabaseRestoreInput(record BackupRestoreRecord, scope *agentpb.BackupPlanScope,

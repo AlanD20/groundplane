@@ -36,7 +36,12 @@ func EqualProgress(left, right Progress) bool {
 // ValidateTransition admits exactly one stage boundary or an identical replay.
 // A report cannot skip stages, replace earlier receipts, or clear an in-flight
 // effect without supplying the corresponding observation.
-func ValidateTransition(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, previous *Progress, next Progress) error {
+func ValidateTransition(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	previous *Progress,
+	next Progress,
+) error {
 	if next.Validate(attempt, input) != nil {
 		return invalid()
 	}
@@ -77,7 +82,10 @@ func ValidateTransition(attempt workexecution.Attempt, input *agentpb.ServiceLif
 	return nil
 }
 
-func (progress Progress) Checkpoint(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput) (workexecution.Checkpoint, error) {
+func (progress Progress) Checkpoint(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+) (workexecution.Checkpoint, error) {
 	if progress.Validate(attempt, input) != nil || progress.Sequence == 0 {
 		return workexecution.Checkpoint{}, invalid()
 	}
@@ -89,7 +97,10 @@ func (progress Progress) Checkpoint(attempt workexecution.Attempt, input *agentp
 }
 
 // CheckpointStages hashes journal metadata after validating its bounded stages.
-func (progress Progress) CheckpointStages(attempt workexecution.Attempt, stages []Stage) (workexecution.Checkpoint, error) {
+func (progress Progress) CheckpointStages(
+	attempt workexecution.Attempt,
+	stages []Stage,
+) (workexecution.Checkpoint, error) {
 	if progress.ValidateStages(attempt, stages) != nil || progress.Sequence == 0 {
 		return workexecution.Checkpoint{}, invalid()
 	}
@@ -116,7 +127,11 @@ func (progress Progress) CheckpointStages(attempt workexecution.Attempt, stages 
 		Evidence: workexecution.Input{ID: attempt.Input.ID, SHA256: hex.EncodeToString(digest[:])}}, nil
 }
 
-func EncodeProgress(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, progress Progress) ([]byte, error) {
+func EncodeProgress(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	progress Progress,
+) ([]byte, error) {
 	if _, err := progress.Checkpoint(attempt, input); err != nil {
 		return nil, err
 	}
@@ -127,7 +142,11 @@ func EncodeProgress(attempt workexecution.Attempt, input *agentpb.ServiceLifecyc
 	return jcs.Canonicalize(raw)
 }
 
-func DecodeProgress(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, raw []byte) (Progress, error) {
+func DecodeProgress(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	raw []byte,
+) (Progress, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return Progress{}, invalid()
 	}

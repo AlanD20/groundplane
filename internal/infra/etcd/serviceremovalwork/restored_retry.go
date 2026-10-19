@@ -14,15 +14,30 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (repository *Repository) PrepareRestoredRetry(ctx context.Context, view workqueue.View, previous workqueue.AttemptSnapshot,
-	delivery *agentpb.ServiceLifecycleWorkInput, at, deadline time.Time,
+func (repository *Repository) PrepareRestoredRetry(
+	ctx context.Context,
+	view workqueue.View,
+	previous workqueue.AttemptSnapshot,
+	delivery *agentpb.ServiceLifecycleWorkInput,
+	at, deadline time.Time,
 ) (workqueue.Change, error) {
 	task, item, attempt := view.Task.Task, view.Item.Item, previous.Attempt
-	if task.Stop != nil || item.ForwardRevoked || task.CollectionStartedAt != nil || item.Phase != workexecution.Settled ||
-		item.Outcome != workexecution.Failed || item.Cleanup != workexecution.CleanupComplete || item.CleanupResult == nil ||
-		attempt.Direction != workexecution.Recovery || attempt.Outcome != workexecution.Succeeded || attempt.FinishedAt == nil ||
-		attempt.Result == nil || *attempt.Result != *item.CleanupResult || attempt.Number != item.AttemptNumber || attempt.Number == ^uint64(0) {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "service removal Retry requires verified completed restoration")
+	if task.Stop != nil || item.ForwardRevoked || task.CollectionStartedAt != nil ||
+		item.Phase != workexecution.Settled ||
+		item.Outcome != workexecution.Failed ||
+		item.Cleanup != workexecution.CleanupComplete ||
+		item.CleanupResult == nil ||
+		attempt.Direction != workexecution.Recovery ||
+		attempt.Outcome != workexecution.Succeeded ||
+		attempt.FinishedAt == nil ||
+		attempt.Result == nil ||
+		*attempt.Result != *item.CleanupResult ||
+		attempt.Number != item.AttemptNumber ||
+		attempt.Number == ^uint64(0) {
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"service removal Retry requires verified completed restoration",
+		)
 	}
 	input, capture, err := repository.Load(ctx, view)
 	if err != nil {
@@ -49,15 +64,23 @@ func (repository *Repository) PrepareRestoredRetry(ctx context.Context, view wor
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	resume := workqueue.ResumeView{Work: view, Attempt: previous, Checkpoint: workqueue.CheckpointSnapshot{Record: &checkpoint, Revision: read.Values[0].ModRevision}}
+	resume := workqueue.ResumeView{
+		Work:       view,
+		Attempt:    previous,
+		Checkpoint: workqueue.CheckpointSnapshot{Record: &checkpoint, Revision: read.Values[0].ModRevision},
+	}
 	progress, progressGuard, err := repository.LoadRecoveryProgress(ctx, resume, delivery, saved.Capture)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if progress.Phase != removalexecution.Complete || progress.InFlight || checkpoint.Evidence != *attempt.Result || progress.UpdatedAt.After(*attempt.FinishedAt) {
+	if progress.Phase != removalexecution.Complete || progress.InFlight || checkpoint.Evidence != *attempt.Result ||
+		progress.UpdatedAt.After(*attempt.FinishedAt) {
 		return workqueue.Change{}, conflict("service removal restoration did not verify the captured predecessor")
 	}
-	encoded, err := lifecycleexecution.EncodeContinuation(delivery, lifecycleexecution.Continuation{Source: saved.Capture.Source, Restored: &attempt})
+	encoded, err := lifecycleexecution.EncodeContinuation(
+		delivery,
+		lifecycleexecution.Continuation{Source: saved.Capture.Source, Restored: &attempt},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

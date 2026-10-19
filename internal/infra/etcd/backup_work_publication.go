@@ -39,13 +39,21 @@ func (plan backupRunPublicationPlan) workPublication(task workexecution.Task, it
 	}
 	defer keyvalue.ClearMutationValues(mutations)
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*keyvalue.KeyValue) error {
-		return errs.New(errs.KindStateConflict, "Backup sources or policy changed before admission; submit a new action")
+		return errs.New(
+			errs.KindStateConflict,
+			"Backup sources or policy changed before admission; submit a new action",
+		)
 	})
 	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
 		return nil, err
 	}
-	publication, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, classify)
+	publication, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		classify,
+	)
 	if err != nil {
 		return nil, err
 	}

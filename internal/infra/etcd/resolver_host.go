@@ -13,7 +13,9 @@ func (repository *TaskRepository) ResolverWorkRepository() (*resolverwork.Reposi
 	return resolverwork.NewRepository(repository.store)
 }
 
-func (repository *TaskRepository) SelectResolverHost(ctx context.Context) (keyvalue.Versioned[hostbindings.Platform], error) {
+func (repository *TaskRepository) SelectResolverHost(
+	ctx context.Context,
+) (keyvalue.Versioned[hostbindings.Platform], error) {
 	host, err := hostbindings.ReadLocal(ctx, repository.store, 0)
 	if err != nil {
 		return keyvalue.Versioned[hostbindings.Platform]{}, err
@@ -23,7 +25,10 @@ func (repository *TaskRepository) SelectResolverHost(ctx context.Context) (keyva
 		return keyvalue.Versioned[hostbindings.Platform]{}, err
 	}
 	if platform.Revision == 0 {
-		return keyvalue.Versioned[hostbindings.Platform]{}, errs.New(errs.KindStateConflict, "CoreDNS is waiting for the enrolled Agent to report its host platform")
+		return keyvalue.Versioned[hostbindings.Platform]{}, errs.New(
+			errs.KindStateConflict,
+			"CoreDNS is waiting for the enrolled Agent to report its host platform",
+		)
 	}
 	return platform, nil
 }

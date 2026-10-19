@@ -37,7 +37,9 @@ func (record attemptRecord) validateRemovalRecovery() error {
 	if err != nil || len(digest) != 32 || hex.EncodeToString(digest) != r.CaptureSHA256 ||
 		r.Source.ValidateForStages(record.Attempt, r.Stages) != nil || record.Attempt.FinishedAt != nil ||
 		r.Progress.ValidateEnvelope(record.Attempt) != nil || r.Progress.Sequence != record.Sequence ||
-		!r.Progress.UpdatedAt.Equal(record.UpdatedAt) || r.Progress.Sequence == 0 && (r.Failure == nil || r.Acknowledged) {
+		!r.Progress.UpdatedAt.Equal(
+			record.UpdatedAt,
+		) || r.Progress.Sequence == 0 && (r.Failure == nil || r.Acknowledged) {
 		return invalid()
 	}
 	if f := r.Failure; f != nil {

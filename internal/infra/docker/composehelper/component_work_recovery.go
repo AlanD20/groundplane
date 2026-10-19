@@ -11,7 +11,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func executeComponentRecovery(ctx context.Context, taskRunner runner.Runner, input componentexecution.HelperInput, catalog ComponentActionCatalog) (*agentpb.ComponentWorkHelperResponse, error) {
+func executeComponentRecovery(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input componentexecution.HelperInput,
+	catalog ComponentActionCatalog,
+) (*agentpb.ComponentWorkHelperResponse, error) {
 	if err := restoreComponentRuntime(ctx, taskRunner, input); err != nil {
 		return nil, err
 	}
@@ -29,14 +34,25 @@ func executeComponentRecovery(ctx context.Context, taskRunner runner.Runner, inp
 		Failure: input.Recovery.Evidence, ComponentID: input.Procedure.ComponentId, Input: input.Attempt.Input,
 		HelperStopped: true, FilesRestored: true, RuntimeAbsent: expected.Absent, RuntimeReady: !expected.Absent,
 		RuntimeSHA256: expected.RuntimeSHA256, ConfigurationSHA256: expected.ConfigurationSHA256, ObservedAt: time.Now().UTC()}
-	raw, _, err := componentexecution.EncodeRecoveryReport(input.Attempt, *input.Recovery, input.Procedure, input.Progress, report)
+	raw, _, err := componentexecution.EncodeRecoveryReport(
+		input.Attempt,
+		*input.Recovery,
+		input.Procedure,
+		input.Progress,
+		report,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return &agentpb.ComponentWorkHelperResponse{RecoveryReport: raw}, nil
 }
 
-func restoreComponentActivation(ctx context.Context, taskRunner runner.Runner, input componentexecution.HelperInput, catalog ComponentActionCatalog) error {
+func restoreComponentActivation(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input componentexecution.HelperInput,
+	catalog ComponentActionCatalog,
+) error {
 	retained := input.Procedure.Predecessor.Configuration
 	if retained == nil {
 		return nil
@@ -63,7 +79,10 @@ func restoreComponentActivation(ctx context.Context, taskRunner runner.Runner, i
 			return err
 		}
 		if id == "" {
-			return errs.New(errs.KindStateConflict, "Previous Component container is unavailable for configuration restoration")
+			return errs.New(
+				errs.KindStateConflict,
+				"Previous Component container is unavailable for configuration restoration",
+			)
 		}
 		failed := retained.Source
 		if transition := input.Procedure.GetConfigurationAction().GetContainerConfigTransition(); transition != nil {

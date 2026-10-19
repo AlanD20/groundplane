@@ -30,16 +30,25 @@ func PreparePublicationSettlement(task TaskSnapshot, item ItemSnapshot, result w
 		keyvalue.ClearMutationValues(change.Mutations)
 		return Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ItemKey(nextItem.ID), ModRevision: item.Revision})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ItemKey(nextItem.ID), Value: raw})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: ItemKey(nextItem.ID), ModRevision: item.Revision},
+	)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ItemKey(nextItem.ID), Value: raw},
+	)
 	if item.Revision == 0 {
 		reference, err := encode("execution_owner", ClaimOwner{TaskID: nextItem.TaskID, WorkItemID: nextItem.ID})
 		if err != nil {
 			keyvalue.ClearMutationValues(change.Mutations)
 			return Change{}, err
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: TaskItemKey(nextItem.TaskID, nextItem.ID)},
-			keyvalue.Condition{Key: QueueKey(nextItem)})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: TaskItemKey(nextItem.TaskID, nextItem.ID)},
+			keyvalue.Condition{Key: QueueKey(nextItem)},
+		)
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut,
 			Key: TaskItemKey(nextItem.TaskID, nextItem.ID), Value: reference})
 	} else {

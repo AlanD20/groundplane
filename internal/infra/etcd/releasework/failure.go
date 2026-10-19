@@ -15,9 +15,19 @@ func FailureKey(evidenceID string) string { return "/v1/execution/release-failur
 // PrepareFailure records a stopped local executor, not proof that Docker effects
 // were undone. Any granted effect retains conflict claims for operation recovery;
 // the shared completion transaction can still release the worker slot.
-func PrepareFailure(ctx context.Context, store Reader, view workqueue.ResumeView, input releaseexecution.Input, reason releaseexecution.FailureReason, at time.Time) (workqueue.Change, workexecution.Completion, error) {
+func PrepareFailure(
+	ctx context.Context,
+	store Reader,
+	view workqueue.ResumeView,
+	input releaseexecution.Input,
+	reason releaseexecution.FailureReason,
+	at time.Time,
+) (workqueue.Change, workexecution.Completion, error) {
 	if ctx == nil || store == nil || !view.ActiveAttempt || !view.CanSettleResult() ||
-		!workexecution.SameAssignment(view.Attempt.Attempt, input.Attempt) || input.Attempt.Direction != workexecution.Forward ||
+		!workexecution.SameAssignment(
+			view.Attempt.Attempt,
+			input.Attempt,
+		) || input.Attempt.Direction != workexecution.Forward ||
 		input.Attempt.FinishedAt != nil || view.Work.Item.Item.Operation != workexecution.Release {
 		return workqueue.Change{}, workexecution.Completion{}, invalid()
 	}
@@ -53,5 +63,9 @@ func PrepareFailure(ctx context.Context, store Reader, view workqueue.ResumeView
 		{Key: workqueue.CheckpointKey(input.Attempt.ID), ModRevision: view.Checkpoint.Revision},
 		{Key: ProgressKey(input.Attempt.ID), ModRevision: progress.Revision},
 	}, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: FailureKey(reference.ID), Value: raw}}}
-	return change, workexecution.Completion{Outcome: outcome, Evidence: reference, EffectsSettled: checkpoint == nil}, nil
+	return change, workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       reference,
+		EffectsSettled: checkpoint == nil,
+	}, nil
 }

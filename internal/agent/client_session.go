@@ -21,7 +21,18 @@ func (c *Client) runSession(
 	if err := ctx.Err(); err != nil {
 		return false, nil
 	}
-	if c.resolverExecutor == nil || c.backingExecutor == nil || c.backupExecutor == nil || c.removalRecovery == nil || c.lifecycleExecutor == nil || c.releaseExecutor == nil || c.releaseRecoveryExecutor == nil || c.scriptExecutor == nil || c.hierarchyExecutor == nil || c.attachRemovalExecutor == nil || c.attachProvisionExecutor == nil || c.volumeExecutor == nil || c.networkExecutor == nil || c.componentExecutor == nil || c.entryExecutor == nil {
+	if c.resolverExecutor == nil || c.backingExecutor == nil || c.backupExecutor == nil || c.removalRecovery == nil ||
+		c.lifecycleExecutor == nil ||
+		c.releaseExecutor == nil ||
+		c.releaseRecoveryExecutor == nil ||
+		c.scriptExecutor == nil ||
+		c.hierarchyExecutor == nil ||
+		c.attachRemovalExecutor == nil ||
+		c.attachProvisionExecutor == nil ||
+		c.volumeExecutor == nil ||
+		c.networkExecutor == nil ||
+		c.componentExecutor == nil ||
+		c.entryExecutor == nil {
 		return false, errs.New(errs.KindInternal, "native Release executor is not configured")
 	}
 	if err := c.processOwnership.Check(); err != nil {
@@ -93,7 +104,11 @@ func (c *Client) runSession(
 		}
 		// Preserve staging on disk for explicit recovery. Its failure must not
 		// disable unrelated typed host work or manufacture an empty inventory.
-		c.logger.Error("agent: Backup staging unavailable; staging-dependent work remains blocked until staging is reconciled", "error", err)
+		c.logger.Error(
+			"agent: Backup staging unavailable; staging-dependent work remains blocked until staging is reconciled",
+			"error",
+			err,
+		)
 		staging = nil
 	}
 	c.staging = staging
@@ -105,7 +120,29 @@ func (c *Client) runSession(
 		}
 		c.staging = nil
 	}()
-	releases, err := newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, c.environmentExecutor, c.backingExecutor, c.resolverExecutor, native, c.processOwnership)
+	releases, err := newExecutionWorkers(
+		streamCtx,
+		int(config.MaxConcurrentTasks),
+		native.identity,
+		c.releaseExecutor,
+		c.releaseRecoveryExecutor,
+		c.scriptExecutor,
+		c.hierarchyExecutor,
+		c.attachRemovalExecutor,
+		c.volumeExecutor,
+		c.networkExecutor,
+		c.componentExecutor,
+		c.entryExecutor,
+		c.attachProvisionExecutor,
+		c.lifecycleExecutor,
+		c.removalRecovery,
+		c.backupExecutor,
+		c.environmentExecutor,
+		c.backingExecutor,
+		c.resolverExecutor,
+		native,
+		c.processOwnership,
+	)
 	if err != nil {
 		return false, err
 	}
@@ -463,7 +500,29 @@ func (c *Client) runSession(
 				}
 				releases.close()
 				config = proto.Clone(next).(*agentpb.AgentConfig)
-				releases, err = newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, c.componentExecutor, c.entryExecutor, c.attachProvisionExecutor, c.lifecycleExecutor, c.removalRecovery, c.backupExecutor, c.environmentExecutor, c.backingExecutor, c.resolverExecutor, native, c.processOwnership)
+				releases, err = newExecutionWorkers(
+					streamCtx,
+					int(config.MaxConcurrentTasks),
+					native.identity,
+					c.releaseExecutor,
+					c.releaseRecoveryExecutor,
+					c.scriptExecutor,
+					c.hierarchyExecutor,
+					c.attachRemovalExecutor,
+					c.volumeExecutor,
+					c.networkExecutor,
+					c.componentExecutor,
+					c.entryExecutor,
+					c.attachProvisionExecutor,
+					c.lifecycleExecutor,
+					c.removalRecovery,
+					c.backupExecutor,
+					c.environmentExecutor,
+					c.backingExecutor,
+					c.resolverExecutor,
+					native,
+					c.processOwnership,
+				)
 				if err != nil {
 					return false, err
 				}

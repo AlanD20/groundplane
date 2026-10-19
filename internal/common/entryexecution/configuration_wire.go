@@ -11,12 +11,26 @@ import (
 
 func EncodeConfigurationFile(header entrymaterialization.Header) *agentpb.EntryConfigurationFile {
 	digest := header.Digest()
-	return &agentpb.EntryConfigurationFile{Destination: header.Destination(), ServiceId: header.ServiceID(), ServiceName: header.ServiceName(),
-		OutputKind: header.OutputKind().String(), Uid: header.UID(), Gid: header.GID(), Mode: uint32(header.Mode()), Length: header.Length(), Sha256: slices.Clone(digest[:])}
+	return &agentpb.EntryConfigurationFile{
+		Destination: header.Destination(),
+		ServiceId:   header.ServiceID(),
+		ServiceName: header.ServiceName(),
+		OutputKind: header.OutputKind().
+			String(),
+		Uid:    header.UID(),
+		Gid:    header.GID(),
+		Mode:   uint32(header.Mode()),
+		Length: header.Length(),
+		Sha256: slices.Clone(digest[:]),
+	}
 }
 
-func DecodeConfigurationFile(input FileInput, file *agentpb.EntryConfigurationFile) (entrymaterialization.Header, error) {
-	if file == nil || executionplan.RejectUnknown(file) != nil || len(file.Sha256) != sha256.Size || file.Length > entrymaterialization.MaximumContentBytes {
+func DecodeConfigurationFile(
+	input FileInput,
+	file *agentpb.EntryConfigurationFile,
+) (entrymaterialization.Header, error) {
+	if file == nil || executionplan.RejectUnknown(file) != nil || len(file.Sha256) != sha256.Size ||
+		file.Length > entrymaterialization.MaximumContentBytes {
 		return entrymaterialization.Header{}, invalidLayout()
 	}
 	_, stage, generation, err := ConfigurationSelection(input)
@@ -29,9 +43,23 @@ func DecodeConfigurationFile(input FileInput, file *agentpb.EntryConfigurationFi
 	}
 	var digest entrymaterialization.Digest
 	copy(digest[:], file.Sha256)
-	return entrymaterialization.NewHeader(entrymaterialization.HeaderSpec{TaskID: input.Attempt.TaskID, StepID: stage, EnvironmentID: input.Procedure.EnvironmentId,
-		Generation: generation, Destination: file.Destination, ServiceID: file.ServiceId, ServiceName: file.ServiceName,
-		OutputKind: kind, UID: file.Uid, GID: file.Gid, Mode: entrymaterialization.Mode(file.Mode), Length: file.Length, Digest: digest})
+	return entrymaterialization.NewHeader(
+		entrymaterialization.HeaderSpec{
+			TaskID:        input.Attempt.TaskID,
+			StepID:        stage,
+			EnvironmentID: input.Procedure.EnvironmentId,
+			Generation:    generation,
+			Destination:   file.Destination,
+			ServiceID:     file.ServiceId,
+			ServiceName:   file.ServiceName,
+			OutputKind:    kind,
+			UID:           file.Uid,
+			GID:           file.Gid,
+			Mode:          entrymaterialization.Mode(file.Mode),
+			Length:        file.Length,
+			Digest:        digest,
+		},
+	)
 }
 
 func ClearConfigurationDelivery(delivery *agentpb.EntryConfigurationFileDelivery) {

@@ -32,7 +32,11 @@ func (repository *Repository) RecordResult(ctx context.Context, result Result) e
 	}
 	key := ResultKey(result.Attempt.ID)
 	conditions = append(conditions, keyvalue.Condition{Key: key})
-	transaction, err := repository.store.Transact(ctx, conditions, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}})
+	transaction, err := repository.store.Transact(
+		ctx,
+		conditions,
+		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}},
+	)
 	defer keyvalue.ClearValues(transaction.FailureReads)
 	if err != nil {
 		return err
@@ -68,7 +72,10 @@ func (repository *Repository) LoadResult(ctx context.Context, attempt workexecut
 		return keyvalue.Versioned[Result]{}, errs.New(errs.KindInternal, "Runner result read is incomplete")
 	}
 	if read.Values[0] == nil || read.Values[1] == nil {
-		return keyvalue.Versioned[Result]{}, errs.New(errs.KindRequestNotFound, "Runner execution result is unavailable")
+		return keyvalue.Versioned[Result]{}, errs.New(
+			errs.KindRequestNotFound,
+			"Runner execution result is unavailable",
+		)
 	}
 	input, err := Decode(read.Values[0].Value)
 	if err != nil {
@@ -81,13 +88,24 @@ func (repository *Repository) LoadResult(ctx context.Context, attempt workexecut
 	stored := result.Attempt
 	if stored.ID != attempt.ID || stored.Number != attempt.Number || stored.Executor != attempt.Executor ||
 		stored.TaskID != attempt.TaskID || stored.WorkItemID != attempt.WorkItemID || stored.Input != attempt.Input || stored.Direction != attempt.Direction {
-		return keyvalue.Versioned[Result]{}, errs.New(errs.KindStateConflict, "Runner result belongs to another attempt")
+		return keyvalue.Versioned[Result]{}, errs.New(
+			errs.KindStateConflict,
+			"Runner result belongs to another attempt",
+		)
 	}
 	if attempt.FinishedAt != nil {
 		completion, err := result.Completion(input)
-		if err != nil || attempt.Result == nil || *attempt.Result != completion.Evidence || attempt.Outcome != completion.Outcome {
-			return keyvalue.Versioned[Result]{}, errs.New(errs.KindStateConflict, "Runner result differs from the accepted attempt outcome")
+		if err != nil || attempt.Result == nil || *attempt.Result != completion.Evidence ||
+			attempt.Outcome != completion.Outcome {
+			return keyvalue.Versioned[Result]{}, errs.New(
+				errs.KindStateConflict,
+				"Runner result differs from the accepted attempt outcome",
+			)
 		}
 	}
-	return keyvalue.Versioned[Result]{Record: result, Revision: read.Values[1].ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[Result]{
+		Record:       result,
+		Revision:     read.Values[1].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }

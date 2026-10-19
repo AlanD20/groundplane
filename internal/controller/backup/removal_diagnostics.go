@@ -20,7 +20,10 @@ type RemovalReporter struct {
 	active     *workexecution.Stage
 }
 
-func NewRemovalReporter(repository *executiondiagnostics.Repository, attempt workexecution.Attempt) (*RemovalReporter, error) {
+func NewRemovalReporter(
+	repository *executiondiagnostics.Repository,
+	attempt workexecution.Attempt,
+) (*RemovalReporter, error) {
 	if repository == nil || attempt.Validate() != nil || attempt.StartedAt == nil || attempt.FinishedAt != nil {
 		return nil, errs.New(errs.KindInternal, "backup removal diagnostics require a started attempt")
 	}
@@ -29,7 +32,13 @@ func NewRemovalReporter(repository *executiondiagnostics.Repository, attempt wor
 
 func (reporter *RemovalReporter) start(ctx context.Context, key, name, expected string) {
 	at := time.Now().UTC()
-	stage := workexecution.Stage{Key: key, Name: name, Expected: expected, State: workexecution.StageRunning, StartedAt: &at}
+	stage := workexecution.Stage{
+		Key:       key,
+		Name:      name,
+		Expected:  expected,
+		State:     workexecution.StageRunning,
+		StartedAt: &at,
+	}
 	reporter.active = &stage
 	reporter.record(ctx, stage)
 }
@@ -77,10 +86,26 @@ func (reporter *RemovalReporter) record(ctx context.Context, stage workexecution
 		return
 	}
 	reporter.lost = true
-	slog.WarnContext(ctx, "backup removal diagnostics incomplete", "task_id", reporter.attempt.TaskID, "attempt_id", reporter.attempt.ID, "error", err)
+	slog.WarnContext(
+		ctx,
+		"backup removal diagnostics incomplete",
+		"task_id",
+		reporter.attempt.TaskID,
+		"attempt_id",
+		reporter.attempt.ID,
+		"error",
+		err,
+	)
 	bounded, cancel = context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	if err := reporter.repository.MarkIncomplete(bounded, reporter.attempt.TaskID, reporter.attempt.WorkItemID, reporter.attempt.ID, reporter.attempt.Executor); err != nil {
-		slog.WarnContext(ctx, "unable to retain backup diagnostic loss", "attempt_id", reporter.attempt.ID, "error", err)
+		slog.WarnContext(
+			ctx,
+			"unable to retain backup diagnostic loss",
+			"attempt_id",
+			reporter.attempt.ID,
+			"error",
+			err,
+		)
 	}
 }

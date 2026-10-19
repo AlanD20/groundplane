@@ -13,8 +13,11 @@ import (
 const MaximumProgressBytes = 8192
 
 func EqualProgress(left, right Progress) bool {
-	if left.AttemptID != right.AttemptID || left.Sequence != right.Sequence || left.Stage != right.Stage || left.InFlight != right.InFlight ||
-		!left.UpdatedAt.Equal(right.UpdatedAt) || (left.BeganAt == nil) != (right.BeganAt == nil) || (left.Last == nil) != (right.Last == nil) ||
+	if left.AttemptID != right.AttemptID || left.Sequence != right.Sequence || left.Stage != right.Stage ||
+		left.InFlight != right.InFlight ||
+		!left.UpdatedAt.Equal(right.UpdatedAt) ||
+		(left.BeganAt == nil) != (right.BeganAt == nil) ||
+		(left.Last == nil) != (right.Last == nil) ||
 		left.BeganAt != nil && !left.BeganAt.Equal(*right.BeganAt) {
 		return false
 	}

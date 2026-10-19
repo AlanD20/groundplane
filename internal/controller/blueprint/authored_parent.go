@@ -28,7 +28,10 @@ func authoredApplyParent(
 		desired.EnvironmentID != claim.EnvironmentID || desired.RevisionID != claim.RevisionID ||
 		desired.RenderGeneration != claim.RenderGeneration || desired.RenderGeneration == 0 ||
 		expectedItems > workexecution.MaximumTaskItems || timeout <= 0 {
-		return workexecution.Task{}, errs.New(errs.KindValidationFailed, "Blueprint Apply identity, work count or deadline is invalid")
+		return workexecution.Task{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Apply identity, work count or deadline is invalid",
+		)
 	}
 	encoded, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(desired)
 	if err != nil {

@@ -34,7 +34,11 @@ func NewExecutor(runtime *Runtime, journal *agentworkjournal.Journal) (*Executor
 
 // Execute owns invocation plaintext. A returned acknowledgement means the
 // Controller saved the outcome, not necessarily that the command succeeded.
-func (executor *Executor) Execute(ctx context.Context, invocation Invocation, exchange Exchange) (*agentpb.ScriptWorkCompletionAck, error) {
+func (executor *Executor) Execute(
+	ctx context.Context,
+	invocation Invocation,
+	exchange Exchange,
+) (*agentpb.ScriptWorkCompletionAck, error) {
 	defer invocation.Clear()
 	if executor == nil || ctx == nil || exchange == nil {
 		return nil, errs.New(errs.KindInternal, "Script execution is not configured")
@@ -57,7 +61,9 @@ func (executor *Executor) Execute(ctx context.Context, invocation Invocation, ex
 		}
 		return &agentpb.ScriptWorkCompletionAck{Attempt: identity, CheckpointSequence: completed.Record.Report.Sequence,
 			CheckpointEvidence: &agentpb.WorkInputReference{InputId: completed.Receipt.Result.ID, Sha256: digest},
-			Outcome:            string(completed.Receipt.Outcome), FinishedAt: timestamppb.New(*completed.Receipt.FinishedAt)}, nil
+			Outcome: string(
+				completed.Receipt.Outcome,
+			), FinishedAt: timestamppb.New(*completed.Receipt.FinishedAt)}, nil
 	}
 	claimed, err := workexecution.EncodeAgentAttempt(invocation.Attempt)
 	if err != nil {
@@ -113,12 +119,22 @@ func (executor *Executor) Execute(ctx context.Context, invocation Invocation, ex
 		!workexecution.SameAssignment(record.Attempt, invocation.Attempt) ||
 		record.Report.ScriptExecutionId != invocation.Run.ScriptExecutionId ||
 		record.Report.State != agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN {
-		return nil, errors.Join(runErr, errs.New(errs.KindStateConflict, "Script has no acknowledged cleanup; retain its attempt for reconciliation"))
+		return nil, errors.Join(
+			runErr,
+			errs.New(
+				errs.KindStateConflict,
+				"Script has no acknowledged cleanup; retain its attempt for reconciliation",
+			),
+		)
 	}
 	return executor.complete(ctx, *record, exchange)
 }
 
-func (executor *Executor) complete(ctx context.Context, record agentworkjournal.ScriptRecord, exchange Exchange) (*agentpb.ScriptWorkCompletionAck, error) {
+func (executor *Executor) complete(
+	ctx context.Context,
+	record agentworkjournal.ScriptRecord,
+	exchange Exchange,
+) (*agentpb.ScriptWorkCompletionAck, error) {
 	claimed, err := workexecution.EncodeAgentAttempt(record.Attempt)
 	if err != nil {
 		return nil, err
@@ -126,7 +142,10 @@ func (executor *Executor) complete(ctx context.Context, record agentworkjournal.
 	settlement, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	request := &agentpb.ScriptWorkCompletionRequest{Attempt: claimed, CheckpointSequence: record.Report.Sequence,
-		CheckpointEvidence: &agentpb.WorkInputReference{InputId: record.Ack.EvidenceId, Sha256: append([]byte(nil), record.Ack.EvidenceSha256...)}}
+		CheckpointEvidence: &agentpb.WorkInputReference{
+			InputId: record.Ack.EvidenceId,
+			Sha256:  append([]byte(nil), record.Ack.EvidenceSha256...),
+		}}
 	ack, err := exchange.CompleteScript(settlement, request)
 	if err != nil {
 		return nil, err

@@ -26,18 +26,28 @@ func OpenLifecycleHelperRequest(request *agentpb.ServiceLifecycleHelperRequest) 
 	if request != nil && request.Assignment != nil && len(request.Assignment.RecoverySource) != 0 {
 		return openLifecycleRecoveryHelper(request)
 	}
-	if request == nil || proto.Size(request) > MaximumPlanBytes || RejectUnknown(request) != nil || request.Assignment == nil ||
-		request.Assignment.Attempt == nil || len(request.Assignment.RecoverySource) != 0 || request.Report == nil || request.Acknowledgement == nil {
+	if request == nil || proto.Size(request) > MaximumPlanBytes || RejectUnknown(request) != nil ||
+		request.Assignment == nil ||
+		request.Assignment.Attempt == nil ||
+		len(request.Assignment.RecoverySource) != 0 ||
+		request.Report == nil ||
+		request.Acknowledgement == nil {
 		return LifecycleHelperInput{}, invalidLifecycleWork()
 	}
 	claimed := request.Assignment.Attempt
-	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: claimed.HostId, AgentID: claimed.AgentId, Generation: claimed.ExecutorGeneration}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     claimed.HostId,
+		AgentID:    claimed.AgentId,
+		Generation: claimed.ExecutorGeneration,
+	}
 	attempt, err := workexecution.DecodeAgentAttempt(claimed, identity)
 	if err != nil || attempt.Direction != workexecution.Forward {
 		return LifecycleHelperInput{}, invalidLifecycleWork()
 	}
 	procedure := request.Assignment.Input
-	if ValidateServiceLifecycleWorkInput(procedure) != nil || procedure.CapturedSource.InputId != attempt.Input.ID || hex.EncodeToString(procedure.CapturedSource.Sha256) != attempt.Input.SHA256 {
+	if ValidateServiceLifecycleWorkInput(procedure) != nil || procedure.CapturedSource.InputId != attempt.Input.ID ||
+		hex.EncodeToString(procedure.CapturedSource.Sha256) != attempt.Input.SHA256 {
 		return LifecycleHelperInput{}, invalidLifecycleWork()
 	}
 	started, _, err := workexecution.DecodeAgentStartAck(request.Start, attempt)
@@ -66,7 +76,9 @@ func OpenLifecycleHelperRequest(request *agentpb.ServiceLifecycleHelperRequest) 
 	}
 	ack := request.Acknowledgement
 	acknowledged, err := workexecution.DecodeAgentAttempt(ack.Attempt, identity)
-	if err != nil || !workexecution.SameAssignment(attempt, acknowledged) || ack.Evidence == nil || ack.RecordedAt == nil || ack.RecordedAt.CheckValid() != nil {
+	if err != nil || !workexecution.SameAssignment(attempt, acknowledged) || ack.Evidence == nil ||
+		ack.RecordedAt == nil ||
+		ack.RecordedAt.CheckValid() != nil {
 		return LifecycleHelperInput{}, invalidLifecycleWork()
 	}
 	checkpoint, err := progress.Checkpoint(attempt, procedure)
@@ -74,22 +86,34 @@ func OpenLifecycleHelperRequest(request *agentpb.ServiceLifecycleHelperRequest) 
 		return LifecycleHelperInput{}, err
 	}
 	evidence := workexecution.Input{ID: ack.Evidence.InputId, SHA256: hex.EncodeToString(ack.Evidence.Sha256)}
-	if checkpoint.Sequence != ack.Sequence || checkpoint.StageID != ack.StageId || checkpoint.Evidence != evidence || !checkpoint.RecordedAt.Equal(ack.RecordedAt.AsTime()) {
+	if checkpoint.Sequence != ack.Sequence || checkpoint.StageID != ack.StageId || checkpoint.Evidence != evidence ||
+		!checkpoint.RecordedAt.Equal(ack.RecordedAt.AsTime()) {
 		return LifecycleHelperInput{}, invalidLifecycleWork()
 	}
 	stages, err := lifecycleexecution.Stages(procedure)
 	if err != nil {
 		return LifecycleHelperInput{}, err
 	}
-	input := LifecycleHelperInput{Attempt: attempt, Procedure: procedure, Progress: progress, Stage: stages[len(progress.Completed)], InspectOnly: request.InspectOnly}
+	input := LifecycleHelperInput{
+		Attempt:     attempt,
+		Procedure:   procedure,
+		Progress:    progress,
+		Stage:       stages[len(progress.Completed)],
+		InspectOnly: request.InspectOnly,
+	}
 	if input.Stage.Expected == lifecycleexecution.HookSucceeded {
 		return LifecycleHelperInput{}, invalidLifecycleWork()
 	}
 	return input, nil
 }
 
-func ValidateLifecycleHookDelivery(attempt workexecution.Attempt, procedure *agentpb.ServiceLifecycleWorkInput, delivery *agentpb.ServiceLifecycleHookDelivery) error {
-	if procedure == nil || procedure.Hook == nil || delivery == nil || RejectUnknown(delivery) != nil || delivery.Hook == nil ||
+func ValidateLifecycleHookDelivery(
+	attempt workexecution.Attempt,
+	procedure *agentpb.ServiceLifecycleWorkInput,
+	delivery *agentpb.ServiceLifecycleHookDelivery,
+) error {
+	if procedure == nil || procedure.Hook == nil || delivery == nil || RejectUnknown(delivery) != nil ||
+		delivery.Hook == nil ||
 		delivery.StageId != procedure.Hook.StageId {
 		return invalidLifecycleWork()
 	}
@@ -98,8 +122,11 @@ func ValidateLifecycleHookDelivery(attempt workexecution.Attempt, procedure *age
 		return invalidLifecycleWork()
 	}
 	hook := delivery.Hook
-	if hook.Event != procedure.Hook.Event || !slices.Equal(hook.Command, procedure.Hook.Command) || hook.TimeoutSeconds != procedure.Hook.TimeoutSeconds ||
-		hook.BackingServiceId != procedure.ServiceId || len(hook.Facts) != 0 || len(hook.FactSchema) != 0 {
+	if hook.Event != procedure.Hook.Event || !slices.Equal(hook.Command, procedure.Hook.Command) ||
+		hook.TimeoutSeconds != procedure.Hook.TimeoutSeconds ||
+		hook.BackingServiceId != procedure.ServiceId ||
+		len(hook.Facts) != 0 ||
+		len(hook.FactSchema) != 0 {
 		return invalidLifecycleWork()
 	}
 	definition, inputs, schema, err := DecodeBackingHookProcedure(hook)
@@ -112,7 +139,10 @@ func ValidateLifecycleHookDelivery(attempt workexecution.Attempt, procedure *age
 // ReadLifecycleHelperReceipt returns nil for a valid but unsatisfied inspection.
 // An effect response must prove its postcondition; only inspection may report
 // an incomplete stage without presenting a success receipt.
-func ReadLifecycleHelperReceipt(input LifecycleHelperInput, response *agentpb.ServiceLifecycleHelperResponse) (*lifecycleexecution.Receipt, error) {
+func ReadLifecycleHelperReceipt(
+	input LifecycleHelperInput,
+	response *agentpb.ServiceLifecycleHelperResponse,
+) (*lifecycleexecution.Receipt, error) {
 	if input.Procedure == nil || input.Progress.BeganAt == nil || response == nil || RejectUnknown(response) != nil ||
 		response.StageId != input.Stage.ID || response.Member != input.Stage.Member || response.Inspection != input.InspectOnly ||
 		response.ObservedAt == nil || response.ObservedAt.CheckValid() != nil || response.ObservedAt.AsTime().Before(*input.Progress.BeganAt) {
@@ -127,8 +157,16 @@ func ReadLifecycleHelperReceipt(input LifecycleHelperInput, response *agentpb.Se
 	if response.Evidence == nil || response.State != string(input.Stage.Expected) {
 		return nil, invalidLifecycleWork()
 	}
-	receipt := lifecycleexecution.Receipt{StageID: response.StageId, Member: response.Member, State: lifecycleexecution.State(response.State),
-		Evidence: workexecution.Input{ID: response.Evidence.InputId, SHA256: hex.EncodeToString(response.Evidence.Sha256)}, ObservedAt: response.ObservedAt.AsTime().UTC()}
+	receipt := lifecycleexecution.Receipt{
+		StageID: response.StageId,
+		Member:  response.Member,
+		State:   lifecycleexecution.State(response.State),
+		Evidence: workexecution.Input{
+			ID:     response.Evidence.InputId,
+			SHA256: hex.EncodeToString(response.Evidence.Sha256),
+		},
+		ObservedAt: response.ObservedAt.AsTime().UTC(),
+	}
 	if receipt.Evidence.ID != input.Attempt.Input.ID {
 		return nil, invalidLifecycleWork()
 	}
@@ -145,7 +183,10 @@ func ReadLifecycleHelperReceipt(input LifecycleHelperInput, response *agentpb.Se
 	return &receipt, nil
 }
 
-func ValidateLifecycleHelperResponse(input LifecycleHelperInput, response *agentpb.ServiceLifecycleHelperResponse) error {
+func ValidateLifecycleHelperResponse(
+	input LifecycleHelperInput,
+	response *agentpb.ServiceLifecycleHelperResponse,
+) error {
 	_, err := ReadLifecycleHelperReceipt(input, response)
 	return err
 }

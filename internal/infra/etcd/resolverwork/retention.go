@@ -12,11 +12,21 @@ import (
 
 // Collection removes only execution captures. Intent, applied configuration,
 // live DNS answers and host baseline remain independently resource-owned.
-func (repository *Repository) PrepareRetention(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (repository *Repository) PrepareRetention(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
-	if task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil || at.IsZero() || at.Location() != time.UTC ||
-		at.Before(*task.CollectionStartedAt) || at.Before(*task.RetainUntil) || item.Operation != workexecution.Resolver ||
-		item.Phase != workexecution.Settled || item.ActiveAttemptID != "" || item.Result == nil ||
+	if task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil || at.IsZero() ||
+		at.Location() != time.UTC ||
+		at.Before(*task.CollectionStartedAt) ||
+		at.Before(*task.RetainUntil) ||
+		item.Operation != workexecution.Resolver ||
+		item.Phase != workexecution.Settled ||
+		item.ActiveAttemptID != "" ||
+		item.Result == nil ||
 		item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete {
 		return false, workqueue.Change{}, invalid("CoreDNS history requires expired, settled execution")
 	}
@@ -33,16 +43,22 @@ func (repository *Repository) PrepareRetention(ctx context.Context, view workque
 			return false, workqueue.Change{}, err
 		}
 		change.Conditions = append(change.Conditions, collected.Conditions...)
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: InputKey(item.ID)},
-			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: CaptureKey(item.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: InputKey(item.ID)},
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: CaptureKey(item.ID)},
+		)
 	}
 	return true, change, nil
 }
 
 func PrepareAttemptRetirement(view workqueue.View, snapshot workqueue.AttemptSnapshot) (workqueue.Change, error) {
 	item, attempt := view.Item.Item, snapshot.Attempt
-	if item.Operation != workexecution.Resolver || item.Placement.Executor != workexecution.Agent || item.Input == nil ||
-		attempt.Input != *item.Input || attempt.Executor.HostID != item.Placement.HostID || attempt.Executor.Executor != workexecution.Agent {
+	if item.Operation != workexecution.Resolver || item.Placement.Executor != workexecution.Agent ||
+		item.Input == nil ||
+		attempt.Input != *item.Input ||
+		attempt.Executor.HostID != item.Placement.HostID ||
+		attempt.Executor.Executor != workexecution.Agent {
 		return workqueue.Change{}, invalid("CoreDNS attempt collection differs from its captured work and host")
 	}
 	collected, err := workqueue.PrepareAttemptCollection(view.Task, view.Item, snapshot)

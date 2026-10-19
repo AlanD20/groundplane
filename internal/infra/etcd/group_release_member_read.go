@@ -19,26 +19,46 @@ func (ledger *ReleaseLedger) ReadCapturedGroupMember(ctx context.Context, task w
 ) (GroupReleaseMemberCapture, error) {
 	if task.Revision <= 0 || root.Revision <= 0 || root.ReadRevision != revision ||
 		root.Record.Policy.TaskID != task.Task.ID || index < 0 || index >= len(root.Record.Policy.Members) {
-		return GroupReleaseMemberCapture{}, errs.New(errs.KindStateConflict, "Group source requires its accepted captured graph")
+		return GroupReleaseMemberCapture{}, errs.New(
+			errs.KindStateConflict,
+			"Group source requires its accepted captured graph",
+		)
 	}
 	accepted, err := root.Record.Task()
 	if err != nil || accepted.Intent != task.Task.Intent || accepted.ID != task.Task.ID {
-		return GroupReleaseMemberCapture{}, errs.New(errs.KindStateConflict, "Group publication source differs from its accepted Task")
+		return GroupReleaseMemberCapture{}, errs.New(
+			errs.KindStateConflict,
+			"Group publication source differs from its accepted Task",
+		)
 	}
 	member := root.Record.Policy.Members[index]
-	keys := []string{GroupReleasePreparationKey(member.ForwardID), releaserender.ServiceRolloutKey(task.Task.Scope.EnvironmentID, task.Task.ID, member.ForwardID),
-		groupReleaseDraftMemberKey(task.Task.ID, member.ForwardID, "preparation"), groupReleaseDraftMemberKey(task.Task.ID, member.ForwardID, "rollout")}
+	keys := []string{
+		GroupReleasePreparationKey(member.ForwardID),
+		releaserender.ServiceRolloutKey(task.Task.Scope.EnvironmentID, task.Task.ID, member.ForwardID),
+		groupReleaseDraftMemberKey(
+			task.Task.ID,
+			member.ForwardID,
+			"preparation",
+		),
+		groupReleaseDraftMemberKey(task.Task.ID, member.ForwardID, "rollout"),
+	}
 	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return GroupReleaseMemberCapture{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return GroupReleaseMemberCapture{}, errs.New(errs.KindStateConflict, "Group publication member read is incomplete")
+		return GroupReleaseMemberCapture{}, errs.New(
+			errs.KindStateConflict,
+			"Group publication member read is incomplete",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > revision) {
-			return GroupReleaseMemberCapture{}, errs.New(errs.KindStateConflict, "Group captured member has an invalid source revision")
+			return GroupReleaseMemberCapture{}, errs.New(
+				errs.KindStateConflict,
+				"Group captured member has an invalid source revision",
+			)
 		}
 	}
 	preparation, rendered := read.Values[0], read.Values[1]
@@ -48,7 +68,10 @@ func (ledger *ReleaseLedger) ReadCapturedGroupMember(ctx context.Context, task w
 		return GroupReleaseMemberCapture{}, errs.New(errs.KindStateConflict, "Group member has conflicting staged and native ownership")
 	}
 	if preparation == nil || rendered == nil {
-		return GroupReleaseMemberCapture{}, errs.New(errs.KindStateConflict, "Group captured member source is incomplete")
+		return GroupReleaseMemberCapture{}, errs.New(
+			errs.KindStateConflict,
+			"Group captured member source is incomplete",
+		)
 	}
 	request, err := DecodeDirectReleasePreparation(preparation.Value, root.Record.Members[index].Forward)
 	if err != nil {

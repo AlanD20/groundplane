@@ -19,7 +19,11 @@ import (
 // ExecuteNetworkWork is called under the helper's exclusive host lease. A
 // mutation requires the Controller's acknowledged in-flight boundary. Restart
 // recovery calls with InspectOnly and never silently repeats a create/remove.
-func ExecuteNetworkWork(ctx context.Context, taskRunner runner.Runner, request *agentpb.NetworkWorkHelperRequest) (*agentpb.NetworkWorkHelperResponse, error) {
+func ExecuteNetworkWork(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	request *agentpb.NetworkWorkHelperRequest,
+) (*agentpb.NetworkWorkHelperResponse, error) {
 	input, err := executionplan.OpenNetworkHelperRequest(request)
 	if err != nil {
 		return nil, err
@@ -44,8 +48,16 @@ func ExecuteNetworkWork(ctx context.Context, taskRunner runner.Runner, request *
 			if remaining <= 0 || remaining > math.MaxUint32 {
 				return nil, errs.New(errs.KindStateConflict, "Network execution deadline has elapsed")
 			}
-			_, err = executeManagedNetworkEnsure(bounded, taskRunner, uint32(remaining), input.Procedure.Candidate,
-				&agentpb.ManagedNetworkEnsure{ArtifactId: input.Procedure.Candidate.ArtifactId, NetworkId: input.Procedure.NetworkId})
+			_, err = executeManagedNetworkEnsure(
+				bounded,
+				taskRunner,
+				uint32(remaining),
+				input.Procedure.Candidate,
+				&agentpb.ManagedNetworkEnsure{
+					ArtifactId: input.Procedure.Candidate.ArtifactId,
+					NetworkId:  input.Procedure.NetworkId,
+				},
+			)
 		case networkexecution.RemoveNetwork:
 			// Use the inspected immutable Docker ID, never resolve the name again.
 			err = disconnectNetworkConsumers(bounded, taskRunner, input.Procedure, dockerID)
@@ -76,7 +88,11 @@ func ExecuteNetworkWork(ctx context.Context, taskRunner runner.Runner, request *
 	return response, nil
 }
 
-func observeNetworkWork(ctx context.Context, taskRunner runner.Runner, input executionplan.NetworkHelperInput) (networkexecution.Observation, string, error) {
+func observeNetworkWork(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input executionplan.NetworkHelperInput,
+) (networkexecution.Observation, string, error) {
 	procedure := input.Procedure
 	observation := networkexecution.Observation{NetworkID: procedure.NetworkId, Input: input.Attempt.Input}
 	listed, err := runNetworkWork(ctx, taskRunner, "network", "ls", "--filter", "name=^"+procedure.DockerName+"$",
@@ -97,8 +113,10 @@ func observeNetworkWork(ctx context.Context, taskRunner runner.Runner, input exe
 		return observation, "", err
 	}
 	var actual inspectedOwnedNetwork
-	if json.Unmarshal(inspected.Stdout, &actual) != nil || actual.ID != identity[0] || actual.Name != procedure.DockerName ||
-		actual.Labels["com.groundplane.managed"] != "true" || actual.Labels["com.groundplane.kind"] != "network" ||
+	if json.Unmarshal(inspected.Stdout, &actual) != nil || actual.ID != identity[0] ||
+		actual.Name != procedure.DockerName ||
+		actual.Labels["com.groundplane.managed"] != "true" ||
+		actual.Labels["com.groundplane.kind"] != "network" ||
 		actual.Labels["com.groundplane.environment-id"] != procedure.EnvironmentId {
 		return observation, "", errs.New(errs.KindStateConflict, "Network ownership differs from captured input")
 	}
@@ -109,7 +127,10 @@ func observeNetworkWork(ctx context.Context, taskRunner runner.Runner, input exe
 			return observation, "", err
 		}
 		if !ownedNetworkMatches(actual, expected) {
-			return observation, "", errs.New(errs.KindStateConflict, "Existing Zone bridge differs from its captured configuration")
+			return observation, "", errs.New(
+				errs.KindStateConflict,
+				"Existing Zone bridge differs from its captured configuration",
+			)
 		}
 		observation.Ready = true
 	}
@@ -127,7 +148,10 @@ func runNetworkWork(ctx context.Context, taskRunner runner.Runner, args ...strin
 		return runner.Result{}, errs.Wrap(errs.KindInternal, err)
 	}
 	if result.ExitCode != 0 {
-		return runner.Result{}, errs.New(errs.KindStateConflict, "Docker could not complete the captured Network operation; attached endpoints must be removed through their owning resources")
+		return runner.Result{}, errs.New(
+			errs.KindStateConflict,
+			"Docker could not complete the captured Network operation; attached endpoints must be removed through their owning resources",
+		)
 	}
 	return result, nil
 }

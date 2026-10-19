@@ -219,7 +219,8 @@ func validateHierarchyDeletionBackupRotationOwner(value []byte, id, owner string
 	if err != nil || record.TaskID != id || record.EnvironmentID != owner {
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	if record.State != backupruntime.BackupKeyRotationApplied && record.State != backupruntime.BackupKeyRotationDiscarded {
+	if record.State != backupruntime.BackupKeyRotationApplied &&
+		record.State != backupruntime.BackupKeyRotationDiscarded {
 		return errs.New(errs.KindResourceInUse, "backup key rotation has not settled")
 	}
 	return nil

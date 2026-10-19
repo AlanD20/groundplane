@@ -58,7 +58,8 @@ func joinChanges(changes []Change) (Change, error) {
 			}
 		}
 		for _, mutation := range change.Mutations {
-			if mutation.Key == "" || mutation.Type != keyvalue.MutationPut && mutation.Type != keyvalue.MutationDelete ||
+			if mutation.Key == "" ||
+				mutation.Type != keyvalue.MutationPut && mutation.Type != keyvalue.MutationDelete ||
 				mutation.Type == keyvalue.MutationPut && mutation.Prefix ||
 				mutation.Type == keyvalue.MutationDelete && len(mutation.Value) != 0 {
 				return Change{}, invalid("execution transaction has an invalid write")

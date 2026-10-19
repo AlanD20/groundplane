@@ -57,8 +57,10 @@ func (repository *InputRepository) captureExclusionGuards(ctx context.Context, r
 			return nil, err
 		}
 		source := targets[value.Key]
-		if record.TaskID != run.TaskID || record.OperationID != run.OperationID || record.EnvironmentID != run.EnvironmentID ||
-			record.OperationKind != backupruntime.BackupOperationBackup || record.TargetID != source.TargetID ||
+		if record.TaskID != run.TaskID || record.OperationID != run.OperationID ||
+			record.EnvironmentID != run.EnvironmentID ||
+			record.OperationKind != backupruntime.BackupOperationBackup ||
+			record.TargetID != source.TargetID ||
 			string(record.TargetKind) != string(source.Kind) {
 			return nil, conflict("Backup source exclusion belongs to another operation")
 		}

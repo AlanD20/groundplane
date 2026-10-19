@@ -7,14 +7,25 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func DecodeRecoveryAck(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, source Recovery, report RecoveryReport,
+func DecodeRecoveryAck(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	source Recovery,
+	report RecoveryReport,
 	ack *agentpb.ServiceLifecycleRecoveryReportAck,
 ) (workexecution.Attempt, error) {
-	if ack == nil || len(ack.ProtoReflect().GetUnknown()) != 0 || ack.Evidence == nil || len(ack.Evidence.ProtoReflect().GetUnknown()) != 0 ||
-		ack.StartedAt == nil || ack.StartedAt.CheckValid() != nil || len(ack.StartedAt.ProtoReflect().GetUnknown()) != 0 ||
-		ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil || len(ack.FinishedAt.ProtoReflect().GetUnknown()) != 0 ||
-		attempt.StartedAt == nil || !ack.StartedAt.AsTime().Equal(*attempt.StartedAt) ||
-		ack.FinishedAt.AsTime().Before(report.ObservedAt) || ack.BoundaryCompleted != report.BoundaryCompleted() {
+	if ack == nil || len(ack.ProtoReflect().GetUnknown()) != 0 || ack.Evidence == nil ||
+		len(ack.Evidence.ProtoReflect().GetUnknown()) != 0 ||
+		ack.StartedAt == nil ||
+		ack.StartedAt.CheckValid() != nil ||
+		len(ack.StartedAt.ProtoReflect().GetUnknown()) != 0 ||
+		ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil ||
+		len(ack.FinishedAt.ProtoReflect().GetUnknown()) != 0 ||
+		attempt.StartedAt == nil ||
+		!ack.StartedAt.AsTime().Equal(*attempt.StartedAt) ||
+		ack.FinishedAt.AsTime().Before(report.ObservedAt) ||
+		ack.BoundaryCompleted != report.BoundaryCompleted() {
 		return workexecution.Attempt{}, invalid()
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, attempt.Executor)

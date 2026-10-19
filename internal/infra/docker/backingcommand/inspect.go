@@ -16,7 +16,8 @@ type Observation struct {
 // journal has the readiness handshake; an exec merely created may start later.
 // Missing Docker state is an error, not evidence that its effects are settled.
 func (executor *Executor) Inspect(ctx context.Context, containerID, execID string) (Observation, error) {
-	if len(containerID) != 64 || len(execID) != 64 || !ids.ValidContainerID(containerID) || !ids.ValidContainerID(execID) {
+	if len(containerID) != 64 || len(execID) != 64 || !ids.ValidContainerID(containerID) ||
+		!ids.ValidContainerID(execID) {
 		return Observation{}, unavailable("backing command inspection requires exact process identities")
 	}
 	result, err := executor.engine.ExecInspect(ctx, execID, client.ExecInspectOptions{})

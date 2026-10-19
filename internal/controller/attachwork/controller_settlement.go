@@ -14,12 +14,19 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *Reports) admitController(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Reports) admitController(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	task, item := request.Task.Task, request.Item.Item
 	if !request.DecisionOnly || request.Direction != workexecution.Forward || item.Operation != workexecution.Attach ||
 		item.Placement.Executor != workexecution.Controller || item.AttemptNumber != 0 ||
 		item.ActiveAttemptID != "" || item.Phase != workexecution.Ready {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Attach connection requires unstarted Controller work")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Attach connection requires unstarted Controller work",
+		)
 	}
 	view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
 	if task.Stop != nil || item.ForwardRevoked || !at.Before(task.Deadline) || !at.Before(item.Deadline) {
@@ -58,17 +65,27 @@ func (owner *Reports) admitController(ctx context.Context, request workqueue.Ass
 		if captured.ID != item.ID {
 			continue
 		}
-		if captured.TaskID != item.TaskID || captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
-			captured.Placement != item.Placement || captured.Input != nil ||
-			!slices.Equal(captured.Dependencies, item.Dependencies) || !slices.Equal(captured.Claims, item.Claims) ||
-			!captured.CreatedAt.Equal(item.CreatedAt) || !captured.Deadline.Equal(item.Deadline) {
-			return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Attach connection differs from its captured work")
+		if captured.TaskID != item.TaskID || captured.Operation != item.Operation ||
+			captured.TargetID != item.TargetID ||
+			captured.Placement != item.Placement ||
+			captured.Input != nil ||
+			!slices.Equal(captured.Dependencies, item.Dependencies) ||
+			!slices.Equal(captured.Claims, item.Claims) ||
+			!captured.CreatedAt.Equal(item.CreatedAt) ||
+			!captured.Deadline.Equal(item.Deadline) {
+			return workdispatch.Decision{}, errs.New(
+				errs.KindStateConflict,
+				"Attach connection differs from its captured work",
+			)
 		}
 		unit = &graph.Record.Units[index]
 		break
 	}
 	if unit == nil {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Attach connection is absent from the accepted Apply")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Attach connection is absent from the accepted Apply",
+		)
 	}
 	snapshot, err := owner.units.LoadAtRevision(ctx, task.Scope.EnvironmentID, view.ReadRevision)
 	if err != nil {

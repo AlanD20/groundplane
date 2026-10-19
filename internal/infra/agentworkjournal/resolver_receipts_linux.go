@@ -21,12 +21,21 @@ func (journal *Journal) CompleteResolver(ctx context.Context, attempt workexecut
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if state == nil || state.Resolver.Progress == nil || !state.Resolver.Acknowledged || state.Resolver.FailureReason != "" ||
-		state.Resolver.Source != nil || ack == nil || len(ack.Failure) != 0 {
+	if state == nil || state.Resolver.Progress == nil || !state.Resolver.Acknowledged ||
+		state.Resolver.FailureReason != "" ||
+		state.Resolver.Source != nil ||
+		ack == nil ||
+		len(ack.Failure) != 0 {
 		return workexecution.Attempt{}, conflict()
 	}
 	entry := state.Resolver
-	evidence, err := resolverexecution.CompletionEvidence(attempt, input, *entry.Progress, entry.Verification, entry.Proof)
+	evidence, err := resolverexecution.CompletionEvidence(
+		attempt,
+		input,
+		*entry.Progress,
+		entry.Verification,
+		entry.Proof,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -35,7 +44,8 @@ func (journal *Journal) CompleteResolver(ctx context.Context, attempt workexecut
 		return workexecution.Attempt{}, err
 	}
 	if terminal.FinishedAt.Before(entry.Progress.UpdatedAt) ||
-		terminal.Outcome != workexecution.Succeeded && terminal.Outcome != workexecution.Cancelled && terminal.Outcome != workexecution.Superseded {
+		terminal.Outcome != workexecution.Succeeded && terminal.Outcome != workexecution.Cancelled &&
+			terminal.Outcome != workexecution.Superseded {
 		return workexecution.Attempt{}, conflict()
 	}
 	if saved := entry.Receipt; saved != nil {
@@ -51,8 +61,11 @@ func (journal *Journal) CompleteResolver(ctx context.Context, attempt workexecut
 func (journal *Journal) PrepareResolverFailure(ctx context.Context, attempt workexecution.Attempt,
 	input resolverexecution.Input, reason resolverexecution.FailureReason, at time.Time,
 ) (*ResolverRecord, error) {
-	if attempt.Direction != workexecution.Forward || reason != resolverexecution.ExecutionFailed && reason != resolverexecution.Interrupted && reason != resolverexecution.DeadlineExpired ||
-		at.Before(attempt.AssignedAt) || attempt.StartedAt != nil && at.Before(*attempt.StartedAt) ||
+	if attempt.Direction != workexecution.Forward ||
+		reason != resolverexecution.ExecutionFailed && reason != resolverexecution.Interrupted &&
+			reason != resolverexecution.DeadlineExpired ||
+		at.Before(attempt.AssignedAt) ||
+		attempt.StartedAt != nil && at.Before(*attempt.StartedAt) ||
 		reason == resolverexecution.DeadlineExpired && at.Before(attempt.Deadline) {
 		return nil, invalid()
 	}
@@ -66,7 +79,9 @@ func (journal *Journal) PrepareResolverFailure(ctx context.Context, attempt work
 		return nil, err
 	}
 	entry := state.Resolver
-	if entry.Source != nil || entry.Receipt != nil || entry.Progress != nil && entry.Progress.Stage == resolverexecution.Complete || at.Before(state.UpdatedAt) {
+	if entry.Source != nil || entry.Receipt != nil ||
+		entry.Progress != nil && entry.Progress.Stage == resolverexecution.Complete ||
+		at.Before(state.UpdatedAt) {
 		return nil, conflict()
 	}
 	if entry.FailureReason != "" {

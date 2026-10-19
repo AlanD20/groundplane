@@ -21,10 +21,18 @@ func ExecutionHistoryReference(key string, value []byte) (*storagemaintenance.Pi
 	if capture.Validate() != nil || key != ExecutionCaptureKey(capture.Policy.TaskID) {
 		return nil, recordcodec.CorruptRecord()
 	}
-	return &storagemaintenance.Pin{Kind: ExecutionHistoryKind, OwnerID: capture.Policy.TaskID, Revision: capture.SourceReadRevision}, nil
+	return &storagemaintenance.Pin{
+		Kind:     ExecutionHistoryKind,
+		OwnerID:  capture.Policy.TaskID,
+		Revision: capture.SourceReadRevision,
+	}, nil
 }
 
-func (repository *ExecutionRepository) PreparationHistoryHeld(ctx context.Context, pin *storagemaintenance.Pin, revision int64) (bool, error) {
+func (repository *ExecutionRepository) PreparationHistoryHeld(
+	ctx context.Context,
+	pin *storagemaintenance.Pin,
+	revision int64,
+) (bool, error) {
 	if pin == nil || pin.Kind != ExecutionHistoryKind || pin.Revision <= 0 {
 		return false, recordcodec.CorruptRecord()
 	}

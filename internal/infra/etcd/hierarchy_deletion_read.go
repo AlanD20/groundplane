@@ -96,7 +96,10 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 	}
 	taskResult, err := repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{workqueue.TaskKey(taskID), hierarchydeletion.TaskBindingKey(taskID)}, Revision: revision},
+		etcdstore.GetManyRequest{
+			Keys:     []string{workqueue.TaskKey(taskID), hierarchydeletion.TaskBindingKey(taskID)},
+			Revision: revision,
+		},
 	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
@@ -125,14 +128,16 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		if err != nil {
 			return hierarchydeletion.HierarchyDeletionOperation{}, err
 		}
-		if failed == nil || failed.ReadRevision != taskResult.ReadRevision || len(failed.Values) != 1 || failed.Values[0] == nil {
+		if failed == nil || failed.ReadRevision != taskResult.ReadRevision || len(failed.Values) != 1 ||
+			failed.Values[0] == nil {
 			return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		failure, err := hierarchydeletion.DecodePlanningRejection(failed.Values[0].Value, task)
 		if err != nil {
 			return hierarchydeletion.HierarchyDeletionOperation{}, err
 		}
-		if failure.Operation.Tombstone.OperationID != binding.OperationID || failure.Operation.MarkerLocator != binding.Marker {
+		if failure.Operation.Tombstone.OperationID != binding.OperationID ||
+			failure.Operation.MarkerLocator != binding.Marker {
 			return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		return failure.Operation, nil
@@ -206,7 +211,8 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 	if err := validateHierarchyDeletionOperationSet(task, tombstone, intent, fence, replay); err != nil {
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
-	if intent.OperationID != binding.OperationID || hierarchydeletion.HierarchyDeletionDigest(replayResult.Values[0].Value) != task.Intent.SHA256 ||
+	if intent.OperationID != binding.OperationID ||
+		hierarchydeletion.HierarchyDeletionDigest(replayResult.Values[0].Value) != task.Intent.SHA256 ||
 		task.Intent.ID != ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "hierarchy-removal") {
 		return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}

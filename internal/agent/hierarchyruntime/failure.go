@@ -18,7 +18,11 @@ type EnvironmentExecution struct {
 
 // RunEnvironment retries delivery of a recorded outcome, never execution of a
 // recorded failure. Errors after the final absence report resume completion.
-func (executor *Executor) RunEnvironment(ctx context.Context, input hierarchyexecution.EnvironmentInput, exchange Exchange) (EnvironmentExecution, error) {
+func (executor *Executor) RunEnvironment(
+	ctx context.Context,
+	input hierarchyexecution.EnvironmentInput,
+	exchange Exchange,
+) (EnvironmentExecution, error) {
 	pending, err := executor.journal.LoadEnvironmentFailure(ctx, input.Attempt)
 	if err != nil {
 		return EnvironmentExecution{}, err
@@ -72,7 +76,10 @@ func (executor *Executor) deliverFailure(ctx context.Context, input hierarchyexe
 	}
 	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	ack, err := exchange.FailEnvironmentRemoval(bounded, &agentpb.EnvironmentRemovalFailureRequest{Attempt: identity, Reason: string(failure.Reason)})
+	ack, err := exchange.FailEnvironmentRemoval(
+		bounded,
+		&agentpb.EnvironmentRemovalFailureRequest{Attempt: identity, Reason: string(failure.Reason)},
+	)
 	if err != nil {
 		return EnvironmentExecution{}, err
 	}

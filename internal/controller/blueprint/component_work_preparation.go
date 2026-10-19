@@ -61,10 +61,14 @@ func (owner *ComponentWorkPreparation) Prepare(ctx context.Context, taskID, work
 		if captured.ID != item.ID {
 			continue
 		}
-		if captured.TaskID != item.TaskID || captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
-			captured.Placement != item.Placement || !slices.Equal(captured.Dependencies, item.Dependencies) ||
-			!slices.Equal(captured.Claims, item.Claims) || captured.Input != nil ||
-			!captured.CreatedAt.Equal(item.CreatedAt) || !captured.Deadline.Equal(item.Deadline) {
+		if captured.TaskID != item.TaskID || captured.Operation != item.Operation ||
+			captured.TargetID != item.TargetID ||
+			captured.Placement != item.Placement ||
+			!slices.Equal(captured.Dependencies, item.Dependencies) ||
+			!slices.Equal(captured.Claims, item.Claims) ||
+			captured.Input != nil ||
+			!captured.CreatedAt.Equal(item.CreatedAt) ||
+			!captured.Deadline.Equal(item.Deadline) {
 			return errs.New(errs.KindStateConflict, "Blueprint Component work differs from its accepted graph")
 		}
 		unit = &graph.Record.Units[index]
@@ -109,7 +113,11 @@ func (owner *ComponentWorkPreparation) Prepare(ctx context.Context, taskID, work
 		return err
 	}
 	defer keyvalue.ClearMutationValues(prepared.Placement.Change.Mutations)
-	guards, err := owner.service.repository.ComponentWorkConfigurationConditions(ctx, work, prepared.Capture.Configuration)
+	guards, err := owner.service.repository.ComponentWorkConfigurationConditions(
+		ctx,
+		work,
+		prepared.Capture.Configuration,
+	)
 	if err != nil {
 		return err
 	}
@@ -118,11 +126,21 @@ func (owner *ComponentWorkPreparation) Prepare(ctx context.Context, taskID, work
 			return err
 		}
 	}
-	guards = append(guards,
-		keyvalue.Condition{Key: blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID), ModRevision: graph.Revision},
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID), ModRevision: snapshot.HeadRevision},
+	guards = append(
+		guards,
+		keyvalue.Condition{
+			Key:         blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID),
+			ModRevision: graph.Revision,
+		},
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID),
+			ModRevision: snapshot.HeadRevision,
+		},
 		keyvalue.Condition{Key: blueprintunits.EpochKey(task.Scope.EnvironmentID), ModRevision: snapshot.EpochRevision},
-		keyvalue.Condition{Key: blueprintunits.DesiredPlanKey(task.Scope.EnvironmentID), ModRevision: snapshot.Desired.Revision},
+		keyvalue.Condition{
+			Key:         blueprintunits.DesiredPlanKey(task.Scope.EnvironmentID),
+			ModRevision: snapshot.Desired.Revision,
+		},
 	)
 	inputID := ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "component-input")
 	_, change, err := owner.inputs.PreparePublication(ctx, work, inputID, prepared.Input, prepared.Capture,

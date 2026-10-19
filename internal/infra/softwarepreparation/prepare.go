@@ -46,7 +46,10 @@ func (preparer *Preparer) Prepare(
 	}
 	workspace := filepath.Join(preparer.workspaceRoot, ".software-preparation-"+input.OperationID)
 	if _, statErr := os.Lstat(workspace); statErr == nil {
-		return result, errs.New(errs.KindStateConflict, "software preparation workspace already exists; reconcile the captured execution instead of rebuilding")
+		return result, errs.New(
+			errs.KindStateConflict,
+			"software preparation workspace already exists; reconcile the captured execution instead of rebuilding",
+		)
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		return result, errs.Wrap(errs.KindInternal, statErr)
 	}

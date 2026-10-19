@@ -37,8 +37,12 @@ func (service *Service) ControllerUpdateSnapshot(ctx context.Context) (apiTypes.
 	if current.Outcome != "" && !current.Settled {
 		status = "needs_attention"
 	}
-	state.LastUpdate = &apiTypes.ControllerUpdateSummary{TaskID: current.Capture.TaskID, Release: string(current.Capture.Input.Release),
-		Status: status, CreatedAt: current.Capture.CreatedAt}
+	state.LastUpdate = &apiTypes.ControllerUpdateSummary{
+		TaskID:    current.Capture.TaskID,
+		Release:   string(current.Capture.Input.Release),
+		Status:    status,
+		CreatedAt: current.Capture.CreatedAt,
+	}
 	if hasJournal && journal.TaskID == current.Capture.TaskID {
 		state.LastUpdate.Phase = string(journal.Phase)
 	}

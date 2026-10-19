@@ -47,10 +47,17 @@ func EncodeRecoveryAssignment(input RecoveryInput) (*agentpb.AttachRecoveryAssig
 	if err != nil {
 		return nil, err
 	}
-	return &agentpb.AttachRecoveryAssignment{Attempt: attempt, Recovery: source, Consumer: proto.CloneOf(input.Consumer)}, nil
+	return &agentpb.AttachRecoveryAssignment{
+		Attempt:  attempt,
+		Recovery: source,
+		Consumer: proto.CloneOf(input.Consumer),
+	}, nil
 }
 
-func DecodeRecoveryAssignment(message *agentpb.AttachRecoveryAssignment, identity workexecution.Identity) (RecoveryInput, error) {
+func DecodeRecoveryAssignment(
+	message *agentpb.AttachRecoveryAssignment,
+	identity workexecution.Identity,
+) (RecoveryInput, error) {
 	if message == nil || executionplan.RejectUnknown(message) != nil {
 		return RecoveryInput{}, invalid("Attach recovery assignment is invalid")
 	}

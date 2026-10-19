@@ -42,7 +42,10 @@ func (repository *InputRepository) PrepareFacts(ctx context.Context, view workqu
 		return workqueue.Change{}, checkpointConflict("Attach facts have no acknowledged hook permission")
 	}
 	key := blueprintattachoutputs.Key(output.AttachID, attempt.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -53,7 +56,10 @@ func (repository *InputRepository) PrepareFacts(ctx context.Context, view workqu
 		return workqueue.Change{}, checkpointConflict("Attach fact publication read is incomplete")
 	}
 	change := workqueue.Change{Conditions: append(source.Conditions, guards...)}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision},
+	)
 	if saved := read.Values[0]; saved != nil {
 		if saved.Key != key || saved.ModRevision <= 0 || saved.ModRevision > view.Work.ReadRevision {
 			return workqueue.Change{}, checkpointConflict("Attach fact publication has invalid storage ownership")
@@ -70,7 +76,9 @@ func (repository *InputRepository) PrepareFacts(ctx context.Context, view workqu
 			return workqueue.Change{}, checkpointConflict("Attach attempt already published different hook facts")
 		}
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: saved.ModRevision})
-		change.Mutations = []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), saved.Value...)}}
+		change.Mutations = []keyvalue.Mutation{
+			{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), saved.Value...)},
+		}
 		return change, nil
 	}
 	if !view.CurrentExecutor || !view.ActiveAttempt || task.FinishedAt != nil || attempt.FinishedAt != nil ||

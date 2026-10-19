@@ -22,7 +22,12 @@ type ReleaseStartupResult struct {
 
 // ExecuteReleaseStartup is the native helper operation, with no generic plan.
 // It never retries Compose up: the caller must inspect interrupted effects.
-func ExecuteReleaseStartup(ctx context.Context, taskRunner runner.Runner, input releaseexecution.Input, report releaseexecution.CheckpointReport) (ReleaseStartupResult, error) {
+func ExecuteReleaseStartup(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+) (ReleaseStartupResult, error) {
 	result := ReleaseStartupResult{}
 	if ctx == nil || taskRunner == nil {
 		return result, errs.New(errs.KindInternal, "Release startup requires a context and subprocess runner")
@@ -58,12 +63,24 @@ func ExecuteReleaseStartup(ctx context.Context, taskRunner runner.Runner, input 
 			prior.Services = append(prior.Services, proto.CloneOf(artifacts.Prior.Retained).Services...)
 		}
 	}
-	inventory, err := inspectServingInventory(bounded, taskRunner, prior, artifacts.Candidate, input.Release.ServiceId, input.Release.ReleaseId, proxy)
+	inventory, err := inspectServingInventory(
+		bounded,
+		taskRunner,
+		prior,
+		artifacts.Candidate,
+		input.Release.ServiceId,
+		input.Release.ReleaseId,
+		proxy,
+	)
 	if err != nil {
 		return result, err
 	}
-	if input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE && len(inventory.predecessors) != 0 {
-		return result, errs.New(errs.KindStateConflict, "previous workload still exists; recreate removal has not completed")
+	if input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE &&
+		len(inventory.predecessors) != 0 {
+		return result, errs.New(
+			errs.KindStateConflict,
+			"previous workload still exists; recreate removal has not completed",
+		)
 	}
 	names := make(map[string]bool)
 	if report.Progress.Rolling == nil {
@@ -86,7 +103,10 @@ func ExecuteReleaseStartup(ctx context.Context, taskRunner runner.Runner, input 
 			return result, errs.New(errs.KindStateConflict, "candidate container ownership cannot be inspected")
 		}
 		if names[labels["com.docker.compose.service"]] {
-			return result, errs.New(errs.KindStateConflict, "candidate already exists; reconcile its startup instead of recreating it")
+			return result, errs.New(
+				errs.KindStateConflict,
+				"candidate already exists; reconcile its startup instead of recreating it",
+			)
 		}
 	}
 	for index, command := range commands {
@@ -105,9 +125,15 @@ func ExecuteReleaseStartup(ctx context.Context, taskRunner runner.Runner, input 
 		}
 		if result.ExitCode != 0 {
 			if index == 0 {
-				return result, errs.New(errs.KindRequestFailed, "captured candidate Compose configuration was rejected before startup")
+				return result, errs.New(
+					errs.KindRequestFailed,
+					"captured candidate Compose configuration was rejected before startup",
+				)
 			}
-			return result, errs.New(errs.KindRequestFailed, "candidate startup failed; inspect the captured containers before retrying")
+			return result, errs.New(
+				errs.KindRequestFailed,
+				"candidate startup failed; inspect the captured containers before retrying",
+			)
 		}
 	}
 	return result, nil

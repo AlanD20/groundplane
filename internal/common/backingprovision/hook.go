@@ -13,8 +13,13 @@ import (
 // HookSuccessEvidence is emitted only after the Agent has saved the captured
 // exec's zero exit status. It names one attempt/container/command input, carries
 // no command output or values and is never permission to run that hook again.
-func HookSuccessEvidence(attempt workexecution.Attempt, layout Layout, containerID string) (workexecution.Input, error) {
-	if layout.Validate(attempt) != nil || attempt.Direction != workexecution.Forward || attempt.StartedAt == nil || !layout.Hook ||
+func HookSuccessEvidence(
+	attempt workexecution.Attempt,
+	layout Layout,
+	containerID string,
+) (workexecution.Input, error) {
+	if layout.Validate(attempt) != nil || attempt.Direction != workexecution.Forward || attempt.StartedAt == nil ||
+		!layout.Hook ||
 		len(containerID) != 64 {
 		return workexecution.Input{}, invalid("backing creation hook result has no captured execution")
 	}

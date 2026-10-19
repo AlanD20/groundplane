@@ -51,7 +51,12 @@ func (record attemptRecord) validateEntryConfiguration() error {
 				terminal.FinishedAt.Before(record.UpdatedAt) {
 				return invalid()
 			}
-			captured, err := entryexecution.DecodeLayoutFailure(*terminal, entry.Layout, failure.Evidence, *terminal.Result)
+			captured, err := entryexecution.DecodeLayoutFailure(
+				*terminal,
+				entry.Layout,
+				failure.Evidence,
+				*terminal.Result,
+			)
 			if err != nil || captured.Reason != failure.Reason || !captured.RecordedAt.Equal(*terminal.FinishedAt) {
 				return invalid()
 			}

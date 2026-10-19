@@ -71,8 +71,10 @@ func (executor *ConnectionCheckExecutor) execute(ctx context.Context, delivery w
 	}
 	record := loaded.Record
 	hash, err := dnschecks.PlanHash(record)
-	if err != nil || record.Owner.TaskID != item.TaskID || record.Owner.WorkItemID != item.ID || record.Owner.PlanID != attempt.Input.ID ||
-		record.Source.ComponentID != item.TargetID || hash != attempt.Input.SHA256 {
+	if err != nil || record.Owner.TaskID != item.TaskID || record.Owner.WorkItemID != item.ID ||
+		record.Owner.PlanID != attempt.Input.ID ||
+		record.Source.ComponentID != item.TargetID ||
+		hash != attempt.Input.SHA256 {
 		return errs.New(errs.KindStateConflict, "DNS check differs from its captured Task input")
 	}
 	if record.Phase == dnschecks.Finished {

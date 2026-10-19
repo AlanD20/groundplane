@@ -37,7 +37,10 @@ type configCaptureChannelTransport struct {
 	binding       backupconfigtransfer.Binding
 }
 
-func (transport *configCaptureChannelTransport) SendFrame(ctx context.Context, frame *agentpb.BackupConfigTransfer) error {
+func (transport *configCaptureChannelTransport) SendFrame(
+	ctx context.Context,
+	frame *agentpb.BackupConfigTransfer,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -49,7 +52,10 @@ func (transport *configCaptureChannelTransport) ReadCredit(ctx context.Context) 
 	return transport.credits.read(ctx, transport.binding.SourceOrdinal)
 }
 
-func (transport *configCaptureChannelTransport) CommitCredit(ctx context.Context, credit *agentpb.BackupConfigCredit) error {
+func (transport *configCaptureChannelTransport) CommitCredit(
+	ctx context.Context,
+	credit *agentpb.BackupConfigCredit,
+) error {
 	if err := transport.reports.CommitConfigCaptureCredit(ctx, transport.authorization, transport.binding, credit); err != nil {
 		return err
 	}

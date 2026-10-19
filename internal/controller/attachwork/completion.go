@@ -28,8 +28,12 @@ func (service *Reports) CompleteAttachProvision(ctx context.Context, authorizati
 	if err != nil {
 		return nil, err
 	}
-	evidence := workexecution.Input{ID: request.CheckpointEvidence.InputId, SHA256: hex.EncodeToString(request.CheckpointEvidence.Sha256)}
-	if evidence.Validate() != nil || view.Checkpoint.Record == nil || view.Checkpoint.Record.Sequence != request.CheckpointSequence ||
+	evidence := workexecution.Input{
+		ID:     request.CheckpointEvidence.InputId,
+		SHA256: hex.EncodeToString(request.CheckpointEvidence.Sha256),
+	}
+	if evidence.Validate() != nil || view.Checkpoint.Record == nil ||
+		view.Checkpoint.Record.Sequence != request.CheckpointSequence ||
 		view.Checkpoint.Record.Evidence != evidence {
 		return nil, errs.New(errs.KindStateConflict, "Attach completion differs from its saved checkpoint")
 	}
@@ -65,7 +69,11 @@ func (service *Reports) CompleteAttachProvision(ctx context.Context, authorizati
 		} else if view.Work.Item.Item.ForwardRevoked {
 			outcome = workexecution.Superseded
 		}
-		completion.Result, completion.At = workexecution.Completion{Outcome: outcome, Evidence: result, EffectsSettled: true}, at
+		completion.Result, completion.At = workexecution.Completion{
+			Outcome:        outcome,
+			Evidence:       result,
+			EffectsSettled: true,
+		}, at
 		terminal, err := workqueue.PrepareCompletion(completion)
 		if err != nil {
 			return nil, err
@@ -77,7 +85,10 @@ func (service *Reports) CompleteAttachProvision(ctx context.Context, authorizati
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Attach completion ownership changed; resend the saved completion")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Attach completion ownership changed; resend the saved completion",
+			)
 		}
 		view, _, err = service.readView(ctx, authorization, request.Attempt)
 		if err != nil {
@@ -97,7 +108,14 @@ func (service *Reports) CompleteAttachProvision(ctx context.Context, authorizati
 	if err != nil {
 		return nil, err
 	}
-	return &agentpb.AttachProvisionCompletionAck{Attempt: proto.CloneOf(request.Attempt), CheckpointSequence: request.CheckpointSequence,
-		CheckpointEvidence: proto.CloneOf(request.CheckpointEvidence), Outcome: string(attempt.Outcome), FinishedAt: timestamppb.New(*attempt.FinishedAt),
-		BindingResult: &agentpb.WorkInputReference{InputId: attempt.Result.ID, Sha256: digest}}, nil
+	return &agentpb.AttachProvisionCompletionAck{
+		Attempt:            proto.CloneOf(request.Attempt),
+		CheckpointSequence: request.CheckpointSequence,
+		CheckpointEvidence: proto.CloneOf(
+			request.CheckpointEvidence,
+		),
+		Outcome:       string(attempt.Outcome),
+		FinishedAt:    timestamppb.New(*attempt.FinishedAt),
+		BindingResult: &agentpb.WorkInputReference{InputId: attempt.Result.ID, Sha256: digest},
+	}, nil
 }

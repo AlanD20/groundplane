@@ -87,7 +87,14 @@ func (repository *TaskRepository) prepareResolverDNSMetadata(ctx context.Context
 		if metadataDNSExecutionHeld(snapshot, record.ID) {
 			continue
 		}
-		conditions, mutations, _, err := reader.PrepareHostnameRetirement(ctx, environmentID, record.ID, record.Hostname(), hosts, revision)
+		conditions, mutations, _, err := reader.PrepareHostnameRetirement(
+			ctx,
+			environmentID,
+			record.ID,
+			record.Hostname(),
+			hosts,
+			revision,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -102,7 +109,8 @@ func (repository *TaskRepository) prepareResolverDNSMetadata(ctx context.Context
 		target := blueprintunits.ResourceKey{Kind: ids.KindDNSRecord, ID: omission.ID}
 		settled := false
 		for _, applied := range snapshot.Applied {
-			if applied.Record.Target == target && applied.Record.State == blueprintunits.Absent && applied.Record.HasEffectSource() {
+			if applied.Record.Target == target && applied.Record.State == blueprintunits.Absent &&
+				applied.Record.HasEffectSource() {
 				settled = true
 				break
 			}
@@ -117,7 +125,14 @@ func (repository *TaskRepository) prepareResolverDNSMetadata(ctx context.Context
 				continue
 			}
 		}
-		conditions, mutations, more, err := reader.PrepareHostnameRetirement(ctx, environmentID, omission.ID, "", hosts, revision)
+		conditions, mutations, more, err := reader.PrepareHostnameRetirement(
+			ctx,
+			environmentID,
+			omission.ID,
+			"",
+			hosts,
+			revision,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -139,7 +154,8 @@ func (repository *TaskRepository) prepareResolverDNSMetadata(ctx context.Context
 func metadataDNSExecutionHeld(snapshot blueprintunits.Snapshot, recordID string) bool {
 	target := blueprintunits.ResourceKey{Kind: ids.KindDNSRecord, ID: recordID}
 	for _, execution := range snapshot.Executions {
-		if slices.Contains(execution.Record.Unit.Reads, target) || slices.Contains(execution.Record.Unit.Writes, target) {
+		if slices.Contains(execution.Record.Unit.Reads, target) ||
+			slices.Contains(execution.Record.Unit.Writes, target) {
 			return true
 		}
 	}

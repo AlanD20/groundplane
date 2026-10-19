@@ -91,7 +91,10 @@ func BindWorkProxySourceHold(work workqueue.View, preflight ProxyServicePrefligh
 		preflight.ParentTaskID != task.ID || preflight.EnvironmentID != task.Scope.EnvironmentID ||
 		preflight.CandidateInput == nil || preflight.CandidateInput.ComponentID != item.TargetID ||
 		len(fragment.StagedRequirements()) != 0 {
-		return nil, workqueue.Change{}, errs.New(errs.KindValidationFailed, "Proxy source hold differs from captured work")
+		return nil, workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Proxy source hold differs from captured work",
+		)
 	}
 	if preflight.SourceHold != nil && *preflight.SourceHold != hold {
 		return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "Proxy work already holds different sources")

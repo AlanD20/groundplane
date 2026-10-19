@@ -115,8 +115,12 @@ func AdvanceScriptExecutionRecord(
 	}
 	if current.CurrentTaskID != input.TaskID || current.WorkItemID != input.WorkItemID ||
 		current.OperationID != input.OperationID || current.ID != input.ExecutionID || current.Input != input.Input ||
-		current.AttemptID != "" && (current.AttemptID != input.AttemptID || current.Executor == nil || *current.Executor != input.Executor) {
-		return ScriptExecutionRecord{}, errs.New(errs.KindStateConflict, "Script checkpoint belongs to another execution attempt")
+		current.AttemptID != "" &&
+			(current.AttemptID != input.AttemptID || current.Executor == nil || *current.Executor != input.Executor) {
+		return ScriptExecutionRecord{}, errs.New(
+			errs.KindStateConflict,
+			"Script checkpoint belongs to another execution attempt",
+		)
 	}
 	if input.At.Before(current.CreatedAt) {
 		return ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "Script checkpoint predates its execution")
@@ -199,7 +203,10 @@ func AdvanceScriptExecutionRecord(
 func ValidateScriptCheckpointInput(input ScriptCheckpointInput) error {
 	if input.Sequence == 0 || ids.Validate(ids.KindStep, input.StageID) != nil ||
 		ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindOperation, input.OperationID) != nil ||
-		ids.Validate(ids.KindAttempt, input.AttemptID) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil ||
+		ids.Validate(
+			ids.KindAttempt,
+			input.AttemptID,
+		) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil ||
 		input.Executor.Validate() != nil || input.Executor.Executor != workexecution.Agent ||
 		!ValidRawScriptExecutionID(input.ExecutionID) || input.Input.Validate() != nil ||
 		!ValidLowerSHA256(input.PayloadSHA256) || !validScriptExecutionState(input.ExpectedState) ||
@@ -260,13 +267,24 @@ func validateScriptExecutionCheckpointShape(record ScriptExecutionRecord) error 
 					record.ControllerCleanup == ScriptControllerCleanupManualRetryExpiry ||
 				record.Outcome.Reason == ScriptOutcomeParentFailureBeforeStart &&
 					record.ControllerCleanup == ScriptControllerCleanupReleaseRecoveryParentFailure)
-		if record.Executor != nil || record.StartAuthorized || record.BodyPrepared != nil || record.ContainerCreated != nil ||
-			record.Outcome == nil || !controllerCleanupMatches ||
-			record.Outcome.ExitCode != nil || record.Outcome.OutputTruncated || record.Outcome.ObservedAt.IsZero() ||
-			record.Cleanup == nil || record.Cleanup.ContainerID != "" || record.Cleanup.BodyDevice != 0 ||
-			record.Cleanup.BodyInode != 0 || record.Cleanup.BodyLeaf != "" || !record.Cleanup.ContainerAbsent ||
-			!record.Cleanup.BodyAbsent || !record.Cleanup.ExecutionDirectoryAbsent ||
-			!ValidLowerSHA256(record.LastCheckpointSHA256) || record.ReconciliationRequired || record.ActiveReference {
+		if record.Executor != nil || record.StartAuthorized || record.BodyPrepared != nil ||
+			record.ContainerCreated != nil ||
+			record.Outcome == nil ||
+			!controllerCleanupMatches ||
+			record.Outcome.ExitCode != nil ||
+			record.Outcome.OutputTruncated ||
+			record.Outcome.ObservedAt.IsZero() ||
+			record.Cleanup == nil ||
+			record.Cleanup.ContainerID != "" ||
+			record.Cleanup.BodyDevice != 0 ||
+			record.Cleanup.BodyInode != 0 ||
+			record.Cleanup.BodyLeaf != "" ||
+			!record.Cleanup.ContainerAbsent ||
+			!record.Cleanup.BodyAbsent ||
+			!record.Cleanup.ExecutionDirectoryAbsent ||
+			!ValidLowerSHA256(record.LastCheckpointSHA256) ||
+			record.ReconciliationRequired ||
+			record.ActiveReference {
 			return invalidScriptCheckpointRecord()
 		}
 		return nil

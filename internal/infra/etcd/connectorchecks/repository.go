@@ -54,14 +54,25 @@ func (repository *Repository) Load(ctx context.Context, taskID string) (keyvalue
 	return repository.loadAt(ctx, taskID, 0)
 }
 
-func (repository *Repository) LoadAt(ctx context.Context, taskID string, revision int64) (keyvalue.Versioned[Record], error) {
+func (repository *Repository) LoadAt(
+	ctx context.Context,
+	taskID string,
+	revision int64,
+) (keyvalue.Versioned[Record], error) {
 	if revision <= 0 {
-		return keyvalue.Versioned[Record]{}, errs.New(errs.KindValidationFailed, "connector check snapshot revision is required")
+		return keyvalue.Versioned[Record]{}, errs.New(
+			errs.KindValidationFailed,
+			"connector check snapshot revision is required",
+		)
 	}
 	return repository.loadAt(ctx, taskID, revision)
 }
 
-func (repository *Repository) loadAt(ctx context.Context, taskID string, revision int64) (keyvalue.Versioned[Record], error) {
+func (repository *Repository) loadAt(
+	ctx context.Context,
+	taskID string,
+	revision int64,
+) (keyvalue.Versioned[Record], error) {
 	if ids.Validate(ids.KindTask, taskID) != nil {
 		return keyvalue.Versioned[Record]{}, errs.New(errs.KindValidationFailed, "connector check Task id is invalid")
 	}

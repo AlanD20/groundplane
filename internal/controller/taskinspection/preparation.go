@@ -17,7 +17,11 @@ type Preparation struct {
 	FinishedAt time.Time
 }
 
-func (service *Service) preparation(ctx context.Context, task workqueue.TaskSnapshot, revision int64) (*Preparation, error) {
+func (service *Service) preparation(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	revision int64,
+) (*Preparation, error) {
 	rejection, err := service.hierarchy.ReadPlanningRejection(ctx, task, revision)
 	if err != nil || rejection == nil {
 		return nil, err

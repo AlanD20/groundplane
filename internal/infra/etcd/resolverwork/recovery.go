@@ -26,9 +26,15 @@ func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.V
 	return repository.loadRecovery(ctx, view, number, nil)
 }
 
-func (repository *Repository) LoadRecoveryForAttempt(ctx context.Context, view workqueue.View, attempt workexecution.Attempt) (RecoverySource, error) {
-	if attempt.Validate() != nil || attempt.Direction != workexecution.Recovery || attempt.TaskID != view.Task.Task.ID ||
-		attempt.WorkItemID != view.Item.Item.ID || attempt.Number > view.Item.Item.AttemptNumber {
+func (repository *Repository) LoadRecoveryForAttempt(
+	ctx context.Context,
+	view workqueue.View,
+	attempt workexecution.Attempt,
+) (RecoverySource, error) {
+	if attempt.Validate() != nil || attempt.Direction != workexecution.Recovery ||
+		attempt.TaskID != view.Task.Task.ID ||
+		attempt.WorkItemID != view.Item.Item.ID ||
+		attempt.Number > view.Item.Item.AttemptNumber {
 		return RecoverySource{}, invalid("DNS resolver cleanup requires its actual retained assignment")
 	}
 	var failure *workexecution.Input
@@ -62,7 +68,12 @@ func (repository *Repository) LoadRecoveryForAttempt(ctx context.Context, view w
 	return source, nil
 }
 
-func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.View, number uint64, evidence *workexecution.Input) (RecoverySource, error) {
+func (repository *Repository) loadRecovery(
+	ctx context.Context,
+	view workqueue.View,
+	number uint64,
+	evidence *workexecution.Input,
+) (RecoverySource, error) {
 	stored, err := repository.Load(ctx, view)
 	if err != nil {
 		return RecoverySource{}, err
@@ -114,7 +125,14 @@ func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.V
 	if err != nil {
 		return RecoverySource{}, err
 	}
-	forwardView, err := queue.ReadResumeAt(ctx, forward.TaskID, forward.WorkItemID, forward.ID, forward.Executor, view.ReadRevision)
+	forwardView, err := queue.ReadResumeAt(
+		ctx,
+		forward.TaskID,
+		forward.WorkItemID,
+		forward.ID,
+		forward.Executor,
+		view.ReadRevision,
+	)
 	if err != nil {
 		return RecoverySource{}, err
 	}
@@ -127,13 +145,15 @@ func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.V
 			return RecoverySource{}, err
 		}
 	}
-	source := RecoverySource{Recovery: resolverexecution.Recovery{Forward: forward, Failure: failure, Evidence: *evidence},
+	source := RecoverySource{
+		Recovery: resolverexecution.Recovery{Forward: forward, Failure: failure, Evidence: *evidence},
 		Guards: append(append([]keyvalue.Condition(nil), stored.Guards...),
 			keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision},
 			keyvalue.Condition{Key: workqueue.AttemptKey(forward.ID), ModRevision: attemptRead.Values[0].ModRevision},
 			keyvalue.Condition{Key: workqueue.CheckpointKey(forward.ID), ModRevision: forwardView.Checkpoint.Revision},
 			keyvalue.Condition{Key: workqueue.TaskKey(view.Task.Task.ID), ModRevision: view.Task.Revision},
-			keyvalue.Condition{Key: workqueue.ItemKey(view.Item.Item.ID), ModRevision: view.Item.Revision})}
+			keyvalue.Condition{Key: workqueue.ItemKey(view.Item.Item.ID), ModRevision: view.Item.Revision}),
+	}
 	if number > forward.Number+1 {
 		_, prior, err := queue.ReadAttempt(ctx, forward.TaskID, forward.WorkItemID, number-1, view.ReadRevision)
 		if err != nil {
@@ -151,9 +171,16 @@ func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.V
 		if err != nil || prior.Attempt.Result == nil {
 			return RecoverySource{}, invalid("DNS resolver cleanup Retry has an invalid preceding result")
 		}
-		source.Recovery.Previous = &resolverexecution.RecoveryInterruption{Attempt: prior.Attempt, Report: report, Evidence: *prior.Attempt.Result}
-		source.Guards = append(source.Guards, keyvalue.Condition{Key: workqueue.AttemptKey(prior.Attempt.ID), ModRevision: prior.Revision},
-			keyvalue.Condition{Key: result.Values[0].Key, ModRevision: result.Values[0].ModRevision})
+		source.Recovery.Previous = &resolverexecution.RecoveryInterruption{
+			Attempt:  prior.Attempt,
+			Report:   report,
+			Evidence: *prior.Attempt.Result,
+		}
+		source.Guards = append(
+			source.Guards,
+			keyvalue.Condition{Key: workqueue.AttemptKey(prior.Attempt.ID), ModRevision: prior.Revision},
+			keyvalue.Condition{Key: result.Values[0].Key, ModRevision: result.Values[0].ModRevision},
+		)
 	}
 	if err := source.Recovery.Validate(layout); err != nil {
 		return RecoverySource{}, err

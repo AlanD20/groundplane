@@ -11,12 +11,15 @@ func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentp
 		return err
 	}
 	switch procedure.Phase {
-	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION, agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_GRANT:
-		if operation == agentpb.PlanOperation_PLAN_OPERATION_ATTACH || operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE ||
+	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
+		agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_GRANT:
+		if operation == agentpb.PlanOperation_PLAN_OPERATION_ATTACH ||
+			operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE ||
 			operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
 			return nil
 		}
-	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_REVOKE, agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH:
+	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_REVOKE,
+		agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH:
 		if operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH {
 			return nil
 		}

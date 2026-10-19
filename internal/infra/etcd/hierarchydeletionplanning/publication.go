@@ -94,13 +94,31 @@ func (repository *Publication) AppendActions(
 		mutations := make([]etcdstore.Mutation, 0, len(actions)+1)
 		defer func() { etcdstore.ClearMutationValues(mutations) }()
 		for index, key := range keys {
-			workID := hierarchydeletion.ActionWorkID(current.Tombstone.CurrentTaskID, current.Tombstone.CreatedAt, current.Tombstone.OperationID, actions[index].Ordinal)
-			binding, err := hierarchydeletion.EncodeWorkBinding(hierarchydeletion.WorkBinding{TaskID: current.Tombstone.CurrentTaskID, OperationID: current.Tombstone.OperationID, Ordinal: actions[index].Ordinal})
+			workID := hierarchydeletion.ActionWorkID(
+				current.Tombstone.CurrentTaskID,
+				current.Tombstone.CreatedAt,
+				current.Tombstone.OperationID,
+				actions[index].Ordinal,
+			)
+			binding, err := hierarchydeletion.EncodeWorkBinding(
+				hierarchydeletion.WorkBinding{
+					TaskID:      current.Tombstone.CurrentTaskID,
+					OperationID: current.Tombstone.OperationID,
+					Ordinal:     actions[index].Ordinal,
+				},
+			)
 			if err != nil {
 				return hierarchydeletion.HierarchyDeletionOperation{}, err
 			}
 			conditions = append(conditions, etcdstore.Condition{Key: hierarchydeletion.WorkBindingKey(workID)})
-			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchydeletion.WorkBindingKey(workID), Value: binding})
+			mutations = append(
+				mutations,
+				etcdstore.Mutation{
+					Type:  etcdstore.MutationPut,
+					Key:   hierarchydeletion.WorkBindingKey(workID),
+					Value: binding,
+				},
+			)
 			conditions = append(conditions, etcdstore.Condition{Key: key})
 			mutations = append(
 				mutations,

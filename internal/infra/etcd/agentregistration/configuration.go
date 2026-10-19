@@ -60,7 +60,11 @@ func (repository *Repository) PrepareConfigurationUpdate(
 	}
 	defer clear(configValue)
 	return ConfigurationUpdate{
-		record: etcdstore.Versioned[localagentrecord.LocalAgentRecord]{Record: replacement, Revision: evidence.primaryRevision, ReadRevision: current.ReadRevision},
+		record: etcdstore.Versioned[localagentrecord.LocalAgentRecord]{
+			Record:       replacement,
+			Revision:     evidence.primaryRevision,
+			ReadRevision: current.ReadRevision,
+		},
 		conditions: []etcdstore.Condition{
 			{Key: localagentrecord.LocalAgentSingletonKey, ModRevision: evidence.singleton.ModRevision},
 			{Key: localagentrecord.LocalAgentPrimaryKey(current.Record.ID), ModRevision: evidence.primary.ModRevision},
@@ -81,7 +85,9 @@ func (update ConfigurationUpdate) Changes() ([]etcdstore.Condition, []etcdstore.
 		return nil, nil, errs.New(errs.KindInternal, "Agent configuration update has not been prepared")
 	}
 	return append([]etcdstore.Condition(nil), update.conditions...), []etcdstore.Mutation{{Type: etcdstore.MutationPut,
-		Key: localagentrecord.LocalAgentConfigKey(update.record.Record.ID), Value: append([]byte(nil), update.value...)}}, nil
+		Key: localagentrecord.LocalAgentConfigKey(
+			update.record.Record.ID,
+		), Value: append([]byte(nil), update.value...)}}, nil
 }
 
 func (update ConfigurationUpdate) ClassifyConflict(revision int64, values []*etcdstore.KeyValue) error {

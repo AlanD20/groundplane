@@ -31,7 +31,10 @@ func NewHost(journal *agentworkjournal.Journal, ownership *agentownership.Lease,
 	configuration *Configuration, consumers Consumers,
 ) (*RuntimeHost, error) {
 	if journal == nil || configuration == nil || consumers == nil {
-		return nil, errs.New(errs.KindInternal, "Entry host requires its journal, file materializer and workload executor")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Entry host requires its journal, file materializer and workload executor",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
@@ -44,11 +47,20 @@ func (host *RuntimeHost) Apply(ctx context.Context, input Input, stage entryexec
 	return err
 }
 
-func (host *RuntimeHost) Inspect(ctx context.Context, input Input, stage entryexecution.Stage) (entryexecution.Observation, error) {
+func (host *RuntimeHost) Inspect(
+	ctx context.Context,
+	input Input,
+	stage entryexecution.Stage,
+) (entryexecution.Observation, error) {
 	return host.execute(ctx, input, stage, true)
 }
 
-func (host *RuntimeHost) execute(ctx context.Context, input Input, stage entryexecution.Stage, inspectOnly bool) (entryexecution.Observation, error) {
+func (host *RuntimeHost) execute(
+	ctx context.Context,
+	input Input,
+	stage entryexecution.Stage,
+	inspectOnly bool,
+) (entryexecution.Observation, error) {
 	if ctx == nil || input.procedure == nil || input.attempt.StartedAt == nil {
 		return entryexecution.Observation{}, invalidInput()
 	}
@@ -61,10 +73,17 @@ func (host *RuntimeHost) execute(ctx context.Context, input Input, stage entryex
 	}
 	if saved == nil || !saved.Acknowledged || saved.Completion != nil || saved.Failure != nil ||
 		!saved.Progress.InFlight || saved.Progress.Stage != stage {
-		return entryexecution.Observation{}, errs.New(errs.KindStateConflict, "Entry host action has no acknowledged execution stage")
+		return entryexecution.Observation{}, errs.New(
+			errs.KindStateConflict,
+			"Entry host action has no acknowledged execution stage",
+		)
 	}
 	captured := entryexecution.FileInput{Attempt: input.attempt, Procedure: input.procedure, Progress: saved.Progress}
-	observed := entryexecution.Observation{EnvironmentID: input.procedure.EnvironmentId, Input: input.attempt.Input, Stage: stage}
+	observed := entryexecution.Observation{
+		EnvironmentID: input.procedure.EnvironmentId,
+		Input:         input.attempt.Input,
+		Stage:         stage,
+	}
 	switch stage {
 	case entryexecution.WriteConfiguration, entryexecution.VerifyConfiguration:
 		ready, err := host.configuration.Run(ctx, captured, inspectOnly || stage == entryexecution.VerifyConfiguration)
@@ -102,7 +121,10 @@ func (host *RuntimeHost) execute(ctx context.Context, input Input, stage entryex
 	}
 	observed.At = time.Now().UTC()
 	if !inspectOnly && !observed.Satisfies(stage) {
-		return entryexecution.Observation{}, errs.New(errs.KindStateConflict, "Entry action finished without the required file or workload observation")
+		return entryexecution.Observation{}, errs.New(
+			errs.KindStateConflict,
+			"Entry action finished without the required file or workload observation",
+		)
 	}
 	return observed, nil
 }

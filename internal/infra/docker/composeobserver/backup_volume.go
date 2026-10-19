@@ -9,7 +9,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (observer *Observer) ObserveBackupConsumer(ctx context.Context, request *agentpb.BackupConsumerHelperRequest) (*agentpb.ObservedProject, error) {
+func (observer *Observer) ObserveBackupConsumer(
+	ctx context.Context,
+	request *agentpb.BackupConsumerHelperRequest,
+) (*agentpb.ObservedProject, error) {
 	if observer == nil || observer.engine == nil || observer.now == nil {
 		return nil, errs.New(errs.KindInternal, "Backup Volume observer is not configured")
 	}
@@ -29,7 +32,8 @@ func (observer *Observer) ObserveBackupConsumer(ctx context.Context, request *ag
 		}
 		proxy := false
 		for _, member := range input.Consumer.Artifact.Services {
-			if member.ServiceId != container.ServiceId || member.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			if member.ServiceId != container.ServiceId ||
+				member.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 				continue
 			}
 			if len(member.ExpectedLabels) != len(container.Labels) {

@@ -16,7 +16,10 @@ func (source *BackupSource) DatabaseConsumerRecovery(ctx context.Context, pointI
 // Database reports use the source's durable sequence and acknowledged
 // predecessor. In particular, dump/apply start must be acknowledged before
 // the helper runs; publishing a request alone is not execution permission.
-func (source *BackupSource) PostgresContainerObserved(ctx context.Context, value *agentpb.BackupPostgresContainerObserved) error {
+func (source *BackupSource) PostgresContainerObserved(
+	ctx context.Context,
+	value *agentpb.BackupPostgresContainerObserved,
+) error {
 	return source.publish(ctx, &agentpb.BackupWorkCheckpointRequest{
 		Checkpoint: &agentpb.BackupWorkCheckpointRequest_PostgresContainerObserved{PostgresContainerObserved: value},
 	})
@@ -28,25 +31,37 @@ func (source *BackupSource) PostgresDumpStart(ctx context.Context, value *agentp
 	})
 }
 
-func (source *BackupSource) PostgresRestoreApplyStart(ctx context.Context, value *agentpb.BackupPostgresRestoreApplyStartCheckpoint) error {
+func (source *BackupSource) PostgresRestoreApplyStart(
+	ctx context.Context,
+	value *agentpb.BackupPostgresRestoreApplyStartCheckpoint,
+) error {
 	return source.publish(ctx, &agentpb.BackupWorkCheckpointRequest{
 		Checkpoint: &agentpb.BackupWorkCheckpointRequest_PostgresRestoreApplyStart{PostgresRestoreApplyStart: value},
 	})
 }
 
-func (source *BackupSource) PostgresRestoreVerified(ctx context.Context, value *agentpb.BackupPostgresRestoreVerified) error {
+func (source *BackupSource) PostgresRestoreVerified(
+	ctx context.Context,
+	value *agentpb.BackupPostgresRestoreVerified,
+) error {
 	return source.publish(ctx, &agentpb.BackupWorkCheckpointRequest{
 		Checkpoint: &agentpb.BackupWorkCheckpointRequest_PostgresRestoreVerified{PostgresRestoreVerified: value},
 	})
 }
 
-func (source *BackupSource) PostgresServiceProgress(ctx context.Context, value *agentpb.BackupPostgresServiceProgress) error {
+func (source *BackupSource) PostgresServiceProgress(
+	ctx context.Context,
+	value *agentpb.BackupPostgresServiceProgress,
+) error {
 	return source.publish(ctx, &agentpb.BackupWorkCheckpointRequest{
 		Checkpoint: &agentpb.BackupWorkCheckpointRequest_PostgresServiceProgress{PostgresServiceProgress: value},
 	})
 }
 
-func (source *BackupSource) MysqlContainerObserved(ctx context.Context, value *agentpb.BackupMySQLContainerObserved) error {
+func (source *BackupSource) MysqlContainerObserved(
+	ctx context.Context,
+	value *agentpb.BackupMySQLContainerObserved,
+) error {
 	return source.publish(ctx, &agentpb.BackupWorkCheckpointRequest{
 		Checkpoint: &agentpb.BackupWorkCheckpointRequest_MysqlContainerObserved{MysqlContainerObserved: value},
 	})
@@ -58,7 +73,10 @@ func (source *BackupSource) MysqlDumpStart(ctx context.Context, value *agentpb.B
 	})
 }
 
-func (source *BackupSource) MysqlRestoreApplyStart(ctx context.Context, value *agentpb.BackupMySQLRestoreApplyStartCheckpoint) error {
+func (source *BackupSource) MysqlRestoreApplyStart(
+	ctx context.Context,
+	value *agentpb.BackupMySQLRestoreApplyStartCheckpoint,
+) error {
 	return source.publish(ctx, &agentpb.BackupWorkCheckpointRequest{
 		Checkpoint: &agentpb.BackupWorkCheckpointRequest_MysqlRestoreApplyStart{MysqlRestoreApplyStart: value},
 	})

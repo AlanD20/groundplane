@@ -26,14 +26,33 @@ type AgentWork struct {
 	configTransfers *backupconfiguration.ConfigTransferRepository
 }
 
-func NewAgentWork(inputs *backupwork.InputRepository, queue *workqueue.Repository, manifests *backupvolumemanifest.Repository, configSnapshots *ConfigSnapshotProducer, configRuntime *etcd.BackupRuntimeRepository, configRestores *ConfigRestoreProducer) (*AgentWork, error) {
-	if inputs == nil || queue == nil || manifests == nil || configSnapshots == nil || configRuntime == nil || configRestores == nil {
+func NewAgentWork(
+	inputs *backupwork.InputRepository,
+	queue *workqueue.Repository,
+	manifests *backupvolumemanifest.Repository,
+	configSnapshots *ConfigSnapshotProducer,
+	configRuntime *etcd.BackupRuntimeRepository,
+	configRestores *ConfigRestoreProducer,
+) (*AgentWork, error) {
+	if inputs == nil || queue == nil || manifests == nil || configSnapshots == nil || configRuntime == nil ||
+		configRestores == nil {
 		return nil, errs.New(errs.KindInternal, "Backup Agent work requires captured input storage")
 	}
-	return &AgentWork{inputs: inputs, queue: queue, manifests: manifests, configSnapshots: configSnapshots, configTransfers: configRuntime.ConfigTransferRepository, configRuntime: configRuntime, configRestores: configRestores}, nil
+	return &AgentWork{
+		inputs:          inputs,
+		queue:           queue,
+		manifests:       manifests,
+		configSnapshots: configSnapshots,
+		configTransfers: configRuntime.ConfigTransferRepository,
+		configRuntime:   configRuntime,
+		configRestores:  configRestores,
+	}, nil
 }
 
-func (owner *AgentWork) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.BackupWorkAssignment, error) {
+func (owner *AgentWork) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.BackupWorkAssignment, error) {
 	assignment, _, err := owner.inputs.LoadAssignment(ctx, view)
 	if err != nil {
 		return nil, err
@@ -44,7 +63,10 @@ func (owner *AgentWork) LoadWorkAssignment(ctx context.Context, view workqueue.R
 	return assignment, nil
 }
 
-func (owner *AgentWork) LoadRecoveryAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.BackupRecoveryAssignment, error) {
+func (owner *AgentWork) LoadRecoveryAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.BackupRecoveryAssignment, error) {
 	assignment, _, err := owner.inputs.LoadRecoveryAssignment(ctx, view)
 	return assignment, err
 }
@@ -54,7 +76,10 @@ func (owner *AgentWork) AuthorizeAgentStart(ctx context.Context, view workqueue.
 	at := time.Now()
 	if attempt.Direction == workexecution.Recovery {
 		if attempt.StartedAt != nil || !at.Before(attempt.Deadline) || !at.Before(item.Deadline) {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Backup recovery cannot obtain a new start grant")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Backup recovery cannot obtain a new start grant",
+			)
 		}
 		_, guards, err := owner.inputs.LoadRecoveryAssignment(ctx, view)
 		return guards, err

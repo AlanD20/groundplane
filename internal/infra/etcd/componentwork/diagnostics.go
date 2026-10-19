@@ -20,7 +20,11 @@ func (repository *InputRepository) DiagnosticBegin(ctx context.Context, view wor
 	if progress.InFlight {
 		return progress, nil
 	}
-	read, err := repository.read(ctx, []string{ReportKey(view.Attempt.Attempt.ID, progress.Sequence-1)}, view.Work.ReadRevision)
+	read, err := repository.read(
+		ctx,
+		[]string{ReportKey(view.Attempt.Attempt.ID, progress.Sequence-1)},
+		view.Work.ReadRevision,
+	)
 	if err != nil {
 		return componentexecution.Progress{}, err
 	}

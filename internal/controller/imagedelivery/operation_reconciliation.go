@@ -65,12 +65,23 @@ func (service *Service) Reconcile(ctx context.Context, delivery workqueue.Delive
 	}
 }
 
-func (service *Service) Settle(ctx context.Context, queue *workqueue.Repository, delivery workqueue.Delivery, at time.Time) error {
+func (service *Service) Settle(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	delivery workqueue.Delivery,
+	at time.Time,
+) error {
 	if queue == nil {
 		return errs.New(errs.KindInternal, "image settlement requires execution storage")
 	}
 	attempt := delivery.Attempt.Attempt
-	request, recorded, err := queue.ReadCompletion(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+	request, recorded, err := queue.ReadCompletion(
+		ctx,
+		attempt.TaskID,
+		attempt.WorkItemID,
+		attempt.ID,
+		attempt.Executor,
+	)
 	if err != nil || recorded {
 		return err
 	}

@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) LoadEnvironmentProvision(ctx context.Context, attempt workexecution.Attempt) (*workexecution.Attempt, *EnvironmentProvisionRecord, error) {
+func (journal *Journal) LoadEnvironmentProvision(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (*workexecution.Attempt, *EnvironmentProvisionRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -24,7 +27,10 @@ func (journal *Journal) LoadEnvironmentProvision(ctx context.Context, attempt wo
 	return &state.Attempt, state.EnvironmentProvision, nil
 }
 
-func (journal *Journal) EnvironmentProvision(ctx context.Context, attempt workexecution.Attempt) (*EnvironmentProvisionRecord, error) {
+func (journal *Journal) EnvironmentProvision(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (*EnvironmentProvisionRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -44,7 +50,11 @@ func (journal *Journal) EnvironmentProvision(ctx context.Context, attempt workex
 // SaveEnvironmentProvision preserves the first failure before independent
 // inspection. Once submitted, the exact result is replayed, never refined under
 // a potentially accepted acknowledgement.
-func (journal *Journal) SaveEnvironmentProvision(ctx context.Context, attempt workexecution.Attempt, result environmentexecution.Result) error {
+func (journal *Journal) SaveEnvironmentProvision(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	result environmentexecution.Result,
+) error {
 	if attempt.StartedAt == nil || result.Validate(attempt) != nil {
 		return invalid()
 	}
@@ -75,7 +85,9 @@ func (journal *Journal) SaveEnvironmentProvision(ctx context.Context, attempt wo
 			return nil
 		}
 		if saved.Submitted || saved.Receipt != nil || saved.Result.HelpersAbsent ||
-			saved.Result.ObservedAt.After(result.ObservedAt) || saved.Result.Failure != "" && saved.Result.Failure != result.Failure {
+			saved.Result.ObservedAt.After(
+				result.ObservedAt,
+			) || saved.Result.Failure != "" && saved.Result.Failure != result.Failure {
 			return conflict()
 		}
 	}
@@ -84,7 +96,10 @@ func (journal *Journal) SaveEnvironmentProvision(ctx context.Context, attempt wo
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) SubmitEnvironmentProvision(ctx context.Context, attempt workexecution.Attempt) (*EnvironmentProvisionRecord, error) {
+func (journal *Journal) SubmitEnvironmentProvision(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (*EnvironmentProvisionRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -104,7 +119,11 @@ func (journal *Journal) SubmitEnvironmentProvision(ctx context.Context, attempt 
 	return state.EnvironmentProvision, nil
 }
 
-func (journal *Journal) AcknowledgeEnvironmentProvision(ctx context.Context, attempt workexecution.Attempt, ack *agentpb.EnvironmentProvisionResultAck) (workexecution.Attempt, error) {
+func (journal *Journal) AcknowledgeEnvironmentProvision(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	ack *agentpb.EnvironmentProvisionResultAck,
+) (workexecution.Attempt, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return workexecution.Attempt{}, err
@@ -114,7 +133,8 @@ func (journal *Journal) AcknowledgeEnvironmentProvision(ctx context.Context, att
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if state == nil || state.EnvironmentProvision == nil || !state.EnvironmentProvision.Submitted || !workexecution.SameAssignment(state.Attempt, attempt) {
+	if state == nil || state.EnvironmentProvision == nil || !state.EnvironmentProvision.Submitted ||
+		!workexecution.SameAssignment(state.Attempt, attempt) {
 		return workexecution.Attempt{}, conflict()
 	}
 	terminal, err := environmentexecution.DecodeResultAck(attempt, state.EnvironmentProvision.Result, ack)
@@ -122,7 +142,8 @@ func (journal *Journal) AcknowledgeEnvironmentProvision(ctx context.Context, att
 		return workexecution.Attempt{}, err
 	}
 	if previous := state.EnvironmentProvision.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) || *previous.Result != *terminal.Result {
+		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*previous.Result != *terminal.Result {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *previous, nil

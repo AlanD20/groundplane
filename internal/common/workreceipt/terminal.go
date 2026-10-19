@@ -11,7 +11,11 @@ import (
 // Terminal decodes the authenticated transport receipt using the original local
 // Start receipt. Operation journals still validate their own retained proof when
 // saving this result; this decoder cannot prove an external effect by itself.
-func Terminal(request *agentpb.AgentMessage, reply *agentpb.ControllerMessage, original workexecution.Attempt) (workexecution.Attempt, []byte, error) {
+func Terminal(
+	request *agentpb.AgentMessage,
+	reply *agentpb.ControllerMessage,
+	original workexecution.Attempt,
+) (workexecution.Attempt, []byte, error) {
 	if err := Match(request, reply); err != nil {
 		return workexecution.Attempt{}, nil, err
 	}

@@ -20,8 +20,12 @@ import (
 func (owner *AgentWork) Recover(ctx context.Context, authorization agentregistration.WorkAuthorization,
 	request *agentpb.BackupRecoveryRequest,
 ) (*agentpb.BackupRecoveryAck, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 || len(request.Report) > executionplan.MaximumBackupRecoveryReportBytes {
-		return nil, errs.New(errs.KindValidationFailed, "Backup prune recovery requires its bounded executor-stop report")
+	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 ||
+		len(request.Report) > executionplan.MaximumBackupRecoveryReportBytes {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Backup prune recovery requires its bounded executor-stop report",
+		)
 	}
 	guards, err := authorization.Conditions()
 	if err != nil {

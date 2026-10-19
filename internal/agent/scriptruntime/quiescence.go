@@ -14,8 +14,12 @@ import (
 // prepare a body, create/start a container, or replay an arbitrary hook.
 // The caller supplies the authenticated captured projection and holds process
 // ownership throughout this operation.
-func (runtime *Runtime) QuiesceHook(ctx context.Context, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport,
-	hook *agentpb.ReleaseWorkHook, projection *agentpb.ScriptRunnerProjection,
+func (runtime *Runtime) QuiesceHook(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+	hook *agentpb.ReleaseWorkHook,
+	projection *agentpb.ScriptRunnerProjection,
 ) (scriptexecution.QuiescenceProof, error) {
 	if err := runtime.validateRecoveryHook(ctx, input, report, hook, projection); err != nil {
 		return scriptexecution.QuiescenceProof{}, err
@@ -28,8 +32,12 @@ func (runtime *Runtime) QuiesceHook(ctx context.Context, input releaseexecution.
 	})
 }
 
-func (runtime *Runtime) validateRecoveryHook(ctx context.Context, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport,
-	hook *agentpb.ReleaseWorkHook, projection *agentpb.ScriptRunnerProjection,
+func (runtime *Runtime) validateRecoveryHook(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+	hook *agentpb.ReleaseWorkHook,
+	projection *agentpb.ScriptRunnerProjection,
 ) error {
 	if runtime == nil || runtime.engine == nil || ctx == nil || report.Validate(input) != nil || report.Ack == nil ||
 		!report.Progress.InFlight || report.Progress.Phase != releaseexecution.QuiesceForward || hook == nil || projection == nil {

@@ -26,10 +26,16 @@ func (sources *GroupRestorationSources) Clear() {
 // LoadGroupRestorationSources joins the retained restoration input to its real
 // successful source and explicitly captured failure. Reading a newer desired
 // Blueprint or manufacturing a source assignment is never part of restoration.
-func (ledger *ReleaseLedger) LoadGroupRestorationSources(ctx context.Context, work workqueue.View) (GroupRestorationSources, error) {
+func (ledger *ReleaseLedger) LoadGroupRestorationSources(
+	ctx context.Context,
+	work workqueue.View,
+) (GroupRestorationSources, error) {
 	if ledger == nil || ledger.store == nil || ctx == nil || work.Task.Task.FinishedAt != nil ||
 		work.Task.Task.CollectionStartedAt != nil || !work.Task.Task.PublicationComplete {
-		return GroupRestorationSources{}, errs.New(errs.KindStateConflict, "Group restoration sources require active retained execution")
+		return GroupRestorationSources{}, errs.New(
+			errs.KindStateConflict,
+			"Group restoration sources require active retained execution",
+		)
 	}
 	groups, err := releasegroups.NewExecutionRepository(ledger.store)
 	if err != nil {
@@ -45,22 +51,33 @@ func (ledger *ReleaseLedger) LoadGroupRestorationSources(ctx context.Context, wo
 	}
 	expected, actual := stored.Input.Source, selected.SourceAttempt.Attempt
 	if stored.Input.Authority != selected.Authority || stored.Input.Preparation != selected.Preparation ||
-		!workexecution.SameAssignment(expected, actual) || expected.Result == nil || actual.Result == nil || *expected.Result != *actual.Result ||
+		!workexecution.SameAssignment(
+			expected,
+			actual,
+		) || expected.Result == nil || actual.Result == nil || *expected.Result != *actual.Result ||
 		expected.Outcome != actual.Outcome || expected.StartedAt == nil || actual.StartedAt == nil ||
 		!expected.StartedAt.Equal(*actual.StartedAt) || expected.FinishedAt == nil || actual.FinishedAt == nil ||
 		!expected.FinishedAt.Equal(*actual.FinishedAt) {
-		return GroupRestorationSources{}, errs.New(errs.KindStateConflict, "Group restoration cause differs from its retained successful source")
+		return GroupRestorationSources{}, errs.New(
+			errs.KindStateConflict,
+			"Group restoration cause differs from its retained successful source",
+		)
 	}
 	forward, err := ledger.LoadReleaseWorkInput(ctx, selected.Source)
 	if err != nil {
 		return GroupRestorationSources{}, err
 	}
-	if forward.Input.Configuration.WorkItemID != expected.WorkItemID || forward.Rollout.Record.Render.ServiceID != work.Item.Item.TargetID ||
-		forward.Rollout.Record.Group == nil || forward.Rollout.Record.Group.GroupID != stored.Input.Authority.GroupID ||
+	if forward.Input.Configuration.WorkItemID != expected.WorkItemID ||
+		forward.Rollout.Record.Render.ServiceID != work.Item.Item.TargetID ||
+		forward.Rollout.Record.Group == nil ||
+		forward.Rollout.Record.Group.GroupID != stored.Input.Authority.GroupID ||
 		forward.Rollout.Record.Group.OperationID != stored.Input.Authority.GroupOperationID ||
 		forward.Rollout.Record.Group.Ordinal != stored.Input.Authority.MemberOrdinal {
 		clear(forward.Rollout.Record.CandidateArtifact)
-		return GroupRestorationSources{}, errs.New(errs.KindStateConflict, "Group restoration has different executable Service sources")
+		return GroupRestorationSources{}, errs.New(
+			errs.KindStateConflict,
+			"Group restoration has different executable Service sources",
+		)
 	}
 	conditions, err := resourcePublicationConditions(stored.Conditions, selected.Conditions, forward.Conditions)
 	if err != nil {

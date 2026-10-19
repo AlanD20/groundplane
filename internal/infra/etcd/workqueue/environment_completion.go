@@ -14,7 +14,10 @@ func (repository *Repository) ReadInterruptedEnvironmentAt(ctx context.Context, 
 		view.Work.Task.Revision <= 0 || view.Work.Item.Revision <= 0 || view.Attempt.Revision <= 0 ||
 		view.Work.Item.Item.Operation != workexecution.Environment || view.Attempt.Attempt.FinishedAt != nil ||
 		view.Checkpoint.Record != nil || view.Checkpoint.Revision != 0 || workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "environment interruption requires its replaced execution and retained ownership")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"environment interruption requires its replaced execution and retained ownership",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }

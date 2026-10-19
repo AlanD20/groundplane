@@ -21,11 +21,33 @@ import (
 // Report handlers cannot settle queue ownership independently of these writes.
 type WorkRecords interface {
 	LoadVolumeWorkInput(context.Context, workqueue.View) (*agentpb.VolumeWorkInput, error)
-	PrepareVolumeWorkCheckpoint(context.Context, workqueue.ResumeView, *agentpb.VolumeWorkInput, volumeexecution.Progress, time.Time) (workqueue.Change, error)
-	PrepareVolumeWorkCompletion(context.Context, workqueue.ResumeView, *agentpb.VolumeWorkInput, time.Time) (workqueue.Change, error)
-	PrepareFailure(context.Context, workqueue.ResumeView, volumeexecution.FailureReason, time.Time, bool) (workqueue.Change, workexecution.Completion, error)
+	PrepareVolumeWorkCheckpoint(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.VolumeWorkInput,
+		volumeexecution.Progress,
+		time.Time,
+	) (workqueue.Change, error)
+	PrepareVolumeWorkCompletion(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.VolumeWorkInput,
+		time.Time,
+	) (workqueue.Change, error)
+	PrepareFailure(
+		context.Context,
+		workqueue.ResumeView,
+		volumeexecution.FailureReason,
+		time.Time,
+		bool,
+	) (workqueue.Change, workexecution.Completion, error)
 	LoadFailure(context.Context, workqueue.ResumeView) ([]byte, error)
-	PrepareRecoveryResult(context.Context, workqueue.ResumeView, []byte, time.Time) (workqueue.Change, workexecution.Completion, error)
+	PrepareRecoveryResult(
+		context.Context,
+		workqueue.ResumeView,
+		[]byte,
+		time.Time,
+	) (workqueue.Change, workexecution.Completion, error)
 	LoadRecoveryResult(context.Context, workqueue.ResumeView) ([]byte, bool, error)
 }
 
@@ -63,7 +85,12 @@ func (service *WorkReports) CheckpointVolume(ctx context.Context, authorization 
 	if input == nil {
 		return nil, errs.New(errs.KindStateConflict, "Volume execution input is unavailable")
 	}
-	progress, err := volumeexecution.DecodeProgress(view.Attempt.Attempt, input.Action, input.VolumeId, request.Progress)
+	progress, err := volumeexecution.DecodeProgress(
+		view.Attempt.Attempt,
+		input.Action,
+		input.VolumeId,
+		request.Progress,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +134,10 @@ func (service *WorkReports) reportView(ctx context.Context, authorization agentr
 	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Attempt.Attempt.StartedAt == nil ||
 		view.Work.Item.Item.Operation != workexecution.Volume || !view.Work.Task.Task.PublicationComplete ||
 		view.Work.Task.Task.CollectionStartedAt != nil {
-		return workqueue.ResumeView{}, errs.New(errs.KindStateConflict, "Volume report has no retained started execution")
+		return workqueue.ResumeView{}, errs.New(
+			errs.KindStateConflict,
+			"Volume report has no retained started execution",
+		)
 	}
 	return view, nil
 }

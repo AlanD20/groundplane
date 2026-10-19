@@ -14,10 +14,19 @@ import (
 )
 
 type Exchange interface {
-	FailEnvironmentRemoval(context.Context, *agentpb.EnvironmentRemovalFailureRequest) (*agentpb.EnvironmentRemovalFailureAck, error)
+	FailEnvironmentRemoval(
+		context.Context,
+		*agentpb.EnvironmentRemovalFailureRequest,
+	) (*agentpb.EnvironmentRemovalFailureAck, error)
 	Start(context.Context, *agentpb.WorkStartRequest) (*agentpb.WorkStartAck, error)
-	EnvironmentRemovalCheckpoint(context.Context, *agentpb.EnvironmentRemovalCheckpointRequest) (*agentpb.EnvironmentRemovalCheckpointAck, error)
-	CompleteEnvironmentRemoval(context.Context, *agentpb.EnvironmentRemovalCompletionRequest) (*agentpb.EnvironmentRemovalCompletionAck, error)
+	EnvironmentRemovalCheckpoint(
+		context.Context,
+		*agentpb.EnvironmentRemovalCheckpointRequest,
+	) (*agentpb.EnvironmentRemovalCheckpointAck, error)
+	CompleteEnvironmentRemoval(
+		context.Context,
+		*agentpb.EnvironmentRemovalCompletionRequest,
+	) (*agentpb.EnvironmentRemovalCompletionAck, error)
 }
 
 type Executor struct {
@@ -28,7 +37,10 @@ type Executor struct {
 
 func NewExecutor(volumeRoot string, journal *agentworkjournal.Journal, host EnvironmentHost) (*Executor, error) {
 	if environmentpath.ValidateRoot(volumeRoot) != nil || journal == nil || host == nil {
-		return nil, errs.New(errs.KindInternal, "Environment removal executor requires its configured volume root, journal and host runtime")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Environment removal executor requires its configured volume root, journal and host runtime",
+		)
 	}
 	return &Executor{volumeRoot: volumeRoot, journal: journal, host: host}, nil
 }
@@ -79,9 +91,16 @@ func (executor *Executor) ExecuteEnvironment(ctx context.Context, input hierarch
 		return nil, err
 	}
 	if sequence < ack.CheckpointSequence {
-		return nil, errs.New(errs.KindStateConflict, "Agent removal journal is missing acknowledged progress; host effects require reconciliation")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Agent removal journal is missing acknowledged progress; host effects require reconciliation",
+		)
 	}
-	checkpoints, err := checkpointdelivery.NewEnvironmentRemoval(input, executor.journal, exchange.EnvironmentRemovalCheckpoint)
+	checkpoints, err := checkpointdelivery.NewEnvironmentRemoval(
+		input,
+		executor.journal,
+		exchange.EnvironmentRemovalCheckpoint,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +114,12 @@ func (executor *Executor) ExecuteEnvironment(ctx context.Context, input hierarch
 	return progress, nil
 }
 
-func (executor *Executor) complete(ctx context.Context, input hierarchyexecution.EnvironmentInput, progress hierarchyexecution.EnvironmentProgress, exchange Exchange) error {
+func (executor *Executor) complete(
+	ctx context.Context,
+	input hierarchyexecution.EnvironmentInput,
+	progress hierarchyexecution.EnvironmentProgress,
+	exchange Exchange,
+) error {
 	request, err := hierarchyexecution.EncodeEnvironmentCompletion(input, progress)
 	if err != nil {
 		return err

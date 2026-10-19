@@ -15,7 +15,12 @@ import (
 type authoredRouteSettlementRepository interface {
 	PrepareBlueprintRouteSettlement(context.Context, workqueue.View, blueprintunits.Unit,
 		projectionrecord.EnvironmentRouteProjection, time.Time) (workqueue.Change, error)
-	PrepareBlueprintRouteOmission(context.Context, workqueue.View, blueprintunits.Unit, time.Time) (workqueue.Change, error)
+	PrepareBlueprintRouteOmission(
+		context.Context,
+		workqueue.View,
+		blueprintunits.Unit,
+		time.Time,
+	) (workqueue.Change, error)
 }
 
 func (service *Service) prepareRouteSettlement(
@@ -26,7 +31,10 @@ func (service *Service) prepareRouteSettlement(
 	}
 	settler, ok := service.repository.(authoredRouteSettlementRepository)
 	if !ok {
-		return workqueue.Change{}, errs.New(errs.KindInternal, "Blueprint Route settlement repository is not configured")
+		return workqueue.Change{}, errs.New(
+			errs.KindInternal,
+			"Blueprint Route settlement repository is not configured",
+		)
 	}
 	if unit.Removal {
 		return settler.PrepareBlueprintRouteOmission(ctx, work, unit, at)

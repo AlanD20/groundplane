@@ -36,7 +36,11 @@ func (recorder commandRecorder) Exited(ctx context.Context, execID string, exitC
 	return recorder.journal.ObserveAttachProvisionExecExit(ctx, recorder.input, execID, exitCode, at)
 }
 
-func (host *BackingHost) observeProvisionExecs(ctx context.Context, input attachexecution.ProvisionInput, saved *agentworkjournal.AttachProvisionRecord) error {
+func (host *BackingHost) observeProvisionExecs(
+	ctx context.Context,
+	input attachexecution.ProvisionInput,
+	saved *agentworkjournal.AttachProvisionRecord,
+) error {
 	if err := host.ownership.Check(); err != nil {
 		return err
 	}
@@ -52,9 +56,18 @@ func (host *BackingHost) observeProvisionExecs(ctx context.Context, input attach
 		return err
 	}
 	if observed.Running {
-		return errs.New(errs.KindStateConflict, "previous Attach command is still running; retry cannot start another command")
+		return errs.New(
+			errs.KindStateConflict,
+			"previous Attach command is still running; retry cannot start another command",
+		)
 	}
 	// This does not report success or release resource claims. Controller-owned
 	// explicit Retry still needs the captured interrupted-operation proof.
-	return host.journal.ObserveAttachProvisionExecExit(ctx, input, execution.ExecID, observed.ExitCode, time.Now().UTC())
+	return host.journal.ObserveAttachProvisionExecExit(
+		ctx,
+		input,
+		execution.ExecID,
+		observed.ExitCode,
+		time.Now().UTC(),
+	)
 }

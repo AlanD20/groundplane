@@ -32,14 +32,22 @@ func NewEntryConfigurationWork(scope workexecution.Scope, placement workexecutio
 		claim.EnvironmentID != scope.EnvironmentID || claim.RevisionID != claim.TaskID ||
 		(placement.Executor != workexecution.Agent && (placement.Executor != workexecution.Controller || action != workexecution.ActionRemove)) ||
 		(action != workexecution.ActionCreate && action != workexecution.ActionUpdate && action != workexecution.ActionRemove) {
-		return workexecution.Task{}, workexecution.Item{}, errs.New(errs.KindValidationFailed, "Entry action requires its sealed mutation and Agent host")
+		return workexecution.Task{}, workexecution.Item{}, errs.New(
+			errs.KindValidationFailed,
+			"Entry action requires its sealed mutation and Agent host",
+		)
 	}
 	task := workexecution.Task{
 		ID: claim.TaskID, Actor: workexecution.OperatorActor, Scope: scope, Action: action,
 		TargetID: targetID, TargetName: targetName,
-		Intent:    workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, claim.CreatedAt, claim.TaskID, "request-intent"), SHA256: claim.Intent.CiphertextDigest},
+		Intent: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, claim.CreatedAt, claim.TaskID, "request-intent"),
+			SHA256: claim.Intent.CiphertextDigest,
+		},
 		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
-		Deadline: claim.CreatedAt.Add(time.Duration(controllerrevision.TaskTimeoutSeconds) * time.Second), ExpectedItems: 1,
+		Deadline: claim.CreatedAt.Add(
+			time.Duration(controllerrevision.TaskTimeoutSeconds) * time.Second,
+		), ExpectedItems: 1,
 	}
 	item := workexecution.Item{
 		ID: ids.DeriveAt(ids.KindWorkItem, claim.CreatedAt, claim.TaskID, "entry-configuration"), TaskID: task.ID,
@@ -72,16 +80,24 @@ type EntryConfigurationRequest struct {
 // PrepareConfigurationWork emits a closed operation, not an ExecutionPlan.
 // The caller must compare EpochRevision during publication, preventing changes
 // to the running-consumer set between its capture and acceptance.
-func (runtime EntryMutationRuntime) PrepareConfigurationWork(request EntryConfigurationRequest) (*agentpb.EntryConfigurationWorkInput, entrywork.Capture, error) {
+func (runtime EntryMutationRuntime) PrepareConfigurationWork(
+	request EntryConfigurationRequest,
+) (*agentpb.EntryConfigurationWorkInput, entrywork.Capture, error) {
 	task, item, candidate := request.Task, request.Item, request.Candidate
 	if runtime.EpochRevision <= 0 || task.Validate() != nil || item.Validate() != nil ||
 		item.Operation != workexecution.EntryConfiguration || item.TaskID != task.ID ||
 		item.TargetID != candidate.EnvironmentID || task.Scope.EnvironmentID != candidate.EnvironmentID ||
 		runtime.Projection.EnvironmentID != candidate.EnvironmentID || candidate.RevisionID != task.ID ||
 		candidate.RenderGeneration <= runtime.Projection.RenderGeneration ||
-		request.Configuration.Matches(task, item) != nil || request.Configuration.Generation != candidate.RenderGeneration ||
+		request.Configuration.Matches(
+			task,
+			item,
+		) != nil || request.Configuration.Generation != candidate.RenderGeneration ||
 		(request.Removal != nil) != (task.Action == workexecution.ActionRemove) {
-		return nil, entrywork.Capture{}, errs.New(errs.KindStateConflict, "Entry configuration has inconsistent captured authority")
+		return nil, entrywork.Capture{}, errs.New(
+			errs.KindStateConflict,
+			"Entry configuration has inconsistent captured authority",
+		)
 	}
 	artifact, err := entryMutationArtifact(candidate)
 	if err != nil {
@@ -117,7 +133,10 @@ func (runtime EntryMutationRuntime) PrepareConfigurationWork(request EntryConfig
 		}
 		input.Files = append(input.Files, descriptor)
 	}
-	sort.Slice(input.Files, func(i, j int) bool { return input.Files[i].GetDestination() < input.Files[j].GetDestination() })
+	sort.Slice(
+		input.Files,
+		func(i, j int) bool { return input.Files[i].GetDestination() < input.Files[j].GetDestination() },
+	)
 	capture := entrywork.Capture{Configuration: request.Configuration}
 	capture.Configuration.Destinations = slices.Clone(request.Configuration.Destinations)
 	if request.Configuration.Prior != nil {
@@ -173,7 +192,9 @@ func (runtime EntryMutationRuntime) PrepareConfigurationWork(request EntryConfig
 	return input, capture, nil
 }
 
-func entryConfigurationReference(reference runtimeconfiguration.Reference) (*agentpb.WorkConfigurationReference, error) {
+func entryConfigurationReference(
+	reference runtimeconfiguration.Reference,
+) (*agentpb.WorkConfigurationReference, error) {
 	if err := runtimeconfiguration.ValidateReference(reference); err != nil {
 		return nil, err
 	}

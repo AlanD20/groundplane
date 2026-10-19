@@ -31,12 +31,20 @@ func prepareConfigurationWorkSecretPins(ctx context.Context, store configuration
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return tasksecretpins.Prepared{}, err
 	}
-	if store == nil || (work.Item.Item.Operation != workexecution.Release && work.Item.Item.Operation != workexecution.Component) ||
+	if store == nil ||
+		(work.Item.Item.Operation != workexecution.Release && work.Item.Item.Operation != workexecution.Component) ||
 		ids.Validate(ids.KindOperation, operationID) != nil ||
-		work.Task.Revision <= 0 || work.Item.Revision <= 0 ||
-		work.Item.Item.AttemptNumber != 0 || work.Item.Item.ForwardRevoked ||
-		work.Task.Task.Stop != nil || work.Task.Task.FinishedAt != nil || work.Item.Item.Phase == workexecution.Settled {
-		return tasksecretpins.Prepared{}, errs.New(errs.KindValidationFailed, "Secret retention requires unstarted native configuration work")
+		work.Task.Revision <= 0 ||
+		work.Item.Revision <= 0 ||
+		work.Item.Item.AttemptNumber != 0 ||
+		work.Item.Item.ForwardRevoked ||
+		work.Task.Task.Stop != nil ||
+		work.Task.Task.FinishedAt != nil ||
+		work.Item.Item.Phase == workexecution.Settled {
+		return tasksecretpins.Prepared{}, errs.New(
+			errs.KindValidationFailed,
+			"Secret retention requires unstarted native configuration work",
+		)
 	}
 	return prepareCapturedConfigurationPins(ctx, store, work, operationID, capture, []tasksecretpins.Condition{
 		{Key: workqueue.TaskKey(work.Task.Task.ID), ModRevision: work.Task.Revision},
@@ -46,11 +54,19 @@ func prepareConfigurationWorkSecretPins(ctx context.Context, store configuration
 
 // The caller supplies its concrete publication owner: an accepted work item or
 // a still-sealed direct-mutation claim. Both capture the same immutable sources.
-func prepareCapturedConfigurationPins(ctx context.Context, store configurationPinStore,
-	work workqueue.View, operationID string, capture runtimeconfiguration.WorkCapture, guards []tasksecretpins.Condition,
+func prepareCapturedConfigurationPins(
+	ctx context.Context,
+	store configurationPinStore,
+	work workqueue.View,
+	operationID string,
+	capture runtimeconfiguration.WorkCapture,
+	guards []tasksecretpins.Condition,
 ) (tasksecretpins.Prepared, error) {
 	if ids.Validate(ids.KindOperation, operationID) != nil || len(guards) == 0 {
-		return tasksecretpins.Prepared{}, errs.New(errs.KindValidationFailed, "configuration Secret capture has no publication owner")
+		return tasksecretpins.Prepared{}, errs.New(
+			errs.KindValidationFailed,
+			"configuration Secret capture has no publication owner",
+		)
 	}
 	if err := capture.Matches(work.Task.Task, work.Item.Item); err != nil {
 		return tasksecretpins.Prepared{}, err
@@ -83,7 +99,10 @@ func prepareCapturedConfigurationPins(ctx context.Context, store configurationPi
 		delete(remaining, file.Destination)
 	}
 	if len(remaining) != 0 {
-		return tasksecretpins.Prepared{}, errs.New(errs.KindStateConflict, "captured configuration is missing changed file sources")
+		return tasksecretpins.Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"captured configuration is missing changed file sources",
+		)
 	}
 	if capture.Prior != nil {
 		prior, err := sources.LoadRetained(ctx, *capture.Prior)
@@ -106,7 +125,10 @@ func prepareCapturedConfigurationPins(ctx context.Context, store configurationPi
 	for _, pin := range selected {
 		pins = append(pins, pin)
 	}
-	slices.SortFunc(pins, func(left, right tasksecretpinrecord.Record) int { return cmp.Compare(left.SecretID, right.SecretID) })
+	slices.SortFunc(
+		pins,
+		func(left, right tasksecretpinrecord.Record) int { return cmp.Compare(left.SecretID, right.SecretID) },
+	)
 	repository, err := tasksecretpins.NewEtcdRepository(store, work.Task.Task.Scope.ProjectID)
 	if err != nil {
 		return tasksecretpins.Prepared{}, err

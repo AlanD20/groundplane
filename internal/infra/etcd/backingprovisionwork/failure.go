@@ -14,9 +14,13 @@ func FailureKey(evidenceID string) string {
 	return "/v1/execution/backing-provision/failures/" + evidenceID
 }
 
-func (repository *Repository) ReadFailure(ctx context.Context, view workqueue.ResumeView) (backingprovision.Failure, []byte, error) {
+func (repository *Repository) ReadFailure(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (backingprovision.Failure, []byte, error) {
 	attempt := view.Attempt.Attempt
-	if attempt.FinishedAt == nil || attempt.Result == nil || attempt.Direction != workexecution.Forward || attempt.Outcome == workexecution.Succeeded {
+	if attempt.FinishedAt == nil || attempt.Result == nil || attempt.Direction != workexecution.Forward ||
+		attempt.Outcome == workexecution.Succeeded {
 		return backingprovision.Failure{}, nil, invalid("backing creation has no saved failed forward receipt")
 	}
 	input, _, err := repository.Load(ctx, view.Work)
@@ -33,7 +37,10 @@ func (repository *Repository) ReadFailure(ctx context.Context, view workqueue.Re
 		return backingprovision.Failure{}, nil, err
 	}
 	key := FailureKey(attempt.Result.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if err != nil {
 		return backingprovision.Failure{}, nil, err
 	}
@@ -50,7 +57,9 @@ func (repository *Repository) ReadFailure(ctx context.Context, view workqueue.Re
 		return backingprovision.Failure{}, nil, err
 	}
 	if !failure.RecordedAt.Equal(*attempt.FinishedAt) {
-		return backingprovision.Failure{}, nil, invalid("backing creation failed receipt has different completion timing")
+		return backingprovision.Failure{}, nil, invalid(
+			"backing creation failed receipt has different completion timing",
+		)
 	}
 	return failure, append([]byte(nil), value.Value...), nil
 }
@@ -61,8 +70,11 @@ func (repository *Repository) ReadFailure(ctx context.Context, view workqueue.Re
 func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue.ResumeView,
 	reason backingprovision.FailureReason, at time.Time,
 ) (workqueue.Change, workexecution.Input, error) {
-	if !view.ActiveAttempt || view.Attempt.Attempt.Direction != workexecution.Forward || view.Attempt.Attempt.FinishedAt != nil {
-		return workqueue.Change{}, workexecution.Input{}, invalid("backing creation failure requires its actual active forward attempt")
+	if !view.ActiveAttempt || view.Attempt.Attempt.Direction != workexecution.Forward ||
+		view.Attempt.Attempt.FinishedAt != nil {
+		return workqueue.Change{}, workexecution.Input{}, invalid(
+			"backing creation failure requires its actual active forward attempt",
+		)
 	}
 	input, guard, err := repository.Load(ctx, view.Work)
 	if err != nil {
@@ -105,7 +117,11 @@ func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue
 		outcome = workexecution.Superseded
 	}
 	request.At = at
-	request.Result = workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: view.Attempt.Attempt.StartedAt == nil}
+	request.Result = workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       evidence,
+		EffectsSettled: view.Attempt.Attempt.StartedAt == nil,
+	}
 	var change workqueue.Change
 	if request.Result.EffectsSettled {
 		change, err = workqueue.PrepareCompletion(request)
@@ -119,10 +135,23 @@ func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
 	key := FailureKey(evidence.ID)
-	change.Conditions = append(change.Conditions, guard, keyvalue.Condition{Key: key},
-		keyvalue.Condition{Key: workqueue.CheckpointKey(view.Attempt.Attempt.ID), ModRevision: view.Checkpoint.Revision},
-		keyvalue.Condition{Key: workqueue.ExecutorKey(view.Attempt.Attempt.Executor), ModRevision: view.ExecutorRevision})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), value...)})
+	change.Conditions = append(
+		change.Conditions,
+		guard,
+		keyvalue.Condition{Key: key},
+		keyvalue.Condition{
+			Key:         workqueue.CheckpointKey(view.Attempt.Attempt.ID),
+			ModRevision: view.Checkpoint.Revision,
+		},
+		keyvalue.Condition{
+			Key:         workqueue.ExecutorKey(view.Attempt.Attempt.Executor),
+			ModRevision: view.ExecutorRevision,
+		},
+	)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), value...)},
+	)
 	if request.Result.EffectsSettled {
 		directories, err := repository.prepareDirectoryState(ctx, view.Work, input, false)
 		if err != nil {

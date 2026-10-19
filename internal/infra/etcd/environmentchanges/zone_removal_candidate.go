@@ -11,7 +11,11 @@ import (
 
 // ValidateZoneRemovalCandidate admits only the named Zone omission and removal
 // of that Zone from its consumers. It is independent of Task execution records.
-func ValidateZoneRemovalCandidate(source, candidate projectionrecord.EnvironmentComposeProjection, zoneID, zoneName string, consumers []string) error {
+func ValidateZoneRemovalCandidate(
+	source, candidate projectionrecord.EnvironmentComposeProjection,
+	zoneID, zoneName string,
+	consumers []string,
+) error {
 	if projectionrecord.ValidateEnvironmentComposeProjection(source) != nil ||
 		projectionrecord.ValidateEnvironmentComposeProjection(candidate) != nil ||
 		source.EnvironmentID != candidate.EnvironmentID {

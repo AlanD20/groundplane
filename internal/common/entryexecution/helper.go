@@ -17,8 +17,10 @@ type HelperInput struct {
 }
 
 func OpenHelperRequest(request *agentpb.EntryConfigurationWorkHelperRequest) (HelperInput, error) {
-	if request == nil || proto.Size(request) > executionplan.MaximumPlanBytes || executionplan.RejectUnknown(request) != nil ||
-		request.Assignment == nil || request.Assignment.Attempt == nil {
+	if request == nil || proto.Size(request) > executionplan.MaximumPlanBytes ||
+		executionplan.RejectUnknown(request) != nil ||
+		request.Assignment == nil ||
+		request.Assignment.Attempt == nil {
 		return HelperInput{}, invalidLayout()
 	}
 	claimed := request.Assignment.Attempt
@@ -53,7 +55,10 @@ func OpenHelperRequest(request *agentpb.EntryConfigurationWorkHelperRequest) (He
 		if err != nil || source.Failure.Checkpoint == nil || checkpoint != *source.Failure.Checkpoint {
 			return HelperInput{}, invalidLayout()
 		}
-		return HelperInput{FileInput: FileInput{Attempt: attempt, Procedure: procedure, Progress: boundary, Recovery: &source}, InspectOnly: request.InspectOnly}, nil
+		return HelperInput{
+			FileInput:   FileInput{Attempt: attempt, Procedure: procedure, Progress: boundary, Recovery: &source},
+			InspectOnly: request.InspectOnly,
+		}, nil
 	}
 	if attempt.Direction != workexecution.Forward || request.Report == nil || request.Acknowledgement == nil ||
 		len(request.Assignment.RecoverySource) != 0 || len(request.Assignment.RecoveryBoundary) != 0 {

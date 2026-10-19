@@ -12,9 +12,15 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func buildRestoreWork(prepared preparedRestore, inputID string) (workexecution.Task, workexecution.Item, *agentpb.BackupWorkInput, error) {
+func buildRestoreWork(
+	prepared preparedRestore,
+	inputID string,
+) (workexecution.Task, workexecution.Item, *agentpb.BackupWorkInput, error) {
 	if prepared.Scope == nil || prepared.HostID == "" || prepared.Authority == nil {
-		return workexecution.Task{}, workexecution.Item{}, nil, errs.New(errs.KindValidationFailed, "Restore captured input is incomplete")
+		return workexecution.Task{}, workexecution.Item{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"Restore captured input is incomplete",
+		)
 	}
 	scope := prepared.Scope
 	input := &agentpb.BackupWorkInput{Schema: 1, Operation: agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_RESTORE,

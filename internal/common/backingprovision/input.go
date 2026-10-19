@@ -25,10 +25,18 @@ const MaximumInputBytes = 512 * 1024
 func ValidateInput(planID string, input *agentpb.BackingProvisionInput) error {
 	if input == nil || proto.Size(input) > MaximumInputBytes || executionplan.RejectUnknown(input) != nil ||
 		ids.Validate(ids.KindTask, input.TaskId) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemId) != nil ||
-		ids.Validate(ids.KindOperation, input.OperationId) != nil || ids.Validate(ids.KindService, input.ServiceId) != nil ||
-		ids.Validate(ids.KindHost, input.HostId) != nil || input.CreatedAt == nil || input.CreatedAt.CheckValid() != nil ||
+		ids.Validate(
+			ids.KindOperation,
+			input.OperationId,
+		) != nil || ids.Validate(ids.KindService, input.ServiceId) != nil ||
+		ids.Validate(
+			ids.KindHost,
+			input.HostId,
+		) != nil || input.CreatedAt == nil || input.CreatedAt.CheckValid() != nil ||
 		input.CreatedAt.AsTime().IsZero() || input.Deadline == nil || input.Deadline.CheckValid() != nil ||
-		!input.Deadline.AsTime().After(input.CreatedAt.AsTime()) || input.Deadline.AsTime().Sub(input.CreatedAt.AsTime()) > 24*time.Hour ||
+		!input.Deadline.AsTime().
+			After(input.CreatedAt.AsTime()) ||
+		input.Deadline.AsTime().Sub(input.CreatedAt.AsTime()) > 24*time.Hour ||
 		input.RenderGeneration != 1 || len(input.ManagedVolumeIds) > 1 || len(input.Files) > 1 {
 		return invalid("backing creation input is invalid or exceeds its facade limits")
 	}
@@ -36,15 +44,19 @@ func ValidateInput(planID string, input *agentpb.BackingProvisionInput) error {
 	if err != nil {
 		return err
 	}
-	if scope.ProjectKind != environmentpath.ProjectKindBacking || scope.ProjectID != input.ProjectId || scope.EnvironmentID != input.EnvironmentId {
+	if scope.ProjectKind != environmentpath.ProjectKindBacking || scope.ProjectID != input.ProjectId ||
+		scope.EnvironmentID != input.EnvironmentId {
 		return invalid("backing creation directory differs from its captured Project and Environment")
 	}
 	if err := executionplan.ValidateCapturedArtifact(planID, input.RenderGeneration, input.Runtime); err != nil {
 		return err
 	}
 	runtime := input.Runtime
-	if runtime.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT || runtime.OwnerId != input.EnvironmentId ||
-		runtime.AuthorizedVolumeDir != input.VolumeDirectory || len(runtime.Services) != 1 || len(runtime.Networks) != 1 ||
+	if runtime.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+		runtime.OwnerId != input.EnvironmentId ||
+		runtime.AuthorizedVolumeDir != input.VolumeDirectory ||
+		len(runtime.Services) != 1 ||
+		len(runtime.Networks) != 1 ||
 		len(runtime.Volumes) != len(input.ManagedVolumeIds) {
 		return invalid("backing creation runtime must contain its one Service and shared Zone")
 	}
@@ -74,7 +86,8 @@ func ValidateInput(planID string, input *agentpb.BackingProvisionInput) error {
 		return err
 	}
 	for _, file := range input.Files {
-		if file.ServiceId != "" || file.ServiceName != "" || file.OutputKind != agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_GENERATED_ENV {
+		if file.ServiceId != "" || file.ServiceName != "" ||
+			file.OutputKind != agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_GENERATED_ENV {
 			return invalid("backing creation can materialize only its Service environment file")
 		}
 	}

@@ -27,7 +27,10 @@ func (repository *BackupRuntimeRepository) PrepareDatabaseRestoreProgress(ctx co
 		current.Record.Point.SourceKind != backupruntime.BackupRuntimeSourceAttach {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "database Restore checkpoint authority is invalid")
 	}
-	membership, err := backupruntime.BackupRestoreEnvironmentIndexKey(current.Record.EnvironmentID, view.Work.Task.Task.ID)
+	membership, err := backupruntime.BackupRestoreEnvironmentIndexKey(
+		current.Record.EnvironmentID,
+		view.Work.Task.Task.ID,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -43,7 +46,10 @@ func (repository *BackupRuntimeRepository) PrepareDatabaseRestoreProgress(ctx co
 	defer etcdstore.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "database Restore checkpoint authority is incomplete")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"database Restore checkpoint authority is incomplete",
+			)
 		}
 	}
 	stored, err := backupruntime.DecodeBackupRestoreRecord(read.Values[0].Value)
@@ -79,7 +85,10 @@ func (repository *BackupRuntimeRepository) PrepareDatabaseRestoreProgress(ctx co
 	}
 	backingEnvironmentID, found, err := backupruntime.DatabaseRestoreBackingEnvironmentID(stored)
 	if err != nil || !found {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "database Restore backing guard authority is invalid")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"database Restore backing guard authority is invalid",
+		)
 	}
 	backingGuard, err := postgresbackingguard.PrepareOwnership(
 		ctx,

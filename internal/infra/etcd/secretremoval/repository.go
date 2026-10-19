@@ -35,7 +35,10 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 		return Input{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Secret removal work is invalid")
 	}
 	key := InputKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}
@@ -54,17 +57,27 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 	if err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}
-	if input.TaskID != task.ID || input.WorkItemID != item.ID || input.SecretID != item.TargetID || ref != *item.Input ||
-		task.Action != workexecution.ActionRemove || task.TargetID != input.SecretID ||
+	if input.TaskID != task.ID || input.WorkItemID != item.ID || input.SecretID != item.TargetID ||
+		ref != *item.Input ||
+		task.Action != workexecution.ActionRemove ||
+		task.TargetID != input.SecretID ||
 		task.Scope != (workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID}) {
-		return Input{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Secret removal differs from its captured resource")
+		return Input{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Secret removal differs from its captured resource",
+		)
 	}
 	return input, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
 }
 
 // PrepareDecision removes the captured Secret and encrypted value atomically
 // with work settlement. Abort only releases this action's tombstone.
-func (repository *Repository) PrepareDecision(ctx context.Context, view workqueue.View, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareDecision(
+	ctx context.Context,
+	view workqueue.View,
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	input, capture, err := repository.Load(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -80,9 +93,15 @@ func (repository *Repository) PrepareDecision(ctx context.Context, view workqueu
 		return workqueue.Change{}, errs.New(errs.KindInternal, "Secret removal resource read is missing")
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if read.ReadRevision != view.ReadRevision || len(read.Values) != 3 || read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil ||
-		read.Values[0].ModRevision != input.SecretRevision || read.Values[1].ModRevision != input.ValueRevision {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Secret or encrypted value changed after removal was accepted")
+	if read.ReadRevision != view.ReadRevision || len(read.Values) != 3 || read.Values[0] == nil ||
+		read.Values[1] == nil ||
+		read.Values[2] == nil ||
+		read.Values[0].ModRevision != input.SecretRevision ||
+		read.Values[1].ModRevision != input.ValueRevision {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Secret or encrypted value changed after removal was accepted",
+		)
 	}
 	record, err := secrets.DecodeRecord(read.Values[0].Value)
 	if err != nil {
@@ -109,7 +128,10 @@ func (repository *Repository) PrepareDecision(ctx context.Context, view workqueu
 	}
 	change.Conditions = append(change.Conditions, capture)
 	for index, key := range keys {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision},
+		)
 	}
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: tombstoneKey})
 	if outcome != workexecution.Succeeded {
@@ -145,6 +167,10 @@ func (repository *Repository) PrepareDecision(ctx context.Context, view workqueu
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: value.ModRevision})
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[0]}, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[1]})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[0]},
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[1]},
+	)
 	return change, nil
 }

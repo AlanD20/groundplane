@@ -9,7 +9,13 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareEntryRecovery(ctx context.Context, attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, source entryexecution.Recovery, boundary entryexecution.Progress) (*EntryRecoveryRecord, error) {
+func (journal *Journal) PrepareEntryRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	source entryexecution.Recovery,
+	boundary entryexecution.Progress,
+) (*EntryRecoveryRecord, error) {
 	restoration, err := entryexecution.CaptureRestoration(attempt, input)
 	if err != nil {
 		return nil, err
@@ -33,8 +39,11 @@ func (journal *Journal) PrepareEntryRecovery(ctx context.Context, attempt workex
 	}
 	if previous != nil {
 		old := previous.EntryRecovery
-		if old == nil || !workexecution.SameAssignment(previous.Attempt, attempt) || previous.Attempt.StartedAt == nil || !previous.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
-			!sameEntryRestoration(old.Restoration, captured.Restoration) || !entryexecution.EqualProgress(old.Boundary, captured.Boundary) {
+		if old == nil || !workexecution.SameAssignment(previous.Attempt, attempt) ||
+			previous.Attempt.StartedAt == nil ||
+			!previous.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
+			!sameEntryRestoration(old.Restoration, captured.Restoration) ||
+			!entryexecution.EqualProgress(old.Boundary, captured.Boundary) {
 			return nil, conflict()
 		}
 		left, err := entryexecution.EncodeRecovery(old.Source, input)
@@ -60,7 +69,12 @@ func (journal *Journal) PrepareEntryRecovery(ctx context.Context, attempt workex
 	return state.EntryRecovery, nil
 }
 
-func (journal *Journal) SaveEntryRecoveryReport(ctx context.Context, attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, report entryexecution.RecoveryReport) error {
+func (journal *Journal) SaveEntryRecoveryReport(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	report entryexecution.RecoveryReport,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -74,12 +88,24 @@ func (journal *Journal) SaveEntryRecoveryReport(ctx context.Context, attempt wor
 		return conflict()
 	}
 	recovery := state.EntryRecovery
-	raw, _, err := entryexecution.EncodeRestorationReport(state.Attempt, recovery.Source, recovery.Restoration, recovery.Boundary, report)
+	raw, _, err := entryexecution.EncodeRestorationReport(
+		state.Attempt,
+		recovery.Source,
+		recovery.Restoration,
+		recovery.Boundary,
+		report,
+	)
 	if err != nil {
 		return err
 	}
 	if recovery.Report != nil {
-		previous, _, err := entryexecution.EncodeRestorationReport(state.Attempt, recovery.Source, recovery.Restoration, recovery.Boundary, *recovery.Report)
+		previous, _, err := entryexecution.EncodeRestorationReport(
+			state.Attempt,
+			recovery.Source,
+			recovery.Restoration,
+			recovery.Boundary,
+			*recovery.Report,
+		)
 		if err != nil || !bytes.Equal(previous, raw) {
 			return conflict()
 		}
@@ -89,7 +115,12 @@ func (journal *Journal) SaveEntryRecoveryReport(ctx context.Context, attempt wor
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) AcknowledgeEntryRecovery(ctx context.Context, attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, terminal workexecution.Attempt) error {
+func (journal *Journal) AcknowledgeEntryRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	terminal workexecution.Attempt,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -99,11 +130,15 @@ func (journal *Journal) AcknowledgeEntryRecovery(ctx context.Context, attempt wo
 	if err != nil {
 		return err
 	}
-	if state == nil || state.EntryRecovery == nil || state.EntryRecovery.Report == nil || !matchesEntryRecovery(state, attempt, input) || terminal.FinishedAt == nil || terminal.Result == nil {
+	if state == nil || state.EntryRecovery == nil || state.EntryRecovery.Report == nil ||
+		!matchesEntryRecovery(state, attempt, input) ||
+		terminal.FinishedAt == nil ||
+		terminal.Result == nil {
 		return conflict()
 	}
 	if previous := state.EntryRecovery.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) || *previous.Result != *terminal.Result {
+		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*previous.Result != *terminal.Result {
 			return conflict()
 		}
 		return nil
@@ -112,8 +147,15 @@ func (journal *Journal) AcknowledgeEntryRecovery(ctx context.Context, attempt wo
 	return journal.writeRecord(ctx, *state)
 }
 
-func matchesEntryRecovery(state *attemptRecord, attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput) bool {
-	if state == nil || state.EntryRecovery == nil || !workexecution.SameAssignment(state.Attempt, attempt) || state.Attempt.StartedAt == nil || attempt.StartedAt == nil || !state.Attempt.StartedAt.Equal(*attempt.StartedAt) {
+func matchesEntryRecovery(
+	state *attemptRecord,
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+) bool {
+	if state == nil || state.EntryRecovery == nil || !workexecution.SameAssignment(state.Attempt, attempt) ||
+		state.Attempt.StartedAt == nil ||
+		attempt.StartedAt == nil ||
+		!state.Attempt.StartedAt.Equal(*attempt.StartedAt) {
 		return false
 	}
 	restoration, err := entryexecution.CaptureRestoration(attempt, input)

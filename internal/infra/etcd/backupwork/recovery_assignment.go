@@ -10,7 +10,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (repository *InputRepository) LoadRecoveryAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.BackupRecoveryAssignment, workqueue.Change, error) {
+func (repository *InputRepository) LoadRecoveryAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.BackupRecoveryAssignment, workqueue.Change, error) {
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
 	if !view.CurrentExecutor || !view.ActiveAttempt || !task.PublicationComplete || task.CollectionStartedAt != nil ||
 		task.FinishedAt != nil || (item.Operation != workexecution.BackupPrune && item.Operation != workexecution.Backup && item.Operation != workexecution.Restore) || attempt.Direction != workexecution.Recovery ||
@@ -58,6 +61,10 @@ func (repository *InputRepository) LoadRecoveryAssignment(ctx context.Context, v
 	if err != nil {
 		return nil, workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, progressGuard, keyvalue.Condition{Key: RecoveryKey(item.ID), ModRevision: source.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		progressGuard,
+		keyvalue.Condition{Key: RecoveryKey(item.ID), ModRevision: source.Revision},
+	)
 	return assignment, change, nil
 }

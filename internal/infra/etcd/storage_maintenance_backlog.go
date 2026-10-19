@@ -11,7 +11,11 @@ import (
 
 // Backlog counts native due candidates, not permission to delete authority.
 // Every collection decision remains with its operation owner.
-func (maintenance *StorageMaintenance) cleanupBacklog(ctx context.Context, now time.Time, revision int64) (int64, int64, error) {
+func (maintenance *StorageMaintenance) cleanupBacklog(
+	ctx context.Context,
+	now time.Time,
+	revision int64,
+) (int64, int64, error) {
 	queue, err := workqueue.NewRepository(maintenance.store)
 	if err != nil {
 		return 0, 0, err
@@ -28,7 +32,8 @@ func (maintenance *StorageMaintenance) cleanupBacklog(ctx context.Context, now t
 			if !task.RetainUntil.After(now) {
 				tasks++
 			}
-			if task.CollectionStartedAt != nil || now.Before(task.FinishedAt.Add(maintenance.policy.DiagnosticRetention)) {
+			if task.CollectionStartedAt != nil ||
+				now.Before(task.FinishedAt.Add(maintenance.policy.DiagnosticRetention)) {
 				continue
 			}
 			expired, err := executiondiagnostics.TaskExpired(ctx, maintenance.store, candidate.Task, revision)

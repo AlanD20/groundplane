@@ -18,11 +18,25 @@ type NetworkRecoveryRecord struct {
 
 func (record attemptRecord) validateNetworkRecovery() error {
 	recovery := record.NetworkRecovery
-	if recovery == nil || record.Network != nil || record.Volume != nil || record.VolumeRecovery != nil || record.AttachRecovery != nil || record.AttachFailure != nil || record.AttachRemoval != nil ||
-		record.EnvironmentFailure != nil || record.EnvironmentRemoval != nil || record.ScriptFailure != nil || record.ScriptRecovery != nil ||
-		record.ScriptCompletion != nil || record.Release != nil || record.Effect != nil || record.Completion != nil ||
-		record.Failure != nil || record.Recovery != nil || len(record.Script) != 0 || record.Sequence != 0 ||
-		record.Attempt.StartedAt == nil || recovery.Source.ValidateFor(record.Attempt) != nil || recovery.Source.Failure.Checkpoint == nil {
+	if recovery == nil || record.Network != nil || record.Volume != nil || record.VolumeRecovery != nil ||
+		record.AttachRecovery != nil ||
+		record.AttachFailure != nil ||
+		record.AttachRemoval != nil ||
+		record.EnvironmentFailure != nil ||
+		record.EnvironmentRemoval != nil ||
+		record.ScriptFailure != nil ||
+		record.ScriptRecovery != nil ||
+		record.ScriptCompletion != nil ||
+		record.Release != nil ||
+		record.Effect != nil ||
+		record.Completion != nil ||
+		record.Failure != nil ||
+		record.Recovery != nil ||
+		len(record.Script) != 0 ||
+		record.Sequence != 0 ||
+		record.Attempt.StartedAt == nil ||
+		recovery.Source.ValidateFor(record.Attempt) != nil ||
+		recovery.Source.Failure.Checkpoint == nil {
 		return invalid()
 	}
 	checkpoint, err := recovery.Boundary.Checkpoint(recovery.Source.Forward, recovery.Action, recovery.NetworkID)
@@ -41,14 +55,25 @@ func (record attemptRecord) validateNetworkRecovery() error {
 	if recovery.Failure != nil {
 		return invalid()
 	}
-	_, evidence, err := networkexecution.EncodeRecoveryReport(record.Attempt, recovery.Source, recovery.Action, recovery.NetworkID, recovery.Boundary, *recovery.Report)
+	_, evidence, err := networkexecution.EncodeRecoveryReport(
+		record.Attempt,
+		recovery.Source,
+		recovery.Action,
+		recovery.NetworkID,
+		recovery.Boundary,
+		*recovery.Report,
+	)
 	if err != nil || !record.UpdatedAt.Equal(recovery.Report.Observation.At) {
 		return invalid()
 	}
 	if terminal := recovery.Receipt; terminal != nil {
-		if terminal.Validate() != nil || !workexecution.SameAssignment(record.Attempt, *terminal) || terminal.FinishedAt == nil ||
-			terminal.StartedAt == nil || !terminal.StartedAt.Equal(*record.Attempt.StartedAt) || terminal.FinishedAt.Before(record.UpdatedAt) ||
-			terminal.Result == nil || *terminal.Result != evidence ||
+		if terminal.Validate() != nil || !workexecution.SameAssignment(record.Attempt, *terminal) ||
+			terminal.FinishedAt == nil ||
+			terminal.StartedAt == nil ||
+			!terminal.StartedAt.Equal(*record.Attempt.StartedAt) ||
+			terminal.FinishedAt.Before(record.UpdatedAt) ||
+			terminal.Result == nil ||
+			*terminal.Result != evidence ||
 			terminal.Outcome != workexecution.Succeeded {
 			return invalid()
 		}
@@ -61,12 +86,17 @@ func validateNetworkRecoveryFailure(attempt workexecution.Attempt, failure *Netw
 		return invalid()
 	}
 	if terminal := failure.Receipt; terminal != nil {
-		if terminal.Validate() != nil || !workexecution.SameAssignment(attempt, *terminal) || terminal.FinishedAt == nil || terminal.Result == nil ||
-			terminal.Outcome == workexecution.Succeeded || terminal.StartedAt == nil || !terminal.StartedAt.Equal(*attempt.StartedAt) {
+		if terminal.Validate() != nil || !workexecution.SameAssignment(attempt, *terminal) ||
+			terminal.FinishedAt == nil ||
+			terminal.Result == nil ||
+			terminal.Outcome == workexecution.Succeeded ||
+			terminal.StartedAt == nil ||
+			!terminal.StartedAt.Equal(*attempt.StartedAt) {
 			return invalid()
 		}
 		saved, err := networkexecution.DecodeFailure(*terminal, failure.Evidence, *terminal.Result)
-		if err != nil || saved.Reason != failure.Reason || saved.Checkpoint != nil || !saved.RecordedAt.Equal(*terminal.FinishedAt) {
+		if err != nil || saved.Reason != failure.Reason || saved.Checkpoint != nil ||
+			!saved.RecordedAt.Equal(*terminal.FinishedAt) {
 			return invalid()
 		}
 	} else if len(failure.Evidence) != 0 {

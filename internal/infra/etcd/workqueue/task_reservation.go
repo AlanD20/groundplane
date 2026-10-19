@@ -59,12 +59,18 @@ func PrepareTaskReservation(task workexecution.Task, claim workexecution.Claim) 
 		return Change{}, err
 	}
 	key, index := TaskReservationKey(claim), taskReservationIndexKey(task.ID)
-	return Change{Conditions: []keyvalue.Condition{{Key: TaskKey(task.ID)}, {Key: key}, {Key: index}, {Key: ClaimKey(claim)}},
+	return Change{
+		Conditions: []keyvalue.Condition{{Key: TaskKey(task.ID)}, {Key: key}, {Key: index}, {Key: ClaimKey(claim)}},
 		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value},
-			{Type: keyvalue.MutationPut, Key: index, Value: append([]byte(nil), value...)}}}, nil
+			{Type: keyvalue.MutationPut, Key: index, Value: append([]byte(nil), value...)}},
+	}, nil
 }
 
-func (repository *Repository) readTaskReservations(ctx context.Context, task workexecution.Task, revision int64) ([]TaskReservationSnapshot, error) {
+func (repository *Repository) readTaskReservations(
+	ctx context.Context,
+	task workexecution.Task,
+	revision int64,
+) ([]TaskReservationSnapshot, error) {
 	if task.Scope.EnvironmentID == "" {
 		return nil, nil
 	}
@@ -80,7 +86,8 @@ func (repository *Repository) readTaskReservations(ctx context.Context, task wor
 		snapshot := TaskReservationSnapshot{Claim: claim}
 		if value := read.Values[index]; value != nil {
 			reservation, err := recordcodec.Decode[TaskReservation](value.Value, "execution_task_reservation")
-			if err != nil || reservation.validate() != nil || reservation.Claim != claim || value.Key != keys[index] || value.ModRevision <= 0 {
+			if err != nil || reservation.validate() != nil || reservation.Claim != claim || value.Key != keys[index] ||
+				value.ModRevision <= 0 {
 				return nil, corrupt()
 			}
 			snapshot.Owner, snapshot.Revision = &reservation, value.ModRevision
@@ -90,7 +97,11 @@ func (repository *Repository) readTaskReservations(ctx context.Context, task wor
 	return snapshots, nil
 }
 
-func taskReservationConditions(task workexecution.Task, item workexecution.Item, snapshots []TaskReservationSnapshot) ([]keyvalue.Condition, error) {
+func taskReservationConditions(
+	task workexecution.Task,
+	item workexecution.Item,
+	snapshots []TaskReservationSnapshot,
+) ([]keyvalue.Condition, error) {
 	count := 0
 	if task.Scope.EnvironmentID != "" {
 		count = 1
@@ -100,7 +111,8 @@ func taskReservationConditions(task workexecution.Task, item workexecution.Item,
 	}
 	conditions := make([]keyvalue.Condition, len(snapshots))
 	for index, snapshot := range snapshots {
-		if snapshot.Claim != (workexecution.Claim{ScopeID: task.Scope.EnvironmentID}) || snapshot.Revision < 0 || (snapshot.Owner == nil) != (snapshot.Revision == 0) {
+		if snapshot.Claim != (workexecution.Claim{ScopeID: task.Scope.EnvironmentID}) || snapshot.Revision < 0 ||
+			(snapshot.Owner == nil) != (snapshot.Revision == 0) {
 			return nil, invalid("Task reservation snapshot is invalid")
 		}
 		if owner := snapshot.Owner; owner != nil {
@@ -120,7 +132,8 @@ func taskReservationConditions(task workexecution.Task, item workexecution.Item,
 // Timeout, disconnection or diagnostic retention cannot release it. A Task with
 // unresolved restoration retains its reservation while unrelated scopes run.
 func (repository *Repository) prepareTaskReservationRelease(ctx context.Context, task TaskSnapshot) (Change, error) {
-	if task.Task.Validate() != nil || task.Revision <= 0 || !task.Task.PublicationComplete || task.Task.Progress.Unsettled() != 0 {
+	if task.Task.Validate() != nil || task.Revision <= 0 || !task.Task.PublicationComplete ||
+		task.Task.Progress.Unsettled() != 0 {
 		return Change{}, invalid("Task reservation release requires fully settled published work")
 	}
 	index := taskReservationIndexKey(task.Task.ID)
@@ -133,7 +146,8 @@ func (repository *Repository) prepareTaskReservationRelease(ctx context.Context,
 		return Change{Conditions: []keyvalue.Condition{{Key: index}}}, nil
 	}
 	reservation, err := recordcodec.Decode[TaskReservation](read.Values[0].Value, "execution_task_reservation")
-	if err != nil || reservation.validate() != nil || reservation.TaskID != task.Task.ID || reservation.Intent != task.Task.Intent {
+	if err != nil || reservation.validate() != nil || reservation.TaskID != task.Task.ID ||
+		reservation.Intent != task.Task.Intent {
 		return Change{}, corrupt()
 	}
 	key := TaskReservationKey(reservation.Claim)
@@ -150,6 +164,12 @@ func (repository *Repository) prepareTaskReservationRelease(ctx context.Context,
 		return Change{}, corrupt()
 	}
 	return Change{Conditions: []keyvalue.Condition{{Key: index, ModRevision: read.Values[0].ModRevision},
-		{Key: key, ModRevision: resource.Values[0].ModRevision}, {Key: TaskKey(task.Task.ID), ModRevision: task.Revision}},
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: key}, {Type: keyvalue.MutationDelete, Key: index}}}, nil
+		{
+			Key:         key,
+			ModRevision: resource.Values[0].ModRevision,
+		}, {Key: TaskKey(task.Task.ID), ModRevision: task.Revision}},
+		Mutations: []keyvalue.Mutation{
+			{Type: keyvalue.MutationDelete, Key: key},
+			{Type: keyvalue.MutationDelete, Key: index},
+		}}, nil
 }

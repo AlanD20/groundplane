@@ -27,12 +27,16 @@ func (repository *InputRepository) PreparePublication(ctx context.Context, view 
 	}
 	for _, dependency := range dependencies {
 		if dependency.Revision > view.ReadRevision {
-			return workexecution.Input{}, workqueue.Change{}, conflict("Component dependency is newer than the captured preparation snapshot")
+			return workexecution.Input{}, workqueue.Change{}, conflict(
+				"Component dependency is newer than the captured preparation snapshot",
+			)
 		}
 	}
 	activation := workqueue.Change{}
 	if (capture.Secrets == nil) != secrets.IsZero() {
-		return workexecution.Input{}, workqueue.Change{}, conflict("Component input must publish its captured Secret retention")
+		return workexecution.Input{}, workqueue.Change{}, conflict(
+			"Component input must publish its captured Secret retention",
+		)
 	}
 	if !secrets.IsZero() {
 		binding, err := secrets.Binding()
@@ -40,7 +44,9 @@ func (repository *InputRepository) PreparePublication(ctx context.Context, view 
 			return workexecution.Input{}, workqueue.Change{}, err
 		}
 		if binding != *capture.Secrets {
-			return workexecution.Input{}, workqueue.Change{}, conflict("Component Secret preparation differs from captured membership")
+			return workexecution.Input{}, workqueue.Change{}, conflict(
+				"Component Secret preparation differs from captured membership",
+			)
 		}
 		fragment, err := tasksecretpins.Activation(secrets)
 		if err != nil {

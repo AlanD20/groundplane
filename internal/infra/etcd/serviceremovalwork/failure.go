@@ -18,22 +18,31 @@ func RecoveryKey(workID string) string { return "/v1/execution/service-removal/r
 // PrepareFailure records the original failure and the captured boundary in the
 // same transaction as attempt completion. Any removed member or in-flight effect
 // keeps the deletion fence and claims until operation-owned recovery settles it.
-func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue.ResumeView,
-	delivery *agentpb.ServiceLifecycleWorkInput, reason lifecycleexecution.FailureReason, at time.Time, interrupted bool,
+func (repository *Repository) PrepareFailure(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	delivery *agentpb.ServiceLifecycleWorkInput,
+	reason lifecycleexecution.FailureReason,
+	at time.Time,
+	interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
 	task, item, attempt := view.Work.Task.Task, view.Work.Item.Item, view.Attempt.Attempt
 	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 ||
 		attempt.FinishedAt != nil || attempt.Direction != workexecution.Forward ||
 		item.Operation != workexecution.ServiceRemoval || !task.PublicationComplete || task.CollectionStartedAt != nil ||
 		interrupted && reason != lifecycleexecution.ExecutionInterrupted {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Service removal failure does not own active execution")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Service removal failure does not own active execution",
+		)
 	}
 	input, capture, err := repository.Load(ctx, view.Work)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	if !matchesDelivery(input, delivery) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Service removal failure differs from its captured runtime")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Service removal failure differs from its captured runtime",
+		)
 	}
 	continuation, continuationGuard, err := repository.LoadContinuation(ctx, view.Work, attempt, delivery)
 	if err != nil {
@@ -51,8 +60,12 @@ func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
-	if progress != nil && progress.BeganAt == nil && len(progress.Completed) == len(delivery.Members) && task.Stop == nil && !item.ForwardRevoked {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("completed service removal must settle its saved result")
+	if progress != nil && progress.BeganAt == nil && len(progress.Completed) == len(delivery.Members) &&
+		task.Stop == nil &&
+		!item.ForwardRevoked {
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"completed service removal must settle its saved result",
+		)
 	}
 	// No stage can execute without its durable before-effect checkpoint grant.
 	settled := inherited == 0 && (progress == nil || progress.BeganAt == nil && len(progress.Completed) == 0)
@@ -96,7 +109,10 @@ func (repository *Repository) PrepareFailure(ctx context.Context, view workqueue
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	source := lifecycleexecution.Recovery{Forward: finished, Failure: failure, Evidence: evidence, Progress: progress}
-	encoded, err := EncodeRecoveryCapture(delivery, removalexecution.RecoveryCapture{Source: source, Continuation: continuation})
+	encoded, err := EncodeRecoveryCapture(
+		delivery,
+		removalexecution.RecoveryCapture{Source: source, Continuation: continuation},
+	)
 	if err != nil {
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, workexecution.Completion{}, err

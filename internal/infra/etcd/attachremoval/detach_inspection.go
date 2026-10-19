@@ -24,7 +24,10 @@ func (repository *InputRepository) PrepareDetachInspection(ctx context.Context, 
 		attempt.FinishedAt != nil || attempt.Direction != workexecution.Recovery ||
 		view.Work.Item.Item.Operation != workexecution.Detach || report.ObservedAt.After(at) ||
 		interrupted && report.State != attachexecution.InspectionInterrupted {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "Detach inspection no longer owns its recovery attempt")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Detach inspection no longer owns its recovery attempt",
+		)
 	}
 	input, guards, err := repository.DetachRecoveryInput(ctx, view.Work, attempt)
 	if err != nil {
@@ -52,7 +55,10 @@ func (repository *InputRepository) PrepareDetachInspection(ctx context.Context, 
 		keyvalue.Condition{Key: workqueue.ItemKey(attempt.WorkItemID), ModRevision: view.Work.Item.Revision},
 		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision},
 		keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: WorkInspectionKey(attempt.ID), Value: raw})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: WorkInspectionKey(attempt.ID), Value: raw},
+	)
 	if attempt.StartedAt != nil {
 		checkpoint, err := report.Checkpoint(input)
 		if err != nil {
@@ -77,10 +83,23 @@ func (repository *InputRepository) PrepareDetachInspection(ctx context.Context, 
 				keyvalue.ClearMutationValues(change.Mutations)
 				return workqueue.Change{}, workexecution.Completion{}, recordcodec.CorruptRecord()
 			}
-			acknowledgement := serviceruntimerecord.Acknowledgement{TaskID: attempt.TaskID, WorkItemID: attempt.WorkItemID,
-				AttemptID: attempt.ID, Executor: attempt.Executor, Input: attempt.Input, Checkpoint: checkpoint,
-				RenderGeneration: capture.Input.Snapshot.Runtime.Source.RenderGeneration, AcknowledgedAt: at}
-			settlement, err := repository.prepareConsumerAcknowledgement(ctx, view, capture.Input, acknowledgement, input.Consumer.Candidate)
+			acknowledgement := serviceruntimerecord.Acknowledgement{
+				TaskID:           attempt.TaskID,
+				WorkItemID:       attempt.WorkItemID,
+				AttemptID:        attempt.ID,
+				Executor:         attempt.Executor,
+				Input:            attempt.Input,
+				Checkpoint:       checkpoint,
+				RenderGeneration: capture.Input.Snapshot.Runtime.Source.RenderGeneration,
+				AcknowledgedAt:   at,
+			}
+			settlement, err := repository.prepareConsumerAcknowledgement(
+				ctx,
+				view,
+				capture.Input,
+				acknowledgement,
+				input.Consumer.Candidate,
+			)
 			if err != nil {
 				keyvalue.ClearMutationValues(change.Mutations)
 				return workqueue.Change{}, workexecution.Completion{}, err
@@ -93,7 +112,11 @@ func (repository *InputRepository) PrepareDetachInspection(ctx context.Context, 
 	if report.ExecutionStopped() {
 		outcome = workexecution.Succeeded
 	}
-	return change, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: report.ExecutionStopped()}, nil
+	return change, workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       evidence,
+		EffectsSettled: report.ExecutionStopped(),
+	}, nil
 }
 
 func (repository *InputRepository) PrepareInterruptedDetachInspection(ctx context.Context, view workqueue.ResumeView,
@@ -109,7 +132,10 @@ func (repository *InputRepository) PrepareInterruptedDetachInspection(ctx contex
 	return repository.PrepareDetachInspection(ctx, view, report, at, true)
 }
 
-func (repository *InputRepository) LoadDetachInspection(ctx context.Context, view workqueue.ResumeView) ([]byte, error) {
+func (repository *InputRepository) LoadDetachInspection(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) ([]byte, error) {
 	if view.Work.Item.Item.Operation != workexecution.Detach {
 		return nil, recordcodec.CorruptRecord()
 	}

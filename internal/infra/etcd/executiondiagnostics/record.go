@@ -26,13 +26,18 @@ func Key(attemptID string) string { return "/v1/diagnostics/execution-stages/" +
 
 func (record Record) Validate() error {
 	if ids.Validate(ids.KindTask, record.TaskID) != nil || ids.Validate(ids.KindWorkItem, record.WorkItemID) != nil ||
-		ids.Validate(ids.KindAttempt, record.AttemptID) != nil || record.Sequence == 0 || !recordcodec.IsCanonicalUTC(record.UpdatedAt) ||
+		ids.Validate(
+			ids.KindAttempt,
+			record.AttemptID,
+		) != nil || record.Sequence == 0 || !recordcodec.IsCanonicalUTC(record.UpdatedAt) ||
 		len(record.Stages) == 0 || len(record.Stages) > maximumStages {
 		return invalid()
 	}
 	seen := make(map[string]bool, len(record.Stages))
 	for _, stage := range record.Stages {
-		if stage.Validate() != nil || seen[stage.Key] || stage.StartedAt != nil && stage.StartedAt.After(record.UpdatedAt) || stage.FinishedAt != nil && stage.FinishedAt.After(record.UpdatedAt) {
+		if stage.Validate() != nil || seen[stage.Key] ||
+			stage.StartedAt != nil && stage.StartedAt.After(record.UpdatedAt) ||
+			stage.FinishedAt != nil && stage.FinishedAt.After(record.UpdatedAt) {
 			return invalid()
 		}
 		seen[stage.Key] = true

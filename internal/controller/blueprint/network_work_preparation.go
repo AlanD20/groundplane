@@ -62,10 +62,14 @@ func (owner *NetworkWorkPreparation) Prepare(ctx context.Context, taskID, workID
 		if captured.ID != item.ID {
 			continue
 		}
-		if captured.TaskID != item.TaskID || captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
-			captured.Placement != item.Placement || !slices.Equal(captured.Dependencies, item.Dependencies) ||
-			!slices.Equal(captured.Claims, item.Claims) || captured.Input != nil ||
-			!captured.CreatedAt.Equal(item.CreatedAt) || !captured.Deadline.Equal(item.Deadline) {
+		if captured.TaskID != item.TaskID || captured.Operation != item.Operation ||
+			captured.TargetID != item.TargetID ||
+			captured.Placement != item.Placement ||
+			!slices.Equal(captured.Dependencies, item.Dependencies) ||
+			!slices.Equal(captured.Claims, item.Claims) ||
+			captured.Input != nil ||
+			!captured.CreatedAt.Equal(item.CreatedAt) ||
+			!captured.Deadline.Equal(item.Deadline) {
 			return errs.New(errs.KindStateConflict, "Blueprint Network work differs from its accepted graph")
 		}
 		unit = &graph.Record.Units[index]
@@ -95,11 +99,21 @@ func (owner *NetworkWorkPreparation) Prepare(ctx context.Context, taskID, workID
 	if err != nil {
 		return err
 	}
-	guards = append(guards,
-		keyvalue.Condition{Key: blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID), ModRevision: graph.Revision},
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID), ModRevision: snapshot.HeadRevision},
+	guards = append(
+		guards,
+		keyvalue.Condition{
+			Key:         blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID),
+			ModRevision: graph.Revision,
+		},
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID),
+			ModRevision: snapshot.HeadRevision,
+		},
 		keyvalue.Condition{Key: blueprintunits.EpochKey(task.Scope.EnvironmentID), ModRevision: snapshot.EpochRevision},
-		keyvalue.Condition{Key: blueprintunits.DesiredPlanKey(task.Scope.EnvironmentID), ModRevision: snapshot.Desired.Revision},
+		keyvalue.Condition{
+			Key:         blueprintunits.DesiredPlanKey(task.Scope.EnvironmentID),
+			ModRevision: snapshot.Desired.Revision,
+		},
 	)
 	change, err := owner.inputs.PrepareBlueprintInput(ctx, work, input, dependencies, guards, time.Now().UTC())
 	if err != nil {

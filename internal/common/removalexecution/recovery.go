@@ -17,7 +17,8 @@ type RecoveryCapture struct {
 }
 
 func (capture RecoveryCapture) Validate(input *agentpb.ServiceLifecycleWorkInput) error {
-	if input == nil || input.Action != agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_DESTROY || input.Hook != nil {
+	if input == nil || input.Action != agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_DESTROY ||
+		input.Hook != nil {
 		return invalid()
 	}
 	if err := capture.Source.Validate(input); err != nil {
@@ -36,7 +37,10 @@ func (capture RecoveryCapture) Validate(input *agentpb.ServiceLifecycleWorkInput
 	return nil
 }
 
-func (capture RecoveryCapture) ValidateFor(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput) error {
+func (capture RecoveryCapture) ValidateFor(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+) error {
 	if err := capture.Validate(input); err != nil {
 		return err
 	}
@@ -50,5 +54,8 @@ func (capture RecoveryCapture) ValidateFor(attempt workexecution.Attempt, input 
 }
 
 func invalid() error {
-	return errs.New(errs.KindStateConflict, "Service removal restoration does not match its captured failure or acknowledged recovery step")
+	return errs.New(
+		errs.KindStateConflict,
+		"Service removal restoration does not match its captured failure or acknowledged recovery step",
+	)
 }

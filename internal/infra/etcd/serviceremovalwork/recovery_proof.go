@@ -24,7 +24,9 @@ func (repository *Repository) PrepareRecoveryProof(ctx context.Context, view wor
 		attempt.StartedAt == nil || attempt.FinishedAt != nil || workexecution.ValidateDelivery(item, attempt) != nil ||
 		!task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
 		view.Checkpoint.Record == nil || view.Checkpoint.Revision <= 0 || at.IsZero() || at.Location() != time.UTC {
-		return Input{}, workexecution.Checkpoint{}, workqueue.Change{}, conflict("Service removal recovery has no active acknowledged restoration")
+		return Input{}, workexecution.Checkpoint{}, workqueue.Change{}, conflict(
+			"Service removal recovery has no active acknowledged restoration",
+		)
 	}
 	input, captureGuard, err := repository.Load(ctx, view.Work)
 	if err != nil {
@@ -41,7 +43,9 @@ func (repository *Repository) PrepareRecoveryProof(ctx context.Context, view wor
 	checkpoint := *view.Checkpoint.Record
 	if progress.Phase != removalexecution.Complete ||
 		progress.InFlight || progress.UpdatedAt.After(at) {
-		return Input{}, workexecution.Checkpoint{}, workqueue.Change{}, conflict("Service removal restoration has not reached its final verification step")
+		return Input{}, workexecution.Checkpoint{}, workqueue.Change{}, conflict(
+			"Service removal restoration has not reached its final verification step",
+		)
 	}
 	conditions, err := repository.RuntimeGuards(ctx, input, view.Work.ReadRevision)
 	if err != nil {

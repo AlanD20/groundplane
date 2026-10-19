@@ -46,7 +46,10 @@ func (service *AgentWork) StreamConfigRestore(
 	ctx, cancel := context.WithDeadline(ctx, time.Unix(0, int64(step.StepDeadlineUnixNano)))
 	defer cancel()
 	content := config.GetExpectedArchive().GetContent()
-	owner, err := configRestoreTransferOwner(backupconfiguration.ConfigTransferOwner{Binding: binding}, step.GetRestore())
+	owner, err := configRestoreTransferOwner(
+		backupconfiguration.ConfigTransferOwner{Binding: binding},
+		step.GetRestore(),
+	)
 	if err != nil {
 		return err
 	}

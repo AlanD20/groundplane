@@ -19,7 +19,10 @@ func (repository *InputRepository) preserveConfigHeadReceipt(ctx context.Context
 		current.ConfigProgress == nil || current.ConfigProgress.PublishedHeadRevision != 0 {
 		return current, nil, nil
 	}
-	keys := []string{backupruntime.BackupRestoreKey(current.TaskID), blueprints.EnvironmentBlueprintHeadKey(current.EnvironmentID)}
+	keys := []string{
+		backupruntime.BackupRestoreKey(current.TaskID),
+		blueprints.EnvironmentBlueprintHeadKey(current.EnvironmentID),
+	}
 	read, err := repository.readSettlementKeys(ctx, keys, revision)
 	if err != nil {
 		return backupruntime.BackupRestoreRecord{}, nil, err
@@ -48,7 +51,9 @@ func (repository *InputRepository) preserveConfigHeadReceipt(ctx context.Context
 	if head != current.TaskID || current.State != backupruntime.BackupRestoreApplyingUpserts ||
 		progress.DeleteEntryOrdinal != progress.DeleteEntryCount || progress.UpsertEntryOrdinal != current.Point.ConfigArchive.EntryCount ||
 		read.Values[1].ModRevision != read.Values[0].ModRevision || read.Values[1].ModRevision <= progress.RevisionRootRevision {
-		return backupruntime.BackupRestoreRecord{}, nil, conflict("Config Restore head lacks its exact publication commit")
+		return backupruntime.BackupRestoreRecord{}, nil, conflict(
+			"Config Restore head lacks its exact publication commit",
+		)
 	}
 	next := backupruntime.CloneBackupRestoreRecord(current)
 	next.State = backupruntime.BackupRestoreCanonicalComplete

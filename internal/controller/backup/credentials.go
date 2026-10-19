@@ -25,7 +25,13 @@ import (
 )
 
 type backupSecretEvidenceReader interface {
-	ResolveWorkSecretEvidence(context.Context, *workqueue.Repository, agentregistration.WorkAuthorization, *agentpb.WorkAttemptIdentity, uint32) (backupsecrets.WorkEvidence, error)
+	ResolveWorkSecretEvidence(
+		context.Context,
+		*workqueue.Repository,
+		agentregistration.WorkAuthorization,
+		*agentpb.WorkAttemptIdentity,
+		uint32,
+	) (backupsecrets.WorkEvidence, error)
 }
 
 // BackupSecretResolver converts one fixed-revision durable evidence snapshot

@@ -12,7 +12,11 @@ import (
 // AuthorizeDelete records the single remote-delete grant for this attempt before
 // contacting the provider. Reconnection may inspect absence but cannot obtain a
 // second grant. Only an explicitly admitted new attempt can retry the deletion.
-func (repository *Repository) AuthorizeDelete(ctx context.Context, execution Execution, identity backupruntime.BackupObjectIdentity) error {
+func (repository *Repository) AuthorizeDelete(
+	ctx context.Context,
+	execution Execution,
+	identity backupruntime.BackupObjectIdentity,
+) error {
 	if repository == nil || repository.store == nil {
 		return errs.New(errs.KindInternal, "backup cleanup storage is unavailable")
 	}
@@ -59,7 +63,11 @@ func (repository *Repository) AuthorizeDelete(ctx context.Context, execution Exe
 	defer clear(value)
 	conditions = append(conditions, local.conditions...)
 	conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: read.Entry.ModRevision})
-	result, err := repository.store.Transact(ctx, conditions, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}})
+	result, err := repository.store.Transact(
+		ctx,
+		conditions,
+		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}},
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return err

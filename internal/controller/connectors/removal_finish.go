@@ -10,7 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *RemovalWork) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
+func (owner *RemovalWork) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	_ time.Time,
+) (workqueue.Change, error) {
 	if finished.Task.Task.ExpectedItems != 1 || len(finished.Items) != 1 {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Connector removal requires one settled decision")
 	}
@@ -19,7 +23,10 @@ func (owner *RemovalWork) PrepareFinish(ctx context.Context, finished workqueue.
 		item.Item.ActiveAttemptID != "" || item.Item.Cleanup != workexecution.CleanupNone {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Connector removal decision has not settled")
 	}
-	_, capture, err := owner.records.Load(ctx, workqueue.View{Task: finished.Task, Item: item, ReadRevision: finished.ReadRevision})
+	_, capture, err := owner.records.Load(
+		ctx,
+		workqueue.View{Task: finished.Task, Item: item, ReadRevision: finished.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

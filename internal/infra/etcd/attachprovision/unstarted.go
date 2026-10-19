@@ -27,7 +27,11 @@ type UnstartedResult struct {
 // PrepareUnstarted closes prepared provisioning that never received permission
 // to execute. Its pending binding remains visible as failed, with captured facts
 // and references retained; this is not a claim that a database was removed.
-func (repository *InputRepository) PrepareUnstarted(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareUnstarted(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if item.Operation != workexecution.Attach || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
 		item.Cleanup != workexecution.CleanupNone || item.Input == nil || !task.PublicationComplete ||
@@ -69,7 +73,12 @@ func (repository *InputRepository) PrepareUnstarted(ctx context.Context, view wo
 	digest := sha256.Sum256(value)
 	change, err := workqueue.PrepareUnstartedSettlement(view.Task, view.Item, workexecution.Completion{
 		Outcome: outcome, EffectsSettled: true, Evidence: workexecution.Input{
-			ID: ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "attach-provision-unstarted"), SHA256: hex.EncodeToString(digest[:]),
+			ID: ids.DeriveAt(
+				ids.KindPlan,
+				item.CreatedAt,
+				item.ID,
+				"attach-provision-unstarted",
+			), SHA256: hex.EncodeToString(digest[:]),
 		},
 	}, at)
 	if err != nil {
@@ -80,7 +89,10 @@ func (repository *InputRepository) PrepareUnstarted(ctx context.Context, view wo
 	change.Conditions = append(change.Conditions, binding.Conditions...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: UnstartedKey(item.ID)})
 	change.Mutations = append(change.Mutations, binding.Mutations...)
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: UnstartedKey(item.ID), Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: UnstartedKey(item.ID), Value: value},
+	)
 	transferred = true
 	return change, nil
 }

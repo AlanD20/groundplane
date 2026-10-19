@@ -26,19 +26,29 @@ type WorkReports struct {
 	diagnostics *executiondiagnostics.Repository
 }
 
-func NewWorkReports(queue *workqueue.Repository, records *backingprovisionwork.Repository, files CapturedFileReader, hooks CreationHookResolver,
+func NewWorkReports(
+	queue *workqueue.Repository,
+	records *backingprovisionwork.Repository,
+	files CapturedFileReader,
+	hooks CreationHookResolver,
 	diagnostics *executiondiagnostics.Repository,
 ) (*WorkReports, error) {
 	if queue == nil || records == nil || files == nil || hooks == nil || diagnostics == nil {
-		return nil, errs.New(errs.KindInternal, "backing creation reporting requires native execution and diagnostic storage")
+		return nil, errs.New(
+			errs.KindInternal,
+			"backing creation reporting requires native execution and diagnostic storage",
+		)
 	}
 	return &WorkReports{queue: queue, records: records, files: files, hooks: hooks, diagnostics: diagnostics}, nil
 }
 
-func (service *WorkReports) CheckpointBackingProvision(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *WorkReports) CheckpointBackingProvision(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.BackingProvisionCheckpointRequest,
 ) (*agentpb.BackingProvisionCheckpointAck, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Progress) == 0 || len(request.Progress) > backingprovision.MaximumProgressBytes {
+	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Progress) == 0 ||
+		len(request.Progress) > backingprovision.MaximumProgressBytes {
 		return nil, errs.New(errs.KindValidationFailed, "backing creation checkpoint is missing or oversized")
 	}
 	guards, err := authorization.Conditions()
@@ -74,7 +84,10 @@ func (service *WorkReports) CheckpointBackingProvision(ctx context.Context, auth
 			return nil, err
 		}
 		if !current {
-			return nil, errs.New(errs.KindStateConflict, "backing creation was superseded before its next execution stage")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"backing creation was superseded before its next execution stage",
+			)
 		}
 		guards = append(guards, source.Conditions...)
 	}
@@ -89,14 +102,21 @@ func (service *WorkReports) CheckpointBackingProvision(ctx context.Context, auth
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "backing creation checkpoint ownership changed; resend the saved report")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"backing creation checkpoint ownership changed; resend the saved report",
+		)
 	}
 	service.reportProgress(ctx, view, layout, progress)
 	evidence, err := encodeBackingReference(checkpoint.Evidence)
 	if err != nil {
 		return nil, err
 	}
-	return &agentpb.BackingProvisionCheckpointAck{Attempt: proto.CloneOf(request.Attempt), Progress: append([]byte(nil), request.Progress...), Evidence: evidence}, nil
+	return &agentpb.BackingProvisionCheckpointAck{
+		Attempt:  proto.CloneOf(request.Attempt),
+		Progress: append([]byte(nil), request.Progress...),
+		Evidence: evidence,
+	}, nil
 }
 
 func (service *WorkReports) reportView(ctx context.Context, authorization agentregistration.WorkAuthorization,
@@ -110,9 +130,15 @@ func (service *WorkReports) reportView(ctx context.Context, authorization agentr
 	if err != nil {
 		return workqueue.ResumeView{}, err
 	}
-	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || requireStarted && view.Attempt.Attempt.StartedAt == nil ||
-		view.Work.Item.Item.Operation != workexecution.BackingProvision || !view.Work.Task.Task.PublicationComplete || view.Work.Task.Task.CollectionStartedAt != nil {
-		return workqueue.ResumeView{}, errs.New(errs.KindStateConflict, "backing creation report has no retained captured execution")
+	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
+		requireStarted && view.Attempt.Attempt.StartedAt == nil ||
+		view.Work.Item.Item.Operation != workexecution.BackingProvision ||
+		!view.Work.Task.Task.PublicationComplete ||
+		view.Work.Task.Task.CollectionStartedAt != nil {
+		return workqueue.ResumeView{}, errs.New(
+			errs.KindStateConflict,
+			"backing creation report has no retained captured execution",
+		)
 	}
 	return view, nil
 }

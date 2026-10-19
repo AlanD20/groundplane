@@ -12,7 +12,10 @@ import (
 // PrepareAssignment joins captured resource ownership to the scheduler's claim,
 // dependency, executor and capacity decision. It grants no execution by itself.
 // Recovery deliberately does not use this forward-only admission function.
-func (repository *Repository) PrepareAssignment(ctx context.Context, view workqueue.View) (Input, workqueue.Change, error) {
+func (repository *Repository) PrepareAssignment(
+	ctx context.Context,
+	view workqueue.View,
+) (Input, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if view.Task.Revision <= 0 || view.Item.Revision <= 0 || task.Stop != nil ||
 		task.CollectionStartedAt != nil || item.ForwardRevoked || item.Phase != workexecution.Ready ||
@@ -35,7 +38,11 @@ func (repository *Repository) PrepareAssignment(ctx context.Context, view workqu
 // effect. A grant queued before an edit must not execute against a newer head.
 // Completed observations and recovery deliberately do not use this guard: they
 // must account for effects already authorized, even after forward revocation.
-func (repository *Repository) PrepareForwardBoundary(ctx context.Context, view workqueue.View, input Input) (workqueue.Change, error) {
+func (repository *Repository) PrepareForwardBoundary(
+	ctx context.Context,
+	view workqueue.View,
+	input Input,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
 		!task.PublicationComplete || item.ForwardRevoked || item.Operation != workexecution.ServiceRemoval ||
@@ -67,7 +74,9 @@ func (repository *Repository) PrepareForwardBoundary(ctx context.Context, view w
 			revision = read.Values[0].ModRevision
 		}
 		if revision != input.HeadRevision {
-			return workqueue.Change{}, conflict("Environment changed after Service removal was requested; no new removal step was started")
+			return workqueue.Change{}, conflict(
+				"Environment changed after Service removal was requested; no new removal step was started",
+			)
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: revision})
 	}

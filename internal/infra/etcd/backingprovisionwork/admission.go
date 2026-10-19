@@ -18,7 +18,10 @@ import (
 // forward grants. The initial epoch and this input are published in the SAME
 // facade transaction; its actual revision is the captured desired-state fence.
 // Updating runtime observations alone does not advance that desired epoch.
-func (repository *Repository) ReadAdmission(ctx context.Context, view workqueue.View) (Input, workqueue.Change, bool, error) {
+func (repository *Repository) ReadAdmission(
+	ctx context.Context,
+	view workqueue.View,
+) (Input, workqueue.Change, bool, error) {
 	input, guard, err := repository.Load(ctx, view)
 	if err != nil {
 		return Input{}, workqueue.Change{}, false, err
@@ -35,9 +38,17 @@ func (repository *Repository) ReadAdmission(ctx context.Context, view workqueue.
 	}
 	keys := []string{hierarchy.ProjectKey(procedure.ProjectId), hierarchy.EnvironmentKey(procedure.EnvironmentId),
 		services.ServiceRuntimeKey(procedure.ServiceId), hierarchy.EnvironmentMutationEpochKey(procedure.EnvironmentId),
-		blueprints.EnvironmentBlueprintHeadKey(procedure.EnvironmentId), hierarchy.EnvironmentOperationLockKey(procedure.EnvironmentId),
-		deletions.TombstoneKey("project", procedure.ProjectId), deletions.TombstoneKey("environment", procedure.EnvironmentId),
-		deletions.TombstoneKey("service", procedure.ServiceId), deletions.TombstoneKey("zone", procedure.Runtime.Networks[0].NetworkId)}
+		blueprints.EnvironmentBlueprintHeadKey(
+			procedure.EnvironmentId,
+		), hierarchy.EnvironmentOperationLockKey(procedure.EnvironmentId),
+		deletions.TombstoneKey(
+			"project",
+			procedure.ProjectId,
+		), deletions.TombstoneKey("environment", procedure.EnvironmentId),
+		deletions.TombstoneKey(
+			"service",
+			procedure.ServiceId,
+		), deletions.TombstoneKey("zone", procedure.Runtime.Networks[0].NetworkId)}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: view.ReadRevision})
 	if err != nil {
 		return Input{}, workqueue.Change{}, false, err
@@ -61,7 +72,10 @@ func (repository *Repository) ReadAdmission(ctx context.Context, view workqueue.
 			current = false
 		}
 		if index == 5 && value != nil {
-			return Input{}, workqueue.Change{}, false, errs.New(errs.KindResourceInUse, "backing creation is blocked by another Environment operation")
+			return Input{}, workqueue.Change{}, false, errs.New(
+				errs.KindResourceInUse,
+				"backing creation is blocked by another Environment operation",
+			)
 		}
 		if index >= 6 && value != nil {
 			current = false
@@ -92,12 +106,20 @@ func (repository *Repository) ReadAdmission(ctx context.Context, view workqueue.
 	if err != nil {
 		return Input{}, workqueue.Change{}, false, err
 	}
-	if project.ID != procedure.ProjectId || project.Kind != hierarchy.ProjectKindBacking || project.TenantID != "" || project.DeletionTaskID != "" ||
-		environment.ID != procedure.EnvironmentId || environment.ProjectID != project.ID || environment.CreateTaskID != procedure.TaskId ||
-		environment.VolumeDir != procedure.VolumeDirectory || environment.NetworkPool != input.Environment.NetworkPool || environment.DeletionTaskID != "" ||
-		service.ServiceID != procedure.ServiceId || service.EnvironmentID != procedure.EnvironmentId ||
-		service.BackingNetworkID != procedure.Runtime.Networks[0].NetworkId || epoch.EnvironmentID != procedure.EnvironmentId ||
-		read.Values[3].ModRevision != guard.ModRevision || head != procedure.TaskId {
+	if project.ID != procedure.ProjectId || project.Kind != hierarchy.ProjectKindBacking || project.TenantID != "" ||
+		project.DeletionTaskID != "" ||
+		environment.ID != procedure.EnvironmentId ||
+		environment.ProjectID != project.ID ||
+		environment.CreateTaskID != procedure.TaskId ||
+		environment.VolumeDir != procedure.VolumeDirectory ||
+		environment.NetworkPool != input.Environment.NetworkPool ||
+		environment.DeletionTaskID != "" ||
+		service.ServiceID != procedure.ServiceId ||
+		service.EnvironmentID != procedure.EnvironmentId ||
+		service.BackingNetworkID != procedure.Runtime.Networks[0].NetworkId ||
+		epoch.EnvironmentID != procedure.EnvironmentId ||
+		read.Values[3].ModRevision != guard.ModRevision ||
+		head != procedure.TaskId {
 		keep = true
 		return input, change, false, nil
 	}

@@ -12,7 +12,9 @@ func advancePostgresRestore(state *agentpb.BackupRestoreResume, step *agentpb.Ba
 ) error {
 	progress, restore := state.DatabaseProgress, step.GetRestore()
 	invalid := func() error {
-		return invalidBackupCheckpoint("PostgreSQL restore report conflicts with captured database or saved consumer progress")
+		return invalidBackupCheckpoint(
+			"PostgreSQL restore report conflicts with captured database or saved consumer progress",
+		)
 	}
 	switch {
 	case report.GetPostgresContainerObserved() != nil:

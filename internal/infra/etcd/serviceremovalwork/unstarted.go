@@ -11,7 +11,11 @@ import (
 
 // PrepareUnstartedStop settles only a removal that never had an executor.
 // No runtime proof is fabricated, and the Service definition remains unchanged.
-func (repository *Repository) PrepareUnstartedStop(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareUnstartedStop(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Cleanup != workexecution.CleanupNone ||
 		item.Input == nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||

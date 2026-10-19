@@ -33,7 +33,10 @@ func (repository *ScriptRepository) scriptReplacementConditions(ctx context.Cont
 	replacement, prior := authorization.Identity(), view.Attempt.Attempt.Executor
 	if view.CurrentExecutor || replacement.Executor != workexecution.Agent || prior.Executor != workexecution.Agent ||
 		replacement.HostID != prior.HostID || replacement.Generation <= prior.Generation {
-		return nil, errs.New(errs.KindStateConflict, "Script reconciliation requires a replacement Agent on the same host")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Script reconciliation requires a replacement Agent on the same host",
+		)
 	}
 	queue, err := workqueue.NewRepository(repository.store)
 	if err != nil {

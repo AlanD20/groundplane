@@ -24,7 +24,10 @@ func (owner *AgentWork) configRestoreEvidence(ctx context.Context, view workqueu
 		return backupwork.CheckpointEvidence{}, err
 	}
 	step := admitted.Input().Steps[binding.SourceOrdinal]
-	transfer, err := configRestoreTransferOwner(backupconfiguration.ConfigTransferOwner{Binding: binding}, step.GetRestore())
+	transfer, err := configRestoreTransferOwner(
+		backupconfiguration.ConfigTransferOwner{Binding: binding},
+		step.GetRestore(),
+	)
 	if err != nil {
 		return backupwork.CheckpointEvidence{}, err
 	}
@@ -59,7 +62,9 @@ func (owner *AgentWork) configRestoreEvidence(ctx context.Context, view workqueu
 			CommittedRecords:         final.CommittedRecordSequence, NextOrdinal: final.NextOrdinal,
 			ValueChainSHA256: append([]byte(nil), final.CumulativeChainSha256...),
 		},
-		Conditions: []keyvalue.Condition{{Key: backupconfiguration.ConfigTransferCursorKey(binding), ModRevision: cursor.Revision}},
+		Conditions: []keyvalue.Condition{
+			{Key: backupconfiguration.ConfigTransferCursorKey(binding), ModRevision: cursor.Revision},
+		},
 	}
 	if admitted.Request.GetConfig().GetValueProgress() != nil {
 		return result, nil

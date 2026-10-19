@@ -14,7 +14,11 @@ func (executor *Executor) RetireRecovery(ctx context.Context, terminal workexecu
 	return executor.journal.RetireProvisionInspection(ctx, terminal)
 }
 
-func (executor *Executor) Recover(ctx context.Context, input attachexecution.ProvisionRecoveryInput, exchange Exchange) (*workexecution.Attempt, error) {
+func (executor *Executor) Recover(
+	ctx context.Context,
+	input attachexecution.ProvisionRecoveryInput,
+	exchange Exchange,
+) (*workexecution.Attempt, error) {
 	if ctx == nil || exchange == nil || input.Validate() != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach inspection requires its captured recovery assignment")
 	}
@@ -61,7 +65,11 @@ func (executor *Executor) Recover(ctx context.Context, input attachexecution.Pro
 	return &terminal, nil
 }
 
-func (executor *Executor) inspectRecovery(ctx context.Context, input attachexecution.ProvisionRecoveryInput, exchange Exchange) (attachexecution.ProvisionRecoveryInput, attachexecution.ProvisionInspection, error) {
+func (executor *Executor) inspectRecovery(
+	ctx context.Context,
+	input attachexecution.ProvisionRecoveryInput,
+	exchange Exchange,
+) (attachexecution.ProvisionRecoveryInput, attachexecution.ProvisionInspection, error) {
 	interrupted := func() attachexecution.ProvisionInspection {
 		return attachexecution.ProvisionInspection{AttemptID: input.Attempt.ID, ForwardID: input.Source.Forward.ID,
 			Failure: input.Source.Evidence, CommandOrdinal: uint32((input.Source.Failure.Checkpoint.Sequence - 1) / 2),

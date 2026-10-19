@@ -86,11 +86,20 @@ func (repository *InputRepository) DefinitionConditions(
 	view workqueue.View,
 ) ([]keyvalue.Condition, error) {
 	task, item := view.Task.Task, view.Item.Item
-	if task.Validate() != nil || item.Validate() != nil || view.ReadRevision <= 0 || view.Task.Revision <= 0 || view.Item.Revision <= 0 ||
-		task.Action != workexecution.ActionRemove || ids.Validate(ids.KindEnvEntry, task.TargetID) != nil ||
-		item.TaskID != task.ID || item.Operation != workexecution.EntryConfiguration || item.TargetID != task.Scope.EnvironmentID ||
-		item.Placement.Executor != workexecution.Controller || item.Phase != workexecution.Settled || item.ActiveAttemptID != "" || item.Input != nil || item.Result == nil ||
-		item.AttemptNumber != 0 || item.Outcome != workexecution.Succeeded ||
+	if task.Validate() != nil || item.Validate() != nil || view.ReadRevision <= 0 || view.Task.Revision <= 0 ||
+		view.Item.Revision <= 0 ||
+		task.Action != workexecution.ActionRemove ||
+		ids.Validate(ids.KindEnvEntry, task.TargetID) != nil ||
+		item.TaskID != task.ID ||
+		item.Operation != workexecution.EntryConfiguration ||
+		item.TargetID != task.Scope.EnvironmentID ||
+		item.Placement.Executor != workexecution.Controller ||
+		item.Phase != workexecution.Settled ||
+		item.ActiveAttemptID != "" ||
+		item.Input != nil ||
+		item.Result == nil ||
+		item.AttemptNumber != 0 ||
+		item.Outcome != workexecution.Succeeded ||
 		item.Cleanup != workexecution.CleanupNone {
 		return nil, conflict("Entry definition requires its settled Controller removal")
 	}

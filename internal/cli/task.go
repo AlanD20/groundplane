@@ -74,7 +74,11 @@ func newTaskCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			accepted, err := app.Client.RetryTask(cmd.Context(), target(app, args[0]), apiTypes.TaskRetryRequest{WorkItemID: retryWork, Attempt: retryAttempt})
+			accepted, err := app.Client.RetryTask(
+				cmd.Context(),
+				target(app, args[0]),
+				apiTypes.TaskRetryRequest{WorkItemID: retryWork, Attempt: retryAttempt},
+			)
 			if err != nil {
 				return err
 			}
@@ -82,7 +86,8 @@ func newTaskCmd() *cobra.Command {
 		},
 	}
 	retry.Flags().StringVar(&retryWork, "work", "", "work item shown in Task details")
-	retry.Flags().Uint64Var(&retryAttempt, "attempt", 0, "recorded attempt count; 0 for work that failed before execution")
+	retry.Flags().
+		Uint64Var(&retryAttempt, "attempt", 0, "recorded attempt count; 0 for work that failed before execution")
 	cmd.AddCommand(retry)
 
 	cmd.AddCommand(&cobra.Command{
@@ -106,7 +111,14 @@ func renderTaskPage(cmd *cobra.Command, page apiTypes.ExecutionPage[apiTypes.Tas
 	headers := []string{"ID", "ACTION", "TARGET", "STATUS", "CREATED", "UPDATED"}
 	rows := make([][]string, len(page.Items))
 	for index, task := range page.Items {
-		rows[index] = []string{task.ID, string(task.Action), task.TargetName, task.Status, taskTimestamp(task.CreatedAt), taskTimestamp(task.UpdatedAt)}
+		rows[index] = []string{
+			task.ID,
+			string(task.Action),
+			task.TargetName,
+			task.Status,
+			taskTimestamp(task.CreatedAt),
+			taskTimestamp(task.UpdatedAt),
+		}
 	}
 	return fromContext(cmd).Out.Render(headers, rows, page)
 }
@@ -156,7 +168,8 @@ func newTaskJournalListCmd(short string, activity bool) *cobra.Command {
 	list.Flags().Int64Var(&revision, "revision", 0, "snapshot revision from the previous page")
 	list.Flags().StringVar(&status, "status", "", "filter the whole journal by Task status")
 	list.Flags().StringVar(&action, "action", "", "filter by action, such as deploy or fetch")
-	list.Flags().StringVar(&resourceKind, "resource-kind", "", "filter by target resource kind, such as service or image")
+	list.Flags().
+		StringVar(&resourceKind, "resource-kind", "", "filter by target resource kind, such as service or image")
 	return list
 }
 

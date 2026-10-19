@@ -34,8 +34,13 @@ func (service *WorkReports) activeDelivery(ctx context.Context, authorization ag
 	}
 	attempt, task, item := view.Attempt.Attempt, view.Work.Task.Task, view.Work.Item.Item
 	expected, err := backingprovision.StageID(attempt.WorkItemID, stage)
-	if err != nil || expected != stageID || attempt.Direction != workexecution.Forward || !view.ActiveAttempt || !view.CurrentExecutor ||
-		attempt.FinishedAt != nil || !time.Now().Before(attempt.Deadline) || task.Stop != nil || task.FinishedAt != nil || item.ForwardRevoked {
+	if err != nil || expected != stageID || attempt.Direction != workexecution.Forward || !view.ActiveAttempt ||
+		!view.CurrentExecutor ||
+		attempt.FinishedAt != nil ||
+		!time.Now().Before(attempt.Deadline) ||
+		task.Stop != nil ||
+		task.FinishedAt != nil ||
+		item.ForwardRevoked {
 		return backingDelivery{}, invalidBackingDelivery()
 	}
 	captured, source, current, err := service.records.ReadAdmission(ctx, view.Work)
@@ -54,7 +59,8 @@ func (service *WorkReports) activeDelivery(ctx context.Context, authorization ag
 	if err != nil {
 		return backingDelivery{}, err
 	}
-	if progress == nil || !progress.InFlight || progress.Stage != stage || view.Checkpoint.Record == nil || view.Checkpoint.Record.StageID != stageID {
+	if progress == nil || !progress.InFlight || progress.Stage != stage || view.Checkpoint.Record == nil ||
+		view.Checkpoint.Record.StageID != stageID {
 		return backingDelivery{}, invalidBackingDelivery()
 	}
 	layout, err := backingprovision.CaptureLayout(attempt, procedure)
@@ -71,7 +77,11 @@ func (service *WorkReports) activeDelivery(ctx context.Context, authorization ag
 		keyvalue.Condition{Key: workqueue.HostForwardFenceKey(attempt.Executor.HostID)},
 	)
 	return backingDelivery{view: view, guards: guards,
-		input: backingprovision.HelperInput{Assignment: backingprovision.Assignment{Attempt: attempt, Procedure: procedure}, Layout: layout, Progress: progress}}, nil
+		input: backingprovision.HelperInput{
+			Assignment: backingprovision.Assignment{Attempt: attempt, Procedure: procedure},
+			Layout:     layout,
+			Progress:   progress,
+		}}, nil
 }
 
 func (service *WorkReports) grantDelivery(ctx context.Context, selection backingDelivery) error {

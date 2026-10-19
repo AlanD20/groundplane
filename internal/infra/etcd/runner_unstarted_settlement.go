@@ -16,8 +16,11 @@ import (
 func (repository *RunnerRepository) PrepareUnstartedRunnerCreation(ctx context.Context,
 	input keyvalue.Versioned[runnerwork.Input], item workexecution.Item,
 ) (workqueue.Change, error) {
-	if input.Revision <= 0 || input.Record.MatchWork(item) != nil || input.Record.Operation != runnerallocation.RuntimeOperationCreate ||
-		item.ActiveAttemptID != "" || item.Cleanup != workexecution.CleanupNone || (item.Phase != workexecution.Ready && item.Phase != workexecution.Waiting) {
+	if input.Revision <= 0 || input.Record.MatchWork(item) != nil ||
+		input.Record.Operation != runnerallocation.RuntimeOperationCreate ||
+		item.ActiveAttemptID != "" ||
+		item.Cleanup != workexecution.CleanupNone ||
+		(item.Phase != workexecution.Ready && item.Phase != workexecution.Waiting) {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Runner creation has execution effects to resolve")
 	}
 	current, err := repository.GetRunner(ctx, input.Record.Desired.ID)

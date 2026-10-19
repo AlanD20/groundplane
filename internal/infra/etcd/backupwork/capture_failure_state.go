@@ -11,7 +11,8 @@ import (
 func failedCaptureRun(current backupruntime.BackupRunRecord, outcome workexecution.Outcome,
 	reason executionplan.BackupFailureReason, at time.Time,
 ) (backupruntime.BackupRunRecord, error) {
-	if (current.State != backupruntime.BackupRunRunning && current.State != backupruntime.BackupRunQueued) || !at.After(current.UpdatedAt) {
+	if (current.State != backupruntime.BackupRunRunning && current.State != backupruntime.BackupRunQueued) ||
+		!at.After(current.UpdatedAt) {
 		return backupruntime.BackupRunRecord{}, conflict("Backup failure requires its running source record")
 	}
 	next := backupruntime.CloneBackupRunPublicationRecord(current)

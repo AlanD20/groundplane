@@ -25,17 +25,28 @@ type componentWorkRender struct {
 
 // renderComponentWork keeps authored Services as routing context only. They are
 // removed from executable Compose content before it is sealed for the Agent.
-func (service *Service) renderComponentWork(ctx context.Context, work workqueue.View, placement componentWorkPlacement) (componentWorkRender, error) {
+func (service *Service) renderComponentWork(
+	ctx context.Context,
+	work workqueue.View,
+	placement componentWorkPlacement,
+) (componentWorkRender, error) {
 	source := placement.Selection.Source
 	if placement.Candidate.Desired.ID != work.Item.Item.TargetID ||
 		placement.Candidate.Desired.OwnerID != work.Task.Task.Scope.EnvironmentID ||
 		source.desired.Record.RevisionID != work.Task.Task.ID {
-		return componentWorkRender{}, errs.New(errs.KindStateConflict, "Component render input belongs to another work item")
+		return componentWorkRender{}, errs.New(
+			errs.KindStateConflict,
+			"Component render input belongs to another work item",
+		)
 	}
 	if !placement.Candidate.Desired.Enabled {
 		return componentWorkRender{}, nil
 	}
-	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(ctx, source.desired.Record, source.identities.Record)
+	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
+		ctx,
+		source.desired.Record,
+		source.identities.Record,
+	)
 	if err != nil {
 		return componentWorkRender{}, err
 	}
@@ -47,7 +58,11 @@ func (service *Service) renderComponentWork(ctx context.Context, work workqueue.
 	if err != nil {
 		return componentWorkRender{}, err
 	}
-	routeProjection, err := projectAuthoredRuntimeRoutes(source.desired.Record, source.identities.Record, placement.Services)
+	routeProjection, err := projectAuthoredRuntimeRoutes(
+		source.desired.Record,
+		source.identities.Record,
+		placement.Services,
+	)
 	if err != nil {
 		return componentWorkRender{}, err
 	}
@@ -63,13 +78,23 @@ func (service *Service) renderComponentWork(ctx context.Context, work workqueue.
 	for index, zone := range placement.Zones {
 		zones[index] = zone.Record.Desired
 	}
-	environment := blueprintComponentEnvironment(source.environment.Record, zones, placement.Services, routes, []core.Component{candidate}, entries)
+	environment := blueprintComponentEnvironment(
+		source.environment.Record,
+		zones,
+		placement.Services,
+		routes,
+		[]core.Component{candidate},
+		entries,
+	)
 	projected, err := composerender.ProjectEnvironmentComponents(project, environment, service.componentCatalog)
 	if err != nil {
 		return componentWorkRender{}, err
 	}
 	if len(projected.Services) != 1 {
-		return componentWorkRender{}, errs.New(errs.KindStateConflict, "Component must render exactly one owned workload")
+		return componentWorkRender{}, errs.New(
+			errs.KindStateConflict,
+			"Component must render exactly one owned workload",
+		)
 	}
 	generated := make(composetypes.Services, 1)
 	for _, identity := range projected.Services {

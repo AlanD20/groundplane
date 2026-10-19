@@ -41,10 +41,14 @@ func (repository *InputRepository) PrepareCaptureSourceCompletion(ctx context.Co
 	if source.State == backupruntime.BackupSourceAttemptSucceeded {
 		return change, nil
 	}
-	if source.State != backupruntime.BackupSourceAttemptPointCommitted || source.Phase != backupruntime.BackupSourcePhaseRetention {
+	if source.State != backupruntime.BackupSourceAttemptPointCommitted ||
+		source.Phase != backupruntime.BackupSourcePhaseRetention {
 		return workqueue.Change{}, conflict("Backup source has not reached retention")
 	}
-	keys := []string{backupruntime.BackupRetentionKey(source.SourceID, source.RecoveryPointID), backupruntime.BackupRecoveryPointKey(source.RecoveryPointID)}
+	keys := []string{
+		backupruntime.BackupRetentionKey(source.SourceID, source.RecoveryPointID),
+		backupruntime.BackupRecoveryPointKey(source.RecoveryPointID),
+	}
 	read, err := repository.readSettlementKeys(ctx, keys, view.Work.ReadRevision)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -57,15 +61,19 @@ func (repository *InputRepository) PrepareCaptureSourceCompletion(ctx context.Co
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if sweep.State != backupruntime.BackupRetentionCompleted || !backupretention.BackupRetentionSweepMatchesRun(run, sweep) {
+	if sweep.State != backupruntime.BackupRetentionCompleted ||
+		!backupretention.BackupRetentionSweepMatchesRun(run, sweep) {
 		return workqueue.Change{}, conflict("Backup source retention is incomplete")
 	}
 	point, err := backupruntime.DecodeBackupRecoveryPointRecord(read.Values[1].Value)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if point.ID != source.RecoveryPointID || point.EnvironmentID != run.EnvironmentID || point.SourceID != source.SourceID ||
-		read.Values[1].ModRevision != assignment.Sources[ordinal].GetCapture().GetPrecedingCheckpoint().GetDedupeKeyModRevision() {
+	if point.ID != source.RecoveryPointID || point.EnvironmentID != run.EnvironmentID ||
+		point.SourceID != source.SourceID ||
+		read.Values[1].ModRevision != assignment.Sources[ordinal].GetCapture().
+			GetPrecedingCheckpoint().
+			GetDedupeKeyModRevision() {
 		return workqueue.Change{}, conflict("Backup source Point differs from its cleanup publication")
 	}
 	next := backupruntime.CloneBackupRunPublicationRecord(run)
@@ -79,8 +87,14 @@ func (repository *InputRepository) PrepareCaptureSourceCompletion(ctx context.Co
 		return workqueue.Change{}, err
 	}
 	for index, key := range keys {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision},
+		)
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: guard.Key, Value: encoded})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: guard.Key, Value: encoded},
+	)
 	return change, nil
 }

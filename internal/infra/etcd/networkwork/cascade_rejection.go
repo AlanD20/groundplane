@@ -72,7 +72,8 @@ func (rejection CascadeRejection) validate(task workexecution.Task) error {
 			return conflict("changed consumer rejection requires its captured work identity")
 		}
 	case CascadeDeadline:
-		if rejection.WorkItemID != "" || rejection.Outcome != workexecution.Failed || rejection.At.Before(task.Deadline) {
+		if rejection.WorkItemID != "" || rejection.Outcome != workexecution.Failed ||
+			rejection.At.Before(task.Deadline) {
 			return conflict("publication deadline rejection predates the accepted deadline")
 		}
 	case CascadeStopped:
@@ -134,7 +135,9 @@ func (repository *InputRepository) LoadCascadeRejection(ctx context.Context, tas
 	revision int64,
 ) (CascadeRejection, workexecution.Input, workqueue.Change, bool, error) {
 	if task.Revision <= 0 || revision < task.Revision {
-		return CascadeRejection{}, workexecution.Input{}, workqueue.Change{}, false, conflict("rejection read requires its Task snapshot")
+		return CascadeRejection{}, workexecution.Input{}, workqueue.Change{}, false, conflict(
+			"rejection read requires its Task snapshot",
+		)
 	}
 	key := CascadeRejectionKey(task.Task.ID)
 	read, err := repository.read(ctx, []string{key}, revision)
@@ -142,7 +145,9 @@ func (repository *InputRepository) LoadCascadeRejection(ctx context.Context, tas
 		return CascadeRejection{}, workexecution.Input{}, workqueue.Change{}, false, err
 	}
 	defer keyvalue.ClearValues(read.Values)
-	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])}}}
+	change := workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])}},
+	}
 	if read.Values[0] == nil {
 		return CascadeRejection{}, workexecution.Input{}, change, false, nil
 	}

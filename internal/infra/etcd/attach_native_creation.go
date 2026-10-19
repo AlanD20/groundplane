@@ -32,23 +32,37 @@ type AttachWorkPublication struct {
 // PublishAttachWork publishes one direct action, its desired binding and its
 // captured execution together. The consumer update is derived exclusively from
 // acknowledged runtime; pending Service edits are not deployed by Attach.
-func (repository *AttachRepository) PublishAttachWork(ctx context.Context, request AttachWorkPublication) (_ IdempotencyTransactionResult, resultErr error) {
+func (repository *AttachRepository) PublishAttachWork(
+	ctx context.Context,
+	request AttachWorkPublication,
+) (_ IdempotencyTransactionResult, resultErr error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	task, scope, draft := request.Task, request.Scope, request.Generation
-	if task.Validate() != nil || task.Action != workexecution.ActionAttach || task.PublicationComplete || task.ExpectedItems != 1 ||
-		blueprintattachinputs.ValidateDraft(draft) != nil || len(scope.Services) != 1 ||
-		task.TargetID != draft.AttachID || task.TargetName != draft.AttachName || draft.ParentTaskID != task.ID ||
+	if task.Validate() != nil || task.Action != workexecution.ActionAttach || task.PublicationComplete ||
+		task.ExpectedItems != 1 ||
+		blueprintattachinputs.ValidateDraft(draft) != nil ||
+		len(scope.Services) != 1 ||
+		task.TargetID != draft.AttachID ||
+		task.TargetName != draft.AttachName ||
+		draft.ParentTaskID != task.ID ||
 		task.Actor != workexecution.OperatorActor ||
 		task.Scope != (workexecution.Scope{TenantID: scope.Tenant.Record.ID, ProjectID: scope.Project.Record.ID, EnvironmentID: draft.EnvironmentID}) ||
-		request.Marker.TaskID != task.ID || request.Marker.Intent.CiphertextDigest != task.Intent.SHA256 ||
-		request.Marker.Locator.Method != "POST" || request.Marker.Locator.Route != "/attaches" ||
-		request.Marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment || request.Marker.Locator.ScopeID != draft.EnvironmentID ||
+		request.Marker.TaskID != task.ID ||
+		request.Marker.Intent.CiphertextDigest != task.Intent.SHA256 ||
+		request.Marker.Locator.Method != "POST" ||
+		request.Marker.Locator.Route != "/attaches" ||
+		request.Marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
+		request.Marker.Locator.ScopeID != draft.EnvironmentID ||
 		request.Marker.ReplayTarget != nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Attach publication differs from its captured action or replay")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach publication differs from its captured action or replay",
+		)
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil || found {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
+		found {
 		return existing, err
 	}
 	record, err := draft.PendingRecord(task.ID, task.CreatedAt)
@@ -62,14 +76,21 @@ func (repository *AttachRepository) PublishAttachWork(ctx context.Context, reque
 	if err := validateAttachCreateScope(ctx, scope, record, ownFacts); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if draft.AdapterKey != scope.BackingService.Record.Desired.Adapter || draft.Authentication != scope.BackingService.Record.Desired.Authentication ||
+	if draft.AdapterKey != scope.BackingService.Record.Desired.Adapter ||
+		draft.Authentication != scope.BackingService.Record.Desired.Authentication ||
 		draft.Provision == nil && (scope.BackingService.Record.Desired.Hooks == nil ||
 			!blueprintattachinputs.MatchesConfiguration(draft, *scope.BackingService.Record.Desired.Hooks)) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Attach captured procedure differs from its backing Service")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach captured procedure differs from its backing Service",
+		)
 	}
 	revision := scope.Services[0].ReadRevision
 	if revision <= 0 {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Attach consumer requires a fixed read snapshot")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Attach consumer requires a fixed read snapshot",
+		)
 	}
 	fence, err := environmentfence.LoadOrdinary(ctx, repository.store, record.EnvironmentID, revision)
 	if err != nil {
@@ -83,7 +104,13 @@ func (repository *AttachRepository) PublishAttachWork(ctx context.Context, reque
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	captured, runtimeGuards, err := inputs.CaptureConsumer(ctx, draft, host.Binding.HostID, ids.New(ids.KindConfig), revision)
+	captured, runtimeGuards, err := inputs.CaptureConsumer(
+		ctx,
+		draft,
+		host.Binding.HostID,
+		ids.New(ids.KindConfig),
+		revision,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -107,7 +134,12 @@ func (repository *AttachRepository) PublishAttachWork(ctx context.Context, reque
 		return IdempotencyTransactionResult{}, err
 	}
 	defer ancestry.Clear()
-	sourceGuards, err := attachDesiredHeadConditions(record.EnvironmentID, scope.DesiredHead.Revision, scope.BackingService, scope.Services)
+	sourceGuards, err := attachDesiredHeadConditions(
+		record.EnvironmentID,
+		scope.DesiredHead.Revision,
+		scope.BackingService,
+		scope.Services,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -118,7 +150,10 @@ func (repository *AttachRepository) PublishAttachWork(ctx context.Context, reque
 			{Key: hierarchy.ProjectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
 			{Key: hierarchy.EnvironmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
 			{Key: hierarchy.ProjectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
-			{Key: hierarchy.EnvironmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
+			{
+				Key:         hierarchy.EnvironmentKey(scope.BackingEnvironment.Record.ID),
+				ModRevision: scope.BackingEnvironment.Revision,
+			},
 		})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -141,10 +176,20 @@ func (repository *AttachRepository) PublishAttachWork(ctx context.Context, reque
 	if prepared.Generation.SettlesInController() {
 		placement.Executor = workexecution.Controller
 	}
-	item := workexecution.Item{ID: request.WorkID, TaskID: task.ID, Operation: workexecution.Attach, TargetID: record.ID,
-		Placement: placement, Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
-		Claims: attachprovision.ProvisionClaims(prepared.Generation, host.Binding.HostID), CreatedAt: task.CreatedAt,
-		UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
+	item := workexecution.Item{
+		ID:        request.WorkID,
+		TaskID:    task.ID,
+		Operation: workexecution.Attach,
+		TargetID:  record.ID,
+		Placement: placement,
+		Input:     &reference,
+		Phase:     workexecution.Ready,
+		Cleanup:   workexecution.CleanupNone,
+		Claims:    attachprovision.ProvisionClaims(prepared.Generation, host.Binding.HostID),
+		CreatedAt: task.CreatedAt,
+		UpdatedAt: task.CreatedAt,
+		Deadline:  task.Deadline,
+	}
 	binding, err := inputs.PrepareDirectBinding(ctx, task, item, prepared.Generation, revision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -160,7 +205,11 @@ func (repository *AttachRepository) PublishAttachWork(ctx context.Context, reque
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(epoch.Value)
-	conditions, err := resourcePublicationConditions(prepared.Change.Conditions, binding.Conditions, publication.Conditions)
+	conditions, err := resourcePublicationConditions(
+		prepared.Change.Conditions,
+		binding.Conditions,
+		publication.Conditions,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -170,7 +219,12 @@ func (repository *AttachRepository) PublishAttachWork(ctx context.Context, reque
 	mutations = append(mutations, desired.mutations...)
 	mutations = append(mutations, ancestry.Mutations()...)
 	mutations = append(mutations, epoch)
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, resourceWorkPublicationConflict(conditions))
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		resourceWorkPublicationConflict(conditions),
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

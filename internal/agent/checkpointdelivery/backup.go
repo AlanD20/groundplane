@@ -64,7 +64,10 @@ func (delivery *Backup) Resume(ctx context.Context) error {
 // Current returns only acknowledged local evidence. The executor combines it
 // with the captured Controller source cursor; absence never proves an effect
 // did not occur, and this method does not execute or infer any command.
-func (delivery *Backup) Current(ctx context.Context, ordinal uint32) (*agentpb.BackupWorkCheckpointRequest, *agentpb.BackupWorkCheckpointAck, error) {
+func (delivery *Backup) Current(
+	ctx context.Context,
+	ordinal uint32,
+) (*agentpb.BackupWorkCheckpointRequest, *agentpb.BackupWorkCheckpointAck, error) {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
 	_, record, err := delivery.journal.LoadBackup(ctx, delivery.assignment, delivery.attempt.Executor)

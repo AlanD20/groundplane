@@ -22,8 +22,17 @@ type Release struct {
 	exchange ReleaseExchange
 }
 
-func NewRelease(input releaseexecution.Input, journal *agentworkjournal.Journal, exchange ReleaseExchange) (*Release, error) {
-	if input.Attempt.Validate() != nil || input.Attempt.Executor.Executor != workexecution.Agent || input.Attempt.StartedAt == nil || input.Attempt.FinishedAt != nil || input.Release == nil || journal == nil || exchange == nil {
+func NewRelease(
+	input releaseexecution.Input,
+	journal *agentworkjournal.Journal,
+	exchange ReleaseExchange,
+) (*Release, error) {
+	if input.Attempt.Validate() != nil || input.Attempt.Executor.Executor != workexecution.Agent ||
+		input.Attempt.StartedAt == nil ||
+		input.Attempt.FinishedAt != nil ||
+		input.Release == nil ||
+		journal == nil ||
+		exchange == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Release checkpoint delivery requires a started Agent attempt")
 	}
 	return &Release{input: input, journal: journal, exchange: exchange}, nil

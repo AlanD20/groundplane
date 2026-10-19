@@ -16,8 +16,10 @@ type GroupMemberBinding struct {
 }
 
 func (binding GroupMemberBinding) Validate() error {
-	if ids.Validate(ids.KindReleaseGroup, binding.GroupID) != nil || ids.Validate(ids.KindOperation, binding.OperationID) != nil ||
-		binding.Ordinal == 0 || binding.Ordinal > 32 {
+	if ids.Validate(ids.KindReleaseGroup, binding.GroupID) != nil ||
+		ids.Validate(ids.KindOperation, binding.OperationID) != nil ||
+		binding.Ordinal == 0 ||
+		binding.Ordinal > 32 {
 		return errs.New(errs.KindValidationFailed, "Release Group member binding is invalid")
 	}
 	return nil

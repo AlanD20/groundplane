@@ -21,8 +21,12 @@ func ConsumerSettlementKey(workID string) string {
 
 // A successful network checkpoint and its applied-runtime record commit
 // together. Retry may reuse this work's result, never overwrite a newer Deploy.
-func (repository *InputRepository) prepareConsumerCheckpoint(ctx context.Context, view workqueue.ResumeView,
-	capture blueprintattachinputs.Generation, input attachexecution.ProvisionInput, report attachexecution.ProvisionReport,
+func (repository *InputRepository) prepareConsumerCheckpoint(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	capture blueprintattachinputs.Generation,
+	input attachexecution.ProvisionInput,
+	report attachexecution.ProvisionReport,
 ) (workqueue.Change, error) {
 	consumer, err := capture.Consumer()
 	if err != nil {
@@ -39,7 +43,8 @@ func (repository *InputRepository) prepareConsumerCheckpoint(ctx context.Context
 		return workqueue.Change{}, err
 	}
 	progress := report.Progress
-	confirms := !progress.InFlight && progress.LastResult != nil && authority.IsConsumerCommand(progress.LastResult.Ordinal)
+	confirms := !progress.InFlight && progress.LastResult != nil &&
+		authority.IsConsumerCommand(progress.LastResult.Ordinal)
 	if !progress.InFlight && !confirms {
 		return workqueue.Change{}, nil
 	}
@@ -49,20 +54,32 @@ func (repository *InputRepository) prepareConsumerCheckpoint(ctx context.Context
 		if err != nil {
 			return workqueue.Change{}, err
 		}
-		source = &serviceruntimerecord.Acknowledgement{TaskID: input.Attempt.TaskID, WorkItemID: input.Attempt.WorkItemID,
-			AttemptID: input.Attempt.ID, Executor: input.Attempt.Executor, Input: input.Attempt.Input, Checkpoint: checkpoint,
-			RenderGeneration: capture.ConsumerRuntime.Source.RenderGeneration, AcknowledgedAt: progress.UpdatedAt}
+		source = &serviceruntimerecord.Acknowledgement{
+			TaskID:           input.Attempt.TaskID,
+			WorkItemID:       input.Attempt.WorkItemID,
+			AttemptID:        input.Attempt.ID,
+			Executor:         input.Attempt.Executor,
+			Input:            input.Attempt.Input,
+			Checkpoint:       checkpoint,
+			RenderGeneration: capture.ConsumerRuntime.Source.RenderGeneration,
+			AcknowledgedAt:   progress.UpdatedAt,
+		}
 	}
 	return repository.prepareConsumerAcknowledgement(ctx, view, capture, consumer.Candidate, source)
 }
 
-func (repository *InputRepository) prepareConsumerAcknowledgement(ctx context.Context, view workqueue.ResumeView,
-	capture blueprintattachinputs.Generation, candidate *agentpb.ComposeArtifact, acknowledgement *serviceruntimerecord.Acknowledgement,
+func (repository *InputRepository) prepareConsumerAcknowledgement(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	capture blueprintattachinputs.Generation,
+	candidate *agentpb.ComposeArtifact,
+	acknowledgement *serviceruntimerecord.Acknowledgement,
 ) (workqueue.Change, error) {
 	if capture.ConsumerRuntime == nil || candidate == nil {
 		return workqueue.Change{}, checkpointConflict("Attach consumer settlement has no captured runtime")
 	}
-	if acknowledgement != nil && (acknowledgement.TaskID != view.Attempt.Attempt.TaskID || acknowledgement.WorkItemID != view.Attempt.Attempt.WorkItemID || acknowledgement.AttemptID != view.Attempt.Attempt.ID || acknowledgement.Executor != view.Attempt.Attempt.Executor || acknowledgement.Input != view.Attempt.Attempt.Input) {
+	if acknowledgement != nil &&
+		(acknowledgement.TaskID != view.Attempt.Attempt.TaskID || acknowledgement.WorkItemID != view.Attempt.Attempt.WorkItemID || acknowledgement.AttemptID != view.Attempt.Attempt.ID || acknowledgement.Executor != view.Attempt.Attempt.Executor || acknowledgement.Input != view.Attempt.Attempt.Input) {
 		return workqueue.Change{}, checkpointConflict("Attach runtime acknowledgement belongs to another execution")
 	}
 	keys := []string{ConsumerSettlementKey(view.Work.Item.Item.ID), serviceruntimerecord.Key(capture.ConsumerServiceID)}
@@ -78,15 +95,22 @@ func (repository *InputRepository) prepareConsumerAcknowledgement(ctx context.Co
 	}
 	guards := make([]keyvalue.Condition, 0, 2)
 	for index, value := range read.Values {
-		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > view.Work.ReadRevision) {
+		if value != nil &&
+			(value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > view.Work.ReadRevision) {
 			return workqueue.Change{}, recordcodec.CorruptRecord()
 		}
 		guards = append(guards, keyvalue.Condition{Key: keys[index], ModRevision: keyvalue.RevisionOf(value)})
 	}
 	expected := *capture.ConsumerRuntime
 	if read.Values[0] != nil {
-		source, err := recordcodec.Decode[serviceruntimerecord.Acknowledgement](read.Values[0].Value, "attach-consumer-settlement")
-		if err != nil || source.TaskID != view.Attempt.Attempt.TaskID || source.WorkItemID != view.Attempt.Attempt.WorkItemID || source.Input != view.Attempt.Attempt.Input || source.Executor.HostID != view.Attempt.Attempt.Executor.HostID {
+		source, err := recordcodec.Decode[serviceruntimerecord.Acknowledgement](
+			read.Values[0].Value,
+			"attach-consumer-settlement",
+		)
+		if err != nil || source.TaskID != view.Attempt.Attempt.TaskID ||
+			source.WorkItemID != view.Attempt.Attempt.WorkItemID ||
+			source.Input != view.Attempt.Attempt.Input ||
+			source.Executor.HostID != view.Attempt.Attempt.Executor.HostID {
 			return workqueue.Change{}, checkpointConflict("Attach consumer settlement belongs to different execution")
 		}
 		expected, err = acknowledgedConsumer(capture, candidate, source)
@@ -129,11 +153,19 @@ func (repository *InputRepository) prepareConsumerAcknowledgement(ctx context.Co
 		return workqueue.Change{}, err
 	}
 	return workqueue.Change{Conditions: guards, Mutations: []keyvalue.Mutation{
-		{Type: keyvalue.MutationPut, Key: keys[1], Value: value}, {Type: keyvalue.MutationPut, Key: keys[0], Value: receipt},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   keys[1],
+			Value: value,
+		}, {Type: keyvalue.MutationPut, Key: keys[0], Value: receipt},
 	}}, nil
 }
 
-func acknowledgedConsumer(capture blueprintattachinputs.Generation, candidate *agentpb.ComposeArtifact, source serviceruntimerecord.Acknowledgement) (serviceruntimerecord.Record, error) {
+func acknowledgedConsumer(
+	capture blueprintattachinputs.Generation,
+	candidate *agentpb.ComposeArtifact,
+	source serviceruntimerecord.Acknowledgement,
+) (serviceruntimerecord.Record, error) {
 	previous := *capture.ConsumerRuntime
 	updated := previous.Runtime
 	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(candidate)

@@ -61,8 +61,11 @@ func (input RecoveryInput) ValidateIdentity() error {
 		}
 		return input.Group.ValidateFor(recovery, forward)
 	}
-	if input.Interruption != nil || recovery.Validate() != nil || forward.Validate() != nil || recovery.Direction != workexecution.Recovery ||
-		forward.Direction != workexecution.Forward || recovery.FinishedAt != nil || forward.FinishedAt == nil ||
+	if input.Interruption != nil || recovery.Validate() != nil || forward.Validate() != nil ||
+		recovery.Direction != workexecution.Recovery ||
+		forward.Direction != workexecution.Forward ||
+		recovery.FinishedAt != nil ||
+		forward.FinishedAt == nil ||
 		forward.Result == nil ||
 		forward.Outcome == workexecution.Succeeded ||
 		recovery.TaskID != forward.TaskID ||

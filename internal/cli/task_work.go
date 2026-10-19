@@ -9,7 +9,10 @@ import (
 
 func newTaskStagesCmd() *cobra.Command {
 	var revision int64
-	cmd := &cobra.Command{Use: "stages <task-id> <work-id> <attempt-id>", Short: "Inspect named stages, expected results and observations", Args: cobra.ExactArgs(3),
+	cmd := &cobra.Command{
+		Use:   "stages <task-id> <work-id> <attempt-id>",
+		Short: "Inspect named stages, expected results and observations",
+		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			stages, err := app.Client.TaskStages(cmd.Context(), args[0], args[1], args[2], revision)
@@ -32,10 +35,23 @@ func newTaskStagesCmd() *cobra.Command {
 			}
 			rows := make([][]string, len(stages.Items))
 			for index, stage := range stages.Items {
-				rows[index] = []string{stage.Name, string(stage.State), stage.Expected, stage.Observed, stage.FailureCode, nullableTaskTimestamp(stage.StartedAt), nullableTaskTimestamp(stage.FinishedAt)}
+				rows[index] = []string{
+					stage.Name,
+					string(stage.State),
+					stage.Expected,
+					stage.Observed,
+					stage.FailureCode,
+					nullableTaskTimestamp(stage.StartedAt),
+					nullableTaskTimestamp(stage.FinishedAt),
+				}
 			}
-			return app.Out.Render([]string{"STAGE", "STATE", "EXPECTED", "OBSERVED", "ERROR", "STARTED", "FINISHED"}, rows, stages)
-		}}
+			return app.Out.Render(
+				[]string{"STAGE", "STATE", "EXPECTED", "OBSERVED", "ERROR", "STARTED", "FINISHED"},
+				rows,
+				stages,
+			)
+		},
+	}
 	cmd.Flags().Int64Var(&revision, "revision", 0, "snapshot revision from execution attempts")
 	return cmd
 }
@@ -43,7 +59,10 @@ func newTaskStagesCmd() *cobra.Command {
 func newTaskAttemptsCmd() *cobra.Command {
 	var after uint64
 	var limit, revision int64
-	cmd := &cobra.Command{Use: "attempts <task-id> <work-id>", Short: "Inspect work execution attempts and their host ownership", Args: cobra.ExactArgs(2),
+	cmd := &cobra.Command{
+		Use:   "attempts <task-id> <work-id>",
+		Short: "Inspect work execution attempts and their host ownership",
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			page, err := app.Client.TaskAttempts(cmd.Context(), args[0], args[1], after, limit, revision)
@@ -56,8 +75,13 @@ func newTaskAttemptsCmd() *cobra.Command {
 					string(attempt.Executor), attempt.HostID, string(attempt.Outcome),
 					nullableTaskTimestamp(attempt.StartedAt), nullableTaskTimestamp(attempt.FinishedAt)}
 			}
-			return app.Out.Render([]string{"ID", "ATTEMPT", "DIRECTION", "EXECUTOR", "HOST", "OUTCOME", "STARTED", "FINISHED"}, rows, page)
-		}}
+			return app.Out.Render(
+				[]string{"ID", "ATTEMPT", "DIRECTION", "EXECUTOR", "HOST", "OUTCOME", "STARTED", "FINISHED"},
+				rows,
+				page,
+			)
+		},
+	}
 	cmd.Flags().Uint64Var(&after, "after", 0, "last attempt number on the previous page")
 	cmd.Flags().Int64Var(&limit, "limit", 25, "page size from 1 through 100")
 	cmd.Flags().Int64Var(&revision, "revision", 0, "snapshot revision from the previous page")
@@ -66,7 +90,10 @@ func newTaskAttemptsCmd() *cobra.Command {
 
 func newTaskImageCmd() *cobra.Command {
 	var revision int64
-	cmd := &cobra.Command{Use: "image <task-id> <work-id>", Short: "Inspect image fetch or removal evidence", Args: cobra.ExactArgs(2),
+	cmd := &cobra.Command{
+		Use:   "image <task-id> <work-id>",
+		Short: "Inspect image fetch or removal evidence",
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			image, err := app.Client.TaskImage(cmd.Context(), args[0], args[1], revision)
@@ -79,7 +106,8 @@ func newTaskImageCmd() *cobra.Command {
 				"summary": image.Summary, "progress": image.Progress, "progress_unavailable": image.ProgressUnavailable,
 				"uncertain_phase": image.UncertainPhase, "revision": image.Revision})
 			return app.Out.RenderOne(fields, values, image)
-		}}
+		},
+	}
 	cmd.Flags().Int64Var(&revision, "revision", 0, "snapshot revision from Task details")
 	return cmd
 }

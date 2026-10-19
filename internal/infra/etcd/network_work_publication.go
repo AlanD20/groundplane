@@ -50,7 +50,10 @@ type NetworkCascadePublication struct {
 
 // PublishNetworkWork joins Zone removal to its authored state and request replay.
 // A Backing Zone additionally supplies its complete captured consumer graph.
-func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context.Context, request NetworkWorkPublication) (IdempotencyTransactionResult, error) {
+func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(
+	ctx context.Context,
+	request NetworkWorkPublication,
+) (IdempotencyTransactionResult, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -69,9 +72,13 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 		item.ID != ids.DeriveAt(ids.KindWorkItem, request.Claim.CreatedAt, request.Claim.TaskID, "network") ||
 		request.Input == nil || request.Input.NetworkId != request.Zone.Record.Desired.ID ||
 		request.Input.RemovalSubnet != request.Zone.Record.Desired.Subnet {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Zone removal requires its ready owning Environment")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Zone removal requires its ready owning Environment",
+		)
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil || found {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
+		found {
 		return existing, err
 	}
 	if _, err := environmentqueries.SelectZoneForDeletion(request.Authorities.Desired, request.Zone, task.TargetID); err != nil {
@@ -85,23 +92,36 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 		return IdempotencyTransactionResult{}, err
 	}
 	if selectedByEnabledComponent(request.Authorities.Desired.Record.Components, task.TargetID) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Zone is selected by an enabled Component; change or disable it first")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindResourceInUse,
+			"Zone is selected by an enabled Component; change or disable it first",
+		)
 	}
 	if request.Marker.ReplayTarget == nil || *request.Marker.ReplayTarget != (idempotency.IdempotencyReplayTarget{
 		Kind: idempotency.IdempotencyReplayTargetZone, ID: task.TargetID}) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Zone removal replay target differs from its resource")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Zone removal replay target differs from its resource",
+		)
 	}
 	fence, err := repository.loadEnvironmentBlueprintMutationFence(ctx, request.Project, request.Environment)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	previous, found, err := repository.getEnvironmentBlueprintProjectionAtRevision(ctx, task.Scope.EnvironmentID, fence.ReadRevision())
+	previous, found, err := repository.getEnvironmentBlueprintProjectionAtRevision(
+		ctx,
+		task.Scope.EnvironmentID,
+		fence.ReadRevision(),
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if !found || previous.Revision != request.Authorities.Desired.Revision ||
 		!environmentchanges.SameServiceRemovalProjection(previous.Record, request.Authorities.Desired.Record) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Zone removal desired source changed before publication")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Zone removal desired source changed before publication",
+		)
 	}
 	host, err := hostbindings.ReadLocal(ctx, repository.store, fence.ReadRevision())
 	if err != nil {
@@ -126,7 +146,8 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	dns, err := dnsrecords.NewReader(repository.store).RequireDNSUnreferenced(ctx, "", task.TargetID, fence.ReadRevision())
+	dns, err := dnsrecords.NewReader(repository.store).
+		RequireDNSUnreferenced(ctx, "", task.TargetID, fence.ReadRevision())
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -136,7 +157,10 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 		return IdempotencyTransactionResult{}, err
 	}
 	if pool.Revision <= 0 || pool.Record.Reservations[task.TargetID] != request.Zone.Record.Desired.Subnet {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Zone subnet reservation differs from the captured Zone")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Zone subnet reservation differs from the captured Zone",
+		)
 	}
 	addresses, err := networkreservations.GetComponentAddressRegistry(ctx, repository.store, request.Zone.Record)
 	if err != nil {
@@ -153,12 +177,21 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(tombstone)
-	admission, err := resourcePublicationConditions(fence.TransactionConditions(), host.Conditions, root.Conditions, identities.conditions, dns,
+	admission, err := resourcePublicationConditions(
+		fence.TransactionConditions(),
+		host.Conditions,
+		root.Conditions,
+		identities.conditions,
+		dns,
 		[]keyvalue.Condition{checks,
 			{Key: tombstoneKey},
 			{Key: networkreservations.ZonePoolRegistryKey(task.Scope.EnvironmentID), ModRevision: pool.Revision},
 			{Key: networkreservations.ComponentAddressRegistryKey(task.TargetID), ModRevision: addresses.Revision},
-			{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(task.Scope.EnvironmentID), ModRevision: request.Authorities.Applied.Revision}})
+			{
+				Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(task.Scope.EnvironmentID),
+				ModRevision: request.Authorities.Applied.Revision,
+			}},
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -168,7 +201,15 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 	}
 	var work workqueue.Change
 	if request.Cascade == nil {
-		work, err = inputs.PreparePublication(ctx, task, item, request.Input, request.Marker, admission, request.Claim.RevisionID)
+		work, err = inputs.PreparePublication(
+			ctx,
+			task,
+			item,
+			request.Input,
+			request.Marker,
+			admission,
+			request.Claim.RevisionID,
+		)
 	} else {
 		work, err = repository.prepareNetworkCascadePublication(ctx, inputs, request, admission)
 	}
@@ -198,8 +239,17 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 	mutations = append(mutations, root.Mutations...)
 	mutations = append(mutations, identities.mutations...)
 	mutations = append(mutations, ancestry.Mutations()...)
-	mutations = append(mutations, epoch, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: tombstoneKey, Value: tombstone})
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, resourceWorkPublicationConflict(conditions))
+	mutations = append(
+		mutations,
+		epoch,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: tombstoneKey, Value: tombstone},
+	)
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		resourceWorkPublicationConflict(conditions),
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

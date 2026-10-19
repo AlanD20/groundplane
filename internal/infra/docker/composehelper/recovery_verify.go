@@ -11,7 +11,12 @@ import (
 // VerifyRecoveryRuntime is inspection only. Earlier successful commands or
 // checkpoints cannot substitute for final exact ownership, readiness, retained
 // runtime and live/restart routing observations. File proof is separate.
-func VerifyRecoveryRuntime(ctx context.Context, taskRunner runner.Runner, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport) error {
+func VerifyRecoveryRuntime(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+) error {
 	if ctx == nil || taskRunner == nil || report.Validate(input) != nil || report.Ack == nil ||
 		!report.Progress.InFlight || report.Progress.Phase != releaseexecution.VerifyRestoration {
 		return invalidReleaseHelper()

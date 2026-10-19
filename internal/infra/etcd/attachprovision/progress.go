@@ -23,7 +23,9 @@ func (repository *InputRepository) LoadProgress(ctx context.Context, view workqu
 	if err != nil {
 		return nil, nil, err
 	}
-	conditions := []keyvalue.Condition{{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision}}
+	conditions := []keyvalue.Condition{
+		{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision},
+	}
 	if view.Checkpoint.Record == nil {
 		if view.Checkpoint.Revision != 0 {
 			return nil, nil, checkpointConflict("Attach checkpoint metadata has no saved evidence")
@@ -35,7 +37,10 @@ func (repository *InputRepository) LoadProgress(ctx context.Context, view workqu
 		return nil, nil, checkpointConflict("Attach checkpoint has no matching execution start")
 	}
 	key := ReportKey(attempt.ID, view.Checkpoint.Record.Sequence)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}

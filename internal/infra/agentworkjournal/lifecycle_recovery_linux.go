@@ -10,7 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 )
 
-func (journal *Journal) PrepareLifecycleRecovery(ctx context.Context, attempt workexecution.Attempt, captured LifecycleRecoveryRecord) (*LifecycleRecoveryRecord, error) {
+func (journal *Journal) PrepareLifecycleRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	captured LifecycleRecoveryRecord,
+) (*LifecycleRecoveryRecord, error) {
 	if attempt.StartedAt == nil || captured.Report != nil || captured.Receipt != nil {
 		return nil, invalid()
 	}
@@ -29,7 +33,9 @@ func (journal *Journal) PrepareLifecycleRecovery(ctx context.Context, attempt wo
 	}
 	if previous != nil {
 		old := previous.LifecycleRecovery
-		if old == nil || !workexecution.SameAssignment(previous.Attempt, attempt) || previous.Attempt.StartedAt == nil || !previous.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
+		if old == nil || !workexecution.SameAssignment(previous.Attempt, attempt) ||
+			previous.Attempt.StartedAt == nil ||
+			!previous.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
 			!slices.Equal(old.Stages, captured.Stages) {
 			return nil, conflict()
 		}
@@ -56,7 +62,11 @@ func (journal *Journal) PrepareLifecycleRecovery(ctx context.Context, attempt wo
 	return state.LifecycleRecovery, nil
 }
 
-func (journal *Journal) SaveLifecycleRecoveryReport(ctx context.Context, attempt workexecution.Attempt, report lifecycleexecution.RecoveryReport) error {
+func (journal *Journal) SaveLifecycleRecoveryReport(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	report lifecycleexecution.RecoveryReport,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -70,12 +80,22 @@ func (journal *Journal) SaveLifecycleRecoveryReport(ctx context.Context, attempt
 		return conflict()
 	}
 	recovery := state.LifecycleRecovery
-	raw, _, err := lifecycleexecution.EncodeRecoveryReportStages(state.Attempt, recovery.Stages, recovery.Source, report)
+	raw, _, err := lifecycleexecution.EncodeRecoveryReportStages(
+		state.Attempt,
+		recovery.Stages,
+		recovery.Source,
+		report,
+	)
 	if err != nil {
 		return err
 	}
 	if recovery.Report != nil {
-		previous, _, err := lifecycleexecution.EncodeRecoveryReportStages(state.Attempt, recovery.Stages, recovery.Source, *recovery.Report)
+		previous, _, err := lifecycleexecution.EncodeRecoveryReportStages(
+			state.Attempt,
+			recovery.Stages,
+			recovery.Source,
+			*recovery.Report,
+		)
 		if err != nil || !bytes.Equal(previous, raw) {
 			return conflict()
 		}
@@ -85,7 +105,10 @@ func (journal *Journal) SaveLifecycleRecoveryReport(ctx context.Context, attempt
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) AcknowledgeLifecycleRecovery(ctx context.Context, attempt, terminal workexecution.Attempt) error {
+func (journal *Journal) AcknowledgeLifecycleRecovery(
+	ctx context.Context,
+	attempt, terminal workexecution.Attempt,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -95,11 +118,15 @@ func (journal *Journal) AcknowledgeLifecycleRecovery(ctx context.Context, attemp
 	if err != nil {
 		return err
 	}
-	if state == nil || state.LifecycleRecovery == nil || state.LifecycleRecovery.Report == nil || !workexecution.SameAssignment(state.Attempt, attempt) || terminal.FinishedAt == nil || terminal.Result == nil {
+	if state == nil || state.LifecycleRecovery == nil || state.LifecycleRecovery.Report == nil ||
+		!workexecution.SameAssignment(state.Attempt, attempt) ||
+		terminal.FinishedAt == nil ||
+		terminal.Result == nil {
 		return conflict()
 	}
 	if previous := state.LifecycleRecovery.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) || *previous.Result != *terminal.Result {
+		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*previous.Result != *terminal.Result {
 			return conflict()
 		}
 		return nil

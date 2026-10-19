@@ -28,7 +28,10 @@ func (repository *BackupRuntimeRepository) PrepareVolumeRestoreProgress(ctx cont
 		current.Record.TaskID != view.Work.Task.Task.ID || current.Record.Point.SourceKind != backupruntime.BackupRuntimeSourceVolume {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Volume Restore checkpoint authority is invalid")
 	}
-	membership, err := backupruntime.BackupRestoreEnvironmentIndexKey(current.Record.EnvironmentID, view.Work.Task.Task.ID)
+	membership, err := backupruntime.BackupRestoreEnvironmentIndexKey(
+		current.Record.EnvironmentID,
+		view.Work.Task.Task.ID,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -45,7 +48,10 @@ func (repository *BackupRuntimeRepository) PrepareVolumeRestoreProgress(ctx cont
 	defer etcdstore.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Volume Restore checkpoint authority is incomplete")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Volume Restore checkpoint authority is incomplete",
+			)
 		}
 	}
 	stored, err := backupruntime.DecodeBackupRestoreRecord(read.Values[0].Value)

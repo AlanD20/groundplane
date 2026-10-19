@@ -61,7 +61,8 @@ func (repository *Repository) TaskEvents(ctx context.Context, taskID string, aft
 	if after > result.Last {
 		return TaskEvents{}, errs.New(errs.KindValidationFailed, "event cursor is ahead of this Task")
 	}
-	result.Expired = after != 0 && (len(record.Items) == 0 && after < result.Last || result.First != 0 && after < result.First-1)
+	result.Expired = after != 0 &&
+		(len(record.Items) == 0 && after < result.Last || result.First != 0 && after < result.First-1)
 	for _, event := range record.Items {
 		if event.Sequence > after {
 			result.Items = append(result.Items, event)
@@ -70,8 +71,15 @@ func (repository *Repository) TaskEvents(ctx context.Context, taskID string, aft
 	return result, nil
 }
 
-func (repository *Repository) readTaskEvents(ctx context.Context, taskID string, revision int64) (*taskEventsRecord, int64, error) {
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{TaskEventsKey(taskID)}, Revision: revision})
+func (repository *Repository) readTaskEvents(
+	ctx context.Context,
+	taskID string,
+	revision int64,
+) (*taskEventsRecord, int64, error) {
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{TaskEventsKey(taskID)}, Revision: revision},
+	)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -93,12 +101,16 @@ func (repository *Repository) readTaskEvents(ctx context.Context, taskID string,
 		return nil, 0, err
 	}
 	if record.TaskID != taskID || record.LastSequence == 0 || len(record.Items) > maximumEvents ||
-		len(record.Items) == 0 && !record.Expired || len(record.Items) != 0 && record.Items[len(record.Items)-1].Sequence != record.LastSequence {
+		len(record.Items) == 0 &&
+			!record.Expired || len(record.Items) != 0 && record.Items[len(record.Items)-1].Sequence != record.LastSequence {
 		return nil, 0, invalid()
 	}
 	for index, event := range record.Items {
-		if event.Sequence == 0 || event.AttemptSequence == 0 || ids.Validate(ids.KindWorkItem, event.WorkItemID) != nil ||
-			ids.Validate(ids.KindAttempt, event.AttemptID) != nil || !recordcodec.IsCanonicalUTC(event.RecordedAt) || event.Stage.Validate() != nil {
+		if event.Sequence == 0 || event.AttemptSequence == 0 ||
+			ids.Validate(ids.KindWorkItem, event.WorkItemID) != nil ||
+			ids.Validate(ids.KindAttempt, event.AttemptID) != nil ||
+			!recordcodec.IsCanonicalUTC(event.RecordedAt) ||
+			event.Stage.Validate() != nil {
 			return nil, 0, invalid()
 		}
 		// Ordering is transaction sequence, not executor wall-clock ordering.
@@ -109,7 +121,12 @@ func (repository *Repository) readTaskEvents(ctx context.Context, taskID string,
 	return &record, read.Values[0].ModRevision, nil
 }
 
-func (repository *Repository) prepareTaskEvent(ctx context.Context, next Record, stage workexecution.Stage, revision int64) (keyvalue.Condition, keyvalue.Mutation, error) {
+func (repository *Repository) prepareTaskEvent(
+	ctx context.Context,
+	next Record,
+	stage workexecution.Stage,
+	revision int64,
+) (keyvalue.Condition, keyvalue.Mutation, error) {
 	previous, modRevision, err := repository.readTaskEvents(ctx, next.TaskID, revision)
 	if err != nil {
 		return keyvalue.Condition{}, keyvalue.Mutation{}, err
@@ -138,7 +155,14 @@ func (repository *Repository) prepareTaskEvent(ctx context.Context, next Record,
 			return keyvalue.Condition{}, keyvalue.Mutation{}, err
 		}
 		if len(value) <= maximumBytes {
-			return keyvalue.Condition{Key: TaskEventsKey(next.TaskID), ModRevision: modRevision}, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: TaskEventsKey(next.TaskID), Value: value}, nil
+			return keyvalue.Condition{
+				Key:         TaskEventsKey(next.TaskID),
+				ModRevision: modRevision,
+			}, keyvalue.Mutation{
+				Type:  keyvalue.MutationPut,
+				Key:   TaskEventsKey(next.TaskID),
+				Value: value,
+			}, nil
 		}
 		clear(value)
 		if len(record.Items) == 1 {

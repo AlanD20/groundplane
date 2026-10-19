@@ -15,7 +15,9 @@ func PrepareVolumeRestoreRecoveryCheckpoint(current BackupRestoreRecord, input *
 	if ValidateBackupRestoreRecord(current) != nil || current.State != BackupRestoreRecoveryRequired ||
 		current.Point.SourceKind != BackupRuntimeSourceVolume || current.VolumeProgress == nil ||
 		current.VolumeProgress.ServicesRecovered || request == nil || request.GetVolume() == nil {
-		return BackupRestoreRecord{}, invalidBackupRuntimeRecord("Volume recovery requires its unfinished captured mutation")
+		return BackupRestoreRecord{}, invalidBackupRuntimeRecord(
+			"Volume recovery requires its unfinished captured mutation",
+		)
 	}
 	position := CloneBackupRestoreRecord(current)
 	position.Verification = BackupVerificationPending

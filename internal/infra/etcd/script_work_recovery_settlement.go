@@ -59,7 +59,11 @@ func (repository *ScriptRepository) SettleRecoveredScript(ctx context.Context, v
 		return err
 	}
 	request.At = at
-	request.Result = workexecution.Completion{Outcome: workexecution.Succeeded, Evidence: reference, EffectsSettled: true}
+	request.Result = workexecution.Completion{
+		Outcome:        workexecution.Succeeded,
+		Evidence:       reference,
+		EffectsSettled: true,
+	}
 	change, err := workqueue.PrepareCompletion(request)
 	if err != nil {
 		return err

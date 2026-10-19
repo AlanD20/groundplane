@@ -9,10 +9,15 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareRemovalRecoveryFailure(ctx context.Context, attempt workexecution.Attempt,
-	input *agentpb.ServiceLifecycleWorkInput, capture removalexecution.RecoveryCapture, reason lifecycleexecution.FailureReason,
+func (journal *Journal) PrepareRemovalRecoveryFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture removalexecution.RecoveryCapture,
+	reason lifecycleexecution.FailureReason,
 ) (*LifecycleFailureDelivery, error) {
-	if capture.ValidateFor(attempt, input) != nil || attempt.StartedAt == nil || attempt.FinishedAt != nil || !reason.Valid() {
+	if capture.ValidateFor(attempt, input) != nil || attempt.StartedAt == nil || attempt.FinishedAt != nil ||
+		!reason.Valid() {
 		return nil, invalid()
 	}
 	unlock, err := journal.lock(ctx)
@@ -45,9 +50,15 @@ func (journal *Journal) PrepareRemovalRecoveryFailure(ctx context.Context, attem
 			return nil, err
 		}
 		state = &attemptRecord{Attempt: attempt, UpdatedAt: progress.UpdatedAt,
-			RemovalRecovery: &RemovalRecoveryRecord{Stages: stages, Source: capture.Source, CaptureSHA256: digest, Progress: progress}}
+			RemovalRecovery: &RemovalRecoveryRecord{
+				Stages:        stages,
+				Source:        capture.Source,
+				CaptureSHA256: digest,
+				Progress:      progress,
+			}}
 	}
-	if !matchesRemovalRecovery(state, attempt, input, capture) || state.RemovalRecovery.Completion != nil || state.RemovalRecovery.Progress.Phase == removalexecution.Complete {
+	if !matchesRemovalRecovery(state, attempt, input, capture) || state.RemovalRecovery.Completion != nil ||
+		state.RemovalRecovery.Progress.Phase == removalexecution.Complete {
 		return nil, conflict()
 	}
 	if state.RemovalRecovery.Failure != nil {
@@ -60,10 +71,16 @@ func (journal *Journal) PrepareRemovalRecoveryFailure(ctx context.Context, attem
 	return state.RemovalRecovery.Failure, nil
 }
 
-func (journal *Journal) AcknowledgeRemovalRecoveryFailure(ctx context.Context, attempt workexecution.Attempt,
-	input *agentpb.ServiceLifecycleWorkInput, capture removalexecution.RecoveryCapture, terminal workexecution.Attempt, evidence []byte,
+func (journal *Journal) AcknowledgeRemovalRecoveryFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture removalexecution.RecoveryCapture,
+	terminal workexecution.Attempt,
+	evidence []byte,
 ) error {
-	if terminal.Validate() != nil || terminal.Result == nil || terminal.FinishedAt == nil || terminal.Outcome != workexecution.Failed {
+	if terminal.Validate() != nil || terminal.Result == nil || terminal.FinishedAt == nil ||
+		terminal.Outcome != workexecution.Failed {
 		return invalid()
 	}
 	failure, err := removalexecution.DecodeFailure(terminal, input, capture, evidence, *terminal.Result)
@@ -85,7 +102,8 @@ func (journal *Journal) AcknowledgeRemovalRecoveryFailure(ctx context.Context, a
 	}
 	stored := state.RemovalRecovery.Failure
 	if previous := stored.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result || !previous.FinishedAt.Equal(*terminal.FinishedAt) {
+		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result ||
+			!previous.FinishedAt.Equal(*terminal.FinishedAt) {
 			return conflict()
 		}
 		return nil

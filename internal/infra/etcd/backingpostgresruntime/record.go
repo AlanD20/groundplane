@@ -159,10 +159,17 @@ func Validate(record Record) error {
 		if proof.ServiceID != record.ServiceID || proof.LocalImageID != record.LocalImageID ||
 			proof.ManagedReleaseSHA256 != record.CatalogSHA256 || proof.AcknowledgedAt.IsZero() ||
 			proof.AcknowledgedAt.Location() != time.UTC || record.DeploymentReleaseID != "" ||
-			environmentprojection.ValidateBackingProvisioningReceipt(*proof) != nil || hex.EncodeToString(digest[:]) != proof.ArtifactSHA256 {
+			environmentprojection.ValidateBackingProvisioningReceipt(
+				*proof,
+			) != nil || hex.EncodeToString(digest[:]) != proof.ArtifactSHA256 {
 			return invalid()
 		}
-		workload, err := backingruntimefact.Workload(artifact, record.ServiceID, proof.Attempt.Input.ID, proof.RenderGeneration)
+		workload, err := backingruntimefact.Workload(
+			artifact,
+			record.ServiceID,
+			proof.Attempt.Input.ID,
+			proof.RenderGeneration,
+		)
 		if err != nil {
 			return err
 		}

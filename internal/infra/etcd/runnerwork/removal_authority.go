@@ -13,7 +13,11 @@ import (
 
 // RemovalAuthority fences the resource captured at admission, independently of
 // Task history. The same comparisons protect execution and cancellation.
-func (repository *Repository) RemovalAuthority(ctx context.Context, input Input, revision int64) ([]keyvalue.Condition, error) {
+func (repository *Repository) RemovalAuthority(
+	ctx context.Context,
+	input Input,
+	revision int64,
+) ([]keyvalue.Condition, error) {
 	if input.Validate() != nil || input.Operation != runnerallocation.RuntimeOperationRemove || revision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "Runner removal authority is invalid")
 	}
@@ -57,7 +61,8 @@ func (repository *Repository) RemovalAuthority(ctx context.Context, input Input,
 	if err != nil {
 		return nil, err
 	}
-	if tombstone.TargetID != id || tombstone.TaskID != input.TaskID || tombstone.TargetRevision != source.DesiredRevision ||
+	if tombstone.TargetID != id || tombstone.TaskID != input.TaskID ||
+		tombstone.TargetRevision != source.DesiredRevision ||
 		tombstone.Phase != deletions.DeletionPhaseFinalizing {
 		return nil, errs.New(errs.KindStateConflict, "Runner removal no longer owns the deletion fence")
 	}

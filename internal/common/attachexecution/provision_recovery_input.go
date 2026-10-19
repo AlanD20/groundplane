@@ -29,5 +29,6 @@ func (input ProvisionRecoveryInput) Validate() error {
 
 func (input ProvisionRecoveryInput) RequiresConsumer() bool {
 	checkpoint := input.Source.Failure.Checkpoint
-	return checkpoint != nil && checkpoint.Sequence%2 != 0 && input.Source.Failure.Authority.IsConsumerCommand(uint32((checkpoint.Sequence-1)/2))
+	return checkpoint != nil && checkpoint.Sequence%2 != 0 &&
+		input.Source.Failure.Authority.IsConsumerCommand(uint32((checkpoint.Sequence-1)/2))
 }

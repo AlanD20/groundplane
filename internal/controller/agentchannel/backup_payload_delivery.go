@@ -23,8 +23,10 @@ type backupPayloadProducer struct {
 
 // Install the inbox before sending the assignment, but do not open a durable
 // transfer until Connect has sent the native execution-start acknowledgement.
-func (delivery *assignmentPayloadDelivery) prepareBackupPayloads(stream agentpb.AgentChannel_ConnectServer,
-	assignment *agentpb.BackupWorkAssignment, authorization agentregistration.WorkAuthorization,
+func (delivery *assignmentPayloadDelivery) prepareBackupPayloads(
+	stream agentpb.AgentChannel_ConnectServer,
+	assignment *agentpb.BackupWorkAssignment,
+	authorization agentregistration.WorkAuthorization,
 	send func(agentpb.AgentChannel_ConnectServer, agentregistration.WorkAuthorization, *agentpb.BackupWorkAssignment, *volumeManifestExchange, *configTransferExchange) error,
 ) (func(), error) {
 	owned, _, err := executionplan.OpenBackupWorkAssignment(assignment, authorization.Identity())
@@ -66,10 +68,17 @@ func (delivery *assignmentPayloadDelivery) launchBackupPayloads(stream agentpb.A
 			configs.close()
 		}
 	}
-	producer := &backupPayloadProducer{attempt: attempt, exchange: exchange, configs: configs, start: make(chan struct{}), cancel: cancel}
+	producer := &backupPayloadProducer{
+		attempt:  attempt,
+		exchange: exchange,
+		configs:  configs,
+		start:    make(chan struct{}),
+		cancel:   cancel,
+	}
 	id := attempt.AttemptId
 	delivery.mu.Lock()
-	if delivery.ctx.Err() != nil || delivery.backupPayloads[id] != nil || len(delivery.backupPayloads) >= delivery.limit {
+	if delivery.ctx.Err() != nil || delivery.backupPayloads[id] != nil ||
+		len(delivery.backupPayloads) >= delivery.limit {
 		delivery.mu.Unlock()
 		cancel()
 		closeTransfers()
@@ -129,13 +138,18 @@ func (delivery *assignmentPayloadDelivery) finishBackupPayloads(message *agentpb
 	}
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
-	if producer := delivery.backupPayloads[attempt.AttemptId]; producer != nil && proto.Equal(producer.attempt, attempt) {
+	if producer := delivery.backupPayloads[attempt.AttemptId]; producer != nil &&
+		proto.Equal(producer.attempt, attempt) {
 		producer.cancel()
 	}
 }
 
-func (server *Server) sendBackupPayloads(stream agentpb.AgentChannel_ConnectServer,
-	authorization agentregistration.WorkAuthorization, assignment *agentpb.BackupWorkAssignment, exchange *volumeManifestExchange, configs *configTransferExchange,
+func (server *Server) sendBackupPayloads(
+	stream agentpb.AgentChannel_ConnectServer,
+	authorization agentregistration.WorkAuthorization,
+	assignment *agentpb.BackupWorkAssignment,
+	exchange *volumeManifestExchange,
+	configs *configTransferExchange,
 ) error {
 	for ordinal, step := range assignment.Input.Steps {
 		if step.GetCapture().GetConfig() != nil {

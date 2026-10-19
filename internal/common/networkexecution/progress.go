@@ -48,7 +48,12 @@ func stages(action agentpb.NetworkWorkAction) []Stage {
 	}
 }
 
-func NewProgress(attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string, at time.Time) (Progress, error) {
+func NewProgress(
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	at time.Time,
+) (Progress, error) {
 	steps := stages(action)
 	if len(steps) == 0 || !at.Before(attempt.Deadline) {
 		return Progress{}, invalidProgress()
@@ -57,7 +62,11 @@ func NewProgress(attempt workexecution.Attempt, action agentpb.NetworkWorkAction
 	return progress, progress.Validate(attempt, action, networkID)
 }
 
-func (progress Progress) Validate(attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string) error {
+func (progress Progress) Validate(
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+) error {
 	steps := stages(action)
 	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward || attempt.StartedAt == nil ||
 		ids.Validate(ids.KindNetwork, networkID) != nil || len(steps) == 0 || progress.AttemptID != attempt.ID ||
@@ -89,7 +98,12 @@ func (progress Progress) Validate(attempt workexecution.Attempt, action agentpb.
 
 // Begin is persisted and acknowledged before starting the named effect. An
 // in-flight checkpoint can only be resolved by inspection, never by Begin again.
-func (progress Progress) Begin(attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string, at time.Time) (Progress, error) {
+func (progress Progress) Begin(
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, action, networkID) != nil || progress.InFlight || progress.Stage == Complete ||
 		at.Before(progress.UpdatedAt) || !at.Before(attempt.Deadline) {
 		return Progress{}, invalidProgress()
@@ -101,7 +115,13 @@ func (progress Progress) Begin(attempt workexecution.Attempt, action agentpb.Net
 	return next, next.Validate(attempt, action, networkID)
 }
 
-func (progress Progress) Confirm(attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string, observation Observation, at time.Time) (Progress, error) {
+func (progress Progress) Confirm(
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	observation Observation,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, action, networkID) != nil || !progress.InFlight || at.Before(progress.UpdatedAt) ||
 		observation.At.Before(*progress.BeganAt) || observation.At.After(at) || !observation.proves(progress.Stage) {
 		return Progress{}, invalidProgress()
@@ -136,5 +156,8 @@ func (observation Observation) proves(stage Stage) bool {
 func (observation Observation) Satisfies(stage Stage) bool { return observation.proves(stage) }
 
 func invalidProgress() error {
-	return errs.New(errs.KindStateConflict, "Network progress does not prove the captured bridge configuration or removal")
+	return errs.New(
+		errs.KindStateConflict,
+		"Network progress does not prove the captured bridge configuration or removal",
+	)
 }

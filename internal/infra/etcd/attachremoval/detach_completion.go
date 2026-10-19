@@ -24,7 +24,9 @@ func (repository *InputRepository) PrepareDetachCompletion(ctx context.Context, 
 	input attachexecution.RemovalInput, at time.Time,
 ) (workqueue.Change, error) {
 	if !view.ActiveAttempt || view.Attempt.Attempt.FinishedAt != nil || view.Checkpoint.Record == nil ||
-		view.Checkpoint.Record.Sequence != uint64(input.CommandCount())*2 || at.Before(view.Checkpoint.Record.RecordedAt) ||
+		view.Checkpoint.Record.Sequence != uint64(
+			input.CommandCount(),
+		)*2 || at.Before(view.Checkpoint.Record.RecordedAt) ||
 		input.Attempt.Direction != workexecution.Forward {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach has no complete active command checkpoint")
 	}
@@ -51,7 +53,10 @@ func (repository *InputRepository) PrepareDetachCompletion(ctx context.Context, 
 	}
 	checkpoint, err := report.Checkpoint(input)
 	if err != nil || !report.Progress.Complete(input) || !sameCheckpoint(checkpoint, *view.Checkpoint.Record) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach completion differs from its saved command evidence")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Detach completion differs from its saved command evidence",
+		)
 	}
 	change, err := repository.PrepareDetachCheckpoint(ctx, view, input, report)
 	if err != nil {
@@ -78,7 +83,10 @@ func (repository *InputRepository) PrepareDetachCompletion(ctx context.Context, 
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: DetachResultKey(input.Attempt.WorkItemID)},
 		keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
 	change.Mutations = append(change.Mutations, resource.Mutations...)
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DetachResultKey(input.Attempt.WorkItemID), Value: raw})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DetachResultKey(input.Attempt.WorkItemID), Value: raw},
+	)
 	return change, nil
 }
 
@@ -89,7 +97,12 @@ func (repository *InputRepository) prepareDetachRemoval(ctx context.Context, vie
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	conditions, mutations, values, err := attachrecord.PrepareAttachRemoval(ctx, repository.store, current, view.ReadRevision)
+	conditions, mutations, values, err := attachrecord.PrepareAttachRemoval(
+		ctx,
+		repository.store,
+		current,
+		view.ReadRevision,
+	)
 	if err != nil {
 		for _, value := range values {
 			clear(value)

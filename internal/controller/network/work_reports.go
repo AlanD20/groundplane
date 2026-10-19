@@ -21,11 +21,33 @@ import (
 // Report handlers cannot settle queue ownership independently of these writes.
 type WorkRecords interface {
 	LoadNetworkWorkInput(context.Context, workqueue.View) (*agentpb.NetworkWorkInput, error)
-	PrepareNetworkWorkCheckpoint(context.Context, workqueue.ResumeView, *agentpb.NetworkWorkInput, networkexecution.Progress, time.Time) (workqueue.Change, error)
-	PrepareNetworkWorkCompletion(context.Context, workqueue.ResumeView, *agentpb.NetworkWorkInput, time.Time) (workqueue.Change, error)
-	PrepareFailure(context.Context, workqueue.ResumeView, networkexecution.FailureReason, time.Time, bool) (workqueue.Change, workexecution.Completion, error)
+	PrepareNetworkWorkCheckpoint(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.NetworkWorkInput,
+		networkexecution.Progress,
+		time.Time,
+	) (workqueue.Change, error)
+	PrepareNetworkWorkCompletion(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.NetworkWorkInput,
+		time.Time,
+	) (workqueue.Change, error)
+	PrepareFailure(
+		context.Context,
+		workqueue.ResumeView,
+		networkexecution.FailureReason,
+		time.Time,
+		bool,
+	) (workqueue.Change, workexecution.Completion, error)
 	LoadFailure(context.Context, workqueue.ResumeView) ([]byte, error)
-	PrepareRecoveryResult(context.Context, workqueue.ResumeView, []byte, time.Time) (workqueue.Change, workexecution.Completion, error)
+	PrepareRecoveryResult(
+		context.Context,
+		workqueue.ResumeView,
+		[]byte,
+		time.Time,
+	) (workqueue.Change, workexecution.Completion, error)
 	LoadRecoveryResult(context.Context, workqueue.ResumeView) ([]byte, bool, error)
 }
 
@@ -36,7 +58,10 @@ type WorkReports struct {
 
 func NewWorkReports(queue *workqueue.Repository, records WorkRecords) (*WorkReports, error) {
 	if queue == nil || records == nil {
-		return nil, errs.New(errs.KindInternal, "Network reporting requires execution storage and its publication owner")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Network reporting requires execution storage and its publication owner",
+		)
 	}
 	return &WorkReports{queue: queue, records: records}, nil
 }
@@ -63,7 +88,12 @@ func (service *WorkReports) CheckpointNetwork(ctx context.Context, authorization
 	if input == nil {
 		return nil, errs.New(errs.KindStateConflict, "Network execution input is unavailable")
 	}
-	progress, err := networkexecution.DecodeProgress(view.Attempt.Attempt, input.Action, input.NetworkId, request.Progress)
+	progress, err := networkexecution.DecodeProgress(
+		view.Attempt.Attempt,
+		input.Action,
+		input.NetworkId,
+		request.Progress,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +137,10 @@ func (service *WorkReports) reportView(ctx context.Context, authorization agentr
 	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Attempt.Attempt.StartedAt == nil ||
 		view.Work.Item.Item.Operation != workexecution.Network || !view.Work.Task.Task.PublicationComplete ||
 		view.Work.Task.Task.CollectionStartedAt != nil {
-		return workqueue.ResumeView{}, errs.New(errs.KindStateConflict, "Network report has no retained started execution")
+		return workqueue.ResumeView{}, errs.New(
+			errs.KindStateConflict,
+			"Network report has no retained started execution",
+		)
 	}
 	return view, nil
 }

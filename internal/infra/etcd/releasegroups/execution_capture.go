@@ -65,8 +65,16 @@ func (capture ExecutionCapture) Validate() error {
 		capture.GroupRevision <= 0 || capture.SourceReadRevision < capture.GroupRevision ||
 		!recordcodec.IsCanonicalUTC(capture.CreatedAt) || !recordcodec.IsCanonicalUTC(capture.Deadline) ||
 		!capture.Deadline.After(capture.CreatedAt) || capture.Deadline.Sub(capture.CreatedAt) > 24*time.Hour ||
-		capture.Deadline.Sub(capture.CreatedAt) != time.Duration(capture.Policy.Manifest.ConfiguredTimeoutSeconds)*time.Second ||
-		len(capture.Members) != len(capture.Policy.Members) || len(capture.Preflight) > 16 || len(capture.Graph) > int(workexecution.MaximumTaskItems) {
+		capture.Deadline.Sub(
+			capture.CreatedAt,
+		) != time.Duration(
+			capture.Policy.Manifest.ConfiguredTimeoutSeconds,
+		)*time.Second ||
+		len(
+			capture.Members,
+		) != len(
+			capture.Policy.Members,
+		) || len(capture.Preflight) > 16 || len(capture.Graph) > int(workexecution.MaximumTaskItems) {
 		return errs.New(errs.KindValidationFailed, "Release Group execution capture is invalid")
 	}
 	byID := make(map[string]workexecution.Item, len(capture.Graph))
@@ -91,7 +99,10 @@ func (capture ExecutionCapture) Validate() error {
 		}
 		reference, err := preparation.Reference()
 		if err != nil || reference != capture.Members[index].Restore {
-			return errs.New(errs.KindValidationFailed, "Release Group restoration differs from its accepted source preparation")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Release Group restoration differs from its accepted source preparation",
+			)
 		}
 		for ordinal, id := range []string{member.ForwardID, member.RestoreID} {
 			item, found := byID[id]
@@ -103,8 +114,14 @@ func (capture ExecutionCapture) Validate() error {
 				item.Input != nil || item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput ||
 				!slices.Contains(item.Claims, workexecution.Claim{ScopeID: member.Member.ServiceID}) ||
 				!slices.Contains(item.Claims, workexecution.Claim{ScopeID: capture.Scope.EnvironmentID}) ||
-				!slices.Contains(item.Claims, workexecution.Claim{HostID: capture.Placement.HostID, ScopeID: capture.Scope.EnvironmentID}) {
-				return errs.New(errs.KindValidationFailed, "Release Group member work is not captured waiting Service execution")
+				!slices.Contains(
+					item.Claims,
+					workexecution.Claim{HostID: capture.Placement.HostID, ScopeID: capture.Scope.EnvironmentID},
+				) {
+				return errs.New(
+					errs.KindValidationFailed,
+					"Release Group member work is not captured waiting Service execution",
+				)
 			}
 			delete(byID, id)
 		}
@@ -118,7 +135,10 @@ func (capture ExecutionCapture) Validate() error {
 			item.Operation != workexecution.Script || item.TargetID != hook.ScriptID ||
 			item.Input != nil || item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput ||
 			!slices.Contains(item.Claims, workexecution.Claim{ScopeID: capture.Scope.EnvironmentID}) ||
-			!slices.Contains(item.Claims, workexecution.Claim{HostID: capture.Placement.HostID, ScopeID: hook.ServiceID}) ||
+			!slices.Contains(
+				item.Claims,
+				workexecution.Claim{HostID: capture.Placement.HostID, ScopeID: hook.ServiceID},
+			) ||
 			previous != "" && !slices.Contains(item.Dependencies, previous) {
 			return errs.New(errs.KindValidationFailed, "Release Group preflight differs from its captured Script work")
 		}
@@ -129,13 +149,19 @@ func (capture ExecutionCapture) Validate() error {
 		for _, member := range capture.Policy.Members {
 			item := capture.memberWork(member.ForwardID)
 			if !slices.Contains(item.Dependencies, previous) {
-				return errs.New(errs.KindValidationFailed, "Release Group member can start before required preflight cleanup")
+				return errs.New(
+					errs.KindValidationFailed,
+					"Release Group member can start before required preflight cleanup",
+				)
 			}
 		}
 	}
 	for _, item := range byID {
 		if item.Operation != workexecution.Network || item.Input == nil || item.Phase != workexecution.Ready {
-			return errs.New(errs.KindValidationFailed, "Release Group graph contains an undeclared member or prerequisite")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Release Group graph contains an undeclared member or prerequisite",
+			)
 		}
 	}
 	return nil
@@ -160,7 +186,10 @@ func (capture ExecutionCapture) encoded() ([]byte, workexecution.Input, error) {
 	}
 	if len(value) > keyvalue.MaximumBytes {
 		clear(value)
-		return nil, workexecution.Input{}, errs.New(errs.KindReleasePlanTooLarge, "Release Group captured graph exceeds the storage budget")
+		return nil, workexecution.Input{}, errs.New(
+			errs.KindReleasePlanTooLarge,
+			"Release Group captured graph exceeds the storage budget",
+		)
 	}
 	digest := sha256.Sum256(value)
 	return value, workexecution.Input{ID: capture.PlanID, SHA256: hex.EncodeToString(digest[:])}, nil
@@ -190,8 +219,13 @@ func PrepareExecutionCapture(task workexecution.Task, capture ExecutionCapture) 
 		task.Action != expected.Action || task.TargetID != expected.TargetID || task.TargetName != expected.TargetName ||
 		task.Intent != expected.Intent || task.ExpectedItems != expected.ExpectedItems || task.PublicationComplete ||
 		task.Progress.Total() != 0 || task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
-		!task.CreatedAt.Equal(expected.CreatedAt) || !task.UpdatedAt.Equal(expected.UpdatedAt) || !task.Deadline.Equal(expected.Deadline) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release Group acceptance differs from its complete capture")
+		!task.CreatedAt.Equal(
+			expected.CreatedAt,
+		) || !task.UpdatedAt.Equal(expected.UpdatedAt) || !task.Deadline.Equal(expected.Deadline) {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Release Group acceptance differs from its complete capture",
+		)
 	}
 	value, _, err := capture.encoded()
 	if err != nil {
@@ -205,6 +239,9 @@ func PrepareExecutionCapture(task workexecution.Task, capture ExecutionCapture) 
 	}
 	reservation.Conditions = append(reservation.Conditions, keyvalue.Condition{Key: key},
 		keyvalue.Condition{Key: ReleaseGroupRecordKey(task.TargetID), ModRevision: capture.GroupRevision})
-	reservation.Mutations = append(reservation.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
+	reservation.Mutations = append(
+		reservation.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value},
+	)
 	return reservation, nil
 }

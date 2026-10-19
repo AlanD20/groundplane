@@ -25,7 +25,10 @@ func NewAgentWork(inputs *servicelifecyclework.Repository, queue *workqueue.Repo
 	return &AgentWork{inputs: inputs, queue: queue}, nil
 }
 
-func (owner *AgentWork) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ServiceLifecycleAssignment, error) {
+func (owner *AgentWork) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ServiceLifecycleAssignment, error) {
 	if view.Attempt.Attempt.Direction == workexecution.Recovery {
 		assignment, _, err := owner.recoveryAssignment(ctx, view)
 		return assignment, err
@@ -64,19 +67,31 @@ func (owner *AgentWork) AuthorizeAgentStart(ctx context.Context, view workqueue.
 	return change, nil
 }
 
-func (owner *AgentWork) capturedAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ServiceLifecycleAssignment, keyvalue.Condition, error) {
+func (owner *AgentWork) capturedAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ServiceLifecycleAssignment, keyvalue.Condition, error) {
 	item, task, attempt := view.Work.Item.Item, view.Work.Task.Task, view.Attempt.Attempt
 	if !view.CurrentExecutor || !view.ActiveAttempt || item.Operation != workexecution.ServiceLifecycle ||
 		attempt.Direction != workexecution.Forward || attempt.Executor.Executor != workexecution.Agent ||
-		workexecution.ValidateDelivery(item, attempt) != nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil {
-		return nil, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Service lifecycle assignment no longer owns active host execution")
+		workexecution.ValidateDelivery(
+			item,
+			attempt,
+		) != nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil {
+		return nil, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle assignment no longer owns active host execution",
+		)
 	}
 	captured, guard, err := owner.inputs.Load(ctx, view.Work)
 	if err != nil {
 		return nil, keyvalue.Condition{}, err
 	}
 	if captured.HostID != attempt.Executor.HostID || captured.Runtime == nil {
-		return nil, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Service lifecycle capture does not authorize this host")
+		return nil, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle capture does not authorize this host",
+		)
 	}
 	input, err := BuildWorkInput(captured)
 	if err != nil {

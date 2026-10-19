@@ -9,7 +9,11 @@ import (
 
 // PrepareAttachProvisionExec must complete before Docker ExecAttach can start this exec.
 // A saved exec is never started again after a process interruption.
-func (journal *Journal) PrepareAttachProvisionExec(ctx context.Context, input attachexecution.ProvisionInput, execution AttachExec) error {
+func (journal *Journal) PrepareAttachProvisionExec(
+	ctx context.Context,
+	input attachexecution.ProvisionInput,
+	execution AttachExec,
+) error {
 	if execution.validate() != nil || execution.ReadyAt != nil || execution.ExitedAt != nil ||
 		!execution.CreatedAt.Before(input.Attempt.Deadline) {
 		return invalid()
@@ -42,7 +46,12 @@ func (journal *Journal) PrepareAttachProvisionExec(ctx context.Context, input at
 
 // AuthorizeAttachProvisionExec records an observed readiness handshake before the caller
 // sends permission. Repeated calls do not authorize a second permission write.
-func (journal *Journal) AuthorizeAttachProvisionExec(ctx context.Context, input attachexecution.ProvisionInput, execID string, at time.Time) error {
+func (journal *Journal) AuthorizeAttachProvisionExec(
+	ctx context.Context,
+	input attachexecution.ProvisionInput,
+	execID string,
+	at time.Time,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -52,7 +61,8 @@ func (journal *Journal) AuthorizeAttachProvisionExec(ctx context.Context, input 
 	if err != nil {
 		return err
 	}
-	if !attachProvisionExecWritable(state, input) || state.AttachProvisionFailure != nil || !at.Before(input.Attempt.Deadline) {
+	if !attachProvisionExecWritable(state, input) || state.AttachProvisionFailure != nil ||
+		!at.Before(input.Attempt.Deadline) {
 		return conflict()
 	}
 	execution := lastAttachProvisionExec(state, execID)
@@ -67,7 +77,13 @@ func (journal *Journal) AuthorizeAttachProvisionExec(ctx context.Context, input 
 // ObserveAttachProvisionExecExit records process exit, not operation success.
 // A later inspection can record the exit of an interrupted command without
 // granting permission to start it again.
-func (journal *Journal) ObserveAttachProvisionExecExit(ctx context.Context, input attachexecution.ProvisionInput, execID string, exitCode int, at time.Time) error {
+func (journal *Journal) ObserveAttachProvisionExecExit(
+	ctx context.Context,
+	input attachexecution.ProvisionInput,
+	execID string,
+	exitCode int,
+	at time.Time,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err

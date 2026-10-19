@@ -39,11 +39,15 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}
-	if view.Task.Revision <= 0 || view.Item.Revision <= 0 || view.ReadRevision < view.Task.Revision || view.ReadRevision < view.Item.Revision {
+	if view.Task.Revision <= 0 || view.Item.Revision <= 0 || view.ReadRevision < view.Task.Revision ||
+		view.ReadRevision < view.Item.Revision {
 		return Input{}, keyvalue.Condition{}, invalid("backing creation needs its retained work snapshot")
 	}
 	key := InputKey(view.Item.Item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}

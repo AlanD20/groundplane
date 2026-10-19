@@ -28,7 +28,12 @@ func (executor *Executor) fail(ctx context.Context, input Input, exchange Exchan
 	return executor.deliverFailure(deliveryCtx, input, exchange, failure)
 }
 
-func (executor *Executor) deliverFailure(ctx context.Context, input Input, exchange Exchange, failure *agentworkjournal.LifecycleFailureDelivery) (workexecution.Attempt, error) {
+func (executor *Executor) deliverFailure(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	failure *agentworkjournal.LifecycleFailureDelivery,
+) (workexecution.Attempt, error) {
 	if failure.Receipt != nil {
 		return *failure.Receipt, nil
 	}
@@ -36,7 +41,10 @@ func (executor *Executor) deliverFailure(ctx context.Context, input Input, excha
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	ack, err := exchange.FailLifecycle(ctx, &agentpb.ServiceLifecycleFailureRequest{Attempt: identity, Reason: string(failure.Reason)})
+	ack, err := exchange.FailLifecycle(
+		ctx,
+		&agentpb.ServiceLifecycleFailureRequest{Attempt: identity, Reason: string(failure.Reason)},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

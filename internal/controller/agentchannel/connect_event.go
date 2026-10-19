@@ -131,3 +131,21 @@ func nextConnectEvent(
 		return connectEvent{kind: connectPayloadFrame, frame: frame}
 	}
 }
+
+func receiveAgentMessages(
+	stream agentpb.AgentChannel_ConnectServer,
+	session *Session,
+	received chan<- agentReceiveResult,
+) {
+	for {
+		message, recvErr := stream.Recv()
+		select {
+		case received <- agentReceiveResult{message: message, err: recvErr}:
+		case <-session.Done():
+			return
+		}
+		if recvErr != nil {
+			return
+		}
+	}
+}

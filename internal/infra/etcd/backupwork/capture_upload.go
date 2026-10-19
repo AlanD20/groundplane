@@ -6,7 +6,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func projectCaptureUpload(source *backupruntime.BackupRunSourceAttemptRecord, cursor *agentpb.BackupCaptureResume) error {
+func projectCaptureUpload(
+	source *backupruntime.BackupRunSourceAttemptRecord,
+	cursor *agentpb.BackupCaptureResume,
+) error {
 	if completed := cursor.GetUploadCompleted(); completed != nil {
 		source.Upload.Target = captureObjectTarget(completed.Target)
 		switch {
@@ -41,7 +44,10 @@ func captureObjectIdentity(value *agentpb.BackupObjectIdentity) backupruntime.Ba
 	result := backupruntime.BackupObjectIdentity{Target: captureObjectTarget(&agentpb.BackupObjectTarget{
 		Connector: value.Connector, Bucket: value.Bucket, ObjectKey: value.ObjectKey})}
 	if version := value.GetVersionId(); version != nil {
-		result.Discriminator = backupruntime.BackupObjectDiscriminator{Kind: backupobject.DiscriminatorVersionID, Value: version.Value}
+		result.Discriminator = backupruntime.BackupObjectDiscriminator{
+			Kind:  backupobject.DiscriminatorVersionID,
+			Value: version.Value,
+		}
 	} else {
 		result.Discriminator = backupruntime.BackupObjectDiscriminator{Kind: backupobject.DiscriminatorETag, Value: value.GetEtag().GetValue()}
 	}

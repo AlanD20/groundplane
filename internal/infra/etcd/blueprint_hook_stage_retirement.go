@@ -43,7 +43,10 @@ func (ledger *ReleaseLedger) RetireUnpublishedHookStage(ctx context.Context, vie
 	var stage blueprintReleaseHookStage
 	if json.Unmarshal(value.Value, &stage) != nil || value.Key != key || value.ModRevision <= 0 ||
 		stage.Schema != 1 || stage.TaskID != task.ID || stage.WorkItemID != item.ID || stage.Input.Validate() != nil ||
-		ids.Validate(ids.KindOperation, stage.OperationID) != nil || stage.Count < 1 || stage.Count > 16 || len(stage.Snapshots) != stage.Count {
+		ids.Validate(
+			ids.KindOperation,
+			stage.OperationID,
+		) != nil || stage.Count < 1 || stage.Count > 16 || len(stage.Snapshots) != stage.Count {
 		return false, errs.New(errs.KindStateConflict, "Hook preparation cleanup descriptor is invalid")
 	}
 	conditions := []keyvalue.Condition{{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
@@ -63,13 +66,18 @@ func (ledger *ReleaseLedger) RetireUnpublishedHookStage(ctx context.Context, vie
 	keys := make([]string, len(stage.Snapshots))
 	seen := make(map[string]bool)
 	for index, snapshot := range stage.Snapshots {
-		if !scriptexecutions.ValidRawScriptExecutionID(snapshot.ExecutionID) || !scriptexecutions.ValidRawScriptExecutionID(snapshot.SnapshotID) ||
-			!scriptexecutions.ValidLowerSHA256(snapshot.SHA256) || seen[snapshot.SnapshotID] {
+		if !scriptexecutions.ValidRawScriptExecutionID(snapshot.ExecutionID) ||
+			!scriptexecutions.ValidRawScriptExecutionID(snapshot.SnapshotID) ||
+			!scriptexecutions.ValidLowerSHA256(snapshot.SHA256) ||
+			seen[snapshot.SnapshotID] {
 			return false, errs.New(errs.KindStateConflict, "Hook preparation snapshot identity is invalid")
 		}
 		seen[snapshot.SnapshotID] = true
 		keys[index] = scriptexecutions.ScriptRunnerSnapshotKey(snapshot.SnapshotID)
-		conditions = append(conditions, keyvalue.Condition{Key: scriptexecutions.ScriptExecutionKey(snapshot.ExecutionID)})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: scriptexecutions.ScriptExecutionKey(snapshot.ExecutionID)},
+		)
 	}
 	snapshots, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: view.ReadRevision})
 	if err != nil {
@@ -84,7 +92,8 @@ func (ledger *ReleaseLedger) RetireUnpublishedHookStage(ctx context.Context, vie
 		condition := keyvalue.Condition{Key: keys[index]}
 		if snapshot != nil {
 			digest := sha256.Sum256(snapshot.Value)
-			if snapshot.Key != keys[index] || snapshot.ModRevision <= 0 || hex.EncodeToString(digest[:]) != stage.Snapshots[index].SHA256 {
+			if snapshot.Key != keys[index] || snapshot.ModRevision <= 0 ||
+				hex.EncodeToString(digest[:]) != stage.Snapshots[index].SHA256 {
 				return false, errs.New(errs.KindStateConflict, "Hook preparation snapshot changed; cleanup refused")
 			}
 			condition.ModRevision = snapshot.ModRevision
@@ -95,7 +104,10 @@ func (ledger *ReleaseLedger) RetireUnpublishedHookStage(ctx context.Context, vie
 	result, err := ledger.store.Transact(ctx, conditions, mutations)
 	keyvalue.ClearValues(result.FailureReads)
 	if err == nil && !result.Succeeded {
-		return false, errs.New(errs.KindStateConflict, "Hook preparation still has retained sources or changed during cleanup")
+		return false, errs.New(
+			errs.KindStateConflict,
+			"Hook preparation still has retained sources or changed during cleanup",
+		)
 	}
 	return false, err
 }

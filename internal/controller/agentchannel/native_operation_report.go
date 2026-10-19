@@ -7,7 +7,11 @@ import (
 
 // Each compiled operation owns authentication and typed decoding. The stream
 // loop owns sending and clears transient file/hook bytes even when Send fails.
-func (server *Server) nativeOperationReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
+func (server *Server) nativeOperationReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
 	for _, route := range []func(*Session, uint64, *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error){
 		server.resolverReport, server.backingReport, server.entryReport, server.componentReport,
 		server.networkReport, server.volumeReport, server.removalRecoveryReport,

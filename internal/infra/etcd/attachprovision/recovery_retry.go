@@ -13,22 +13,42 @@ import (
 
 // PrepareRecoveryRetry grants a bounded inspection of the same failure. It
 // cannot create credentials or repeat an ambiguous Custom hook.
-func (repository *InputRepository) PrepareRecoveryRetry(ctx context.Context, view workqueue.View, previous workqueue.AttemptSnapshot, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareRecoveryRetry(
+	ctx context.Context,
+	view workqueue.View,
+	previous workqueue.AttemptSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item, attempt := view.Task.Task, view.Item.Item, previous.Attempt
-	if task.CollectionStartedAt != nil || item.Operation != workexecution.Attach || item.Placement.Executor != workexecution.Agent ||
-		item.Phase != workexecution.Attention || item.ActiveAttemptID != "" || item.Input == nil || item.TaskID != task.ID ||
-		attempt.TaskID != task.ID || attempt.WorkItemID != item.ID || attempt.Executor.HostID != item.Placement.HostID ||
-		attempt.Executor.Executor != workexecution.Agent || attempt.FinishedAt == nil || attempt.Result == nil ||
-		attempt.Input != *item.Input || attempt.Number != item.AttemptNumber || previous.Revision <= 0 || previous.Revision > view.ReadRevision ||
+	if task.CollectionStartedAt != nil || item.Operation != workexecution.Attach ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Attention ||
+		item.ActiveAttemptID != "" ||
+		item.Input == nil ||
+		item.TaskID != task.ID ||
+		attempt.TaskID != task.ID ||
+		attempt.WorkItemID != item.ID ||
+		attempt.Executor.HostID != item.Placement.HostID ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		attempt.FinishedAt == nil ||
+		attempt.Result == nil ||
+		attempt.Input != *item.Input ||
+		attempt.Number != item.AttemptNumber ||
+		previous.Revision <= 0 ||
+		previous.Revision > view.ReadRevision ||
 		item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Attach has no captured unresolved execution to inspect")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Attach has no captured unresolved execution to inspect",
+		)
 	}
 	saved, err := repository.LoadRecovery(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	if attempt.Direction == workexecution.Forward {
-		if saved.Source.Forward.ID != attempt.ID || saved.Source.Evidence != *attempt.Result || item.Result == nil || *item.Result != *attempt.Result {
+		if saved.Source.Forward.ID != attempt.ID || saved.Source.Evidence != *attempt.Result || item.Result == nil ||
+			*item.Result != *attempt.Result {
 			return workqueue.Change{}, checkpointConflict("Attach inspection Retry lost its original failure")
 		}
 	} else {
@@ -51,6 +71,9 @@ func (repository *InputRepository) PrepareRecoveryRetry(ctx context.Context, vie
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, source.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: RecoveryKey(item.ID), ModRevision: saved.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: RecoveryKey(item.ID), ModRevision: saved.Revision},
+	)
 	return change, nil
 }

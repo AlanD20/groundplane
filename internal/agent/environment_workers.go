@@ -9,7 +9,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (workers *executionWorkers) submitEnvironmentProvision(message *agentpb.EnvironmentProvisionAssignment, available int) error {
+func (workers *executionWorkers) submitEnvironmentProvision(
+	message *agentpb.EnvironmentProvisionAssignment,
+	available int,
+) error {
 	input, err := environmentexecution.DecodeAssignment(message, workers.identity)
 	if err != nil {
 		return err
@@ -32,7 +35,10 @@ func (workers *executionWorkers) submitEnvironmentProvision(message *agentpb.Env
 	if err != nil {
 		return err
 	}
-	workers.active[input.Attempt.WorkItemID] = activeExecution{attempt: input.Attempt, environmentProvision: proto.CloneOf(message)}
+	workers.active[input.Attempt.WorkItemID] = activeExecution{
+		attempt:              input.Attempt,
+		environmentProvision: proto.CloneOf(message),
+	}
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()

@@ -11,7 +11,10 @@ import (
 // LoadHookInputs reads the envelope pinned by this work, never current Secrets.
 // The caller owns clearing returned ciphertext and joining the read conditions
 // with its active-attempt authorization before delivering plaintext.
-func (repository *Repository) LoadHookInputs(ctx context.Context, view workqueue.View) (Input, *taskconfiguration.BackingHookEncryptedInputs, []keyvalue.Condition, error) {
+func (repository *Repository) LoadHookInputs(
+	ctx context.Context,
+	view workqueue.View,
+) (Input, *taskconfiguration.BackingHookEncryptedInputs, []keyvalue.Condition, error) {
 	captured, guard, err := repository.Load(ctx, view)
 	if err != nil {
 		return Input{}, nil, nil, err
@@ -38,7 +41,8 @@ func (repository *Repository) LoadHookInputs(ctx context.Context, view workqueue
 	if err != nil {
 		return Input{}, nil, nil, err
 	}
-	if envelope.OperationID != captured.HookInputs.OperationID || envelope.CiphertextSHA256 != captured.HookInputs.CiphertextSHA256 {
+	if envelope.OperationID != captured.HookInputs.OperationID ||
+		envelope.CiphertextSHA256 != captured.HookInputs.CiphertextSHA256 {
 		clear(envelope.Ciphertext)
 		return Input{}, nil, nil, conflict("Service lifecycle hook envelope differs from its captured authority")
 	}

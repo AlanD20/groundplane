@@ -32,7 +32,12 @@ func EqualProgress(left, right Progress) bool {
 	return true
 }
 
-func ValidateTransition(attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, previous *Progress, next Progress) error {
+func ValidateTransition(
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	previous *Progress,
+	next Progress,
+) error {
 	if next.Validate(attempt, input) != nil {
 		return invalidLayout()
 	}
@@ -65,7 +70,10 @@ func ValidateTransition(attempt workexecution.Attempt, input *agentpb.EntryConfi
 	return nil
 }
 
-func (progress Progress) Checkpoint(attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput) (workexecution.Checkpoint, error) {
+func (progress Progress) Checkpoint(
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+) (workexecution.Checkpoint, error) {
 	layout, err := CaptureLayout(attempt, input)
 	if err != nil {
 		return workexecution.Checkpoint{}, err
@@ -73,7 +81,10 @@ func (progress Progress) Checkpoint(attempt workexecution.Attempt, input *agentp
 	return progress.LayoutCheckpoint(attempt, layout)
 }
 
-func (progress Progress) LayoutCheckpoint(attempt workexecution.Attempt, layout Layout) (workexecution.Checkpoint, error) {
+func (progress Progress) LayoutCheckpoint(
+	attempt workexecution.Attempt,
+	layout Layout,
+) (workexecution.Checkpoint, error) {
 	if progress.ValidateLayout(attempt, layout) != nil || progress.Sequence == 0 {
 		return workexecution.Checkpoint{}, invalidLayout()
 	}
@@ -100,7 +111,11 @@ func (progress Progress) LayoutCheckpoint(attempt workexecution.Attempt, layout 
 		RecordedAt: progress.UpdatedAt, Evidence: workexecution.Input{ID: attempt.Input.ID, SHA256: hex.EncodeToString(digest[:])}}, nil
 }
 
-func EncodeProgress(attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, progress Progress) ([]byte, error) {
+func EncodeProgress(
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	progress Progress,
+) ([]byte, error) {
 	if _, err := progress.Checkpoint(attempt, input); err != nil {
 		return nil, err
 	}
@@ -111,7 +126,11 @@ func EncodeProgress(attempt workexecution.Attempt, input *agentpb.EntryConfigura
 	return jcs.Canonicalize(raw)
 }
 
-func DecodeProgress(attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, raw []byte) (Progress, error) {
+func DecodeProgress(
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	raw []byte,
+) (Progress, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return Progress{}, invalidLayout()
 	}

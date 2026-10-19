@@ -52,7 +52,8 @@ func (input Input) Validate() error {
 		plan.RunnerID != desired.ID || plan.TenantID != desired.TenantID ||
 		plan.OwnerKind != string(desired.OwnerKind) || plan.OwnerID != desired.OwnerID ||
 		plan.Container.ImageRef != desired.ImageRef || plan.Container.GitHubURL != desired.GitHubURL ||
-		input.Operation == runnerallocation.RuntimeOperationCreate && !slices.Equal(plan.Container.Labels, desired.Labels) || plan.RuntimeEpoch == 0 ||
+		input.Operation == runnerallocation.RuntimeOperationCreate &&
+			!slices.Equal(plan.Container.Labels, desired.Labels) || plan.RuntimeEpoch == 0 ||
 		plan.AllocationConfig.ValidateAllocation(plan.Allocation) != nil || plan.Digest() == "" {
 		return errs.New(errs.KindValidationFailed, "Runner execution input is invalid")
 	}

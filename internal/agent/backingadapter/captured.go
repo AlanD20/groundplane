@@ -37,7 +37,15 @@ func (runtime *Runtime) ExecuteCapturedProcedure(ctx context.Context, procedure 
 		if err != nil {
 			return err
 		}
-		exitCode, err := executor.Execute(ctx, recorder, containerID, append([]string{program}, args...), nil, input, io.Discard)
+		exitCode, err := executor.Execute(
+			ctx,
+			recorder,
+			containerID,
+			append([]string{program}, args...),
+			nil,
+			input,
+			io.Discard,
+		)
 		if err != nil {
 			return err
 		}

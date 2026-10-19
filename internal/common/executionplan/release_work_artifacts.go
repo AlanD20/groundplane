@@ -22,7 +22,10 @@ type ReleaseWorkArtifacts struct {
 
 // OpenReleaseWorkArtifacts consumes typed Release input directly. It neither
 // constructs an ExecutionPlan nor authorizes filesystem/container mutations.
-func OpenReleaseWorkArtifacts(attempt workexecution.Attempt, input *agentpb.ReleaseWorkInput) (ReleaseWorkArtifacts, error) {
+func OpenReleaseWorkArtifacts(
+	attempt workexecution.Attempt,
+	input *agentpb.ReleaseWorkInput,
+) (ReleaseWorkArtifacts, error) {
 	var result ReleaseWorkArtifacts
 	if input == nil || attempt.Validate() != nil || input.Candidate == nil || input.Predecessor == nil ||
 		input.Candidate.OwnerId != input.EnvironmentId || input.RenderGeneration == 0 {
@@ -85,11 +88,17 @@ func OpenReleaseWorkArtifacts(attempt workexecution.Attempt, input *agentpb.Rele
 	}
 	prior := input.Predecessor
 	if !prior.Absent {
-		runtime, err := OpenNativeServingRuntime(input.EnvironmentId, input.ServiceId, prior.CurrentArtifact, prior.RetainedArtifact)
+		runtime, err := OpenNativeServingRuntime(
+			input.EnvironmentId,
+			input.ServiceId,
+			prior.CurrentArtifact,
+			prior.RetainedArtifact,
+		)
 		if err != nil {
 			return ReleaseWorkArtifacts{}, err
 		}
-		if runtime.ReleaseID != prior.ReleaseId || runtime.Target != prior.Target || runtime.ReleaseID == input.ReleaseId {
+		if runtime.ReleaseID != prior.ReleaseId || runtime.Target != prior.Target ||
+			runtime.ReleaseID == input.ReleaseId {
 			return ReleaseWorkArtifacts{}, invalidReleaseWorkArtifacts()
 		}
 		if err := validateArtifactContent(runtime.Artifact); err != nil {
@@ -129,5 +138,8 @@ func OpenReleaseWorkArtifacts(attempt workexecution.Attempt, input *agentpb.Rele
 }
 
 func invalidReleaseWorkArtifacts() error {
-	return errs.New(errs.KindValidationFailed, "Release work artifacts do not match the selected Service, Release or captured runtime")
+	return errs.New(
+		errs.KindValidationFailed,
+		"Release work artifacts do not match the selected Service, Release or captured runtime",
+	)
 }

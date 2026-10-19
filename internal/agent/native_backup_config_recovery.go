@@ -25,7 +25,10 @@ func (exchange *nativeExchange) PrepareConfigRecovery(ctx context.Context,
 	}
 	response, err := exchange.request(ctx, &agentpb.AgentMessage{
 		Payload: &agentpb.AgentMessage_BackupConfigRecoveryPrepareRequest{
-			BackupConfigRecoveryPrepareRequest: &agentpb.BackupConfigRecoveryPrepareRequest{Attempt: owned.Attempt, SourceOrdinal: ordinal},
+			BackupConfigRecoveryPrepareRequest: &agentpb.BackupConfigRecoveryPrepareRequest{
+				Attempt:       owned.Attempt,
+				SourceOrdinal: ordinal,
+			},
 		},
 	}, owned.Attempt, "backup_config_recovery_prepare", fmt.Sprint(ordinal))
 	if err != nil {

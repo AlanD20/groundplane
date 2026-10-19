@@ -13,7 +13,10 @@ import (
 // LoadWorkAssignment resolves captured generations, never current desired
 // configuration. A reconnect receives the same attempt and its saved checkpoint.
 // The caller authenticates the executor and clears plaintext after sending.
-func (service *Service) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ScriptWorkAssignment, error) {
+func (service *Service) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ScriptWorkAssignment, error) {
 	attempt := view.Attempt.Attempt
 	if !view.ActiveAttempt || !view.CurrentExecutor || attempt.Direction != workexecution.Forward ||
 		attempt.FinishedAt != nil || workexecution.ValidateDelivery(view.Work.Item.Item, attempt) != nil {

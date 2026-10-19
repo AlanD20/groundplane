@@ -216,7 +216,13 @@ func ValidateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 	if intent.Authored != nil {
 		source = intent.AppliedProjection
 	}
-	return ValidateZoneRemovalCandidate(source, intent.CandidateProjection, intent.ZoneID, intent.ZoneName, intent.AffectedServiceIDs)
+	return ValidateZoneRemovalCandidate(
+		source,
+		intent.CandidateProjection,
+		intent.ZoneID,
+		intent.ZoneName,
+		intent.AffectedServiceIDs,
+	)
 }
 
 func EncodeZoneRemovalIntent(intent ZoneRemovalIntent) ([]byte, error) {

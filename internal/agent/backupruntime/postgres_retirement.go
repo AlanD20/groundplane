@@ -42,15 +42,21 @@ func postgresOriginalRequest(step *agentpb.BackupStepAuthority,
 
 // This is called only after the source-cleanup checkpoint is acknowledged.
 // The retained start keeps retirement bound across all later resume phases.
-func retirePostgresExecution(ctx context.Context, assignment *agentpb.BackupWorkAssignment,
-	identity workexecution.Identity, ordinal uint32, publisher *checkpointdelivery.BackupSource, dump *agentpb.BackupPostgresDumpStart,
+func retirePostgresExecution(
+	ctx context.Context,
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+	ordinal uint32,
+	publisher *checkpointdelivery.BackupSource,
+	dump *agentpb.BackupPostgresDumpStart,
 	apply *agentpb.BackupPostgresRestoreApplyStartCheckpoint,
 ) (resultErr error) {
 	cursor, err := publisher.Current(ctx)
 	if err != nil {
 		return err
 	}
-	if cursor.GetCapture().GetSourceCleanupCompleted() == nil && cursor.GetRestore().GetSourceCleanupCompleted() == nil {
+	if cursor.GetCapture().GetSourceCleanupCompleted() == nil &&
+		cursor.GetRestore().GetSourceCleanupCompleted() == nil {
 		return errs.New(errs.KindStateConflict, "Database helper retirement requires acknowledged source cleanup")
 	}
 	if uint64(ordinal) >= uint64(len(assignment.Input.Steps)) {

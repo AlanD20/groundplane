@@ -24,7 +24,8 @@ func releaseHooks(input Input, phase Phase) []*agentpb.ReleaseWorkHook {
 // ActiveHook returns the exact captured hook at an acknowledged in-flight
 // boundary. Callers cannot choose another hook merely by supplying its name.
 func (progress Progress) ActiveHook(input Input) (*agentpb.ReleaseWorkHook, error) {
-	if progress.Validate(input) != nil || !progress.InFlight || progress.Phase != PreHooks && progress.Phase != PostHooks {
+	if progress.Validate(input) != nil || !progress.InFlight ||
+		progress.Phase != PreHooks && progress.Phase != PostHooks {
 		return nil, invalidProgress()
 	}
 	return proto.CloneOf(releaseHooks(input, progress.Phase)[progress.Hook]), nil

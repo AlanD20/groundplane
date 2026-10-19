@@ -11,7 +11,10 @@ import (
 
 // Execution has already settled resource effects atomically. Aggregate Task
 // completion checks that durable resource outcome instead of running it again.
-func (repository *InputRepository) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+) (workqueue.Change, error) {
 	task := finished.Task.Task
 	if task.Action == workexecution.ActionBackupPrune {
 		return repository.PreparePruneFinish(ctx, finished)
@@ -33,7 +36,10 @@ func (repository *InputRepository) PrepareFinish(ctx context.Context, finished w
 		(item.Item.Cleanup != workexecution.CleanupNone && item.Item.Cleanup != workexecution.CleanupComplete) {
 		return workqueue.Change{}, conflict("Backup work still has unresolved execution or cleanup")
 	}
-	input, guard, err := repository.Load(ctx, workqueue.View{Task: finished.Task, Item: item, ReadRevision: finished.ReadRevision})
+	input, guard, err := repository.Load(
+		ctx,
+		workqueue.View{Task: finished.Task, Item: item, ReadRevision: finished.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

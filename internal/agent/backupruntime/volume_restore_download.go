@@ -29,8 +29,14 @@ type volumeRestoreArtifact struct {
 
 // downloadVolumeRestore authenticates the exact Point object and its entire
 // canonical archive before the caller is permitted to stop or mutate Services.
-func downloadVolumeRestore(ctx context.Context, assignment *agentpb.BackupWorkAssignment,
-	identity workexecution.Identity, ordinal uint32, staging *Staging, exchange SourceExchange, expectedEntries []backupvolume.Entry,
+func downloadVolumeRestore(
+	ctx context.Context,
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+	ordinal uint32,
+	staging *Staging,
+	exchange SourceExchange,
+	expectedEntries []backupvolume.Entry,
 	expectedManifest []backupvolume.ManifestEntryBytes,
 ) (_ *volumeRestoreArtifact, resultErr error) {
 	if assignment == nil || assignment.Input == nil || uint64(ordinal) >= uint64(len(assignment.Input.Steps)) {
@@ -45,14 +51,24 @@ func downloadVolumeRestore(ctx context.Context, assignment *agentpb.BackupWorkAs
 	if err != nil {
 		return nil, err
 	}
-	return downloadCapturedVolumeRestore(ctx, assignment.Input, assignment.Attempt, ordinal, staged, exchange, expectedEntries, expectedManifest)
+	return downloadCapturedVolumeRestore(
+		ctx,
+		assignment.Input,
+		assignment.Attempt,
+		ordinal,
+		staged,
+		exchange,
+		expectedEntries,
+		expectedManifest,
+	)
 }
 
 func downloadCapturedVolumeRestore(ctx context.Context, input *agentpb.BackupWorkInput,
 	attempt *agentpb.WorkAttemptIdentity, ordinal uint32, staged CaptureStage, exchange SourceExchange,
 	expectedEntries []backupvolume.Entry, expectedManifest []backupvolume.ManifestEntryBytes,
 ) (*volumeRestoreArtifact, error) {
-	if input == nil || attempt == nil || uint64(ordinal) >= uint64(len(input.Steps)) || exchange == nil || staged.Stage == nil {
+	if input == nil || attempt == nil || uint64(ordinal) >= uint64(len(input.Steps)) || exchange == nil ||
+		staged.Stage == nil {
 		return nil, errs.New(errs.KindStateConflict, "Volume Restore download authority is unavailable")
 	}
 	step := input.Steps[ordinal]
@@ -133,7 +149,10 @@ func downloadCapturedVolumeRestore(ctx context.Context, input *agentpb.BackupWor
 		if !bytes.Equal(left.Path, right.Path) || left.Kind != right.Kind || left.Mode != right.Mode ||
 			left.UID != right.UID || left.GID != right.GID || left.SizeBytes != right.SizeBytes ||
 			left.ContentSHA256 != right.ContentSHA256 {
-			return nil, errs.New(errs.KindStateConflict, "Volume Restore artifact differs from the selected Point manifest")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Volume Restore artifact differs from the selected Point manifest",
+			)
 		}
 	}
 	sameInode := download.Source == download.Stored

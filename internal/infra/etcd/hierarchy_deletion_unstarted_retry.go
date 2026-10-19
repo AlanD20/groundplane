@@ -12,12 +12,19 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyDeletionRepository) PrepareHierarchyUnstartedRetry(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *HierarchyDeletionRepository) PrepareHierarchyUnstartedRetry(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Action != workexecution.ActionRemove || task.Stop != nil || task.CollectionStartedAt != nil ||
 		(item.Operation != workexecution.Hierarchy && item.Operation != workexecution.RemovalBackupObject) || item.AttemptNumber != 0 || item.Input == nil || item.Result == nil ||
 		item.Phase != workexecution.Settled || item.Outcome != workexecution.Failed || item.Cleanup != workexecution.CleanupNone || item.ForwardRevoked {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "removal Retry requires captured work that failed before execution")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"removal Retry requires captured work that failed before execution",
+		)
 	}
 	captured, err := repository.LoadHierarchyWork(ctx, view)
 	if err != nil {
@@ -37,7 +44,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyUnstartedRetry(ct
 	}
 	stopKey := hierarchydeletion.WorkStopKey(item.ID)
 	summaryKey := hierarchydeletion.WorkSummaryKey(task.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{stopKey, summaryKey}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{stopKey, summaryKey}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -60,14 +70,24 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyUnstartedRetry(ct
 	}
 	change.Conditions = append(change.Conditions, captured.Conditions...)
 	change.Conditions = append(change.Conditions, fence.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: stopKey, ModRevision: read.Values[0].ModRevision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: stopKey, ModRevision: read.Values[0].ModRevision},
+	)
 	change.Mutations = append(change.Mutations, fence.Mutations...)
 	// Preserve the prior stop proof under its content identity before clearing
 	// the current result slot, which a later queued timeout may populate again.
 	evidenceKey := hierarchydeletion.WorkStopEvidenceKey(item.ID, item.Result.SHA256)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: evidenceKey})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: evidenceKey, Value: append([]byte(nil), read.Values[0].Value...)},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: stopKey})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   evidenceKey,
+			Value: append([]byte(nil), read.Values[0].Value...),
+		},
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: stopKey},
+	)
 	change.Conditions = append(change.Conditions, attachCapture.Conditions...)
 	change.Mutations = append(change.Mutations, attachCapture.Mutations...)
 	attachCapture.Mutations = nil

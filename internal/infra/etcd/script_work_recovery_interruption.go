@@ -28,8 +28,17 @@ func (repository *ScriptRepository) ReconcileInterruptedScriptRecovery(ctx conte
 	return repository.settleInterruptedScriptRecovery(ctx, view, guards, at)
 }
 
-func (repository *ScriptRepository) settleInterruptedScriptRecovery(ctx context.Context, view workqueue.ResumeView, guards []keyvalue.Condition, at time.Time) error {
-	if view.Work.Item.Item.Operation != workexecution.Script || view.Attempt.Attempt.Direction != workexecution.Recovery || len(guards) == 0 || view.Checkpoint.Record != nil || view.Checkpoint.Revision != 0 {
+func (repository *ScriptRepository) settleInterruptedScriptRecovery(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	guards []keyvalue.Condition,
+	at time.Time,
+) error {
+	if view.Work.Item.Item.Operation != workexecution.Script ||
+		view.Attempt.Attempt.Direction != workexecution.Recovery ||
+		len(guards) == 0 ||
+		view.Checkpoint.Record != nil ||
+		view.Checkpoint.Revision != 0 {
 		return errs.New(errs.KindStateConflict, "Script cleanup failure requires its captured recovery assignment")
 	}
 	sources, err := repository.LoadScriptRecoverySources(ctx, view.Work)
@@ -62,8 +71,15 @@ func (repository *ScriptRepository) settleInterruptedScriptRecovery(ctx context.
 	}
 	defer clear(raw)
 	digest := sha256.Sum256(raw)
-	evidence := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, attempt.AssignedAt, attempt.ID, "script-recovery-interruption"), SHA256: hex.EncodeToString(digest[:])}
-	request.At, request.Result = at, workexecution.Completion{Outcome: workexecution.Failed, Evidence: evidence, EffectsSettled: false}
+	evidence := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, attempt.AssignedAt, attempt.ID, "script-recovery-interruption"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
+	request.At, request.Result = at, workexecution.Completion{
+		Outcome:        workexecution.Failed,
+		Evidence:       evidence,
+		EffectsSettled: false,
+	}
 	change, err := workqueue.PrepareCompletion(request)
 	if err != nil {
 		return err
@@ -71,7 +87,11 @@ func (repository *ScriptRepository) settleInterruptedScriptRecovery(ctx context.
 	defer keyvalue.ClearMutationValues(change.Mutations)
 	key := scriptexecutions.ScriptExecutionKey(sources.Ownership.Run.ScriptExecutionId) + "/interruptions/" + attempt.ID
 	conditions := append(sources.Conditions, guards...)
-	conditions = append(conditions, keyvalue.Condition{Key: key}, keyvalue.Condition{Key: workqueue.CheckpointKey(attempt.ID)})
+	conditions = append(
+		conditions,
+		keyvalue.Condition{Key: key},
+		keyvalue.Condition{Key: workqueue.CheckpointKey(attempt.ID)},
+	)
 	result, err := queue.Commit(ctx, workqueue.Change{Conditions: conditions,
 		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}}}, change)
 	keyvalue.ClearValues(result.FailureReads)

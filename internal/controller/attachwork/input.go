@@ -34,7 +34,10 @@ func (owner *Inputs) Forward(ctx context.Context, view workqueue.ResumeView) (at
 		attempt.Validate() != nil || attempt.TaskID != view.Work.Task.Task.ID ||
 		attempt.WorkItemID != item.ID || item.Input == nil || attempt.Input != *item.Input ||
 		attempt.Executor.Executor != workexecution.Agent || attempt.Executor.HostID != item.Placement.HostID {
-		return attachexecution.ProvisionInput{}, errs.New(errs.KindStateConflict, "Attach attempt does not own this captured input")
+		return attachexecution.ProvisionInput{}, errs.New(
+			errs.KindStateConflict,
+			"Attach attempt does not own this captured input",
+		)
 	}
 	source, err := owner.repository.LoadCaptured(ctx, view.Work)
 	if err != nil {
@@ -53,7 +56,10 @@ func (owner *Inputs) Forward(ctx context.Context, view workqueue.ResumeView) (at
 	return input, nil
 }
 
-func (owner *Inputs) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.AttachProvisionAssignment, error) {
+func (owner *Inputs) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.AttachProvisionAssignment, error) {
 	task := view.Work.Task.Task
 	if !view.CurrentExecutor || !view.ActiveAttempt || task.FinishedAt != nil ||
 		task.CollectionStartedAt != nil || !task.PublicationComplete ||

@@ -35,7 +35,10 @@ type entryDesiredMutationRepository interface {
 		time.Time,
 	) error
 	controllerrevision.ClaimRepository
-	StageEnvironmentBlueprintRevision(context.Context, blueprints.EnvironmentBlueprintStageRequest) (blueprints.EnvironmentBlueprintSeal, error)
+	StageEnvironmentBlueprintRevision(
+		context.Context,
+		blueprints.EnvironmentBlueprintStageRequest,
+	) (blueprints.EnvironmentBlueprintSeal, error)
 	GetEnvironmentDesiredInput(
 		context.Context,
 		string,
@@ -64,7 +67,10 @@ type entryDesiredMutationRepository interface {
 }
 
 type entryRuntimeCapture interface {
-	CaptureEntryMutationRuntime(context.Context, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]) (taskplanning.EntryMutationRuntime, error)
+	CaptureEntryMutationRuntime(
+		context.Context,
+		etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	) (taskplanning.EntryMutationRuntime, error)
 }
 
 type entryDesiredMutationService struct {

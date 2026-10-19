@@ -10,7 +10,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) retainAgentWorkImages(ctx context.Context, retention *imageRetention, value keyvalue.KeyValue, revision int64) error {
+func (service *Service) retainAgentWorkImages(
+	ctx context.Context,
+	retention *imageRetention,
+	value keyvalue.KeyValue,
+	revision int64,
+) error {
 	item, err := workqueue.DecodeItem(value.Value)
 	if err != nil {
 		return err
@@ -18,7 +23,8 @@ func (service *Service) retainAgentWorkImages(ctx context.Context, retention *im
 	if value.Key != workqueue.ItemKey(item.ID) {
 		return errs.New(errs.KindStateConflict, "Agent image retention work identity is inconsistent")
 	}
-	if item.Operation != workexecution.AgentLifecycle && item.Operation != workexecution.AgentSoftware || item.Phase == workexecution.Settled {
+	if item.Operation != workexecution.AgentLifecycle && item.Operation != workexecution.AgentSoftware ||
+		item.Phase == workexecution.Settled {
 		return nil
 	}
 	if item.Input == nil {

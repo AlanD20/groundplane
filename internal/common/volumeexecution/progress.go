@@ -57,7 +57,12 @@ func stages(action agentpb.VolumeWorkAction) []Stage {
 	}
 }
 
-func NewProgress(attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string, at time.Time) (Progress, error) {
+func NewProgress(
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	at time.Time,
+) (Progress, error) {
 	steps := stages(action)
 	if len(steps) == 0 || !at.Before(attempt.Deadline) {
 		return Progress{}, invalidProgress()
@@ -66,7 +71,11 @@ func NewProgress(attempt workexecution.Attempt, action agentpb.VolumeWorkAction,
 	return progress, progress.Validate(attempt, action, volumeID)
 }
 
-func (progress Progress) Validate(attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string) error {
+func (progress Progress) Validate(
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+) error {
 	steps := stages(action)
 	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward || attempt.StartedAt == nil ||
 		ids.Validate(ids.KindVolume, volumeID) != nil || len(steps) == 0 || progress.AttemptID != attempt.ID ||
@@ -98,7 +107,12 @@ func (progress Progress) Validate(attempt workexecution.Attempt, action agentpb.
 
 // Begin is persisted and acknowledged before starting the named effect. An
 // in-flight checkpoint can only be resolved by inspection, never by Begin again.
-func (progress Progress) Begin(attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string, at time.Time) (Progress, error) {
+func (progress Progress) Begin(
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, action, volumeID) != nil || progress.InFlight || progress.Stage == Complete ||
 		at.Before(progress.UpdatedAt) || !at.Before(attempt.Deadline) {
 		return Progress{}, invalidProgress()
@@ -110,7 +124,13 @@ func (progress Progress) Begin(attempt workexecution.Attempt, action agentpb.Vol
 	return next, next.Validate(attempt, action, volumeID)
 }
 
-func (progress Progress) Confirm(attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string, observation Observation, at time.Time) (Progress, error) {
+func (progress Progress) Confirm(
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	observation Observation,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, action, volumeID) != nil || !progress.InFlight || at.Before(progress.UpdatedAt) ||
 		observation.At.Before(*progress.BeganAt) || observation.At.After(at) || !observation.proves(progress.Stage) {
 		return Progress{}, invalidProgress()
@@ -128,7 +148,8 @@ func (progress Progress) Confirm(attempt workexecution.Attempt, action agentpb.V
 }
 
 func (observation Observation) proves(stage Stage) bool {
-	if observation.DirectoryReady && observation.DirectoryAbsent || observation.VolumeReady && observation.VolumeAbsent {
+	if observation.DirectoryReady && observation.DirectoryAbsent ||
+		observation.VolumeReady && observation.VolumeAbsent {
 		return false
 	}
 	switch stage {
@@ -152,5 +173,8 @@ func (observation Observation) proves(stage Stage) bool {
 func (observation Observation) Satisfies(stage Stage) bool { return observation.proves(stage) }
 
 func invalidProgress() error {
-	return errs.New(errs.KindStateConflict, "Volume progress does not prove its required ownership, consumer and storage checks")
+	return errs.New(
+		errs.KindStateConflict,
+		"Volume progress does not prove its required ownership, consumer and storage checks",
+	)
 }

@@ -30,6 +30,9 @@ func retainFailedExecution(change *workqueue.Change, item workexecution.Item, at
 		return err
 	}
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: RecoveryKey(item.ID)})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: RecoveryKey(item.ID), Value: recovery})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: RecoveryKey(item.ID), Value: recovery},
+	)
 	return nil
 }

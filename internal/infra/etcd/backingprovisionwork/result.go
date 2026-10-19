@@ -28,8 +28,11 @@ func (repository *Repository) ReadCompleted(ctx context.Context, attempt workexe
 ) (CompletionRecord, keyvalue.Condition, error) {
 	if attempt.Validate() != nil || attempt.FinishedAt == nil || attempt.Result == nil || attempt.StartedAt == nil ||
 		attempt.Direction != workexecution.Forward || revision <= 0 ||
-		attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled && attempt.Outcome != workexecution.Superseded {
-		return CompletionRecord{}, keyvalue.Condition{}, invalid("backing creation has no completed forward runtime receipt")
+		attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled &&
+			attempt.Outcome != workexecution.Superseded {
+		return CompletionRecord{}, keyvalue.Condition{}, invalid(
+			"backing creation has no completed forward runtime receipt",
+		)
 	}
 	key := ResultKey(attempt.ID)
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: revision})
@@ -37,12 +40,16 @@ func (repository *Repository) ReadCompleted(ctx context.Context, attempt workexe
 		return CompletionRecord{}, keyvalue.Condition{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return CompletionRecord{}, keyvalue.Condition{}, invalid("backing creation completed attempt lost its exact receipt")
+		return CompletionRecord{}, keyvalue.Condition{}, invalid(
+			"backing creation completed attempt lost its exact receipt",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	value := read.Values[0]
 	if value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision {
-		return CompletionRecord{}, keyvalue.Condition{}, invalid("backing creation completion receipt ownership is invalid")
+		return CompletionRecord{}, keyvalue.Condition{}, invalid(
+			"backing creation completion receipt ownership is invalid",
+		)
 	}
 	receipt, err := recordcodec.Decode[CompletionRecord](value.Value, "backing-provision-completion")
 	if err != nil {
@@ -50,14 +57,20 @@ func (repository *Repository) ReadCompleted(ctx context.Context, attempt workexe
 	}
 	saved := receipt.Attempt
 	if saved.Validate() != nil || !workexecution.SameAssignment(saved, attempt) || saved.StartedAt == nil ||
-		!saved.StartedAt.Equal(*attempt.StartedAt) || saved.FinishedAt == nil || !saved.FinishedAt.Equal(*attempt.FinishedAt) ||
+		!saved.StartedAt.Equal(
+			*attempt.StartedAt,
+		) || saved.FinishedAt == nil || !saved.FinishedAt.Equal(*attempt.FinishedAt) ||
 		saved.Outcome != attempt.Outcome || saved.Result == nil || *saved.Result != *attempt.Result ||
 		receipt.Observation.ObservedAt.After(*attempt.FinishedAt) {
-		return CompletionRecord{}, keyvalue.Condition{}, invalid("backing creation completion receipt differs from its actual attempt")
+		return CompletionRecord{}, keyvalue.Condition{}, invalid(
+			"backing creation completion receipt differs from its actual attempt",
+		)
 	}
 	evidence, err := backingprovision.CompletionEvidence(saved, receipt.Checkpoint, receipt.Observation)
 	if err != nil || evidence != *attempt.Result {
-		return CompletionRecord{}, keyvalue.Condition{}, invalid("backing creation completion receipt has different runtime evidence")
+		return CompletionRecord{}, keyvalue.Condition{}, invalid(
+			"backing creation completion receipt has different runtime evidence",
+		)
 	}
 	return receipt, keyvalue.Condition{Key: key, ModRevision: value.ModRevision}, nil
 }

@@ -172,7 +172,10 @@ func (journal *Journal) Position(ctx context.Context) (*agentpb.BackupVolumeMani
 	if err := journal.available(ctx); err != nil {
 		return nil, false, err
 	}
-	return proto.CloneOf(journal.state.credits[len(journal.state.credits)-1]), journal.state.complete && !journal.state.partial, nil
+	return proto.CloneOf(
+			journal.state.credits[len(journal.state.credits)-1],
+		), journal.state.complete &&
+			!journal.state.partial, nil
 }
 
 // AcceptFrame persists exact frame bytes and the resulting cumulative credit

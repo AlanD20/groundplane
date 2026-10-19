@@ -11,7 +11,8 @@ import (
 // records, runtime/configuration heads and resource artifacts are not Task data.
 // The collector must join its captured-input retirement proof in this write.
 func PrepareAttemptRetirement(view workqueue.View, attempt workqueue.AttemptSnapshot) (workqueue.Change, error) {
-	if view.Item.Item.Operation != workexecution.Release && view.Item.Item.Operation != workexecution.ReleaseRestoration {
+	if view.Item.Item.Operation != workexecution.Release &&
+		view.Item.Item.Operation != workexecution.ReleaseRestoration {
 		return workqueue.Change{}, invalid()
 	}
 	guard, err := workqueue.PrepareAttemptCollection(view.Task, view.Item, attempt)

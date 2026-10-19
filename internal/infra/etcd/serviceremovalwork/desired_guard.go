@@ -11,7 +11,11 @@ import (
 // DesiredGuard binds the captured canonical desired bytes, independently of the
 // current head. Supersession is checked through native work ownership; accepting
 // a newer head must never replace the input of an already accepted removal.
-func (repository *Repository) DesiredGuard(ctx context.Context, input Input, revision int64) (keyvalue.Condition, error) {
+func (repository *Repository) DesiredGuard(
+	ctx context.Context,
+	input Input,
+	revision int64,
+) (keyvalue.Condition, error) {
 	if err := input.Validate(); err != nil {
 		return keyvalue.Condition{}, err
 	}

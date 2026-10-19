@@ -41,7 +41,8 @@ func (service *Service) Image(ctx context.Context, taskID, workID string, revisi
 		return ImageDetails{}, err
 	}
 	record := inspection.Operation
-	if record.Input.WorkItemID != workID || record.Input.Action != task.Task.Action || record.Input.Target() != task.Task.TargetID {
+	if record.Input.WorkItemID != workID || record.Input.Action != task.Task.Action ||
+		record.Input.Target() != task.Task.TargetID {
 		return ImageDetails{}, errs.New(errs.KindRequestNotFound, "image work does not belong to this Task")
 	}
 	result := ImageDetails{TaskID: taskID, WorkItemID: workID, AttemptID: record.AttemptID,

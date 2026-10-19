@@ -12,21 +12,33 @@ import (
 
 // Retrying captured bridge input must not apply an older Zone definition after
 // another action has changed the Environment.
-func (repository *InputRepository) guardRetryDesired(ctx context.Context, view workqueue.View) ([]keyvalue.Condition, error) {
+func (repository *InputRepository) guardRetryDesired(
+	ctx context.Context,
+	view workqueue.View,
+) ([]keyvalue.Condition, error) {
 	current, guards, err := repository.ReadDesiredMatch(ctx, view)
 	if err != nil {
 		return nil, err
 	}
 	if !current {
-		return nil, errs.New(errs.KindTaskNotRetryable, "Environment configuration changed after this Network action; submit a new action instead of retrying its old configuration")
+		return nil, errs.New(
+			errs.KindTaskNotRetryable,
+			"Environment configuration changed after this Network action; submit a new action instead of retrying its old configuration",
+		)
 	}
 	return guards, nil
 }
 
 // ReadDesiredMatch returns comparisons for both match and supersession. The
 // caller joins them to assignment or revocation, never acts on an unguarded read.
-func (repository *InputRepository) ReadDesiredMatch(ctx context.Context, view workqueue.View) (bool, []keyvalue.Condition, error) {
-	keys := []string{DesiredKey(view.Item.Item.ID), blueprints.EnvironmentBlueprintHeadKey(view.Task.Task.Scope.EnvironmentID)}
+func (repository *InputRepository) ReadDesiredMatch(
+	ctx context.Context,
+	view workqueue.View,
+) (bool, []keyvalue.Condition, error) {
+	keys := []string{
+		DesiredKey(view.Item.Item.ID),
+		blueprints.EnvironmentBlueprintHeadKey(view.Task.Task.Scope.EnvironmentID),
+	}
 	read, err := repository.read(ctx, keys, view.ReadRevision)
 	if err != nil {
 		return false, nil, err

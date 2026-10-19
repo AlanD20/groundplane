@@ -106,7 +106,11 @@ func (resolver *BackupSecretResolver) ReleaseRestoreIdentity(ctx context.Context
 	return nil
 }
 
-func (sessions *restoreIdentitySessions) copy(ctx context.Context, taskID string, deadline time.Time, step *agentpb.BackupStepAuthority,
+func (sessions *restoreIdentitySessions) copy(
+	ctx context.Context,
+	taskID string,
+	deadline time.Time,
+	step *agentpb.BackupStepAuthority,
 	evidence backupsecrets.Evidence,
 ) ([]byte, error) {
 	if sessions == nil || evidence.Restore == nil || !evidence.Restore.UsesOldIdentity {

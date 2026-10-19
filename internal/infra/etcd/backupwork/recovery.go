@@ -18,7 +18,8 @@ type RecoverySnapshot struct {
 
 func (repository *InputRepository) LoadRecovery(ctx context.Context, view workqueue.View) (RecoverySnapshot, error) {
 	item := view.Item.Item
-	if (item.Operation != workexecution.BackupPrune && item.Operation != workexecution.Restore && item.Operation != workexecution.Backup) || item.Input == nil {
+	if (item.Operation != workexecution.BackupPrune && item.Operation != workexecution.Restore && item.Operation != workexecution.Backup) ||
+		item.Input == nil {
 		return RecoverySnapshot{}, conflict("Backup recovery requires captured work")
 	}
 	read, err := repository.readSettlementKeys(ctx, []string{RecoveryKey(item.ID)}, view.ReadRevision)

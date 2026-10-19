@@ -13,8 +13,13 @@ import (
 
 // sendBackupWorkSecrets consumes transient slots opened by the credential grant
 // owner. Neither successful framing nor sending a frame grants execution rights.
-func sendBackupWorkSecrets(ctx context.Context, stream agentpb.AgentChannel_ConnectServer,
-	input *agentpb.BackupWorkInput, attempt *agentpb.WorkAttemptIdentity, ordinal uint32, identity workexecution.Identity,
+func sendBackupWorkSecrets(
+	ctx context.Context,
+	stream agentpb.AgentChannel_ConnectServer,
+	input *agentpb.BackupWorkInput,
+	attempt *agentpb.WorkAttemptIdentity,
+	ordinal uint32,
+	identity workexecution.Identity,
 	slots map[agentpb.BackupSecretSlotPurpose][]byte,
 ) error {
 	defer clearBackupSecretSlots(slots)

@@ -24,7 +24,9 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 ||
 		attempt.FinishedAt != nil || view.Work.Item.Item.Operation != workexecution.Attach ||
 		!workexecution.SameAssignment(attempt, input.Attempt) {
-		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict("Attach failure no longer owns its active attempt")
+		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict(
+			"Attach failure no longer owns its active attempt",
+		)
 	}
 	source, err := repository.LoadCaptured(ctx, view.Work)
 	if err != nil {
@@ -37,7 +39,9 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 	}
 	if source.Generation.Record.SettlesInController() || authority.AttachID != source.Generation.Record.AttachID ||
 		authority.BackingServiceID != source.Generation.Record.BackingServiceID {
-		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict("Attach failure differs from its captured provisioning target")
+		return workqueue.Change{}, workexecution.Completion{}, checkpointConflict(
+			"Attach failure differs from its captured provisioning target",
+		)
 	}
 	progress, guards, err := repository.LoadProgress(ctx, view, input)
 	if err != nil {
@@ -82,7 +86,10 @@ func (repository *InputRepository) LoadFailure(ctx context.Context, view workque
 		return nil, checkpointConflict("Attach failure has no retained terminal attempt")
 	}
 	key := FailureKey(attempt.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}

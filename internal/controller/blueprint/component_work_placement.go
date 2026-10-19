@@ -35,7 +35,11 @@ func (service *Service) prepareComponentWorkPlacement(ctx context.Context, work 
 		return componentWorkPlacement{}, err
 	}
 	source := selected.Source
-	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(ctx, source.desired.Record, source.identities.Record)
+	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
+		ctx,
+		source.desired.Record,
+		source.identities.Record,
+	)
 	if err != nil {
 		return componentWorkPlacement{}, err
 	}
@@ -69,19 +73,36 @@ func (service *Service) prepareComponentWorkPlacement(ctx context.Context, work 
 	if err != nil {
 		return componentWorkPlacement{}, err
 	}
-	services, err := taskplanning.ProjectServiceProjection(project, identities, source.desired.Record.Input.ServiceExtensions)
+	services, err := taskplanning.ProjectServiceProjection(
+		project,
+		identities,
+		source.desired.Record.Input.ServiceExtensions,
+	)
 	if err != nil {
 		return componentWorkPlacement{}, err
 	}
-	if selected.Candidate.Kind != selected.Current.Component.Record.Desired.Kind && selected.Candidate.Kind.IsEnvironmentProxy() {
-		authority, err = service.prepareAuthoredProxyServiceCapture(ctx, work.Task.Task, selected.Candidate.Kind, authority, services)
+	if selected.Candidate.Kind != selected.Current.Component.Record.Desired.Kind &&
+		selected.Candidate.Kind.IsEnvironmentProxy() {
+		authority, err = service.prepareAuthoredProxyServiceCapture(
+			ctx,
+			work.Task.Task,
+			selected.Candidate.Kind,
+			authority,
+			services,
+		)
 		if err != nil {
 			return componentWorkPlacement{}, err
 		}
 	}
 	candidate := selected.Candidate
 	candidate.PinnedIPv4, candidate.Healthy = "", false
-	record, change, err := service.repository.PrepareWorkPlacement(ctx, work, selected.Current.Component, candidate, authority)
+	record, change, err := service.repository.PrepareWorkPlacement(
+		ctx,
+		work,
+		selected.Current.Component,
+		candidate,
+		authority,
+	)
 	if err != nil {
 		return componentWorkPlacement{}, err
 	}

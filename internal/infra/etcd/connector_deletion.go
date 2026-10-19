@@ -43,9 +43,15 @@ func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Conte
 		task.Action != workexecution.ActionRemove || task.Actor != workexecution.OperatorActor ||
 		task.TargetID != connector.ID || task.TargetName != connector.Name || task.Intent != ref || task.ExpectedItems != 1 ||
 		!task.CreatedAt.Equal(input.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Connector removal Task differs from captured input")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Connector removal Task differs from captured input",
+		)
 	}
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetConnector, ID: connector.ID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetConnector,
+		ID:   connector.ID,
+	}
 	if idempotencyrecord.ValidateIdempotencyMarker(marker) != nil ||
 		marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
@@ -53,7 +59,10 @@ func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Conte
 		marker.Locator.Route != connectorDeletionRoute || marker.ReplayTarget == nil || *marker.ReplayTarget != target ||
 		!idempotencyrecord.ValidTaskResponse(marker.Response, task.ID) || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(task.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Connector removal replay marker is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Connector removal replay marker is invalid",
+		)
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
 		return existing, err
@@ -74,9 +83,18 @@ func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Conte
 		fixed.Values[0].ModRevision != input.ConnectorRevision || fixed.Values[1].ModRevision != input.CredentialRevision ||
 		fixed.Values[2] == nil || string(fixed.Values[2].Value) != connector.ID ||
 		fixed.Values[3] == nil || string(fixed.Values[3].Value) != connector.ID || fixed.Values[4] != nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Connector or removal state changed; refresh before removing")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Connector or removal state changed; refresh before removing",
+		)
 	}
-	refs, err := connectormutations.RequireConnectorReferencesUnused(ctx, repository.store, connector.ID, connector.EnvironmentID, fence.ReadRevision())
+	refs, err := connectormutations.RequireConnectorReferencesUnused(
+		ctx,
+		repository.store,
+		connector.ID,
+		connector.EnvironmentID,
+		fence.ReadRevision(),
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -110,10 +128,17 @@ func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Conte
 	conditions = append(conditions, refs...)
 	conditions = append(conditions, fence.TransactionConditions()...)
 	for index, key := range keys {
-		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(fixed.Values[index])})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(fixed.Values[index])},
+		)
 	}
 	mutations := append(work.Mutations, captureWrites...)
-	mutations = append(mutations, epoch, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstone})
+	mutations = append(
+		mutations,
+		epoch,
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstone},
+	)
 	tenant, err := loadConnectorTaskInitiationTenantAtRevision(ctx, repository.store, project, fence.ReadRevision())
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -123,13 +148,21 @@ func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Conte
 		return IdempotencyTransactionResult{}, err
 	}
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*etcdstore.KeyValue) error {
-		return errs.New(errs.KindStateConflict, "Connector removal input, references or Environment changed; refresh before removing")
+		return errs.New(
+			errs.KindStateConflict,
+			"Connector removal input, references or Environment changed; refresh before removing",
+		)
 	})
 	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotencyrecord.IdempotencyMarkerTask, conditions, mutations, classify)
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotencyrecord.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

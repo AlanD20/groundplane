@@ -29,7 +29,11 @@ type Registry interface {
 }
 
 type TaskStore interface {
-	CreateImageOperation(context.Context, imageoperations.Input, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	CreateImageOperation(
+		context.Context,
+		imageoperations.Input,
+		idempotencyrecord.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type Service struct {
@@ -52,14 +56,24 @@ func New(
 	diagnostics *executiondiagnostics.Repository,
 	releases *etcd.ReleaseLedger,
 ) (*Service, error) {
-	if registry == nil || store == nil || tasks == nil || evidence == nil || intents == nil || diagnostics == nil || releases == nil {
+	if registry == nil || store == nil || tasks == nil || evidence == nil || intents == nil || diagnostics == nil ||
+		releases == nil {
 		return nil, errs.New(errs.KindInternal, "image delivery dependencies are incomplete")
 	}
 	operations, err := imageoperations.NewRepository(store)
 	if err != nil {
 		return nil, err
 	}
-	return &Service{registry: registry, store: store, tasks: tasks, evidence: evidence, intents: intents, operations: operations, diagnostics: diagnostics, releases: releases}, nil
+	return &Service{
+		registry:    registry,
+		store:       store,
+		tasks:       tasks,
+		evidence:    evidence,
+		intents:     intents,
+		operations:  operations,
+		diagnostics: diagnostics,
+		releases:    releases,
+	}, nil
 }
 
 func (service *Service) FetchImage(

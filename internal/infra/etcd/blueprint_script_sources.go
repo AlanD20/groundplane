@@ -89,8 +89,12 @@ func (ledger *ReleaseLedger) ReleaseHookSourceMembers(
 			Kind:      sourceref.SourceService,
 			ServiceID: execution.ServiceID,
 		}
-		if snapshot.ServiceSource == nil || (snapshot.ServiceSource.Existing == nil) == (snapshot.ServiceSource.Staged == nil) {
-			return nil, errs.New(errs.KindValidationFailed, "Release hook Service source requires exactly one captured authority")
+		if snapshot.ServiceSource == nil ||
+			(snapshot.ServiceSource.Existing == nil) == (snapshot.ServiceSource.Staged == nil) {
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Release hook Service source requires exactly one captured authority",
+			)
 		}
 		if snapshot.ServiceSource.Existing != nil {
 			// Direct hooks retain the sealed runner snapshot, as manual Script
@@ -98,9 +102,11 @@ func (ledger *ReleaseLedger) ReleaseHookSourceMembers(
 			// record and their head revision is not the runtime sidecar revision.
 			service.SourceModRevision, service.SourceDigest = hook.SnapshotRevision, execution.SnapshotSHA256
 			members = append(members, scriptsourceevidence.ScriptSourcePreparationMember{Reference: service,
-				Evidence: scriptsourceevidence.ScriptSourceEvidence{Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{
-					SourceKey: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID),
-				}}})
+				Evidence: scriptsourceevidence.ScriptSourceEvidence{
+					Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{
+						SourceKey: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID),
+					},
+				}})
 		} else {
 			serviceValue, err := servicerecord.EncodeServiceRuntimeRecordStorage(sources.Service.Record)
 			if err != nil {

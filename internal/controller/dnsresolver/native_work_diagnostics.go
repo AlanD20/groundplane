@@ -10,8 +10,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (service *WorkReports) reportProgress(ctx context.Context, view workqueue.ResumeView, input resolverexecution.Input,
-	layout resolverexecution.Layout, progress resolverexecution.Progress,
+func (service *WorkReports) reportProgress(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input resolverexecution.Input,
+	layout resolverexecution.Layout,
+	progress resolverexecution.Progress,
 ) {
 	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
@@ -26,7 +30,16 @@ func (service *WorkReports) reportProgress(ctx context.Context, view workqueue.R
 				stage, stageErr := resolverexecution.DiagnosticStage(attempt, layout, begin, begin)
 				err = stageErr
 				if err == nil {
-					err = service.diagnostics.Report(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor, begin.Sequence, stage, begin.UpdatedAt)
+					err = service.diagnostics.Report(
+						bounded,
+						attempt.TaskID,
+						attempt.WorkItemID,
+						attempt.ID,
+						attempt.Executor,
+						begin.Sequence,
+						stage,
+						begin.UpdatedAt,
+					)
 				}
 			}
 		}
@@ -35,7 +48,16 @@ func (service *WorkReports) reportProgress(ctx context.Context, view workqueue.R
 		stage, stageErr := resolverexecution.DiagnosticStage(attempt, layout, begin, progress)
 		err = stageErr
 		if err == nil {
-			err = service.diagnostics.Report(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor, progress.Sequence, stage, progress.UpdatedAt)
+			err = service.diagnostics.Report(
+				bounded,
+				attempt.TaskID,
+				attempt.WorkItemID,
+				attempt.ID,
+				attempt.Executor,
+				progress.Sequence,
+				stage,
+				progress.UpdatedAt,
+			)
 		}
 	}
 	service.diagnosticLoss(ctx, bounded, attempt, err)
@@ -45,8 +67,13 @@ func (service *WorkReports) reportTerminal(ctx context.Context, view workqueue.R
 	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	attempt := view.Attempt.Attempt
-	stage := workexecution.Stage{Key: "resolver_result", Name: "Publish CoreDNS result", StartedAt: attempt.StartedAt, FinishedAt: attempt.FinishedAt,
-		Expected: "Publish proven applied DNS state, or retain the original failure independently of cleanup"}
+	stage := workexecution.Stage{
+		Key:        "resolver_result",
+		Name:       "Publish CoreDNS result",
+		StartedAt:  attempt.StartedAt,
+		FinishedAt: attempt.FinishedAt,
+		Expected:   "Publish proven applied DNS state, or retain the original failure independently of cleanup",
+	}
 	sequence := uint64(1)
 	if cursor := view.Checkpoint.Record; cursor != nil {
 		sequence = cursor.Sequence + 1
@@ -73,7 +100,12 @@ func (service *WorkReports) reportTerminal(ctx context.Context, view workqueue.R
 		stored, err := service.records.Load(bounded, view.Work)
 		if err == nil {
 			layout, layoutErr := resolverexecution.CaptureLayout(attempt, stored.Input)
-			progress, progressErr := service.records.ReadProgress(bounded, view, stored.Input, view.Checkpoint.Record.Sequence)
+			progress, progressErr := service.records.ReadProgress(
+				bounded,
+				view,
+				stored.Input,
+				view.Checkpoint.Record.Sequence,
+			)
 			if layoutErr == nil && progressErr == nil && progress.InFlight {
 				active, activeErr := resolverexecution.DiagnosticStage(attempt, layout, progress, progress)
 				if activeErr == nil {

@@ -45,7 +45,10 @@ func (repository *InputRepository) LoadDetachCapture(ctx context.Context, view w
 	value := read.Values[0]
 	if value == nil {
 		result.Clear()
-		return DetachCapture{}, errs.New(errs.KindStateConflict, "Detach publication has lost its captured hook input authority")
+		return DetachCapture{}, errs.New(
+			errs.KindStateConflict,
+			"Detach publication has lost its captured hook input authority",
+		)
 	}
 	capture, err := DecodeWorkCapture(value.Value)
 	if err != nil {
@@ -83,7 +86,10 @@ func matchesDetachHookCapture(source Input, capture WorkCapture) bool {
 // DetachCaptureAdmission joins immutable source ownership and active Secret
 // retention into the caller's assignment or Start transaction. Live resource
 // ownership is a separate guard from the native Detach publication owner.
-func (repository *InputRepository) DetachCaptureAdmission(ctx context.Context, view workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) DetachCaptureAdmission(
+	ctx context.Context,
+	view workqueue.View,
+) (workqueue.Change, error) {
 	capture, err := repository.LoadDetachCapture(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -111,6 +117,9 @@ func (repository *InputRepository) DetachCaptureAdmission(ctx context.Context, v
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision},
+	)
 	return change, nil
 }

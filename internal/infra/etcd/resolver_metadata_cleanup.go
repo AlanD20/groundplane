@@ -40,7 +40,12 @@ func (repository *TaskRepository) ReconcileResolverDNSMetadata(ctx context.Conte
 			return errs.New(errs.KindInternal, "DNS metadata cleanup cursor is corrupt")
 		}
 	}
-	ack, ready, err := readResolverStateAcknowledgement(ctx, repository.store, read.ReadRevision, resolverWithdrawalBeforeEffects)
+	ack, ready, err := readResolverStateAcknowledgement(
+		ctx,
+		repository.store,
+		read.ReadRevision,
+		resolverWithdrawalBeforeEffects,
+	)
 	if err != nil || !ready {
 		return err
 	}
@@ -58,7 +63,9 @@ func (repository *TaskRepository) ReconcileResolverDNSMetadata(ctx context.Conte
 		return errs.New(errs.KindInternal, "DNS metadata cleanup scan is incomplete")
 	}
 	defer keyvalue.ClearRangeValues(page.Values)
-	conditions := append([]keyvalue.Condition{{Key: resolverMetadataCursorKey, ModRevision: keyvalue.RevisionOf(read.Values[0])}}, ack.conditions...)
+	conditions := append(
+		[]keyvalue.Condition{{Key: resolverMetadataCursorKey, ModRevision: keyvalue.RevisionOf(read.Values[0])}},
+		ack.conditions...)
 	var mutations []keyvalue.Mutation
 	defer func() { keyvalue.ClearMutationValues(mutations) }()
 	for _, value := range page.Values {
@@ -66,7 +73,10 @@ func (repository *TaskRepository) ReconcileResolverDNSMetadata(ctx context.Conte
 		if !strings.HasSuffix(value.Key, "/current") {
 			continue
 		}
-		environmentID := strings.TrimSuffix(strings.TrimPrefix(value.Key, environmentqueries.EnvironmentDesiredHeadScanPrefix), "/current")
+		environmentID := strings.TrimSuffix(
+			strings.TrimPrefix(value.Key, environmentqueries.EnvironmentDesiredHeadScanPrefix),
+			"/current",
+		)
 		if ids.Validate(ids.KindEnvironment, environmentID) != nil {
 			return errs.New(errs.KindInternal, "DNS metadata cleanup Environment head is corrupt")
 		}
@@ -89,7 +99,10 @@ func (repository *TaskRepository) ReconcileResolverDNSMetadata(ctx context.Conte
 		return err
 	}
 	defer clear(raw)
-	mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: resolverMetadataCursorKey, Value: raw})
+	mutations = append(
+		mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: resolverMetadataCursorKey, Value: raw},
+	)
 	budget, err := repository.store.MeasureTransaction(ctx, conditions, mutations)
 	if err != nil {
 		return err

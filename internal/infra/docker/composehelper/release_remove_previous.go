@@ -22,16 +22,26 @@ type PreviousRemovalResult struct {
 // whatever happens to have a Compose service name. It never removes volumes or
 // the stable proxy. A partial stop/remove remains an in-flight boundary until
 // fresh inventory proves absence; an exit status alone is insufficient.
-func ExecuteReleasePreviousRemoval(ctx context.Context, taskRunner runner.Runner, input releaseexecution.Input, report releaseexecution.CheckpointReport) (PreviousRemovalResult, error) {
+func ExecuteReleasePreviousRemoval(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+) (PreviousRemovalResult, error) {
 	result := PreviousRemovalResult{}
 	if ctx == nil || taskRunner == nil {
 		return result, errs.New(errs.KindInternal, "Release removal requires a context and subprocess runner")
 	}
-	retiring := report.Progress.Action == releaseexecution.RetireSwitchedPrevious && input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_BLUE_GREEN
-	recreating := report.Progress.Action == releaseexecution.RemovePrevious && input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE
+	retiring := report.Progress.Action == releaseexecution.RetireSwitchedPrevious &&
+		input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_BLUE_GREEN
+	recreating := report.Progress.Action == releaseexecution.RemovePrevious &&
+		input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE
 	if report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil || report.Progress.Validate(input) != nil ||
 		!report.Progress.InFlight || report.Progress.Phase != releaseexecution.Rollout || (!retiring && !recreating) {
-		return result, errs.New(errs.KindStateConflict, "previous workload removal has no acknowledged removal boundary")
+		return result, errs.New(
+			errs.KindStateConflict,
+			"previous workload removal has no acknowledged removal boundary",
+		)
 	}
 	stageID, err := report.Progress.StageID(input)
 	if err != nil || stageID != report.StageID {
@@ -53,7 +63,15 @@ func ExecuteReleasePreviousRemoval(ctx context.Context, taskRunner runner.Runner
 	if artifacts.Prior.Retained != nil {
 		prior.Services = append(prior.Services, proto.CloneOf(artifacts.Prior.Retained).Services...)
 	}
-	inventory, err := inspectServingInventory(bounded, taskRunner, prior, artifacts.Candidate, input.Release.ServiceId, input.Release.ReleaseId, artifacts.Prior.Proxy)
+	inventory, err := inspectServingInventory(
+		bounded,
+		taskRunner,
+		prior,
+		artifacts.Candidate,
+		input.Release.ServiceId,
+		input.Release.ReleaseId,
+		artifacts.Prior.Proxy,
+	)
 	if err != nil {
 		return result, err
 	}
@@ -78,16 +96,30 @@ func ExecuteReleasePreviousRemoval(ctx context.Context, taskRunner runner.Runner
 				return result, err
 			}
 			if output.ExitCode != 0 {
-				return result, errs.New(errs.KindRequestFailed, "previous workload stop/removal failed; its absence has not been proven")
+				return result, errs.New(
+					errs.KindRequestFailed,
+					"previous workload stop/removal failed; its absence has not been proven",
+				)
 			}
 		}
 	}
-	observed, err := inspectServingInventory(bounded, taskRunner, prior, artifacts.Candidate, input.Release.ServiceId, input.Release.ReleaseId, artifacts.Prior.Proxy)
+	observed, err := inspectServingInventory(
+		bounded,
+		taskRunner,
+		prior,
+		artifacts.Candidate,
+		input.Release.ServiceId,
+		input.Release.ReleaseId,
+		artifacts.Prior.Proxy,
+	)
 	if err != nil {
 		return result, err
 	}
 	if len(observed.predecessors) != 0 || !retiring && len(observed.candidates) != 0 {
-		return result, errs.New(errs.KindStateConflict, "previous workload removal did not reach the required absent state")
+		return result, errs.New(
+			errs.KindStateConflict,
+			"previous workload removal did not reach the required absent state",
+		)
 	}
 	if retiring {
 		if err := proveReleaseRetirement(bounded, taskRunner, input, artifacts, observed.proxyID); err != nil {
@@ -100,7 +132,13 @@ func ExecuteReleasePreviousRemoval(ctx context.Context, taskRunner runner.Runner
 
 // Retirement is permitted only after the replacement is ready and both live
 // routing and the proxy restart source point to it. Recheck after removal too.
-func proveReleaseRetirement(ctx context.Context, taskRunner runner.Runner, input releaseexecution.Input, artifacts executionplan.ReleaseWorkArtifacts, proxyID string) error {
+func proveReleaseRetirement(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.Input,
+	artifacts executionplan.ReleaseWorkArtifacts,
+	proxyID string,
+) error {
 	if artifacts.Proxy == nil || proxyID == "" || len(input.Release.TrafficConfigurations) != 1 {
 		return errs.New(errs.KindStateConflict, "previous workload retirement requires the captured serving proxy")
 	}
@@ -114,7 +152,10 @@ func proveReleaseRetirement(ctx context.Context, taskRunner runner.Runner, input
 		return err
 	}
 	if !ready || !routed {
-		return errs.New(errs.KindStateConflict, "replacement readiness and live/restart routing must be proven before retiring the previous workload")
+		return errs.New(
+			errs.KindStateConflict,
+			"replacement readiness and live/restart routing must be proven before retiring the previous workload",
+		)
 	}
 	return nil
 }

@@ -49,8 +49,12 @@ func validateRecoverySettlement(record ScriptExecutionRecord) error {
 }
 
 func SettleRecovery(record ScriptExecutionRecord, settlement ScriptRecoverySettlement) (ScriptExecutionRecord, error) {
-	if ValidateScriptExecutionRecord(record) != nil || record.Recovery != nil || settlement.SettledAt.Before(record.UpdatedAt) {
-		return ScriptExecutionRecord{}, errs.New(errs.KindStateConflict, "Script recovery cannot settle changed or already settled execution")
+	if ValidateScriptExecutionRecord(record) != nil || record.Recovery != nil ||
+		settlement.SettledAt.Before(record.UpdatedAt) {
+		return ScriptExecutionRecord{}, errs.New(
+			errs.KindStateConflict,
+			"Script recovery cannot settle changed or already settled execution",
+		)
 	}
 	record.Recovery = &settlement
 	record.UpdatedAt = settlement.SettledAt

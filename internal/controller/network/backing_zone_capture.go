@@ -14,7 +14,13 @@ import (
 )
 
 type backingZoneHookInputs interface {
-	SealBackingHookInputsAtRevision(context.Context, string, string, backinghook.Configuration, int64) (*taskconfiguration.BackingHookEncryptedInputs, error)
+	SealBackingHookInputsAtRevision(
+		context.Context,
+		string,
+		string,
+		backinghook.Configuration,
+		int64,
+	) (*taskconfiguration.BackingHookEncryptedInputs, error)
 }
 
 type capturedBackingZoneWork struct {
@@ -70,7 +76,8 @@ func captureBackingZoneWork(ctx context.Context, facts backingZoneHookInputs, ta
 			return captured, err
 		}
 		source := input.Snapshot.Source
-		if attachremoval.NeedsAgent(source) && source.Backing.Desired.Adapter == "custom" && source.Backing.Desired.Hooks != nil {
+		if attachremoval.NeedsAgent(source) && source.Backing.Desired.Adapter == "custom" &&
+			source.Backing.Desired.Hooks != nil {
 			capture.Hook, err = facts.SealBackingHookInputsAtRevision(ctx, capture.OperationID,
 				source.Attach.BackingProjectID, *source.Backing.Desired.Hooks, revision)
 			if err != nil {

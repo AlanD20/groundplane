@@ -15,7 +15,11 @@ type EntryRemovalConfiguration struct {
 	EpochRevision int64
 }
 
-func (repository *HierarchyRepository) ReadEntryRemovalConfiguration(ctx context.Context, environmentID string, revision int64) (EntryRemovalConfiguration, error) {
+func (repository *HierarchyRepository) ReadEntryRemovalConfiguration(
+	ctx context.Context,
+	environmentID string,
+	revision int64,
+) (EntryRemovalConfiguration, error) {
 	files, err := runtimeconfiguration.New(repository.store)
 	if err != nil {
 		return EntryRemovalConfiguration{}, err
@@ -31,8 +35,15 @@ func (repository *HierarchyRepository) ReadEntryRemovalConfiguration(ctx context
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil ||
 		read.Values[0].Key != key || read.Values[0].ModRevision <= 0 || read.Values[0].ModRevision > revision {
-		return EntryRemovalConfiguration{}, errs.New(errs.KindStateConflict, "Entry removal Environment epoch is unavailable")
+		return EntryRemovalConfiguration{}, errs.New(
+			errs.KindStateConflict,
+			"Entry removal Environment epoch is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
-	return EntryRemovalConfiguration{Files: snapshot, HeadRevision: head, EpochRevision: read.Values[0].ModRevision}, nil
+	return EntryRemovalConfiguration{
+		Files:         snapshot,
+		HeadRevision:  head,
+		EpochRevision: read.Values[0].ModRevision,
+	}, nil
 }

@@ -11,7 +11,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (repository *InputRepository) LoadNetworkWorkInput(ctx context.Context, view workqueue.View) (*agentpb.NetworkWorkInput, error) {
+func (repository *InputRepository) LoadNetworkWorkInput(
+	ctx context.Context,
+	view workqueue.View,
+) (*agentpb.NetworkWorkInput, error) {
 	input, _, err := repository.Load(ctx, view)
 	return input, err
 }
@@ -35,7 +38,9 @@ func (repository *InputRepository) PrepareNetworkWorkCheckpoint(ctx context.Cont
 			return workqueue.Change{}, err
 		}
 		if !current {
-			return workqueue.Change{}, conflict("Environment configuration changed; this Network action cannot start another stage")
+			return workqueue.Change{}, conflict(
+				"Environment configuration changed; this Network action cannot start another stage",
+			)
 		}
 		guards = append(guards, desired...)
 		removal, err := repository.RemovalAdmission(ctx, view.Work)

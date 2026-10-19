@@ -161,7 +161,10 @@ func (service *MutationService) detachAttachOnce(
 	task := workexecution.Task{ID: taskID, Actor: actor, Scope: workexecution.Scope{TenantID: source.TenantID,
 		ProjectID: source.ProjectID, EnvironmentID: source.Attach.EnvironmentID}, Action: workexecution.ActionDetach,
 		TargetID: source.Attach.ID, TargetName: source.Attach.Name,
-		Intent:        workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, now, taskID, "request-intent"), SHA256: evidence.durable.CiphertextDigest},
+		Intent: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, now, taskID, "request-intent"),
+			SHA256: evidence.durable.CiphertextDigest,
+		},
 		ExpectedItems: 1, CreatedAt: now, UpdatedAt: now, Deadline: now.Add(timeout)}
 	item := workexecution.Item{ID: workID, TaskID: taskID, Operation: workexecution.Detach, TargetID: task.TargetID,
 		Placement: placement, Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,

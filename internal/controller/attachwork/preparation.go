@@ -21,7 +21,11 @@ type Preparation struct {
 	units  *blueprintunits.Repository
 }
 
-func NewPreparation(inputs *Inputs, queue *workqueue.Repository, units *blueprintunits.Repository) (*Preparation, error) {
+func NewPreparation(
+	inputs *Inputs,
+	queue *workqueue.Repository,
+	units *blueprintunits.Repository,
+) (*Preparation, error) {
 	if inputs == nil || queue == nil || units == nil {
 		return nil, errs.New(errs.KindInternal, "Attach preparation requires captured inputs and Apply ownership")
 	}
@@ -57,11 +61,17 @@ func (owner *Preparation) Prepare(ctx context.Context, taskID, workID string) er
 			continue
 		}
 		unit := graph.Record.Units[index]
-		if captured.TaskID != item.TaskID || captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
-			captured.Placement != item.Placement || captured.Input != nil ||
-			!slices.Equal(captured.Dependencies, item.Dependencies) || !slices.Equal(captured.Claims, item.Claims) ||
-			!captured.CreatedAt.Equal(item.CreatedAt) || !captured.Deadline.Equal(item.Deadline) ||
-			unit.Removal || unit.Target.Kind != ids.KindAttach || unit.Target.ID != source.Generation.Record.AttachID {
+		if captured.TaskID != item.TaskID || captured.Operation != item.Operation ||
+			captured.TargetID != item.TargetID ||
+			captured.Placement != item.Placement ||
+			captured.Input != nil ||
+			!slices.Equal(captured.Dependencies, item.Dependencies) ||
+			!slices.Equal(captured.Claims, item.Claims) ||
+			!captured.CreatedAt.Equal(item.CreatedAt) ||
+			!captured.Deadline.Equal(item.Deadline) ||
+			unit.Removal ||
+			unit.Target.Kind != ids.KindAttach ||
+			unit.Target.ID != source.Generation.Record.AttachID {
 			return errs.New(errs.KindStateConflict, "Attach preparation differs from its accepted resource graph")
 		}
 		matched = true
@@ -116,11 +126,21 @@ func (owner *Preparation) Prepare(ctx context.Context, taskID, workID string) er
 	}
 	change.Conditions = append(change.Conditions, source.Conditions...)
 	change.Conditions = append(change.Conditions, guards...)
-	change.Conditions = append(change.Conditions,
-		keyvalue.Condition{Key: blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID), ModRevision: graph.Revision},
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID), ModRevision: snapshot.HeadRevision},
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{
+			Key:         blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID),
+			ModRevision: graph.Revision,
+		},
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID),
+			ModRevision: snapshot.HeadRevision,
+		},
 		keyvalue.Condition{Key: blueprintunits.EpochKey(task.Scope.EnvironmentID), ModRevision: snapshot.EpochRevision},
-		keyvalue.Condition{Key: blueprintunits.DesiredPlanKey(task.Scope.EnvironmentID), ModRevision: snapshot.Desired.Revision},
+		keyvalue.Condition{
+			Key:         blueprintunits.DesiredPlanKey(task.Scope.EnvironmentID),
+			ModRevision: snapshot.Desired.Revision,
+		},
 	)
 	result, err := owner.queue.Commit(ctx, change, binding)
 	keyvalue.ClearValues(result.FailureReads)

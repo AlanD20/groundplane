@@ -56,8 +56,10 @@ func PrepareUnstartedStop(task workqueue.TaskSnapshot, item workqueue.ItemSnapsh
 	digest := sha256.Sum256(value)
 	change, err := workqueue.PrepareUnstartedSettlement(task, item, workexecution.Completion{
 		Outcome: outcome, EffectsSettled: true,
-		Evidence: workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, item.Item.CreatedAt, item.Item.ID, "script-unstarted"),
-			SHA256: hex.EncodeToString(digest[:])},
+		Evidence: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, item.Item.CreatedAt, item.Item.ID, "script-unstarted"),
+			SHA256: hex.EncodeToString(digest[:]),
+		},
 	}, at)
 	if err != nil {
 		clear(value)

@@ -35,7 +35,9 @@ func AuthorizeActivation(task Task, item Item, attempt Attempt, input Input, at 
 	if item.TaskID != task.ID || item.Operation != ControllerSoftware && item.Operation != AgentSoftware ||
 		item.Phase != Running || attempt.Direction != Forward || attempt.StartedAt == nil ||
 		item.ForwardRevoked || task.Stop != nil || task.FinishedAt != nil || task.Activation != nil ||
-		!at.Before(attempt.Deadline) || !at.Before(task.Deadline) || at.Before(item.UpdatedAt) || at.Before(task.UpdatedAt) {
+		!at.Before(
+			attempt.Deadline,
+		) || !at.Before(task.Deadline) || at.Before(item.UpdatedAt) || at.Before(task.UpdatedAt) {
 		return Task{}, conflict("software activation is no longer permitted; inspect its saved outcome")
 	}
 	grant := ActivationGrant{WorkItemID: item.ID, AttemptID: attempt.ID, Input: input, GrantedAt: at}

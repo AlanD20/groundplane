@@ -34,7 +34,12 @@ func ResultKey(attemptID string) string { return "/v1/private/connector-check-re
 // the operation's durable state proves effects settled; a nil executor error or
 // a disconnected process does not. Cleanup success preserves the original work
 // failure through the work model's separate recovery outcome.
-func PrepareResult(snapshot keyvalue.Versioned[Record], task workqueue.TaskSnapshot, attempt workexecution.Attempt, at time.Time) (workqueue.Change, workexecution.Completion, error) {
+func PrepareResult(
+	snapshot keyvalue.Versioned[Record],
+	task workqueue.TaskSnapshot,
+	attempt workexecution.Attempt,
+	at time.Time,
+) (workqueue.Change, workexecution.Completion, error) {
 	record := snapshot.Record
 	if snapshot.Revision <= 0 || record.Validate() != nil || attempt.Validate() != nil ||
 		task.Revision <= 0 || task.Task.Validate() != nil || task.Task.ID != attempt.TaskID ||
@@ -42,17 +47,24 @@ func PrepareResult(snapshot keyvalue.Versioned[Record], task workqueue.TaskSnaps
 		attempt.FinishedAt != nil || attempt.Executor.Executor != workexecution.Controller ||
 		!validTime(at) || at.Before(record.CreatedAt) ||
 		record.Phase != Finished && record.Phase != CleanupRequired {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "connector check has no settled execution result")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"connector check has no settled execution result",
+		)
 	}
 	digest, err := PlanHash(record)
 	if err != nil || attempt.Input.ID != record.Owner.PlanID || attempt.Input.SHA256 != digest {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "connector check result changed captured input")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"connector check result changed captured input",
+		)
 	}
 	outcome := workexecution.Failed
 	if record.Phase == Finished && (record.Outcome == Passed || attempt.Direction == workexecution.Recovery) {
 		outcome = workexecution.Succeeded
 	}
-	if record.Phase == Finished && attempt.StartedAt == nil && attempt.Direction == workexecution.Forward && task.Task.Stop != nil {
+	if record.Phase == Finished && attempt.StartedAt == nil && attempt.Direction == workexecution.Forward &&
+		task.Task.Stop != nil {
 		outcome = task.Task.Stop.Outcome
 	}
 	result := ExecutionResult{Owner: record.Owner, AttemptID: attempt.ID, Outcome: record.Outcome, WorkOutcome: outcome,
@@ -63,7 +75,10 @@ func PrepareResult(snapshot keyvalue.Versioned[Record], task workqueue.TaskSnaps
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	hash := sha256.Sum256(value)
-	evidence := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, record.CreatedAt, attempt.ID, "connector-check-result"), SHA256: hex.EncodeToString(hash[:])}
+	evidence := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, record.CreatedAt, attempt.ID, "connector-check-result"),
+		SHA256: hex.EncodeToString(hash[:]),
+	}
 	return workqueue.Change{
 		Conditions: []keyvalue.Condition{{Key: Key(record.Owner.TaskID), ModRevision: snapshot.Revision},
 			{Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision}, {Key: ResultKey(attempt.ID)}},

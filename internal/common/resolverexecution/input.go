@@ -54,12 +54,19 @@ type Input struct {
 
 func (input Input) Validate() error {
 	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindWorkItem, input.WorkID) != nil ||
-		ids.Validate(ids.KindHost, input.HostID) != nil || !validDigest(input.BaselineSHA256) || ids.Validate(ids.KindOperation, input.OperationID) != nil ||
-		ids.Validate(ids.KindComponent, input.ComponentID) != nil || input.Generation == 0 || !canonicalTime(input.CreatedAt) ||
+		ids.Validate(
+			ids.KindHost,
+			input.HostID,
+		) != nil || !validDigest(input.BaselineSHA256) || ids.Validate(ids.KindOperation, input.OperationID) != nil ||
+		ids.Validate(
+			ids.KindComponent,
+			input.ComponentID,
+		) != nil || input.Generation == 0 || !canonicalTime(input.CreatedAt) ||
 		!canonicalTime(input.Deadline) || !input.Deadline.After(input.CreatedAt) ||
 		input.Deadline.Sub(input.CreatedAt) > 24*time.Hour ||
 		input.Enabled != (input.Candidate != nil) || !input.Enabled && input.EnsureRuntime ||
-		input.PreviousEnabled && input.Previous == nil || input.Enabled && !input.EnsureRuntime && !input.PreviousEnabled ||
+		input.PreviousEnabled &&
+			input.Previous == nil || input.Enabled && !input.EnsureRuntime && !input.PreviousEnabled ||
 		(input.Previous == nil) != (input.PreviousFileOwner == "") || input.Previous != nil && !ValidFileOwner(input.PreviousFileOwner) {
 		return invalid("DNS resolver input has invalid identity, timing or captured runtime selection")
 	}
@@ -76,7 +83,8 @@ func (input Input) Validate() error {
 	}
 	if input.Candidate != nil && input.Previous != nil {
 		candidate, previous := input.Candidate, input.Previous
-		if candidate.Generation <= previous.Generation || candidate.Runtime.Services[0].ServiceId != previous.Runtime.Services[0].ServiceId ||
+		if candidate.Generation <= previous.Generation ||
+			candidate.Runtime.Services[0].ServiceId != previous.Runtime.Services[0].ServiceId ||
 			!input.EnsureRuntime && (!bytes.Equal(candidate.Runtime.YamlSha256, previous.Runtime.YamlSha256) ||
 				candidate.Runtime.ArtifactId != previous.Runtime.ArtifactId) ||
 			!bytes.Equal(candidate.Apply.ExpectedPreviousArtifactDigest, previous.Apply.ArtifactDigest) ||
@@ -92,11 +100,17 @@ func (input Input) Validate() error {
 }
 
 func (configuration Configuration) Validate(componentID string) error {
-	if configuration.Generation == 0 || configuration.RuntimeGeneration == 0 || configuration.RuntimeGeneration > configuration.Generation ||
-		len(configuration.Corefile) == 0 || len(configuration.Corefile) > MaximumCorefileBytes ||
-		configuration.Runtime == nil || configuration.Runtime.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM ||
-		configuration.Runtime.OwnerId != "" || len(configuration.Runtime.Services) != 1 || configuration.Runtime.Services[0] == nil ||
-		configuration.Runtime.Services[0].OwnerComponentId != componentID || configuration.Runtime.Services[0].ExpectedReplicas != 1 {
+	if configuration.Generation == 0 || configuration.RuntimeGeneration == 0 ||
+		configuration.RuntimeGeneration > configuration.Generation ||
+		len(configuration.Corefile) == 0 ||
+		len(configuration.Corefile) > MaximumCorefileBytes ||
+		configuration.Runtime == nil ||
+		configuration.Runtime.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM ||
+		configuration.Runtime.OwnerId != "" ||
+		len(configuration.Runtime.Services) != 1 ||
+		configuration.Runtime.Services[0] == nil ||
+		configuration.Runtime.Services[0].OwnerComponentId != componentID ||
+		configuration.Runtime.Services[0].ExpectedReplicas != 1 {
 		return invalid("DNS resolver configuration requires one captured platform-owned container")
 	}
 	// Configuration reloads may retain the running Compose ownership generation.
@@ -116,7 +130,9 @@ func (configuration Configuration) Validate(componentID string) error {
 	if configuration.Apply.ArtifactId != configuration.Observe.ArtifactId ||
 		!bytes.Equal(configuration.Apply.DefinitionDigest, configuration.Observe.DefinitionDigest) ||
 		!bytes.Equal(configuration.Apply.CatalogDigest, configuration.Observe.CatalogDigest) ||
-		len(configuration.Observe.ExpectedPreviousArtifactDigest) != 0 || configuration.Observe.ExpectedPreviousArtifactId != "" ||
+		len(
+			configuration.Observe.ExpectedPreviousArtifactDigest,
+		) != 0 || configuration.Observe.ExpectedPreviousArtifactId != "" ||
 		configuration.Observe.ExpectedPreviousGeneration != 0 {
 		return invalid("DNS resolver observation is not bound to its captured configuration")
 	}

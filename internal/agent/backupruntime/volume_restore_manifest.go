@@ -71,7 +71,10 @@ func readVolumeRestoreManifest(ctx context.Context, binding backupvolumetransfer
 	}
 	if exchange == nil {
 		if !complete {
-			return nil, nil, nil, errs.New(errs.KindStateConflict, "Volume recovery requires its completed captured manifest")
+			return nil, nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Volume recovery requires its completed captured manifest",
+			)
 		}
 	} else {
 		if err := exchange.SendVolumeCredit(ctx, binding, credit); err != nil {

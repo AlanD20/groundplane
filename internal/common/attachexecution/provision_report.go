@@ -36,7 +36,10 @@ func DecodeProvisionReport(input ProvisionInput, raw []byte) (ProvisionReport, e
 	return DecodeProvisionReportAuthority(input.Attempt, authority, raw)
 }
 
-func (report ProvisionReport) CheckpointAuthority(attempt workexecution.Attempt, authority ProvisionAuthority) (workexecution.Checkpoint, error) {
+func (report ProvisionReport) CheckpointAuthority(
+	attempt workexecution.Attempt,
+	authority ProvisionAuthority,
+) (workexecution.Checkpoint, error) {
 	if report.Progress.Validate(attempt, authority) != nil || report.Progress.Sequence == 0 {
 		return workexecution.Checkpoint{}, invalid("Attach provisioning report has no acknowledged command")
 	}
@@ -48,7 +51,12 @@ func (report ProvisionReport) CheckpointAuthority(attempt workexecution.Attempt,
 	if !report.Progress.InFlight {
 		ordinal--
 	}
-	stage := ids.DeriveAt(ids.KindStep, at, attempt.WorkItemID, "attach-provisioning/"+strconv.FormatUint(uint64(ordinal), 10))
+	stage := ids.DeriveAt(
+		ids.KindStep,
+		at,
+		attempt.WorkItemID,
+		"attach-provisioning/"+strconv.FormatUint(uint64(ordinal), 10),
+	)
 	assignment := attempt
 	assignment.FinishedAt, assignment.Result, assignment.Outcome = nil, nil, ""
 	raw, err := json.Marshal(struct {
@@ -68,7 +76,11 @@ func (report ProvisionReport) CheckpointAuthority(attempt workexecution.Attempt,
 		RecordedAt: report.Progress.UpdatedAt, Evidence: workexecution.Input{ID: attempt.Input.ID, SHA256: hex.EncodeToString(digest[:])}}, nil
 }
 
-func EncodeProvisionReportAuthority(attempt workexecution.Attempt, authority ProvisionAuthority, report ProvisionReport) ([]byte, error) {
+func EncodeProvisionReportAuthority(
+	attempt workexecution.Attempt,
+	authority ProvisionAuthority,
+	report ProvisionReport,
+) ([]byte, error) {
 	if _, err := report.CheckpointAuthority(attempt, authority); err != nil {
 		return nil, err
 	}
@@ -86,7 +98,11 @@ func EncodeProvisionReportAuthority(attempt workexecution.Attempt, authority Pro
 	return canonical, nil
 }
 
-func DecodeProvisionReportAuthority(attempt workexecution.Attempt, authority ProvisionAuthority, raw []byte) (ProvisionReport, error) {
+func DecodeProvisionReportAuthority(
+	attempt workexecution.Attempt,
+	authority ProvisionAuthority,
+	raw []byte,
+) (ProvisionReport, error) {
 	if len(raw) == 0 || len(raw) > MaximumProvisionReportBytes {
 		return ProvisionReport{}, invalid("Attach provisioning report is missing or oversized")
 	}
@@ -109,7 +125,12 @@ func DecodeProvisionReportAuthority(attempt workexecution.Attempt, authority Pro
 
 // ValidateProvisionTransition accepts exactly one acknowledged command boundary.
 // It cannot skip work, repeat an ambiguous command or change its saved result.
-func ValidateProvisionTransition(attempt workexecution.Attempt, authority ProvisionAuthority, previous *ProvisionProgress, next ProvisionProgress) error {
+func ValidateProvisionTransition(
+	attempt workexecution.Attempt,
+	authority ProvisionAuthority,
+	previous *ProvisionProgress,
+	next ProvisionProgress,
+) error {
 	if next.Validate(attempt, authority) != nil {
 		return invalid("Attach provisioning checkpoint is invalid")
 	}

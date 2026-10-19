@@ -14,7 +14,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *Work) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (owner *Work) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
@@ -62,12 +66,18 @@ func (owner *Work) ReconcileInterrupted(ctx context.Context, view workqueue.Resu
 	return nil
 }
 
-func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
+func (owner *Work) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	_ time.Time,
+) (workqueue.Change, error) {
 	if len(finished.Items) != 1 || finished.Task.Task.ExpectedItems != 1 {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "CoreDNS action requires one settled work item")
 	}
 	item := finished.Items[0]
-	if item.Item.Operation != workexecution.Resolver || item.Item.Phase != workexecution.Settled || item.Item.ActiveAttemptID != "" || item.Item.Result == nil {
+	if item.Item.Operation != workexecution.Resolver || item.Item.Phase != workexecution.Settled ||
+		item.Item.ActiveAttemptID != "" ||
+		item.Item.Result == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "CoreDNS action still has unresolved effects")
 	}
 	view := workqueue.View{Task: finished.Task, Item: item, ReadRevision: finished.ReadRevision}
@@ -80,20 +90,39 @@ func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.Finishe
 		keyvalue.Condition{Key: workqueue.ItemKey(item.Item.ID), ModRevision: item.Revision})}
 	if item.Item.AttemptNumber == 0 {
 		if *item.Item.Result != stored.Reference || item.Item.Outcome == workexecution.Succeeded {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "unexecuted CoreDNS work cannot prove runtime application")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"unexecuted CoreDNS work cannot prove runtime application",
+			)
 		}
 		return change, nil
 	}
-	_, latest, err := owner.queue.ReadAttempt(ctx, finished.Task.Task.ID, item.Item.ID, item.Item.AttemptNumber, finished.ReadRevision)
+	_, latest, err := owner.queue.ReadAttempt(
+		ctx,
+		finished.Task.Task.ID,
+		item.Item.ID,
+		item.Item.AttemptNumber,
+		finished.ReadRevision,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	resume, err := owner.queue.ReadResumeAt(ctx, latest.Attempt.TaskID, latest.Attempt.WorkItemID, latest.Attempt.ID, latest.Attempt.Executor, finished.ReadRevision)
+	resume, err := owner.queue.ReadResumeAt(
+		ctx,
+		latest.Attempt.TaskID,
+		latest.Attempt.WorkItemID,
+		latest.Attempt.ID,
+		latest.Attempt.Executor,
+		finished.ReadRevision,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	if latest.Attempt.FinishedAt == nil || latest.Attempt.Result == nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "CoreDNS action lost its terminal execution receipt")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"CoreDNS action lost its terminal execution receipt",
+		)
 	}
 	var guard keyvalue.Condition
 	if latest.Attempt.Direction == workexecution.Recovery {
@@ -107,7 +136,10 @@ func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.Finishe
 		}
 		report, err := jcs.Decode[resolverexecution.RecoveryReport](raw)
 		if err != nil || report.Status != resolverexecution.RecoveryComplete {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "CoreDNS cleanup has no successful restoration receipt")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"CoreDNS cleanup has no successful restoration receipt",
+			)
 		}
 		guard = receipt
 	} else {
@@ -123,14 +155,26 @@ func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.Finishe
 			return workqueue.Change{}, err
 		}
 	}
-	change.Conditions = append(change.Conditions, guard, keyvalue.Condition{Key: workqueue.AttemptKey(latest.Attempt.ID), ModRevision: latest.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		guard,
+		keyvalue.Condition{Key: workqueue.AttemptKey(latest.Attempt.ID), ModRevision: latest.Revision},
+	)
 	return change, nil
 }
 
-func (owner *Work) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (owner *Work) RetireWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	return owner.records.PrepareRetention(ctx, view, at, final)
 }
 
-func (owner *Work) PrepareAttemptRetirement(view workqueue.View, attempt workqueue.AttemptSnapshot) (workqueue.Change, error) {
+func (owner *Work) PrepareAttemptRetirement(
+	view workqueue.View,
+	attempt workqueue.AttemptSnapshot,
+) (workqueue.Change, error) {
 	return resolverwork.PrepareAttemptRetirement(view, attempt)
 }

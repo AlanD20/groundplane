@@ -162,7 +162,13 @@ func (repository *BackupRuntimeRepository) PrepareConfigRestoreProgress(ctx cont
 	}
 	var next backupruntime.BackupRestoreRecord
 	if admitted.Recovery != nil {
-		next, err = backupruntime.PrepareConfigRestoreRecoveryCheckpoint(stored, admitted.Input(), request, progress, at)
+		next, err = backupruntime.PrepareConfigRestoreRecoveryCheckpoint(
+			stored,
+			admitted.Input(),
+			request,
+			progress,
+			at,
+		)
 	} else {
 		next, err = backupruntime.PrepareConfigRestoreCheckpoint(stored, admitted.Input(), request, progress, at)
 	}

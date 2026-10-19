@@ -13,7 +13,10 @@ func (owner *Owner) RemovalInput(ctx context.Context, view workqueue.ResumeView)
 	return owner.forwardInput(ctx, view)
 }
 
-func (owner *Owner) RecoveryInput(ctx context.Context, view workqueue.ResumeView) (attachexecution.RecoveryInput, error) {
+func (owner *Owner) RecoveryInput(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (attachexecution.RecoveryInput, error) {
 	input, _, err := owner.inputs.DetachRecoveryInput(ctx, view.Work, view.Attempt.Attempt)
 	return input, err
 }

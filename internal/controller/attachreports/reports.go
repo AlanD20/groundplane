@@ -21,11 +21,32 @@ import (
 type Owner interface {
 	RemovalInput(context.Context, workqueue.ResumeView) (attachexecution.RemovalInput, error)
 	RecoveryInput(context.Context, workqueue.ResumeView) (attachexecution.RecoveryInput, error)
-	PrepareRemovalCheckpoint(context.Context, workqueue.ResumeView, attachexecution.RemovalInput, attachexecution.RemovalReport) (workqueue.Change, error)
-	PrepareRemovalCompletion(context.Context, workqueue.ResumeView, attachexecution.RemovalInput, time.Time) (workqueue.Change, error)
-	PrepareRemovalFailure(context.Context, workqueue.ResumeView, attachexecution.RemovalInput, attachexecution.FailureReason, time.Time) (workqueue.Change, workexecution.Completion, error)
+	PrepareRemovalCheckpoint(
+		context.Context,
+		workqueue.ResumeView,
+		attachexecution.RemovalInput,
+		attachexecution.RemovalReport,
+	) (workqueue.Change, error)
+	PrepareRemovalCompletion(
+		context.Context,
+		workqueue.ResumeView,
+		attachexecution.RemovalInput,
+		time.Time,
+	) (workqueue.Change, error)
+	PrepareRemovalFailure(
+		context.Context,
+		workqueue.ResumeView,
+		attachexecution.RemovalInput,
+		attachexecution.FailureReason,
+		time.Time,
+	) (workqueue.Change, workexecution.Completion, error)
 	LoadRemovalFailure(context.Context, workqueue.ResumeView) ([]byte, error)
-	PrepareRemovalInspection(context.Context, workqueue.ResumeView, attachexecution.RemovalInspection, time.Time) (workqueue.Change, workexecution.Completion, error)
+	PrepareRemovalInspection(
+		context.Context,
+		workqueue.ResumeView,
+		attachexecution.RemovalInspection,
+		time.Time,
+	) (workqueue.Change, workexecution.Completion, error)
 	LoadRemovalInspection(context.Context, workqueue.ResumeView) ([]byte, error)
 }
 
@@ -70,9 +91,14 @@ func (service *Reports) readView(ctx context.Context, authorization agentregistr
 		return workqueue.ResumeView{}, nil, nil, err
 	}
 	owner := service.owners[view.Work.Item.Item.Operation]
-	if owner == nil || !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Attempt.Attempt.Direction != direction ||
-		view.Work.Task.Task.CollectionStartedAt != nil || !view.Work.Task.Task.PublicationComplete {
-		return workqueue.ResumeView{}, nil, nil, errs.New(errs.KindStateConflict, "Attach report has no retained matching assignment")
+	if owner == nil || !workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
+		view.Attempt.Attempt.Direction != direction ||
+		view.Work.Task.Task.CollectionStartedAt != nil ||
+		!view.Work.Task.Task.PublicationComplete {
+		return workqueue.ResumeView{}, nil, nil, errs.New(
+			errs.KindStateConflict,
+			"Attach report has no retained matching assignment",
+		)
 	}
 	return view, owner, guards, nil
 }

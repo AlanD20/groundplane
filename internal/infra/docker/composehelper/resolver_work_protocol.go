@@ -47,7 +47,11 @@ func validateResolverResponse(input resolverexecution.HelperInput, response *age
 	return err
 }
 
-func ReadResolverResponse(ctx context.Context, source io.Reader, input resolverexecution.HelperInput) (*agentpb.ResolverWorkHelperResponse, error) {
+func ReadResolverResponse(
+	ctx context.Context,
+	source io.Reader,
+	input resolverexecution.HelperInput,
+) (*agentpb.ResolverWorkHelperResponse, error) {
 	raw, err := readFrame(ctx, source)
 	if err != nil {
 		return nil, err
@@ -66,7 +70,12 @@ func ReadResolverResponse(ctx context.Context, source io.Reader, input resolvere
 	return response, nil
 }
 
-func WriteResolverResponse(ctx context.Context, output io.Writer, input resolverexecution.HelperInput, response *agentpb.ResolverWorkHelperResponse) error {
+func WriteResolverResponse(
+	ctx context.Context,
+	output io.Writer,
+	input resolverexecution.HelperInput,
+	response *agentpb.ResolverWorkHelperResponse,
+) error {
 	if err := validateResolverResponse(input, response); err != nil {
 		return err
 	}

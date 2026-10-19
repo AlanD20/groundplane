@@ -16,7 +16,10 @@ func (repository *Repository) ReadInterruptedBackupAt(ctx context.Context, view 
 		(operation != workexecution.BackupPrune && operation != workexecution.Backup && operation != workexecution.Restore) || view.Attempt.Attempt.FinishedAt != nil ||
 		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Backup reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Backup reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }

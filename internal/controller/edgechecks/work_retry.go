@@ -40,6 +40,9 @@ func (executor *Executor) PrepareWorkRetry(ctx context.Context, task workqueue.T
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: checkrecord.Key(task.Task.ID), ModRevision: loaded.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: checkrecord.Key(task.Task.ID), ModRevision: loaded.Revision},
+	)
 	return change, nil
 }

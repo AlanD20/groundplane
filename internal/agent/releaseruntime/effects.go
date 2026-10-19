@@ -22,16 +22,34 @@ type ConfigurationEffects interface {
 // HookEffects consumes only ActiveHook's immutable input. Its Inspect method
 // uses Script checkpoints and cleanup evidence; it cannot rerun a lost hook.
 type HookEffects interface {
-	Execute(context.Context, releaseexecution.Input, releaseexecution.CheckpointReport, *agentpb.ReleaseWorkHook) (workexecution.Input, error)
-	Inspect(context.Context, releaseexecution.Input, releaseexecution.CheckpointReport, *agentpb.ReleaseWorkHook) (workexecution.Input, error)
+	Execute(
+		context.Context,
+		releaseexecution.Input,
+		releaseexecution.CheckpointReport,
+		*agentpb.ReleaseWorkHook,
+	) (workexecution.Input, error)
+	Inspect(
+		context.Context,
+		releaseexecution.Input,
+		releaseexecution.CheckpointReport,
+		*agentpb.ReleaseWorkHook,
+	) (workexecution.Input, error)
 }
 
 // EffectEvidence persists the exact action result before publication. Resume
 // reports whether a saved result exists, not whether the mutation happened.
 type EffectEvidence interface {
-	RecordReadiness(context.Context, releaseexecution.CheckpointReport, *agentpb.ObservedProject) (workexecution.Input, error)
+	RecordReadiness(
+		context.Context,
+		releaseexecution.CheckpointReport,
+		*agentpb.ObservedProject,
+	) (workexecution.Input, error)
 	RecordDrain(context.Context, releaseexecution.CheckpointReport, time.Time) (workexecution.Input, error)
-	RecordHelper(context.Context, releaseexecution.CheckpointReport, *agentpb.ReleaseHelperResponse) (workexecution.Input, error)
+	RecordHelper(
+		context.Context,
+		releaseexecution.CheckpointReport,
+		*agentpb.ReleaseHelperResponse,
+	) (workexecution.Input, error)
 	Resume(context.Context, releaseexecution.CheckpointReport) (workexecution.Input, bool, error)
 }
 
@@ -43,25 +61,56 @@ type Driver struct {
 	evidence      EffectEvidence
 }
 
-func NewDriver(configuration ConfigurationEffects, hooks HookEffects, helper MutationHelper, observer Observer, evidence EffectEvidence) (*Driver, error) {
+func NewDriver(
+	configuration ConfigurationEffects,
+	hooks HookEffects,
+	helper MutationHelper,
+	observer Observer,
+	evidence EffectEvidence,
+) (*Driver, error) {
 	if configuration == nil || hooks == nil || helper == nil || observer == nil || evidence == nil {
-		return nil, errs.New(errs.KindInternal, "Release driver requires configuration, hooks, helper, observation and evidence owners")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Release driver requires configuration, hooks, helper, observation and evidence owners",
+		)
 	}
-	return &Driver{configuration: configuration, hooks: hooks, helper: helper, observer: observer, evidence: evidence}, nil
+	return &Driver{
+		configuration: configuration,
+		hooks:         hooks,
+		helper:        helper,
+		observer:      observer,
+		evidence:      evidence,
+	}, nil
 }
 
-func (driver *Driver) Execute(ctx context.Context, input releaseexecution.Input, report releaseexecution.CheckpointReport) (workexecution.Input, error) {
+func (driver *Driver) Execute(
+	ctx context.Context,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+) (workexecution.Input, error) {
 	return driver.run(ctx, input, report, false)
 }
 
-func (driver *Driver) Inspect(ctx context.Context, input releaseexecution.Input, report releaseexecution.CheckpointReport) (workexecution.Input, error) {
+func (driver *Driver) Inspect(
+	ctx context.Context,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+) (workexecution.Input, error) {
 	return driver.run(ctx, input, report, true)
 }
 
-func (driver *Driver) run(ctx context.Context, input releaseexecution.Input, report releaseexecution.CheckpointReport, inspect bool) (workexecution.Input, error) {
+func (driver *Driver) run(
+	ctx context.Context,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+	inspect bool,
+) (workexecution.Input, error) {
 	if driver == nil || ctx == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil ||
 		report.Progress.Validate(input) != nil || !report.Progress.InFlight {
-		return workexecution.Input{}, errs.New(errs.KindStateConflict, "Release effect requires an acknowledged active boundary")
+		return workexecution.Input{}, errs.New(
+			errs.KindStateConflict,
+			"Release effect requires an acknowledged active boundary",
+		)
 	}
 	stage, err := report.Progress.StageID(input)
 	if err != nil || stage != report.StageID {
@@ -85,11 +134,19 @@ func (driver *Driver) run(ctx context.Context, input releaseexecution.Input, rep
 	case releaseexecution.Rollout:
 		return driver.rollout(ctx, input, report, inspect)
 	default:
-		return workexecution.Input{}, errs.New(errs.KindStateConflict, "Release cursor does not select an executable phase")
+		return workexecution.Input{}, errs.New(
+			errs.KindStateConflict,
+			"Release cursor does not select an executable phase",
+		)
 	}
 }
 
-func (driver *Driver) rollout(ctx context.Context, input releaseexecution.Input, report releaseexecution.CheckpointReport, inspect bool) (workexecution.Input, error) {
+func (driver *Driver) rollout(
+	ctx context.Context,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+	inspect bool,
+) (workexecution.Input, error) {
 	// Reuse exact saved proof even if its upload receipt was lost. This applies
 	// to readiness and drain as well as helper mutations; reconnect cannot renew
 	// the original deadline or replace an already-persisted result.
@@ -97,7 +154,8 @@ func (driver *Driver) rollout(ctx context.Context, input releaseexecution.Input,
 		return reference, err
 	}
 	cursor := report.Progress
-	if cursor.Action == releaseexecution.WaitCandidate || cursor.Rolling != nil && cursor.Rolling.Phase == rollingrelease.WaitCandidateHealthy {
+	if cursor.Action == releaseexecution.WaitCandidate ||
+		cursor.Rolling != nil && cursor.Rolling.Phase == rollingrelease.WaitCandidateHealthy {
 		observed, err := WaitCandidate(ctx, driver.observer, input, report, nil)
 		if err != nil {
 			return workexecution.Input{}, err

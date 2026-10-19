@@ -21,7 +21,11 @@ import (
 // Volume preparation does not wait for the Environment runtime projection:
 // that projection may itself depend on this Volume. Render only the captured
 // Volume, with no Services, hooks or mutable dependency facts.
-func (service *Service) prepareAuthoredVolumeInput(ctx context.Context, work workqueue.View, create bool) (*agentpb.VolumeWorkInput, []keyvalue.Condition, error) {
+func (service *Service) prepareAuthoredVolumeInput(
+	ctx context.Context,
+	work workqueue.View,
+	create bool,
+) (*agentpb.VolumeWorkInput, []keyvalue.Condition, error) {
 	source, err := service.loadAuthoredRuntimeProjectionSource(ctx, work.Task.Task)
 	if err != nil {
 		return nil, nil, err
@@ -29,10 +33,17 @@ func (service *Service) prepareAuthoredVolumeInput(ctx context.Context, work wor
 	for _, revision := range []int64{source.desired.Revision, source.identities.Revision,
 		source.environment.Revision, source.project.Revision} {
 		if revision <= 0 || revision > work.ReadRevision {
-			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Volume source changed after its preparation snapshot")
+			return nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Volume source changed after its preparation snapshot",
+			)
 		}
 	}
-	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(ctx, source.desired.Record, source.identities.Record)
+	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
+		ctx,
+		source.desired.Record,
+		source.identities.Record,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -53,14 +64,22 @@ func (service *Service) prepareAuthoredVolumeInput(ctx context.Context, work wor
 		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Volume requires captured managed local storage")
 	}
 	if !create {
-		birth, found, err := service.repository.GetEnvironmentDesiredInputRevision(ctx, source.environment.Record.ID, identity.BirthRevisionID)
+		birth, found, err := service.repository.GetEnvironmentDesiredInputRevision(
+			ctx,
+			source.environment.Record.ID,
+			identity.BirthRevisionID,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
 		if !found || birth.Revision <= 0 || birth.Revision > work.ReadRevision {
 			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Volume creation input is unavailable")
 		}
-		birthIdentities, found, err := service.repository.GetEnvironmentOwnedIdentitiesRevision(ctx, source.environment.Record.ID, identity.BirthRevisionID)
+		birthIdentities, found, err := service.repository.GetEnvironmentOwnedIdentitiesRevision(
+			ctx,
+			source.environment.Record.ID,
+			identity.BirthRevisionID,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -79,13 +98,20 @@ func (service *Service) prepareAuthoredVolumeInput(ctx context.Context, work wor
 		if !matched {
 			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Volume is absent from its creation revision")
 		}
-		birthProject, err := composerender.LoadNormalizedEnvironmentDesiredProject(ctx, birth.Record, birthIdentities.Record)
+		birthProject, err := composerender.LoadNormalizedEnvironmentDesiredProject(
+			ctx,
+			birth.Record,
+			birthIdentities.Record,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
 		original, found := birthProject.Volumes[identity.Name]
 		if !found || !maps.Equal(original.Labels, volume.Labels) {
-			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint cannot change physical labels of an existing Volume")
+			return nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Blueprint cannot change physical labels of an existing Volume",
+			)
 		}
 	}
 	ownerKind := composerender.ComposeProjectOwnerBacking
@@ -95,21 +121,32 @@ func (service *Service) prepareAuthoredVolumeInput(ctx context.Context, work wor
 	}
 	if source.project.Record.Kind == hierarchy.ProjectKindTenant {
 		if source.tenant.Revision <= 0 || source.tenant.Revision > work.ReadRevision {
-			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Volume Tenant changed after its preparation snapshot")
+			return nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Volume Tenant changed after its preparation snapshot",
+			)
 		}
 		ownerKind = composerender.ComposeProjectOwnerTenant
-		guards = append(guards, keyvalue.Condition{Key: hierarchy.TenantKey(source.tenant.Record.ID), ModRevision: source.tenant.Revision})
+		guards = append(
+			guards,
+			keyvalue.Condition{Key: hierarchy.TenantKey(source.tenant.Record.ID), ModRevision: source.tenant.Revision},
+		)
 	}
 	item := work.Item.Item
 	planID := ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "volume-input")
 	artifact, err := composerender.RenderCompose(composerender.ComposeRenderInput{
-		Project:          &composetypes.Project{Name: project.Name, Volumes: composetypes.Volumes{identity.Name: volume}},
+		Project: &composetypes.Project{
+			Name:    project.Name,
+			Volumes: composetypes.Volumes{identity.Name: volume},
+		},
 		ArtifactID:       ids.DeriveAt(ids.KindConfig, item.CreatedAt, item.ID, "volume-artifact"),
 		ProjectOwnerKind: ownerKind, TenantID: work.Task.Task.Scope.TenantID,
 		ProjectID: source.project.Record.ID, EnvironmentID: source.environment.Record.ID,
 		PlanID: planID, RenderGeneration: source.desired.Record.RenderGeneration,
 		AuthorizedVolumeDir: source.environment.Record.VolumeDir,
-		Identities:          composeidentity.Snapshot{Volumes: []composeidentity.Resource{{ID: identity.ID, Name: identity.Name}}},
+		Identities: composeidentity.Snapshot{
+			Volumes: []composeidentity.Resource{{ID: identity.ID, Name: identity.Name}},
+		},
 	})
 	if err != nil {
 		return nil, nil, err

@@ -25,7 +25,13 @@ type Reports struct {
 	units       *blueprintunits.Repository
 }
 
-func NewReports(queue *workqueue.Repository, inputs *Inputs, facts *attachments.FactService, units *blueprintunits.Repository, diagnostics *executiondiagnostics.Repository) (*Reports, error) {
+func NewReports(
+	queue *workqueue.Repository,
+	inputs *Inputs,
+	facts *attachments.FactService,
+	units *blueprintunits.Repository,
+	diagnostics *executiondiagnostics.Repository,
+) (*Reports, error) {
 	if queue == nil || inputs == nil || facts == nil || units == nil || diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "Attach reporting requires execution storage and captured inputs")
 	}
@@ -53,15 +59,22 @@ func (service *Reports) readDirectionalView(ctx context.Context, authorization a
 	if err != nil {
 		return workqueue.ResumeView{}, nil, err
 	}
-	if view.Work.Item.Item.Operation != workexecution.Attach || !workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
-		view.Attempt.Attempt.Direction != direction || view.Work.Task.Task.CollectionStartedAt != nil ||
+	if view.Work.Item.Item.Operation != workexecution.Attach ||
+		!workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
+		view.Attempt.Attempt.Direction != direction ||
+		view.Work.Task.Task.CollectionStartedAt != nil ||
 		!view.Work.Task.Task.PublicationComplete {
-		return workqueue.ResumeView{}, nil, errs.New(errs.KindStateConflict, "Attach report has no retained matching assignment")
+		return workqueue.ResumeView{}, nil, errs.New(
+			errs.KindStateConflict,
+			"Attach report has no retained matching assignment",
+		)
 	}
 	return view, guards, nil
 }
 
-func (service *Reports) CheckpointAttachProvision(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *Reports) CheckpointAttachProvision(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.AttachProvisionCheckpointRequest,
 ) (*agentpb.AttachProvisionCheckpointAck, error) {
 	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil ||

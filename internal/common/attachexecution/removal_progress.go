@@ -128,13 +128,17 @@ func (progress RemovalProgress) ValidateAuthority(attempt workexecution.Attempt,
 		(progress.LastResult != nil) != (progress.Completed > 0) {
 		return invalid("Attach removal progress has inconsistent command boundaries")
 	}
-	if progress.BeganAt != nil && (progress.BeganAt.Before(*attempt.StartedAt) || !progress.BeganAt.Before(attempt.Deadline) || progress.BeganAt.After(progress.UpdatedAt)) {
+	if progress.BeganAt != nil &&
+		(progress.BeganAt.Before(*attempt.StartedAt) || !progress.BeganAt.Before(attempt.Deadline) || progress.BeganAt.After(progress.UpdatedAt)) {
 		return invalid("Attach removal command has an invalid start time")
 	}
 	if result := progress.LastResult; result != nil {
-		if result.Ordinal+1 != progress.Completed || result.ExitCode != 0 || result.StartedAt.Before(*attempt.StartedAt) ||
-			!result.StartedAt.Before(attempt.Deadline) || result.FinishedAt.Before(result.StartedAt) ||
-			result.FinishedAt.After(progress.UpdatedAt) || progress.BeganAt != nil && result.FinishedAt.After(*progress.BeganAt) {
+		if result.Ordinal+1 != progress.Completed || result.ExitCode != 0 ||
+			result.StartedAt.Before(*attempt.StartedAt) ||
+			!result.StartedAt.Before(attempt.Deadline) ||
+			result.FinishedAt.Before(result.StartedAt) ||
+			result.FinishedAt.After(progress.UpdatedAt) ||
+			progress.BeganAt != nil && result.FinishedAt.After(*progress.BeganAt) {
 			return invalid("Attach removal progress lacks a successful command result")
 		}
 		isConsumer := authority.HasConsumer && result.Ordinal == authority.ConsumerOrdinal
@@ -157,7 +161,9 @@ func (progress RemovalProgress) Complete(input RemovalInput) bool {
 }
 
 func (progress RemovalProgress) Begin(input RemovalInput, at time.Time) (RemovalProgress, error) {
-	if progress.Validate(input) != nil || progress.InFlight || progress.Complete(input) || at.Before(progress.UpdatedAt) || !at.Before(input.Attempt.Deadline) {
+	if progress.Validate(input) != nil || progress.InFlight || progress.Complete(input) ||
+		at.Before(progress.UpdatedAt) ||
+		!at.Before(input.Attempt.Deadline) {
 		return RemovalProgress{}, invalid("Attach removal cannot begin another command")
 	}
 	next := progress
@@ -167,7 +173,11 @@ func (progress RemovalProgress) Begin(input RemovalInput, at time.Time) (Removal
 	return next, next.Validate(input)
 }
 
-func (progress RemovalProgress) Confirm(input RemovalInput, result RemovalCommandResult, at time.Time) (RemovalProgress, error) {
+func (progress RemovalProgress) Confirm(
+	input RemovalInput,
+	result RemovalCommandResult,
+	at time.Time,
+) (RemovalProgress, error) {
 	authority, err := input.Authority()
 	if err != nil {
 		return RemovalProgress{}, err
@@ -175,9 +185,16 @@ func (progress RemovalProgress) Confirm(input RemovalInput, result RemovalComman
 	return progress.ConfirmAuthority(input.Attempt, authority, result, at)
 }
 
-func (progress RemovalProgress) ConfirmAuthority(attempt workexecution.Attempt, authority RemovalAuthority, result RemovalCommandResult, at time.Time) (RemovalProgress, error) {
-	if progress.ValidateAuthority(attempt, authority) != nil || !progress.InFlight || at.Before(progress.UpdatedAt) || result.Ordinal != progress.Completed ||
-		!result.StartedAt.Equal(*progress.BeganAt) || result.FinishedAt.After(at) {
+func (progress RemovalProgress) ConfirmAuthority(
+	attempt workexecution.Attempt,
+	authority RemovalAuthority,
+	result RemovalCommandResult,
+	at time.Time,
+) (RemovalProgress, error) {
+	if progress.ValidateAuthority(attempt, authority) != nil || !progress.InFlight || at.Before(progress.UpdatedAt) ||
+		result.Ordinal != progress.Completed ||
+		!result.StartedAt.Equal(*progress.BeganAt) ||
+		result.FinishedAt.After(at) {
 		return RemovalProgress{}, invalid("Attach removal result does not match its acknowledged command")
 	}
 	next := progress

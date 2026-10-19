@@ -28,7 +28,11 @@ type localAgentConfigEvidence struct {
 }
 
 type localAgentConfigIdempotency interface {
-	Apply(context.Context, agentregistration.ConfigurationUpdate, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	Apply(
+		context.Context,
+		agentregistration.ConfigurationUpdate,
+		idempotencyrecord.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 	Prepare(context.Context, string, localagent.Config) (localAgentConfigEvidence, error)
 	ResolveExisting(
 		context.Context,

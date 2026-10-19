@@ -26,9 +26,13 @@ type BackingFailureDelivery struct {
 
 func (record attemptRecord) validateBacking() error {
 	backing := record.Backing
-	if backing == nil || record.BackingRecovery != nil || record.Attempt.Validate() != nil || record.Attempt.Direction != workexecution.Forward ||
-		record.Attempt.Executor.Executor != workexecution.Agent || record.Attempt.FinishedAt != nil ||
-		backing.Layout.Validate(record.Attempt) != nil || record.UpdatedAt.IsZero() || record.UpdatedAt.Before(record.Attempt.AssignedAt) {
+	if backing == nil || record.BackingRecovery != nil || record.Attempt.Validate() != nil ||
+		record.Attempt.Direction != workexecution.Forward ||
+		record.Attempt.Executor.Executor != workexecution.Agent ||
+		record.Attempt.FinishedAt != nil ||
+		backing.Layout.Validate(record.Attempt) != nil ||
+		record.UpdatedAt.IsZero() ||
+		record.UpdatedAt.Before(record.Attempt.AssignedAt) {
 		return invalid()
 	}
 	for _, present := range []bool{record.EnvironmentProvision != nil, record.Backup != nil, record.RemovalRecovery != nil,
@@ -45,7 +49,9 @@ func (record attemptRecord) validateBacking() error {
 		}
 	}
 	if backing.Progress == nil {
-		if record.Sequence != 0 || backing.Failure == nil || backing.Acknowledged || backing.Runtime != nil || backing.Completion != nil || backing.Hook != nil {
+		if record.Sequence != 0 || backing.Failure == nil || backing.Acknowledged || backing.Runtime != nil ||
+			backing.Completion != nil ||
+			backing.Hook != nil {
 			return invalid()
 		}
 	} else if backing.Progress.Validate(record.Attempt, backing.Layout) != nil || backing.Progress.Sequence == 0 ||
@@ -56,19 +62,25 @@ func (record attemptRecord) validateBacking() error {
 		return invalid()
 	}
 	if backing.Runtime != nil {
-		if backing.Progress == nil || record.Attempt.StartedAt == nil || backingruntimefact.ValidateObservation(*backing.Runtime) != nil ||
-			backing.Runtime.ServiceID != backing.Layout.ServiceID || backing.Runtime.ObservedAt.Before(*record.Attempt.StartedAt) ||
-			backing.Progress.Stage != backingprovision.VerifyRuntime && backing.Progress.Stage != backingprovision.Complete {
+		if backing.Progress == nil || record.Attempt.StartedAt == nil ||
+			backingruntimefact.ValidateObservation(*backing.Runtime) != nil ||
+			backing.Runtime.ServiceID != backing.Layout.ServiceID ||
+			backing.Runtime.ObservedAt.Before(*record.Attempt.StartedAt) ||
+			backing.Progress.Stage != backingprovision.VerifyRuntime &&
+				backing.Progress.Stage != backingprovision.Complete {
 			return invalid()
 		}
 		if backing.Progress.Last == nil || backing.Runtime.ContainerID != backing.Progress.Last.ContainerID ||
-			backing.Progress.Stage == backingprovision.Complete && !backing.Runtime.ObservedAt.Equal(backing.Progress.Last.At) {
+			backing.Progress.Stage == backingprovision.Complete &&
+				!backing.Runtime.ObservedAt.Equal(backing.Progress.Last.At) {
 			return invalid()
 		}
 	}
 	if failure := backing.Failure; failure != nil {
-		if failure.Reason != backingprovision.ExecutionFailed && failure.Reason != backingprovision.DeadlineExpired && failure.Reason != backingprovision.Interrupted ||
-			backing.Completion != nil || backing.Progress != nil && backing.Progress.Stage == backingprovision.Complete {
+		if failure.Reason != backingprovision.ExecutionFailed && failure.Reason != backingprovision.DeadlineExpired &&
+			failure.Reason != backingprovision.Interrupted ||
+			backing.Completion != nil ||
+			backing.Progress != nil && backing.Progress.Stage == backingprovision.Complete {
 			return invalid()
 		}
 		if receipt := failure.Receipt; receipt != nil {
@@ -79,7 +91,8 @@ func (record attemptRecord) validateBacking() error {
 			if err != nil || saved.Reason != failure.Reason || !saved.RecordedAt.Equal(*receipt.FinishedAt) {
 				return invalid()
 			}
-			if saved.Checkpoint != nil && (backing.Progress == nil || saved.Checkpoint.Sequence > backing.Progress.Sequence) {
+			if saved.Checkpoint != nil &&
+				(backing.Progress == nil || saved.Checkpoint.Sequence > backing.Progress.Sequence) {
 				return invalid()
 			}
 		} else if len(failure.Evidence) != 0 {
@@ -104,7 +117,8 @@ func (record attemptRecord) validateBacking() error {
 }
 
 func sameBackingTerminal(active, terminal workexecution.Attempt) bool {
-	if terminal.Validate() != nil || !workexecution.SameAssignment(active, terminal) || terminal.FinishedAt == nil || terminal.Result == nil ||
+	if terminal.Validate() != nil || !workexecution.SameAssignment(active, terminal) || terminal.FinishedAt == nil ||
+		terminal.Result == nil ||
 		(active.StartedAt == nil) != (terminal.StartedAt == nil) {
 		return false
 	}

@@ -16,10 +16,22 @@ import (
 // transaction. New effects require current intent; proof of an already-granted
 // effect remains reportable after supersession or Stop. Typed effect/Script
 // evidence is independently checked by the checkpoint service in that transaction.
-func (service *Service) PrepareCheckpointEvidence(ctx context.Context, view workqueue.ResumeView, input releaseexecution.Input, previous releasework.Snapshot, report releaseexecution.CheckpointReport) (workqueue.Change, error) {
+func (service *Service) PrepareCheckpointEvidence(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input releaseexecution.Input,
+	previous releasework.Snapshot,
+	report releaseexecution.CheckpointReport,
+) (workqueue.Change, error) {
 	if service == nil || service.ledger == nil || ctx == nil || !view.ActiveAttempt || !view.CurrentExecutor ||
-		!workexecution.SameAssignment(input.Attempt, view.Attempt.Attempt) || input.Attempt.Direction != workexecution.Forward {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Release checkpoint does not own this forward attempt")
+		!workexecution.SameAssignment(
+			input.Attempt,
+			view.Attempt.Attempt,
+		) || input.Attempt.Direction != workexecution.Forward {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Release checkpoint does not own this forward attempt",
+		)
 	}
 	var prior *releaseexecution.Progress
 	if previous.Record != nil {
@@ -46,7 +58,12 @@ func (service *Service) PrepareCheckpointEvidence(ctx context.Context, view work
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	storage, err := service.ledger.PostgresPatchConditions(ctx, artifact, view.Work.Item.Item.TargetID, view.Work.ReadRevision)
+	storage, err := service.ledger.PostgresPatchConditions(
+		ctx,
+		artifact,
+		view.Work.Item.Item.TargetID,
+		view.Work.ReadRevision,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

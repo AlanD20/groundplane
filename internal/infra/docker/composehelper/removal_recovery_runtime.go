@@ -18,7 +18,12 @@ import (
 
 // ExecuteRemovalRuntime restores only captured members, workloads before their
 // proxy. Quiescence and configuration are separate acknowledged recovery phases.
-func ExecuteRemovalRuntime(ctx context.Context, taskRunner runner.Runner, root string, request *agentpb.ServiceRemovalRecoveryHelperRequest) (*agentpb.ServiceRemovalRecoveryHelperResponse, error) {
+func ExecuteRemovalRuntime(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	root string,
+	request *agentpb.ServiceRemovalRecoveryHelperRequest,
+) (*agentpb.ServiceRemovalRecoveryHelperResponse, error) {
 	if ctx == nil || taskRunner == nil {
 		return nil, invalidReleaseHelper()
 	}
@@ -27,8 +32,12 @@ func ExecuteRemovalRuntime(ctx context.Context, taskRunner runner.Runner, root s
 		return nil, err
 	}
 	phase := input.Progress.Phase
-	if phase != removalexecution.InspectRuntime && phase != removalexecution.RestoreRuntime && phase != removalexecution.VerifyRestoration {
-		return nil, errs.New(errs.KindValidationFailed, "Service removal runtime helper received a non-runtime recovery phase")
+	if phase != removalexecution.InspectRuntime && phase != removalexecution.RestoreRuntime &&
+		phase != removalexecution.VerifyRestoration {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Service removal runtime helper received a non-runtime recovery phase",
+		)
 	}
 	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 	if !input.InspectOnly {
@@ -44,7 +53,12 @@ func ExecuteRemovalRuntime(ctx context.Context, taskRunner runner.Runner, root s
 		if err != nil || scope.EnvironmentID != input.Procedure.EnvironmentId {
 			return nil, invalidReleaseHelper()
 		}
-		observed[index], err = inspectCapturedContainers(bounded, taskRunner, member.Artifact, member.Artifact.Services[0])
+		observed[index], err = inspectCapturedContainers(
+			bounded,
+			taskRunner,
+			member.Artifact,
+			member.Artifact.Services[0],
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -69,7 +83,11 @@ func ExecuteRemovalRuntime(ctx context.Context, taskRunner runner.Runner, root s
 			service := member.Artifact.Services[0]
 			state, err := inspectLifecycleMember(bounded, taskRunner, executionplan.LifecycleHelperInput{
 				Attempt: input.Attempt, Procedure: input.Procedure, InspectOnly: true,
-				Stage: lifecycleexecution.Stage{ID: member.Ownership.StepId, Member: service.ComposeName, Expected: lifecycleexecution.Running},
+				Stage: lifecycleexecution.Stage{
+					ID:       member.Ownership.StepId,
+					Member:   service.ComposeName,
+					Expected: lifecycleexecution.Running,
+				},
 			})
 			if err != nil {
 				return nil, err

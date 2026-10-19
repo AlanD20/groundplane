@@ -27,18 +27,37 @@ type creationCapture struct {
 	Allocator   *desiredrevision.BlueprintIdentityAllocator
 }
 
-func (service *CreationService) captureCreation(ctx context.Context, capture creationCapture) (backingprovisionwork.Publication, error) {
+func (service *CreationService) captureCreation(
+	ctx context.Context,
+	capture creationCapture,
+) (backingprovisionwork.Publication, error) {
 	placement, err := service.repository.ResolveResourceHost(ctx)
 	if err != nil {
 		return backingprovisionwork.Publication{}, err
 	}
 	environment, allocator := capture.Environment, capture.Allocator
-	workID, operationID := allocator.Named(ids.KindWorkItem, "backing-create"), allocator.Named(ids.KindOperation, "operation")
+	workID, operationID := allocator.Named(
+		ids.KindWorkItem,
+		"backing-create",
+	), allocator.Named(
+		ids.KindOperation,
+		"operation",
+	)
 	budget := time.Duration(desiredrevision.TaskTimeoutSeconds) * time.Second
-	procedure := &agentpb.BackingProvisionInput{TaskId: environment.CreateTaskID, WorkItemId: workID, OperationId: operationID,
-		ProjectId: environment.ProjectID, EnvironmentId: environment.ID, ServiceId: capture.Service.ID,
-		HostId: placement.HostID, VolumeRoot: service.volumeRoot, VolumeDirectory: environment.VolumeDir,
-		RenderGeneration: 1, Runtime: capture.Artifact, CreatedAt: timestamppb.New(environment.CreatedAt)}
+	procedure := &agentpb.BackingProvisionInput{
+		TaskId:           environment.CreateTaskID,
+		WorkItemId:       workID,
+		OperationId:      operationID,
+		ProjectId:        environment.ProjectID,
+		EnvironmentId:    environment.ID,
+		ServiceId:        capture.Service.ID,
+		HostId:           placement.HostID,
+		VolumeRoot:       service.volumeRoot,
+		VolumeDirectory:  environment.VolumeDir,
+		RenderGeneration: 1,
+		Runtime:          capture.Artifact,
+		CreatedAt:        timestamppb.New(environment.CreatedAt),
+	}
 	for _, volume := range capture.Artifact.Volumes {
 		procedure.ManagedVolumeIds = append(procedure.ManagedVolumeIds, volume.VolumeId)
 	}
@@ -54,10 +73,16 @@ func (service *CreationService) captureCreation(ctx context.Context, capture cre
 	var envelope *taskconfiguration.BackingHookEncryptedInputs
 	if hooks := capture.Service.Hooks; hooks != nil && hooks.AfterStart != nil {
 		if service.hookInputs == nil {
-			return backingprovisionwork.Publication{}, errs.New(errs.KindInternal, "backing creation hook capture is unavailable")
+			return backingprovisionwork.Publication{}, errs.New(
+				errs.KindInternal,
+				"backing creation hook capture is unavailable",
+			)
 		}
 		definition := hooks.AfterStart
-		procedure.AfterStart = &agentpb.BackingProvisionAfterStart{Command: append([]string(nil), definition.Command...), TimeoutSeconds: definition.TimeoutSeconds}
+		procedure.AfterStart = &agentpb.BackingProvisionAfterStart{
+			Command:        append([]string(nil), definition.Command...),
+			TimeoutSeconds: definition.TimeoutSeconds,
+		}
 		if minimum := time.Duration(definition.TimeoutSeconds)*time.Second + 30*time.Second; budget < minimum {
 			budget = minimum
 		}

@@ -47,10 +47,15 @@ func DecodeEnvironmentInput(raw []byte) (EnvironmentInput, error) {
 }
 
 func validateEnvironmentInput(input EnvironmentInput) error {
-	if !ValidHierarchyDeletionPrivateID(input.OperationID, "del") || ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
-		input.SnapshotRevision <= 0 || input.EnvironmentRevision <= 0 || input.EnvironmentRevision > input.SnapshotRevision ||
-		!path.IsAbs(input.VolumeDirectory) || path.Clean(input.VolumeDirectory) != input.VolumeDirectory ||
-		path.Base(input.VolumeDirectory) != input.EnvironmentID || len(input.ComposeArtifact) > environmentInputBytes {
+	if !ValidHierarchyDeletionPrivateID(input.OperationID, "del") ||
+		ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
+		input.SnapshotRevision <= 0 ||
+		input.EnvironmentRevision <= 0 ||
+		input.EnvironmentRevision > input.SnapshotRevision ||
+		!path.IsAbs(input.VolumeDirectory) ||
+		path.Clean(input.VolumeDirectory) != input.VolumeDirectory ||
+		path.Base(input.VolumeDirectory) != input.EnvironmentID ||
+		len(input.ComposeArtifact) > environmentInputBytes {
 		return CorruptHierarchyDeletion()
 	}
 	return nil

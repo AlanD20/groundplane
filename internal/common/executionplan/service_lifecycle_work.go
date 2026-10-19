@@ -15,16 +15,22 @@ import (
 // container ownership before honoring any checkpoint grant.
 func ValidateServiceLifecycleWorkInput(input *agentpb.ServiceLifecycleWorkInput) error {
 	if input == nil || proto.Size(input) > MaximumPlanBytes ||
-		ids.Validate(ids.KindEnvironment, input.EnvironmentId) != nil || ids.Validate(ids.KindService, input.ServiceId) != nil ||
+		ids.Validate(
+			ids.KindEnvironment,
+			input.EnvironmentId,
+		) != nil || ids.Validate(ids.KindService, input.ServiceId) != nil ||
 		input.CapturedSource == nil || ids.Validate(ids.KindPlan, input.CapturedSource.InputId) != nil ||
-		len(input.CapturedSource.Sha256) != sha256.Size || len(input.Members) == 0 || len(input.Members) > MaximumServiceRuntimeMembers {
+		len(
+			input.CapturedSource.Sha256,
+		) != sha256.Size || len(input.Members) == 0 || len(input.Members) > MaximumServiceRuntimeMembers {
 		return invalidLifecycleWork()
 	}
 	if err := RejectUnknown(input); err != nil {
 		return err
 	}
 	switch input.Action {
-	case agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_START, agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_DESTROY:
+	case agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_START,
+		agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_DESTROY:
 		if input.StopGraceSeconds != 0 {
 			return invalidLifecycleWork()
 		}
@@ -44,15 +50,25 @@ func ValidateServiceLifecycleWorkInput(input *agentpb.ServiceLifecycleWorkInput)
 		if err := validateArtifactContent(artifact); err != nil {
 			return err
 		}
-		if artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT || artifact.OwnerId != input.EnvironmentId ||
-			len(artifact.Services) != 1 || artifact.Services[0] == nil || source.ArtifactId != artifact.ArtifactId ||
-			source.ServiceId != input.ServiceId || ids.Validate(ids.KindPlan, source.SourcePlanId) != nil || source.SourceRenderGeneration == 0 ||
-			ids.Validate(ids.KindStep, source.StepId) != nil || stages[source.StepId] || artifacts[source.ArtifactId] || len(source.ComposeNames) != 1 {
+		if artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+			artifact.OwnerId != input.EnvironmentId ||
+			len(artifact.Services) != 1 ||
+			artifact.Services[0] == nil ||
+			source.ArtifactId != artifact.ArtifactId ||
+			source.ServiceId != input.ServiceId ||
+			ids.Validate(ids.KindPlan, source.SourcePlanId) != nil ||
+			source.SourceRenderGeneration == 0 ||
+			ids.Validate(ids.KindStep, source.StepId) != nil ||
+			stages[source.StepId] ||
+			artifacts[source.ArtifactId] ||
+			len(source.ComposeNames) != 1 {
 			return invalidLifecycleWork()
 		}
 		service := artifact.Services[0]
-		if service.ServiceId != input.ServiceId || service.ComposeName == "" || source.ComposeNames[0] != service.ComposeName ||
-			names[service.ComposeName] || !serviceLifecycleLabelsMatch(service, source) {
+		if service.ServiceId != input.ServiceId || service.ComposeName == "" ||
+			source.ComposeNames[0] != service.ComposeName ||
+			names[service.ComposeName] ||
+			!serviceLifecycleLabelsMatch(service, source) {
 			return invalidLifecycleWork()
 		}
 		stages[source.StepId], artifacts[source.ArtifactId], names[service.ComposeName] = true, true, true
@@ -61,7 +77,10 @@ func ValidateServiceLifecycleWorkInput(input *agentpb.ServiceLifecycleWorkInput)
 		if ids.Validate(ids.KindStep, hook.StageId) != nil || stages[hook.StageId] {
 			return invalidLifecycleWork()
 		}
-		definition := &backinghook.Definition{Command: append([]string(nil), hook.Command...), TimeoutSeconds: hook.TimeoutSeconds}
+		definition := &backinghook.Definition{
+			Command:        append([]string(nil), hook.Command...),
+			TimeoutSeconds: hook.TimeoutSeconds,
+		}
 		configuration := backinghook.Configuration{}
 		if input.Action == agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_START {
 			if hook.Event != agentpb.BackingHookEvent_BACKING_HOOK_EVENT_AFTER_START {

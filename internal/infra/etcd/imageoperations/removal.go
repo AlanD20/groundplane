@@ -18,7 +18,10 @@ type removalGuard struct {
 }
 
 func (journal *Journal) readRemovalGuard(ctx context.Context, revision int64) (removalGuard, int64, error) {
-	read, err := journal.repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{imagefence.Key}, Revision: revision})
+	read, err := journal.repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{imagefence.Key}, Revision: revision},
+	)
 	if err != nil {
 		return removalGuard{}, 0, err
 	}
@@ -108,7 +111,9 @@ func (journal *Journal) RecordRemovalOutcome(ctx context.Context, outcome Remova
 		if outcome == RemovalAbsent {
 			record.Outcome = workexecution.Succeeded
 		}
-		change.Mutations = []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: imagefence.Key, Value: []byte(`{"operation":""}`)}}
+		change.Mutations = []keyvalue.Mutation{
+			{Type: keyvalue.MutationPut, Key: imagefence.Key, Value: []byte(`{"operation":""}`)},
+		}
 	default:
 		return invalid()
 	}

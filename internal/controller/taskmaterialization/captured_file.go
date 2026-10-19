@@ -15,9 +15,17 @@ import (
 // OpenCapturedFile resolves an immutable source already selected by the
 // authenticated operation owner, without reading current desired configuration.
 // The returned stream owns its plaintext and must be closed by the caller.
-func (resolver *TaskMaterializationResolver) OpenCapturedFile(ctx context.Context, taskID, stageID string, generation uint64, record taskmaterialization.Record) (entrymaterialization.Header, io.ReadCloser, error) {
+func (resolver *TaskMaterializationResolver) OpenCapturedFile(
+	ctx context.Context,
+	taskID, stageID string,
+	generation uint64,
+	record taskmaterialization.Record,
+) (entrymaterialization.Header, io.ReadCloser, error) {
 	var empty entrymaterialization.Header
-	if ctx == nil || resolver == nil || resolver.blueprints == nil || resolver.values == nil || resolver.secrets == nil || resolver.components == nil || resolver.protector == nil {
+	if ctx == nil || resolver == nil || resolver.blueprints == nil || resolver.values == nil ||
+		resolver.secrets == nil ||
+		resolver.components == nil ||
+		resolver.protector == nil {
 		return empty, nil, errs.New(errs.KindInternal, "captured file resolver is not configured")
 	}
 	if err := ctx.Err(); err != nil {
@@ -44,12 +52,19 @@ func (resolver *TaskMaterializationResolver) OpenCapturedFile(ctx context.Contex
 	expected := header.Digest()
 	if uint64(len(content)) != record.Length || subtle.ConstantTimeCompare(actual[:], expected[:]) != 1 {
 		clear(content)
-		return empty, nil, errs.New(errs.KindStateConflict, "captured file source no longer matches its recorded content")
+		return empty, nil, errs.New(
+			errs.KindStateConflict,
+			"captured file source no longer matches its recorded content",
+		)
 	}
 	return header, entrymaterialization.OwnBytes(content), nil
 }
 
-func CapturedFileHeader(taskID, stageID string, generation uint64, record taskmaterialization.Record) (entrymaterialization.Header, error) {
+func CapturedFileHeader(
+	taskID, stageID string,
+	generation uint64,
+	record taskmaterialization.Record,
+) (entrymaterialization.Header, error) {
 	if err := taskmaterialization.ValidateRecord(record, generation); err != nil {
 		return entrymaterialization.Header{}, err
 	}

@@ -15,8 +15,11 @@ import (
 // PrepareHierarchyEnvironmentCheckpoint binds the report to the same immutable
 // removal source used for delivery. The reporting transport must authenticate
 // the attempt identity and commit this change before returning an acknowledgement.
-func (repository *HierarchyDeletionRepository) PrepareHierarchyEnvironmentCheckpoint(ctx context.Context, view workqueue.ResumeView,
-	input hierarchyexecution.EnvironmentInput, report hierarchyexecution.EnvironmentReport,
+func (repository *HierarchyDeletionRepository) PrepareHierarchyEnvironmentCheckpoint(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input hierarchyexecution.EnvironmentInput,
+	report hierarchyexecution.EnvironmentReport,
 ) (workqueue.Change, error) {
 	captured, err := repository.LoadHierarchyEnvironmentInput(ctx, view.Work)
 	if err != nil {
@@ -29,9 +32,16 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyEnvironmentCheckp
 	}
 	digest := sha256.Sum256(raw)
 	clear(raw)
-	sourceID := ids.DeriveAt(ids.KindPlan, view.Work.Task.Task.CreatedAt, view.Work.Item.Item.ID, "environment-removal-source")
-	if input.Removal == nil || input.Removal.CapturedSource == nil || input.Removal.CapturedSource.InputId != sourceID ||
-		!bytes.Equal(input.Removal.CapturedSource.Sha256, digest[:]) || input.Removal.EnvironmentId != captured.Input.EnvironmentID ||
+	sourceID := ids.DeriveAt(
+		ids.KindPlan,
+		view.Work.Task.Task.CreatedAt,
+		view.Work.Item.Item.ID,
+		"environment-removal-source",
+	)
+	if input.Removal == nil || input.Removal.CapturedSource == nil ||
+		input.Removal.CapturedSource.InputId != sourceID ||
+		!bytes.Equal(input.Removal.CapturedSource.Sha256, digest[:]) ||
+		input.Removal.EnvironmentId != captured.Input.EnvironmentID ||
 		input.Removal.ExpectedVolumeDir != captured.Input.VolumeDirectory {
 		return workqueue.Change{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}

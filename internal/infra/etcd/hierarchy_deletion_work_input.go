@@ -16,7 +16,10 @@ type HierarchyWorkInput struct {
 	Conditions []keyvalue.Condition
 }
 
-func (repository *HierarchyDeletionRepository) LoadHierarchyWork(ctx context.Context, view workqueue.View) (HierarchyWorkInput, error) {
+func (repository *HierarchyDeletionRepository) LoadHierarchyWork(
+	ctx context.Context,
+	view workqueue.View,
+) (HierarchyWorkInput, error) {
 	if view.ReadRevision <= 0 || view.Task.Revision <= 0 || view.Item.Revision <= 0 {
 		return HierarchyWorkInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
@@ -26,7 +29,8 @@ func (repository *HierarchyDeletionRepository) LoadHierarchyWork(ctx context.Con
 	if err != nil {
 		return HierarchyWorkInput{}, err
 	}
-	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
+	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 2 || read.Values[0] == nil ||
+		read.Values[1] == nil {
 		return HierarchyWorkInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer keyvalue.ClearValues(read.Values)
@@ -38,25 +42,31 @@ func (repository *HierarchyDeletionRepository) LoadHierarchyWork(ctx context.Con
 	if err != nil {
 		return HierarchyWorkInput{}, err
 	}
-	if binding.TaskID != view.Task.Task.ID || taskBinding.TaskID != binding.TaskID || taskBinding.OperationID != binding.OperationID {
+	if binding.TaskID != view.Task.Task.ID || taskBinding.TaskID != binding.TaskID ||
+		taskBinding.OperationID != binding.OperationID {
 		return HierarchyWorkInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	operation, err := repository.OperationByTaskAtRevision(ctx, binding.TaskID, view.ReadRevision)
 	if err != nil {
 		return HierarchyWorkInput{}, err
 	}
-	if operation.Tombstone.PlanCount == nil || binding.Ordinal >= *operation.Tombstone.PlanCount || operation.Tombstone.PlanDigest == nil {
+	if operation.Tombstone.PlanCount == nil || binding.Ordinal >= *operation.Tombstone.PlanCount ||
+		operation.Tombstone.PlanDigest == nil {
 		return HierarchyWorkInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	actionKey, err := hierarchydeletion.HierarchyDeletionActionKey(binding.OperationID, binding.Ordinal)
 	if err != nil {
 		return HierarchyWorkInput{}, err
 	}
-	captured, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{actionKey}, Revision: view.ReadRevision})
+	captured, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{actionKey}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return HierarchyWorkInput{}, err
 	}
-	if captured == nil || captured.ReadRevision != view.ReadRevision || len(captured.Values) != 1 || captured.Values[0] == nil {
+	if captured == nil || captured.ReadRevision != view.ReadRevision || len(captured.Values) != 1 ||
+		captured.Values[0] == nil {
 		return HierarchyWorkInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer keyvalue.ClearValues(captured.Values)
@@ -77,9 +87,15 @@ func (repository *HierarchyDeletionRepository) LoadHierarchyWork(ctx context.Con
 		expected = hierarchyAttachClaims(expected, source.Input)
 		attachremoval.Clear(&source.Input)
 	}
-	if action.Ordinal != binding.Ordinal || action.ParentOperationID != binding.OperationID || expected.ID != work.ID || expected.TaskID != work.TaskID ||
-		expected.Operation != work.Operation || expected.TargetID != work.TargetID || expected.Placement != work.Placement || work.Input == nil || *expected.Input != *work.Input ||
-		!slices.Equal(expected.Claims, work.Claims) || !slices.Equal(expected.Dependencies, work.Dependencies) {
+	if action.Ordinal != binding.Ordinal || action.ParentOperationID != binding.OperationID || expected.ID != work.ID ||
+		expected.TaskID != work.TaskID ||
+		expected.Operation != work.Operation ||
+		expected.TargetID != work.TargetID ||
+		expected.Placement != work.Placement ||
+		work.Input == nil ||
+		*expected.Input != *work.Input ||
+		!slices.Equal(expected.Claims, work.Claims) ||
+		!slices.Equal(expected.Dependencies, work.Dependencies) {
 		return HierarchyWorkInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	fenceKey, err := hierarchydeletion.HierarchyDeletionCleanupFenceKey(binding.OperationID)
@@ -87,8 +103,20 @@ func (repository *HierarchyDeletionRepository) LoadHierarchyWork(ctx context.Con
 		return HierarchyWorkInput{}, err
 	}
 	return HierarchyWorkInput{Operation: operation, Action: action, Conditions: []keyvalue.Condition{
-		{Key: keys[0], ModRevision: read.Values[0].ModRevision}, {Key: keys[1], ModRevision: read.Values[1].ModRevision},
-		{Key: actionKey, ModRevision: captured.Values[0].ModRevision}, {Key: fenceKey, ModRevision: operation.FenceRevision},
-		{Key: hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID), ModRevision: operation.TombstoneRevision},
+		{
+			Key:         keys[0],
+			ModRevision: read.Values[0].ModRevision,
+		}, {Key: keys[1], ModRevision: read.Values[1].ModRevision},
+		{
+			Key:         actionKey,
+			ModRevision: captured.Values[0].ModRevision,
+		}, {Key: fenceKey, ModRevision: operation.FenceRevision},
+		{
+			Key: hierarchydeletion.HierarchyDeletionTombstoneKey(
+				string(operation.Tombstone.TargetKind),
+				operation.Tombstone.TargetID,
+			),
+			ModRevision: operation.TombstoneRevision,
+		},
 	}}, nil
 }

@@ -17,8 +17,14 @@ type VolumeExchange interface {
 	ReceiveVolumeFrame(context.Context, backupvolumetransfer.Binding) (*agentpb.BackupVolumeManifestTransfer, error)
 }
 
-func sendVolumeManifest(ctx context.Context, binding backupvolumetransfer.Binding, step *agentpb.BackupStepAuthority,
-	role agentpb.BackupVolumeManifestRole, entries []backupvolume.Entry, archive *backupvolume.ArtifactEvidence, exchange VolumeExchange,
+func sendVolumeManifest(
+	ctx context.Context,
+	binding backupvolumetransfer.Binding,
+	step *agentpb.BackupStepAuthority,
+	role agentpb.BackupVolumeManifestRole,
+	entries []backupvolume.Entry,
+	archive *backupvolume.ArtifactEvidence,
+	exchange VolumeExchange,
 ) error {
 	pointID, generation := step.GetCapture().GetPointId(), ""
 	if binding.Direction != agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_CAPTURE {
@@ -45,7 +51,10 @@ func sendVolumeManifest(ctx context.Context, binding backupvolumetransfer.Bindin
 		if err != nil {
 			return err
 		}
-		if backupvolumetransfer.ValidateCredit(binding, credit) != nil || credit.CommittedRecordSequence != frame.RecordSequence || credit.NextOrdinal != frames.Next[index] || !bytes.Equal(credit.TransferChainSha256, frames.Chains[index][:]) {
+		if backupvolumetransfer.ValidateCredit(binding, credit) != nil ||
+			credit.CommittedRecordSequence != frame.RecordSequence ||
+			credit.NextOrdinal != frames.Next[index] ||
+			!bytes.Equal(credit.TransferChainSha256, frames.Chains[index][:]) {
 			return errs.New(errs.KindStateConflict, "Volume manifest acknowledgement differs from the sent record")
 		}
 	}

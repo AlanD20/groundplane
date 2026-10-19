@@ -9,12 +9,20 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (repository *HierarchyDeletionRepository) ReadPlanningRejection(ctx context.Context, task workqueue.TaskSnapshot, revision int64) (*hierarchydeletion.PlanningRejection, error) {
-	if task.Task.Action != workexecution.ActionRemove || task.Task.ExpectedItems != 0 || task.Task.FinishedAt == nil || task.Task.Outcome == workexecution.Succeeded {
+func (repository *HierarchyDeletionRepository) ReadPlanningRejection(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	revision int64,
+) (*hierarchydeletion.PlanningRejection, error) {
+	if task.Task.Action != workexecution.ActionRemove || task.Task.ExpectedItems != 0 || task.Task.FinishedAt == nil ||
+		task.Task.Outcome == workexecution.Succeeded {
 		return nil, nil
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
-		Keys: []string{hierarchydeletion.TaskBindingKey(task.Task.ID), hierarchydeletion.PlanningRejectionKey(task.Task.ID)}, Revision: revision,
+		Keys: []string{
+			hierarchydeletion.TaskBindingKey(task.Task.ID),
+			hierarchydeletion.PlanningRejectionKey(task.Task.ID),
+		}, Revision: revision,
 	})
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
@@ -39,7 +47,8 @@ func (repository *HierarchyDeletionRepository) ReadPlanningRejection(ctx context
 	if err != nil {
 		return nil, err
 	}
-	if binding.TaskID != task.Task.ID || binding.OperationID != rejection.Operation.Tombstone.OperationID || binding.Marker != rejection.Operation.MarkerLocator {
+	if binding.TaskID != task.Task.ID || binding.OperationID != rejection.Operation.Tombstone.OperationID ||
+		binding.Marker != rejection.Operation.MarkerLocator {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return &rejection, nil

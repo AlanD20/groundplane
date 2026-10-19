@@ -19,7 +19,10 @@ func (repository *ServiceRepository) prepareRemovalSecretPins(ctx context.Contex
 	revision int64, guards []keyvalue.Condition,
 ) (serviceremovalwork.Input, workqueue.Change, error) {
 	if input.ConfigurationPins != nil || input.Validate() != nil {
-		return input, workqueue.Change{}, errs.New(errs.KindValidationFailed, "Service removal Secret capture requires its unpublished configuration")
+		return input, workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Service removal Secret capture requires its unpublished configuration",
+		)
 	}
 	if input.Configuration == nil {
 		return input, workqueue.Change{}, nil
@@ -57,7 +60,10 @@ func (repository *ServiceRepository) prepareRemovalSecretPins(ctx context.Contex
 	}
 	owner := make([]tasksecretpins.Condition, 0, len(guards))
 	for _, guard := range guards {
-		owner = append(owner, tasksecretpins.Condition{Key: guard.Key, ModRevision: guard.ModRevision, Prefix: guard.Prefix})
+		owner = append(
+			owner,
+			tasksecretpins.Condition{Key: guard.Key, ModRevision: guard.ModRevision, Prefix: guard.Prefix},
+		)
 	}
 	retention, err := tasksecretpins.NewEtcdRepository(repository.store, input.Scope.ProjectID)
 	if err != nil {
@@ -92,13 +98,20 @@ func requireRemovalPreparationOwner(input serviceremovalwork.Input, guards []key
 			if guard.Key != key {
 				continue
 			}
-			if found || guard.Prefix || guard.ModRevision < 0 || guard.Key == serviceremovalwork.InputKey(input.WorkItemID) && guard.ModRevision != 0 {
-				return errs.New(errs.KindValidationFailed, "Service removal Secret preparation has conflicting ownership guards")
+			if found || guard.Prefix || guard.ModRevision < 0 ||
+				guard.Key == serviceremovalwork.InputKey(input.WorkItemID) && guard.ModRevision != 0 {
+				return errs.New(
+					errs.KindValidationFailed,
+					"Service removal Secret preparation has conflicting ownership guards",
+				)
 			}
 			found = true
 		}
 		if !found {
-			return errs.New(errs.KindValidationFailed, "Service removal Secret preparation requires Task, work and absent input guards")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Service removal Secret preparation requires Task, work and absent input guards",
+			)
 		}
 	}
 	return nil

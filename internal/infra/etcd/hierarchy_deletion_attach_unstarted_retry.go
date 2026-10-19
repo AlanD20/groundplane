@@ -11,7 +11,10 @@ import (
 // prepareHierarchyAttachUnstartedRetry joins activation to the operator's Retry.
 // Pin staging alone cannot dispatch work, and the saved envelope is never
 // regenerated from current Secrets or an old etcd revision.
-func (repository *HierarchyDeletionRepository) prepareHierarchyAttachUnstartedRetry(ctx context.Context, view workqueue.View) (workqueue.Change, error) {
+func (repository *HierarchyDeletionRepository) prepareHierarchyAttachUnstartedRetry(
+	ctx context.Context,
+	view workqueue.View,
+) (workqueue.Change, error) {
 	active, err := repository.LoadHierarchyAttachCapture(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err

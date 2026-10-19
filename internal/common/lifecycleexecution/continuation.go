@@ -64,7 +64,10 @@ func (continuation Continuation) Completed(input *agentpb.ServiceLifecycleWorkIn
 	return append(completed, *report.Receipt), nil
 }
 
-func (continuation Continuation) ValidateFor(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput) error {
+func (continuation Continuation) ValidateFor(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+) error {
 	if _, err := continuation.Completed(input); err != nil {
 		return err
 	}

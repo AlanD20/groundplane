@@ -22,17 +22,29 @@ func NewRemovalRepository(store preparationStore) (*RemovalRepository, error) {
 	return &RemovalRepository{store: store}, nil
 }
 
-func (repository *RemovalRepository) Load(ctx context.Context, view workqueue.View) (RemovalInput, keyvalue.Condition, error) {
+func (repository *RemovalRepository) Load(
+	ctx context.Context,
+	view workqueue.View,
+) (RemovalInput, keyvalue.Condition, error) {
 	if view.ReadRevision <= 0 {
-		return RemovalInput{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Release Group removal snapshot is unavailable")
+		return RemovalInput{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Release Group removal snapshot is unavailable",
+		)
 	}
 	key := RemovalInputKey(view.Item.Item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return RemovalInput{}, keyvalue.Condition{}, err
 	}
 	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
-		return RemovalInput{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Release Group removal capture is unavailable")
+		return RemovalInput{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Release Group removal capture is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	input, err := DecodeRemovalInput(read.Values[0].Value)
@@ -47,21 +59,38 @@ func (repository *RemovalRepository) Load(ctx context.Context, view workqueue.Vi
 
 // PrepareDecision settles the captured definition and its deletion fence in the
 // same transaction as the native result. Cancellation preserves the definition.
-func (repository *RemovalRepository) PrepareDecision(ctx context.Context, view workqueue.View, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func (repository *RemovalRepository) PrepareDecision(
+	ctx context.Context,
+	view workqueue.View,
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	input, capture, err := repository.Load(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	item, task := view.Item.Item, view.Task.Task
 	if item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Cleanup != workexecution.CleanupNone ||
-		outcome == workexecution.Succeeded && (task.Stop != nil || item.ForwardRevoked || !at.Before(task.Deadline) || !at.Before(item.Deadline)) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release Group removal is not authorized for atomic settlement")
+		outcome == workexecution.Succeeded &&
+			(task.Stop != nil || item.ForwardRevoked || !at.Before(task.Deadline) || !at.Before(item.Deadline)) {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Release Group removal is not authorized for atomic settlement",
+		)
 	}
 	tombstoneKey := deletions.TombstoneKey(string(deletions.DeletionTargetReleaseGroup), input.GroupID)
 	keys := []string{ReleaseGroupRecordKey(input.GroupID), tombstoneKey,
-		ReleaseGroupOwnerKey(input.Scope.EnvironmentID, input.GroupID), ReleaseGroupNameKey(input.Scope.EnvironmentID, input.GroupName),
-		hierarchy.EnvironmentMutationEpochKey(input.Scope.EnvironmentID), hierarchy.EnvironmentKey(input.Scope.EnvironmentID),
-		deletions.TombstoneKey("environment", input.Scope.EnvironmentID), deletions.TombstoneKey("project", input.Scope.ProjectID),
+		ReleaseGroupOwnerKey(
+			input.Scope.EnvironmentID,
+			input.GroupID,
+		), ReleaseGroupNameKey(input.Scope.EnvironmentID, input.GroupName),
+		hierarchy.EnvironmentMutationEpochKey(
+			input.Scope.EnvironmentID,
+		), hierarchy.EnvironmentKey(input.Scope.EnvironmentID),
+		deletions.TombstoneKey(
+			"environment",
+			input.Scope.EnvironmentID,
+		), deletions.TombstoneKey("project", input.Scope.ProjectID),
 		deletions.TombstoneKey("tenant", input.Scope.TenantID)}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: view.ReadRevision})
 	if err != nil {
@@ -73,10 +102,14 @@ func (repository *RemovalRepository) PrepareDecision(ctx context.Context, view w
 	defer keyvalue.ClearValues(read.Values)
 	for index := 0; index < 6; index++ {
 		if read.Values[index] == nil {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release Group removal lost its resource or indexes")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Release Group removal lost its resource or indexes",
+			)
 		}
 	}
-	if read.Values[0].ModRevision != input.GroupRevision || string(read.Values[2].Value) != input.GroupID || string(read.Values[3].Value) != input.GroupID {
+	if read.Values[0].ModRevision != input.GroupRevision || string(read.Values[2].Value) != input.GroupID ||
+		string(read.Values[3].Value) != input.GroupID {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release Group changed after removal was accepted")
 	}
 	group, err := DecodeReleaseGroupStored(read.Values[0].Value)
@@ -97,7 +130,12 @@ func (repository *RemovalRepository) PrepareDecision(ctx context.Context, view w
 		tombstone.TargetRevision != input.GroupRevision || tombstone.TaskID != input.TaskID || tombstone.Phase != deletions.DeletionPhaseFinalizing {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release Group removal lost its captured ownership")
 	}
-	change, err := workqueue.PrepareUnstartedSettlement(view.Task, view.Item, workexecution.Completion{Outcome: outcome, Evidence: *item.Input, EffectsSettled: true}, at)
+	change, err := workqueue.PrepareUnstartedSettlement(
+		view.Task,
+		view.Item,
+		workexecution.Completion{Outcome: outcome, Evidence: *item.Input, EffectsSettled: true},
+		at,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -129,7 +167,12 @@ func (repository *RemovalRepository) PrepareDecision(ctx context.Context, view w
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err
 	}
-	condition, mutation, err := LoadReleaseGroupCollectionEpoch(ctx, repository.store, input.Scope.EnvironmentID, view.ReadRevision)
+	condition, mutation, err := LoadReleaseGroupCollectionEpoch(
+		ctx,
+		repository.store,
+		input.Scope.EnvironmentID,
+		view.ReadRevision,
+	)
 	if err != nil {
 		clear(value)
 		keyvalue.ClearMutationValues(change.Mutations)
@@ -139,6 +182,10 @@ func (repository *RemovalRepository) PrepareDecision(ctx context.Context, view w
 	for _, index := range []int{0, 2, 3} {
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[index]})
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: keys[4], Value: value}, mutation)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: keys[4], Value: value},
+		mutation,
+	)
 	return change, nil
 }

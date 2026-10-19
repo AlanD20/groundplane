@@ -20,7 +20,8 @@ func (journal *Journal) CompleteAttachProvision(ctx context.Context, input attac
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if !matchesAttachProvisionState(state, input) || !state.AttachProvision.Acknowledged || state.AttachProvisionFailure != nil {
+	if !matchesAttachProvisionState(state, input) || !state.AttachProvision.Acknowledged ||
+		state.AttachProvisionFailure != nil {
 		return workexecution.Attempt{}, conflict()
 	}
 	terminal, err := attachexecution.DecodeProvisionCompletion(input, state.AttachProvision.Report.Progress, ack)
@@ -28,7 +29,8 @@ func (journal *Journal) CompleteAttachProvision(ctx context.Context, input attac
 		return workexecution.Attempt{}, err
 	}
 	if previous := state.AttachProvision.Completion; previous != nil {
-		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) || *previous.Result != *terminal.Result {
+		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*previous.Result != *terminal.Result {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *previous, nil

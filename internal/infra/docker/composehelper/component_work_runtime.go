@@ -10,7 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func reconcileComponentRuntime(ctx context.Context, taskRunner runner.Runner, input componentexecution.HelperInput) error {
+func reconcileComponentRuntime(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input componentexecution.HelperInput,
+) error {
 	inventory, err := inspectComponentWork(ctx, taskRunner, input)
 	if err != nil {
 		return err
@@ -56,10 +60,23 @@ func applySingletonArtifact(ctx context.Context, taskRunner runner.Runner, artif
 	if err != nil {
 		return err
 	}
-	base := []string{"compose", "--project-name", artifact.ProjectName, "--project-directory", composeProjectDirectory(artifact), "--file", "-"}
+	base := []string{
+		"compose",
+		"--project-name",
+		artifact.ProjectName,
+		"--project-directory",
+		composeProjectDirectory(artifact),
+		"--file",
+		"-",
+	}
 	for _, suffix := range [][]string{{"config", "--quiet"}, {"up", "--detach", "--no-deps", "--pull", "never", "--", artifact.Services[0].ComposeName}} {
-		result, err := taskRunner.Run(ctx, runner.RunCmdOpts{Name: DockerExecutable, Args: append(slices.Clone(base), suffix...),
-			Dir: composeProjectDirectory(artifact), Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: input, CaptureLimitBytes: 32 * 1024})
+		result, err := taskRunner.Run(
+			ctx,
+			runner.RunCmdOpts{Name: DockerExecutable, Args: append(slices.Clone(base), suffix...),
+				Dir: composeProjectDirectory(
+					artifact,
+				), Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: input, CaptureLimitBytes: 32 * 1024},
+		)
 		clear(result.Stdout)
 		clear(result.Stderr)
 		if ctx.Err() != nil {

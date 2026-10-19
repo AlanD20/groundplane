@@ -43,7 +43,10 @@ func (service *Service) stageSelectedRuntime(
 	}
 	if len(candidates) != 1 || candidates[0].Record.Desired.ID != input.Work.Item.Item.TargetID ||
 		input.Artifact == nil {
-		return preparedSelectedRuntime{}, errs.New(errs.KindValidationFailed, "Service work requires its captured candidate and artifact")
+		return preparedSelectedRuntime{}, errs.New(
+			errs.KindValidationFailed,
+			"Service work requires its captured candidate and artifact",
+		)
 	}
 	var err error
 	publicationID := strings.TrimPrefix(
@@ -156,13 +159,21 @@ func (service *Service) stageSelectedRuntime(
 	}
 	members = hooks.members
 	if len(members) != 1 {
-		return preparedSelectedRuntime{}, errs.New(errs.KindValidationFailed, "Service work requires exactly one Release")
+		return preparedSelectedRuntime{}, errs.New(
+			errs.KindValidationFailed,
+			"Service work requires exactly one Release",
+		)
 	}
 	artifact, err := RenderServiceReleaseArtifact(ctx, members[0])
 	if err != nil {
 		return preparedSelectedRuntime{}, err
 	}
-	storageConditions, err := service.ledger.PostgresPatchConditions(ctx, artifact, members[0].Render.ServiceID, input.Environment.ReadRevision)
+	storageConditions, err := service.ledger.PostgresPatchConditions(
+		ctx,
+		artifact,
+		members[0].Render.ServiceID,
+		input.Environment.ReadRevision,
+	)
 	if err != nil {
 		return preparedSelectedRuntime{}, err
 	}

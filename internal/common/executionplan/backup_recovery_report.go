@@ -77,7 +77,10 @@ func (report BackupRecoveryReport) Validate(attempt workexecution.Attempt, sourc
 		report.ForwardID != source.Forward.ID || report.Failure != source.Evidence || !report.ExecutorStopped ||
 		report.ObservedAt.IsZero() || report.ObservedAt.Location() != time.UTC ||
 		report.ObservedAt.Before(*attempt.StartedAt) || report.ObservedAt.Before(source.Failure.RecordedAt) {
-		return errs.New(errs.KindValidationFailed, "Backup prune recovery does not prove exclusion of the captured executor")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Backup prune recovery does not prove exclusion of the captured executor",
+		)
 	}
 	switch report.Operation {
 	case workexecution.BackupPrune:
@@ -123,14 +126,20 @@ func EncodeBackupRecoveryReport(attempt workexecution.Attempt, source BackupWork
 		return nil, workexecution.Input{}, err
 	}
 	digest := sha256.Sum256(raw)
-	return raw, workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, at, attempt.ID, "backup/recovery"), SHA256: hex.EncodeToString(digest[:])}, nil
+	return raw, workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, at, attempt.ID, "backup/recovery"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }
 
 func DecodeBackupRecoveryReport(attempt workexecution.Attempt, source BackupWorkRecovery,
 	raw []byte,
 ) (BackupRecoveryReport, workexecution.Input, error) {
 	if len(raw) == 0 || len(raw) > MaximumBackupRecoveryReportBytes {
-		return BackupRecoveryReport{}, workexecution.Input{}, errs.New(errs.KindValidationFailed, "Backup prune recovery report is missing or oversized")
+		return BackupRecoveryReport{}, workexecution.Input{}, errs.New(
+			errs.KindValidationFailed,
+			"Backup prune recovery report is missing or oversized",
+		)
 	}
 	report, err := jcs.Decode[BackupRecoveryReport](raw)
 	if err != nil {
@@ -141,7 +150,10 @@ func DecodeBackupRecoveryReport(attempt workexecution.Attempt, source BackupWork
 		return BackupRecoveryReport{}, workexecution.Input{}, err
 	}
 	if !bytes.Equal(canonical, raw) {
-		return BackupRecoveryReport{}, workexecution.Input{}, errs.New(errs.KindValidationFailed, "Backup prune recovery report is not canonical")
+		return BackupRecoveryReport{}, workexecution.Input{}, errs.New(
+			errs.KindValidationFailed,
+			"Backup prune recovery report is not canonical",
+		)
 	}
 	return report, evidence, nil
 }

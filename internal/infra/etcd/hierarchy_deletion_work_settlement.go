@@ -15,7 +15,11 @@ import (
 // PrepareHierarchyControllerSettlement joins metadata deletion, its immutable
 // proof and work settlement. Dependency completion, resource conflicts and Abort
 // are compared in the same transaction through the decision fence.
-func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerSettlement(ctx context.Context, request workqueue.Assignment, at time.Time) (workqueue.Change, error) {
+func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerSettlement(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workqueue.Change, error) {
 	fence, err := workqueue.PrepareDecisionFence(request)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -33,7 +37,8 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerSettlem
 		return workqueue.Change{}, err
 	}
 	action := captured.Action
-	effects, err := hierarchydeletionfinalization.NewPreparer(repository.store).PrepareCaptured(ctx, captured.Operation, action)
+	effects, err := hierarchydeletionfinalization.NewPreparer(repository.store).
+		PrepareCaptured(ctx, captured.Operation, action)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

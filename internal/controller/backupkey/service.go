@@ -40,7 +40,12 @@ type Repository interface {
 		etcd.PreparedBackupKeyRotation,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	PrepareBackupKeyRotationSettlement(context.Context, workqueue.View, workexecution.Outcome, time.Time) (workqueue.Change, error)
+	PrepareBackupKeyRotationSettlement(
+		context.Context,
+		workqueue.View,
+		workexecution.Outcome,
+		time.Time,
+	) (workqueue.Change, error)
 	PrepareBackupKeyRotationFinish(context.Context, workqueue.FinishedWork) (workqueue.Change, error)
 	PrepareBackupKeyRotationRetention(context.Context, workqueue.View, time.Time, bool) (bool, workqueue.Change, error)
 }

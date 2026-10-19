@@ -31,9 +31,15 @@ func (input EnvironmentInput) Validate() error {
 	return input.Recovery.ValidateFor(input.Attempt)
 }
 
-func DecodeEnvironmentAssignment(message *agentpb.EnvironmentRemovalAssignment, identity workexecution.Identity) (EnvironmentInput, error) {
+func DecodeEnvironmentAssignment(
+	message *agentpb.EnvironmentRemovalAssignment,
+	identity workexecution.Identity,
+) (EnvironmentInput, error) {
 	if message == nil || message.Removal == nil || proto.Size(message) > executionplan.MaximumPlanBytes {
-		return EnvironmentInput{}, errs.New(errs.KindValidationFailed, "Environment removal assignment is missing or oversized")
+		return EnvironmentInput{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment removal assignment is missing or oversized",
+		)
 	}
 	if err := executionplan.RejectUnknown(message); err != nil {
 		return EnvironmentInput{}, err
@@ -42,7 +48,10 @@ func DecodeEnvironmentAssignment(message *agentpb.EnvironmentRemovalAssignment, 
 	if err != nil {
 		return EnvironmentInput{}, err
 	}
-	input := EnvironmentInput{Attempt: attempt, Removal: proto.Clone(message.Removal).(*agentpb.EnvironmentRemovalInput)}
+	input := EnvironmentInput{
+		Attempt: attempt,
+		Removal: proto.Clone(message.Removal).(*agentpb.EnvironmentRemovalInput),
+	}
 	if len(message.Recovery) != 0 {
 		source, err := DecodeEnvironmentRecovery(message.Recovery)
 		if err != nil {
@@ -64,7 +73,10 @@ func EncodeEnvironmentAssignment(input EnvironmentInput) (*agentpb.EnvironmentRe
 	if err != nil {
 		return nil, err
 	}
-	message := &agentpb.EnvironmentRemovalAssignment{Attempt: attempt, Removal: proto.Clone(input.Removal).(*agentpb.EnvironmentRemovalInput)}
+	message := &agentpb.EnvironmentRemovalAssignment{
+		Attempt: attempt,
+		Removal: proto.Clone(input.Removal).(*agentpb.EnvironmentRemovalInput),
+	}
 	if input.Recovery != nil {
 		message.Recovery, err = EncodeEnvironmentRecovery(*input.Recovery)
 		if err != nil {

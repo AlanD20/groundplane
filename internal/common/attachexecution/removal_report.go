@@ -28,7 +28,10 @@ func (report RemovalReport) Checkpoint(input RemovalInput) (workexecution.Checkp
 	return report.CheckpointAuthority(input.Attempt, authority)
 }
 
-func (report RemovalReport) CheckpointAuthority(attempt workexecution.Attempt, authority RemovalAuthority) (workexecution.Checkpoint, error) {
+func (report RemovalReport) CheckpointAuthority(
+	attempt workexecution.Attempt,
+	authority RemovalAuthority,
+) (workexecution.Checkpoint, error) {
 	if report.Progress.ValidateAuthority(attempt, authority) != nil || report.Progress.Sequence == 0 {
 		return workexecution.Checkpoint{}, invalid("Attach removal report has no acknowledged command")
 	}
@@ -40,7 +43,12 @@ func (report RemovalReport) CheckpointAuthority(attempt workexecution.Attempt, a
 	if !report.Progress.InFlight {
 		ordinal--
 	}
-	stage := ids.DeriveAt(ids.KindStep, at, attempt.WorkItemID, "attach-removal/"+strconv.FormatUint(uint64(ordinal), 10))
+	stage := ids.DeriveAt(
+		ids.KindStep,
+		at,
+		attempt.WorkItemID,
+		"attach-removal/"+strconv.FormatUint(uint64(ordinal), 10),
+	)
 	assignment := attempt
 	assignment.FinishedAt, assignment.Result, assignment.Outcome = nil, nil, ""
 	raw, err := json.Marshal(struct {
@@ -68,7 +76,11 @@ func EncodeRemovalReport(input RemovalInput, report RemovalReport) ([]byte, erro
 	return EncodeRemovalReportAuthority(input.Attempt, authority, report)
 }
 
-func EncodeRemovalReportAuthority(attempt workexecution.Attempt, authority RemovalAuthority, report RemovalReport) ([]byte, error) {
+func EncodeRemovalReportAuthority(
+	attempt workexecution.Attempt,
+	authority RemovalAuthority,
+	report RemovalReport,
+) ([]byte, error) {
 	if _, err := report.CheckpointAuthority(attempt, authority); err != nil {
 		return nil, err
 	}
@@ -94,7 +106,11 @@ func DecodeRemovalReport(input RemovalInput, raw []byte) (RemovalReport, error) 
 	return DecodeRemovalReportAuthority(input.Attempt, authority, raw)
 }
 
-func DecodeRemovalReportAuthority(attempt workexecution.Attempt, authority RemovalAuthority, raw []byte) (RemovalReport, error) {
+func DecodeRemovalReportAuthority(
+	attempt workexecution.Attempt,
+	authority RemovalAuthority,
+	raw []byte,
+) (RemovalReport, error) {
 	if len(raw) == 0 || len(raw) > MaximumRemovalReportBytes {
 		return RemovalReport{}, invalid("Attach removal report is missing or oversized")
 	}

@@ -34,7 +34,10 @@ func prepareItemCreation(item workexecution.Item) (Change, error) {
 	}
 	if item.Phase == workexecution.Ready {
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: QueueKey(item)})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: QueueKey(item), Value: reference})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: QueueKey(item), Value: reference},
+		)
 	}
 	if err := updateInputQueue(&change, workexecution.Item{}, item); err != nil {
 		return Change{}, err
@@ -123,7 +126,10 @@ func prepareCompletion(request Completion, recovery *workexecution.RetryDecision
 			return Change{}, err
 		}
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: QueueKey(item)})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: QueueKey(item), Value: reference})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: QueueKey(item), Value: reference},
+		)
 	}
 	if len(request.Claims) != len(item.Claims) {
 		return Change{}, invalid("execution completion must account for every conflict claim")
@@ -134,9 +140,15 @@ func prepareCompletion(request Completion, recovery *workexecution.RetryDecision
 		if snapshot.Claim != claim || snapshot.Revision <= 0 || snapshot.Owner == nil || *snapshot.Owner != owner {
 			return Change{}, invalid("execution completion no longer owns its resources")
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ClaimKey(claim), ModRevision: snapshot.Revision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: ClaimKey(claim), ModRevision: snapshot.Revision},
+		)
 		if item.Phase == workexecution.Settled {
-			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: ClaimKey(claim)})
+			change.Mutations = append(
+				change.Mutations,
+				keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: ClaimKey(claim)},
+			)
 		}
 	}
 	if err := completeHostEffect(&change, item, request.HostEffect); err != nil {

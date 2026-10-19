@@ -17,8 +17,13 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *zoneDeletionService) publishZoneRemovalWork(ctx context.Context, request etcd.NetworkWorkPublication,
-	projectionEvidence controllerrevision.ProjectionEvidence, affected []string, evidence zoneDeletionEvidence, impactToken string,
+func (service *zoneDeletionService) publishZoneRemovalWork(
+	ctx context.Context,
+	request etcd.NetworkWorkPublication,
+	projectionEvidence controllerrevision.ProjectionEvidence,
+	affected []string,
+	evidence zoneDeletionEvidence,
+	impactToken string,
 ) (idempotency.IdempotencyResponse, error) {
 	placement, err := service.repository.ResolveResourceHost(ctx)
 	if err != nil {
@@ -68,12 +73,19 @@ func (service *zoneDeletionService) publishZoneRemovalWork(ctx context.Context, 
 		return idempotency.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(body)
-	response := idempotency.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}
+	response := idempotency.IdempotencyResponse{
+		Status:      http.StatusAccepted,
+		ContentKind: "application/json",
+		Body:        body,
+	}
 	request.Marker = idempotency.IdempotencyMarker{
 		Kind: idempotency.IdempotencyMarkerTask, State: idempotency.IdempotencyMarkerPending,
 		Locator: request.Claim.Locator, Intent: request.Claim.Intent, TaskID: request.Task.ID,
-		ReplayTarget: &idempotency.IdempotencyReplayTarget{Kind: idempotency.IdempotencyReplayTargetZone, ID: request.Task.TargetID},
-		Response:     response, CreatedAt: request.Task.CreatedAt, UpdatedAt: request.Task.CreatedAt,
+		ReplayTarget: &idempotency.IdempotencyReplayTarget{
+			Kind: idempotency.IdempotencyReplayTargetZone,
+			ID:   request.Task.TargetID,
+		},
+		Response: response, CreatedAt: request.Task.CreatedAt, UpdatedAt: request.Task.CreatedAt,
 	}
 	result, publicationErr := service.repository.PublishNetworkWork(ctx, request)
 	var resolution requestidempotency.Resolution
@@ -94,6 +106,9 @@ func (service *zoneDeletionService) publishZoneRemovalWork(ctx context.Context, 
 	case requestidempotency.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone removal publication has no durable outcome")
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Zone removal publication has no durable outcome",
+		)
 	}
 }

@@ -13,13 +13,23 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *AgentWork) admitRecovery(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *AgentWork) admitRecovery(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
-	if request.DecisionOnly || item.Operation != workexecution.Hierarchy || item.Placement.Executor != workexecution.Agent ||
+	if request.DecisionOnly || item.Operation != workexecution.Hierarchy ||
+		item.Placement.Executor != workexecution.Agent ||
 		item.Phase != workexecution.Ready ||
-		item.ActiveAttemptID != "" || item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped ||
-		at.IsZero() || at.Before(item.UpdatedAt) {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "removal recovery cannot obtain this assignment")
+		item.ActiveAttemptID != "" ||
+		item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped ||
+		at.IsZero() ||
+		at.Before(item.UpdatedAt) {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"removal recovery cannot obtain this assignment",
+		)
 	}
 	if !at.Before(item.Deadline) {
 		change, err := workqueue.PrepareCleanupRetryExpiry(request.Task, request.Item, at)

@@ -10,7 +10,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) Settle(ctx context.Context, queue *workqueue.Repository, delivery workqueue.Delivery, at time.Time) error {
+func (service *Service) Settle(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	delivery workqueue.Delivery,
+	at time.Time,
+) error {
 	attempt := delivery.Attempt.Attempt
 	view, err := queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 	if err != nil || view.Attempt.Attempt.FinishedAt != nil {
@@ -62,9 +67,16 @@ func (service *Service) Settle(ctx context.Context, queue *workqueue.Repository,
 	return nil
 }
 
-func (service *Service) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
+func (service *Service) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	_ time.Time,
+) (workqueue.Change, error) {
 	if len(finished.Items) != 1 || finished.Task.Task.Action != workexecution.ActionPrepare {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "software preparation completion requires one captured operation")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"software preparation completion requires one captured operation",
+		)
 	}
 	item := finished.Items[0].Item
 	snapshot, err := service.records.LoadWork(ctx, item, finished.ReadRevision)
@@ -77,7 +89,10 @@ func (service *Service) PrepareFinish(ctx context.Context, finished workqueue.Fi
 			return workqueue.Change{}, err
 		}
 		if item.Result == nil || *item.Result != reference || item.Outcome == workexecution.Succeeded {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "unstarted preparation has no matching rejection")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"unstarted preparation has no matching rejection",
+			)
 		}
 		return snapshot.Guard(), nil
 	}
@@ -90,7 +105,10 @@ func (service *Service) PrepareFinish(ctx context.Context, finished workqueue.Fi
 		return workqueue.Change{}, err
 	}
 	if !found || previous.Attempt.FinishedAt == nil || previous.Attempt.Result == nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "software preparation completion has no accepted outcome")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"software preparation completion has no accepted outcome",
+		)
 	}
 	proof, result, err := preparationrecord.PrepareResult(snapshot, saved, previous.Attempt)
 	if err != nil {
@@ -100,8 +118,12 @@ func (service *Service) PrepareFinish(ctx context.Context, finished workqueue.Fi
 	if previous.Attempt.Direction == workexecution.Recovery {
 		accepted = item.CleanupResult
 	}
-	if !result.EffectsSettled || *previous.Attempt.Result != result.Evidence || accepted == nil || *accepted != result.Evidence {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "software preparation still has unresolved build resources")
+	if !result.EffectsSettled || *previous.Attempt.Result != result.Evidence || accepted == nil ||
+		*accepted != result.Evidence {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"software preparation still has unresolved build resources",
+		)
 	}
 	return proof, nil
 }

@@ -29,7 +29,13 @@ type AttemptPage struct {
 
 // Attempts exposes explicit execution identity/timing without copying captured
 // executable input, secret material or arbitrary output into the read model.
-func (service *Service) Attempts(ctx context.Context, taskID, workID string, after uint64, limit int64, revision int64) (AttemptPage, error) {
+func (service *Service) Attempts(
+	ctx context.Context,
+	taskID, workID string,
+	after uint64,
+	limit int64,
+	revision int64,
+) (AttemptPage, error) {
 	page, err := service.queue.ListAttempts(ctx, taskID, workID, after, limit, revision)
 	if err != nil {
 		return AttemptPage{}, err
@@ -49,7 +55,12 @@ func inspectAttempt(attempt workexecution.Attempt) Attempt {
 		AssignedAt: attempt.AssignedAt, Deadline: attempt.Deadline, StartedAt: attempt.StartedAt, FinishedAt: attempt.FinishedAt}
 }
 
-func (service *Service) originalFailureAttempt(ctx context.Context, taskID string, item workexecution.Item, revision int64) (*Attempt, error) {
+func (service *Service) originalFailureAttempt(
+	ctx context.Context,
+	taskID string,
+	item workexecution.Item,
+	revision int64,
+) (*Attempt, error) {
 	if item.FirstFailureAttempt == 0 {
 		return nil, nil
 	}

@@ -20,15 +20,21 @@ type Reports struct {
 
 func NewReports(queue *workqueue.Repository, owner *AgentWork) (*Reports, error) {
 	if queue == nil || owner == nil {
-		return nil, errs.New(errs.KindInternal, "Environment removal reporting requires storage and its execution owner")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Environment removal reporting requires storage and its execution owner",
+		)
 	}
 	return &Reports{queue: queue, owner: owner}, nil
 }
 
-func (service *Reports) CheckpointEnvironmentRemoval(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *Reports) CheckpointEnvironmentRemoval(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.EnvironmentRemovalCheckpointRequest,
 ) (*agentpb.EnvironmentRemovalCheckpointAck, error) {
-	if ctx == nil || request == nil || len(request.Report) == 0 || len(request.Report) > hierarchyexecution.MaximumEnvironmentReportBytes {
+	if ctx == nil || request == nil || len(request.Report) == 0 ||
+		len(request.Report) > hierarchyexecution.MaximumEnvironmentReportBytes {
 		return nil, errs.New(errs.KindValidationFailed, "Environment removal report is missing or oversized")
 	}
 	guards, err := authorization.Conditions()

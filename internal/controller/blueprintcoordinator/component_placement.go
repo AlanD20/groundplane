@@ -18,7 +18,10 @@ func (planner *ComponentPlanner) metadataOnly(ctx context.Context, task workexec
 	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, desired map[string]core.ComponentSpec,
 ) (bool, error) {
 	key := componentrecord.RecordKey(unit.Target.ID)
-	read, err := planner.hosts.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: baseline.ReadRevision})
+	read, err := planner.hosts.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: baseline.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -39,7 +42,8 @@ func (planner *ComponentPlanner) metadataOnly(ctx context.Context, task workexec
 	if err != nil {
 		return false, err
 	}
-	if current.Desired.ID != unit.Target.ID || current.Desired.Owner != core.ComponentOwnerEnvironment || current.Desired.OwnerID != task.Scope.EnvironmentID {
+	if current.Desired.ID != unit.Target.ID || current.Desired.Owner != core.ComponentOwnerEnvironment ||
+		current.Desired.OwnerID != task.Scope.EnvironmentID {
 		return false, errs.New(errs.KindStateConflict, "Component placement belongs to another Environment")
 	}
 	capability, supported := current.Desired.Kind.EnvironmentCapability()
@@ -50,7 +54,9 @@ func (planner *ComponentPlanner) metadataOnly(ctx context.Context, task workexec
 	if found == unit.Removal {
 		return false, errs.New(errs.KindStateConflict, "Component placement differs from authored intent")
 	}
-	if found && spec.Enabled || current.Desired.Enabled || len(current.Runtime.GeneratedServices) != 0 || current.Runtime.PinnedIPv4 != "" || current.Runtime.Healthy {
+	if found && spec.Enabled || current.Desired.Enabled || len(current.Runtime.GeneratedServices) != 0 ||
+		current.Runtime.PinnedIPv4 != "" ||
+		current.Runtime.Healthy {
 		return false, nil
 	}
 	for _, execution := range baseline.Executions {
@@ -65,7 +71,8 @@ func (planner *ComponentPlanner) metadataOnly(ctx context.Context, task workexec
 	if present {
 		acknowledged := runtime.Record.Component
 		acknowledged.Runtime.Healthy = current.Runtime.Healthy
-		if runtime.Record.EnvironmentID != task.Scope.EnvironmentID || !componentrecord.EqualRecord(acknowledged, current) {
+		if runtime.Record.EnvironmentID != task.Scope.EnvironmentID ||
+			!componentrecord.EqualRecord(acknowledged, current) {
 			return false, nil
 		}
 	}
@@ -78,12 +85,17 @@ func (planner *ComponentPlanner) metadataOnly(ctx context.Context, task workexec
 			return false, nil
 		}
 		if receipt.ControllerOperationID != "" {
-			return blueprintunits.ControllerDisabledComponentPublicationMatches(applied, value.ModRevision, runtime.Revision), nil
+			return blueprintunits.ControllerDisabledComponentPublicationMatches(
+				applied,
+				value.ModRevision,
+				runtime.Revision,
+			), nil
 		}
 		if receipt.State == blueprintunits.Absent {
 			return !present || !runtime.Record.Component.Desired.Enabled, nil
 		}
-		return present && receipt.Execution != nil && *receipt.Execution == runtime.Record.Execution && receipt.ParentTaskID == runtime.Record.RevisionID, nil
+		return present && receipt.Execution != nil && *receipt.Execution == runtime.Record.Execution &&
+			receipt.ParentTaskID == runtime.Record.RevisionID, nil
 	}
 	return false, nil
 }

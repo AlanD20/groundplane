@@ -52,7 +52,8 @@ func (progress EnvironmentProgress) Validate(input EnvironmentInput) error {
 		progress.InFlight != (progress.Sequence%2 == 1) || progress.InFlight != (progress.BeganAt != nil) {
 		return invalidEnvironmentProgress()
 	}
-	if progress.BeganAt != nil && (progress.BeganAt.Before(*input.Attempt.StartedAt) || !progress.BeganAt.Before(input.Attempt.Deadline) || progress.BeganAt.After(progress.UpdatedAt)) {
+	if progress.BeganAt != nil &&
+		(progress.BeganAt.Before(*input.Attempt.StartedAt) || !progress.BeganAt.Before(input.Attempt.Deadline) || progress.BeganAt.After(progress.UpdatedAt)) {
 		return invalidEnvironmentProgress()
 	}
 	expected := RemoveRuntime
@@ -91,7 +92,11 @@ func (progress EnvironmentProgress) Begin(input EnvironmentInput, at time.Time) 
 	return next, next.Validate(input)
 }
 
-func (progress EnvironmentProgress) Confirm(input EnvironmentInput, observation EnvironmentObservation, at time.Time) (EnvironmentProgress, error) {
+func (progress EnvironmentProgress) Confirm(
+	input EnvironmentInput,
+	observation EnvironmentObservation,
+	at time.Time,
+) (EnvironmentProgress, error) {
 	if progress.Validate(input) != nil || !progress.InFlight || at.Before(progress.UpdatedAt) ||
 		observation.At.Before(*progress.BeganAt) || observation.At.After(at) {
 		return EnvironmentProgress{}, invalidEnvironmentProgress()
@@ -109,5 +114,8 @@ func (progress EnvironmentProgress) Confirm(input EnvironmentInput, observation 
 }
 
 func invalidEnvironmentProgress() error {
-	return errs.New(errs.KindStateConflict, "Environment removal progress does not prove its required execution and absence checks")
+	return errs.New(
+		errs.KindStateConflict,
+		"Environment removal progress does not prove its required execution and absence checks",
+	)
 }

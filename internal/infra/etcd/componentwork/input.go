@@ -70,7 +70,9 @@ func (repository *InputRepository) Stage(ctx context.Context, view workqueue.Vie
 		view.Task.Revision <= 0 || view.Item.Revision <= 0 || view.ReadRevision <= 0 ||
 		view.Task.Revision > view.ReadRevision || view.Item.Revision > view.ReadRevision ||
 		input.GetComponentId() != item.TargetID || input.GetEnvironmentId() != task.Scope.EnvironmentID {
-		return workexecution.Input{}, workqueue.Change{}, conflict("Component input requires its captured admission owner")
+		return workexecution.Input{}, workqueue.Change{}, conflict(
+			"Component input requires its captured admission owner",
+		)
 	}
 	taskID, workID := task.ID, item.ID
 	guards := []keyvalue.Condition{
@@ -88,7 +90,9 @@ func (repository *InputRepository) stageRoute(ctx context.Context, task workexec
 		item.Operation != workexecution.Component || item.Placement.Executor != workexecution.Agent ||
 		item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput ||
 		item.Input != nil || item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.ForwardRevoked || len(guards) == 0 {
-		return workexecution.Input{}, workqueue.Change{}, conflict("Route input requires its unpublished admission owner")
+		return workexecution.Input{}, workqueue.Change{}, conflict(
+			"Route input requires its unpublished admission owner",
+		)
 	}
 	view := workqueue.View{Task: workqueue.TaskSnapshot{Task: task}, Item: workqueue.ItemSnapshot{Item: item},
 		ReadRevision: capture.Configuration.ReadRevision}
@@ -123,7 +127,13 @@ func (repository *InputRepository) stageCaptured(ctx context.Context, view workq
 		return workexecution.Input{}, workqueue.Change{}, conflict("Component captured input exceeds its storage bound")
 	}
 	digest := sha256.Sum256(raw)
-	manifest := inputManifest{TaskID: taskID, WorkID: workID, Input: reference, Length: len(raw), SHA256: hex.EncodeToString(digest[:])}
+	manifest := inputManifest{
+		TaskID: taskID,
+		WorkID: workID,
+		Input:  reference,
+		Length: len(raw),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	publication := workqueue.Change{Conditions: append([]keyvalue.Condition(nil), guards...)}
 	publication.Conditions = append(publication.Conditions, keyvalue.Condition{Key: InputKey(workID)})
 	for offset, ordinal := 0, 0; offset < len(raw); offset, ordinal = offset+inputChunkBytes, ordinal+1 {
@@ -142,7 +152,9 @@ func (repository *InputRepository) stageCaptured(ctx context.Context, view workq
 			revision = value.ModRevision
 			keyvalue.ClearValues(read.Values)
 			if !matches {
-				return workexecution.Input{}, workqueue.Change{}, conflict("Component input chunk already contains different captured content")
+				return workexecution.Input{}, workqueue.Change{}, conflict(
+					"Component input chunk already contains different captured content",
+				)
 			}
 		} else {
 			conditions := append([]keyvalue.Condition(nil), guards...)
@@ -172,7 +184,10 @@ func (repository *InputRepository) stageCaptured(ctx context.Context, view workq
 	return reference, publication, nil
 }
 
-func (repository *InputRepository) Load(ctx context.Context, view workqueue.View) (*agentpb.ComponentWorkInput, Capture, []keyvalue.Condition, error) {
+func (repository *InputRepository) Load(
+	ctx context.Context,
+	view workqueue.View,
+) (*agentpb.ComponentWorkInput, Capture, []keyvalue.Condition, error) {
 	item := view.Item.Item
 	if item.Operation != workexecution.Component || item.Placement.Executor != workexecution.Agent ||
 		item.Input == nil || item.TaskID != view.Task.Task.ID || view.ReadRevision <= 0 {
@@ -244,19 +259,25 @@ func (repository *InputRepository) Load(ctx context.Context, view workqueue.View
 	return owned, stored.Capture, conditions, nil
 }
 
-func (repository *InputRepository) read(ctx context.Context, keys []string, revision int64) (*keyvalue.GetManyResult, error) {
+func (repository *InputRepository) read(
+	ctx context.Context,
+	keys []string,
+	revision int64,
+) (*keyvalue.GetManyResult, error) {
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != len(keys) {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		len(read.Values) != len(keys) {
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
 		return nil, conflict("Component input read is incomplete")
 	}
 	for index, value := range read.Values {
-		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
+		if value != nil &&
+			(value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
 			keyvalue.ClearValues(read.Values)
 			return nil, conflict("Component input read has inconsistent ownership")
 		}

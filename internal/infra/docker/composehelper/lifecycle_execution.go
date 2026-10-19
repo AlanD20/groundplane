@@ -14,7 +14,12 @@ import (
 
 // ExecuteLifecycleMember owns only Compose members. Custom hooks execute through
 // their recorded Docker-exec owner, not as an untracked helper subprocess.
-func ExecuteLifecycleMember(ctx context.Context, taskRunner runner.Runner, volumeRoot string, request *agentpb.ServiceLifecycleHelperRequest) (*agentpb.ServiceLifecycleHelperResponse, error) {
+func ExecuteLifecycleMember(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	volumeRoot string,
+	request *agentpb.ServiceLifecycleHelperRequest,
+) (*agentpb.ServiceLifecycleHelperResponse, error) {
 	if ctx == nil || taskRunner == nil {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle helper dependencies are missing")
 	}
@@ -61,7 +66,10 @@ func ExecuteLifecycleMember(ctx context.Context, taskRunner runner.Runner, volum
 			return response, executionplan.ValidateLifecycleHelperResponse(input, response)
 		}
 		if input.Stage.Expected != lifecycleexecution.Running {
-			return nil, errs.New(errs.KindStateConflict, "Service containers still exist or run after the captured lifecycle action")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Service containers still exist or run after the captured lifecycle action",
+			)
 		}
 		// Waiting observes only; a slow healthcheck never triggers another up.
 		timer := time.NewTimer(time.Second)

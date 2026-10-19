@@ -74,7 +74,11 @@ func (service *Service) retainProxyRolloutImages(ctx context.Context, retention 
 	return retainServiceRolloutImages(retention, capture, reason)
 }
 
-func retainServiceRolloutImages(retention *imageRetention, capture releaserender.ServiceRolloutCapture, reason string) error {
+func retainServiceRolloutImages(
+	retention *imageRetention,
+	capture releaserender.ServiceRolloutCapture,
+	reason string,
+) error {
 	render, err := releaserender.OpenServiceRolloutCapture(capture)
 	if err != nil {
 		return err
@@ -94,7 +98,8 @@ func retainServiceRolloutImages(retention *imageRetention, capture releaserender
 	}
 	for _, hook := range render.Hooks {
 		snapshot := &agentpb.ResolvedRunnerSnapshot{}
-		if err := proto.Unmarshal(hook.RunnerSnapshot, snapshot); err != nil || executionplan.RejectUnknown(snapshot) != nil {
+		if err := proto.Unmarshal(hook.RunnerSnapshot, snapshot); err != nil ||
+			executionplan.RejectUnknown(snapshot) != nil {
 			return errs.New(errs.KindStateConflict, "pending proxy rollout hook image capture is invalid")
 		}
 		retention.retain(snapshot.GetLocalImageId(), reason)

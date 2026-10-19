@@ -27,8 +27,10 @@ func (owner *AgentWork) PrepareFinish(
 		)
 	}
 	item := finished.Items[0]
-	if item.Item.Operation != workexecution.EntryConfiguration || item.Item.TaskID != task.ID || item.Item.TargetID != task.Scope.EnvironmentID ||
-		item.Item.Phase != workexecution.Settled || item.Item.ActiveAttemptID != "" ||
+	if item.Item.Operation != workexecution.EntryConfiguration || item.Item.TaskID != task.ID ||
+		item.Item.TargetID != task.Scope.EnvironmentID ||
+		item.Item.Phase != workexecution.Settled ||
+		item.Item.ActiveAttemptID != "" ||
 		item.Item.Result == nil ||
 		(item.Item.Cleanup != workexecution.CleanupNone && item.Item.Cleanup != workexecution.CleanupComplete) {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Entry action has unresolved work")

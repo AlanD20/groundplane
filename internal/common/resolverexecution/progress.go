@@ -38,11 +38,18 @@ type Layout struct {
 
 func CaptureLayout(attempt workexecution.Attempt, input Input) (Layout, error) {
 	_, reference, err := Capture(attempt.Input.ID, input)
-	if err != nil || reference != attempt.Input || input.TaskID != attempt.TaskID || input.WorkID != attempt.WorkItemID ||
+	if err != nil || reference != attempt.Input || input.TaskID != attempt.TaskID ||
+		input.WorkID != attempt.WorkItemID ||
 		input.HostID != attempt.Executor.HostID {
 		return Layout{}, invalid("DNS resolver journal does not match its captured assignment")
 	}
-	layout := Layout{Input: reference, ComponentID: input.ComponentID, Enabled: input.Enabled, EnsureRuntime: input.EnsureRuntime, PreviousEnabled: input.PreviousEnabled}
+	layout := Layout{
+		Input:           reference,
+		ComponentID:     input.ComponentID,
+		Enabled:         input.Enabled,
+		EnsureRuntime:   input.EnsureRuntime,
+		PreviousEnabled: input.PreviousEnabled,
+	}
 	if input.Enabled {
 		layout.ConfigurationSHA256 = hex.EncodeToString(input.Candidate.Apply.ArtifactDigest)
 	}
@@ -52,7 +59,8 @@ func CaptureLayout(attempt workexecution.Attempt, input Input) (Layout, error) {
 func (layout Layout) Validate(attempt workexecution.Attempt) error {
 	if attempt.Validate() != nil || attempt.Executor.Executor != workexecution.Agent || layout.Input != attempt.Input ||
 		ids.Validate(ids.KindComponent, layout.ComponentID) != nil || !layout.Enabled && layout.EnsureRuntime ||
-		layout.Enabled && !validDigest(layout.ConfigurationSHA256) || !layout.Enabled && layout.ConfigurationSHA256 != "" {
+		layout.Enabled &&
+			!validDigest(layout.ConfigurationSHA256) || !layout.Enabled && layout.ConfigurationSHA256 != "" {
 		return invalid("DNS resolver journal layout is invalid")
 	}
 	return nil
@@ -82,7 +90,8 @@ type Observation struct {
 }
 
 func (observed Observation) Satisfies(stage Stage, layout Layout) bool {
-	if observed.Input != layout.Input || observed.ComponentID != layout.ComponentID || observed.Stage != stage || !canonicalTime(observed.At) {
+	if observed.Input != layout.Input || observed.ComponentID != layout.ComponentID || observed.Stage != stage ||
+		!canonicalTime(observed.At) {
 		return false
 	}
 	want := Observation{Input: layout.Input, ComponentID: layout.ComponentID, Stage: stage, At: observed.At}
@@ -155,7 +164,9 @@ func (progress Progress) Validate(attempt workexecution.Attempt, layout Layout) 
 }
 
 func (progress Progress) Begin(attempt workexecution.Attempt, layout Layout, at time.Time) (Progress, error) {
-	if progress.Validate(attempt, layout) != nil || progress.InFlight || progress.Stage == Complete || at.Before(progress.UpdatedAt) || !at.Before(attempt.Deadline) {
+	if progress.Validate(attempt, layout) != nil || progress.InFlight || progress.Stage == Complete ||
+		at.Before(progress.UpdatedAt) ||
+		!at.Before(attempt.Deadline) {
 		return Progress{}, invalid("DNS resolver cannot begin this execution stage")
 	}
 	next, began := progress, at.UTC()
@@ -164,9 +175,17 @@ func (progress Progress) Begin(attempt workexecution.Attempt, layout Layout, at 
 	return next, next.Validate(attempt, layout)
 }
 
-func (progress Progress) Confirm(attempt workexecution.Attempt, layout Layout, observation Observation, at time.Time) (Progress, error) {
-	if progress.Validate(attempt, layout) != nil || !progress.InFlight || at.Before(progress.UpdatedAt) || !at.Before(attempt.Deadline) ||
-		observation.At.Before(*progress.BeganAt) || observation.At.After(at) || !observation.Satisfies(progress.Stage, layout) {
+func (progress Progress) Confirm(
+	attempt workexecution.Attempt,
+	layout Layout,
+	observation Observation,
+	at time.Time,
+) (Progress, error) {
+	if progress.Validate(attempt, layout) != nil || !progress.InFlight || at.Before(progress.UpdatedAt) ||
+		!at.Before(attempt.Deadline) ||
+		observation.At.Before(*progress.BeganAt) ||
+		observation.At.After(at) ||
+		!observation.Satisfies(progress.Stage, layout) {
 		return Progress{}, invalid("DNS resolver observation does not confirm its active stage")
 	}
 	next := progress
@@ -184,7 +203,13 @@ func StageID(workID string, stage Stage) (string, error) {
 		return "", err
 	}
 	switch stage {
-	case WriteConfiguration, ReconcileRuntime, VerifyDNS, ApplyHostResolver, RestoreHostResolver, RemoveRuntime, VerifyAbsent:
+	case WriteConfiguration,
+		ReconcileRuntime,
+		VerifyDNS,
+		ApplyHostResolver,
+		RestoreHostResolver,
+		RemoveRuntime,
+		VerifyAbsent:
 		return ids.DeriveAt(ids.KindStep, at, workID, "dns-resolver/"+string(stage)), nil
 	default:
 		return "", invalid("DNS resolver stage has no executable identity")
@@ -195,8 +220,11 @@ func EqualProgress(left, right Progress) bool {
 	if (left.BeganAt == nil) != (right.BeganAt == nil) || (left.Last == nil) != (right.Last == nil) {
 		return false
 	}
-	return left.AttemptID == right.AttemptID && left.Sequence == right.Sequence && left.Stage == right.Stage && left.InFlight == right.InFlight &&
-		left.UpdatedAt.Equal(right.UpdatedAt) && (left.BeganAt == nil || left.BeganAt.Equal(*right.BeganAt)) && (left.Last == nil || *left.Last == *right.Last)
+	return left.AttemptID == right.AttemptID && left.Sequence == right.Sequence && left.Stage == right.Stage &&
+		left.InFlight == right.InFlight &&
+		left.UpdatedAt.Equal(right.UpdatedAt) &&
+		(left.BeganAt == nil || left.BeganAt.Equal(*right.BeganAt)) &&
+		(left.Last == nil || *left.Last == *right.Last)
 }
 
 func ValidateTransition(attempt workexecution.Attempt, layout Layout, prior *Progress, next Progress) error {
@@ -265,10 +293,14 @@ func (progress Progress) Checkpoint(attempt workexecution.Attempt, layout Layout
 	}
 	digest := sha256.Sum256(raw)
 	return workexecution.Checkpoint{AttemptID: attempt.ID, Sequence: progress.Sequence, StageID: stageID,
-		Evidence: workexecution.Input{ID: attempt.Input.ID, SHA256: hex.EncodeToString(digest[:])}, RecordedAt: progress.UpdatedAt}, nil
+		Evidence: workexecution.Input{
+			ID:     attempt.Input.ID,
+			SHA256: hex.EncodeToString(digest[:]),
+		}, RecordedAt: progress.UpdatedAt}, nil
 }
 
 func validDigest(digest string) bool {
 	decoded, err := hex.DecodeString(digest)
-	return err == nil && len(decoded) == sha256.Size && hex.EncodeToString(decoded) == digest && digest != hex.EncodeToString(make([]byte, sha256.Size))
+	return err == nil && len(decoded) == sha256.Size && hex.EncodeToString(decoded) == digest &&
+		digest != hex.EncodeToString(make([]byte, sha256.Size))
 }

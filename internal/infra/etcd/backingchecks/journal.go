@@ -19,7 +19,12 @@ type Journal struct {
 	identity   workexecution.Identity
 }
 
-func NewJournal(repository *Repository, owner Owner, attemptID string, identity workexecution.Identity) (*Journal, error) {
+func NewJournal(
+	repository *Repository,
+	owner Owner,
+	attemptID string,
+	identity workexecution.Identity,
+) (*Journal, error) {
 	if repository == nil || ids.Validate(ids.KindTask, owner.TaskID) != nil ||
 		ids.Validate(ids.KindPlan, owner.PlanID) != nil ||
 		ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
@@ -51,7 +56,8 @@ func (journal *Journal) Observe(ctx context.Context, result *backingaccess.Resul
 
 func (journal *Journal) ResumeCleanup(ctx context.Context) error {
 	return journal.mutate(ctx, false, func(record *Record, _ workexecution.Attempt) error {
-		if record.Phase != Checking && record.Phase != Cleaning && record.Phase != CleanupRequired || !record.CleanupPending {
+		if record.Phase != Checking && record.Phase != Cleaning && record.Phase != CleanupRequired ||
+			!record.CleanupPending {
 			return errs.New(errs.KindStateConflict, "Backing access check has no interrupted helper to clean up")
 		}
 		record.Phase = Cleaning
@@ -155,7 +161,8 @@ func (journal *Journal) mutateState(ctx context.Context, forward, allowAssigned 
 	if err != nil || executor.Identity != journal.identity {
 		return errs.New(errs.KindStateConflict, "Backing access executor was replaced")
 	}
-	if forward && (task.Stop != nil || item.ForwardRevoked || assignment.Direction != workexecution.Forward || !time.Now().UTC().Before(assignment.Deadline)) {
+	if forward &&
+		(task.Stop != nil || item.ForwardRevoked || assignment.Direction != workexecution.Forward || !time.Now().UTC().Before(assignment.Deadline)) {
 		return errs.New(errs.KindStateConflict, "Backing access check no longer permits a new probe")
 	}
 	conditions := make([]keyvalue.Condition, len(keys))

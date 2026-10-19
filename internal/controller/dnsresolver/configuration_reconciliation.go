@@ -62,7 +62,10 @@ func (reconciler *ConfigurationReconciler) Run(ctx context.Context) {
 }
 
 func (reconciler *ConfigurationReconciler) reconcile(ctx context.Context) error {
-	page, err := reconciler.components.ListPlatformComponents(ctx, keyvalue.PageRequest{Limit: keyvalue.MaximumPageLimit})
+	page, err := reconciler.components.ListPlatformComponents(
+		ctx,
+		keyvalue.PageRequest{Limit: keyvalue.MaximumPageLimit},
+	)
 	if err != nil {
 		return err
 	}

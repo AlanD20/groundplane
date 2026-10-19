@@ -12,17 +12,26 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *routeMutationService) acceptRouteWork(ctx context.Context,
-	environment keyvalue.Versioned[hierarchy.EnvironmentRecord], project keyvalue.Versioned[hierarchy.ProjectRecord],
-	target keyvalue.Versioned[services.ServiceRecord], previous *keyvalue.Versioned[routes.Record], record routes.Record,
-	action workexecution.Action, locator idempotency.IdempotencyLocator, evidence routeMutationEvidence,
+func (service *routeMutationService) acceptRouteWork(
+	ctx context.Context,
+	environment keyvalue.Versioned[hierarchy.EnvironmentRecord],
+	project keyvalue.Versioned[hierarchy.ProjectRecord],
+	target keyvalue.Versioned[services.ServiceRecord],
+	previous *keyvalue.Versioned[routes.Record],
+	record routes.Record,
+	action workexecution.Action,
+	locator idempotency.IdempotencyLocator,
+	evidence routeMutationEvidence,
 ) (idempotency.IdempotencyResponse, error) {
 	current, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
 	if !found {
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Route requires the Environment's authored Service definition")
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Route requires the Environment's authored Service definition",
+		)
 	}
 	staged, err := service.publisher.stage(ctx, routeWorkStageRequest{
 		Current: current, Route: record, Action: action, ReadRevision: current.ReadRevision,

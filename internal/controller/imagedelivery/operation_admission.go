@@ -14,7 +14,12 @@ import (
 	"github.com/distribution/reference"
 )
 
-func (service *Service) prepareOperation(ctx context.Context, requested string, at time.Time, remove bool) (imageoperations.Input, []byte, error) {
+func (service *Service) prepareOperation(
+	ctx context.Context,
+	requested string,
+	at time.Time,
+	remove bool,
+) (imageoperations.Input, []byte, error) {
 	input := imageoperations.Input{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
 		PlanID: ids.New(ids.KindPlan), OperationID: ids.New(ids.KindOperation),
 		Placement: workexecution.Placement{Executor: workexecution.Controller}, CreatedAt: at}
@@ -34,8 +39,10 @@ func (service *Service) prepareOperation(ctx context.Context, requested string, 
 		return imageoperations.Input{}, nil, err
 	}
 	if reference.Domain(named) == "localhost:5000" {
-		return imageoperations.Input{}, nil, errs.New(errs.KindValidationFailed,
-			"Use registry.groundplane.internal:5000 to fetch from GP's private registry; localhost:5000 is the installer's host-local reference")
+		return imageoperations.Input{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"Use registry.groundplane.internal:5000 to fetch from GP's private registry; localhost:5000 is the installer's host-local reference",
+		)
 	}
 	plan, err := service.registry.Resolve(ctx, requested)
 	if err != nil {
@@ -48,6 +55,8 @@ func (service *Service) prepareOperation(ctx context.Context, requested string, 
 	if err := input.Validate(); err != nil {
 		return imageoperations.Input{}, nil, err
 	}
-	body, err := json.Marshal(apiTypes.ImageFetchAccepted{TaskID: input.TaskID, Image: plan.Reference(), ConfigDigest: plan.ConfigDigest})
+	body, err := json.Marshal(
+		apiTypes.ImageFetchAccepted{TaskID: input.TaskID, Image: plan.Reference(), ConfigDigest: plan.ConfigDigest},
+	)
 	return input, body, err
 }

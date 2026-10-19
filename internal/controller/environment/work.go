@@ -27,11 +27,19 @@ func NewWork(records *environmentprovision.Repository, queue *workqueue.Reposito
 	return &Work{records: records, queue: queue}, nil
 }
 
-func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Work) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	task, item := request.Task.Task, request.Item.Item
-	if request.DecisionOnly || item.Operation != workexecution.Environment || item.Placement.Executor != workexecution.Agent ||
+	if request.DecisionOnly || item.Operation != workexecution.Environment ||
+		item.Placement.Executor != workexecution.Agent ||
 		request.Executor.Record.Identity.HostID != item.Placement.HostID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "environment provisioning assignment belongs to another host")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"environment provisioning assignment belongs to another host",
+		)
 	}
 	view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
 	if request.Direction == workexecution.Recovery {
@@ -40,10 +48,17 @@ func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at t
 			return workdispatch.Decision{Disposition: workdispatch.NeedsAttention, Change: change}, err
 		}
 		_, guard, err := owner.records.LoadRecovery(ctx, view)
-		return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: item.Deadline, Change: workqueue.Change{Conditions: []keyvalue.Condition{guard}}}, err
+		return workdispatch.Decision{
+			Disposition: workdispatch.Dispatch,
+			Deadline:    item.Deadline,
+			Change:      workqueue.Change{Conditions: []keyvalue.Condition{guard}},
+		}, err
 	}
 	if request.Direction != workexecution.Forward {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "environment provisioning direction is invalid")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"environment provisioning direction is invalid",
+		)
 	}
 	if task.Stop != nil || !at.Before(item.Deadline) || !at.Before(task.Deadline) {
 		outcome := workexecution.Failed
@@ -70,13 +85,19 @@ func (owner *Work) AuthorizeAgentStart(ctx context.Context, view workqueue.Resum
 	return change, err
 }
 
-func (owner *Work) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.EnvironmentProvisionAssignment, error) {
+func (owner *Work) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.EnvironmentProvisionAssignment, error) {
 	if attempt := view.Attempt.Attempt; attempt.StartedAt == nil && attempt.Direction == workexecution.Forward &&
 		(view.Work.Task.Task.Stop != nil || view.Work.Item.Item.ForwardRevoked || !time.Now().UTC().Before(attempt.Deadline)) {
 		if err := owner.rejectBeforeStart(ctx, view); err != nil {
 			return nil, err
 		}
-		return nil, errs.New(errs.KindStateConflict, "environment provisioning stopped before its directory effect started")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"environment provisioning stopped before its directory effect started",
+		)
 	}
 	capture, _, err := owner.records.Load(ctx, view.Work)
 	if err != nil {
@@ -129,7 +150,12 @@ func (owner *Work) rejectBeforeStart(ctx context.Context, view workqueue.ResumeV
 	return nil
 }
 
-func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *Work) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "environment provisioning has no stop request")
 	}
@@ -139,14 +165,22 @@ func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item w
 			return workqueue.Change{}, err
 		}
 		if view.Task.Revision != task.Revision || view.Item.Revision != item.Revision {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "environment provisioning changed before cancellation")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"environment provisioning changed before cancellation",
+			)
 		}
 		return owner.settleUnstarted(ctx, view, task.Task.Stop.Outcome, at)
 	}
 	return workqueue.PrepareRevocation(task, item, task.Task.Stop.Outcome, at)
 }
 
-func (owner *Work) settleUnstarted(ctx context.Context, view workqueue.View, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func (owner *Work) settleUnstarted(
+	ctx context.Context,
+	view workqueue.View,
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	input, _, err := owner.records.Load(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -186,22 +220,34 @@ func (owner *Work) settleUnstarted(ctx context.Context, view workqueue.View, out
 	return state, nil
 }
 
-func (owner *Work) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (owner *Work) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
 	}
 	current, previous := authorization.Identity(), view.Attempt.Attempt
-	if current.Executor != workexecution.Agent || current.HostID != previous.Executor.HostID || current == previous.Executor {
-		return errs.New(errs.KindStateConflict, "environment interruption requires the replacement Agent on the captured host")
+	if current.Executor != workexecution.Agent || current.HostID != previous.Executor.HostID ||
+		current == previous.Executor {
+		return errs.New(
+			errs.KindStateConflict,
+			"environment interruption requires the replacement Agent on the captured host",
+		)
 	}
 	completion, err := owner.queue.ReadInterruptedEnvironmentAt(ctx, view)
 	if err != nil {
 		return err
 	}
 	at := time.Now().UTC()
-	report := environmentexecution.Result{AttemptID: previous.ID, HelpersAbsent: previous.Direction == workexecution.Forward && previous.StartedAt == nil,
-		Failure: "Agent execution was interrupted before the directory result was recorded", ObservedAt: at}
+	report := environmentexecution.Result{
+		AttemptID:     previous.ID,
+		HelpersAbsent: previous.Direction == workexecution.Forward && previous.StartedAt == nil,
+		Failure:       "Agent execution was interrupted before the directory result was recorded",
+		ObservedAt:    at,
+	}
 	if !report.HelpersAbsent {
 		report.CleanupFailure = "The original helper and directory need inspection on the captured host"
 	}

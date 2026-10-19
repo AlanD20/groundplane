@@ -12,7 +12,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func PrepareDefinitionWorkStop(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func PrepareDefinitionWorkStop(
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	stopped := task.Task.Stop != nil && outcome == task.Task.Stop.Outcome
 	expired := outcome == workexecution.Failed && !at.Before(item.Item.Deadline)
 	if task.Task.Action != workexecution.ActionApply || item.Item.Operation != workexecution.ResourceDefinition ||
@@ -30,7 +35,10 @@ func PrepareDefinitionWorkStop(task workqueue.TaskSnapshot, item workqueue.ItemS
 		return workqueue.Change{}, err
 	}
 	digest := sha256.Sum256(value)
-	evidence := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, task.Task.CreatedAt, item.Item.ID, "definition-result"), SHA256: hex.EncodeToString(digest[:])}
+	evidence := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, task.Task.CreatedAt, item.Item.ID, "definition-result"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	change, err := workqueue.PrepareUnstartedSettlement(task, item, workexecution.Completion{
 		Outcome: outcome, Evidence: evidence, EffectsSettled: true,
 	}, at)

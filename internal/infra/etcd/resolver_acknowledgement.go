@@ -32,14 +32,23 @@ const (
 	resolverResourcePresentation
 )
 
-func readResolverAcknowledgement(ctx context.Context, store hierarchyStore, revision int64) (resolverAcknowledgement, bool, error) {
+func readResolverAcknowledgement(
+	ctx context.Context,
+	store hierarchyStore,
+	revision int64,
+) (resolverAcknowledgement, bool, error) {
 	return readResolverStateAcknowledgement(ctx, store, revision, resolverServingAcknowledgement)
 }
 
 // Serving and withdrawal decisions consume independent applied resource state.
 // Captured pending work is read only to exclude effects not yet proven settled;
 // no completed Task, diagnostic event or old render-input record is consulted.
-func readResolverStateAcknowledgement(ctx context.Context, store hierarchyStore, revision int64, purpose resolverAcknowledgementPurpose) (resolverAcknowledgement, bool, error) {
+func readResolverStateAcknowledgement(
+	ctx context.Context,
+	store hierarchyStore,
+	revision int64,
+	purpose resolverAcknowledgementPurpose,
+) (resolverAcknowledgement, bool, error) {
 	var ack resolverAcknowledgement
 	indexKey := platformcomponents.PlatformComponentKindKey(core.ComponentKindCoreDNS)
 	index, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{indexKey}, Revision: revision})
@@ -55,7 +64,10 @@ func readResolverStateAcknowledgement(ctx context.Context, store hierarchyStore,
 		if purpose != resolverServingAcknowledgement {
 			return ack, true, nil
 		}
-		return ack, false, errs.New(errs.KindValidationFailed, "Environment DNS requires an enabled platform CoreDNS resolver")
+		return ack, false, errs.New(
+			errs.KindValidationFailed,
+			"Environment DNS requires an enabled platform CoreDNS resolver",
+		)
 	}
 	componentID := string(index.Values[0].Value)
 	if ids.Validate(ids.KindComponent, componentID) != nil {
@@ -80,7 +92,10 @@ func readResolverStateAcknowledgement(ctx context.Context, store hierarchyStore,
 	}
 	ack.component = component
 	for i, key := range keys {
-		ack.conditions = append(ack.conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[i])})
+		ack.conditions = append(
+			ack.conditions,
+			keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[i])},
+		)
 	}
 	if purpose == resolverResourcePresentation {
 		ack.state, err = resolverwork.ReadLocalResourceState(ctx, store, componentID, revision)
@@ -101,16 +116,23 @@ func readResolverStateAcknowledgement(ctx context.Context, store hierarchyStore,
 		}
 	}
 	if purpose == resolverServingAcknowledgement && !component.Desired.Enabled {
-		return ack, false, errs.New(errs.KindValidationFailed, "Environment DNS requires an enabled platform CoreDNS resolver")
+		return ack, false, errs.New(
+			errs.KindValidationFailed,
+			"Environment DNS requires an enabled platform CoreDNS resolver",
+		)
 	}
 	if ack.pendingTaskID != "" && purpose != resolverWithdrawalFinalization && purpose != resolverResourcePresentation {
 		return ack, false, nil
 	}
 	applied := ack.state.Applied
 	if applied == nil {
-		absent := purpose != resolverServingAcknowledgement && ack.state.IntentRevision == 0 && ack.state.ClaimOwner == nil &&
-			ack.state.Request == nil && !component.Runtime.Healthy && len(component.Runtime.GeneratedServices) == 0 &&
-			read.Values[1] != nil && string(read.Values[1].Value) == componentID
+		absent := purpose != resolverServingAcknowledgement && ack.state.IntentRevision == 0 &&
+			ack.state.ClaimOwner == nil &&
+			ack.state.Request == nil &&
+			!component.Runtime.Healthy &&
+			len(component.Runtime.GeneratedServices) == 0 &&
+			read.Values[1] != nil &&
+			string(read.Values[1].Value) == componentID
 		return ack, absent, nil
 	}
 	if purpose == resolverServingAcknowledgement && !applied.Desired.Enabled {
@@ -122,7 +144,12 @@ func readResolverStateAcknowledgement(ctx context.Context, store hierarchyStore,
 // A resource-owned request retains the original forward outcome after history
 // expiry. Only a failure for these exact current DNS inputs can fail a dependent
 // action; an older authored head or removal fence is never reused as its failure.
-func failedResolverConfigurationRequest(ctx context.Context, store hierarchyStore, revision int64, ack resolverAcknowledgement) (string, []keyvalue.Condition, error) {
+func failedResolverConfigurationRequest(
+	ctx context.Context,
+	store hierarchyStore,
+	revision int64,
+	ack resolverAcknowledgement,
+) (string, []keyvalue.Condition, error) {
 	request := ack.state.Request
 	if request == nil || request.Outcome == "" || request.Outcome == workexecution.Succeeded {
 		return "", nil, nil
@@ -142,11 +169,16 @@ func failedResolverConfigurationRequest(ctx context.Context, store hierarchyStor
 	if err != nil || !matches {
 		return "", nil, err
 	}
-	generation, matches, err := dnsrecords.NewReader(store).MatchResolverDNSGeneration(ctx, request.References, revision)
+	generation, matches, err := dnsrecords.NewReader(store).
+		MatchResolverDNSGeneration(ctx, request.References, revision)
 	if err != nil || !matches {
 		return "", nil, err
 	}
-	digest, err := platformcomponents.ResolverConfigurationFingerprint(request.PrivateListener, global.Captures, request.ZoneListeners)
+	digest, err := platformcomponents.ResolverConfigurationFingerprint(
+		request.PrivateListener,
+		global.Captures,
+		request.ZoneListeners,
+	)
 	if err != nil {
 		return "", nil, err
 	}

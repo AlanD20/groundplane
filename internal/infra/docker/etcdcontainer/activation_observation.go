@@ -10,7 +10,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (m *Manager) ObserveApply(ctx context.Context, taskID, candidate, previous string) (etcdactivation.Outcome, error) {
+func (m *Manager) ObserveApply(
+	ctx context.Context,
+	taskID, candidate, previous string,
+) (etcdactivation.Outcome, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.observeApply(ctx, taskID, candidate, previous)
@@ -19,7 +22,10 @@ func (m *Manager) ObserveApply(ctx context.Context, taskID, candidate, previous 
 // RecoverApply can restore only this operation's captured predecessor. Holding
 // the lifecycle mutex joins an Apply still running in this process; bootstrap
 // performs the same restoration before opening etcd after a process restart.
-func (m *Manager) RecoverApply(ctx context.Context, taskID, candidate, previous string) (etcdactivation.Outcome, error) {
+func (m *Manager) RecoverApply(
+	ctx context.Context,
+	taskID, candidate, previous string,
+) (etcdactivation.Outcome, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	record, err := m.activationRecord(ctx)
@@ -28,7 +34,10 @@ func (m *Manager) RecoverApply(ctx context.Context, taskID, candidate, previous 
 	}
 	if record.TaskID == taskID && record.Phase == "prepared" {
 		if record.Candidate != candidate || record.Previous != previous {
-			return etcdactivation.Unresolved, errs.New(errs.KindStateConflict, "etcd activation recovery differs from captured configuration")
+			return etcdactivation.Unresolved, errs.New(
+				errs.KindStateConflict,
+				"etcd activation recovery differs from captured configuration",
+			)
 		}
 		if err := m.recoverInterrupted(ctx); err != nil {
 			return etcdactivation.Unresolved, err
@@ -37,9 +46,15 @@ func (m *Manager) RecoverApply(ctx context.Context, taskID, candidate, previous 
 	return m.observeApply(ctx, taskID, candidate, previous)
 }
 
-func (m *Manager) observeApply(ctx context.Context, taskID, candidate, previous string) (etcdactivation.Outcome, error) {
+func (m *Manager) observeApply(
+	ctx context.Context,
+	taskID, candidate, previous string,
+) (etcdactivation.Outcome, error) {
 	if ids.Validate(ids.KindTask, taskID) != nil {
-		return etcdactivation.Unresolved, errs.New(errs.KindValidationFailed, "etcd activation Task identity is invalid")
+		return etcdactivation.Unresolved, errs.New(
+			errs.KindValidationFailed,
+			"etcd activation Task identity is invalid",
+		)
 	}
 	for _, content := range []string{candidate, previous} {
 		if err := config.ValidateEtcdDocument(ctx, []byte(content)); err != nil {
@@ -62,13 +77,19 @@ func (m *Manager) observeApply(ctx context.Context, taskID, candidate, previous 
 				return etcdactivation.Unresolved, err
 			}
 			if found {
-				return etcdactivation.Unresolved, errs.New(errs.KindStateConflict, "etcd activation receipt was replaced before execution settled")
+				return etcdactivation.Unresolved, errs.New(
+					errs.KindStateConflict,
+					"etcd activation receipt was replaced before execution settled",
+				)
 			}
 		}
 		return etcdactivation.NotStarted, nil
 	}
 	if record.Candidate != candidate || record.Previous != previous {
-		return etcdactivation.Unresolved, errs.New(errs.KindStateConflict, "etcd activation receipt differs from captured configuration")
+		return etcdactivation.Unresolved, errs.New(
+			errs.KindStateConflict,
+			"etcd activation receipt differs from captured configuration",
+		)
 	}
 	var expected string
 	var outcome etcdactivation.Outcome
@@ -92,8 +113,12 @@ func (m *Manager) observeApply(ctx context.Context, taskID, candidate, previous 
 	if err != nil {
 		return etcdactivation.Unresolved, err
 	}
-	if active != expected || !exists || !owned(observed) || !matchesDesired(observed, cfg) || observed.State == nil || !observed.State.Running {
-		return etcdactivation.Unresolved, errs.New(errs.KindStateConflict, "etcd runtime does not match its activation receipt")
+	if active != expected || !exists || !owned(observed) || !matchesDesired(observed, cfg) || observed.State == nil ||
+		!observed.State.Running {
+		return etcdactivation.Unresolved, errs.New(
+			errs.KindStateConflict,
+			"etcd runtime does not match its activation receipt",
+		)
 	}
 	if err := m.probe(ctx); err != nil {
 		return etcdactivation.Unresolved, err

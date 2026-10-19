@@ -28,9 +28,18 @@ type WorkReports struct {
 	records     *componentrecord.InputRepository
 }
 
-func NewWorkReports(queue *workqueue.Repository, records *componentrecord.InputRepository, ledger *blueprintunits.Repository, files CapturedFileReader, diagnostics *executiondiagnostics.Repository) (*WorkReports, error) {
+func NewWorkReports(
+	queue *workqueue.Repository,
+	records *componentrecord.InputRepository,
+	ledger *blueprintunits.Repository,
+	files CapturedFileReader,
+	diagnostics *executiondiagnostics.Repository,
+) (*WorkReports, error) {
 	if queue == nil || records == nil || ledger == nil || files == nil || diagnostics == nil {
-		return nil, errs.New(errs.KindInternal, "Component reporting requires execution storage and its publication owner")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Component reporting requires execution storage and its publication owner",
+		)
 	}
 	return &WorkReports{queue: queue, records: records, ledger: ledger, files: files, diagnostics: diagnostics}, nil
 }
@@ -102,7 +111,10 @@ func (service *WorkReports) reportView(ctx context.Context, authorization agentr
 	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Attempt.Attempt.StartedAt == nil ||
 		view.Work.Item.Item.Operation != workexecution.Component || !view.Work.Task.Task.PublicationComplete ||
 		view.Work.Task.Task.CollectionStartedAt != nil {
-		return workqueue.ResumeView{}, errs.New(errs.KindStateConflict, "Component report has no retained started execution")
+		return workqueue.ResumeView{}, errs.New(
+			errs.KindStateConflict,
+			"Component report has no retained started execution",
+		)
 	}
 	return view, nil
 }

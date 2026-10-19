@@ -21,14 +21,21 @@ func (repository *Repository) PauseReplacement(ctx context.Context, agentID stri
 	if err != nil || found {
 		return err
 	}
-	raw, err := recordcodec.Encode("agent_forward_fence", forwardFence{AgentID: agentID, CredentialGeneration: original})
+	raw, err := recordcodec.Encode(
+		"agent_forward_fence",
+		forwardFence{AgentID: agentID, CredentialGeneration: original},
+	)
 	if err != nil {
 		return err
 	}
 	defer clear(raw)
 	conditions := append([]keyvalue.Condition(nil), binding.Conditions...)
 	conditions = append(conditions, guard)
-	result, err := repository.store.Transact(ctx, conditions, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: guard.Key, Value: raw}})
+	result, err := repository.store.Transact(
+		ctx,
+		conditions,
+		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: guard.Key, Value: raw}},
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return err
@@ -41,7 +48,12 @@ func (repository *Repository) PauseReplacement(ctx context.Context, agentID stri
 
 // PrepareResumeReplacement joins admission reopening to native settlement.
 // A qualified candidate cannot accept new work between a late Abort and cleanup.
-func (repository *Repository) PrepareResumeReplacement(ctx context.Context, agentID string, original, current uint64, revision int64) (workqueue.Change, error) {
+func (repository *Repository) PrepareResumeReplacement(
+	ctx context.Context,
+	agentID string,
+	original, current uint64,
+	revision int64,
+) (workqueue.Change, error) {
 	binding, err := repository.replacementBinding(ctx, agentID, original, current, revision)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -51,14 +63,26 @@ func (repository *Repository) PrepareResumeReplacement(ctx context.Context, agen
 		return workqueue.Change{}, err
 	}
 	if !found {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Agent replacement settlement has no retained forward fence")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Agent replacement settlement has no retained forward fence",
+		)
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{localagents.LocalAgentPrimaryKey(agentID)}, Revision: binding.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{
+			Keys:     []string{localagents.LocalAgentPrimaryKey(agentID)},
+			Revision: binding.ReadRevision,
+		},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	if read == nil {
-		return workqueue.Change{}, errs.New(errs.KindStorageUnavailable, "Agent replacement readiness snapshot is unavailable")
+		return workqueue.Change{}, errs.New(
+			errs.KindStorageUnavailable,
+			"Agent replacement readiness snapshot is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.ReadRevision != binding.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
@@ -69,16 +93,30 @@ func (repository *Repository) PrepareResumeReplacement(ctx context.Context, agen
 		return workqueue.Change{}, err
 	}
 	if primary.ID != agentID || primary.Generation != current || primary.Phase != localagents.LocalAgentPhaseReady {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Agent replacement has not settled at its qualified generation")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Agent replacement has not settled at its qualified generation",
+		)
 	}
 	conditions := append([]keyvalue.Condition(nil), binding.Conditions...)
 	conditions = append(conditions, guard)
-	return workqueue.Change{Conditions: conditions, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: guard.Key}}}, nil
+	return workqueue.Change{
+		Conditions: conditions,
+		Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: guard.Key}},
+	}, nil
 }
 
-func (repository *Repository) replacementBinding(ctx context.Context, agentID string, original, current uint64, revision int64) (MaintenanceBinding, error) {
+func (repository *Repository) replacementBinding(
+	ctx context.Context,
+	agentID string,
+	original, current uint64,
+	revision int64,
+) (MaintenanceBinding, error) {
 	if original == 0 || original > ^uint64(0)-2 || current < original || current > original+2 {
-		return MaintenanceBinding{}, errs.New(errs.KindValidationFailed, "Agent replacement admission generations are invalid")
+		return MaintenanceBinding{}, errs.New(
+			errs.KindValidationFailed,
+			"Agent replacement admission generations are invalid",
+		)
 	}
 	binding, err := repository.maintenanceBindingAt(ctx, agentID, current, revision)
 	if err != nil {

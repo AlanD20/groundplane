@@ -17,16 +17,41 @@ import (
 
 type Exchange interface {
 	StartAttempt(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
-	BackingProvisionCheckpoint(context.Context, *agentpb.BackingProvisionCheckpointRequest) (*agentpb.BackingProvisionCheckpointAck, error)
-	CompleteBackingProvision(context.Context, *agentpb.BackingProvisionCompletionRequest) (*agentpb.BackingProvisionCompletionAck, error)
-	FailBackingProvision(context.Context, *agentpb.BackingProvisionFailureRequest) (*agentpb.BackingProvisionFailureAck, error)
-	BackingProvisionConfiguration(context.Context, *agentpb.BackingProvisionConfigurationRequest) (*agentpb.BackingProvisionConfigurationManifest, error)
-	BackingProvisionFile(context.Context, *agentpb.BackingProvisionFileRequest) (*agentpb.BackingProvisionFileDelivery, error)
-	BackingProvisionHook(context.Context, *agentpb.BackingProvisionHookRequest) (*agentpb.BackingProvisionHookDelivery, error)
-	RecoverBackingProvision(context.Context, *agentpb.BackingProvisionRecoveryRequest) (*agentpb.BackingProvisionRecoveryAck, error)
+	BackingProvisionCheckpoint(
+		context.Context,
+		*agentpb.BackingProvisionCheckpointRequest,
+	) (*agentpb.BackingProvisionCheckpointAck, error)
+	CompleteBackingProvision(
+		context.Context,
+		*agentpb.BackingProvisionCompletionRequest,
+	) (*agentpb.BackingProvisionCompletionAck, error)
+	FailBackingProvision(
+		context.Context,
+		*agentpb.BackingProvisionFailureRequest,
+	) (*agentpb.BackingProvisionFailureAck, error)
+	BackingProvisionConfiguration(
+		context.Context,
+		*agentpb.BackingProvisionConfigurationRequest,
+	) (*agentpb.BackingProvisionConfigurationManifest, error)
+	BackingProvisionFile(
+		context.Context,
+		*agentpb.BackingProvisionFileRequest,
+	) (*agentpb.BackingProvisionFileDelivery, error)
+	BackingProvisionHook(
+		context.Context,
+		*agentpb.BackingProvisionHookRequest,
+	) (*agentpb.BackingProvisionHookDelivery, error)
+	RecoverBackingProvision(
+		context.Context,
+		*agentpb.BackingProvisionRecoveryRequest,
+	) (*agentpb.BackingProvisionRecoveryAck, error)
 }
 
-func (executor *Executor) Run(ctx context.Context, assignment backingprovision.Assignment, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) Run(
+	ctx context.Context,
+	assignment backingprovision.Assignment,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	if assignment.Attempt.Direction == workexecution.Recovery {
 		return executor.RunRecovery(ctx, assignment, exchange)
 	}
@@ -34,7 +59,11 @@ func (executor *Executor) Run(ctx context.Context, assignment backingprovision.A
 }
 
 type Helper interface {
-	ExecuteBackingProvision(context.Context, string, *agentpb.BackingProvisionHelperRequest) (*agentpb.BackingProvisionHelperResponse, error)
+	ExecuteBackingProvision(
+		context.Context,
+		string,
+		*agentpb.BackingProvisionHelperRequest,
+	) (*agentpb.BackingProvisionHelperResponse, error)
 	StopBackingProvision(context.Context, *agentpb.BackingProvisionHelperRequest) error
 }
 
@@ -51,7 +80,10 @@ func NewExecutor(volumeRoot string, journal *agentworkjournal.Journal, materiali
 	helper Helper, commands *backingcommand.Executor, ownership *agentownership.Lease,
 ) (*Executor, error) {
 	if volumeRoot == "" || journal == nil || materializer == nil || helper == nil || commands == nil {
-		return nil, errs.New(errs.KindInternal, "backing creation requires its journal, file/runtime helpers and command executor")
+		return nil, errs.New(
+			errs.KindInternal,
+			"backing creation requires its journal, file/runtime helpers and command executor",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
@@ -60,7 +92,11 @@ func NewExecutor(volumeRoot string, journal *agentworkjournal.Journal, materiali
 		helper: helper, commands: commands, ownership: ownership}, nil
 }
 
-func (executor *Executor) RunForward(ctx context.Context, assignment backingprovision.Assignment, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) RunForward(
+	ctx context.Context,
+	assignment backingprovision.Assignment,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	if ctx == nil || exchange == nil || assignment.Validate() != nil || assignment.Recovery != nil ||
 		assignment.Attempt.Direction != workexecution.Forward || assignment.Procedure.VolumeRoot != executor.volumeRoot {
 		return workexecution.Attempt{}, invalidInput()
@@ -92,8 +128,10 @@ func (executor *Executor) RunForward(ctx context.Context, assignment backingprov
 		return executor.deliverFailure(ctx, assignment, exchange, saved.Failure)
 	}
 	if saved == nil && reconcile {
-		return executor.fail(ctx, assignment, exchange, errs.New(errs.KindStateConflict,
-			"backing creation started previously but its local checkpoint is unavailable; cleanup inspection is required"))
+		return executor.fail(ctx, assignment, exchange, errs.New(
+			errs.KindStateConflict,
+			"backing creation started previously but its local checkpoint is unavailable; cleanup inspection is required",
+		))
 	}
 	var progress backingprovision.Progress
 	if saved != nil {
@@ -157,5 +195,8 @@ func (executor *Executor) Retire(ctx context.Context, terminal workexecution.Att
 }
 
 func invalidInput() error {
-	return errs.New(errs.KindStateConflict, "backing creation execution does not match its captured assignment and checkpoint")
+	return errs.New(
+		errs.KindStateConflict,
+		"backing creation execution does not match its captured assignment and checkpoint",
+	)
 }

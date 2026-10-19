@@ -11,8 +11,14 @@ import (
 
 // Capture the MVP placement at admission. Later Agent replacement may change
 // the process, but cannot silently retarget deletion to a different machine.
-func (repository *HierarchyDeletionRepository) captureDeletionHost(ctx context.Context, revision int64) (string, []keyvalue.Condition, error) {
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{localagents.LocalAgentSingletonKey}, Revision: revision})
+func (repository *HierarchyDeletionRepository) captureDeletionHost(
+	ctx context.Context,
+	revision int64,
+) (string, []keyvalue.Condition, error) {
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{localagents.LocalAgentSingletonKey}, Revision: revision},
+	)
 	if err != nil {
 		return "", nil, err
 	}
@@ -32,6 +38,9 @@ func (repository *HierarchyDeletionRepository) captureDeletionHost(ctx context.C
 	if err != nil {
 		return "", nil, err
 	}
-	conditions := append(binding.Conditions, keyvalue.Condition{Key: localagents.LocalAgentSingletonKey, ModRevision: value.ModRevision})
+	conditions := append(
+		binding.Conditions,
+		keyvalue.Condition{Key: localagents.LocalAgentSingletonKey, ModRevision: value.ModRevision},
+	)
 	return binding.Binding.HostID, conditions, nil
 }

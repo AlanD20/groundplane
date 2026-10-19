@@ -33,7 +33,10 @@ type entryConfigurationPublication struct {
 	ConfigurationRevision int64
 }
 
-func (service *entryDesiredMutationService) publishConfiguration(ctx context.Context, request entryConfigurationPublication) (etcd.IdempotencyTransactionResult, error) {
+func (service *entryDesiredMutationService) publishConfiguration(
+	ctx context.Context,
+	request entryConfigurationPublication,
+) (etcd.IdempotencyTransactionResult, error) {
 	placement := workexecution.Placement{Executor: workexecution.Controller}
 	if request.Removal == nil || len(request.Files) != 0 {
 		var err error

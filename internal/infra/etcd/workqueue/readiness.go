@@ -98,7 +98,10 @@ func prepareReadyChange(before ItemSnapshot, next workexecution.Item) (Change, e
 		if err != nil {
 			return Change{}, err
 		}
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: QueueKey(next), Value: reference})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: QueueKey(next), Value: reference},
+		)
 	}
 	return change, nil
 }
@@ -120,7 +123,10 @@ func PrepareCleanupRetryExpiry(task TaskSnapshot, item ItemSnapshot, at time.Tim
 		Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: ItemKey(next.ID), Value: value}},
 	}
 	if item.Item.Phase == workexecution.Ready || retryWaiting(item.Item) {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: QueueKey(next)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: QueueKey(next)},
+		)
 	}
 	if err := countTransition(&change, task, item.Item, next, at); err != nil {
 		return Change{}, err

@@ -26,7 +26,12 @@ func (repository *Repository) PrepareDefinition(ctx context.Context,
 	if headRevision <= 0 || readRevision < headRevision {
 		return nil, nil, errs.New(errs.KindStateConflict, "Route publication requires its captured desired head")
 	}
-	projection, found, err := environmentqueries.ReadDeclaredResources(ctx, repository.store, environment.Record.ID, readRevision)
+	projection, found, err := environmentqueries.ReadDeclaredResources(
+		ctx,
+		repository.store,
+		environment.Record.ID,
+		readRevision,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -45,7 +50,10 @@ func (repository *Repository) PrepareDefinition(ctx context.Context,
 		if current == nil || ValidateRouteVersion(*current) != nil || current.Revision != headRevision ||
 			current.Record.EnvironmentID != desired.EnvironmentID || current.Record.Desired != desired.Desired ||
 			current.Record.DesiredGeneration != desired.DesiredGeneration {
-			return nil, nil, errs.New(errs.KindStateConflict, "Route publication differs from its captured desired definition")
+			return nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Route publication differs from its captured desired definition",
+			)
 		}
 		expected, err := routes.ReplaceDesired(current.Record, record.Desired)
 		if err != nil {
@@ -60,7 +68,11 @@ func (repository *Repository) PrepareDefinition(ctx context.Context,
 		return nil, nil, errs.New(errs.KindStateConflict, "Route create or edit no longer matches the desired head")
 	}
 	keys := []string{routes.RecordKey(record.Desired.ID), routes.OwnerKey(record.EnvironmentID, record.Desired.ID),
-		routes.MatchKey(record.EnvironmentID, record.Desired.Host, record.Desired.Path), routes.ObservationKey(record.Desired.ID)}
+		routes.MatchKey(
+			record.EnvironmentID,
+			record.Desired.Host,
+			record.Desired.Path,
+		), routes.ObservationKey(record.Desired.ID)}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
 		return nil, nil, err
@@ -85,7 +97,10 @@ func (repository *Repository) PrepareDefinition(ctx context.Context,
 			if err != nil || stored.EnvironmentID != record.EnvironmentID || stored.Desired.ID != record.Desired.ID ||
 				stored.Desired.Host != record.Desired.Host || stored.Desired.Path != record.Desired.Path ||
 				stored.Desired.TargetServiceID != record.Desired.TargetServiceID || stored.Desired.TargetPort != record.Desired.TargetPort {
-				return nil, nil, errs.New(errs.KindStateConflict, "Route retained metadata belongs to another definition")
+				return nil, nil, errs.New(
+					errs.KindStateConflict,
+					"Route retained metadata belongs to another definition",
+				)
 			}
 		case 1, 2:
 			if string(value.Value) != record.Desired.ID {
@@ -103,13 +118,24 @@ func (repository *Repository) PrepareDefinition(ctx context.Context,
 	for index := 0; index < 3; index++ {
 		guards[index].ModRevision = keyvalue.RevisionOf(read.Values[index])
 	}
-	guards = append(guards, keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(record.EnvironmentID), ModRevision: headRevision},
-		keyvalue.Condition{Key: keys[3], ModRevision: keyvalue.RevisionOf(read.Values[3])})
+	guards = append(
+		guards,
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(record.EnvironmentID),
+			ModRevision: headRevision,
+		},
+		keyvalue.Condition{Key: keys[3], ModRevision: keyvalue.RevisionOf(read.Values[3])},
+	)
 	value, err := routes.EncodeRecord(record)
 	if err != nil {
 		return nil, nil, err
 	}
-	observation, err := routes.NewObservationRecord(record.EnvironmentID, record.Desired.ID, record.DesiredGeneration, record.Observed)
+	observation, err := routes.NewObservationRecord(
+		record.EnvironmentID,
+		record.Desired.ID,
+		record.DesiredGeneration,
+		record.Observed,
+	)
 	if err != nil {
 		clear(value)
 		return nil, nil, err

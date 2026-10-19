@@ -25,13 +25,21 @@ type removalResource struct {
 // removeEnvironmentRuntime addresses only individually inspected resource IDs.
 // Shared networks or foreign containers cause a failure before any deletion.
 // Docker's non-force removal also refuses attached networks or used Volumes.
-func removeEnvironmentRuntime(ctx context.Context, taskRunner runner.Runner, input hierarchyexecution.EnvironmentInput, inspectOnly bool) error {
+func removeEnvironmentRuntime(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input hierarchyexecution.EnvironmentInput,
+	inspectOnly bool,
+) error {
 	resources, err := environmentRemovalInventory(ctx, taskRunner, input)
 	if err != nil {
 		return err
 	}
 	if inspectOnly && len(resources) > 0 {
-		return errs.New(errs.KindStateConflict, "Environment runtime resources remain; interrupted removal needs reconciliation")
+		return errs.New(
+			errs.KindStateConflict,
+			"Environment runtime resources remain; interrupted removal needs reconciliation",
+		)
 	}
 	for _, selected := range resources {
 		if err := inspectRemovalResource(ctx, taskRunner, input, selected); err != nil {
@@ -57,7 +65,11 @@ func removeEnvironmentRuntime(ctx context.Context, taskRunner runner.Runner, inp
 	return nil
 }
 
-func environmentRemovalInventory(ctx context.Context, taskRunner runner.Runner, input hierarchyexecution.EnvironmentInput) ([]removalResource, error) {
+func environmentRemovalInventory(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input hierarchyexecution.EnvironmentInput,
+) ([]removalResource, error) {
 	resources := make([]removalResource, 0)
 	for _, kind := range []string{"container", "network", "volume"} {
 		filters := []string{"label=com.groundplane.environment-id=" + input.Removal.EnvironmentId}
@@ -111,7 +123,12 @@ type removalInspection struct {
 	} `json:"Config"`
 }
 
-func captureRemovalResource(ctx context.Context, taskRunner runner.Runner, input hierarchyexecution.EnvironmentInput, kind, id string) (removalResource, error) {
+func captureRemovalResource(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input hierarchyexecution.EnvironmentInput,
+	kind, id string,
+) (removalResource, error) {
 	inspected, err := removalResourceInspection(ctx, taskRunner, kind, id)
 	if err != nil {
 		return removalResource{}, err
@@ -155,13 +172,20 @@ func captureRemovalResource(ctx context.Context, taskRunner runner.Runner, input
 	return selected, nil
 }
 
-func inspectRemovalResource(ctx context.Context, taskRunner runner.Runner, input hierarchyexecution.EnvironmentInput, selected removalResource) error {
+func inspectRemovalResource(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input hierarchyexecution.EnvironmentInput,
+	selected removalResource,
+) error {
 	observed, err := removalResourceInspection(ctx, taskRunner, selected.kind, selected.id)
 	if err != nil {
 		return err
 	}
-	if observed.Name != selected.name || observed.Labels["com.groundplane.environment-id"] != input.Removal.EnvironmentId ||
-		observed.Labels["com.groundplane.managed"] != "true" || !hasAllExpectedLabels(observed.Labels, selected.labels) {
+	if observed.Name != selected.name ||
+		observed.Labels["com.groundplane.environment-id"] != input.Removal.EnvironmentId ||
+		observed.Labels["com.groundplane.managed"] != "true" ||
+		!hasAllExpectedLabels(observed.Labels, selected.labels) {
 		return foreignEnvironmentRemoval()
 	}
 	if selected.service != nil {
@@ -172,15 +196,26 @@ func inspectRemovalResource(ctx context.Context, taskRunner runner.Runner, input
 		if err != nil {
 			return err
 		}
-		if failure != nil || !present || !managedVolumeMatches(inspection, selected.volume,
-			filepath.Join(input.Removal.ExpectedVolumeDir, selected.volume.ComposeName), input.Removal.Compose.ProjectName) {
+		if failure != nil || !present || !managedVolumeMatches(
+			inspection,
+			selected.volume,
+			filepath.Join(
+				input.Removal.ExpectedVolumeDir,
+				selected.volume.ComposeName,
+			),
+			input.Removal.Compose.ProjectName,
+		) {
 			return foreignEnvironmentRemoval()
 		}
 	}
 	return nil
 }
 
-func removalResourceInspection(ctx context.Context, taskRunner runner.Runner, kind, id string) (removalInspection, error) {
+func removalResourceInspection(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	kind, id string,
+) (removalInspection, error) {
 	raw, err := environmentDocker(ctx, taskRunner, kind, "inspect", "--format", "{{json .}}", id)
 	if err != nil {
 		return removalInspection{}, err

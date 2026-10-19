@@ -63,7 +63,10 @@ func (inbox *WorkInbox) Register(assignment *agentpb.BackupWorkAssignment, ident
 	return inbox.register(owned.Input, owned.Attempt, attempt, identity, false)
 }
 
-func (inbox *WorkInbox) RegisterRecovery(assignment *agentpb.BackupRecoveryAssignment, identity workexecution.Identity) error {
+func (inbox *WorkInbox) RegisterRecovery(
+	assignment *agentpb.BackupRecoveryAssignment,
+	identity workexecution.Identity,
+) error {
 	owned, attempt, _, err := executionplan.OpenBackupRecoveryAssignment(assignment, identity)
 	if err != nil {
 		return err
@@ -101,7 +104,14 @@ func (inbox *WorkInbox) register(input *agentpb.BackupWorkInput, wire *agentpb.W
 	if _, found := inbox.attempts[attempt.ID]; found {
 		return errs.New(errs.KindStateConflict, "Backup credential attempt is already registered")
 	}
-	inbox.attempts[attempt.ID] = &workSecrets{input: input, attempt: wire, recovery: recovery, identity: identity, deadline: attempt.Deadline, slots: slots}
+	inbox.attempts[attempt.ID] = &workSecrets{
+		input:    input,
+		attempt:  wire,
+		recovery: recovery,
+		identity: identity,
+		deadline: attempt.Deadline,
+		slots:    slots,
+	}
 	return nil
 }
 

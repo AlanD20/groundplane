@@ -50,7 +50,10 @@ func (ledger *ReleaseLedger) BlueprintWorkProjectionConditions(ctx context.Conte
 	for index, key := range keys {
 		value := read.Values[index]
 		if value == nil || value.Key != key || value.ModRevision <= 0 || value.ModRevision > work.ReadRevision {
-			return nil, errs.New(errs.KindStateConflict, "Blueprint runtime input is not available at the work snapshot")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Blueprint runtime input is not available at the work snapshot",
+			)
 		}
 		conditions[index] = keyvalue.Condition{Key: key, ModRevision: value.ModRevision}
 	}

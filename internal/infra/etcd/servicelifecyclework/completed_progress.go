@@ -11,12 +11,20 @@ import (
 
 // HasCompletedProgress uses recorded stage receipts, not sequence arithmetic:
 // a retry starts a new cursor while retaining earlier completed stages.
-func (repository *Repository) HasCompletedProgress(ctx context.Context, view workqueue.ResumeView, input *agentpb.ServiceLifecycleWorkInput) (bool, error) {
+func (repository *Repository) HasCompletedProgress(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input *agentpb.ServiceLifecycleWorkInput,
+) (bool, error) {
 	checkpoint := view.Checkpoint.Record
 	if checkpoint == nil {
 		return false, nil
 	}
-	read, err := repository.read(ctx, []string{ReportKey(view.Attempt.Attempt.ID, checkpoint.Sequence)}, view.Work.ReadRevision)
+	read, err := repository.read(
+		ctx,
+		[]string{ReportKey(view.Attempt.Attempt.ID, checkpoint.Sequence)},
+		view.Work.ReadRevision,
+	)
 	if err != nil {
 		return false, err
 	}

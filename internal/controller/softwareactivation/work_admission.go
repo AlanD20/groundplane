@@ -10,7 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (service *Service) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	record, err := service.records.At(ctx, request.Task.Task.ID, request.ReadRevision)
 	if err != nil {
 		return workdispatch.Decision{}, err
@@ -29,14 +33,28 @@ func (service *Service) Admit(ctx context.Context, request workqueue.Assignment,
 		if err != nil {
 			return workdispatch.Decision{}, err
 		}
-		change, err := workqueue.PrepareUnstartedSettlement(request.Task, request.Item, workexecution.Completion{Outcome: workexecution.Failed, EffectsSettled: true, Evidence: reference}, at)
+		change, err := workqueue.PrepareUnstartedSettlement(
+			request.Task,
+			request.Item,
+			workexecution.Completion{Outcome: workexecution.Failed, EffectsSettled: true, Evidence: reference},
+			at,
+		)
 		change.Conditions = append(change.Conditions, guard.Conditions...)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
-	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: request.Item.Item.Deadline, Change: guard}, nil
+	return workdispatch.Decision{
+		Disposition: workdispatch.Dispatch,
+		Deadline:    request.Item.Item.Deadline,
+		Change:      guard,
+	}, nil
 }
 
-func (service *Service) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (service *Service) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "software activation has no stop request")
 	}
@@ -54,14 +72,29 @@ func (service *Service) Stop(ctx context.Context, task workqueue.TaskSnapshot, i
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change, err := workqueue.PrepareUnstartedSettlement(task, item, workexecution.Completion{Outcome: task.Task.Stop.Outcome, EffectsSettled: true, Evidence: reference}, at)
+	change, err := workqueue.PrepareUnstartedSettlement(
+		task,
+		item,
+		workexecution.Completion{Outcome: task.Task.Stop.Outcome, EffectsSettled: true, Evidence: reference},
+		at,
+	)
 	change.Conditions = append(change.Conditions, activationGuard(record).Conditions...)
 	return change, err
 }
 
-func (service *Service) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, previous workqueue.AttemptSnapshot, revision int64, at time.Time) (workqueue.Change, error) {
+func (service *Service) PrepareWorkRetry(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	previous workqueue.AttemptSnapshot,
+	revision int64,
+	at time.Time,
+) (workqueue.Change, error) {
 	if item.Item.Phase != workexecution.Attention || previous.Attempt.Result == nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Retry only cleans up interrupted staging; apply the preparation again to activate it")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Retry only cleans up interrupted staging; apply the preparation again to activate it",
+		)
 	}
 	record, err := service.records.At(ctx, task.Task.ID, revision)
 	if err != nil {
@@ -70,7 +103,18 @@ func (service *Service) PrepareWorkRetry(ctx context.Context, task workqueue.Tas
 	if err := record.Record.MatchStage(item.Item); err != nil {
 		return workqueue.Change{}, err
 	}
-	change, err := workqueue.PrepareRetry(task, item, previous, workexecution.RetryDecision{Direction: workexecution.Recovery, Result: *previous.Attempt.Result, NotBefore: at, Deadline: at.Add(2 * time.Minute)}, at)
+	change, err := workqueue.PrepareRetry(
+		task,
+		item,
+		previous,
+		workexecution.RetryDecision{
+			Direction: workexecution.Recovery,
+			Result:    *previous.Attempt.Result,
+			NotBefore: at,
+			Deadline:  at.Add(2 * time.Minute),
+		},
+		at,
+	)
 	change.Conditions = append(change.Conditions, activationGuard(record).Conditions...)
 	return change, err
 }

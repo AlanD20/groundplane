@@ -10,19 +10,45 @@ import (
 )
 
 type RemovalRecoveryReporter interface {
-	LoadRemovalConfiguration(context.Context, agentregistration.WorkAuthorization, *agentpb.ServiceRemovalConfigurationRequest) (*agentpb.ServiceRemovalConfigurationManifest, error)
-	LoadRemovalConfigurationFile(context.Context, agentregistration.WorkAuthorization, *agentpb.ServiceRemovalConfigurationFileRequest) (*agentpb.ServiceRemovalConfigurationFileDelivery, error)
-	CheckpointRemovalRecovery(context.Context, agentregistration.WorkAuthorization, *agentpb.ServiceRemovalRecoveryCheckpointRequest) (*agentpb.ServiceRemovalRecoveryCheckpointAck, error)
-	CompleteRemovalRecovery(context.Context, agentregistration.WorkAuthorization, *agentpb.ServiceRemovalRecoveryCompletionRequest) (*agentpb.ServiceRemovalRecoveryCompletionAck, error)
-	FailRemovalRecovery(context.Context, agentregistration.WorkAuthorization, *agentpb.ServiceRemovalRecoveryFailureRequest) (*agentpb.ServiceRemovalRecoveryFailureAck, error)
+	LoadRemovalConfiguration(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ServiceRemovalConfigurationRequest,
+	) (*agentpb.ServiceRemovalConfigurationManifest, error)
+	LoadRemovalConfigurationFile(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ServiceRemovalConfigurationFileRequest,
+	) (*agentpb.ServiceRemovalConfigurationFileDelivery, error)
+	CheckpointRemovalRecovery(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ServiceRemovalRecoveryCheckpointRequest,
+	) (*agentpb.ServiceRemovalRecoveryCheckpointAck, error)
+	CompleteRemovalRecovery(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ServiceRemovalRecoveryCompletionRequest,
+	) (*agentpb.ServiceRemovalRecoveryCompletionAck, error)
+	FailRemovalRecovery(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.ServiceRemovalRecoveryFailureRequest,
+	) (*agentpb.ServiceRemovalRecoveryFailureAck, error)
 }
 
 func (server *Server) ConfigureServiceRemovalRecovery(reports RemovalRecoveryReporter) {
 	server.removalRecoveryReports = reports
 }
 
-func (server *Server) removalRecoveryReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetServiceRemovalConfigurationRequest() == nil && message.GetServiceRemovalConfigurationFileRequest() == nil && message.GetServiceRemovalRecoveryCheckpointRequest() == nil {
+func (server *Server) removalRecoveryReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
+	if message.GetServiceRemovalConfigurationRequest() == nil &&
+		message.GetServiceRemovalConfigurationFileRequest() == nil &&
+		message.GetServiceRemovalRecoveryCheckpointRequest() == nil {
 		return false, nil, nil
 	}
 	if server.removalRecoveryReports == nil {

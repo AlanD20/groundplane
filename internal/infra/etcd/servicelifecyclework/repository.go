@@ -39,11 +39,18 @@ func PreparePublication(input Input) (workqueue.Change, error) {
 
 func (repository *Repository) Load(ctx context.Context, view workqueue.View) (Input, keyvalue.Condition, error) {
 	task, item := view.Task.Task, view.Item.Item
-	if view.ReadRevision <= 0 || item.TaskID != task.ID || item.Operation != workexecution.ServiceLifecycle || item.Input == nil {
-		return Input{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Service lifecycle work has no captured input")
+	if view.ReadRevision <= 0 || item.TaskID != task.ID || item.Operation != workexecution.ServiceLifecycle ||
+		item.Input == nil {
+		return Input{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle work has no captured input",
+		)
 	}
 	key := InputKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}
@@ -67,10 +74,18 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 	if input.Runtime != nil {
 		placement = workexecution.Placement{Executor: workexecution.Agent, HostID: input.HostID}
 	}
-	if input.TaskID != task.ID || input.WorkItemID != item.ID || input.ServiceID != item.TargetID || input.ServiceID != task.TargetID ||
-		input.Action != task.Action || input.Scope != task.Scope || item.Placement != placement || ref != *item.Input ||
-		task.Intent != ref || task.ExpectedItems != 1 {
-		return Input{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Service lifecycle input differs from its accepted action")
+	if input.TaskID != task.ID || input.WorkItemID != item.ID || input.ServiceID != item.TargetID ||
+		input.ServiceID != task.TargetID ||
+		input.Action != task.Action ||
+		input.Scope != task.Scope ||
+		item.Placement != placement ||
+		ref != *item.Input ||
+		task.Intent != ref ||
+		task.ExpectedItems != 1 {
+		return Input{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle input differs from its accepted action",
+		)
 	}
 	return input, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
 }

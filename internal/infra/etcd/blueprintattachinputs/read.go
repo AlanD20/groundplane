@@ -12,11 +12,17 @@ type Reader interface {
 }
 
 // ReadAtRevision keeps captured input and execution ownership in one MVCC view.
-func ReadAtRevision(ctx context.Context, store Reader, revisionID, attachID string, revision int64) (etcdstore.Versioned[Generation], bool, error) {
+func ReadAtRevision(
+	ctx context.Context,
+	store Reader,
+	revisionID, attachID string,
+	revision int64,
+) (etcdstore.Versioned[Generation], bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[Generation]{}, false, err
 	}
-	if store == nil || revision <= 0 || ids.Validate(ids.KindTask, revisionID) != nil || ids.Validate(ids.KindAttach, attachID) != nil {
+	if store == nil || revision <= 0 || ids.Validate(ids.KindTask, revisionID) != nil ||
+		ids.Validate(ids.KindAttach, attachID) != nil {
 		return etcdstore.Versioned[Generation]{}, false, errs.New(
 			errs.KindValidationFailed, "Blueprint Attach input generation identity is invalid",
 		)
@@ -28,7 +34,10 @@ func ReadAtRevision(ctx context.Context, store Reader, revisionID, attachID stri
 		return etcdstore.Versioned[Generation]{}, false, err
 	}
 	if result == nil {
-		return etcdstore.Versioned[Generation]{}, false, errs.New(errs.KindInternal, "Blueprint Attach input generation read is missing")
+		return etcdstore.Versioned[Generation]{}, false, errs.New(
+			errs.KindInternal,
+			"Blueprint Attach input generation read is missing",
+		)
 	}
 	defer etcdstore.ClearValues(result.Values)
 	if len(result.Values) != 1 || result.ReadRevision != revision {
@@ -41,7 +50,10 @@ func ReadAtRevision(ctx context.Context, store Reader, revisionID, attachID stri
 	}
 	value := result.Values[0]
 	if value.Key != Key(revisionID, attachID) || value.ModRevision <= 0 || value.ModRevision > result.ReadRevision {
-		return etcdstore.Versioned[Generation]{}, false, errs.New(errs.KindInternal, "Blueprint Attach input generation storage identity is invalid")
+		return etcdstore.Versioned[Generation]{}, false, errs.New(
+			errs.KindInternal,
+			"Blueprint Attach input generation storage identity is invalid",
+		)
 	}
 	generation, err := Decode(value.Value)
 	if err != nil || generation.RevisionID != revisionID || generation.AttachID != attachID {

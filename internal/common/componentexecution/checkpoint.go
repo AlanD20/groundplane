@@ -33,7 +33,12 @@ func EqualProgress(left, right Progress) bool {
 	return true
 }
 
-func ValidateTransition(attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, previous *Progress, next Progress) error {
+func ValidateTransition(
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	previous *Progress,
+	next Progress,
+) error {
 	if next.Validate(attempt, input) != nil {
 		return invalidProgress()
 	}
@@ -66,7 +71,10 @@ func ValidateTransition(attempt workexecution.Attempt, input *agentpb.ComponentW
 	return nil
 }
 
-func (progress Progress) Checkpoint(attempt workexecution.Attempt, input *agentpb.ComponentWorkInput) (workexecution.Checkpoint, error) {
+func (progress Progress) Checkpoint(
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+) (workexecution.Checkpoint, error) {
 	layout, err := CaptureLayout(attempt, input)
 	if err != nil {
 		return workexecution.Checkpoint{}, err
@@ -74,7 +82,10 @@ func (progress Progress) Checkpoint(attempt workexecution.Attempt, input *agentp
 	return progress.LayoutCheckpoint(attempt, layout)
 }
 
-func (progress Progress) LayoutCheckpoint(attempt workexecution.Attempt, layout Layout) (workexecution.Checkpoint, error) {
+func (progress Progress) LayoutCheckpoint(
+	attempt workexecution.Attempt,
+	layout Layout,
+) (workexecution.Checkpoint, error) {
 	if progress.ValidateLayout(attempt, layout) != nil || progress.Sequence == 0 {
 		return workexecution.Checkpoint{}, invalidProgress()
 	}
@@ -101,7 +112,11 @@ func (progress Progress) LayoutCheckpoint(attempt workexecution.Attempt, layout 
 		RecordedAt: progress.UpdatedAt, Evidence: workexecution.Input{ID: attempt.Input.ID, SHA256: hex.EncodeToString(digest[:])}}, nil
 }
 
-func EncodeProgress(attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, progress Progress) ([]byte, error) {
+func EncodeProgress(
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	progress Progress,
+) ([]byte, error) {
 	if _, err := progress.Checkpoint(attempt, input); err != nil {
 		return nil, err
 	}

@@ -24,7 +24,10 @@ func (owner *Owner) ReconcileInterrupted(ctx context.Context, view workqueue.Res
 	identity, attempt := authorization.Identity(), view.Attempt.Attempt
 	if identity.HostID != attempt.Executor.HostID || identity == attempt.Executor || view.CurrentExecutor ||
 		view.Work.Item.Item.Operation != workexecution.Detach {
-		return errs.New(errs.KindStateConflict, "Detach interruption requires the authenticated replacement on its captured host")
+		return errs.New(
+			errs.KindStateConflict,
+			"Detach interruption requires the authenticated replacement on its captured host",
+		)
 	}
 	completion, err := owner.queue.ReadInterruptedDetachAt(ctx, view)
 	if err != nil {
@@ -74,7 +77,10 @@ func (owner *Owner) ReconcileInterrupted(ctx context.Context, view workqueue.Res
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Detach interruption ownership changed before its evidence could settle")
+		return errs.New(
+			errs.KindStateConflict,
+			"Detach interruption ownership changed before its evidence could settle",
+		)
 	}
 	return nil
 }

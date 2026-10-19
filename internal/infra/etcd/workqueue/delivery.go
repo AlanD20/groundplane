@@ -29,11 +29,18 @@ func (repository *Repository) Deliveries(ctx context.Context, identity workexecu
 // caller must establish process termination before invoking effectful cleanup.
 // All memberships and records are read at one revision, including old slots
 // beyond the replacement executor's reduced capacity.
-func (repository *Repository) InterruptedDeliveries(ctx context.Context, identity workexecution.Identity) ([]Delivery, error) {
+func (repository *Repository) InterruptedDeliveries(
+	ctx context.Context,
+	identity workexecution.Identity,
+) ([]Delivery, error) {
 	return repository.deliveries(ctx, identity, true)
 }
 
-func (repository *Repository) deliveries(ctx context.Context, identity workexecution.Identity, interrupted bool) ([]Delivery, error) {
+func (repository *Repository) deliveries(
+	ctx context.Context,
+	identity workexecution.Identity,
+	interrupted bool,
+) ([]Delivery, error) {
 	if err := identity.Validate(); err != nil {
 		return nil, err
 	}
@@ -107,7 +114,8 @@ func (repository *Repository) deliveries(ctx context.Context, identity workexecu
 		if attempt.Executor.Generation > identity.Generation {
 			return nil, corrupt()
 		}
-		if interrupted && attempt.Executor.Generation == identity.Generation || !interrupted && attempt.Executor != identity {
+		if interrupted && attempt.Executor.Generation == identity.Generation ||
+			!interrupted && attempt.Executor != identity {
 			continue
 		}
 		result = append(result, Delivery{

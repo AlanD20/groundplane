@@ -24,7 +24,12 @@ type Exchange interface {
 	FailRelease(context.Context, *agentpb.ReleaseWorkFailureRequest) (*agentpb.ReleaseWorkFailureAck, error)
 	ReleaseCheckpoint(context.Context, *agentpb.ReleaseWorkCheckpointRequest) (*agentpb.ReleaseWorkCheckpointAck, error)
 	Hook(context.Context, *agentpb.ReleaseHookRequest) (*agentpb.ReleaseHookDelivery, error)
-	EffectEvidence(context.Context, *agentpb.WorkAttemptIdentity, []byte, workexecution.Input) (workexecution.Input, error)
+	EffectEvidence(
+		context.Context,
+		*agentpb.WorkAttemptIdentity,
+		[]byte,
+		workexecution.Input,
+	) (workexecution.Input, error)
 	Script(workexecution.Attempt) (checkpointdelivery.ScriptExchange, error)
 }
 
@@ -37,17 +42,37 @@ type Executor struct {
 	observer     Observer
 }
 
-func NewExecutor(volumeRoot string, journal *agentworkjournal.Journal, materializer *materialization.Runtime, scripts *scriptruntime.Runtime, helper MutationHelper, observer Observer) (*Executor, error) {
-	if environmentpath.ValidateRoot(volumeRoot) != nil || journal == nil || materializer == nil || scripts == nil || helper == nil || observer == nil {
+func NewExecutor(
+	volumeRoot string,
+	journal *agentworkjournal.Journal,
+	materializer *materialization.Runtime,
+	scripts *scriptruntime.Runtime,
+	helper MutationHelper,
+	observer Observer,
+) (*Executor, error) {
+	if environmentpath.ValidateRoot(volumeRoot) != nil || journal == nil || materializer == nil || scripts == nil ||
+		helper == nil ||
+		observer == nil {
 		return nil, errs.New(errs.KindInternal, "native Release executor dependencies are incomplete")
 	}
-	return &Executor{volumeRoot: volumeRoot, journal: journal, materializer: materializer, scripts: scripts, helper: helper, observer: observer}, nil
+	return &Executor{
+		volumeRoot:   volumeRoot,
+		journal:      journal,
+		materializer: materializer,
+		scripts:      scripts,
+		helper:       helper,
+		observer:     observer,
+	}, nil
 }
 
 // execute runs one assigned forward attempt. The caller owns exclusive scheduling
 // of that attempt and subsequent result settlement/recovery. This method never
 // retires the journal, allocates retries or turns a cleanup result into success.
-func (executor *Executor) execute(ctx context.Context, input releaseexecution.Input, exchange Exchange) (*releaseexecution.CheckpointReport, error) {
+func (executor *Executor) execute(
+	ctx context.Context,
+	input releaseexecution.Input,
+	exchange Exchange,
+) (*releaseexecution.CheckpointReport, error) {
 	if executor == nil || ctx == nil || exchange == nil {
 		return nil, errs.New(errs.KindInternal, "native Release execution is not configured")
 	}
@@ -89,7 +114,10 @@ func (executor *Executor) execute(ctx context.Context, input releaseexecution.In
 		return nil, err
 	}
 	if sequence < start.CheckpointSequence {
-		return nil, errs.New(errs.KindStateConflict, "Controller has execution checkpoints missing from the Agent journal; reconcile the saved attempt before further effects")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Controller has execution checkpoints missing from the Agent journal; reconcile the saved attempt before further effects",
+		)
 	}
 	checkpoints, err := checkpointdelivery.NewRelease(input, executor.journal, exchange.ReleaseCheckpoint)
 	if err != nil {
@@ -138,7 +166,12 @@ func (executor *Executor) execute(ctx context.Context, input releaseexecution.In
 
 // Settlement may be delivered after the effect deadline; it cannot grant new
 // effects. A bounded transport failure leaves the completed journal for replay.
-func (executor *Executor) complete(ctx context.Context, input releaseexecution.Input, report releaseexecution.CheckpointReport, exchange Exchange) error {
+func (executor *Executor) complete(
+	ctx context.Context,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+	exchange Exchange,
+) error {
 	request, err := releaseexecution.EncodeCompletionRequest(input, report)
 	if err != nil {
 		return err

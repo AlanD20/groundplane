@@ -52,7 +52,11 @@ func (service *WorkReports) CompleteVolume(ctx context.Context, authorization ag
 		if err != nil {
 			return nil, err
 		}
-		completion.Result = workexecution.Completion{Outcome: completedVolumeOutcome(view.Work), Evidence: evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        completedVolumeOutcome(view.Work),
+			Evidence:       evidence,
+			EffectsSettled: true,
+		}
 		completion.At = at
 		change, err := workqueue.PrepareCompletion(completion)
 		if err != nil {
@@ -77,8 +81,12 @@ func (service *WorkReports) CompleteVolume(ctx context.Context, authorization ag
 		(attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled && attempt.Outcome != workexecution.Superseded) {
 		return nil, errs.New(errs.KindStateConflict, "saved Volume result does not acknowledge successful completion")
 	}
-	return &agentpb.VolumeWorkCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: proto.CloneOf(request.Evidence),
-		StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
+	return &agentpb.VolumeWorkCompletionAck{
+		Attempt:    proto.CloneOf(request.Attempt),
+		Evidence:   proto.CloneOf(request.Evidence),
+		StartedAt:  timestamppb.New(*attempt.StartedAt),
+		FinishedAt: timestamppb.New(*attempt.FinishedAt),
+	}, nil
 }
 
 // A proven host effect remains applied, but cannot turn cancelled or superseded

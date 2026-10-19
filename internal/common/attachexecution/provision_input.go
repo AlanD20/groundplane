@@ -14,15 +14,23 @@ import (
 // arbitrary sequence of adapter commands. Bindings without provisioning are
 // settled by the Controller and do not manufacture an Agent no-op.
 func ValidateProvision(input *agentpb.AttachProvisionInput) error {
-	if input == nil || executionplan.RejectUnknown(input) != nil || proto.Size(input) > executionplan.MaximumPlanBytes ||
-		input.CapturedSource == nil || ids.Validate(ids.KindPlan, input.CapturedSource.InputId) != nil || len(input.CapturedSource.Sha256) != 32 ||
-		ids.Validate(ids.KindAttach, input.AttachId) != nil || ids.Validate(ids.KindService, input.BackingServiceId) != nil ||
-		ids.Validate(ids.KindTenant, input.TenantId) != nil || ids.Validate(ids.KindProject, input.ProjectId) != nil ||
-		ids.Validate(ids.KindEnvironment, input.EnvironmentId) != nil || input.ServiceId != "" && ids.Validate(ids.KindService, input.ServiceId) != nil {
+	if input == nil || executionplan.RejectUnknown(input) != nil ||
+		proto.Size(input) > executionplan.MaximumPlanBytes ||
+		input.CapturedSource == nil ||
+		ids.Validate(ids.KindPlan, input.CapturedSource.InputId) != nil ||
+		len(input.CapturedSource.Sha256) != 32 ||
+		ids.Validate(ids.KindAttach, input.AttachId) != nil ||
+		ids.Validate(ids.KindService, input.BackingServiceId) != nil ||
+		ids.Validate(ids.KindTenant, input.TenantId) != nil ||
+		ids.Validate(ids.KindProject, input.ProjectId) != nil ||
+		ids.Validate(ids.KindEnvironment, input.EnvironmentId) != nil ||
+		input.ServiceId != "" && ids.Validate(ids.KindService, input.ServiceId) != nil {
 		return invalid("Attach provisioning identity or captured source is invalid")
 	}
 	if input.Consumer != nil {
-		if input.Consumer.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT || input.Consumer.EnvironmentId != input.EnvironmentId || input.Consumer.ServiceId != input.ServiceId {
+		if input.Consumer.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT ||
+			input.Consumer.EnvironmentId != input.EnvironmentId ||
+			input.Consumer.ServiceId != input.ServiceId {
 			return invalid("Attach consumer connection belongs to a different binding")
 		}
 		if err := executionplan.ValidateAttachConsumerTransition(context.Background(), input.Consumer); err != nil {
@@ -89,7 +97,10 @@ func ProvisionProcedures(input *agentpb.AttachProvisionInput) ([]*agentpb.Adapte
 	return procedures, nil
 }
 
-func provisionProcedure(input *agentpb.AttachProvisionInput, grant *agentpb.AttachGrantProvision) *agentpb.AdapterProcedure {
+func provisionProcedure(
+	input *agentpb.AttachProvisionInput,
+	grant *agentpb.AttachGrantProvision,
+) *agentpb.AdapterProcedure {
 	credential := input.GetCredential()
 	procedure := &agentpb.AdapterProcedure{AdapterKey: credential.AdapterKey, Authentication: credential.Authentication,
 		AttachId: input.AttachId, BackingServiceId: input.BackingServiceId, Role: credential.Role}

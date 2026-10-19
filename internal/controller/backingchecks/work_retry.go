@@ -20,7 +20,10 @@ func (executor *Executor) PrepareWorkRetry(ctx context.Context, task workqueue.T
 ) (workqueue.Change, error) {
 	if previous.Attempt.Result == nil || item.Item.Operation != workexecution.BackingCheck ||
 		item.Item.TaskID != task.Task.ID || item.Item.Input == nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Backing cleanup has no recorded attempt to retry")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Backing cleanup has no recorded attempt to retry",
+		)
 	}
 	loaded, err := executor.repository.LoadAt(ctx, task.Task.ID, revision)
 	if err != nil {
@@ -32,7 +35,10 @@ func (executor *Executor) PrepareWorkRetry(ctx context.Context, task workqueue.T
 	if err != nil || record.Phase != checkrecord.CleanupRequired || record.Owner.WorkItemID != item.Item.ID ||
 		record.Owner.PlanID != item.Item.Input.ID || digest != item.Item.Input.SHA256 ||
 		record.Source.Parameters.AttachID != item.Item.TargetID {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Backing cleanup differs from its captured helper")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Backing cleanup differs from its captured helper",
+		)
 	}
 	change, err := workqueue.PrepareRetry(task, item, previous, workexecution.RetryDecision{
 		Direction: workexecution.Recovery, Result: *previous.Attempt.Result, NotBefore: at,
@@ -41,6 +47,9 @@ func (executor *Executor) PrepareWorkRetry(ctx context.Context, task workqueue.T
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: checkrecord.Key(task.Task.ID), ModRevision: loaded.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: checkrecord.Key(task.Task.ID), ModRevision: loaded.Revision},
+	)
 	return change, nil
 }

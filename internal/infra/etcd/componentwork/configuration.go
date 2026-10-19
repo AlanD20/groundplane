@@ -12,12 +12,19 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (repository *InputRepository) LoadActiveConfiguration(ctx context.Context, view workqueue.ResumeView) (componentexecution.HelperInput, []taskmaterialization.Record, error) {
+func (repository *InputRepository) LoadActiveConfiguration(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (componentexecution.HelperInput, []taskmaterialization.Record, error) {
 	var empty componentexecution.HelperInput
 	attempt := view.Attempt.Attempt
-	if !view.ActiveAttempt || !view.CurrentExecutor || attempt.Direction != workexecution.Forward || attempt.FinishedAt != nil ||
-		attempt.StartedAt == nil || view.Checkpoint.Record == nil || view.Work.Task.Task.FinishedAt != nil ||
-		view.Work.Task.Task.CollectionStartedAt != nil || view.Work.Task.Task.Stop != nil {
+	if !view.ActiveAttempt || !view.CurrentExecutor || attempt.Direction != workexecution.Forward ||
+		attempt.FinishedAt != nil ||
+		attempt.StartedAt == nil ||
+		view.Checkpoint.Record == nil ||
+		view.Work.Task.Task.FinishedAt != nil ||
+		view.Work.Task.Task.CollectionStartedAt != nil ||
+		view.Work.Task.Task.Stop != nil {
 		return empty, nil, conflict("Component configuration requires an active write stage")
 	}
 	input, capture, _, err := repository.Load(ctx, view.Work)
@@ -44,7 +51,8 @@ func (repository *InputRepository) LoadActiveConfiguration(ctx context.Context, 
 		return empty, nil, err
 	}
 	checkpoint, err := progress.Checkpoint(attempt, input)
-	if err != nil || checkpoint != *view.Checkpoint.Record || !progress.InFlight || progress.Stage != componentexecution.WriteConfiguration {
+	if err != nil || checkpoint != *view.Checkpoint.Record || !progress.InFlight ||
+		progress.Stage != componentexecution.WriteConfiguration {
 		return empty, nil, conflict("Component configuration does not match its acknowledged write stage")
 	}
 	sources, err := runtimeconfiguration.New(repository.store)

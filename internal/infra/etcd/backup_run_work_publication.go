@@ -23,7 +23,10 @@ func (publication *PreparedBackupRunPublication) PublishWork(ctx context.Context
 	state.mu.Lock()
 	if state.consumed || state.repository == nil {
 		state.mu.Unlock()
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Backup publication was already consumed")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Backup publication was already consumed",
+		)
 	}
 	state.consumed = true
 	repository, plan := state.repository, state.plan
@@ -33,28 +36,47 @@ func (publication *PreparedBackupRunPublication) PublishWork(ctx context.Context
 	state.scope, state.authority, state.artifacts = nil, nil, nil
 	state.mu.Unlock()
 	defer plan.clear()
-	if input == nil || scope == nil || input.ProjectId != scope.ProjectId || input.EnvironmentId != scope.EnvironmentId ||
-		!proto.Equal(input.Project, scope.Project) || !proto.Equal(input.Environment, scope.Environment) ||
-		len(input.Services) != len(scope.Services) || len(input.Steps) != len(steps) || len(input.Artifacts) != len(artifacts) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Backup captured resource scope changed")
+	if input == nil || scope == nil || input.ProjectId != scope.ProjectId ||
+		input.EnvironmentId != scope.EnvironmentId ||
+		!proto.Equal(input.Project, scope.Project) ||
+		!proto.Equal(input.Environment, scope.Environment) ||
+		len(input.Services) != len(scope.Services) ||
+		len(input.Steps) != len(steps) ||
+		len(input.Artifacts) != len(artifacts) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Backup captured resource scope changed",
+		)
 	}
 	for index, fact := range scope.Services {
 		if !proto.Equal(fact, input.Services[index]) {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Backup captured Service fact changed")
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"Backup captured Service fact changed",
+			)
 		}
 	}
 	for index, step := range steps {
 		if !proto.Equal(step, input.Steps[index]) {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Backup captured source authority changed")
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"Backup captured source authority changed",
+			)
 		}
 	}
 	for index, artifact := range artifacts {
 		if !proto.Equal(artifact, input.Artifacts[index]) {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Backup captured artifact changed")
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"Backup captured artifact changed",
+			)
 		}
 	}
 	if item.Placement.HostID != plan.hostID || plan.hostID == "" {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Backup target host changed after capture")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Backup target host changed after capture",
+		)
 	}
 	mutation, err := plan.workPublication(task, item, input, marker, plan.initiation)
 	if err != nil {

@@ -74,7 +74,10 @@ func (ledger *ReleaseLedger) RetireUnpublishedRollout(ctx context.Context, view 
 		keyvalue.Condition{Key: tasksecretpins.ReversePrefix(capture.OperationID), Prefix: true})
 	result, err := ledger.store.Transact(ctx, guards, []keyvalue.Mutation{
 		{Type: keyvalue.MutationDelete, Key: key},
-		{Type: keyvalue.MutationDelete, Key: BlueprintProxyServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID)},
+		{
+			Type: keyvalue.MutationDelete,
+			Key:  BlueprintProxyServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID),
+		},
 	})
 	keyvalue.ClearValues(result.FailureReads)
 	if err == nil && !result.Succeeded {

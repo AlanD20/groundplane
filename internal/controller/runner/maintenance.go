@@ -142,7 +142,12 @@ func (maintenance *Maintenance) refreshOne(ctx context.Context, runnerID string)
 	if !exists || prior.Record.RuntimeEpoch != current.Record.RuntimeEpoch {
 		return errs.New(errs.KindStateConflict, "Runner ready ownership is missing")
 	}
-	plan, err := maintenance.repository.LoadAppliedRunnerPlan(ctx, runnerID, prior.Record.RuntimeEpoch, current.Record.ContainerID)
+	plan, err := maintenance.repository.LoadAppliedRunnerPlan(
+		ctx,
+		runnerID,
+		prior.Record.RuntimeEpoch,
+		current.Record.ContainerID,
+	)
 	if err != nil {
 		return maintenance.offline(ctx, runnerID, err)
 	}

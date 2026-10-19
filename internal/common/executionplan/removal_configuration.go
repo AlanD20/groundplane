@@ -13,14 +13,20 @@ import (
 // RemovalConfigurationHeaders authenticates the entire metadata selection before
 // any file is materialized. The Controller selects these sources from its sealed
 // snapshot; the Agent does not infer files from a current Blueprint.
-func RemovalConfigurationHeaders(request *agentpb.ServiceRemovalRecoveryHelperRequest, manifest *agentpb.ServiceRemovalConfigurationManifest) ([]entrymaterialization.Header, error) {
+func RemovalConfigurationHeaders(
+	request *agentpb.ServiceRemovalRecoveryHelperRequest,
+	manifest *agentpb.ServiceRemovalConfigurationManifest,
+) ([]entrymaterialization.Header, error) {
 	input, err := OpenRemovalRecoveryHelperRequest(request)
 	if err != nil {
 		return nil, err
 	}
-	if input.Progress.Phase != removalexecution.RestoreConfiguration || manifest == nil || RejectUnknown(manifest) != nil ||
-		!proto.Equal(manifest.Attempt, request.Assignment.Attempt) || manifest.StageId != input.Checkpoint.StageID ||
-		!proto.Equal(manifest.Configuration, request.Assignment.Configuration) || len(manifest.Files) > 512 ||
+	if input.Progress.Phase != removalexecution.RestoreConfiguration || manifest == nil ||
+		RejectUnknown(manifest) != nil ||
+		!proto.Equal(manifest.Attempt, request.Assignment.Attempt) ||
+		manifest.StageId != input.Checkpoint.StageID ||
+		!proto.Equal(manifest.Configuration, request.Assignment.Configuration) ||
+		len(manifest.Files) > 512 ||
 		manifest.Configuration == nil && len(manifest.Files) != 0 {
 		return nil, invalidRemovalHelper()
 	}
@@ -48,7 +54,9 @@ func RemovalConfigurationHeaders(request *agentpb.ServiceRemovalRecoveryHelperRe
 	return headers, nil
 }
 
-func RemovalConfigurationFileRoot(request *agentpb.ServiceRemovalRecoveryHelperRequest, manifest *agentpb.ServiceRemovalConfigurationManifest,
+func RemovalConfigurationFileRoot(
+	request *agentpb.ServiceRemovalRecoveryHelperRequest,
+	manifest *agentpb.ServiceRemovalConfigurationManifest,
 	header entrymaterialization.Header,
 ) (string, error) {
 	headers, err := RemovalConfigurationHeaders(request, manifest)

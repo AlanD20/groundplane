@@ -20,7 +20,9 @@ func (repository *InputRepository) PrepareDirectCompletionReceipt(ctx context.Co
 		attempt.FinishedAt != nil || attempt.StartedAt == nil || item.Input == nil ||
 		attempt.TaskID != view.Work.Task.Task.ID || attempt.WorkItemID != item.ID || attempt.Input != *item.Input ||
 		attempt.Executor.Executor != workexecution.Agent || attempt.Executor.HostID != item.Placement.HostID || result.Validate() != nil {
-		return workqueue.Change{}, checkpointConflict("Attach receipt requires its active completed provisioning attempt")
+		return workqueue.Change{}, checkpointConflict(
+			"Attach receipt requires its active completed provisioning attempt",
+		)
 	}
 	source, err := repository.LoadCaptured(ctx, view.Work)
 	if err != nil {
@@ -35,7 +37,10 @@ func (repository *InputRepository) PrepareDirectCompletionReceipt(ctx context.Co
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, source.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision},
+	)
 	return change, nil
 }
 
@@ -50,12 +55,22 @@ func (repository *InputRepository) prepareDirectReceipt(ctx context.Context, vie
 	receipt blueprintunits.AppliedRecord,
 ) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
-	if task.Action != workexecution.ActionAttach || task.TargetID != item.TargetID || item.Operation != workexecution.Attach ||
-		item.TaskID != task.ID || item.Input == nil || view.ReadRevision <= 0 || view.Task.Revision <= 0 || view.Item.Revision <= 0 ||
-		receipt.ParentTaskID != task.ID || receipt.EnvironmentID != task.Scope.EnvironmentID || receipt.Target.ID != task.TargetID {
+	if task.Action != workexecution.ActionAttach || task.TargetID != item.TargetID ||
+		item.Operation != workexecution.Attach ||
+		item.TaskID != task.ID ||
+		item.Input == nil ||
+		view.ReadRevision <= 0 ||
+		view.Task.Revision <= 0 ||
+		view.Item.Revision <= 0 ||
+		receipt.ParentTaskID != task.ID ||
+		receipt.EnvironmentID != task.Scope.EnvironmentID ||
+		receipt.Target.ID != task.TargetID {
 		return workqueue.Change{}, checkpointConflict("Attach applied receipt has no matching direct action")
 	}
-	keys := []string{blueprintunits.EpochKey(receipt.EnvironmentID), blueprintunits.AppliedKey(receipt.EnvironmentID, receipt.Target)}
+	keys := []string{
+		blueprintunits.EpochKey(receipt.EnvironmentID),
+		blueprintunits.AppliedKey(receipt.EnvironmentID, receipt.Target),
+	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: view.ReadRevision})
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
@@ -69,7 +84,8 @@ func (repository *InputRepository) prepareDirectReceipt(ctx context.Context, vie
 	guards := []keyvalue.Condition{{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
 		{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision}}
 	for index, value := range read.Values {
-		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > view.ReadRevision) {
+		if value != nil &&
+			(value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > view.ReadRevision) {
 			return workqueue.Change{}, checkpointConflict("Attach applied receipt has an invalid revision")
 		}
 		guards = append(guards, keyvalue.Condition{Key: keys[index], ModRevision: keyvalue.RevisionOf(value)})

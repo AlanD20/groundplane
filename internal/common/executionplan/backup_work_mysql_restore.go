@@ -12,7 +12,9 @@ func advanceMySQLRestore(state *agentpb.BackupRestoreResume, step *agentpb.Backu
 ) error {
 	progress, restore := state.DatabaseProgress, step.GetRestore()
 	invalid := func() error {
-		return invalidBackupCheckpoint("MySQL restore report conflicts with captured database or saved consumer progress")
+		return invalidBackupCheckpoint(
+			"MySQL restore report conflicts with captured database or saved consumer progress",
+		)
 	}
 	switch {
 	case report.GetMysqlContainerObserved() != nil:

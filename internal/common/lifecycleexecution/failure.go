@@ -43,7 +43,11 @@ func FailureID(attemptID string) (string, error) {
 	return ids.DeriveAt(ids.KindPlan, at, attemptID, "service-lifecycle/failure"), nil
 }
 
-func EncodeFailure(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, failure Failure) ([]byte, workexecution.Input, error) {
+func EncodeFailure(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	failure Failure,
+) ([]byte, workexecution.Input, error) {
 	stages, err := Stages(input)
 	if err != nil ||
 		input.CapturedSource == nil || input.CapturedSource.InputId != attempt.Input.ID ||
@@ -53,7 +57,11 @@ func EncodeFailure(attempt workexecution.Attempt, input *agentpb.ServiceLifecycl
 	return EncodeFailureStages(attempt, stages, failure)
 }
 
-func EncodeFailureStages(attempt workexecution.Attempt, stages []Stage, failure Failure) ([]byte, workexecution.Input, error) {
+func EncodeFailureStages(
+	attempt workexecution.Attempt,
+	stages []Stage,
+	failure Failure,
+) ([]byte, workexecution.Input, error) {
 	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward || validateStages(stages) != nil ||
 		failure.AttemptID != attempt.ID || failure.Input != attempt.Input || !failure.Reason.Valid() ||
 		failure.RecordedAt.IsZero() || failure.RecordedAt.Location() != time.UTC || failure.RecordedAt.Before(attempt.AssignedAt) ||
@@ -89,15 +97,26 @@ func EncodeFailureStages(attempt workexecution.Attempt, stages []Stage, failure 
 	return raw, workexecution.Input{ID: id, SHA256: hex.EncodeToString(digest[:])}, nil
 }
 
-func DecodeFailure(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, raw []byte, reference workexecution.Input) (Failure, error) {
+func DecodeFailure(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	raw []byte,
+	reference workexecution.Input,
+) (Failure, error) {
 	stages, err := Stages(input)
-	if err != nil || input.CapturedSource == nil || input.CapturedSource.InputId != attempt.Input.ID || hex.EncodeToString(input.CapturedSource.Sha256) != attempt.Input.SHA256 {
+	if err != nil || input.CapturedSource == nil || input.CapturedSource.InputId != attempt.Input.ID ||
+		hex.EncodeToString(input.CapturedSource.Sha256) != attempt.Input.SHA256 {
 		return Failure{}, invalid()
 	}
 	return DecodeFailureStages(attempt, stages, raw, reference)
 }
 
-func DecodeFailureStages(attempt workexecution.Attempt, stages []Stage, raw []byte, reference workexecution.Input) (Failure, error) {
+func DecodeFailureStages(
+	attempt workexecution.Attempt,
+	stages []Stage,
+	raw []byte,
+	reference workexecution.Input,
+) (Failure, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return Failure{}, invalid()
 	}

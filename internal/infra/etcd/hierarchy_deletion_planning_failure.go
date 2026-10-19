@@ -21,17 +21,28 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyPlanningRejection
 	if task.Task.Stop != nil {
 		outcome = task.Task.Stop.Outcome
 	}
-	if task.Revision <= 0 || revision < task.Revision || task.Task.PublicationComplete || task.Task.ExpectedItems != 0 ||
-		task.Task.Progress.Total() != 0 || task.Task.FinishedAt != nil || task.Task.FirstFailure != nil ||
-		!reason.Valid(task.Task, outcome, at) || at.Before(task.Task.UpdatedAt) {
-		return workqueue.Change{}, workexecution.Input{}, errs.New(errs.KindStateConflict, "removal planning has no matching rejection without published work")
+	if task.Revision <= 0 || revision < task.Revision || task.Task.PublicationComplete ||
+		task.Task.ExpectedItems != 0 ||
+		task.Task.Progress.Total() != 0 ||
+		task.Task.FinishedAt != nil ||
+		task.Task.FirstFailure != nil ||
+		!reason.Valid(task.Task, outcome, at) ||
+		at.Before(task.Task.UpdatedAt) {
+		return workqueue.Change{}, workexecution.Input{}, errs.New(
+			errs.KindStateConflict,
+			"removal planning has no matching rejection without published work",
+		)
 	}
 	op, err := repository.OperationByTaskAtRevision(ctx, task.Task.ID, revision)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
-	if op.Tombstone.Phase != hierarchydeletion.HierarchyDeletionPlanning || op.Tombstone.PlanCount != nil || op.Tombstone.PlanDigest != nil {
-		return workqueue.Change{}, workexecution.Input{}, errs.New(errs.KindStateConflict, "removal already has an executable plan")
+	if op.Tombstone.Phase != hierarchydeletion.HierarchyDeletionPlanning || op.Tombstone.PlanCount != nil ||
+		op.Tombstone.PlanDigest != nil {
+		return workqueue.Change{}, workexecution.Input{}, errs.New(
+			errs.KindStateConflict,
+			"removal already has an executable plan",
+		)
 	}
 	id, kind := op.Tombstone.TargetID, op.Tombstone.TargetKind
 	rootKey := hierarchyDeletionPrimaryKey(kind, id)
@@ -58,9 +69,17 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyPlanningRejection
 		}
 	}
 	var lock hierarchydeletion.HierarchyDeletionLock
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(read.Values[1].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &lock) != nil ||
-		lock.ParentOperationID != op.Tombstone.OperationID || lock.TargetID != id || lock.TargetKind != kind ||
-		lock.DeletionEpoch != op.Tombstone.DeletionEpoch || lock.TombstoneKey != tombstoneKey || lock.CleanupFenceKey != fenceKey {
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		read.Values[1].Value,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+		&lock,
+	) != nil ||
+		lock.ParentOperationID != op.Tombstone.OperationID ||
+		lock.TargetID != id ||
+		lock.TargetKind != kind ||
+		lock.DeletionEpoch != op.Tombstone.DeletionEpoch ||
+		lock.TombstoneKey != tombstoneKey ||
+		lock.CleanupFenceKey != fenceKey {
 		return workqueue.Change{}, workexecution.Input{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	root, err := releaseHierarchyPlanningRoot(kind, id, task.Task.ID, read.Values[0].Value)
@@ -69,7 +88,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyPlanningRejection
 	}
 	op.Fence.Dispatch = hierarchydeletion.HierarchyDeletionDispatchClosed
 	op.Fence.UpdatedAt, op.UpdatedAt = at, at
-	raw, err := hierarchydeletion.EncodePlanningRejection(hierarchydeletion.PlanningRejection{Operation: op, Reason: reason, Outcome: outcome, At: at}, task.Task)
+	raw, err := hierarchydeletion.EncodePlanningRejection(
+		hierarchydeletion.PlanningRejection{Operation: op, Reason: reason, Outcome: outcome, At: at},
+		task.Task,
+	)
 	if err != nil {
 		clear(root)
 		return workqueue.Change{}, workexecution.Input{}, err
@@ -89,7 +111,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyPlanningRejection
 		{Type: keyvalue.MutationDelete, Key: fenceKey},
 	}}
 	for _, value := range read.Values {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision},
+		)
 	}
 	return change, evidence, nil
 }

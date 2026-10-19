@@ -59,7 +59,9 @@ func (repository *InputRepository) PrepareCascadePublicationRejection(ctx contex
 		task.Outcome == "" || task.Outcome == workexecution.Succeeded || item.Operation != workexecution.Detach ||
 		item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Cleanup != workexecution.CleanupNone ||
 		item.Phase != workexecution.Ready || view.Task.Revision <= 0 || view.Item.Revision < 0 {
-		return workqueue.Change{}, checkpointConflict("consumer publication cleanup requires a rejected unexecuted graph")
+		return workqueue.Change{}, checkpointConflict(
+			"consumer publication cleanup requires a rejected unexecuted graph",
+		)
 	}
 	if view.Item.Revision > 0 {
 		return repository.PrepareDetachFailed(ctx, view)

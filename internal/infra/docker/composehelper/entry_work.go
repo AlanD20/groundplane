@@ -57,7 +57,15 @@ func ExecuteEntryConfigurationWork(ctx context.Context, taskRunner runner.Runner
 		}
 	}
 	if input.Recovery != nil {
-		return entryexecution.HelperRestoration(input, entryexecution.ConsumerRestoration{AttemptID: input.Attempt.ID, Input: input.Attempt.Input, Restored: ready, At: time.Now().UTC()})
+		return entryexecution.HelperRestoration(
+			input,
+			entryexecution.ConsumerRestoration{
+				AttemptID: input.Attempt.ID,
+				Input:     input.Attempt.Input,
+				Restored:  ready,
+				At:        time.Now().UTC(),
+			},
+		)
 	}
 	observed := entryexecution.Observation{EnvironmentID: input.Procedure.EnvironmentId, Input: input.Attempt.Input,
 		Stage: input.Progress.Stage, At: time.Now().UTC()}
@@ -97,7 +105,10 @@ func inspectEntryConsumers(ctx context.Context, taskRunner runner.Runner, artifa
 		}
 		if service.ExpectedReplicas == 0 || uint64(len(containers)) > uint64(service.ExpectedReplicas) ||
 			!restoring && uint64(len(containers)) != uint64(service.ExpectedReplicas) {
-			return false, errs.New(errs.KindStateConflict, "Entry consumers no longer match the captured running replicas; no workloads were started")
+			return false, errs.New(
+				errs.KindStateConflict,
+				"Entry consumers no longer match the captured running replicas; no workloads were started",
+			)
 		}
 		if uint64(len(containers)) != uint64(service.ExpectedReplicas) {
 			ready = false
@@ -109,7 +120,10 @@ func inspectEntryConsumers(ctx context.Context, taskRunner runner.Runner, artifa
 		fields := strings.Fields(string(result.Stdout))
 		clear(result.Stdout)
 		if len(fields) != 2 || fields[0] != service.ComposeName || len(fields[1]) != 64 {
-			return false, errs.New(errs.KindStateConflict, "Compose did not return the selected Entry consumer configuration hash")
+			return false, errs.New(
+				errs.KindStateConflict,
+				"Compose did not return the selected Entry consumer configuration hash",
+			)
 		}
 		if _, err := hex.DecodeString(fields[1]); err != nil {
 			return false, errs.New(errs.KindStateConflict, "Compose returned an invalid consumer configuration hash")
@@ -125,10 +139,16 @@ func inspectEntryConsumers(ctx context.Context, taskRunner runner.Runner, artifa
 			state := strings.Fields(string(actual.Stdout))
 			clear(actual.Stdout)
 			if len(state) != 2 || state[0] != "true" && state[0] != "false" {
-				return false, errs.New(errs.KindStateConflict, "Entry consumer inspection returned invalid runtime state")
+				return false, errs.New(
+					errs.KindStateConflict,
+					"Entry consumer inspection returned invalid runtime state",
+				)
 			}
 			if state[0] != "true" && !restoring {
-				return false, errs.New(errs.KindStateConflict, "Entry consumer is no longer running; Deploy it explicitly instead of starting it through an Entry edit")
+				return false, errs.New(
+					errs.KindStateConflict,
+					"Entry consumer is no longer running; Deploy it explicitly instead of starting it through an Entry edit",
+				)
 			}
 			ready = ready && state[0] == "true" && state[1] == fields[1]
 		}
@@ -136,7 +156,12 @@ func inspectEntryConsumers(ctx context.Context, taskRunner runner.Runner, artifa
 	return ready, nil
 }
 
-func runEntryCompose(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact, args ...string) (runner.Result, error) {
+func runEntryCompose(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	artifact *agentpb.ComposeArtifact,
+	args ...string,
+) (runner.Result, error) {
 	input, err := composeCLIInput(artifact.CanonicalYaml)
 	if err != nil {
 		return runner.Result{}, err
@@ -152,12 +177,16 @@ func runEntryCommand(ctx context.Context, taskRunner runner.Runner, command runn
 	command.CaptureLimitBytes = 32 * 1024
 	result, err := taskRunner.Run(ctx, command)
 	clear(result.Stderr)
-	if ctx.Err() != nil || err != nil || result.ExitCode != 0 || int64(len(result.Stdout)) >= command.CaptureLimitBytes {
+	if ctx.Err() != nil || err != nil || result.ExitCode != 0 ||
+		int64(len(result.Stdout)) >= command.CaptureLimitBytes {
 		clear(result.Stdout)
 		if ctx.Err() != nil {
 			return runner.Result{}, ctx.Err()
 		}
-		return runner.Result{}, errs.New(errs.KindRequestFailed, "Docker could not inspect or reconcile the captured Entry consumers")
+		return runner.Result{}, errs.New(
+			errs.KindRequestFailed,
+			"Docker could not inspect or reconcile the captured Entry consumers",
+		)
 	}
 	return result, nil
 }

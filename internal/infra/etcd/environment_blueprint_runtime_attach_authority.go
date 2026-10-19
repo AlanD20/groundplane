@@ -51,7 +51,8 @@ func (repository *EnvironmentBlueprintRepository) blueprintRuntimeAttachConditio
 	if err != nil || digest != receipt.ControllerAttachBindingSHA256 {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint runtime Attach differs from its acknowledged binding")
 	}
-	if len(receipt.ControllerAttachReferences) == 0 || receipt.ControllerAttachReferences[0].AttachID != attach.Record.CredentialAttachID {
+	if len(receipt.ControllerAttachReferences) == 0 ||
+		receipt.ControllerAttachReferences[0].AttachID != attach.Record.CredentialAttachID {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint runtime Attach has no captured credential reference")
 	}
 	for _, expected := range receipt.ControllerAttachReferences {

@@ -25,12 +25,20 @@ func EqualProgress(left, right Progress) bool {
 	}
 	if left.Observation != nil {
 		a, b := *left.Observation, *right.Observation
-		return a.NetworkID == b.NetworkID && a.Input == b.Input && a.Ready == b.Ready && a.Present == b.Present && a.Absent == b.Absent && a.At.Equal(b.At)
+		return a.NetworkID == b.NetworkID && a.Input == b.Input && a.Ready == b.Ready && a.Present == b.Present &&
+			a.Absent == b.Absent &&
+			a.At.Equal(b.At)
 	}
 	return true
 }
 
-func ValidateTransition(attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string, previous *Progress, next Progress) error {
+func ValidateTransition(
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	previous *Progress,
+	next Progress,
+) error {
 	if next.Validate(attempt, action, networkID) != nil {
 		return invalidProgress()
 	}
@@ -63,7 +71,11 @@ func ValidateTransition(attempt workexecution.Attempt, action agentpb.NetworkWor
 	return nil
 }
 
-func (progress Progress) Checkpoint(attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string) (workexecution.Checkpoint, error) {
+func (progress Progress) Checkpoint(
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+) (workexecution.Checkpoint, error) {
 	if progress.Validate(attempt, action, networkID) != nil || progress.Sequence == 0 {
 		return workexecution.Checkpoint{}, invalidProgress()
 	}
@@ -92,7 +104,12 @@ func (progress Progress) Checkpoint(attempt workexecution.Attempt, action agentp
 		RecordedAt: progress.UpdatedAt, Evidence: workexecution.Input{ID: attempt.Input.ID, SHA256: hex.EncodeToString(digest[:])}}, nil
 }
 
-func EncodeProgress(attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string, progress Progress) ([]byte, error) {
+func EncodeProgress(
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	progress Progress,
+) ([]byte, error) {
 	if _, err := progress.Checkpoint(attempt, action, networkID); err != nil {
 		return nil, err
 	}
@@ -103,7 +120,12 @@ func EncodeProgress(attempt workexecution.Attempt, action agentpb.NetworkWorkAct
 	return jcs.Canonicalize(raw)
 }
 
-func DecodeProgress(attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string, raw []byte) (Progress, error) {
+func DecodeProgress(
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	raw []byte,
+) (Progress, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return Progress{}, invalidProgress()
 	}

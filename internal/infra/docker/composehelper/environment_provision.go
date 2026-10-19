@@ -25,7 +25,10 @@ func MarshalEnvironmentProvisionRequest(request *agentpb.EnvironmentProvisionHel
 	return frame(raw)
 }
 
-func ReadEnvironmentProvisionRequest(ctx context.Context, input io.Reader) (*agentpb.EnvironmentProvisionHelperRequest, error) {
+func ReadEnvironmentProvisionRequest(
+	ctx context.Context,
+	input io.Reader,
+) (*agentpb.EnvironmentProvisionHelperRequest, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
@@ -44,7 +47,11 @@ func ReadEnvironmentProvisionRequest(ctx context.Context, input io.Reader) (*age
 	return request, nil
 }
 
-func ExecuteEnvironmentProvision(ctx context.Context, volumeRoot string, request *agentpb.EnvironmentProvisionHelperRequest) (*agentpb.EnvironmentProvisionHelperResponse, error) {
+func ExecuteEnvironmentProvision(
+	ctx context.Context,
+	volumeRoot string,
+	request *agentpb.EnvironmentProvisionHelperRequest,
+) (*agentpb.EnvironmentProvisionHelperResponse, error) {
 	if ctx == nil {
 		return nil, errs.New(errs.KindInternal, "environment provisioning helper context is required")
 	}
@@ -78,15 +85,24 @@ func ExecuteEnvironmentProvision(ctx context.Context, volumeRoot string, request
 	if err != nil {
 		return nil, err
 	}
-	response := &agentpb.EnvironmentProvisionHelperResponse{EnvironmentId: input.Creation.EnvironmentId, Input: reference,
-		DirectoryReady: !absent, Inspection: request.InspectOnly, ObservedAt: timestamppb.New(time.Now().UTC())}
+	response := &agentpb.EnvironmentProvisionHelperResponse{
+		EnvironmentId:  input.Creation.EnvironmentId,
+		Input:          reference,
+		DirectoryReady: !absent,
+		Inspection:     request.InspectOnly,
+		ObservedAt:     timestamppb.New(time.Now().UTC()),
+	}
 	if err := environmentexecution.ValidateHelperResponse(input, request.InspectOnly, response); err != nil {
 		return nil, err
 	}
 	return response, nil
 }
 
-func WriteEnvironmentProvisionResponse(ctx context.Context, output io.Writer, response *agentpb.EnvironmentProvisionHelperResponse) error {
+func WriteEnvironmentProvisionResponse(
+	ctx context.Context,
+	output io.Writer,
+	response *agentpb.EnvironmentProvisionHelperResponse,
+) error {
 	if response == nil || executionplan.RejectUnknown(response) != nil {
 		return errs.New(errs.KindValidationFailed, "environment provisioning helper response is invalid")
 	}
@@ -114,7 +130,10 @@ func WriteEnvironmentProvisionResponse(ctx context.Context, output io.Writer, re
 	return nil
 }
 
-func ReadEnvironmentProvisionResponse(ctx context.Context, input io.Reader) (*agentpb.EnvironmentProvisionHelperResponse, error) {
+func ReadEnvironmentProvisionResponse(
+	ctx context.Context,
+	input io.Reader,
+) (*agentpb.EnvironmentProvisionHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err

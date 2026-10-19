@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (repository *InputRepository) CaptureControllerReferences(ctx context.Context, work workqueue.View) ([]attachments.BindingReference, []keyvalue.Condition, error) {
+func (repository *InputRepository) CaptureControllerReferences(
+	ctx context.Context,
+	work workqueue.View,
+) ([]attachments.BindingReference, []keyvalue.Condition, error) {
 	source, err := repository.LoadCaptured(ctx, work)
 	if err != nil {
 		return nil, nil, err
@@ -37,7 +40,14 @@ func (repository *InputRepository) CaptureControllerReferences(ctx context.Conte
 			if err != nil {
 				return nil, nil, err
 			}
-			references = append(references, attachments.BindingReference{AttachID: id, BindingSHA256: digest, FactsSHA256: generation.GeneratedInputs.CiphertextSHA256})
+			references = append(
+				references,
+				attachments.BindingReference{
+					AttachID:      id,
+					BindingSHA256: digest,
+					FactsSHA256:   generation.GeneratedInputs.CiphertextSHA256,
+				},
+			)
 			continue
 		}
 		reference, conditions, err := attachments.ReadBindingReference(ctx, repository.store, id, work.ReadRevision)

@@ -12,16 +12,23 @@ import (
 // successful helper command or an earlier proxy configuration.
 func ValidateHelperResult(input Input, progress Progress, response *agentpb.ReleaseHelperResponse) error {
 	if progress.Validate(input) != nil || !progress.InFlight || progress.Phase != Rollout || response == nil ||
-		executionplan.RejectUnknown(response) != nil || !response.Succeeded || response.ExitCode != 0 || response.Inspection && response.MutationAttempted {
+		executionplan.RejectUnknown(
+			response,
+		) != nil || !response.Succeeded || response.ExitCode != 0 || response.Inspection && response.MutationAttempted {
 		return errs.New(errs.KindStateConflict, "Release helper result is not a successful active action")
 	}
-	startup := progress.Action == StartCandidate || progress.Rolling != nil && progress.Rolling.Phase == rollingrelease.StartCandidate
-	removal := progress.Action == RemovePrevious || progress.Action == RetireSwitchedPrevious || progress.Rolling != nil &&
-		(progress.Rolling.Phase == rollingrelease.RemovePredecessor || progress.Rolling.Phase == rollingrelease.RemoveRetained)
-	switching := progress.Action == SwitchTraffic || progress.Rolling != nil && progress.Rolling.Phase == rollingrelease.SwitchTraffic
+	startup := progress.Action == StartCandidate ||
+		progress.Rolling != nil && progress.Rolling.Phase == rollingrelease.StartCandidate
+	removal := progress.Action == RemovePrevious || progress.Action == RetireSwitchedPrevious ||
+		progress.Rolling != nil &&
+			(progress.Rolling.Phase == rollingrelease.RemovePredecessor || progress.Rolling.Phase == rollingrelease.RemoveRetained)
+	switching := progress.Action == SwitchTraffic ||
+		progress.Rolling != nil && progress.Rolling.Phase == rollingrelease.SwitchTraffic
 	verifying := progress.Action == VerifyServing
-	if !startup && !removal && !switching && !verifying || startup && (!response.MutationAttempted && !response.Inspection || response.AbsenceObserved) ||
-		removal && !response.AbsenceObserved || verifying && (response.MutationAttempted || response.AbsenceObserved) ||
+	if !startup && !removal && !switching && !verifying ||
+		startup && (!response.MutationAttempted && !response.Inspection || response.AbsenceObserved) ||
+		removal && !response.AbsenceObserved ||
+		verifying && (response.MutationAttempted || response.AbsenceObserved) ||
 		switching && (response.AbsenceObserved || input.Artifacts.Proxy == nil && response.MutationAttempted) {
 		return errs.New(errs.KindStateConflict, "Release helper result does not prove the selected action")
 	}

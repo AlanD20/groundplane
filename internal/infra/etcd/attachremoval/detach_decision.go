@@ -35,9 +35,15 @@ func (repository *InputRepository) PrepareDetachDecision(ctx context.Context, vi
 	at time.Time,
 ) (workqueue.Change, error) {
 	item, task := view.Item.Item, view.Task.Task
-	if item.Operation != workexecution.Detach || item.Input == nil || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
-		item.Cleanup != workexecution.CleanupNone || !task.PublicationComplete || task.FinishedAt != nil ||
-		task.CollectionStartedAt != nil || at.IsZero() || at.Location() != time.UTC || at.Before(item.UpdatedAt) {
+	if item.Operation != workexecution.Detach || item.Input == nil || item.AttemptNumber != 0 ||
+		item.ActiveAttemptID != "" ||
+		item.Cleanup != workexecution.CleanupNone ||
+		!task.PublicationComplete ||
+		task.FinishedAt != nil ||
+		task.CollectionStartedAt != nil ||
+		at.IsZero() ||
+		at.Location() != time.UTC ||
+		at.Before(item.UpdatedAt) {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach cannot settle as an unassigned decision")
 	}
 	input, guards, err := repository.LoadDetach(ctx, view)
@@ -66,8 +72,11 @@ func (repository *InputRepository) PrepareDetachDecision(ctx context.Context, vi
 		return workqueue.Change{}, err
 	}
 	evidenceID := ids.New(ids.KindPlan)
-	raw, err := recordcodec.Encode("detach-decision", detachDecision{ID: evidenceID, TaskID: task.ID, WorkItemID: item.ID,
-		AttachID: input.Snapshot.Source.Attach.ID, Input: *item.Input, Outcome: outcome, At: at})
+	raw, err := recordcodec.Encode(
+		"detach-decision",
+		detachDecision{ID: evidenceID, TaskID: task.ID, WorkItemID: item.ID,
+			AttachID: input.Snapshot.Source.Attach.ID, Input: *item.Input, Outcome: outcome, At: at},
+	)
 	if err != nil {
 		keyvalue.ClearMutationValues(resource.Mutations)
 		return workqueue.Change{}, err
@@ -85,6 +94,9 @@ func (repository *InputRepository) PrepareDetachDecision(ctx context.Context, vi
 	change.Conditions = append(change.Conditions, resource.Conditions...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: DetachDecisionKey(item.ID, evidenceID)})
 	change.Mutations = append(change.Mutations, resource.Mutations...)
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DetachDecisionKey(item.ID, evidenceID), Value: raw})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DetachDecisionKey(item.ID, evidenceID), Value: raw},
+	)
 	return change, nil
 }

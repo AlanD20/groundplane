@@ -13,7 +13,10 @@ import (
 // PrepareCascadeFinish checks captured graph membership independently of queue
 // ordering: the first listed item need not be the bridge. Resource settlement
 // already belongs to each typed work owner and is not repeated here.
-func (repository *InputRepository) PrepareCascadeFinish(ctx context.Context, finished workqueue.FinishedWork) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareCascadeFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+) (workqueue.Change, error) {
 	task := finished.Task.Task
 	if task.Action != workexecution.ActionRemove || task.Scope.TenantID != "" || !task.PublicationComplete ||
 		task.ExpectedItems == 0 || len(finished.Items) != int(task.ExpectedItems) {
@@ -23,7 +26,11 @@ func (repository *InputRepository) PrepareCascadeFinish(ctx context.Context, fin
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	rejection, evidence, proof, rejected, err := repository.LoadCascadeRejection(ctx, finished.Task, finished.ReadRevision)
+	rejection, evidence, proof, rejected, err := repository.LoadCascadeRejection(
+		ctx,
+		finished.Task,
+		finished.ReadRevision,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -47,7 +54,9 @@ func (repository *InputRepository) PrepareCascadeFinish(ctx context.Context, fin
 		delete(expected, item.ID)
 		if rejected && (item.AttemptNumber != 0 || *item.Result != evidence || item.Outcome != rejection.Outcome ||
 			item.Cleanup != workexecution.CleanupNone || item.CleanupResult != nil) {
-			return workqueue.Change{}, conflict("rejected Backing Zone publication differs from its saved no-execution result")
+			return workqueue.Change{}, conflict(
+				"rejected Backing Zone publication differs from its saved no-execution result",
+			)
 		}
 		if item.Operation == workexecution.Network {
 			bridge = snapshot
@@ -56,7 +65,10 @@ func (repository *InputRepository) PrepareCascadeFinish(ctx context.Context, fin
 	if len(expected) != 0 || bridge.Item.ID == "" {
 		return workqueue.Change{}, conflict("Backing Zone completion is missing captured work")
 	}
-	input, conditions, err := repository.Load(ctx, workqueue.View{Task: finished.Task, Item: bridge, ReadRevision: finished.ReadRevision})
+	input, conditions, err := repository.Load(
+		ctx,
+		workqueue.View{Task: finished.Task, Item: bridge, ReadRevision: finished.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

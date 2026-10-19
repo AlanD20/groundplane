@@ -20,13 +20,15 @@ func (result ExecutionResult) Validate(expected Journal) error {
 	if err := expected.Validate(); err != nil {
 		return err
 	}
-	if result.Failure == nil && result.Outcome != workexecution.Succeeded || result.Failure != nil && result.Outcome == workexecution.Succeeded {
+	if result.Failure == nil && result.Outcome != workexecution.Succeeded ||
+		result.Failure != nil && result.Outcome == workexecution.Succeeded {
 		return errs.New(errs.KindValidationFailed, "controller activation failure evidence is missing or contradictory")
 	}
 	if err := result.Failure.Validate(); err != nil {
 		return err
 	}
-	if result.Outcome != workexecution.Succeeded && result.Outcome != workexecution.Failed && result.Outcome != workexecution.Cancelled {
+	if result.Outcome != workexecution.Succeeded && result.Outcome != workexecution.Failed &&
+		result.Outcome != workexecution.Cancelled {
 		return errs.New(errs.KindValidationFailed, "controller activation result outcome is invalid")
 	}
 	if result.Journal == nil {
@@ -39,7 +41,8 @@ func (result ExecutionResult) Validate(expected Journal) error {
 	if err := journal.Validate(); err != nil {
 		return err
 	}
-	if !journal.SameOperation(expected) || result.Settled && !journal.Phase.Settled() || !result.Settled && result.Outcome == workexecution.Succeeded {
+	if !journal.SameOperation(expected) || result.Settled && !journal.Phase.Settled() ||
+		!result.Settled && result.Outcome == workexecution.Succeeded {
 		return errs.New(errs.KindValidationFailed, "controller activation result differs from its captured handoff")
 	}
 	if result.Outcome == workexecution.Succeeded && journal.Phase != PhaseHealthy {

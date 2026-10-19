@@ -26,8 +26,16 @@ func (service *WorkReports) reportProgress(ctx context.Context, view workqueue.R
 			stage, stageErr := componentexecution.DiagnosticStage(attempt, input, begin, begin)
 			err = stageErr
 			if err == nil {
-				err = service.diagnostics.Report(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor,
-					begin.Sequence, stage, begin.UpdatedAt)
+				err = service.diagnostics.Report(
+					bounded,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+					begin.Sequence,
+					stage,
+					begin.UpdatedAt,
+				)
 			}
 		}
 	}
@@ -42,7 +50,14 @@ func (service *WorkReports) reportProgress(ctx context.Context, view workqueue.R
 	if err != nil {
 		slog.WarnContext(ctx, "Component execution diagnostics incomplete", "attempt_id", attempt.ID, "error", err)
 		if lossErr := service.diagnostics.MarkIncomplete(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor); lossErr != nil {
-			slog.WarnContext(ctx, "could not record Component diagnostic loss", "attempt_id", attempt.ID, "error", lossErr)
+			slog.WarnContext(
+				ctx,
+				"could not record Component diagnostic loss",
+				"attempt_id",
+				attempt.ID,
+				"error",
+				lossErr,
+			)
 		}
 	}
 }

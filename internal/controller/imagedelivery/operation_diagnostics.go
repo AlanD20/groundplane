@@ -38,22 +38,49 @@ func (reporter *imageReporter) incomplete(ctx context.Context, cause error) {
 		return
 	}
 	reporter.lost = true
-	slog.WarnContext(ctx, "image execution diagnostics incomplete", "task_id", reporter.attempt.TaskID, "attempt_id", reporter.attempt.ID, "error", cause)
+	slog.WarnContext(
+		ctx,
+		"image execution diagnostics incomplete",
+		"task_id",
+		reporter.attempt.TaskID,
+		"attempt_id",
+		reporter.attempt.ID,
+		"error",
+		cause,
+	)
 	loss, finish := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer finish()
 	if err := reporter.repository.MarkIncomplete(loss, reporter.attempt.TaskID, reporter.attempt.WorkItemID, reporter.attempt.ID, reporter.attempt.Executor); err != nil {
-		slog.WarnContext(ctx, "unable to persist image diagnostic loss", "attempt_id", reporter.attempt.ID, "error", err)
+		slog.WarnContext(
+			ctx,
+			"unable to persist image diagnostic loss",
+			"attempt_id",
+			reporter.attempt.ID,
+			"error",
+			err,
+		)
 	}
 }
 
 func (reporter *imageReporter) start(ctx context.Context, key, name, expected string) workexecution.Stage {
 	at := time.Now().UTC()
-	stage := workexecution.Stage{Key: key, Name: name, Expected: expected, State: workexecution.StageRunning, StartedAt: &at}
+	stage := workexecution.Stage{
+		Key:       key,
+		Name:      name,
+		Expected:  expected,
+		State:     workexecution.StageRunning,
+		StartedAt: &at,
+	}
 	reporter.record(ctx, stage)
 	return stage
 }
 
-func (reporter *imageReporter) finish(ctx context.Context, stage workexecution.Stage, state workexecution.StageState, observed string) {
+func (reporter *imageReporter) finish(
+	ctx context.Context,
+	stage workexecution.Stage,
+	state workexecution.StageState,
+	observed string,
+) {
 	stage.State, stage.Observed = state, observed
 	if state != workexecution.StageUnknown {
 		at := time.Now().UTC()

@@ -10,7 +10,10 @@ import (
 )
 
 // Hierarchy removal may still consume captured authority after execution ends.
-func (repository *InputRepository) retentionHierarchyGuards(ctx context.Context, view workqueue.View) (bool, []keyvalue.Condition, error) {
+func (repository *InputRepository) retentionHierarchyGuards(
+	ctx context.Context,
+	view workqueue.View,
+) (bool, []keyvalue.Condition, error) {
 	var conditions []keyvalue.Condition
 	keys := []string{hierarchydeletion.HierarchyDeletionTombstoneKey("environment", view.Task.Task.Scope.EnvironmentID)}
 	if view.Task.Task.Scope.ProjectID != "" {
@@ -36,7 +39,11 @@ func (repository *InputRepository) retentionHierarchyGuards(ctx context.Context,
 }
 
 // Delete only immutable indexes that still identify this exact captured input.
-func (repository *InputRepository) prepareStagingIndexRetirement(ctx context.Context, view workqueue.View, input *agentpb.BackupWorkInput) (workqueue.Change, error) {
+func (repository *InputRepository) prepareStagingIndexRetirement(
+	ctx context.Context,
+	view workqueue.View,
+	input *agentpb.BackupWorkInput,
+) (workqueue.Change, error) {
 	var change workqueue.Change
 	indexes, err := prepareSourceStagingIndexes(view.Item.Item, input)
 	if err != nil {
@@ -51,7 +58,10 @@ func (repository *InputRepository) prepareStagingIndexRetirement(ctx context.Con
 		value := stored.Values[0]
 		valid := value != nil && value.Version == 1 && bytes.Equal(value.Value, expected.Value)
 		if valid {
-			change.Conditions = append(change.Conditions, keyvalue.Condition{Key: expected.Key, ModRevision: value.ModRevision})
+			change.Conditions = append(
+				change.Conditions,
+				keyvalue.Condition{Key: expected.Key, ModRevision: value.ModRevision},
+			)
 		}
 		keyvalue.ClearValues(stored.Values)
 		if !valid {

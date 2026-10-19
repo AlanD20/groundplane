@@ -15,8 +15,20 @@ import (
 )
 
 type DefinitionPreparer interface {
-	PrepareDefinitionSettlement(context.Context, workqueue.View, blueprintunits.Unit, blueprintunits.Snapshot, time.Time) (workqueue.Change, error)
-	PrepareDNSSettlement(context.Context, workqueue.View, blueprintunits.Unit, blueprintunits.Snapshot, time.Time) (etcd.BlueprintDNSPreparation, error)
+	PrepareDefinitionSettlement(
+		context.Context,
+		workqueue.View,
+		blueprintunits.Unit,
+		blueprintunits.Snapshot,
+		time.Time,
+	) (workqueue.Change, error)
+	PrepareDNSSettlement(
+		context.Context,
+		workqueue.View,
+		blueprintunits.Unit,
+		blueprintunits.Snapshot,
+		time.Time,
+	) (etcd.BlueprintDNSPreparation, error)
 }
 
 type DefinitionWork struct {
@@ -31,10 +43,18 @@ func NewDefinitionWork(service DefinitionPreparer, ledger *blueprintunits.Reposi
 	return &DefinitionWork{service: service, ledger: ledger}, nil
 }
 
-func (owner *DefinitionWork) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *DefinitionWork) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
-	if item.Operation != workexecution.ResourceDefinition || item.Placement.Executor != workexecution.Controller || item.AttemptNumber != 0 {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Definition work is not an unstarted Controller decision")
+	if item.Operation != workexecution.ResourceDefinition || item.Placement.Executor != workexecution.Controller ||
+		item.AttemptNumber != 0 {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Definition work is not an unstarted Controller decision",
+		)
 	}
 	if !at.Before(item.Deadline) {
 		change, err := blueprintunits.PrepareDefinitionWorkStop(request.Task, request.Item, workexecution.Failed, at)
@@ -47,8 +67,12 @@ func (owner *DefinitionWork) Admit(ctx context.Context, request workqueue.Assign
 	if err != nil {
 		return workdispatch.Decision{}, err
 	}
-	if snapshot.Desired == nil || snapshot.HeadTaskID != item.TaskID || snapshot.Desired.Record.ParentTaskID != item.TaskID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Definition work no longer owns the captured Apply")
+	if snapshot.Desired == nil || snapshot.HeadTaskID != item.TaskID ||
+		snapshot.Desired.Record.ParentTaskID != item.TaskID {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Definition work no longer owns the captured Apply",
+		)
 	}
 	graph, err := owner.ledger.LoadCapturedGraph(ctx, request.Task.Task, request.ReadRevision)
 	if err != nil {
@@ -59,15 +83,22 @@ func (owner *DefinitionWork) Admit(ctx context.Context, request workqueue.Assign
 			continue
 		}
 		unit := graph.Record.Units[index]
-		if captured.Operation != item.Operation || captured.TargetID != item.TargetID || captured.Placement != item.Placement {
-			return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Definition work differs from its captured graph")
+		if captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
+			captured.Placement != item.Placement {
+			return workdispatch.Decision{}, errs.New(
+				errs.KindStateConflict,
+				"Definition work differs from its captured graph",
+			)
 		}
 		expected, err := blueprintunits.DefinitionWorkInput(request.Task.Task, unit)
 		if err != nil {
 			return workdispatch.Decision{}, err
 		}
 		if item.Input == nil || *item.Input != expected || captured.Input == nil || *captured.Input != expected {
-			return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Definition work differs from captured input")
+			return workdispatch.Decision{}, errs.New(
+				errs.KindStateConflict,
+				"Definition work differs from captured input",
+			)
 		}
 		view := workqueue.View{
 			Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision,
@@ -82,7 +113,10 @@ func (owner *DefinitionWork) Admit(ctx context.Context, request workqueue.Assign
 			change = prepared.Change
 			if !prepared.Complete {
 				if len(change.Mutations) == 0 {
-					return workdispatch.Decision{Disposition: workdispatch.Wait, Wait: &workexecution.Wait{Reason: workexecution.WaitInput}}, nil
+					return workdispatch.Decision{
+						Disposition: workdispatch.Wait,
+						Wait:        &workexecution.Wait{Reason: workexecution.WaitInput},
+					}, nil
 				}
 				fence, fenceErr := workqueue.PrepareDecisionFence(request)
 				if fenceErr != nil {
@@ -106,7 +140,12 @@ func (owner *DefinitionWork) Admit(ctx context.Context, request workqueue.Assign
 	return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Definition is absent from the captured Apply")
 }
 
-func (owner *DefinitionWork) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *DefinitionWork) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if err := ctx.Err(); err != nil {
 		return workqueue.Change{}, err
 	}
@@ -116,7 +155,12 @@ func (owner *DefinitionWork) Stop(ctx context.Context, task workqueue.TaskSnapsh
 	return blueprintunits.PrepareDefinitionWorkStop(task, item, task.Task.Stop.Outcome, at)
 }
 
-func (owner *DefinitionWork) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (owner *DefinitionWork) RetireWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	if !final {
 		return false, workqueue.Change{}, errs.New(errs.KindInternal, "Definition decision unexpectedly has attempts")
 	}
@@ -124,6 +168,12 @@ func (owner *DefinitionWork) RetireWork(ctx context.Context, view workqueue.View
 	return err == nil, change, err
 }
 
-func (owner *DefinitionWork) PrepareAttemptRetirement(view workqueue.View, attempt workqueue.AttemptSnapshot) (workqueue.Change, error) {
-	return workqueue.Change{}, errs.New(errs.KindInternal, "Controller Definition decision cannot have execution attempts")
+func (owner *DefinitionWork) PrepareAttemptRetirement(
+	view workqueue.View,
+	attempt workqueue.AttemptSnapshot,
+) (workqueue.Change, error) {
+	return workqueue.Change{}, errs.New(
+		errs.KindInternal,
+		"Controller Definition decision cannot have execution attempts",
+	)
 }

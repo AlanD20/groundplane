@@ -10,9 +10,20 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (service *Service) observe(ctx context.Context, delivery workqueue.Delivery, key, name, expected string, action func(context.Context) error) error {
+func (service *Service) observe(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+	key, name, expected string,
+	action func(context.Context) error,
+) error {
 	started := time.Now().UTC()
-	stage := workexecution.Stage{Key: key, Name: name, Expected: expected, State: workexecution.StageRunning, StartedAt: &started}
+	stage := workexecution.Stage{
+		Key:       key,
+		Name:      name,
+		Expected:  expected,
+		State:     workexecution.StageRunning,
+		StartedAt: &started,
+	}
 	service.reportStage(ctx, delivery.Attempt.Attempt, stage)
 	err := action(ctx)
 	finished := time.Now().UTC()
@@ -32,7 +43,13 @@ func (service *Service) reportStage(ctx context.Context, attempt workexecution.A
 	if err != nil || !view.CurrentExecutor {
 		return
 	}
-	snapshot, err := service.diagnostics.Read(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, view.Work.ReadRevision)
+	snapshot, err := service.diagnostics.Read(
+		bounded,
+		attempt.TaskID,
+		attempt.WorkItemID,
+		attempt.ID,
+		view.Work.ReadRevision,
+	)
 	if err != nil {
 		slog.WarnContext(ctx, "software staging diagnostics unavailable", "attempt_id", attempt.ID, "error", err)
 		return

@@ -14,7 +14,10 @@ type BackupCompletionExchange func(context.Context, *agentpb.BackupWorkCompletio
 
 // Complete requires all local reports acknowledged. The Controller separately
 // proves all captured sources settled; only its saved receipt retires evidence.
-func (delivery *Backup) Complete(ctx context.Context, exchange BackupCompletionExchange) (workexecution.Attempt, error) {
+func (delivery *Backup) Complete(
+	ctx context.Context,
+	exchange BackupCompletionExchange,
+) (workexecution.Attempt, error) {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
 	if exchange == nil {
@@ -25,7 +28,10 @@ func (delivery *Backup) Complete(ctx context.Context, exchange BackupCompletionE
 		return workexecution.Attempt{}, err
 	}
 	if record == nil || attempt.StartedAt == nil || !attempt.StartedAt.Equal(*delivery.attempt.StartedAt) {
-		return workexecution.Attempt{}, errs.New(errs.KindStateConflict, "Backup has no matching durable execution to complete")
+		return workexecution.Attempt{}, errs.New(
+			errs.KindStateConflict,
+			"Backup has no matching durable execution to complete",
+		)
 	}
 	if record.Completion != nil {
 		return *record.Completion, nil

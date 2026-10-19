@@ -16,10 +16,19 @@ import (
 type Exchange interface {
 	ConfigurationExchange
 	StartAttempt(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
-	ComponentCheckpoint(context.Context, *agentpb.ComponentWorkCheckpointRequest) (*agentpb.ComponentWorkCheckpointAck, error)
-	CompleteComponent(context.Context, *agentpb.ComponentWorkCompletionRequest) (*agentpb.ComponentWorkCompletionAck, error)
+	ComponentCheckpoint(
+		context.Context,
+		*agentpb.ComponentWorkCheckpointRequest,
+	) (*agentpb.ComponentWorkCheckpointAck, error)
+	CompleteComponent(
+		context.Context,
+		*agentpb.ComponentWorkCompletionRequest,
+	) (*agentpb.ComponentWorkCompletionAck, error)
 	FailComponent(context.Context, *agentpb.ComponentWorkFailureRequest) (*agentpb.ComponentWorkFailureAck, error)
-	RecoverComponent(context.Context, *agentpb.ComponentWorkRecoveryReportRequest) (*agentpb.ComponentWorkRecoveryReportAck, error)
+	RecoverComponent(
+		context.Context,
+		*agentpb.ComponentWorkRecoveryReportRequest,
+	) (*agentpb.ComponentWorkRecoveryReportAck, error)
 }
 
 // Host owns exact Component runtime and configuration authority and joins any helper before
@@ -39,7 +48,12 @@ type Executor struct {
 	ownership    *agentownership.Lease
 }
 
-func NewExecutor(journal *agentworkjournal.Journal, materializer *materialization.Runtime, helper Helper, ownership *agentownership.Lease) (*Executor, error) {
+func NewExecutor(
+	journal *agentworkjournal.Journal,
+	materializer *materialization.Runtime,
+	helper Helper,
+	ownership *agentownership.Lease,
+) (*Executor, error) {
 	if journal == nil || materializer == nil || helper == nil {
 		return nil, errs.New(errs.KindInternal, "Component execution requires its durable journal and runtime")
 	}
@@ -93,7 +107,15 @@ func (executor *Executor) run(ctx context.Context, input Input, exchange Exchang
 		return executor.deliverFailure(ctx, input, exchange, saved.Failure)
 	}
 	if saved == nil && reconcile {
-		return executor.fail(ctx, input, exchange, errs.New(errs.KindStateConflict, "Component execution started previously but its local checkpoint is unavailable; inspection is required"))
+		return executor.fail(
+			ctx,
+			input,
+			exchange,
+			errs.New(
+				errs.KindStateConflict,
+				"Component execution started previously but its local checkpoint is unavailable; inspection is required",
+			),
+		)
 	}
 	var progress componentexecution.Progress
 	if saved != nil {
@@ -177,14 +199,24 @@ func (executor *Executor) run(ctx context.Context, input Input, exchange Exchang
 	return terminal, nil
 }
 
-func (executor *Executor) save(ctx context.Context, input Input, exchange Exchange, progress componentexecution.Progress) error {
+func (executor *Executor) save(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress componentexecution.Progress,
+) error {
 	if _, err := executor.journal.PrepareComponent(ctx, input.attempt, input.procedure, progress); err != nil {
 		return err
 	}
 	return executor.acknowledge(ctx, input, exchange, progress)
 }
 
-func (executor *Executor) acknowledge(ctx context.Context, input Input, exchange Exchange, progress componentexecution.Progress) error {
+func (executor *Executor) acknowledge(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress componentexecution.Progress,
+) error {
 	request, err := input.checkpointRequest(progress)
 	if err != nil {
 		return err

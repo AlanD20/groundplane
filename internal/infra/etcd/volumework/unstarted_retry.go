@@ -19,12 +19,19 @@ func unstartedEvidencePrefix(workID string) string {
 	return "/v1/volume-unstarted-evidence/" + workID + "/"
 }
 
-func (repository *InputRepository) PrepareUnstartedRetry(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareUnstartedRetry(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if item.Operation != workexecution.Volume || task.Stop != nil || task.CollectionStartedAt != nil ||
 		item.AttemptNumber != 0 || item.Input == nil || item.Result == nil || item.Phase != workexecution.Settled ||
 		item.Outcome != workexecution.Failed || item.Cleanup != workexecution.CleanupNone || item.ForwardRevoked {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Volume Retry requires a captured action that failed before execution")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Volume Retry requires a captured action that failed before execution",
+		)
 	}
 	input, guards, err := repository.Load(ctx, view)
 	if err != nil {
@@ -50,7 +57,8 @@ func (repository *InputRepository) PrepareUnstartedRetry(ctx context.Context, vi
 	}
 	raw := read.Values[0].Value
 	digest := sha256.Sum256(raw)
-	if item.Result.ID != ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "volume-unstarted") || item.Result.SHA256 != hex.EncodeToString(digest[:]) {
+	if item.Result.ID != ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "volume-unstarted") ||
+		item.Result.SHA256 != hex.EncodeToString(digest[:]) {
 		return workqueue.Change{}, conflict("Volume Retry queued failure differs from its recorded result")
 	}
 	failure, err := recordcodec.Decode[UnstartedResult](raw, "volume-unstarted")
@@ -64,7 +72,11 @@ func (repository *InputRepository) PrepareUnstartedRetry(ctx context.Context, vi
 	}
 	evidenceKey := unstartedEvidencePrefix(item.ID) + item.Result.SHA256
 	change.Conditions = append(change.Conditions, guards...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, keyvalue.Condition{Key: evidenceKey})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision},
+		keyvalue.Condition{Key: evidenceKey},
+	)
 	change.Mutations = append(change.Mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: evidenceKey, Value: append([]byte(nil), raw...)},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})

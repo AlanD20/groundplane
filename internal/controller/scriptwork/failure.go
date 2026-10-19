@@ -14,7 +14,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (service *Service) FailScript(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.ScriptWorkFailureRequest) (*agentpb.ScriptWorkFailureAck, error) {
+func (service *Service) FailScript(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.ScriptWorkFailureRequest,
+) (*agentpb.ScriptWorkFailureAck, error) {
 	if service == nil || ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Script failure request is invalid")
 	}
@@ -29,7 +33,8 @@ func (service *Service) FailScript(ctx context.Context, authorization agentregis
 	if err != nil {
 		return nil, err
 	}
-	if view.Work.Item.Item.Operation != workexecution.Script || !workexecution.SameAssignment(claimed, view.Attempt.Attempt) {
+	if view.Work.Item.Item.Operation != workexecution.Script ||
+		!workexecution.SameAssignment(claimed, view.Attempt.Attempt) {
 		return nil, errs.New(errs.KindStateConflict, "Script failure belongs to another assignment")
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
@@ -50,5 +55,8 @@ func (service *Service) FailScript(ctx context.Context, authorization agentregis
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	return &agentpb.ScriptWorkFailureAck{Attempt: proto.CloneOf(request.Attempt), Outcome: string(terminal.Outcome),
-		Evidence: &agentpb.WorkInputReference{InputId: terminal.Result.ID, Sha256: digest}, FinishedAt: timestamppb.New(*terminal.FinishedAt)}, nil
+		Evidence: &agentpb.WorkInputReference{
+			InputId: terminal.Result.ID,
+			Sha256:  digest,
+		}, FinishedAt: timestamppb.New(*terminal.FinishedAt)}, nil
 }

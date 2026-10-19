@@ -11,8 +11,11 @@ import (
 // AdvanceBackupConfigRestore advances only the captured restore generation.
 // The Controller must join publication/materialization ownership with the
 // checkpoint; this pure transition does not authorize a desired-state rewrite.
-func AdvanceBackupConfigRestore(assignment *agentpb.BackupWorkAssignment,
-	request *agentpb.BackupWorkCheckpointRequest, authenticated workexecution.Identity, evidence *BackupConfigWorkEvidence,
+func AdvanceBackupConfigRestore(
+	assignment *agentpb.BackupWorkAssignment,
+	request *agentpb.BackupWorkCheckpointRequest,
+	authenticated workexecution.Identity,
+	evidence *BackupConfigWorkEvidence,
 ) (*agentpb.BackupStepResume, error) {
 	owned, attempt, err := OpenBackupWorkAssignment(assignment, authenticated)
 	if err != nil {
@@ -28,8 +31,12 @@ func AdvanceBackupConfigRestore(assignment *agentpb.BackupWorkAssignment,
 	return advanceConfigRestoreSource(owned.Input, owned.Sources, report, evidence, attempt)
 }
 
-func advanceConfigRestoreSource(input *agentpb.BackupWorkInput, sources []*agentpb.BackupStepResume,
-	report *agentpb.BackupWorkCheckpointRequest, evidence *BackupConfigWorkEvidence, transferOwner workexecution.Attempt,
+func advanceConfigRestoreSource(
+	input *agentpb.BackupWorkInput,
+	sources []*agentpb.BackupStepResume,
+	report *agentpb.BackupWorkCheckpointRequest,
+	evidence *BackupConfigWorkEvidence,
+	transferOwner workexecution.Attempt,
 ) (*agentpb.BackupStepResume, error) {
 	step := input.Steps[report.SourceOrdinal]
 	current := sources[report.SourceOrdinal].GetRestore()
@@ -60,7 +67,9 @@ func advanceConfigRestoreSource(input *agentpb.BackupWorkInput, sources []*agent
 		progress := current.GetConfigProgress()
 		if progress.GetMaterialization() == nil || progress.SourceCleanupCompleted != nil ||
 			value.PointId != step.GetRestore().PointId || !proto.Equal(value.Evidence, step.GetRestore().ExpectedEvidence) {
-			return nil, invalidBackupCheckpoint("Config cleanup must follow publication of the captured restore generation")
+			return nil, invalidBackupCheckpoint(
+				"Config cleanup must follow publication of the captured restore generation",
+			)
 		}
 		progress = proto.CloneOf(progress)
 		progress.SourceCleanupCompleted = proto.CloneOf(value)
@@ -117,7 +126,9 @@ func advanceConfigRestoreTransfer(next, current *agentpb.BackupRestoreResume,
 			evidence.NextOrdinal != content.EntryCount+1 || !bytes.Equal(value.ValueChainSha256, evidence.ValueChainSHA256) ||
 			!backupCheckpointDigest(evidence.TransferTranscriptSHA256) ||
 			!bytes.Equal(value.TransferTranscriptSha256, evidence.TransferTranscriptSHA256) {
-			return invalidBackupCheckpoint("Config restore completion differs from its captured generation or transfer transcript")
+			return invalidBackupCheckpoint(
+				"Config restore completion differs from its captured generation or transfer transcript",
+			)
 		}
 		progress.Progress = &agentpb.BackupConfigProgress_Transfer{Transfer: proto.CloneOf(value)}
 		next.Phase = agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_PUBLICATION

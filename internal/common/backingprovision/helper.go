@@ -24,12 +24,18 @@ type HelperInput struct {
 }
 
 func OpenHelperRequest(request *agentpb.BackingProvisionHelperRequest) (HelperInput, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || request.Assignment == nil || request.Assignment.Attempt == nil ||
+	if request == nil || executionplan.RejectUnknown(request) != nil || request.Assignment == nil ||
+		request.Assignment.Attempt == nil ||
 		proto.Size(request) > MaximumInputBytes+6*MaximumProgressBytes+4096 {
 		return HelperInput{}, invalid("backing creation helper request is missing or oversized")
 	}
 	claimed := request.Assignment.Attempt
-	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: claimed.HostId, AgentID: claimed.AgentId, Generation: claimed.ExecutorGeneration}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     claimed.HostId,
+		AgentID:    claimed.AgentId,
+		Generation: claimed.ExecutorGeneration,
+	}
 	assignment, err := DecodeAssignment(request.Assignment, identity)
 	if err != nil {
 		return HelperInput{}, err
@@ -76,14 +82,28 @@ func OpenHelperRequest(request *agentpb.BackingProvisionHelperRequest) (HelperIn
 	return input, nil
 }
 
-func HelperObservation(input HelperInput, observation Observation, runtime *backingruntimefact.Observation) (*agentpb.BackingProvisionHelperResponse, error) {
-	if input.Assignment.Recovery != nil || input.Progress == nil || input.Progress.Validate(input.Assignment.Attempt, input.Layout) != nil ||
-		!input.Progress.InFlight || observation.ServiceID != input.Layout.ServiceID || observation.Input != input.Layout.Input ||
-		observation.Stage != input.Progress.Stage || observation.At.IsZero() || observation.At.Location() != time.UTC ||
+func HelperObservation(
+	input HelperInput,
+	observation Observation,
+	runtime *backingruntimefact.Observation,
+) (*agentpb.BackingProvisionHelperResponse, error) {
+	if input.Assignment.Recovery != nil || input.Progress == nil ||
+		input.Progress.Validate(input.Assignment.Attempt, input.Layout) != nil ||
+		!input.Progress.InFlight ||
+		observation.ServiceID != input.Layout.ServiceID ||
+		observation.Input != input.Layout.Input ||
+		observation.Stage != input.Progress.Stage ||
+		observation.At.IsZero() ||
+		observation.At.Location() != time.UTC ||
 		observation.At.Before(*input.Progress.BeganAt) {
 		return nil, invalid("backing creation helper observation has no matching active boundary")
 	}
-	empty := Observation{ServiceID: observation.ServiceID, Input: observation.Input, Stage: observation.Stage, At: observation.At}
+	empty := Observation{
+		ServiceID: observation.ServiceID,
+		Input:     observation.Input,
+		Stage:     observation.Stage,
+		At:        observation.At,
+	}
 	if !observation.Satisfies(input.Progress.Stage, input.Layout) && (!input.InspectOnly || observation != empty) {
 		return nil, invalid("backing creation helper did not prove its selected stage")
 	}
@@ -97,13 +117,15 @@ func HelperObservation(input HelperInput, observation Observation, runtime *back
 	}
 	response := &agentpb.BackingProvisionHelperResponse{Observation: canonical}
 	if runtime != nil {
-		if input.Progress.Stage != VerifyRuntime || !observation.RuntimeVerified || runtime.ContainerID != observation.ContainerID ||
+		if input.Progress.Stage != VerifyRuntime || !observation.RuntimeVerified ||
+			runtime.ContainerID != observation.ContainerID ||
 			!runtime.ObservedAt.Equal(observation.At) {
 			return nil, invalid("backing creation runtime proof belongs to another stage or container")
 		}
 		workload, err := backingruntimefact.Workload(input.Assignment.Procedure.Runtime, input.Layout.ServiceID,
 			input.Assignment.Attempt.Input.ID, input.Assignment.Procedure.RenderGeneration)
-		if err != nil || !backingruntimefact.MatchesObservation(*runtime, input.Assignment.Procedure.Runtime, workload) {
+		if err != nil ||
+			!backingruntimefact.MatchesObservation(*runtime, input.Assignment.Procedure.Runtime, workload) {
 			return nil, invalid("backing creation runtime proof differs from its captured artifact")
 		}
 		response.RuntimeObservation, err = EncodeRuntimeObservation(*runtime)
@@ -116,7 +138,10 @@ func HelperObservation(input HelperInput, observation Observation, runtime *back
 	return response, nil
 }
 
-func ReadHelperObservation(input HelperInput, response *agentpb.BackingProvisionHelperResponse) (Observation, *backingruntimefact.Observation, error) {
+func ReadHelperObservation(
+	input HelperInput,
+	response *agentpb.BackingProvisionHelperResponse,
+) (Observation, *backingruntimefact.Observation, error) {
 	if response == nil || executionplan.RejectUnknown(response) != nil || len(response.Observation) == 0 ||
 		len(response.Observation) > MaximumProgressBytes || len(response.RecoveryReport) != 0 {
 		return Observation{}, nil, invalid("backing creation helper response is missing or invalid")

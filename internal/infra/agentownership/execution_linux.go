@@ -20,7 +20,10 @@ type Execution struct {
 
 func (lease *Lease) Begin(attempt workexecution.Attempt) (*Execution, error) {
 	if attempt.Validate() != nil || attempt.Executor.Executor != workexecution.Agent || attempt.FinishedAt != nil {
-		return nil, errs.New(errs.KindValidationFailed, "Agent process execution requires an unfinished assigned attempt")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Agent process execution requires an unfinished assigned attempt",
+		)
 	}
 	if err := lease.Check(); err != nil {
 		return nil, err

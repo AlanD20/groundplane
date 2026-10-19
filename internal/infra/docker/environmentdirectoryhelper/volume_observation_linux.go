@@ -10,7 +10,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func (Creator) InspectManagedVolume(ctx context.Context, request ManagedVolumeInspectRequest) (ManagedVolumeObservation, error) {
+func (Creator) InspectManagedVolume(
+	ctx context.Context,
+	request ManagedVolumeInspectRequest,
+) (ManagedVolumeObservation, error) {
 	if ctx == nil {
 		return ManagedVolumeObservation{}, errs.New(errs.KindInternal, "Volume directory inspection requires a context")
 	}
@@ -51,7 +54,10 @@ func (Creator) InspectManagedVolume(ctx context.Context, request ManagedVolumeIn
 	if err == nil {
 		// Inspection never finishes an interrupted publication or removes its
 		// evidence. The owning operation must account for that effect first.
-		return ManagedVolumeObservation{}, errs.New(errs.KindStateConflict, "Volume directory creation has not finished publishing")
+		return ManagedVolumeObservation{}, errs.New(
+			errs.KindStateConflict,
+			"Volume directory creation has not finished publishing",
+		)
 	}
 	if !errors.Is(err, syscall.ENOENT) {
 		return ManagedVolumeObservation{}, errs.Wrap(errs.KindStateConflict,

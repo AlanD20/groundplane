@@ -11,7 +11,10 @@ import (
 
 // LoadStagingCapture binds source-file recovery to the resource run at the
 // same revision as work progress, including after the execution has settled.
-func (repository *InputRepository) LoadStagingCapture(ctx context.Context, source StagingSource) (backupruntime.BackupRunRecord, keyvalue.Condition, error) {
+func (repository *InputRepository) LoadStagingCapture(
+	ctx context.Context,
+	source StagingSource,
+) (backupruntime.BackupRunRecord, keyvalue.Condition, error) {
 	var zero backupruntime.BackupRunRecord
 	input := source.Input
 	if input == nil || input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_CAPTURE ||
@@ -31,7 +34,8 @@ func (repository *InputRepository) LoadStagingCapture(ctx context.Context, sourc
 	if err != nil {
 		return zero, keyvalue.Condition{}, err
 	}
-	if run.TaskID != source.View.Task.Task.ID || run.EnvironmentID != input.EnvironmentId || len(run.Sources) != len(input.Steps) {
+	if run.TaskID != source.View.Task.Task.ID || run.EnvironmentID != input.EnvironmentId ||
+		len(run.Sources) != len(input.Steps) {
 		return zero, keyvalue.Condition{}, conflict("Backup source run differs from captured work")
 	}
 	scope := &agentpb.BackupPlanScope{ProjectId: input.ProjectId, Project: input.Project,

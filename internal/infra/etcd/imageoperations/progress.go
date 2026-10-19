@@ -16,7 +16,9 @@ func ProgressKey(attemptID string) string { return "/v1/diagnostics/image-progre
 func (journal *Journal) Report(ctx context.Context, progress imagefetch.Progress) error {
 	if progress.DownloadedBytes < 0 || progress.TotalBytes < 0 ||
 		len(progress.Phase) > 64 || len(progress.ErrorCode) > 128 || len(progress.ErrorDetail) > 2048 ||
-		!utf8.ValidString(progress.Phase) || !utf8.ValidString(progress.ErrorCode) || !utf8.ValidString(progress.ErrorDetail) {
+		!utf8.ValidString(
+			progress.Phase,
+		) || !utf8.ValidString(progress.ErrorCode) || !utf8.ValidString(progress.ErrorDetail) {
 		return invalid()
 	}
 	owned, err := journal.read(ctx, false)

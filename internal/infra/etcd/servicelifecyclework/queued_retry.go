@@ -11,7 +11,12 @@ import (
 
 // PrepareQueuedRetryStop preserves the preceding execution result. It settles
 // only the queued retry; it never declares an interrupted host effect resolved.
-func (repository *Repository) PrepareQueuedRetryStop(ctx context.Context, view workqueue.View, previous workqueue.AttemptSnapshot, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareQueuedRetryStop(
+	ctx context.Context,
+	view workqueue.View,
+	previous workqueue.AttemptSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item, attempt := view.Task.Task, view.Item.Item, previous.Attempt
 	if item.Operation != workexecution.ServiceLifecycle || item.AttemptNumber == 0 || item.Input == nil ||
 		item.ActiveAttemptID != "" || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||

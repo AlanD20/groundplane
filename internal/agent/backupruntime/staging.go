@@ -32,7 +32,12 @@ func NewStaging(stager *backupstage.Stager, prepared []*backupstage.PreparedStag
 	if stager == nil {
 		return nil, errs.New(errs.KindInternal, "Backup staging requires completed startup recovery")
 	}
-	state := &Staging{stager: stager, prepared: make(map[backupstage.IDs]*backupstage.PreparedStage), held: make(map[backupstage.IDs]*backupstage.PreparedStage), active: make(map[backupstage.IDs]*backupstage.Stage)}
+	state := &Staging{
+		stager:   stager,
+		prepared: make(map[backupstage.IDs]*backupstage.PreparedStage),
+		held:     make(map[backupstage.IDs]*backupstage.PreparedStage),
+		active:   make(map[backupstage.IDs]*backupstage.Stage),
+	}
 	permissions, err := volumeRecoveryPermissions(inventory, plan)
 	if err != nil {
 		return nil, err
@@ -43,8 +48,12 @@ func NewStaging(stager *backupstage.Stager, prepared []*backupstage.PreparedStag
 		state.sourceRecovery[string(disposition.RecoveryKeySha256)] = proto.CloneOf(disposition)
 	}
 	for _, row := range prepared {
-		if row == nil || row.Stage == nil || row.DispositionID == "" || state.prepared[row.IDs] != nil || state.held[row.IDs] != nil {
-			return nil, errs.New(errs.KindStateConflict, "Backup staging recovery contains an invalid or duplicate source")
+		if row == nil || row.Stage == nil || row.DispositionID == "" || state.prepared[row.IDs] != nil ||
+			state.held[row.IDs] != nil {
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Backup staging recovery contains an invalid or duplicate source",
+			)
 		}
 		key, err := executionplan.BackupSourceStagingKey(row.IDs.Task, row.IDs.Step, row.IDs.Point)
 		if err != nil {
@@ -101,8 +110,12 @@ func (state *Staging) VolumeCapture(ctx context.Context, assignment *agentpb.Bac
 	result := CaptureStage{IDs: ids}
 	if retained := state.prepared[ids]; retained != nil {
 		prepared := resume.GetPreparedArtifact()
-		if prepared.GetPointId() != ids.Point || prepared.GetVolume() == nil || prepared.GetEvidence() == nil || prepared.GetFinals() == nil {
-			return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Volume files lack acknowledged artifact evidence")
+		if prepared.GetPointId() != ids.Point || prepared.GetVolume() == nil || prepared.GetEvidence() == nil ||
+			prepared.GetFinals() == nil {
+			return CaptureStage{}, errs.New(
+				errs.KindStateConflict,
+				"Recovered Volume files lack acknowledged artifact evidence",
+			)
 		}
 		for _, file := range retained.Files {
 			if file.Artifact == nil {
@@ -110,17 +123,28 @@ func (state *Staging) VolumeCapture(ctx context.Context, assignment *agentpb.Bac
 			}
 			switch file.Evidence.Name {
 			case executionplan.BackupSourceStagingFinal:
-				if result.Source != nil || file.Evidence.Size != prepared.Evidence.SourceSizeBytes || !bytes.Equal(file.Evidence.SHA256[:], prepared.Evidence.SourceSha256) {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Volume source differs from captured evidence")
+				if result.Source != nil || file.Evidence.Size != prepared.Evidence.SourceSizeBytes ||
+					!bytes.Equal(file.Evidence.SHA256[:], prepared.Evidence.SourceSha256) {
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Recovered Volume source differs from captured evidence",
+					)
 				}
 				result.Source, result.SourceEvidence = file.Artifact, file.Evidence
 			case executionplan.BackupStoredStagingFinal:
-				if result.Stored != nil || file.Evidence.Size != prepared.Evidence.StoredSizeBytes || !bytes.Equal(file.Evidence.SHA256[:], prepared.Evidence.StoredSha256) {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Volume object differs from captured evidence")
+				if result.Stored != nil || file.Evidence.Size != prepared.Evidence.StoredSizeBytes ||
+					!bytes.Equal(file.Evidence.SHA256[:], prepared.Evidence.StoredSha256) {
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Recovered Volume object differs from captured evidence",
+					)
 				}
 				result.Stored = file.Artifact
 			default:
-				return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Volume stage contains an unexpected file")
+				return CaptureStage{}, errs.New(
+					errs.KindStateConflict,
+					"Recovered Volume stage contains an unexpected file",
+				)
 			}
 		}
 		if result.Source == nil {
@@ -128,7 +152,10 @@ func (state *Staging) VolumeCapture(ctx context.Context, assignment *agentpb.Bac
 		}
 		if prepared.Finals.GetSameInode() {
 			if result.Stored != nil {
-				return CaptureStage{}, errs.New(errs.KindStateConflict, "Unencrypted Volume stage contains an extra stored object")
+				return CaptureStage{}, errs.New(
+					errs.KindStateConflict,
+					"Unencrypted Volume stage contains an extra stored object",
+				)
 			}
 			result.Stored = result.Source
 		} else if result.Stored == nil {
@@ -139,7 +166,10 @@ func (state *Staging) VolumeCapture(ctx context.Context, assignment *agentpb.Bac
 		return result, nil
 	}
 	if resume.GetPreparedArtifact() != nil {
-		return CaptureStage{}, errs.New(errs.KindStateConflict, "Acknowledged Volume artifact has no retained staging files")
+		return CaptureStage{}, errs.New(
+			errs.KindStateConflict,
+			"Acknowledged Volume artifact has no retained staging files",
+		)
 	}
 	stage, err := state.stager.Prepare(ctx, ids, backupstage.ExclusiveUnknown())
 	if err != nil {
@@ -151,7 +181,11 @@ func (state *Staging) VolumeCapture(ctx context.Context, assignment *agentpb.Bac
 	return result, err
 }
 
-func (state *Staging) SourceAbsent(assignment *agentpb.BackupWorkAssignment, identity workexecution.Identity, ordinal uint32) (bool, error) {
+func (state *Staging) SourceAbsent(
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+	ordinal uint32,
+) (bool, error) {
 	owned, attempt, err := executionplan.OpenBackupWorkAssignment(assignment, identity)
 	if err != nil {
 		return false, err

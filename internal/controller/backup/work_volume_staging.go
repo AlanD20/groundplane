@@ -23,25 +23,35 @@ func (owner *AgentWork) volumeRestoreStaging(ctx context.Context, identity worke
 	}
 	step := source.Input.Steps[source.Ordinal]
 	restore := step.GetRestore()
-	if restore.GetVolume() == nil || native.Point.SourceKind != backupruntime.BackupRuntimeSourceVolume || entry.DatabaseExecution {
+	if restore.GetVolume() == nil || native.Point.SourceKind != backupruntime.BackupRuntimeSourceVolume ||
+		entry.DatabaseExecution {
 		return nil, nil, invalidCaptureStaging()
 	}
 	evidence := restore.ExpectedEvidence
 	if evidence == nil {
 		return nil, nil, invalidCaptureStaging()
 	}
-	full := []*agentpb.BackupRecoveredFile{{Role: agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_SOURCE_PLAINTEXT,
-		SizeBytes: evidence.SourceSizeBytes, Sha256: append([]byte(nil), evidence.SourceSha256...)}}
+	full := []*agentpb.BackupRecoveredFile{
+		{Role: agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_SOURCE_PLAINTEXT,
+			SizeBytes: evidence.SourceSizeBytes, Sha256: append([]byte(nil), evidence.SourceSha256...)},
+	}
 	if restore.Encryption.GetKind() == agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
-		full = append(full, &agentpb.BackupRecoveredFile{Role: agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_STORED_OBJECT,
-			SizeBytes: evidence.StoredSizeBytes, Sha256: append([]byte(nil), evidence.StoredSha256...)})
+		full = append(
+			full,
+			&agentpb.BackupRecoveredFile{Role: agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_STORED_OBJECT,
+				SizeBytes: evidence.StoredSizeBytes, Sha256: append([]byte(nil), evidence.StoredSha256...)},
+		)
 	}
 	guards := append(append([]keyvalue.Condition(nil), source.Conditions...), guard)
 	result := &agentpb.BackupStagingDisposition{RecoveryKeySha256: append([]byte(nil), entry.RecoveryKeySha256...)}
 	item := source.View.Item.Item
-	settled := item.Phase == workexecution.Settled && (item.Cleanup == workexecution.CleanupNone || item.Cleanup == workexecution.CleanupComplete)
-	if settled && (native.State == backupruntime.BackupRestoreCompleted || native.State == backupruntime.BackupRestoreFailedSafe) {
-		result.Disposition = &agentpb.BackupStagingDisposition_DiscardRecovered{DiscardRecovered: &agentpb.BackupDiscardRecovered{}}
+	settled := item.Phase == workexecution.Settled &&
+		(item.Cleanup == workexecution.CleanupNone || item.Cleanup == workexecution.CleanupComplete)
+	if settled &&
+		(native.State == backupruntime.BackupRestoreCompleted || native.State == backupruntime.BackupRestoreFailedSafe) {
+		result.Disposition = &agentpb.BackupStagingDisposition_DiscardRecovered{
+			DiscardRecovered: &agentpb.BackupDiscardRecovered{},
+		}
 		return result, guards, nil
 	}
 	resume := source.Sources[source.Ordinal].GetRestore()
@@ -74,8 +84,10 @@ func (owner *AgentWork) volumeRestoreStaging(ctx context.Context, identity worke
 		if err != nil {
 			return nil, nil, err
 		}
-		result.Disposition = &agentpb.BackupStagingDisposition_RecoveryRequired{RecoveryRequired: &agentpb.BackupRecoveryRequired{
-			NativeRestoreModRevision: guard.ModRevision, NativeRestoreSha256: digest, ExpectedFiles: proto.CloneOf(entry).Files}}
+		result.Disposition = &agentpb.BackupStagingDisposition_RecoveryRequired{
+			RecoveryRequired: &agentpb.BackupRecoveryRequired{
+				NativeRestoreModRevision: guard.ModRevision, NativeRestoreSha256: digest, ExpectedFiles: proto.CloneOf(entry).Files},
+		}
 		return result, guards, nil
 	}
 	assignment, liveGuards, err := owner.stagingAssignment(ctx, identity, source)
@@ -84,7 +96,9 @@ func (owner *AgentWork) volumeRestoreStaging(ctx context.Context, identity worke
 	}
 	guards = append(guards, liveGuards...)
 	if beforeValidation || native.State == backupruntime.BackupRestoreVerified {
-		result.Disposition = &agentpb.BackupStagingDisposition_DiscardRecovered{DiscardRecovered: &agentpb.BackupDiscardRecovered{}}
+		result.Disposition = &agentpb.BackupStagingDisposition_DiscardRecovered{
+			DiscardRecovered: &agentpb.BackupDiscardRecovered{},
+		}
 		return result, guards, nil
 	}
 	if !sameRecoveredFiles(entry.Files, full) {

@@ -19,8 +19,16 @@ type HostActivityPage struct {
 
 // HostActivity includes running work and unresolved effects whose worker slot
 // has already been released. Diagnostic retention cannot erase these entries.
-func (repository *Repository) HostActivity(ctx context.Context, hostID, after string, limit int64, revision int64) (HostActivityPage, error) {
-	if ids.Validate(ids.KindHost, hostID) != nil || after != "" && ids.Validate(ids.KindWorkItem, after) != nil || limit < 1 || limit > 64 || revision < 0 {
+func (repository *Repository) HostActivity(
+	ctx context.Context,
+	hostID, after string,
+	limit int64,
+	revision int64,
+) (HostActivityPage, error) {
+	if ids.Validate(ids.KindHost, hostID) != nil || after != "" && ids.Validate(ids.KindWorkItem, after) != nil ||
+		limit < 1 ||
+		limit > 64 ||
+		revision < 0 {
 		return HostActivityPage{}, invalid("host activity read is invalid")
 	}
 	request := keyvalue.RangeRequest{Prefix: HostEffectsPrefix(hostID), Limit: limit, Revision: revision}
@@ -31,14 +39,17 @@ func (repository *Repository) HostActivity(ctx context.Context, hostID, after st
 	if err != nil {
 		return HostActivityPage{}, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || int64(len(read.Values)) > limit || read.More && len(read.Values) == 0 {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		int64(len(read.Values)) > limit ||
+		read.More && len(read.Values) == 0 {
 		return HostActivityPage{}, corrupt()
 	}
 	defer keyvalue.ClearRangeValues(read.Values)
 	result := HostActivityPage{More: read.More, ReadRevision: read.ReadRevision}
 	for _, value := range read.Values {
 		id := strings.TrimPrefix(value.Key, request.Prefix)
-		if value.Key != HostEffectKey(hostID, id) || ids.Validate(ids.KindWorkItem, id) != nil || id <= after || result.LastID != "" && id <= result.LastID {
+		if value.Key != HostEffectKey(hostID, id) || ids.Validate(ids.KindWorkItem, id) != nil || id <= after ||
+			result.LastID != "" && id <= result.LastID {
 			return HostActivityPage{}, corrupt()
 		}
 		owner, err := recordcodec.Decode[ClaimOwner](value.Value, "execution_host_effect")
@@ -50,7 +61,9 @@ func (repository *Repository) HostActivity(ctx context.Context, hostID, after st
 			return HostActivityPage{}, err
 		}
 		item := view.Item.Item
-		if item.Placement.Executor != workexecution.Agent || item.Placement.HostID != hostID || item.Phase == workexecution.Settled || item.AttemptNumber == 0 {
+		if item.Placement.Executor != workexecution.Agent || item.Placement.HostID != hostID ||
+			item.Phase == workexecution.Settled ||
+			item.AttemptNumber == 0 {
 			return HostActivityPage{}, corrupt()
 		}
 		result.Work = append(result.Work, view)

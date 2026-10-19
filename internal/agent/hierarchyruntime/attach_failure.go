@@ -75,7 +75,10 @@ func (executor *AttachExecutor) deliverAttachFailure(ctx context.Context, input 
 	}
 	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	ack, err := exchange.FailAttachRemoval(bounded, &agentpb.AttachRemovalFailureRequest{Attempt: identity, Reason: string(failure.Reason)})
+	ack, err := exchange.FailAttachRemoval(
+		bounded,
+		&agentpb.AttachRemovalFailureRequest{Attempt: identity, Reason: string(failure.Reason)},
+	)
 	if err != nil {
 		return AttachExecution{}, err
 	}

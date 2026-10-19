@@ -32,7 +32,11 @@ type componentWorkInventory struct {
 
 // Inventory admits only identities from the captured candidate and predecessor.
 // A matching human-readable name alone never grants removal authority.
-func inspectComponentWork(ctx context.Context, taskRunner runner.Runner, input componentexecution.HelperInput) (componentWorkInventory, error) {
+func inspectComponentWork(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input componentexecution.HelperInput,
+) (componentWorkInventory, error) {
 	var inventory componentWorkInventory
 	listed, err := runComponentWork(ctx, taskRunner, "container", "ls", "--all", "--no-trunc",
 		"--filter", "label=com.groundplane.environment-id="+input.Procedure.EnvironmentId,
@@ -89,7 +93,10 @@ func componentWorkReady(containers []componentWorkContainer) bool {
 }
 
 func invalidComponentInventory() error {
-	return errs.New(errs.KindStateConflict, "Component containers do not match the captured candidate or previous runtime; no containers were selected for removal")
+	return errs.New(
+		errs.KindStateConflict,
+		"Component containers do not match the captured candidate or previous runtime; no containers were selected for removal",
+	)
 }
 
 func runComponentWork(ctx context.Context, taskRunner runner.Runner, args ...string) (runner.Result, error) {
@@ -102,7 +109,10 @@ func runComponentWork(ctx context.Context, taskRunner runner.Runner, args ...str
 		return runner.Result{}, errs.Wrap(errs.KindInternal, err)
 	}
 	if result.ExitCode != 0 {
-		return runner.Result{}, errs.New(errs.KindRequestFailed, "Docker could not inspect or update the captured Component runtime")
+		return runner.Result{}, errs.New(
+			errs.KindRequestFailed,
+			"Docker could not inspect or update the captured Component runtime",
+		)
 	}
 	return result, nil
 }

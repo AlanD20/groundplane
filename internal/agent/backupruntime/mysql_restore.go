@@ -110,8 +110,20 @@ func restoreMySQL(ctx context.Context, assignment *agentpb.BackupWorkAssignment,
 		if _, err := executor.RecoverExecution(ctx, container, original, execID, nil); err != nil {
 			return true, err
 		}
-		return finishMySQLRestore(ctx, assignment, identity, ordinal, staging, consumers, authority, executor, container,
-			artifact, publisher, resume.MysqlApplyStart)
+		return finishMySQLRestore(
+			ctx,
+			assignment,
+			identity,
+			ordinal,
+			staging,
+			consumers,
+			authority,
+			executor,
+			container,
+			artifact,
+			publisher,
+			resume.MysqlApplyStart,
+		)
 	}
 	if resume.Phase == agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_SERVICE_RECOVERY {
 		if _, err := mysqlVerifyRestore(ctx, executor, container, step, authority); err != nil {

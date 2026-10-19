@@ -13,7 +13,11 @@ import (
 // An Apply can stop while configuration Secrets are being staged, before it
 // publishes executable input. Retirement must collect that staging without
 // demanding an input that never existed or touching another removal's state.
-func (repository *Repository) retireUnprepared(ctx context.Context, view workqueue.View, final bool) (bool, workqueue.Change, error) {
+func (repository *Repository) retireUnprepared(
+	ctx context.Context,
+	view workqueue.View,
+	final bool,
+) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Action != workexecution.ActionApply || item.AttemptNumber != 0 || item.Input != nil ||
 		item.Outcome == workexecution.Succeeded || item.Cleanup != workexecution.CleanupNone {
@@ -39,7 +43,10 @@ func (repository *Repository) retireUnprepared(ctx context.Context, view workque
 	}
 	guards := make([]tasksecretpins.Condition, 0, len(change.Conditions))
 	for _, guard := range change.Conditions {
-		guards = append(guards, tasksecretpins.Condition{Key: guard.Key, ModRevision: guard.ModRevision, Prefix: guard.Prefix})
+		guards = append(
+			guards,
+			tasksecretpins.Condition{Key: guard.Key, ModRevision: guard.ModRevision, Prefix: guard.Prefix},
+		)
 	}
 	done, err := pins.AbandonOwned(ctx, operationID, task.ID, item.ID, guards)
 	if err != nil || !done {

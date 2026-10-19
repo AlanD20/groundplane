@@ -21,13 +21,20 @@ type RemovalRecoveryHelperInput struct {
 	InspectOnly bool
 }
 
-func OpenRemovalRecoveryHelperRequest(request *agentpb.ServiceRemovalRecoveryHelperRequest) (RemovalRecoveryHelperInput, error) {
+func OpenRemovalRecoveryHelperRequest(
+	request *agentpb.ServiceRemovalRecoveryHelperRequest,
+) (RemovalRecoveryHelperInput, error) {
 	if request == nil || proto.Size(request) > MaximumPlanBytes || RejectUnknown(request) != nil ||
 		request.Assignment == nil || request.Assignment.Attempt == nil || request.Report == nil || request.Acknowledgement == nil {
 		return RemovalRecoveryHelperInput{}, invalidRemovalHelper()
 	}
 	a := request.Assignment
-	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: a.Attempt.HostId, AgentID: a.Attempt.AgentId, Generation: a.Attempt.ExecutorGeneration}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     a.Attempt.HostId,
+		AgentID:    a.Attempt.AgentId,
+		Generation: a.Attempt.ExecutorGeneration,
+	}
 	attempt, err := workexecution.DecodeAgentAttempt(a.Attempt, identity)
 	if err != nil {
 		return RemovalRecoveryHelperInput{}, err
@@ -67,14 +74,26 @@ func OpenRemovalRecoveryHelperRequest(request *agentpb.ServiceRemovalRecoveryHel
 		ack.RecordedAt == nil || ack.RecordedAt.CheckValid() != nil {
 		return RemovalRecoveryHelperInput{}, invalidRemovalHelper()
 	}
-	if checkpoint.Sequence != ack.Sequence || checkpoint.StageID != ack.StageId || !checkpoint.RecordedAt.Equal(ack.RecordedAt.AsTime()) ||
-		checkpoint.Evidence.ID != ack.Evidence.InputId || checkpoint.Evidence.SHA256 != hex.EncodeToString(ack.Evidence.Sha256) {
+	if checkpoint.Sequence != ack.Sequence || checkpoint.StageID != ack.StageId ||
+		!checkpoint.RecordedAt.Equal(ack.RecordedAt.AsTime()) ||
+		checkpoint.Evidence.ID != ack.Evidence.InputId ||
+		checkpoint.Evidence.SHA256 != hex.EncodeToString(ack.Evidence.Sha256) {
 		return RemovalRecoveryHelperInput{}, invalidRemovalHelper()
 	}
-	return RemovalRecoveryHelperInput{Attempt: attempt, Procedure: a.Removal, Capture: capture, Progress: progress, Checkpoint: checkpoint, InspectOnly: request.InspectOnly}, nil
+	return RemovalRecoveryHelperInput{
+		Attempt:     attempt,
+		Procedure:   a.Removal,
+		Capture:     capture,
+		Progress:    progress,
+		Checkpoint:  checkpoint,
+		InspectOnly: request.InspectOnly,
+	}, nil
 }
 
-func ReadRemovalRecoveryHelperReceipt(input RemovalRecoveryHelperInput, response *agentpb.ServiceRemovalRecoveryHelperResponse) (*workexecution.Input, error) {
+func ReadRemovalRecoveryHelperReceipt(
+	input RemovalRecoveryHelperInput,
+	response *agentpb.ServiceRemovalRecoveryHelperResponse,
+) (*workexecution.Input, error) {
 	if input.Progress.Validate(input.Attempt, input.Procedure, input.Capture) != nil || !input.Progress.InFlight ||
 		response == nil || RejectUnknown(response) != nil || response.StageId != input.Checkpoint.StageID ||
 		response.Inspection != input.InspectOnly || response.ObservedAt == nil || response.ObservedAt.CheckValid() != nil ||
@@ -98,5 +117,8 @@ func ReadRemovalRecoveryHelperReceipt(input RemovalRecoveryHelperInput, response
 }
 
 func invalidRemovalHelper() error {
-	return errs.New(errs.KindValidationFailed, "Service removal restoration helper lacks its exact acknowledged recovery grant")
+	return errs.New(
+		errs.KindValidationFailed,
+		"Service removal restoration helper lacks its exact acknowledged recovery grant",
+	)
 }

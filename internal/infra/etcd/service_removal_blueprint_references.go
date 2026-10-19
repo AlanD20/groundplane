@@ -13,7 +13,11 @@ import (
 // The retained declaration identifies what to remove, not whether removal is
 // permitted. The accepted Blueprint and live references are checked separately.
 // Callers join these guards with the Environment epoch and deletion fence.
-func (repository *ServiceRepository) prepareBlueprintRemovalReferences(ctx context.Context, input serviceremovalwork.Input, revision int64) ([]keyvalue.Condition, error) {
+func (repository *ServiceRepository) prepareBlueprintRemovalReferences(
+	ctx context.Context,
+	input serviceremovalwork.Input,
+	revision int64,
+) ([]keyvalue.Condition, error) {
 	desired, found, err := blueprints.ReadDesiredInputRevision(ctx, repository.store,
 		input.Scope.EnvironmentID, input.DesiredRevisionID, revision)
 	if err != nil {
@@ -31,6 +35,9 @@ func (repository *ServiceRepository) prepareBlueprintRemovalReferences(ctx conte
 		return nil, err
 	}
 	return append(references.Conditions(), keyvalue.Condition{
-		Key: blueprints.EnvironmentBlueprintRootKey(input.Scope.EnvironmentID, input.DesiredRevisionID), ModRevision: desired.Revision,
+		Key: blueprints.EnvironmentBlueprintRootKey(
+			input.Scope.EnvironmentID,
+			input.DesiredRevisionID,
+		), ModRevision: desired.Revision,
 	}), nil
 }

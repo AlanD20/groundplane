@@ -13,7 +13,12 @@ import (
 // AccountJournal checks unsubmitted and partial local records against the actual
 // durable attempt. Readiness separately reconciles interrupted operation effects.
 // An unrecognized file remains intact and prevents blind startup adoption.
-func (delivery *AgentDeliveries) AccountJournal(ctx context.Context, authorization agentregistration.WorkAuthorization, attemptID string, expected *agentpb.WorkAttemptIdentity) error {
+func (delivery *AgentDeliveries) AccountJournal(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	attemptID string,
+	expected *agentpb.WorkAttemptIdentity,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
@@ -29,8 +34,12 @@ func (delivery *AgentDeliveries) AccountJournal(ctx context.Context, authorizati
 	}
 	if expected != nil {
 		claimed, err := workexecution.DecodeAgentAttempt(expected, attempt.Executor)
-		if executionplan.RejectUnknown(expected) != nil || err != nil || !workexecution.SameAssignment(claimed, attempt) {
-			return errs.New(errs.KindStateConflict, "local work journal differs from its captured Controller assignment")
+		if executionplan.RejectUnknown(expected) != nil || err != nil ||
+			!workexecution.SameAssignment(claimed, attempt) {
+			return errs.New(
+				errs.KindStateConflict,
+				"local work journal differs from its captured Controller assignment",
+			)
 		}
 	}
 	view, err := retained.ReadResult(ctx, delivery.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)

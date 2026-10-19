@@ -34,7 +34,10 @@ func InputKey(workID string) string { return "/v1/execution/connector-removal/in
 func (input Input) Validate() error {
 	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil ||
 		ids.Validate(ids.KindPlan, input.PlanID) != nil || ids.Validate(ids.KindConnector, input.ConnectorID) != nil ||
-		ids.Validate(ids.KindProject, input.ProjectID) != nil || ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
+		ids.Validate(
+			ids.KindProject,
+			input.ProjectID,
+		) != nil || ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
 		input.TenantID != "" && ids.Validate(ids.KindTenant, input.TenantID) != nil ||
 		input.ConnectorRevision <= 0 || input.CredentialRevision <= 0 || !recordcodec.IsCanonicalUTC(input.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Connector removal capture is invalid")
@@ -82,5 +85,9 @@ func PreparePublication(input Input) ([]keyvalue.Condition, []keyvalue.Mutation,
 		return nil, nil, err
 	}
 	key := InputKey(input.WorkItemID)
-	return []keyvalue.Condition{{Key: key}}, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}}, nil
+	return []keyvalue.Condition{
+		{Key: key},
+	}, []keyvalue.Mutation{
+		{Type: keyvalue.MutationPut, Key: key, Value: value},
+	}, nil
 }

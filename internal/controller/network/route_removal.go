@@ -11,9 +11,15 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *routeMutationService) RemoveRoute(ctx context.Context, routeID, idempotencyKey string) (idempotency.IdempotencyResponse, error) {
+func (service *routeMutationService) RemoveRoute(
+	ctx context.Context,
+	routeID, idempotencyKey string,
+) (idempotency.IdempotencyResponse, error) {
 	if ctx == nil || ids.Validate(ids.KindRoute, routeID) != nil {
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Route removal requires a valid Route identity and request context")
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Route removal requires a valid Route identity and request context",
+		)
 	}
 	for attempt := 0; attempt < maximumRouteMutationAttempts; attempt++ {
 		response, err := service.removeRouteOnce(ctx, routeID, idempotencyKey)
@@ -28,7 +34,10 @@ func (service *routeMutationService) RemoveRoute(ctx context.Context, routeID, i
 	return idempotency.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route removal retry bound was not enforced")
 }
 
-func (service *routeMutationService) removeRouteOnce(ctx context.Context, routeID, key string) (idempotency.IdempotencyResponse, error) {
+func (service *routeMutationService) removeRouteOnce(
+	ctx context.Context,
+	routeID, key string,
+) (idempotency.IdempotencyResponse, error) {
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(ctx,
 		idempotency.IdempotencyReplayTarget{Kind: idempotency.IdempotencyReplayTargetRoute, ID: routeID},
 		http.MethodDelete, routeEditRoute, key)
@@ -56,11 +65,25 @@ func (service *routeMutationService) removeRouteOnce(ctx context.Context, routeI
 	if found {
 		return routeReplayResponse(resolution)
 	}
-	environment, project, target, err := service.routeHierarchy(ctx, current.Record.EnvironmentID, current.Record.Desired.TargetServiceID)
+	environment, project, target, err := service.routeHierarchy(
+		ctx,
+		current.Record.EnvironmentID,
+		current.Record.Desired.TargetServiceID,
+	)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
-	return service.acceptRouteWork(ctx, environment, project, target, &current, current.Record, workexecution.ActionRemove, locator, evidence)
+	return service.acceptRouteWork(
+		ctx,
+		environment,
+		project,
+		target,
+		&current,
+		current.Record,
+		workexecution.ActionRemove,
+		locator,
+		evidence,
+	)
 }
 
 func routeRemovalIntent(routeID, environmentID string) routeMutationIntent {
@@ -68,7 +91,11 @@ func routeRemovalIntent(routeID, environmentID string) routeMutationIntent {
 		path: []requestidempotency.PathBinding{{Name: "id", Value: routeID}}}
 }
 
-func (service *routeMutationService) replayRouteRemoval(ctx context.Context, routeID string, locator idempotency.IdempotencyLocator) (idempotency.IdempotencyResponse, error) {
+func (service *routeMutationService) replayRouteRemoval(
+	ctx context.Context,
+	routeID string,
+	locator idempotency.IdempotencyLocator,
+) (idempotency.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.Prepare(ctx, routeRemovalIntent(routeID, locator.ScopeID))
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
@@ -79,7 +106,10 @@ func (service *routeMutationService) replayRouteRemoval(ctx context.Context, rou
 		return idempotency.IdempotencyResponse{}, err
 	}
 	if !found {
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Route removal replay record is unavailable")
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Route removal replay record is unavailable",
+		)
 	}
 	return routeReplayResponse(resolution)
 }

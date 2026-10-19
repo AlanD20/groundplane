@@ -34,7 +34,12 @@ func (journal *Journal) PrepareBackingHookExec(ctx context.Context, attempt work
 	if !backingHookWritable(state, attempt, layout) || state.Backing.Hook != nil {
 		return conflict()
 	}
-	state.Backing.Hook = &BackingHookRecord{Boundary: *state.Backing.Progress, ContainerID: containerID, ExecID: execID, CreatedAt: at.UTC()}
+	state.Backing.Hook = &BackingHookRecord{
+		Boundary:    *state.Backing.Progress,
+		ContainerID: containerID,
+		ExecID:      execID,
+		CreatedAt:   at.UTC(),
+	}
 	return journal.writeRecord(ctx, *state)
 }
 
@@ -125,8 +130,14 @@ func (journal *Journal) SaveBackingHookResult(ctx context.Context, attempt worke
 	if err != nil {
 		return backingprovision.Observation{}, err
 	}
-	result := backingprovision.Observation{ServiceID: layout.ServiceID, Input: layout.Input, Stage: backingprovision.AfterStart,
-		ContainerID: hook.ContainerID, HookResult: evidence, At: at.UTC()}
+	result := backingprovision.Observation{
+		ServiceID:   layout.ServiceID,
+		Input:       layout.Input,
+		Stage:       backingprovision.AfterStart,
+		ContainerID: hook.ContainerID,
+		HookResult:  evidence,
+		At:          at.UTC(),
+	}
 	hook.Result = &result
 	return result, journal.writeRecord(ctx, *state)
 }

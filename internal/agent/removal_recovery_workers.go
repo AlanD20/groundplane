@@ -10,7 +10,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (workers *executionWorkers) submitRemovalRecovery(delivery *agentpb.ServiceRemovalRecoveryAssignment, available int) error {
+func (workers *executionWorkers) submitRemovalRecovery(
+	delivery *agentpb.ServiceRemovalRecoveryAssignment,
+	available int,
+) error {
 	input, err := removalruntime.DecodeAssignment(delivery, workers.identity)
 	if err != nil {
 		return err
@@ -26,7 +29,10 @@ func (workers *executionWorkers) submitRemovalRecovery(delivery *agentpb.Service
 	}
 	if active, exists := workers.active[attempt.WorkItemID]; exists {
 		if active.removalRecovery == nil || !proto.Equal(active.removalRecovery, delivery) {
-			return errs.New(errs.KindStateConflict, "service removal recovery already has a different active assignment")
+			return errs.New(
+				errs.KindStateConflict,
+				"service removal recovery already has a different active assignment",
+			)
 		}
 		return nil
 	}

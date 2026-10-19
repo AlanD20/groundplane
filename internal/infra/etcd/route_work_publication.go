@@ -42,7 +42,10 @@ type RouteWorkPublication struct {
 
 // PublishRouteWork joins desired state and the native router operation. Removal
 // publishes intent now, but keeps mutable Route metadata until host completion.
-func (repository *HierarchyRepository) PublishRouteWork(ctx context.Context, request RouteWorkPublication) (IdempotencyTransactionResult, error) {
+func (repository *HierarchyRepository) PublishRouteWork(
+	ctx context.Context,
+	request RouteWorkPublication,
+) (IdempotencyTransactionResult, error) {
 	project, environment, claim := request.Project, request.Environment, request.Claim
 	task, item, route := request.Task, request.Item, request.Capture.Route
 	if ctx == nil || repository == nil || route == nil ||
@@ -56,12 +59,16 @@ func (repository *HierarchyRepository) PublishRouteWork(ctx context.Context, req
 		request.Marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
 		request.Marker.Locator.ScopeID != environment.Record.ID ||
 		(route.Remove && (request.Current == nil || request.Current.Record != route.Record)) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Route publication authority is inconsistent")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Route publication authority is inconsistent",
+		)
 	}
 	if err := routepersistence.ValidateRouteHierarchy(ctx, environment, project, request.Target, route.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil || found {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
+		found {
 		return existing, err
 	}
 	fence, err := repository.loadEnvironmentBlueprintMutationFence(ctx, project, environment)
@@ -69,7 +76,10 @@ func (repository *HierarchyRepository) PublishRouteWork(ctx context.Context, req
 		return IdempotencyTransactionResult{}, err
 	}
 	if epoch, found := fence.EpochRevision(); !found || epoch != request.EpochRevision {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route Environment changed before publication")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Route Environment changed before publication",
+		)
 	}
 	publication, err := repository.prepareEnvironmentBlueprintPublication(ctx, claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: environment.Record.ID, RevisionID: task.ID},
@@ -86,8 +96,16 @@ func (repository *HierarchyRepository) PublishRouteWork(ctx context.Context, req
 	}
 	defer identities.clear()
 	definitions := routepersistence.NewRepository(repository.store)
-	conditions, writes, err := definitions.PrepareDefinition(ctx, environment, project, request.Target, request.Current, route.Record,
-		claim.BaselineHeadRevision, fence.ReadRevision())
+	conditions, writes, err := definitions.PrepareDefinition(
+		ctx,
+		environment,
+		project,
+		request.Target,
+		request.Current,
+		route.Record,
+		claim.BaselineHeadRevision,
+		fence.ReadRevision(),
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -109,11 +127,20 @@ func (repository *HierarchyRepository) PublishRouteWork(ctx context.Context, req
 	guards := append(fence.TransactionConditions(), request.PreparationConditions...)
 	guards = append(guards, identities.conditions...)
 	guards = append(guards, conditions...)
-	guards = append(guards, check,
+	guards = append(
+		guards,
+		check,
 		keyvalue.Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		keyvalue.Condition{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintRootKey(environment.Record.ID, task.ID), ModRevision: publication.rootRevision},
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), ModRevision: claim.BaselineHeadRevision})
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintRootKey(environment.Record.ID, task.ID),
+			ModRevision: publication.rootRevision,
+		},
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
+			ModRevision: claim.BaselineHeadRevision,
+		},
+	)
 	change, err := repository.prepareRouteWorkExecution(ctx, request, guards, fence.ReadRevision())
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -133,10 +160,21 @@ func (repository *HierarchyRepository) PublishRouteWork(ctx context.Context, req
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	change.Mutations = append(change.Mutations, epoch,
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), Value: reference},
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: publication.descriptorKey, Value: append([]byte(nil), publication.publishedDescriptor...)},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: publication.locatorKey})
+	change.Mutations = append(
+		change.Mutations,
+		epoch,
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
+			Value: reference,
+		},
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   publication.descriptorKey,
+			Value: append([]byte(nil), publication.publishedDescriptor...),
+		},
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: publication.locatorKey},
+	)
 	queue, err := workqueue.NewRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -149,8 +187,12 @@ func (repository *HierarchyRepository) PublishRouteWork(ctx context.Context, req
 	if result.Succeeded {
 		return IdempotencyTransactionResult{kind: idempotencyTransactionApplied, revision: result.Revision}, nil
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil || found {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
+		found {
 		return existing, err
 	}
-	return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route publication changed before atomic acceptance")
+	return IdempotencyTransactionResult{}, errs.New(
+		errs.KindStateConflict,
+		"Route publication changed before atomic acceptance",
+	)
 }

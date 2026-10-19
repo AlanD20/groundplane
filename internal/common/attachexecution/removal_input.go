@@ -21,15 +21,22 @@ type RemovalInput struct {
 }
 
 func ValidateRemoval(input *agentpb.AttachRemovalInput) error {
-	if input == nil || executionplan.RejectUnknown(input) != nil || proto.Size(input) > executionplan.MaximumPlanBytes ||
-		input.CapturedSource == nil || ids.Validate(ids.KindPlan, input.CapturedSource.InputId) != nil || len(input.CapturedSource.Sha256) != 32 ||
-		ids.Validate(ids.KindAttach, input.AttachId) != nil || ids.Validate(ids.KindService, input.BackingServiceId) != nil ||
-		ids.Validate(ids.KindTenant, input.TenantId) != nil || ids.Validate(ids.KindProject, input.ProjectId) != nil ||
-		ids.Validate(ids.KindEnvironment, input.EnvironmentId) != nil || input.ServiceId != "" && ids.Validate(ids.KindService, input.ServiceId) != nil {
+	if input == nil || executionplan.RejectUnknown(input) != nil ||
+		proto.Size(input) > executionplan.MaximumPlanBytes ||
+		input.CapturedSource == nil ||
+		ids.Validate(ids.KindPlan, input.CapturedSource.InputId) != nil ||
+		len(input.CapturedSource.Sha256) != 32 ||
+		ids.Validate(ids.KindAttach, input.AttachId) != nil ||
+		ids.Validate(ids.KindService, input.BackingServiceId) != nil ||
+		ids.Validate(ids.KindTenant, input.TenantId) != nil ||
+		ids.Validate(ids.KindProject, input.ProjectId) != nil ||
+		ids.Validate(ids.KindEnvironment, input.EnvironmentId) != nil ||
+		input.ServiceId != "" && ids.Validate(ids.KindService, input.ServiceId) != nil {
 		return invalid("Attach removal identity or captured source is invalid")
 	}
 	if input.Consumer != nil {
-		if input.Consumer.EnvironmentId != input.EnvironmentId || input.Consumer.ServiceId != input.ServiceId || input.Consumer.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT {
+		if input.Consumer.EnvironmentId != input.EnvironmentId || input.Consumer.ServiceId != input.ServiceId ||
+			input.Consumer.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT {
 			return invalid("Detach consumer belongs to a different Attach")
 		}
 		if err := executionplan.ValidateAttachConsumerTransition(context.Background(), input.Consumer); err != nil {
@@ -137,7 +144,10 @@ func ClearRemoval(input *agentpb.AttachRemovalInput) {
 	}
 }
 
-func DecodeRemovalAssignment(message *agentpb.AttachRemovalAssignment, identity workexecution.Identity) (RemovalInput, error) {
+func DecodeRemovalAssignment(
+	message *agentpb.AttachRemovalAssignment,
+	identity workexecution.Identity,
+) (RemovalInput, error) {
 	if message == nil || executionplan.RejectUnknown(message) != nil {
 		return RemovalInput{}, invalid("Attach removal assignment is invalid")
 	}

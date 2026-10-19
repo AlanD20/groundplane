@@ -50,12 +50,23 @@ func Acquire(ctx context.Context) (*Lease, error) {
 		return nil, errs.WrapJoined(errs.KindInternal, err, lease.Close())
 	}
 	if stat.Uid != uint32(os.Geteuid()) || stat.Mode&0o7777 != 0o700 {
-		return nil, errs.WrapJoined(errs.KindStateConflict, errs.New(errs.KindStateConflict, "Agent execution ownership directory must be private and owned by the Agent account"), lease.Close())
+		return nil, errs.WrapJoined(
+			errs.KindStateConflict,
+			errs.New(
+				errs.KindStateConflict,
+				"Agent execution ownership directory must be private and owned by the Agent account",
+			),
+			lease.Close(),
+		)
 	}
 	if err := unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		closeErr := lease.Close()
 		if errors.Is(err, unix.EWOULDBLOCK) {
-			return nil, errs.WrapJoined(errs.KindStateConflict, errs.New(errs.KindStateConflict, "another Agent process still owns this host's execution"), closeErr)
+			return nil, errs.WrapJoined(
+				errs.KindStateConflict,
+				errs.New(errs.KindStateConflict, "another Agent process still owns this host's execution"),
+				closeErr,
+			)
 		}
 		return nil, errs.WrapJoined(errs.KindInternal, err, closeErr)
 	}
@@ -100,7 +111,8 @@ func (lease *Lease) Check() error {
 	if err := errors.Join(statErr, unix.Close(fd)); err != nil {
 		return errs.Wrap(errs.KindInternal, err)
 	}
-	if held.Dev != current.Dev || held.Ino != current.Ino || current.Uid != uint32(os.Geteuid()) || current.Mode&0o7777 != 0o700 {
+	if held.Dev != current.Dev || held.Ino != current.Ino || current.Uid != uint32(os.Geteuid()) ||
+		current.Mode&0o7777 != 0o700 {
 		return errs.New(errs.KindStateConflict, "Agent execution ownership directory changed")
 	}
 	return nil

@@ -10,7 +10,11 @@ import (
 
 // ReadAppliedVolumes reads a bounded page at the desired inventory's revision.
 // Missing applied state means unproven storage, never implicit success.
-func (repository *InputRepository) ReadAppliedVolumes(ctx context.Context, volumeIDs []string, revision int64) (map[string]AppliedVolume, error) {
+func (repository *InputRepository) ReadAppliedVolumes(
+	ctx context.Context,
+	volumeIDs []string,
+	revision int64,
+) (map[string]AppliedVolume, error) {
 	if len(volumeIDs) > 200 || revision <= 0 {
 		return nil, conflict("applied Volume page requires a bounded revisioned inventory")
 	}

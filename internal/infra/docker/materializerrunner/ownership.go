@@ -40,7 +40,10 @@ func helperLabels(owner Ownership) map[string]string {
 
 func validateOwnership(owner Ownership) error {
 	if ids.Validate(ids.KindTask, owner.TaskID) != nil || ids.Validate(ids.KindStep, owner.StageID) != nil ||
-		ids.Validate(ids.KindEnvironment, owner.EnvironmentID) != nil || owner.Generation == 0 || owner.Destination == "" {
+		ids.Validate(
+			ids.KindEnvironment,
+			owner.EnvironmentID,
+		) != nil || owner.Generation == 0 || owner.Destination == "" {
 		return errs.New(errs.KindValidationFailed, "materializer requires captured file ownership")
 	}
 	return nil

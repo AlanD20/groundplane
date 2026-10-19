@@ -11,7 +11,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (executor *Executor) acknowledge(ctx context.Context, assignment resolverexecution.Assignment, exchange Exchange, progress resolverexecution.Progress) error {
+func (executor *Executor) acknowledge(
+	ctx context.Context,
+	assignment resolverexecution.Assignment,
+	exchange Exchange,
+	progress resolverexecution.Progress,
+) error {
 	layout, err := resolverexecution.CaptureLayout(assignment.Attempt, assignment.Input)
 	if err != nil {
 		return err
@@ -24,21 +29,33 @@ func (executor *Executor) acknowledge(ctx context.Context, assignment resolverex
 	if err != nil {
 		return err
 	}
-	ack, err := exchange.ResolverCheckpoint(ctx, &agentpb.ResolverWorkCheckpointRequest{Attempt: identity, Progress: raw})
+	ack, err := exchange.ResolverCheckpoint(
+		ctx,
+		&agentpb.ResolverWorkCheckpointRequest{Attempt: identity, Progress: raw},
+	)
 	if err != nil {
 		return err
 	}
 	return executor.journal.AcknowledgeResolver(ctx, assignment.Attempt, assignment.Input, ack)
 }
 
-func (executor *Executor) save(ctx context.Context, assignment resolverexecution.Assignment, exchange Exchange, progress resolverexecution.Progress) error {
+func (executor *Executor) save(
+	ctx context.Context,
+	assignment resolverexecution.Assignment,
+	exchange Exchange,
+	progress resolverexecution.Progress,
+) error {
 	if _, err := executor.journal.PrepareResolver(ctx, assignment.Attempt, assignment.Input, progress); err != nil {
 		return err
 	}
 	return executor.acknowledge(ctx, assignment, exchange, progress)
 }
 
-func (executor *Executor) complete(ctx context.Context, assignment resolverexecution.Assignment, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) complete(
+	ctx context.Context,
+	assignment resolverexecution.Assignment,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	saved, err := executor.journal.Resolver(ctx, assignment.Attempt, assignment.Input)
 	if err != nil {
 		return workexecution.Attempt{}, err
@@ -46,7 +63,13 @@ func (executor *Executor) complete(ctx context.Context, assignment resolverexecu
 	if saved == nil || saved.Progress == nil || !saved.Acknowledged {
 		return workexecution.Attempt{}, invalidInput()
 	}
-	evidence, err := resolverexecution.CompletionEvidence(assignment.Attempt, assignment.Input, *saved.Progress, saved.Verification, saved.Proof)
+	evidence, err := resolverexecution.CompletionEvidence(
+		assignment.Attempt,
+		assignment.Input,
+		*saved.Progress,
+		saved.Verification,
+		saved.Proof,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -58,14 +81,26 @@ func (executor *Executor) complete(ctx context.Context, assignment resolverexecu
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	ack, err := exchange.CompleteResolver(ctx, &agentpb.ResolverWorkCompletionRequest{Attempt: identity, Evidence: encoded, ServingProof: proto.CloneOf(saved.Proof)})
+	ack, err := exchange.CompleteResolver(
+		ctx,
+		&agentpb.ResolverWorkCompletionRequest{
+			Attempt:      identity,
+			Evidence:     encoded,
+			ServingProof: proto.CloneOf(saved.Proof),
+		},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
 	return executor.journal.CompleteResolver(ctx, assignment.Attempt, assignment.Input, ack)
 }
 
-func (executor *Executor) fail(ctx context.Context, assignment resolverexecution.Assignment, exchange Exchange, cause error) (workexecution.Attempt, error) {
+func (executor *Executor) fail(
+	ctx context.Context,
+	assignment resolverexecution.Assignment,
+	exchange Exchange,
+	cause error,
+) (workexecution.Attempt, error) {
 	reason := resolverexecution.ExecutionFailed
 	at := time.Now().UTC()
 	if !at.Before(assignment.Attempt.Deadline) {
@@ -82,19 +117,30 @@ func (executor *Executor) fail(ctx context.Context, assignment resolverexecution
 	return executor.deliverFailure(bounded, assignment, exchange, saved.FailureReason)
 }
 
-func (executor *Executor) deliverFailure(ctx context.Context, assignment resolverexecution.Assignment, exchange Exchange, reason resolverexecution.FailureReason) (workexecution.Attempt, error) {
+func (executor *Executor) deliverFailure(
+	ctx context.Context,
+	assignment resolverexecution.Assignment,
+	exchange Exchange,
+	reason resolverexecution.FailureReason,
+) (workexecution.Attempt, error) {
 	identity, err := workexecution.EncodeAgentAttempt(assignment.Attempt)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	ack, err := exchange.FailResolver(ctx, &agentpb.ResolverWorkFailureRequest{Attempt: identity, Reason: string(reason)})
+	ack, err := exchange.FailResolver(
+		ctx,
+		&agentpb.ResolverWorkFailureRequest{Attempt: identity, Reason: string(reason)},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
 	return executor.journal.AcknowledgeResolverFailure(ctx, assignment.Attempt, assignment.Input, ack)
 }
 
-func (executor *Executor) helperRequest(ctx context.Context, assignment resolverexecution.Assignment, start *agentpb.WorkStartAck,
+func (executor *Executor) helperRequest(
+	ctx context.Context,
+	assignment resolverexecution.Assignment,
+	start *agentpb.WorkStartAck,
 	inspect bool,
 ) (*agentpb.ResolverWorkHelperRequest, resolverexecution.HelperInput, error) {
 	if err := executor.ownership.Check(); err != nil {
@@ -108,7 +154,11 @@ func (executor *Executor) helperRequest(ctx context.Context, assignment resolver
 	if err != nil {
 		return nil, resolverexecution.HelperInput{}, err
 	}
-	request := &agentpb.ResolverWorkHelperRequest{Assignment: &agentpb.ResolverWorkAssignment{Attempt: identity, Input: raw}, Start: proto.CloneOf(start), InspectOnly: inspect}
+	request := &agentpb.ResolverWorkHelperRequest{
+		Assignment:  &agentpb.ResolverWorkAssignment{Attempt: identity, Input: raw},
+		Start:       proto.CloneOf(start),
+		InspectOnly: inspect,
+	}
 	if assignment.Recovery != nil {
 		request.Assignment.Recovery, err = resolverexecution.EncodeRecovery(*assignment.Recovery)
 		if err != nil {

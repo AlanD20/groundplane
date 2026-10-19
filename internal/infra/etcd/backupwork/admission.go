@@ -7,7 +7,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (repository *InputRepository) PrepareAdmission(ctx context.Context, view workqueue.View) (*agentpb.BackupWorkInput, workqueue.Change, error) {
+func (repository *InputRepository) PrepareAdmission(
+	ctx context.Context,
+	view workqueue.View,
+) (*agentpb.BackupWorkInput, workqueue.Change, error) {
 	input, captured, err := repository.Load(ctx, view)
 	if err != nil {
 		return nil, workqueue.Change{}, err

@@ -17,9 +17,16 @@ import (
 
 // InspectReleaseEffect never changes containers, files or routing. Missing proof
 // leaves the effect unresolved; it is not permission to repeat a mutation.
-func InspectReleaseEffect(ctx context.Context, taskRunner runner.Runner, input releaseexecution.Input, report releaseexecution.CheckpointReport) (*agentpb.ReleaseHelperResponse, error) {
-	if ctx == nil || taskRunner == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil || report.Progress.Validate(input) != nil ||
-		!report.Progress.InFlight || report.Progress.Phase != releaseexecution.Rollout {
+func InspectReleaseEffect(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+) (*agentpb.ReleaseHelperResponse, error) {
+	if ctx == nil || taskRunner == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil ||
+		report.Progress.Validate(input) != nil ||
+		!report.Progress.InFlight ||
+		report.Progress.Phase != releaseexecution.Rollout {
 		return nil, invalidReleaseHelper()
 	}
 	stage, err := report.Progress.StageID(input)
@@ -57,7 +64,15 @@ func InspectReleaseEffect(ctx context.Context, taskRunner runner.Runner, input r
 			proxy = artifacts.Prior.Proxy
 		}
 	}
-	inventory, err := inspectServingInventory(bounded, taskRunner, prior, artifacts.Candidate, input.Release.ServiceId, input.Release.ReleaseId, proxy)
+	inventory, err := inspectServingInventory(
+		bounded,
+		taskRunner,
+		prior,
+		artifacts.Candidate,
+		input.Release.ServiceId,
+		input.Release.ReleaseId,
+		proxy,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +112,8 @@ func InspectReleaseEffect(ctx context.Context, taskRunner runner.Runner, input r
 	response := &agentpb.ReleaseHelperResponse{Succeeded: true, Inspection: true}
 	switch {
 	case startup:
-		if input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE && len(inventory.predecessors) != 0 {
+		if input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE &&
+			len(inventory.predecessors) != 0 {
 			return nil, unresolvedReleaseEffect()
 		}
 		if err := inspectStartedRelease(bounded, taskRunner, inventory, workloads); err != nil {
@@ -119,7 +135,13 @@ func InspectReleaseEffect(ctx context.Context, taskRunner runner.Runner, input r
 			if inventory.proxyID == "" {
 				return nil, unresolvedReleaseEffect()
 			}
-			proven, err := observeRestorationProxy(bounded, taskRunner, inventory.proxyID, artifacts.Proxy.ProxyImplementation, traffic.AfterSHA256[:])
+			proven, err := observeRestorationProxy(
+				bounded,
+				taskRunner,
+				inventory.proxyID,
+				artifacts.Proxy.ProxyImplementation,
+				traffic.AfterSHA256[:],
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -130,7 +152,8 @@ func InspectReleaseEffect(ctx context.Context, taskRunner runner.Runner, input r
 			response.Inspection = true
 		}
 	case retired != nil:
-		if progress.Rolling.Phase == rollingrelease.RemovePredecessor && time.Now().Before(progress.Rolling.DrainUntil) {
+		if progress.Rolling.Phase == rollingrelease.RemovePredecessor &&
+			time.Now().Before(progress.Rolling.DrainUntil) {
 			return nil, unresolvedReleaseEffect()
 		}
 		if artifacts.Proxy != nil {
@@ -141,7 +164,13 @@ func InspectReleaseEffect(ctx context.Context, taskRunner runner.Runner, input r
 			if inventory.proxyID == "" {
 				return nil, unresolvedReleaseEffect()
 			}
-			proven, err := observeRestorationProxy(bounded, taskRunner, inventory.proxyID, artifacts.Proxy.ProxyImplementation, traffic.AfterSHA256[:])
+			proven, err := observeRestorationProxy(
+				bounded,
+				taskRunner,
+				inventory.proxyID,
+				artifacts.Proxy.ProxyImplementation,
+				traffic.AfterSHA256[:],
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -176,7 +205,12 @@ func InspectReleaseEffect(ctx context.Context, taskRunner runner.Runner, input r
 	return response, releaseexecution.ValidateHelperResult(input, progress, response)
 }
 
-func inspectStartedRelease(ctx context.Context, taskRunner runner.Runner, inventory servingInventory, services []*agentpb.ComposeService) error {
+func inspectStartedRelease(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	inventory servingInventory,
+	services []*agentpb.ComposeService,
+) error {
 	if len(services) == 0 {
 		return unresolvedReleaseEffect()
 	}
@@ -186,10 +220,23 @@ func inspectStartedRelease(ctx context.Context, taskRunner runner.Runner, invent
 		if err != nil {
 			return err
 		}
-		if !slices.ContainsFunc(services, func(service *agentpb.ComposeService) bool { return service.ComposeName == name }) {
+		if !slices.ContainsFunc(
+			services,
+			func(service *agentpb.ComposeService) bool { return service.ComposeName == name },
+		) {
 			continue
 		}
-		result, err := taskRunner.Run(ctx, runner.RunCmdOpts{Name: DockerExecutable, Args: []string{"container", "inspect", "--format", "{{.State.Running}}", id}, Dir: WorkDirectory, Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, CaptureLimitBytes: 1024})
+		result, err := taskRunner.Run(
+			ctx,
+			runner.RunCmdOpts{
+				Name:              DockerExecutable,
+				Args:              []string{"container", "inspect", "--format", "{{.State.Running}}", id},
+				Dir:               WorkDirectory,
+				Env:               slices.Clone(fixedEnvironment),
+				ReplaceEnv:        true,
+				CaptureLimitBytes: 1024,
+			},
+		)
 		if err != nil {
 			return err
 		}
@@ -207,5 +254,8 @@ func inspectStartedRelease(ctx context.Context, taskRunner runner.Runner, invent
 }
 
 func unresolvedReleaseEffect() error {
-	return errs.New(errs.KindStateConflict, "interrupted Release action has no complete matching runtime proof; recovery is required")
+	return errs.New(
+		errs.KindStateConflict,
+		"interrupted Release action has no complete matching runtime proof; recovery is required",
+	)
 }

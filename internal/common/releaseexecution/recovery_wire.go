@@ -9,7 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func EncodeRecoveryRequest(input RecoveryInput, report RecoveryReport) (*agentpb.ReleaseRecoveryCheckpointRequest, error) {
+func EncodeRecoveryRequest(
+	input RecoveryInput,
+	report RecoveryReport,
+) (*agentpb.ReleaseRecoveryCheckpointRequest, error) {
 	if report.Ack != nil || report.Validate(input) != nil {
 		return nil, invalidProgress()
 	}
@@ -24,8 +27,12 @@ func EncodeRecoveryRequest(input RecoveryInput, report RecoveryReport) (*agentpb
 	return &agentpb.ReleaseRecoveryCheckpointRequest{Attempt: attempt, Report: raw}, nil
 }
 
-func DecodeRecoveryRequest(input RecoveryInput, request *agentpb.ReleaseRecoveryCheckpointRequest) (RecoveryReport, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 || len(request.Report) > MaximumCheckpointBytes {
+func DecodeRecoveryRequest(
+	input RecoveryInput,
+	request *agentpb.ReleaseRecoveryCheckpointRequest,
+) (RecoveryReport, error) {
+	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 ||
+		len(request.Report) > MaximumCheckpointBytes {
 		return RecoveryReport{}, invalidProgress()
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(request.Attempt, input.Input.Attempt.Executor)
@@ -62,8 +69,14 @@ func EncodeRecoveryAck(input RecoveryInput, report RecoveryReport) (*agentpb.Rel
 	return &agentpb.ReleaseRecoveryCheckpointAck{Attempt: attempt, Checkpoint: raw}, nil
 }
 
-func DecodeRecoveryAck(input RecoveryInput, report RecoveryReport, ack *agentpb.ReleaseRecoveryCheckpointAck) (workexecution.Checkpoint, error) {
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || len(ack.Checkpoint) == 0 || len(ack.Checkpoint) > MaximumCheckpointBytes || report.Validate(input) != nil {
+func DecodeRecoveryAck(
+	input RecoveryInput,
+	report RecoveryReport,
+	ack *agentpb.ReleaseRecoveryCheckpointAck,
+) (workexecution.Checkpoint, error) {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || len(ack.Checkpoint) == 0 ||
+		len(ack.Checkpoint) > MaximumCheckpointBytes ||
+		report.Validate(input) != nil {
 		return workexecution.Checkpoint{}, invalidProgress()
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(ack.Attempt, input.Input.Attempt.Executor)

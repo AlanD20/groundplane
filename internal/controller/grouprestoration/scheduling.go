@@ -12,12 +12,19 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (service *Service) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item, task := request.Item.Item, request.Task.Task
 	if request.DecisionOnly || item.Operation != workexecution.ReleaseRestoration || item.Input == nil ||
 		request.Direction != workexecution.Forward && request.Direction != workexecution.Recovery ||
 		item.Placement.Executor != workexecution.Agent || request.Executor.Record.Identity.HostID != item.Placement.HostID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Group restoration cannot obtain this assignment")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Group restoration cannot obtain this assignment",
+		)
 	}
 	if request.Direction == workexecution.Recovery && !at.Before(item.Deadline) {
 		change, err := workqueue.PrepareCleanupRetryExpiry(request.Task, request.Item, at)
@@ -69,7 +76,12 @@ func (service *Service) activeConditions(ctx context.Context, view workqueue.Res
 	return append(conditions, previous.Conditions...), nil
 }
 
-func (service *Service) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (service *Service) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if err := ctx.Err(); err != nil {
 		return workqueue.Change{}, err
 	}

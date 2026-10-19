@@ -31,11 +31,17 @@ func (host *BackupConsumerHost) RunRecovery(ctx context.Context, assignment *age
 	}
 	if attempt == nil || attempt.StartedAt == nil || saved == nil || saved.Recovery == nil ||
 		saved.Completion != nil || saved.FailureReason != "" || len(saved.Recovery.Report) != 0 || ordinal != 0 {
-		return nil, digest, errs.New(errs.KindStateConflict, "Restore consumer recovery requires its active durable start")
+		return nil, digest, errs.New(
+			errs.KindStateConflict,
+			"Restore consumer recovery requires its active durable start",
+		)
 	}
 	request := &agentpb.BackupConsumerHelperRequest{Recovery: owned, SourceOrdinal: ordinal, ServiceId: serviceID,
 		Operation: operation, InspectOnly: inspection,
-		Start: &agentpb.WorkStartAck{Attempt: proto.CloneOf(owned.Attempt), StartedAt: timestamppb.New(*attempt.StartedAt)}}
+		Start: &agentpb.WorkStartAck{
+			Attempt:   proto.CloneOf(owned.Attempt),
+			StartedAt: timestamppb.New(*attempt.StartedAt),
+		}}
 	if !inspection {
 		request.Checkpoint, err = saved.Recovery.Checkpoint.Report()
 		if err != nil {

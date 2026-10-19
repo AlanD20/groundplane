@@ -15,7 +15,11 @@ import (
 // An uncertain publication is never interpreted as failure to publish. Observe
 // native Task absence first; Abandon also fences Task/work/root absence in each
 // cleanup transaction, so publication racing this read retains its protection.
-func (repository *ServiceRepository) abandonRemovalSecretPreparation(ctx context.Context, input serviceremovalwork.Input, cause error) error {
+func (repository *ServiceRepository) abandonRemovalSecretPreparation(
+	ctx context.Context,
+	input serviceremovalwork.Input,
+	cause error,
+) error {
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	key := workqueue.TaskKey(input.TaskID)
@@ -24,11 +28,17 @@ func (repository *ServiceRepository) abandonRemovalSecretPreparation(ctx context
 		return errors.Join(cause, err)
 	}
 	if read == nil {
-		return errors.Join(cause, errs.New(errs.KindStorageUnavailable, "Cannot establish removal publication outcome for Secret cleanup"))
+		return errors.Join(
+			cause,
+			errs.New(errs.KindStorageUnavailable, "Cannot establish removal publication outcome for Secret cleanup"),
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if len(read.Values) != 1 || read.ReadRevision <= 0 {
-		return errors.Join(cause, errs.New(errs.KindStorageUnavailable, "Removal publication observation is incomplete"))
+		return errors.Join(
+			cause,
+			errs.New(errs.KindStorageUnavailable, "Removal publication observation is incomplete"),
+		)
 	}
 	if read.Values[0] != nil {
 		return cause
@@ -43,7 +53,11 @@ func (repository *ServiceRepository) abandonRemovalSecretPreparation(ctx context
 // Apply already owns a durable Task. Absence of its immutable input, compared
 // with the exact current work revision, distinguishes an unpublished preparation
 // from an uncertain successful commit. Published pins are never abandoned.
-func (repository *ServiceRepository) abandonBlueprintRemovalPreparation(ctx context.Context, input serviceremovalwork.Input, cause error) error {
+func (repository *ServiceRepository) abandonBlueprintRemovalPreparation(
+	ctx context.Context,
+	input serviceremovalwork.Input,
+	cause error,
+) error {
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	queue, err := workqueue.NewRepository(repository.store)
@@ -70,7 +84,13 @@ func (repository *ServiceRepository) abandonBlueprintRemovalPreparation(ctx cont
 		if err := cleanup.Err(); err != nil {
 			return errors.Join(cause, err)
 		}
-		done, err := pins.AbandonOwned(cleanup, input.ConfigurationOperationID(), input.TaskID, input.WorkItemID, guards)
+		done, err := pins.AbandonOwned(
+			cleanup,
+			input.ConfigurationOperationID(),
+			input.TaskID,
+			input.WorkItemID,
+			guards,
+		)
 		if err != nil || done {
 			return errors.Join(cause, err)
 		}

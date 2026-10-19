@@ -27,7 +27,9 @@ type Removal struct {
 }
 
 func (removal Removal) matches(view workqueue.View, environmentID string, generation uint64) error {
-	if environmentID != view.Task.Task.Scope.EnvironmentID || generation == 0 || view.Task.Task.Action != workexecution.ActionRemove || ids.Validate(ids.KindEnvEntry, removal.EntryID) != nil ||
+	if environmentID != view.Task.Task.Scope.EnvironmentID || generation == 0 ||
+		view.Task.Task.Action != workexecution.ActionRemove ||
+		ids.Validate(ids.KindEnvEntry, removal.EntryID) != nil ||
 		ids.Validate(ids.KindTask, removal.BaseRevisionID) != nil ||
 		ids.Validate(ids.KindTask, "task_"+removal.DescriptorID) != nil ||
 		removal.RevisionID != view.Task.Task.ID ||

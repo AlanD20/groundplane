@@ -32,7 +32,10 @@ func (repository *ConnectorRepository) CaptureConnectorRemoval(ctx context.Conte
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.ReadRevision != current.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
-		return connectorremoval.Input{}, errs.New(errs.KindStateConflict, "Connector credentials are unavailable for removal")
+		return connectorremoval.Input{}, errs.New(
+			errs.KindStateConflict,
+			"Connector credentials are unavailable for removal",
+		)
 	}
 	credentials, err := connectors.DecodeEncryptedCredentials(read.Values[0].Value)
 	defer clear(credentials.Ciphertext)
@@ -40,7 +43,10 @@ func (repository *ConnectorRepository) CaptureConnectorRemoval(ctx context.Conte
 		return connectorremoval.Input{}, err
 	}
 	if credentials.ConnectorID != current.Record.Connector.ID {
-		return connectorremoval.Input{}, errs.New(errs.KindStateConflict, "Connector credentials belong to another resource")
+		return connectorremoval.Input{}, errs.New(
+			errs.KindStateConflict,
+			"Connector credentials belong to another resource",
+		)
 	}
 	input := connectorremoval.Input{TaskID: taskID, WorkItemID: workID, PlanID: planID,
 		TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID,

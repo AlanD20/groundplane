@@ -35,7 +35,10 @@ func OpenBackupRecoveryConsumer(assignment *agentpb.BackupRecoveryAssignment, au
 		return BackupConsumerInput{}, err
 	}
 	if owned.RestoreMode != agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION {
-		return BackupConsumerInput{}, errs.New(errs.KindStateConflict, "Consumer recovery requires a captured live mutation")
+		return BackupConsumerInput{}, errs.New(
+			errs.KindStateConflict,
+			"Consumer recovery requires a captured live mutation",
+		)
 	}
 	return backupConsumerInput(owned.Input, attempt, ordinal, serviceID)
 }
@@ -47,8 +50,12 @@ func backupConsumerInput(input *agentpb.BackupWorkInput, attempt workexecution.A
 		return BackupConsumerInput{}, errs.New(errs.KindStateConflict, "Volume consumer source is not captured")
 	}
 	step := input.Steps[ordinal]
-	if step.GetRestore().GetVolume() == nil && step.GetRestore().GetPostgres() == nil && step.GetRestore().GetMysql() == nil {
-		return BackupConsumerInput{}, errs.New(errs.KindStateConflict, "Volume consumer action requires a captured Restore source")
+	if step.GetRestore().GetVolume() == nil && step.GetRestore().GetPostgres() == nil &&
+		step.GetRestore().GetMysql() == nil {
+		return BackupConsumerInput{}, errs.New(
+			errs.KindStateConflict,
+			"Volume consumer action requires a captured Restore source",
+		)
 	}
 	artifact, service, err := BackupConsumer(input.EnvironmentId, input.Services, input.Artifacts, step, serviceID)
 	if err != nil {

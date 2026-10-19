@@ -46,7 +46,10 @@ func (owner *AgentWork) PrepareConfigRecovery(ctx context.Context, authorization
 	bounded, cancel := context.WithDeadline(ctx, view.Attempt.Attempt.Deadline)
 	defer cancel()
 	step := assignment.Input.Steps[ordinal]
-	transfer, err := configRestoreTransferOwner(backupconfiguration.ConfigTransferOwner{Binding: binding}, step.GetRestore())
+	transfer, err := configRestoreTransferOwner(
+		backupconfiguration.ConfigTransferOwner{Binding: binding},
+		step.GetRestore(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +64,13 @@ func (owner *AgentWork) PrepareConfigRecovery(ctx context.Context, authorization
 		candidate.Projection, candidate.Identities, view.Attempt.Attempt); err != nil {
 		return nil, err
 	}
-	view, err = owner.queue.ReadResume(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, authorization.Identity())
+	view, err = owner.queue.ReadResume(
+		bounded,
+		attempt.TaskID,
+		attempt.WorkItemID,
+		attempt.ID,
+		authorization.Identity(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +78,13 @@ func (owner *AgentWork) PrepareConfigRecovery(ctx context.Context, authorization
 	if err != nil {
 		return nil, err
 	}
-	_, transferGuards, err := owner.inputs.LoadConfigRecoveryTransfer(bounded, owner.queue, binding, attempt, view.Work.ReadRevision)
+	_, transferGuards, err := owner.inputs.LoadConfigRecoveryTransfer(
+		bounded,
+		owner.queue,
+		binding,
+		attempt,
+		view.Work.ReadRevision,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -93,5 +108,9 @@ func (owner *AgentWork) PrepareConfigRecovery(ctx context.Context, authorization
 	if !result.Succeeded || !time.Now().Before(view.Attempt.Attempt.Deadline) {
 		return nil, configSnapshotGuardConflict()
 	}
-	return &agentpb.BackupConfigRecoveryPrepareAck{Assignment: assignment, SourceOrdinal: ordinal, Completed: seal.Record.Completed}, nil
+	return &agentpb.BackupConfigRecoveryPrepareAck{
+		Assignment:    assignment,
+		SourceOrdinal: ordinal,
+		Completed:     seal.Record.Completed,
+	}, nil
 }

@@ -12,8 +12,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (owner *AgentWork) ReadRestoreNewVolumeManifest(ctx context.Context, authorization agentregistration.WorkAuthorization,
-	wire *agentpb.WorkAttemptIdentity, ordinal uint32,
+func (owner *AgentWork) ReadRestoreNewVolumeManifest(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	wire *agentpb.WorkAttemptIdentity,
+	ordinal uint32,
 ) (backupvolumemanifest.Complete, error) {
 	if _, _, err := owner.volumeManifestOwner(ctx, authorization, wire, ordinal,
 		agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW); err != nil {
@@ -41,7 +44,8 @@ func (owner *AgentWork) ReadRestoreNewVolumeManifest(ctx context.Context, author
 func (owner *AgentWork) readPointVolumeManifest(ctx context.Context, point backupruntime.BackupRecoveryPointSnapshot,
 	revision int64,
 ) (backupvolumemanifest.Complete, error) {
-	if point.SourceKind != backupruntime.BackupRuntimeSourceVolume || backupruntime.ValidateBackupRecoveryPointSnapshot(point) != nil {
+	if point.SourceKind != backupruntime.BackupRuntimeSourceVolume ||
+		backupruntime.ValidateBackupRecoveryPointSnapshot(point) != nil {
 		return backupvolumemanifest.Complete{}, invalidVolumeManifestAuthority()
 	}
 	manifestOwner, err := point.VolumeArchive.Manifest.Owner()

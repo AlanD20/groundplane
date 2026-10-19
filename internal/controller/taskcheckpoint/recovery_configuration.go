@@ -19,7 +19,12 @@ type fileSelection struct {
 	files      []taskmaterialization.Record
 }
 
-func (service *ReleaseCheckpointService) activeFileSelection(ctx context.Context, authorization agentregistration.WorkAuthorization, identity *agentpb.WorkAttemptIdentity, stage string) (fileSelection, error) {
+func (service *ReleaseCheckpointService) activeFileSelection(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	identity *agentpb.WorkAttemptIdentity,
+	stage string,
+) (fileSelection, error) {
 	if service == nil || ctx == nil || service.files == nil {
 		return fileSelection{}, invalidConfigurationRequest()
 	}
@@ -55,11 +60,18 @@ func (service *ReleaseCheckpointService) activeFileSelection(ctx context.Context
 		return fileSelection{}, err
 	}
 	if !workexecution.SameAssignment(input.Input.Attempt, view.Attempt.Attempt) || report.StageID != stage ||
-		len(files) > 512 || len(files) != len(input.Input.Release.ConfigurationDestinations) || input.Input.Release.Configuration == nil {
+		len(
+			files,
+		) > 512 || len(files) != len(input.Input.Release.ConfigurationDestinations) || input.Input.Release.Configuration == nil {
 		return fileSelection{}, invalidConfigurationRequest()
 	}
-	selection := fileSelection{attempt: input.Input.Attempt, stage: stage, reference: input.Input.Release.PriorConfiguration,
-		generation: input.Input.Release.Configuration.Generation, files: files}
+	selection := fileSelection{
+		attempt:    input.Input.Attempt,
+		stage:      stage,
+		reference:  input.Input.Release.PriorConfiguration,
+		generation: input.Input.Release.Configuration.Generation,
+		files:      files,
+	}
 	if selection.reference != nil {
 		selection.generation = selection.reference.Generation
 	}

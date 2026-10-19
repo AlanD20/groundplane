@@ -52,7 +52,9 @@ func (repository *InputRepository) StageCascadeGraph(ctx context.Context, task w
 			item.Cleanup != workexecution.CleanupNone || item.Outcome != "" ||
 			ordinal < len(graph)-1 && item.Operation != workexecution.Detach ||
 			ordinal == len(graph)-1 && (item.Operation != workexecution.Network || item.TargetID != task.TargetID) {
-			return workqueue.Change{}, conflict("Backing Zone graph must contain captured Detaches followed by its bridge")
+			return workqueue.Change{}, conflict(
+				"Backing Zone graph must contain captured Detaches followed by its bridge",
+			)
 		}
 		raw, err := workqueue.EncodeItem(item)
 		if err != nil {
@@ -95,7 +97,10 @@ func (repository *InputRepository) StageCascadeGraph(ctx context.Context, task w
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	return workqueue.Change{Conditions: guards, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: rootKey, Value: raw}}}, nil
+	return workqueue.Change{
+		Conditions: guards,
+		Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: rootKey, Value: raw}},
+	}, nil
 }
 
 func (repository *InputRepository) LoadCascadeGraph(ctx context.Context, task workqueue.TaskSnapshot,
@@ -154,5 +159,7 @@ func (repository *InputRepository) LoadCascadeGraph(ctx context.Context, task wo
 	if err := workexecution.ValidateGraph(task.Task, graph); err != nil {
 		return nil, workqueue.Change{}, err
 	}
-	return graph, workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}, nil
+	return graph, workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}},
+	}, nil
 }

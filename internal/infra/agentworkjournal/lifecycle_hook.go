@@ -21,19 +21,31 @@ type LifecycleHookRecord struct {
 	Result      *lifecycleexecution.Receipt `json:"result,omitempty"`
 }
 
-func (hook LifecycleHookRecord) validate(attempt workexecution.Attempt, stages []lifecycleexecution.Stage, progress lifecycleexecution.Progress) error {
+func (hook LifecycleHookRecord) validate(
+	attempt workexecution.Attempt,
+	stages []lifecycleexecution.Stage,
+	progress lifecycleexecution.Progress,
+) error {
 	boundary := hook.Boundary
-	if boundary.ValidateStages(attempt, stages) != nil || boundary.BeganAt == nil || boundary.Sequence > progress.Sequence ||
+	if boundary.ValidateStages(attempt, stages) != nil || boundary.BeganAt == nil ||
+		boundary.Sequence > progress.Sequence ||
 		stages[len(boundary.Completed)].Expected != lifecycleexecution.HookSucceeded ||
-		len(hook.ContainerID) != 64 || !ids.ValidContainerID(hook.ContainerID) || len(hook.ExecID) != 64 || !ids.ValidContainerID(hook.ExecID) ||
-		hook.CreatedAt.Location() != time.UTC || hook.CreatedAt.Before(*boundary.BeganAt) || !hook.CreatedAt.Before(attempt.Deadline) ||
+		len(hook.ContainerID) != 64 ||
+		!ids.ValidContainerID(hook.ContainerID) ||
+		len(hook.ExecID) != 64 ||
+		!ids.ValidContainerID(hook.ExecID) ||
+		hook.CreatedAt.Location() != time.UTC ||
+		hook.CreatedAt.Before(*boundary.BeganAt) ||
+		!hook.CreatedAt.Before(attempt.Deadline) ||
 		(hook.ExitedAt == nil) != (hook.ExitCode == nil) {
 		return invalid()
 	}
-	if hook.ReadyAt != nil && (hook.ReadyAt.Location() != time.UTC || hook.ReadyAt.Before(hook.CreatedAt) || !hook.ReadyAt.Before(attempt.Deadline)) {
+	if hook.ReadyAt != nil &&
+		(hook.ReadyAt.Location() != time.UTC || hook.ReadyAt.Before(hook.CreatedAt) || !hook.ReadyAt.Before(attempt.Deadline)) {
 		return invalid()
 	}
-	if hook.ExitedAt != nil && (hook.ReadyAt == nil || hook.ExitedAt.Location() != time.UTC || hook.ExitedAt.Before(*hook.ReadyAt)) {
+	if hook.ExitedAt != nil &&
+		(hook.ReadyAt == nil || hook.ExitedAt.Location() != time.UTC || hook.ExitedAt.Before(*hook.ReadyAt)) {
 		return invalid()
 	}
 	if boundary.Sequence == progress.Sequence && !lifecycleexecution.EqualProgress(boundary, progress) {
@@ -41,8 +53,12 @@ func (hook LifecycleHookRecord) validate(attempt workexecution.Attempt, stages [
 	}
 	if result := hook.Result; result != nil {
 		stage := stages[len(boundary.Completed)]
-		if hook.ExitedAt == nil || *hook.ExitCode != 0 || result.StageID != stage.ID || result.Member != "" || result.State != lifecycleexecution.HookSucceeded ||
-			result.Evidence.Validate() != nil || result.Evidence.ID != attempt.Input.ID || result.ObservedAt.Location() != time.UTC || result.ObservedAt.Before(*hook.ExitedAt) {
+		if hook.ExitedAt == nil || *hook.ExitCode != 0 || result.StageID != stage.ID || result.Member != "" ||
+			result.State != lifecycleexecution.HookSucceeded ||
+			result.Evidence.Validate() != nil ||
+			result.Evidence.ID != attempt.Input.ID ||
+			result.ObservedAt.Location() != time.UTC ||
+			result.ObservedAt.Before(*hook.ExitedAt) {
 			return invalid()
 		}
 	}

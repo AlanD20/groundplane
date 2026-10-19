@@ -20,5 +20,10 @@ func (owner *AgentWork) PrepareWorkRetry(ctx context.Context, task workqueue.Tas
 		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable,
 			"Component execution has no unresolved cleanup to retry; submit a new Apply to run the configuration again")
 	}
-	return owner.inputs.PrepareRecoveryRetry(ctx, workqueue.View{Task: task, Item: item, ReadRevision: revision}, previous, at)
+	return owner.inputs.PrepareRecoveryRetry(
+		ctx,
+		workqueue.View{Task: task, Item: item, ReadRevision: revision},
+		previous,
+		at,
+	)
 }

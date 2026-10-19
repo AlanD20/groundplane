@@ -13,7 +13,12 @@ import (
 // PrepareRetention preserves captured inputs until every attempt is retired.
 // AppliedNetwork is resource state, not execution history, and is never deleted
 // here. The collecting Task fence prevents Retry from acquiring these inputs.
-func (repository *InputRepository) PrepareRetention(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (repository *InputRepository) PrepareRetention(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Validate() != nil || item.Validate() != nil || view.Task.Revision <= 0 || view.Item.Revision <= 0 ||
 		task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil ||
@@ -59,7 +64,10 @@ func (repository *InputRepository) PrepareRetention(ctx context.Context, view wo
 		keyvalue.Condition{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision})
 	change := workqueue.Change{Conditions: guards}
 	if final {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true},
+		)
 		change.Mutations = []keyvalue.Mutation{
 			{Type: keyvalue.MutationDelete, Key: InputPrefix(item.ID), Prefix: true},
 			{Type: keyvalue.MutationDelete, Key: UnstartedKey(item.ID)},

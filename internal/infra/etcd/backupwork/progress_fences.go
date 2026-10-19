@@ -12,8 +12,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (repository *InputRepository) restoreProgressFences(ctx context.Context, view workqueue.View,
-	input *agentpb.BackupWorkInput, stored []SourceProgress, sources []*agentpb.BackupStepResume, progressRevision int64,
+func (repository *InputRepository) restoreProgressFences(
+	ctx context.Context,
+	view workqueue.View,
+	input *agentpb.BackupWorkInput,
+	stored []SourceProgress,
+	sources []*agentpb.BackupStepResume,
+	progressRevision int64,
 ) error {
 	keys := make([]string, 0, len(sources))
 	ordinals := make([]int, 0, len(sources))

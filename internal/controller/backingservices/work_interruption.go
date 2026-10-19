@@ -12,16 +12,26 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *Work) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (owner *Work) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
 	}
 	actor, previous := authorization.Identity(), view.Attempt.Attempt.Executor
-	if actor.Executor != workexecution.Agent || actor.HostID != previous.HostID || actor == previous || view.CurrentExecutor ||
-		!view.ActiveAttempt || view.Attempt.Attempt.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil ||
+	if actor.Executor != workexecution.Agent || actor.HostID != previous.HostID || actor == previous ||
+		view.CurrentExecutor ||
+		!view.ActiveAttempt ||
+		view.Attempt.Attempt.FinishedAt != nil ||
+		view.Work.Task.Task.CollectionStartedAt != nil ||
 		view.Work.Item.Item.Operation != workexecution.BackingProvision {
-		return errs.New(errs.KindStateConflict, "backing creation interruption requires the replacement Agent on the same host")
+		return errs.New(
+			errs.KindStateConflict,
+			"backing creation interruption requires the replacement Agent on the same host",
+		)
 	}
 	at := time.Now().UTC()
 	var change workqueue.Change

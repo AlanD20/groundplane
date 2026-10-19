@@ -21,14 +21,22 @@ type Owner struct {
 	planner *attachplan.RemovalPlanner
 }
 
-func New(queue *workqueue.Repository, inputs *attachremoval.InputRepository, planner *attachplan.RemovalPlanner) (*Owner, error) {
+func New(
+	queue *workqueue.Repository,
+	inputs *attachremoval.InputRepository,
+	planner *attachplan.RemovalPlanner,
+) (*Owner, error) {
 	if queue == nil || inputs == nil || planner == nil {
 		return nil, errs.New(errs.KindInternal, "Detach execution requires one queue and captured input owners")
 	}
 	return &Owner{queue: queue, inputs: inputs, planner: planner}, nil
 }
 
-func (owner *Owner) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Owner) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item, task := request.Item.Item, request.Task.Task
 	if item.Operation != workexecution.Detach || item.Input == nil || item.Phase != workexecution.Ready ||
 		item.ActiveAttemptID != "" || at.IsZero() || at.Before(item.UpdatedAt) {
@@ -52,7 +60,8 @@ func (owner *Owner) Admit(ctx context.Context, request workqueue.Assignment, at 
 		change, err := owner.inputs.PrepareDetachDecision(ctx, view, at)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
-	if item.Placement.Executor != workexecution.Agent || request.Executor.Record.Identity.HostID != item.Placement.HostID {
+	if item.Placement.Executor != workexecution.Agent ||
+		request.Executor.Record.Identity.HostID != item.Placement.HostID {
 		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Detach requires its captured Agent host")
 	}
 	resource, err := owner.inputs.DetachResourceAdmission(ctx, view)
@@ -72,7 +81,12 @@ func (owner *Owner) Admit(ctx context.Context, request workqueue.Assignment, at 
 	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: item.Deadline, Change: capture}, nil
 }
 
-func (owner *Owner) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *Owner) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil || item.Item.Operation != workexecution.Detach || item.Item.TaskID != task.Task.ID {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach has no matching stop request")
 	}
@@ -89,11 +103,21 @@ func (owner *Owner) Stop(ctx context.Context, task workqueue.TaskSnapshot, item 
 	return workqueue.PrepareRevocation(task, item, task.Task.Stop.Outcome, at)
 }
 
-func (owner *Owner) prepareQueuedStop(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (owner *Owner) prepareQueuedStop(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	if view.Item.Item.AttemptNumber == 0 {
 		return owner.inputs.PrepareDetachDecision(ctx, view, at)
 	}
-	_, previous, err := owner.queue.ReadAttempt(ctx, view.Task.Task.ID, view.Item.Item.ID, view.Item.Item.AttemptNumber, view.ReadRevision)
+	_, previous, err := owner.queue.ReadAttempt(
+		ctx,
+		view.Task.Task.ID,
+		view.Item.Item.ID,
+		view.Item.Item.AttemptNumber,
+		view.ReadRevision,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -117,7 +141,10 @@ func (owner *Owner) prepareQueuedStop(ctx context.Context, view workqueue.View, 
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, resource.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.AttemptKey(previous.Attempt.ID), ModRevision: previous.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: workqueue.AttemptKey(previous.Attempt.ID), ModRevision: previous.Revision},
+	)
 	change.Mutations = append(change.Mutations, resource.Mutations...)
 	return change, nil
 }

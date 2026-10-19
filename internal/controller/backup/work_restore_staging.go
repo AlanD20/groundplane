@@ -29,15 +29,21 @@ func (owner *AgentWork) restoreSourceStaging(ctx context.Context, identity worke
 		return nil, nil, invalidCaptureStaging()
 	}
 	evidence := restore.ExpectedEvidence
-	full := []*agentpb.BackupRecoveredFile{{Role: agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_SOURCE_PLAINTEXT,
-		SizeBytes: evidence.SourceSizeBytes, Sha256: append([]byte(nil), evidence.SourceSha256...)}}
+	full := []*agentpb.BackupRecoveredFile{
+		{Role: agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_SOURCE_PLAINTEXT,
+			SizeBytes: evidence.SourceSizeBytes, Sha256: append([]byte(nil), evidence.SourceSha256...)},
+	}
 	if config || restore.Encryption.GetKind() == agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
-		full = append(full, &agentpb.BackupRecoveredFile{Role: agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_STORED_OBJECT,
-			SizeBytes: evidence.StoredSizeBytes, Sha256: append([]byte(nil), evidence.StoredSha256...)})
+		full = append(
+			full,
+			&agentpb.BackupRecoveredFile{Role: agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_STORED_OBJECT,
+				SizeBytes: evidence.StoredSizeBytes, Sha256: append([]byte(nil), evidence.StoredSha256...)},
+		)
 	}
 	guards := append(append([]keyvalue.Condition(nil), source.Conditions...), guard)
 	item := source.View.Item.Item
-	settled := item.Phase == workexecution.Settled && (item.Cleanup == workexecution.CleanupNone || item.Cleanup == workexecution.CleanupComplete)
+	settled := item.Phase == workexecution.Settled &&
+		(item.Cleanup == workexecution.CleanupNone || item.Cleanup == workexecution.CleanupComplete)
 	safe := native.State == backupruntime.BackupRestoreFailedSafe && !native.MutationStarted
 	completed := native.State == backupruntime.BackupRestoreCompleted &&
 		(config && native.ConfigProgress != nil && native.ConfigProgress.SourceCleanupCompleted ||
@@ -58,9 +64,13 @@ func (owner *AgentWork) restoreSourceStaging(ctx context.Context, identity worke
 			if err != nil {
 				return nil, nil, err
 			}
-			decision = &agentpb.BackupStagingDisposition{RecoveryKeySha256: append([]byte(nil), entry.RecoveryKeySha256...),
-				Disposition: &agentpb.BackupStagingDisposition_RecoveryRequired{RecoveryRequired: &agentpb.BackupRecoveryRequired{
-					NativeRestoreModRevision: guard.ModRevision, NativeRestoreSha256: raw, ExpectedFiles: proto.CloneOf(entry).Files}}}
+			decision = &agentpb.BackupStagingDisposition{
+				RecoveryKeySha256: append([]byte(nil), entry.RecoveryKeySha256...),
+				Disposition: &agentpb.BackupStagingDisposition_RecoveryRequired{
+					RecoveryRequired: &agentpb.BackupRecoveryRequired{
+						NativeRestoreModRevision: guard.ModRevision, NativeRestoreSha256: raw, ExpectedFiles: proto.CloneOf(entry).Files},
+				},
+			}
 		} else {
 			decision = discardCapturedFiles(entry)
 		}
@@ -116,7 +126,8 @@ func recoveredRepresentationsMatch(actual, expected []*agentpb.BackupRecoveredFi
 	for _, file := range actual {
 		matched := false
 		for _, candidate := range expected {
-			matched = matched || proto.Equal(file, candidate) || partial && file.Role == candidate.Role && file.SizeBytes <= candidate.SizeBytes
+			matched = matched || proto.Equal(file, candidate) ||
+				partial && file.Role == candidate.Role && file.SizeBytes <= candidate.SizeBytes
 		}
 		if !matched {
 			return false

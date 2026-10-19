@@ -18,12 +18,18 @@ func (repository *BackupPolicyRepository) PublishBackupKeyRotation(ctx context.C
 ) (IdempotencyTransactionResult, error) {
 	publication := prepared.Publication
 	if publication == nil || publication.state == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "backup key rotation publication is not prepared")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"backup key rotation publication is not prepared",
+		)
 	}
 	publication.state.mu.Lock()
 	if publication.state.consumed || publication.state.repository != repository {
 		publication.state.mu.Unlock()
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backup key rotation publication is unavailable")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"backup key rotation publication is unavailable",
+		)
 	}
 	publication.state.consumed = true
 	plan := publication.state.plan
@@ -34,8 +40,12 @@ func (repository *BackupPolicyRepository) PublishBackupKeyRotation(ctx context.C
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if plan.task.Intent != reference || plan.item.Input == nil || *plan.item.Input != reference || marker.TaskID != plan.task.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backup key rotation publication input changed")
+	if plan.task.Intent != reference || plan.item.Input == nil || *plan.item.Input != reference ||
+		marker.TaskID != plan.task.ID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"backup key rotation publication input changed",
+		)
 	}
 	work, err := workqueue.PrepareSingleTask(plan.task, plan.item, marker)
 	if err != nil {
@@ -55,7 +65,12 @@ func (repository *BackupPolicyRepository) PublishBackupKeyRotation(ctx context.C
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	transaction, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, classify)
+	transaction, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

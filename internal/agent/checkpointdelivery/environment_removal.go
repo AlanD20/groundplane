@@ -27,7 +27,10 @@ func NewEnvironmentRemoval(input hierarchyexecution.EnvironmentInput, journal *a
 	if input.Attempt.Validate() != nil || input.Attempt.Executor.Executor != workexecution.Agent ||
 		input.Validate() != nil || input.Attempt.StartedAt == nil || input.Attempt.FinishedAt != nil ||
 		executionplan.ValidateEnvironmentRemovalInput(input.Removal) != nil || journal == nil || exchange == nil {
-		return nil, errs.New(errs.KindValidationFailed, "Environment removal reporting requires a started Agent attempt")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Environment removal reporting requires a started Agent attempt",
+		)
 	}
 	return &EnvironmentRemoval{input: input, journal: journal, exchange: exchange}, nil
 }
@@ -62,12 +65,18 @@ func (delivery *EnvironmentRemoval) Current(ctx context.Context) (*hierarchyexec
 		return nil, err
 	}
 	if !record.Acknowledged {
-		return nil, errs.New(errs.KindStateConflict, "Environment removal progress has not been acknowledged by the Controller")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Environment removal progress has not been acknowledged by the Controller",
+		)
 	}
 	return &record.Report.Progress, nil
 }
 
-func (delivery *EnvironmentRemoval) deliver(ctx context.Context, record agentworkjournal.EnvironmentRemovalRecord) error {
+func (delivery *EnvironmentRemoval) deliver(
+	ctx context.Context,
+	record agentworkjournal.EnvironmentRemovalRecord,
+) error {
 	if record.Acknowledged {
 		return nil
 	}

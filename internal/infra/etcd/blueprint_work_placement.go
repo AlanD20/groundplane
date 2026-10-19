@@ -21,7 +21,10 @@ func (repository *EnvironmentBlueprintRepository) blueprintWorkPlacementConditio
 			continue
 		}
 		if selected != "" && selected != item.Placement.HostID {
-			return nil, errs.New(errs.KindValidationFailed, "Blueprint targets multiple hosts; this installation supports one managed host")
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint targets multiple hosts; this installation supports one managed host",
+			)
 		}
 		selected = item.Placement.HostID
 	}

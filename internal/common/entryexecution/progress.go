@@ -39,7 +39,11 @@ func FinalSequence(attempt workexecution.Attempt, input *agentpb.EntryConfigurat
 	return uint64(2 * len(layout.stages())), nil
 }
 
-func NewProgress(attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, at time.Time) (Progress, error) {
+func NewProgress(
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	at time.Time,
+) (Progress, error) {
 	layout, err := CaptureLayout(attempt, input)
 	if err != nil || !at.Before(attempt.Deadline) {
 		return Progress{}, invalidLayout()
@@ -94,7 +98,11 @@ func (progress Progress) ValidateLayout(attempt workexecution.Attempt, layout La
 	return nil
 }
 
-func (progress Progress) Begin(attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, at time.Time) (Progress, error) {
+func (progress Progress) Begin(
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, input) != nil || progress.InFlight || progress.Stage == Complete ||
 		at.Before(progress.UpdatedAt) || !at.Before(attempt.Deadline) {
 		return Progress{}, invalidLayout()
@@ -105,7 +113,12 @@ func (progress Progress) Begin(attempt workexecution.Attempt, input *agentpb.Ent
 	return next, next.Validate(attempt, input)
 }
 
-func (progress Progress) Confirm(attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, observed Observation, at time.Time) (Progress, error) {
+func (progress Progress) Confirm(
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	observed Observation,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, input) != nil || !progress.InFlight || at.Before(progress.UpdatedAt) ||
 		observed.At.Before(*progress.BeganAt) || observed.At.After(at) || !observed.Satisfies(progress.Stage) {
 		return Progress{}, invalidLayout()

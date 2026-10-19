@@ -10,7 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *Reports) interruptInspection(ctx context.Context, view workqueue.ResumeView, guards []keyvalue.Condition) error {
+func (owner *Reports) interruptInspection(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	guards []keyvalue.Condition,
+) error {
 	input, sourceGuards, err := owner.inputs.Recovery(ctx, view.Work, view.Attempt.Attempt)
 	if err != nil {
 		return err
@@ -38,7 +42,12 @@ func (owner *Reports) interruptInspection(ctx context.Context, view workqueue.Re
 		return err
 	}
 	defer keyvalue.ZeroMutationBytes(terminal.Mutations)
-	committed, err := owner.queue.Commit(ctx, workqueue.Change{Conditions: append(guards, sourceGuards...)}, proof, terminal)
+	committed, err := owner.queue.Commit(
+		ctx,
+		workqueue.Change{Conditions: append(guards, sourceGuards...)},
+		proof,
+		terminal,
+	)
 	keyvalue.ClearValues(committed.FailureReads)
 	if err != nil {
 		return err

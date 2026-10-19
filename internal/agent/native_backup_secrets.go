@@ -27,7 +27,11 @@ func (exchange *nativeExchange) RegisterBackupRecoverySecrets(assignment *agentp
 	return exchange.backupSecrets.RegisterRecovery(assignment, exchange.identity)
 }
 
-func (exchange *nativeExchange) RequestBackupSecrets(ctx context.Context, attempt *agentpb.WorkAttemptIdentity, ordinal uint32) error {
+func (exchange *nativeExchange) RequestBackupSecrets(
+	ctx context.Context,
+	attempt *agentpb.WorkAttemptIdentity,
+	ordinal uint32,
+) error {
 	if ctx == nil {
 		return errs.New(errs.KindValidationFailed, "Backup credential request context is required")
 	}
@@ -42,7 +46,10 @@ func (exchange *nativeExchange) RequestBackupSecrets(ctx context.Context, attemp
 		return errs.New(errs.KindStateConflict, "Backup credential session is closed")
 	}
 	message := &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupWorkSecretRequest{
-		BackupWorkSecretRequest: &agentpb.BackupWorkSecretRequest{Attempt: proto.CloneOf(attempt), SourceOrdinal: ordinal}}}
+		BackupWorkSecretRequest: &agentpb.BackupWorkSecretRequest{
+			Attempt:       proto.CloneOf(attempt),
+			SourceOrdinal: ordinal,
+		}}}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -63,7 +70,10 @@ func (exchange *nativeExchange) ConsumeBackupSecret(ctx context.Context, attempt
 	return exchange.backupSecrets.Consume(ctx, attempt, ordinal, purpose, consume)
 }
 
-func (exchange *nativeExchange) acceptBackupSecrets(ctx context.Context, transfer *agentpb.BackupWorkSecretTransfer) error {
+func (exchange *nativeExchange) acceptBackupSecrets(
+	ctx context.Context,
+	transfer *agentpb.BackupWorkSecretTransfer,
+) error {
 	if chunk := transfer.GetChunk(); chunk != nil {
 		defer func() {
 			clear(chunk.Content)

@@ -46,7 +46,10 @@ func (journal *Journal) PrepareAttachFailure(ctx context.Context, attempt workex
 	return *state.AttachFailure, nil
 }
 
-func (journal *Journal) LoadAttachFailure(ctx context.Context, attempt workexecution.Attempt) (*AttachFailureDelivery, error) {
+func (journal *Journal) LoadAttachFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (*AttachFailureDelivery, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -85,7 +88,8 @@ func (journal *Journal) AcknowledgeAttachFailure(ctx context.Context, attempt wo
 		return workexecution.Attempt{}, conflict()
 	}
 	if prior := state.AttachFailure.Receipt; prior != nil {
-		if prior.Outcome != terminal.Outcome || !prior.FinishedAt.Equal(*terminal.FinishedAt) || *prior.Result != *terminal.Result {
+		if prior.Outcome != terminal.Outcome || !prior.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*prior.Result != *terminal.Result {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *prior, nil

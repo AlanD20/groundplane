@@ -22,11 +22,18 @@ func (repository *Repository) PrepareInitialAcknowledgement(ctx context.Context,
 		return nil, Mutation{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 || read.Values[1] == nil {
-		return nil, Mutation{}, errs.New(errs.KindStateConflict, "initial configuration acknowledgement lost its captured sources")
+		return nil, Mutation{}, errs.New(
+			errs.KindStateConflict,
+			"initial configuration acknowledgement lost its captured sources",
+		)
 	}
 	defer clearKeyValues(read.Values)
-	if read.Values[0] != nil || read.Values[1].Key != keys[1] || read.Values[1].ModRevision <= 0 || read.Values[1].ModRevision > revision {
-		return nil, Mutation{}, errs.New(errs.KindStateConflict, "initial configuration acknowledgement would replace an existing head")
+	if read.Values[0] != nil || read.Values[1].Key != keys[1] || read.Values[1].ModRevision <= 0 ||
+		read.Values[1].ModRevision > revision {
+		return nil, Mutation{}, errs.New(
+			errs.KindStateConflict,
+			"initial configuration acknowledgement would replace an existing head",
+		)
 	}
 	value, err := EncodeReference(reference)
 	if err != nil {

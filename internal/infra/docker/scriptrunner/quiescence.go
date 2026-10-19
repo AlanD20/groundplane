@@ -16,7 +16,10 @@ import (
 // Quiesce stops an exactly owned Script container without starting it, removing
 // evidence, or treating termination as successful execution. A caller must hold
 // exclusive execution ownership so no old Agent can restart the container.
-func (runner *Runner) Quiesce(ctx context.Context, request scriptexecution.QuiescenceRequest) (scriptexecution.QuiescenceProof, error) {
+func (runner *Runner) Quiesce(
+	ctx context.Context,
+	request scriptexecution.QuiescenceRequest,
+) (scriptexecution.QuiescenceProof, error) {
 	if runner == nil || runner.client == nil || ctx == nil {
 		return scriptexecution.QuiescenceProof{}, errs.New(errs.KindInternal, "Script quiescence is not configured")
 	}
@@ -34,7 +37,10 @@ func (runner *Runner) Quiesce(ctx context.Context, request scriptexecution.Quies
 	}
 	id := observed.Container.ID
 	if observed.Container.Name != "/"+request.Projection.Name || observed.Container.State == nil {
-		return scriptexecution.QuiescenceProof{}, errs.New(errs.KindStateConflict, "Script container identity or state is unavailable")
+		return scriptexecution.QuiescenceProof{}, errs.New(
+			errs.KindStateConflict,
+			"Script container identity or state is unavailable",
+		)
 	}
 	if err := validateCleanupProjection(observed, id, request.Projection); err != nil {
 		return scriptexecution.QuiescenceProof{}, err
@@ -42,7 +48,8 @@ func (runner *Runner) Quiesce(ctx context.Context, request scriptexecution.Quies
 	state := observed.Container.State
 	if state.Running || state.Restarting || state.Paused {
 		timeout := stopSeconds
-		if _, err := runner.client.ContainerStop(bounded, id, client.ContainerStopOptions{Signal: "SIGTERM", Timeout: &timeout}); err != nil && !containerderrdefs.IsNotFound(err) {
+		if _, err := runner.client.ContainerStop(bounded, id, client.ContainerStopOptions{Signal: "SIGTERM", Timeout: &timeout}); err != nil &&
+			!containerderrdefs.IsNotFound(err) {
 			return scriptexecution.QuiescenceProof{}, operationError(bounded, "stop captured Script", err)
 		}
 	}
@@ -67,7 +74,10 @@ func (runner *Runner) Quiesce(ctx context.Context, request scriptexecution.Quies
 
 func validateQuiescenceRequest(request scriptexecution.QuiescenceRequest) error {
 	if ids.Validate(ids.KindTask, request.TaskID) != nil || ids.Validate(ids.KindWorkItem, request.WorkItemID) != nil ||
-		ids.Validate(ids.KindOperation, request.OperationID) != nil || request.ExecutionID == "" || request.Projection == nil ||
+		ids.Validate(
+			ids.KindOperation,
+			request.OperationID,
+		) != nil || request.ExecutionID == "" || request.Projection == nil ||
 		request.Projection.Name != "gp-script-"+strings.ToLower(request.ExecutionID) {
 		return errs.New(errs.KindValidationFailed, "Script quiescence requires captured container ownership")
 	}
@@ -81,9 +91,12 @@ func validateQuiescenceRequest(request scriptexecution.QuiescenceRequest) error 
 		}
 		labels[label.Key] = label.Value
 	}
-	if labels["com.groundplane.task-id"] != request.TaskID || labels["com.groundplane.work-item-id"] != request.WorkItemID ||
-		labels["com.groundplane.operation-id"] != request.OperationID || labels["com.groundplane.script-execution-id"] != request.ExecutionID ||
-		labels["com.groundplane.managed"] != "true" || labels["com.groundplane.kind"] != "script-runner" {
+	if labels["com.groundplane.task-id"] != request.TaskID ||
+		labels["com.groundplane.work-item-id"] != request.WorkItemID ||
+		labels["com.groundplane.operation-id"] != request.OperationID ||
+		labels["com.groundplane.script-execution-id"] != request.ExecutionID ||
+		labels["com.groundplane.managed"] != "true" ||
+		labels["com.groundplane.kind"] != "script-runner" {
 		return errs.New(errs.KindValidationFailed, "Script quiescence labels differ from captured work")
 	}
 	return nil

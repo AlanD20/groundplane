@@ -11,7 +11,10 @@ import (
 
 // StopEntryConfigurationWork joins both exact runtime helpers before the Agent restores
 // files. It cannot start runtime effects or release the failed Task's claims.
-func (executor *Executor) StopEntryConfigurationWork(ctx context.Context, request *agentpb.EntryConfigurationWorkHelperRequest) error {
+func (executor *Executor) StopEntryConfigurationWork(
+	ctx context.Context,
+	request *agentpb.EntryConfigurationWorkHelperRequest,
+) error {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return errs.New(errs.KindInternal, "Entry helper cleanup is not configured")
 	}

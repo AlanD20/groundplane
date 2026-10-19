@@ -15,10 +15,17 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, at time.Time) (workqueue.Change, error) {
+func (service *Service) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	at time.Time,
+) (workqueue.Change, error) {
 	task := finished.Task.Task
 	if task.Action != workexecution.ActionActivate || task.TargetID != activation.TargetID() {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "software activation completion has a different requested action")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"software activation completion has a different requested action",
+		)
 	}
 	record, err := service.records.At(ctx, task.ID, finished.ReadRevision)
 	if err != nil {
@@ -29,7 +36,10 @@ func (service *Service) PrepareFinish(ctx context.Context, finished workqueue.Fi
 		return workqueue.Change{}, err
 	}
 	if len(finished.Items) != len(graph) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "software activation completion has incomplete work")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"software activation completion has incomplete work",
+		)
 	}
 	change := activationGuard(record)
 	progress := record.Record.Progress
@@ -43,9 +53,15 @@ func (service *Service) PrepareFinish(ctx context.Context, finished workqueue.Fi
 			}
 		}
 		if !matched || item.Phase != workexecution.Settled || item.ActiveAttemptID != "" || item.Result == nil {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "software activation completion includes unsettled or foreign work")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"software activation completion includes unsettled or foreign work",
+			)
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.ItemKey(item.ID), ModRevision: snapshot.Revision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: workqueue.ItemKey(item.ID), ModRevision: snapshot.Revision},
+		)
 		if item.Outcome != workexecution.Succeeded {
 			allSucceeded = false
 		}
@@ -56,7 +72,10 @@ func (service *Service) PrepareFinish(ctx context.Context, finished workqueue.Fi
 				return workqueue.Change{}, err
 			}
 			if settlement == nil {
-				return workqueue.Change{}, errs.New(errs.KindStateConflict, "unprepared software work has no recorded settlement")
+				return workqueue.Change{}, errs.New(
+					errs.KindStateConflict,
+					"unprepared software work has no recorded settlement",
+				)
 			}
 			continue
 		}
@@ -75,7 +94,9 @@ func (service *Service) PrepareFinish(ctx context.Context, finished workqueue.Fi
 	if !allSucceeded {
 		progress.Phase = activation.PhaseFailed
 		if progress.ErrorCode == "" {
-			failure := taskprogress.CaptureControllerFailure(errs.New(errs.KindRequestFailed, "software activation did not complete every selected component"))
+			failure := taskprogress.CaptureControllerFailure(
+				errs.New(errs.KindRequestFailed, "software activation did not complete every selected component"),
+			)
 			progress.ErrorCode, progress.ErrorDetail = failure.Code, failure.Summary()
 		}
 	}
@@ -85,15 +106,25 @@ func (service *Service) PrepareFinish(ctx context.Context, finished workqueue.Fi
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: activation.Key(task.ID), Value: raw})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: activation.Key(task.ID), Value: raw},
+	)
 	return change, nil
 }
 
-func (service *Service) finishedItem(ctx context.Context, view workqueue.View, record keyvalue.Versioned[activation.Record]) (workqueue.Change, bool, bool, *taskprogress.Failure, error) {
+func (service *Service) finishedItem(
+	ctx context.Context,
+	view workqueue.View,
+	record keyvalue.Versioned[activation.Record],
+) (workqueue.Change, bool, bool, *taskprogress.Failure, error) {
 	item := view.Item.Item
 	if item.AttemptNumber == 0 {
 		if item.Outcome == workexecution.Succeeded {
-			return workqueue.Change{}, false, false, nil, errs.New(errs.KindStateConflict, "unstarted software work cannot claim activation")
+			return workqueue.Change{}, false, false, nil, errs.New(
+				errs.KindStateConflict,
+				"unstarted software work cannot claim activation",
+			)
 		}
 		var reference workexecution.Input
 		var change workqueue.Change
@@ -109,7 +140,11 @@ func (service *Service) finishedItem(ctx context.Context, view workqueue.View, r
 				return workqueue.Change{}, false, false, nil, loadErr
 			}
 			reference, err = capture.Record.Reference()
-			change = workqueue.Change{Conditions: []keyvalue.Condition{{Key: controllersoftware.InputKey(item.ID), ModRevision: capture.Revision}}}
+			change = workqueue.Change{
+				Conditions: []keyvalue.Condition{
+					{Key: controllersoftware.InputKey(item.ID), ModRevision: capture.Revision},
+				},
+			}
 		case workexecution.AgentSoftware:
 			repository := service.agentRecords
 			capture, loadErr := repository.Load(ctx, item, view.ReadRevision)
@@ -117,7 +152,11 @@ func (service *Service) finishedItem(ctx context.Context, view workqueue.View, r
 				return workqueue.Change{}, false, false, nil, loadErr
 			}
 			reference, err = capture.Record.Reference()
-			change = workqueue.Change{Conditions: []keyvalue.Condition{{Key: agentoperations.InputKey(item.ID), ModRevision: capture.Revision}}}
+			change = workqueue.Change{
+				Conditions: []keyvalue.Condition{
+					{Key: agentoperations.InputKey(item.ID), ModRevision: capture.Revision},
+				},
+			}
 		default:
 			err = errs.New(errs.KindStateConflict, "software activation has an unknown work operation")
 		}
@@ -125,7 +164,10 @@ func (service *Service) finishedItem(ctx context.Context, view workqueue.View, r
 			return workqueue.Change{}, false, false, nil, err
 		}
 		if *item.Result != reference {
-			return workqueue.Change{}, false, false, nil, errs.New(errs.KindStateConflict, "unstarted software work has a different captured rejection")
+			return workqueue.Change{}, false, false, nil, errs.New(
+				errs.KindStateConflict,
+				"unstarted software work has a different captured rejection",
+			)
 		}
 		return change, false, false, nil, nil
 	}
@@ -162,7 +204,8 @@ func (service *Service) finishedItem(ctx context.Context, view workqueue.View, r
 			return proof, false, false, nil, errs.New(errs.KindStateConflict, "Controller activation result is missing")
 		}
 		proof, result, err = controllersoftware.PrepareResult(capture, saved, attempt.Attempt)
-		controllerApplied = saved.Record.Result.Journal != nil && saved.Record.Result.Journal.Phase == upgrade.PhaseHealthy
+		controllerApplied = saved.Record.Result.Journal != nil &&
+			saved.Record.Result.Journal.Phase == upgrade.PhaseHealthy
 		failure = saved.Record.Result.Failure
 	case workexecution.AgentSoftware:
 		repository := service.agentRecords
@@ -190,9 +233,18 @@ func (service *Service) finishedItem(ctx context.Context, view workqueue.View, r
 	if attempt.Attempt.Direction == workexecution.Recovery {
 		accepted = item.CleanupResult
 	}
-	if !result.EffectsSettled || attempt.Attempt.FinishedAt == nil || attempt.Attempt.Result == nil || accepted == nil || *accepted != result.Evidence || *attempt.Attempt.Result != result.Evidence {
-		return workqueue.Change{}, false, false, nil, errs.New(errs.KindStateConflict, "software activation still has unresolved or unaccepted effects")
+	if !result.EffectsSettled || attempt.Attempt.FinishedAt == nil || attempt.Attempt.Result == nil ||
+		accepted == nil ||
+		*accepted != result.Evidence ||
+		*attempt.Attempt.Result != result.Evidence {
+		return workqueue.Change{}, false, false, nil, errs.New(
+			errs.KindStateConflict,
+			"software activation still has unresolved or unaccepted effects",
+		)
 	}
-	proof.Conditions = append(proof.Conditions, keyvalue.Condition{Key: workqueue.AttemptKey(attempt.Attempt.ID), ModRevision: attempt.Revision})
+	proof.Conditions = append(
+		proof.Conditions,
+		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.Attempt.ID), ModRevision: attempt.Revision},
+	)
 	return proof, controllerApplied, agentApplied, failure, nil
 }

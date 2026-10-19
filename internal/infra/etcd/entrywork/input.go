@@ -58,8 +58,14 @@ func NewInputRepository(store workqueue.Store) (*InputRepository, error) {
 // MUST join publication of the native work item and its desired-state change.
 // Chunks alone are not executable input. Guards identify the live admission claim;
 // staging cannot continue after its owner has been replaced or published.
-func (repository *InputRepository) Stage(ctx context.Context, task workexecution.Task, item workexecution.Item, inputID string,
-	input *agentpb.EntryConfigurationWorkInput, capture Capture, guards []keyvalue.Condition,
+func (repository *InputRepository) Stage(
+	ctx context.Context,
+	task workexecution.Task,
+	item workexecution.Item,
+	inputID string,
+	input *agentpb.EntryConfigurationWorkInput,
+	capture Capture,
+	guards []keyvalue.Condition,
 ) (workexecution.Input, workqueue.Change, error) {
 	if task.Validate() != nil || item.Validate() != nil || task.Stop != nil || task.FinishedAt != nil ||
 		(task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove) ||
@@ -69,7 +75,11 @@ func (repository *InputRepository) Stage(ctx context.Context, task workexecution
 		item.ActiveAttemptID != "" || item.ForwardRevoked || len(guards) == 0 {
 		return workexecution.Input{}, workqueue.Change{}, conflict("Entry input requires its captured admission owner")
 	}
-	view := workqueue.View{Task: workqueue.TaskSnapshot{Task: task}, Item: workqueue.ItemSnapshot{Item: item}, ReadRevision: capture.Configuration.ReadRevision}
+	view := workqueue.View{
+		Task:         workqueue.TaskSnapshot{Task: task},
+		Item:         workqueue.ItemSnapshot{Item: item},
+		ReadRevision: capture.Configuration.ReadRevision,
+	}
 	taskID, workID := task.ID, item.ID
 	if err := capture.matches(view, input); err != nil {
 		return workexecution.Input{}, workqueue.Change{}, err
@@ -79,7 +89,11 @@ func (repository *InputRepository) Stage(ctx context.Context, task workexecution
 		return workexecution.Input{}, workqueue.Change{}, err
 	}
 	guards = append(append([]keyvalue.Condition(nil), guards...), consumers...)
-	guards = append(guards, keyvalue.Condition{Key: workqueue.TaskKey(taskID)}, keyvalue.Condition{Key: workqueue.ItemKey(workID)})
+	guards = append(
+		guards,
+		keyvalue.Condition{Key: workqueue.TaskKey(taskID)},
+		keyvalue.Condition{Key: workqueue.ItemKey(workID)},
+	)
 	_, wire, reference, err := executionplan.CaptureEntryConfigurationWorkInput(inputID, input)
 	if err != nil {
 		return workexecution.Input{}, workqueue.Change{}, err
@@ -96,10 +110,18 @@ func (repository *InputRepository) Stage(ctx context.Context, task workexecution
 	}
 	defer clear(raw)
 	if len(raw) > maximumStoredInputBytes {
-		return workexecution.Input{}, workqueue.Change{}, conflict("Entry configuration captured input exceeds its storage bound")
+		return workexecution.Input{}, workqueue.Change{}, conflict(
+			"Entry configuration captured input exceeds its storage bound",
+		)
 	}
 	digest := sha256.Sum256(raw)
-	manifest := inputManifest{TaskID: taskID, WorkID: workID, Input: reference, Length: len(raw), SHA256: hex.EncodeToString(digest[:])}
+	manifest := inputManifest{
+		TaskID: taskID,
+		WorkID: workID,
+		Input:  reference,
+		Length: len(raw),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	publication := workqueue.Change{Conditions: append([]keyvalue.Condition(nil), guards...)}
 	publication.Conditions = append(publication.Conditions, keyvalue.Condition{Key: InputKey(workID)})
 	for offset, ordinal := 0, 0; offset < len(raw); offset, ordinal = offset+inputChunkBytes, ordinal+1 {
@@ -118,7 +140,9 @@ func (repository *InputRepository) Stage(ctx context.Context, task workexecution
 			revision = value.ModRevision
 			keyvalue.ClearValues(read.Values)
 			if !matches {
-				return workexecution.Input{}, workqueue.Change{}, conflict("Entry configuration input chunk already contains different captured content")
+				return workexecution.Input{}, workqueue.Change{}, conflict(
+					"Entry configuration input chunk already contains different captured content",
+				)
 			}
 		} else {
 			conditions := append([]keyvalue.Condition(nil), guards...)
@@ -148,7 +172,10 @@ func (repository *InputRepository) Stage(ctx context.Context, task workexecution
 	return reference, publication, nil
 }
 
-func (repository *InputRepository) Load(ctx context.Context, view workqueue.View) (*agentpb.EntryConfigurationWorkInput, Capture, []keyvalue.Condition, error) {
+func (repository *InputRepository) Load(
+	ctx context.Context,
+	view workqueue.View,
+) (*agentpb.EntryConfigurationWorkInput, Capture, []keyvalue.Condition, error) {
 	item := view.Item.Item
 	if item.Operation != workexecution.EntryConfiguration || item.Placement.Executor != workexecution.Agent ||
 		item.Input == nil || item.TaskID != view.Task.Task.ID || view.ReadRevision <= 0 {
@@ -220,19 +247,25 @@ func (repository *InputRepository) Load(ctx context.Context, view workqueue.View
 	return owned, stored.Capture, conditions, nil
 }
 
-func (repository *InputRepository) read(ctx context.Context, keys []string, revision int64) (*keyvalue.GetManyResult, error) {
+func (repository *InputRepository) read(
+	ctx context.Context,
+	keys []string,
+	revision int64,
+) (*keyvalue.GetManyResult, error) {
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != len(keys) {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		len(read.Values) != len(keys) {
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
 		return nil, conflict("Entry configuration input read is incomplete")
 	}
 	for index, value := range read.Values {
-		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
+		if value != nil &&
+			(value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
 			keyvalue.ClearValues(read.Values)
 			return nil, conflict("Entry configuration input read has inconsistent ownership")
 		}

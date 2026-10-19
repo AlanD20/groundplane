@@ -14,7 +14,9 @@ import (
 func (owner *AgentWork) ResolveSourceRecovery(ctx context.Context, identity workexecution.Identity,
 	entry *agentpb.BackupRecoveredStage,
 ) (*agentpb.BackupStagingDisposition, []keyvalue.Condition, error) {
-	if executionplan.ValidateBackupStagingInventory(&agentpb.BackupStagingInventory{Entries: []*agentpb.BackupRecoveredStage{entry}}) != nil {
+	if executionplan.ValidateBackupStagingInventory(
+		&agentpb.BackupStagingInventory{Entries: []*agentpb.BackupRecoveredStage{entry}},
+	) != nil {
 		return nil, nil, invalidCaptureStaging()
 	}
 	source, err := owner.inputs.ReadStagingSource(ctx, owner.queue, identity, entry.RecoveryKeySha256)
@@ -51,7 +53,8 @@ func (owner *AgentWork) captureSourceStaging(ctx context.Context, identity worke
 	}
 	guards := append(append([]keyvalue.Condition(nil), source.Conditions...), guard)
 	item := source.View.Item.Item
-	settled := item.Phase == workexecution.Settled && (item.Cleanup == workexecution.CleanupNone || item.Cleanup == workexecution.CleanupComplete)
+	settled := item.Phase == workexecution.Settled &&
+		(item.Cleanup == workexecution.CleanupNone || item.Cleanup == workexecution.CleanupComplete)
 	terminal := run.State == backupruntime.BackupRunCompleted || run.State == backupruntime.BackupRunFailed ||
 		run.State == backupruntime.BackupRunAborted || run.State == backupruntime.BackupRunTimedOut
 	var decision *agentpb.BackupStagingDisposition

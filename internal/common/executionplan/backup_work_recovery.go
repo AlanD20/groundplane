@@ -68,7 +68,10 @@ func EncodeBackupWorkRecovery(source BackupWorkRecovery) ([]byte, error) {
 
 func DecodeBackupWorkRecovery(raw []byte) (BackupWorkRecovery, error) {
 	if len(raw) == 0 || len(raw) > 32768 {
-		return BackupWorkRecovery{}, errs.New(errs.KindValidationFailed, "Backup recovery evidence is missing or oversized")
+		return BackupWorkRecovery{}, errs.New(
+			errs.KindValidationFailed,
+			"Backup recovery evidence is missing or oversized",
+		)
 	}
 	source, err := jcs.Decode[BackupWorkRecovery](raw)
 	if err != nil {

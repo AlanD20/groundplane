@@ -12,7 +12,9 @@ func ProvisionDiagnosticStages(attempt workexecution.Attempt, authority Provisio
 	progress ProvisionProgress,
 ) (workexecution.Stage, workexecution.Stage, error) {
 	if progress.Validate(attempt, authority) != nil || progress.Sequence == 0 {
-		return workexecution.Stage{}, workexecution.Stage{}, invalid("Attach diagnostics require acknowledged command progress")
+		return workexecution.Stage{}, workexecution.Stage{}, invalid(
+			"Attach diagnostics require acknowledged command progress",
+		)
 	}
 	ordinal, started := progress.Completed, progress.BeganAt
 	if !progress.InFlight {

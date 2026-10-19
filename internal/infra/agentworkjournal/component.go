@@ -20,13 +20,26 @@ type ComponentFailureDelivery struct {
 }
 
 func (record attemptRecord) validateComponent() error {
-	if record.Component == nil || record.ComponentRecovery != nil || record.Network != nil || record.NetworkRecovery != nil ||
-		record.Volume != nil || record.VolumeRecovery != nil || record.AttachRecovery != nil ||
-		record.AttachFailure != nil || record.AttachRemoval != nil || record.EnvironmentFailure != nil ||
-		record.EnvironmentRemoval != nil || record.ScriptFailure != nil || record.ScriptRecovery != nil ||
-		record.ScriptCompletion != nil || record.Release != nil || record.Effect != nil ||
-		record.Completion != nil || record.Failure != nil || record.Recovery != nil || len(record.Script) != 0 ||
-		record.Attempt.Executor.Executor != workexecution.Agent || record.Attempt.FinishedAt != nil {
+	if record.Component == nil || record.ComponentRecovery != nil || record.Network != nil ||
+		record.NetworkRecovery != nil ||
+		record.Volume != nil ||
+		record.VolumeRecovery != nil ||
+		record.AttachRecovery != nil ||
+		record.AttachFailure != nil ||
+		record.AttachRemoval != nil ||
+		record.EnvironmentFailure != nil ||
+		record.EnvironmentRemoval != nil ||
+		record.ScriptFailure != nil ||
+		record.ScriptRecovery != nil ||
+		record.ScriptCompletion != nil ||
+		record.Release != nil ||
+		record.Effect != nil ||
+		record.Completion != nil ||
+		record.Failure != nil ||
+		record.Recovery != nil ||
+		len(record.Script) != 0 ||
+		record.Attempt.Executor.Executor != workexecution.Agent ||
+		record.Attempt.FinishedAt != nil {
 		return invalid()
 	}
 	component := record.Component
@@ -35,11 +48,13 @@ func (record attemptRecord) validateComponent() error {
 		component.Progress.ValidateLayout(record.Attempt, component.Layout) != nil {
 		return invalid()
 	}
-	if component.Progress.Sequence == 0 && (component.Failure == nil || component.Acknowledged || component.Completion != nil) {
+	if component.Progress.Sequence == 0 &&
+		(component.Failure == nil || component.Acknowledged || component.Completion != nil) {
 		return invalid()
 	}
 	if failure := component.Failure; failure != nil {
-		if !failure.Reason.Valid() || component.Completion != nil || component.Progress.Stage == componentexecution.Complete {
+		if !failure.Reason.Valid() || component.Completion != nil ||
+			component.Progress.Stage == componentexecution.Complete {
 			return invalid()
 		}
 		if terminal := failure.Receipt; terminal != nil {
@@ -48,7 +63,12 @@ func (record attemptRecord) validateComponent() error {
 				terminal.StartedAt == nil || !terminal.StartedAt.Equal(*record.Attempt.StartedAt) || terminal.FinishedAt.Before(record.UpdatedAt) {
 				return invalid()
 			}
-			captured, err := componentexecution.DecodeLayoutFailure(*terminal, component.Layout, failure.Evidence, *terminal.Result)
+			captured, err := componentexecution.DecodeLayoutFailure(
+				*terminal,
+				component.Layout,
+				failure.Evidence,
+				*terminal.Result,
+			)
 			if err != nil || captured.Reason != failure.Reason || !captured.RecordedAt.Equal(*terminal.FinishedAt) {
 				return invalid()
 			}

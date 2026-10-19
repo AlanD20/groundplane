@@ -122,7 +122,11 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		return PreparedBackupKeyRotation{}, err
 	}
 	task := workexecution.Task{ID: record.TaskID, Actor: workexecution.OperatorActor,
-		Scope:  workexecution.Scope{TenantID: owner.TenantID, ProjectID: owner.ProjectID, EnvironmentID: owner.EnvironmentID},
+		Scope: workexecution.Scope{
+			TenantID:      owner.TenantID,
+			ProjectID:     owner.ProjectID,
+			EnvironmentID: owner.EnvironmentID,
+		},
 		Action: workexecution.ActionRotate, TargetID: record.EnvironmentID, TargetName: record.EnvironmentID,
 		Intent: reference, ExpectedItems: 1, CreatedAt: record.CreatedAt, UpdatedAt: record.CreatedAt,
 		Deadline: record.CreatedAt.Add(time.Duration(backupKeyRotationTimeoutSeconds) * time.Second)}
@@ -177,7 +181,14 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	return PreparedBackupKeyRotation{
 		Publication: &PreparedBackupKeyRotationPublication{state: &preparedBackupKeyRotationState{
 			repository: repository,
-			plan:       backupKeyRotationPublicationPlan{conditions: conditions, mutations: mutations, record: record, task: task, item: item, owner: owner},
+			plan: backupKeyRotationPublicationPlan{
+				conditions: conditions,
+				mutations:  mutations,
+				record:     record,
+				task:       task,
+				item:       item,
+				owner:      owner,
+			},
 		}},
 	}, nil
 }

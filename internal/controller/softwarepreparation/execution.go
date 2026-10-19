@@ -12,11 +12,17 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) loadDelivery(ctx context.Context, delivery workqueue.Delivery) (preparationrecord.WorkSnapshot, error) {
+func (service *Service) loadDelivery(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (preparationrecord.WorkSnapshot, error) {
 	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
 	if workexecution.ValidateDelivery(item, attempt) != nil || item.ActiveAttemptID != attempt.ID ||
 		attempt.Executor.Executor != workexecution.Controller || attempt.FinishedAt != nil {
-		return preparationrecord.WorkSnapshot{}, errs.New(errs.KindStateConflict, "software preparation delivery is not its active attempt")
+		return preparationrecord.WorkSnapshot{}, errs.New(
+			errs.KindStateConflict,
+			"software preparation delivery is not its active attempt",
+		)
 	}
 	return service.records.LoadWork(ctx, item, 0)
 }
@@ -26,8 +32,12 @@ func (service *Service) AuthorizeStart(ctx context.Context, delivery workqueue.D
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if delivery.Attempt.Attempt.Direction == workexecution.Forward && snapshot.Record.Record.Progress.Phase != preparation.PhaseAccepted {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "software build has already started; only reconciliation is permitted")
+	if delivery.Attempt.Attempt.Direction == workexecution.Forward &&
+		snapshot.Record.Record.Progress.Phase != preparation.PhaseAccepted {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"software build has already started; only reconciliation is permitted",
+		)
 	}
 	return snapshot.Guard(), nil
 }
@@ -45,7 +55,14 @@ func (service *Service) RejectUnstarted(ctx context.Context, delivery workqueue.
 	if progress.Phase != preparation.PhaseFailed {
 		progress.Phase, progress.ErrorCode, progress.ErrorDetail = preparation.PhaseFailed, "execution.not_started", "Software preparation stopped before execution started."
 	}
-	return service.records.RecordOutcome(ctx, service.queue, attempt, progress, attempt.Direction == workexecution.Forward, service.now().UTC())
+	return service.records.RecordOutcome(
+		ctx,
+		service.queue,
+		attempt,
+		progress,
+		attempt.Direction == workexecution.Forward,
+		service.now().UTC(),
+	)
 }
 
 func (service *Service) Execute(ctx context.Context, delivery workqueue.Delivery) error {

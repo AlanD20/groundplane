@@ -11,7 +11,10 @@ func OpenBackupRecoveryAssignment(assignment *agentpb.BackupRecoveryAssignment, 
 	*agentpb.BackupRecoveryAssignment, workexecution.Attempt, BackupWorkRecovery, error,
 ) {
 	if assignment == nil || proto.Size(assignment) > MaximumPlanBytes || RejectUnknown(assignment) != nil {
-		return nil, workexecution.Attempt{}, BackupWorkRecovery{}, errs.New(errs.KindValidationFailed, "Backup recovery assignment is invalid")
+		return nil, workexecution.Attempt{}, BackupWorkRecovery{}, errs.New(
+			errs.KindValidationFailed,
+			"Backup recovery assignment is invalid",
+		)
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(assignment.Attempt, identity)
 	if err != nil {
@@ -30,12 +33,18 @@ func OpenBackupRecoveryAssignment(assignment *agentpb.BackupRecoveryAssignment, 
 		return nil, workexecution.Attempt{}, BackupWorkRecovery{}, err
 	}
 	if reference != attempt.Input {
-		return nil, workexecution.Attempt{}, BackupWorkRecovery{}, errs.New(errs.KindStateConflict, "Backup recovery input differs from its failed operation")
+		return nil, workexecution.Attempt{}, BackupWorkRecovery{}, errs.New(
+			errs.KindStateConflict,
+			"Backup recovery input differs from its failed operation",
+		)
 	}
 	if input.Operation == agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_RESTORE {
 		if assignment.RestoreMode != agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_NO_LIVE_MUTATION &&
 			assignment.RestoreMode != agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION {
-			return nil, workexecution.Attempt{}, BackupWorkRecovery{}, errs.New(errs.KindValidationFailed, "Restore recovery requires the Controller's mutation disposition")
+			return nil, workexecution.Attempt{}, BackupWorkRecovery{}, errs.New(
+				errs.KindValidationFailed,
+				"Restore recovery requires the Controller's mutation disposition",
+			)
 		}
 	} else if assignment.RestoreMode != agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_UNSPECIFIED {
 		return nil, workexecution.Attempt{}, BackupWorkRecovery{}, errs.New(errs.KindValidationFailed, "Non-Restore recovery carries a Restore disposition")

@@ -15,12 +15,19 @@ import (
 // PrepareFinish checks the accepted membership after each operation has settled
 // its own resource effects. Finishing the visible action does not redeploy,
 // rewrite applied state or turn a failed DNS prerequisite into success.
-func (owner *GraphPublication) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, at time.Time) (workqueue.Change, error) {
+func (owner *GraphPublication) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	at time.Time,
+) (workqueue.Change, error) {
 	task := finished.Task.Task
 	if task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback ||
 		!task.PublicationComplete || task.Progress.Unsettled() != 0 || task.FinishedAt != nil ||
 		task.CollectionStartedAt != nil || at.Before(task.UpdatedAt) || len(finished.Items) != int(task.ExpectedItems) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release completion requires its fully settled captured graph")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Release completion requires its fully settled captured graph",
+		)
 	}
 	if ids.Validate(ids.KindReleaseGroup, task.TargetID) == nil {
 		return owner.groups.PrepareFinish(ctx, finished, at)
@@ -33,7 +40,8 @@ func (owner *GraphPublication) PrepareFinish(ctx context.Context, finished workq
 	actual := make(map[string]workqueue.ItemSnapshot, len(finished.Items))
 	for index := range finished.Items {
 		snapshot := &finished.Items[index]
-		if snapshot.Item.Phase != workexecution.Settled || snapshot.Item.Result == nil || snapshot.Item.ActiveAttemptID != "" {
+		if snapshot.Item.Phase != workexecution.Settled || snapshot.Item.Result == nil ||
+			snapshot.Item.ActiveAttemptID != "" {
 			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release completion still has unresolved work")
 		}
 		actual[snapshot.Item.ID] = *snapshot
@@ -42,7 +50,10 @@ func (owner *GraphPublication) PrepareFinish(ctx context.Context, finished workq
 		}
 	}
 	if release == nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release completion is missing its selected Service")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Release completion is missing its selected Service",
+		)
 	}
 	view := workqueue.View{Task: finished.Task, Item: *release, ReadRevision: finished.ReadRevision}
 	rollout, err := owner.ledger.GetServiceRollout(ctx, view)
@@ -62,10 +73,14 @@ func (owner *GraphPublication) PrepareFinish(ctx context.Context, finished workq
 		item := snapshot.Item
 		if !found || item.Operation != expected.Operation || item.TargetID != expected.TargetID ||
 			item.Placement != expected.Placement || !item.CreatedAt.Equal(expected.CreatedAt) ||
-			item.AttemptNumber == 0 && !item.Deadline.Equal(expected.Deadline) || !slices.Equal(item.Claims, expected.Claims) ||
+			item.AttemptNumber == 0 &&
+				!item.Deadline.Equal(expected.Deadline) || !slices.Equal(item.Claims, expected.Claims) ||
 			!slices.Equal(item.Dependencies, expected.Dependencies) ||
 			item.Operation == workexecution.Network && (item.Input == nil || *item.Input != *expected.Input) {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release completion membership differs from the accepted action")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Release completion membership differs from the accepted action",
+			)
 		}
 	}
 	// Every work transition advances the Task revision. Comparing that aggregate

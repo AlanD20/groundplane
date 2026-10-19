@@ -15,14 +15,29 @@ import (
 // PrepareServiceRemovalDecision handles only a never-deployed direct Service.
 // The scheduler joins its dependency and resource-claim comparisons before
 // committing this definition change with work settlement.
-func (repository *ServiceRepository) PrepareServiceRemovalDecision(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *ServiceRepository) PrepareServiceRemovalDecision(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
-	if task.Action != workexecution.ActionRemove && task.Action != workexecution.ActionApply || item.Operation != workexecution.ServiceRemoval ||
-		item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
-		item.Phase != workexecution.Ready || item.Input == nil || item.Cleanup != workexecution.CleanupNone ||
-		!task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
-		at.IsZero() || at.Location() != time.UTC || at.Before(item.UpdatedAt) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service removal is not a ready definition-only action")
+	if task.Action != workexecution.ActionRemove && task.Action != workexecution.ActionApply ||
+		item.Operation != workexecution.ServiceRemoval ||
+		item.AttemptNumber != 0 ||
+		item.ActiveAttemptID != "" ||
+		item.Phase != workexecution.Ready ||
+		item.Input == nil ||
+		item.Cleanup != workexecution.CleanupNone ||
+		!task.PublicationComplete ||
+		task.FinishedAt != nil ||
+		task.CollectionStartedAt != nil ||
+		at.IsZero() ||
+		at.Location() != time.UTC ||
+		at.Before(item.UpdatedAt) {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Service removal is not a ready definition-only action",
+		)
 	}
 	inputs, err := serviceremovalwork.NewRepository(repository.store)
 	if err != nil {
@@ -36,7 +51,10 @@ func (repository *ServiceRepository) PrepareServiceRemovalDecision(ctx context.C
 		return workqueue.Change{}, err
 	}
 	if input.Runtime != nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service removal requires its captured Agent execution")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Service removal requires its captured Agent execution",
+		)
 	}
 	ledger, err := blueprintunits.NewRepository(repository.store)
 	if err != nil {

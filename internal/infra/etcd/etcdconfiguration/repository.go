@@ -22,19 +22,33 @@ func New(backend store) (*Repository, error) {
 	return &Repository{store: backend}, nil
 }
 
-func (repository *Repository) Load(ctx context.Context, workID string, revision int64) (keyvalue.Versioned[Input], error) {
+func (repository *Repository) Load(
+	ctx context.Context,
+	workID string,
+	revision int64,
+) (keyvalue.Versioned[Input], error) {
 	if ids.Validate(ids.KindWorkItem, workID) != nil || revision < 0 {
-		return keyvalue.Versioned[Input]{}, errs.New(errs.KindValidationFailed, "etcd configuration work identity is invalid")
+		return keyvalue.Versioned[Input]{}, errs.New(
+			errs.KindValidationFailed,
+			"etcd configuration work identity is invalid",
+		)
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{InputKey(workID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{InputKey(workID)}, Revision: revision},
+	)
 	if err != nil {
 		return keyvalue.Versioned[Input]{}, err
 	}
 	if read == nil {
-		return keyvalue.Versioned[Input]{}, errs.New(errs.KindStorageUnavailable, "etcd configuration input read is unavailable")
+		return keyvalue.Versioned[Input]{}, errs.New(
+			errs.KindStorageUnavailable,
+			"etcd configuration input read is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if read.ReadRevision <= 0 || (revision > 0 && read.ReadRevision != revision) || len(read.Values) != 1 || read.Values[0] == nil {
+	if read.ReadRevision <= 0 || (revision > 0 && read.ReadRevision != revision) || len(read.Values) != 1 ||
+		read.Values[0] == nil {
 		return keyvalue.Versioned[Input]{}, errs.New(errs.KindStateConflict, "etcd configuration input is unavailable")
 	}
 	input, err := Decode(read.Values[0].Value)
@@ -44,5 +58,9 @@ func (repository *Repository) Load(ctx context.Context, workID string, revision 
 	if input.WorkItemID != workID {
 		return keyvalue.Versioned[Input]{}, errs.New(errs.KindInternal, "etcd configuration input owner is corrupt")
 	}
-	return keyvalue.Versioned[Input]{Record: input, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[Input]{
+		Record:       input,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }

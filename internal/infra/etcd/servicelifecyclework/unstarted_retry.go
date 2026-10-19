@@ -10,12 +10,19 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *Repository) PrepareUnstartedRetry(ctx context.Context, view workqueue.View, at, deadline time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareUnstartedRetry(
+	ctx context.Context,
+	view workqueue.View,
+	at, deadline time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Stop != nil || task.CollectionStartedAt != nil || item.ForwardRevoked || item.AttemptNumber != 0 ||
 		item.Phase != workexecution.Settled || item.Outcome != workexecution.Failed || item.Cleanup != workexecution.CleanupNone ||
 		item.Input == nil || item.Result == nil || *item.Result != *item.Input {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Service lifecycle Retry requires a captured action that failed before execution")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Service lifecycle Retry requires a captured action that failed before execution",
+		)
 	}
 	captured, guard, err := repository.Load(ctx, view)
 	if err != nil {

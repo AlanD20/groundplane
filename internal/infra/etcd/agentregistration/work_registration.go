@@ -44,7 +44,10 @@ func (repository *Repository) RegisterWorkProcess(ctx context.Context, agentID s
 		condition := keyvalue.Condition{Key: keys[index]}
 		if value != nil {
 			if value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision {
-				return workexecution.Identity{}, errs.New(errs.KindInternal, "Agent process registration revision is invalid")
+				return workexecution.Identity{}, errs.New(
+					errs.KindInternal,
+					"Agent process registration revision is invalid",
+				)
 			}
 			condition.ModRevision = value.ModRevision
 		}
@@ -57,7 +60,8 @@ func (repository *Repository) RegisterWorkProcess(ctx context.Context, agentID s
 	if err != nil {
 		return workexecution.Identity{}, err
 	}
-	if credential.ID != agentID || credential.Generation != credentialGeneration || credential.Phase == localagents.LocalAgentPhaseDeleting {
+	if credential.ID != agentID || credential.Generation != credentialGeneration ||
+		credential.Phase == localagents.LocalAgentPhaseDeleting {
 		return workexecution.Identity{}, agentCredentialNotFound()
 	}
 	var previous workqueue.ExecutorSnapshot
@@ -71,17 +75,35 @@ func (repository *Repository) RegisterWorkProcess(ctx context.Context, agentID s
 	if receipt := read.Values[2]; receipt != nil {
 		saved, err := recordcodec.Decode[workexecution.Identity](receipt.Value, "agent-work-process")
 		if err != nil || saved.Validate() != nil {
-			return workexecution.Identity{}, errs.New(errs.KindInternal, "Agent process registration receipt is corrupt")
+			return workexecution.Identity{}, errs.New(
+				errs.KindInternal,
+				"Agent process registration receipt is corrupt",
+			)
 		}
-		if previous.Revision == 0 || previous.Record.Identity != saved || previous.Record.ProcessGeneration != process || saved.AgentID != agentID || saved.HostID != binding.Binding.HostID {
-			return workexecution.Identity{}, errs.New(errs.KindStateConflict, "Agent process has been replaced; it cannot reconnect as the current executor")
+		if previous.Revision == 0 || previous.Record.Identity != saved ||
+			previous.Record.ProcessGeneration != process ||
+			saved.AgentID != agentID ||
+			saved.HostID != binding.Binding.HostID {
+			return workexecution.Identity{}, errs.New(
+				errs.KindStateConflict,
+				"Agent process has been replaced; it cannot reconnect as the current executor",
+			)
 		}
 		if !slices.Equal(previous.Record.Operations, operations) {
-			return workexecution.Identity{}, errs.New(errs.KindStateConflict, "Agent process operation catalog changed during reconnect")
+			return workexecution.Identity{}, errs.New(
+				errs.KindStateConflict,
+				"Agent process operation catalog changed during reconnect",
+			)
 		}
 		// A reconnect preserves the process generation, but admission waits for
 		// the new channel to reconcile its durable deliveries before dispatch.
-		change, err := workqueue.PrepareAvailability(previous, saved, false, capacity, previous.Record.UnavailableOperations)
+		change, err := workqueue.PrepareAvailability(
+			previous,
+			saved,
+			false,
+			capacity,
+			previous.Record.UnavailableOperations,
+		)
 		if err != nil {
 			return workexecution.Identity{}, err
 		}
@@ -108,14 +130,20 @@ func (repository *Repository) RegisterWorkProcess(ctx context.Context, agentID s
 		return workexecution.Identity{}, err
 	}
 	defer clear(receipt)
-	mutations := append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: receiptKey, Value: receipt})
+	mutations := append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: receiptKey, Value: receipt},
+	)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return workexecution.Identity{}, err
 	}
 	if !result.Succeeded {
-		return workexecution.Identity{}, errs.New(errs.KindStateConflict, "Agent process registration changed; reconnect to resolve its saved identity")
+		return workexecution.Identity{}, errs.New(
+			errs.KindStateConflict,
+			"Agent process registration changed; reconnect to resolve its saved identity",
+		)
 	}
 	return registered.Identity, nil
 }

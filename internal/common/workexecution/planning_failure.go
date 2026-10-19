@@ -12,7 +12,8 @@ func RejectPlanning(task Task, outcome Outcome, evidence Input, at, retainUntil 
 	if err := evidence.Validate(); err != nil {
 		return Task{}, err
 	}
-	if outcome != Failed && (task.Stop == nil || task.Stop.Outcome != outcome || outcome != Cancelled && outcome != Superseded) {
+	if outcome != Failed &&
+		(task.Stop == nil || task.Stop.Outcome != outcome || outcome != Cancelled && outcome != Superseded) {
 		return Task{}, conflict("planning rejection requires failure or the recorded stop outcome")
 	}
 	if task.PublicationComplete || task.ExpectedItems != 0 || task.Progress.Total() != 0 ||

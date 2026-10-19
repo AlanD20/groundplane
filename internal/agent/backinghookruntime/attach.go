@@ -16,7 +16,10 @@ func ExecuteAttach(ctx context.Context, executor *backingcommand.Executor, recor
 	containerID string, definition backinghook.Definition, input backinghook.Input, schema []backinghook.FactDefinition,
 ) (backinghook.Output, error) {
 	if input.Context.Event != backinghook.Attach || executor == nil {
-		return backinghook.Output{}, errs.New(errs.KindValidationFailed, "captured Attach requires its Attach hook and executor")
+		return backinghook.Output{}, errs.New(
+			errs.KindValidationFailed,
+			"captured Attach requires its Attach hook and executor",
+		)
 	}
 	if err := backinghook.Validate(definition, input, schema); err != nil {
 		return backinghook.Output{}, err
@@ -30,7 +33,9 @@ func ExecuteAttach(ctx context.Context, executor *backingcommand.Executor, recor
 	variables := backingHookProcessEnvironment(environment)
 	defer clear(variables)
 	command := append([]string{"/bin/sh", "-c", capturedHookScript, "groundplane-attach",
-		backingHookDurationArgument(backingHookKillAfter), backingHookDurationArgument(duration)}, definition.Command...)
+		backingHookDurationArgument(
+			backingHookKillAfter,
+		), backingHookDurationArgument(duration)}, definition.Command...)
 	result := &capturedHookResult{}
 	defer func() { clear(result.content) }()
 	exitCode, err := executor.Execute(ctx, recorder, containerID, command, variables, nil, result)

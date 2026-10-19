@@ -31,14 +31,22 @@ func (repository *BackupRuntimeRepository) publishRestoreWork(ctx context.Contex
 ) (IdempotencyTransactionResult, error) {
 	defer keyvalue.ClearMutationValues(captured.mutations)
 	invalid := func() (IdempotencyTransactionResult, error) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Restore captured publication changed")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Restore captured publication changed",
+		)
 	}
 	if input == nil || captured.scope == nil || captured.hostID == "" || item.Placement.HostID != captured.hostID ||
 		task.Scope.TenantID != captured.owner.TenantID || task.Scope.ProjectID != captured.owner.ProjectID ||
 		task.Scope.EnvironmentID != captured.owner.EnvironmentID || input.ProjectId != captured.scope.ProjectId ||
 		input.EnvironmentId != captured.scope.EnvironmentId || !proto.Equal(input.Project, captured.scope.Project) ||
-		!proto.Equal(input.Environment, captured.scope.Environment) || len(input.Services) != len(captured.scope.Services) ||
-		len(input.Steps) != 1 || !proto.Equal(input.Steps[0], captured.authority) || len(input.Artifacts) != len(captured.artifacts) {
+		!proto.Equal(
+			input.Environment,
+			captured.scope.Environment,
+		) || len(input.Services) != len(captured.scope.Services) ||
+		len(
+			input.Steps,
+		) != 1 || !proto.Equal(input.Steps[0], captured.authority) || len(input.Artifacts) != len(captured.artifacts) {
 		return invalid()
 	}
 	for index, fact := range captured.scope.Services {
@@ -70,7 +78,10 @@ func (repository *BackupRuntimeRepository) publishRestoreWork(ctx context.Contex
 		return IdempotencyTransactionResult{}, err
 	}
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*keyvalue.KeyValue) error {
-		return errs.New(errs.KindStateConflict, "Restore source or destination changed before admission; submit a new action")
+		return errs.New(
+			errs.KindStateConflict,
+			"Restore source or destination changed before admission; submit a new action",
+		)
 	})
 	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {

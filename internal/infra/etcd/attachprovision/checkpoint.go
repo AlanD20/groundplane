@@ -26,8 +26,10 @@ func (repository *InputRepository) PrepareCheckpoint(ctx context.Context, view w
 	input attachexecution.ProvisionInput, report attachexecution.ProvisionReport,
 ) (workqueue.Change, error) {
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
-	if !workexecution.SameAssignment(input.Attempt, attempt) || attempt.StartedAt == nil || input.Attempt.StartedAt == nil ||
-		!input.Attempt.StartedAt.Equal(*attempt.StartedAt) || item.Operation != workexecution.Attach ||
+	if !workexecution.SameAssignment(input.Attempt, attempt) || attempt.StartedAt == nil ||
+		input.Attempt.StartedAt == nil ||
+		!input.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
+		item.Operation != workexecution.Attach ||
 		view.Work.ReadRevision <= 0 {
 		return workqueue.Change{}, checkpointConflict("Attach provisioning report has no matching started execution")
 	}
@@ -100,15 +102,22 @@ func (repository *InputRepository) PrepareCheckpoint(ctx context.Context, view w
 			view.Checkpoint.Record == nil || next.Sequence > view.Checkpoint.Record.Sequence {
 			return workqueue.Change{}, checkpointConflict("Attach provisioning sequence has different saved evidence")
 		}
-		return workqueue.Change{Conditions: append(source.Conditions, keyvalue.Condition{Key: key, ModRevision: existing.ModRevision},
-			keyvalue.Condition{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision}),
-			Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)}}}, nil
+		return workqueue.Change{
+			Conditions: append(source.Conditions, keyvalue.Condition{Key: key, ModRevision: existing.ModRevision},
+				keyvalue.Condition{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision}),
+			Mutations: []keyvalue.Mutation{
+				{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)},
+			},
+		}, nil
 	}
 	if !view.ActiveAttempt || task.FinishedAt != nil || task.CollectionStartedAt != nil {
 		return workqueue.Change{}, checkpointConflict("Attach provisioning no longer accepts new reports")
 	}
-	if report.Progress.InFlight && (!view.CurrentExecutor || item.ForwardRevoked || task.Stop != nil || !time.Now().UTC().Before(attempt.Deadline)) {
-		return workqueue.Change{}, checkpointConflict("Attach provisioning cannot begin a command after stop, replacement or deadline")
+	if report.Progress.InFlight &&
+		(!view.CurrentExecutor || item.ForwardRevoked || task.Stop != nil || !time.Now().UTC().Before(attempt.Deadline)) {
+		return workqueue.Change{}, checkpointConflict(
+			"Attach provisioning cannot begin a command after stop, replacement or deadline",
+		)
 	}
 	if err := attachexecution.ValidateProvisionTransition(attempt, authority, previous, report.Progress); err != nil {
 		return workqueue.Change{}, err
@@ -136,7 +145,10 @@ func (repository *InputRepository) PrepareCheckpoint(ctx context.Context, view w
 			return workqueue.Change{}, err
 		}
 		change.Conditions = append(change.Conditions, guards...)
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision},
+		)
 	}
 	consumer, err := repository.prepareConsumerCheckpoint(ctx, view, capture, input, report)
 	if err != nil {
@@ -145,7 +157,10 @@ func (repository *InputRepository) PrepareCheckpoint(ctx context.Context, view w
 	}
 	change.Conditions = append(change.Conditions, consumer.Conditions...)
 	change.Mutations = append(change.Mutations, consumer.Mutations...)
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)},
+	)
 	return change, nil
 }
 

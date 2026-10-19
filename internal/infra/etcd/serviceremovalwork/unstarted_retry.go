@@ -15,12 +15,19 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *Repository) PrepareUnstartedRetry(ctx context.Context, view workqueue.View, at, deadline time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareUnstartedRetry(
+	ctx context.Context,
+	view workqueue.View,
+	at, deadline time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Stop != nil || task.CollectionStartedAt != nil || item.ForwardRevoked || item.AttemptNumber != 0 ||
 		item.Phase != workexecution.Settled || item.Outcome != workexecution.Failed || item.Cleanup != workexecution.CleanupNone ||
 		item.Input == nil || item.Result == nil || *item.Result != *item.Input || item.Operation != workexecution.ServiceRemoval {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "service removal Retry requires a captured action that failed before assignment")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"service removal Retry requires a captured action that failed before assignment",
+		)
 	}
 	input, capture, err := repository.Load(ctx, view)
 	if err != nil {
@@ -43,7 +50,12 @@ func (repository *Repository) PrepareUnstartedRetry(ctx context.Context, view wo
 
 // Reacquiring admission cannot replace a later runtime, configuration or desired
 // revision. The fence and queue Retry are published in one transaction.
-func (repository *Repository) prepareRetryFence(ctx context.Context, view workqueue.View, input Input, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) prepareRetryFence(
+	ctx context.Context,
+	view workqueue.View,
+	input Input,
+	at time.Time,
+) (workqueue.Change, error) {
 	desired, err := repository.DesiredGuard(ctx, input, view.ReadRevision)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -58,10 +70,22 @@ func (repository *Repository) prepareRetryFence(ctx context.Context, view workqu
 		keyvalue.Condition{Key: services.ServiceRuntimeKey(input.ServiceID), ModRevision: input.RuntimeRevision},
 		keyvalue.Condition{Key: serviceruntimerecord.Key(input.ServiceID), ModRevision: input.RuntimeSourceRevision})
 	if input.Runtime != nil {
-		conditions = append(conditions, keyvalue.Condition{Key: runtimeconfiguration.HeadKey(input.Scope.EnvironmentID), ModRevision: input.ConfigurationRevision})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{
+				Key:         runtimeconfiguration.HeadKey(input.Scope.EnvironmentID),
+				ModRevision: input.ConfigurationRevision,
+			},
+		)
 	}
 	if view.Task.Task.Action == workexecution.ActionRemove {
-		conditions = append(conditions, keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(input.Scope.EnvironmentID), ModRevision: input.HeadRevision})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{
+				Key:         blueprints.EnvironmentBlueprintHeadKey(input.Scope.EnvironmentID),
+				ModRevision: input.HeadRevision,
+			},
+		)
 	}
 	tombstone, err := deletions.EncodeDeletionTombstone(deletions.DeletionTombstoneRecord{
 		TargetKind: deletions.DeletionTargetService, TargetID: input.ServiceID, TargetRevision: input.ServiceRevision,
@@ -69,5 +93,8 @@ func (repository *Repository) prepareRetryFence(ctx context.Context, view workqu
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	return workqueue.Change{Conditions: conditions, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: fenceKey, Value: tombstone}}}, nil
+	return workqueue.Change{
+		Conditions: conditions,
+		Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: fenceKey, Value: tombstone}},
+	}, nil
 }

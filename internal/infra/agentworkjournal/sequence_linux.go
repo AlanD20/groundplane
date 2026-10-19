@@ -18,7 +18,8 @@ func (journal *Journal) Sequence(ctx context.Context, attempt workexecution.Atte
 	if err != nil || state == nil {
 		return 0, err
 	}
-	if !workexecution.SameAssignment(state.Attempt, attempt) || state.Attempt.StartedAt == nil || attempt.StartedAt == nil ||
+	if !workexecution.SameAssignment(state.Attempt, attempt) || state.Attempt.StartedAt == nil ||
+		attempt.StartedAt == nil ||
 		!state.Attempt.StartedAt.Equal(*attempt.StartedAt) {
 		return 0, conflict()
 	}

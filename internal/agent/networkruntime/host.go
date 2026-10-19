@@ -40,11 +40,20 @@ func (host *RuntimeHost) Apply(ctx context.Context, input Input, stage networkex
 	return err
 }
 
-func (host *RuntimeHost) Inspect(ctx context.Context, input Input, stage networkexecution.Stage) (networkexecution.Observation, error) {
+func (host *RuntimeHost) Inspect(
+	ctx context.Context,
+	input Input,
+	stage networkexecution.Stage,
+) (networkexecution.Observation, error) {
 	return host.execute(ctx, input, stage, true)
 }
 
-func (host *RuntimeHost) execute(ctx context.Context, input Input, stage networkexecution.Stage, inspectOnly bool) (networkexecution.Observation, error) {
+func (host *RuntimeHost) execute(
+	ctx context.Context,
+	input Input,
+	stage networkexecution.Stage,
+	inspectOnly bool,
+) (networkexecution.Observation, error) {
 	if input.procedure == nil || input.attempt.StartedAt == nil {
 		return networkexecution.Observation{}, invalidInput()
 	}
@@ -55,8 +64,13 @@ func (host *RuntimeHost) execute(ctx context.Context, input Input, stage network
 	if err != nil {
 		return networkexecution.Observation{}, err
 	}
-	if saved == nil || !saved.Acknowledged || saved.Completion != nil || saved.Failure != nil || !saved.Progress.InFlight || saved.Progress.Stage != stage {
-		return networkexecution.Observation{}, errs.New(errs.KindStateConflict, "Network host operation has no matching acknowledged checkpoint")
+	if saved == nil || !saved.Acknowledged || saved.Completion != nil || saved.Failure != nil ||
+		!saved.Progress.InFlight ||
+		saved.Progress.Stage != stage {
+		return networkexecution.Observation{}, errs.New(
+			errs.KindStateConflict,
+			"Network host operation has no matching acknowledged checkpoint",
+		)
 	}
 	report, err := input.checkpointRequest(saved.Progress)
 	if err != nil {

@@ -39,7 +39,10 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	}
 	if owner.EnvironmentID != revision.EnvironmentID || owner.TaskID != claim.TaskID ||
 		owner.RevisionID != revision.RevisionID || owner.RenderGeneration != claim.RenderGeneration {
-		return environmentBlueprintPublicationEvidence{}, errs.New(errs.KindStateConflict, "Blueprint publication owner differs from its staged revision")
+		return environmentBlueprintPublicationEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint publication owner differs from its staged revision",
+		)
 	}
 	return repository.prepareEnvironmentBlueprintPublicationWithDigest(
 		ctx, claim, revision, digest, marker, expectedHeadRevision,

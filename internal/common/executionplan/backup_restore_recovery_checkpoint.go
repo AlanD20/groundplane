@@ -16,9 +16,11 @@ func ValidateBackupRestoreRecoveryCheckpoint(request *agentpb.BackupWorkCheckpoi
 	if err != nil {
 		return nil, err
 	}
-	if attempt.FinishedAt != nil || owned.Input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_RESTORE ||
+	if attempt.FinishedAt != nil ||
+		owned.Input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_RESTORE ||
 		owned.RestoreMode != agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION ||
-		request == nil || !proto.Equal(request.Attempt, owned.Attempt) {
+		request == nil ||
+		!proto.Equal(request.Attempt, owned.Attempt) {
 		return nil, invalidBackupCheckpoint("Restore continuation requires its active recovery assignment")
 	}
 	validated, err := validateBackupSourceCheckpoint(request, owned.Input)

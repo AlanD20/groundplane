@@ -24,9 +24,16 @@ func NewWork(service *Service, queue *workqueue.Repository) (*Work, error) {
 	return &Work{repository: service.repository, queue: queue}, nil
 }
 
-func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Work) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	if !request.DecisionOnly || request.Direction != workexecution.Forward {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "backup key rotation requires an atomic Controller decision")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"backup key rotation requires an atomic Controller decision",
+		)
 	}
 	task, item := request.Task.Task, request.Item.Item
 	outcome := workexecution.Succeeded
@@ -42,7 +49,12 @@ func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at t
 	return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 }
 
-func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *Work) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "backup key rotation has no stop request")
 	}
@@ -56,11 +68,20 @@ func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item w
 	return owner.repository.PrepareBackupKeyRotationSettlement(ctx, view, task.Task.Stop.Outcome, at)
 }
 
-func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
+func (owner *Work) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	_ time.Time,
+) (workqueue.Change, error) {
 	return owner.repository.PrepareBackupKeyRotationFinish(ctx, finished)
 }
 
-func (owner *Work) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (owner *Work) RetireWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	return owner.repository.PrepareBackupKeyRotationRetention(ctx, view, at, final)
 }
 

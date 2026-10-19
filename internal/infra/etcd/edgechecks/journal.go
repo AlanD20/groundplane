@@ -19,8 +19,15 @@ type Journal struct {
 	identity   workexecution.Identity
 }
 
-func NewJournal(repository *Repository, owner Owner, attemptID string, identity workexecution.Identity) (*Journal, error) {
-	if repository == nil || owner.Validate() != nil || ids.Validate(ids.KindAttempt, attemptID) != nil || identity.Validate() != nil || identity.Executor != workexecution.Controller {
+func NewJournal(
+	repository *Repository,
+	owner Owner,
+	attemptID string,
+	identity workexecution.Identity,
+) (*Journal, error) {
+	if repository == nil || owner.Validate() != nil || ids.Validate(ids.KindAttempt, attemptID) != nil ||
+		identity.Validate() != nil ||
+		identity.Executor != workexecution.Controller {
 		return nil, errs.New(errs.KindValidationFailed, "edge diagnostic journal ownership is required")
 	}
 	return &Journal{repository: repository, owner: owner, attemptID: attemptID, identity: identity}, nil
@@ -145,7 +152,8 @@ func (journal *Journal) mutateState(ctx context.Context, forward, allowAssigned 
 	if err != nil || executor.Identity != journal.identity {
 		return errs.New(errs.KindStateConflict, "edge diagnostic executor was replaced")
 	}
-	if forward && (task.Stop != nil || item.ForwardRevoked || assignment.Direction != workexecution.Forward || !time.Now().UTC().Before(assignment.Deadline)) {
+	if forward &&
+		(task.Stop != nil || item.ForwardRevoked || assignment.Direction != workexecution.Forward || !time.Now().UTC().Before(assignment.Deadline)) {
 		return errs.New(errs.KindStateConflict, "edge diagnostic check no longer permits a new probe")
 	}
 	conditions := make([]keyvalue.Condition, len(keys))

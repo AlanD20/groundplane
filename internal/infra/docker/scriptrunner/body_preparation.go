@@ -57,7 +57,12 @@ func preparedBodyForEvidence(
 
 // Cleanup uses captured metadata and inode evidence, never a fresh plaintext
 // body fetch. Remove still rechecks the local file's complete size and digest.
-func preparedCapturedBody(store *bodyStore, workID, executionID string, metadata *agentpb.ScriptBodyArtifactMetadata, evidence scriptexecution.BodyEvidence) (preparedBody, error) {
+func preparedCapturedBody(
+	store *bodyStore,
+	workID, executionID string,
+	metadata *agentpb.ScriptBodyArtifactMetadata,
+	evidence scriptexecution.BodyEvidence,
+) (preparedBody, error) {
 	if store == nil || evidence.Leaf != bodyLeaf || evidence.Device == 0 || evidence.Inode == 0 ||
 		metadata == nil || ids.Validate(ids.KindWorkItem, workID) != nil || !validBodyExecutionID(executionID) ||
 		metadata.ScriptExecutionId != executionID || metadata.Size == 0 || metadata.Size > executionplan.MaximumScriptBodyBytes ||

@@ -23,9 +23,19 @@ func EffectEvidencePrefix(attemptID string) string {
 // PrepareEffectEvidence writes immutable proof without advancing the Release.
 // It must be committed with authenticated executor comparisons by the caller.
 // A stopped/superseded Task can still report an already-authorized effect.
-func PrepareEffectEvidence(ctx context.Context, store Reader, view workqueue.ResumeView, input releaseexecution.Input, raw []byte, reference workexecution.Input) (workqueue.Change, error) {
-	if store == nil || !view.ActiveAttempt || !view.CurrentExecutor || !workexecution.SameAssignment(view.Attempt.Attempt, input.Attempt) ||
-		view.Work.Task.Task.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil || view.Checkpoint.Record == nil {
+func PrepareEffectEvidence(
+	ctx context.Context,
+	store Reader,
+	view workqueue.ResumeView,
+	input releaseexecution.Input,
+	raw []byte,
+	reference workexecution.Input,
+) (workqueue.Change, error) {
+	if store == nil || !view.ActiveAttempt || !view.CurrentExecutor ||
+		!workexecution.SameAssignment(view.Attempt.Attempt, input.Attempt) ||
+		view.Work.Task.Task.FinishedAt != nil ||
+		view.Work.Task.Task.CollectionStartedAt != nil ||
+		view.Checkpoint.Record == nil {
 		return workqueue.Change{}, invalid()
 	}
 	saved, err := Load(ctx, store, input, view.Work.ReadRevision)
@@ -36,7 +46,8 @@ func PrepareEffectEvidence(ctx context.Context, store Reader, view workqueue.Res
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if !releaseexecution.EqualCheckpoint(*view.Checkpoint.Record, *report.Ack) || saved.Revision != view.Checkpoint.Revision {
+	if !releaseexecution.EqualCheckpoint(*view.Checkpoint.Record, *report.Ack) ||
+		saved.Revision != view.Checkpoint.Revision {
 		return workqueue.Change{}, invalid()
 	}
 	evidence, err := releaseexecution.DecodeEffectEvidence(input, report, raw, reference)
@@ -71,7 +82,14 @@ func PrepareEffectEvidence(ctx context.Context, store Reader, view workqueue.Res
 	return change, nil
 }
 
-func EffectCompletionConditions(ctx context.Context, store Reader, view workqueue.ResumeView, input releaseexecution.Input, previous Snapshot, next releaseexecution.CheckpointReport) ([]keyvalue.Condition, error) {
+func EffectCompletionConditions(
+	ctx context.Context,
+	store Reader,
+	view workqueue.ResumeView,
+	input releaseexecution.Input,
+	previous Snapshot,
+	next releaseexecution.CheckpointReport,
+) ([]keyvalue.Condition, error) {
 	if ctx == nil || store == nil {
 		return nil, invalid()
 	}
@@ -79,7 +97,8 @@ func EffectCompletionConditions(ctx context.Context, store Reader, view workqueu
 	if err != nil {
 		return nil, err
 	}
-	if next.Progress.InFlight || next.Progress.Evidence == nil || releaseexecution.ValidateTransition(input, &report.Progress, next.Progress) != nil {
+	if next.Progress.InFlight || next.Progress.Evidence == nil ||
+		releaseexecution.ValidateTransition(input, &report.Progress, next.Progress) != nil {
 		return nil, invalid()
 	}
 	key := EffectEvidenceKey(input.Attempt.ID, report.Sequence)
@@ -99,7 +118,10 @@ func EffectCompletionConditions(ctx context.Context, store Reader, view workqueu
 	if err != nil || next.Progress.UpdatedAt.Before(evidence.RecordedAt) {
 		return nil, invalid()
 	}
-	return []keyvalue.Condition{{Key: key, ModRevision: value.ModRevision}, {Key: ProgressKey(input.Attempt.ID), ModRevision: previous.Revision}}, nil
+	return []keyvalue.Condition{
+		{Key: key, ModRevision: value.ModRevision},
+		{Key: ProgressKey(input.Attempt.ID), ModRevision: previous.Revision},
+	}, nil
 }
 
 func activeEffectReport(input releaseexecution.Input, saved Snapshot) (releaseexecution.CheckpointReport, error) {
@@ -107,7 +129,11 @@ func activeEffectReport(input releaseexecution.Input, saved Snapshot) (releaseex
 		(saved.Record.Progress.Phase != releaseexecution.Rollout && saved.Record.Progress.Phase != releaseexecution.Configuration) {
 		return releaseexecution.CheckpointReport{}, invalid()
 	}
-	report := releaseexecution.CheckpointReport{Sequence: saved.Record.CheckpointSequence, StageID: saved.Record.StageID, Progress: saved.Record.Progress}
+	report := releaseexecution.CheckpointReport{
+		Sequence: saved.Record.CheckpointSequence,
+		StageID:  saved.Record.StageID,
+		Progress: saved.Record.Progress,
+	}
 	ack, err := report.Checkpoint(input.Attempt)
 	if err != nil {
 		return releaseexecution.CheckpointReport{}, err

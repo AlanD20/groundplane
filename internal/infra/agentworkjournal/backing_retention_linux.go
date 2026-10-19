@@ -40,9 +40,11 @@ func (journal *Journal) retireRecoveredBacking(ctx context.Context, recovery Bac
 	if err != nil || state == nil {
 		return err
 	}
-	if !workexecution.SameAssignment(state.Attempt, source) || state.Backing == nil || state.Backing.Layout != recovery.Layout ||
-		state.Backing.Completion != nil || state.Backing.Failure != nil && state.Backing.Failure.Receipt != nil &&
-		!sameBackingReceipt(state.Backing.Failure.Receipt, source) {
+	if !workexecution.SameAssignment(state.Attempt, source) || state.Backing == nil ||
+		state.Backing.Layout != recovery.Layout ||
+		state.Backing.Completion != nil ||
+		state.Backing.Failure != nil && state.Backing.Failure.Receipt != nil &&
+			!sameBackingReceipt(state.Backing.Failure.Receipt, source) {
 		return conflict()
 	}
 	return journal.removeRecord(ctx, source.ID)

@@ -9,7 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (repository *InputRepository) PrepareControllerAppliedBinding(ctx context.Context, work workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareControllerAppliedBinding(
+	ctx context.Context,
+	work workqueue.View,
+) (workqueue.Change, error) {
 	source, err := repository.LoadCaptured(ctx, work)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -43,7 +46,11 @@ func (repository *InputRepository) prepareAppliedBinding(ctx context.Context, wo
 		Consumer: consumer, Credential: consumer, Facts: ownFacts}
 	change := workqueue.Change{}
 	if !consumer.OwnsCredential() {
-		credential, facts, guards, err := repository.readReadyBinding(ctx, consumer.CredentialAttachID, work.ReadRevision)
+		credential, facts, guards, err := repository.readReadyBinding(
+			ctx,
+			consumer.CredentialAttachID,
+			work.ReadRevision,
+		)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
@@ -63,7 +70,10 @@ func (repository *InputRepository) prepareAppliedBinding(ctx context.Context, wo
 		change.Conditions = append(change.Conditions, guards...)
 	}
 	key := attachments.AppliedBindingKey(consumer.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: work.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -90,12 +100,19 @@ func (repository *InputRepository) prepareAppliedBinding(ctx context.Context, wo
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])},
+	)
 	change.Mutations = []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}}
 	return change, nil
 }
 
-func (repository *InputRepository) readReadyBinding(ctx context.Context, id string, revision int64) (attachments.Record, *attachments.EncryptedFacts, []keyvalue.Condition, error) {
+func (repository *InputRepository) readReadyBinding(
+	ctx context.Context,
+	id string,
+	revision int64,
+) (attachments.Record, *attachments.EncryptedFacts, []keyvalue.Condition, error) {
 	keys := []string{attachments.AttachKey(id), attachments.AttachFactsKey(id)}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if read != nil {
@@ -110,7 +127,9 @@ func (repository *InputRepository) readReadyBinding(ctx context.Context, id stri
 	guards := make([]keyvalue.Condition, 0, 2)
 	for index, value := range read.Values {
 		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > revision) {
-			return attachments.Record{}, nil, nil, checkpointConflict("Attach applied credential source changed revision")
+			return attachments.Record{}, nil, nil, checkpointConflict(
+				"Attach applied credential source changed revision",
+			)
 		}
 		guards = append(guards, keyvalue.Condition{Key: keys[index], ModRevision: keyvalue.RevisionOf(value)})
 	}
@@ -129,7 +148,9 @@ func (repository *InputRepository) readReadyBinding(ctx context.Context, id stri
 		}
 		if decoded.AttachID != id {
 			clear(decoded.Ciphertext)
-			return attachments.Record{}, nil, nil, checkpointConflict("Attach applied facts belong to another credential")
+			return attachments.Record{}, nil, nil, checkpointConflict(
+				"Attach applied facts belong to another credential",
+			)
 		}
 		facts = &decoded
 	}

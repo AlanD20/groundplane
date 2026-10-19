@@ -21,7 +21,10 @@ func PrepareRemovalFailure(ctx context.Context, reader Reader, view workqueue.Re
 	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 ||
 		view.Attempt.Attempt.FinishedAt != nil || !removalOperation(view.Work.Item.Item.Operation) ||
 		!workexecution.SameAssignment(view.Attempt.Attempt, input.Attempt) {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "Attach failure no longer owns its active attempt")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Attach failure no longer owns its active attempt",
+		)
 	}
 	authority, err := input.Authority()
 	if err != nil {
@@ -45,8 +48,10 @@ func PrepareRemovalFailure(ctx context.Context, reader Reader, view workqueue.Re
 		if err != nil {
 			return workqueue.Change{}, workexecution.Completion{}, err
 		}
-		if read == nil || read.ReadRevision != view.Work.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil ||
-			read.Values[0].Key != key || read.Values[0].ModRevision <= 0 {
+		if read == nil || read.ReadRevision != view.Work.ReadRevision || len(read.Values) != 1 ||
+			read.Values[0] == nil ||
+			read.Values[0].Key != key ||
+			read.Values[0].ModRevision <= 0 {
 			return workqueue.Change{}, workexecution.Completion{}, recordcodec.CorruptRecord()
 		}
 		report, err := attachexecution.DecodeRemovalReport(input, read.Values[0].Value)
@@ -55,13 +60,25 @@ func PrepareRemovalFailure(ctx context.Context, reader Reader, view workqueue.Re
 		}
 		expected, err := report.Checkpoint(input)
 		if err != nil || !sameCheckpoint(expected, *checkpoint) || report.Progress.Complete(input) {
-			return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "Attach failure differs from saved progress; completed work must report completion")
+			return workqueue.Change{}, workexecution.Completion{}, errs.New(
+				errs.KindStateConflict,
+				"Attach failure differs from saved progress; completed work must report completion",
+			)
 		}
 		settled = !report.Progress.InFlight
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision},
+		)
 	}
-	failure := attachexecution.RemovalFailure{AttemptID: input.Attempt.ID, Input: input.Attempt.Input, Authority: authority,
-		Reason: reason, Checkpoint: checkpoint, RecordedAt: at}
+	failure := attachexecution.RemovalFailure{
+		AttemptID:  input.Attempt.ID,
+		Input:      input.Attempt.Input,
+		Authority:  authority,
+		Reason:     reason,
+		Checkpoint: checkpoint,
+		RecordedAt: at,
+	}
 	raw, evidence, err := attachexecution.EncodeRemovalFailure(input.Attempt, failure)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
@@ -72,7 +89,9 @@ func PrepareRemovalFailure(ctx context.Context, reader Reader, view workqueue.Re
 	} else if view.Work.Item.Item.ForwardRevoked {
 		outcome = workexecution.Superseded
 	}
-	change.Mutations = []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: WorkFailureKey(input.Attempt.ID), Value: raw}}
+	change.Mutations = []keyvalue.Mutation{
+		{Type: keyvalue.MutationPut, Key: WorkFailureKey(input.Attempt.ID), Value: raw},
+	}
 	completion := workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: settled}
 	if !settled {
 		recovery, err := prepareRemovalRecoverySource(ctx, reader, view, input, reason, completion, at)

@@ -12,7 +12,8 @@ import (
 // Pin only the selected consumer to its captured local image. Never resolve a
 // tag again, mutate the stored artifact, or change another service's definition.
 func backupConsumerCLIInput(input executionplan.BackupConsumerInput) ([]byte, error) {
-	if input.Artifact == nil || input.Service == nil || input.Fact == nil || len(input.Fact.LocalImageIdSha256) != sha256.Size {
+	if input.Artifact == nil || input.Service == nil || input.Fact == nil ||
+		len(input.Fact.LocalImageIdSha256) != sha256.Size {
 		return nil, invalidBackupConsumerInput()
 	}
 	var document yaml.Node

@@ -29,9 +29,17 @@ type Effects interface {
 // Run keeps failure separate from recovery. A failed or uncertain effect leaves
 // its in-flight cursor intact and returns to the attempt owner; it cannot turn
 // cleanup into success, create a new attempt or retry indefinitely.
-func Run(ctx context.Context, input releaseexecution.Input, checkpoints Checkpoints, effects Effects) (*releaseexecution.CheckpointReport, error) {
+func Run(
+	ctx context.Context,
+	input releaseexecution.Input,
+	checkpoints Checkpoints,
+	effects Effects,
+) (*releaseexecution.CheckpointReport, error) {
 	if ctx == nil || checkpoints == nil || effects == nil || input.Attempt.StartedAt == nil || input.Release == nil {
-		return nil, errs.New(errs.KindInternal, "Release execution requires a started input, durable checkpoints and effects")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Release execution requires a started input, durable checkpoints and effects",
+		)
 	}
 	bounded, cancel := context.WithDeadline(ctx, input.Attempt.Deadline)
 	defer cancel()
@@ -110,12 +118,18 @@ func Run(ctx context.Context, input releaseexecution.Input, checkpoints Checkpoi
 	}
 }
 
-func acknowledgedCursor(ctx context.Context, checkpoints Checkpoints, input releaseexecution.Input, expected releaseexecution.Progress) (*releaseexecution.CheckpointReport, error) {
+func acknowledgedCursor(
+	ctx context.Context,
+	checkpoints Checkpoints,
+	input releaseexecution.Input,
+	expected releaseexecution.Progress,
+) (*releaseexecution.CheckpointReport, error) {
 	report, err := checkpoints.Current(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if report == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil || !releaseexecution.EqualProgress(report.Progress, expected) {
+	if report == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil ||
+		!releaseexecution.EqualProgress(report.Progress, expected) {
 		return nil, errs.New(errs.KindStateConflict, "Release checkpoint did not acknowledge the requested cursor")
 	}
 	return report, nil

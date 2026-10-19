@@ -25,7 +25,11 @@ func NewDeletionCleanup(repository *hierarchydeletionbackupcleanup.Repository,
 	return &DeletionCleanup{repository: repository, stores: stores}, nil
 }
 
-func (service *DeletionCleanup) Execute(ctx context.Context, execution hierarchydeletionbackupcleanup.Execution, reporter *RemovalReporter) (executionErr error) {
+func (service *DeletionCleanup) Execute(
+	ctx context.Context,
+	execution hierarchydeletionbackupcleanup.Execution,
+	reporter *RemovalReporter,
+) (executionErr error) {
 	if reporter == nil {
 		return errs.New(errs.KindInternal, "backup removal requires its diagnostic reporter")
 	}
@@ -37,7 +41,12 @@ func (service *DeletionCleanup) Execute(ctx context.Context, execution hierarchy
 	}()
 	ctx, cancel := context.WithDeadline(ctx, execution.Deadline())
 	defer cancel()
-	reporter.start(ctx, "prepare_object", "Prepare captured backup object", "Load the retained object identity and scoped Connector credentials without selecting newer configuration.")
+	reporter.start(
+		ctx,
+		"prepare_object",
+		"Prepare captured backup object",
+		"Load the retained object identity and scoped Connector credentials without selecting newer configuration.",
+	)
 	remote, err := service.repository.PrepareRemote(ctx, execution)
 	if err != nil {
 		return err
@@ -90,7 +99,12 @@ func (service *DeletionCleanup) Execute(ctx context.Context, execution hierarchy
 				}
 			}
 			reporter.finish(ctx, "The captured object identity and Connector credentials are ready.")
-			reporter.start(ctx, "delete_object", "Delete captured backup object", "Authorize one conditional deletion of the selected version or ETag; do not delete another object at the same key.")
+			reporter.start(
+				ctx,
+				"delete_object",
+				"Delete captured backup object",
+				"Authorize one conditional deletion of the selected version or ETag; do not delete another object at the same key.",
+			)
 			if err := service.repository.AuthorizeDelete(ctx, execution, identity); err != nil {
 				return err
 			}
@@ -98,8 +112,16 @@ func (service *DeletionCleanup) Execute(ctx context.Context, execution hierarchy
 			if err := store.PruneExact(ctx, authority); err != nil {
 				return err
 			}
-			reporter.finish(ctx, "Storage's conditional removal operation confirmed that the selected object is absent.")
-			reporter.start(ctx, "confirm_absence", "Record confirmed object absence", "Confirm exact object absence and retain the proof before retiring recovery-point metadata.")
+			reporter.finish(
+				ctx,
+				"Storage's conditional removal operation confirmed that the selected object is absent.",
+			)
+			reporter.start(
+				ctx,
+				"confirm_absence",
+				"Record confirmed object absence",
+				"Confirm exact object absence and retain the proof before retiring recovery-point metadata.",
+			)
 			head, err := store.HeadExact(ctx, artifact, &authority.Discriminator)
 			if err != nil {
 				return err
@@ -110,14 +132,20 @@ func (service *DeletionCleanup) Execute(ctx context.Context, execution hierarchy
 			if err := service.repository.ConfirmAbsent(ctx, execution, identity); err != nil {
 				return err
 			}
-			reporter.finish(ctx, "Exact object absence is saved. Metadata retirement follows in the atomic Task settlement.")
+			reporter.finish(
+				ctx,
+				"Exact object absence is saved. Metadata retirement follows in the atomic Task settlement.",
+			)
 			return nil
 		})
 }
 
 // Reconcile only observes the captured provider identity. A saved Start can
 // precede an interrupted delete request; it never authorizes command replay.
-func (service *DeletionCleanup) Reconcile(ctx context.Context, execution hierarchydeletionbackupcleanup.Execution) error {
+func (service *DeletionCleanup) Reconcile(
+	ctx context.Context,
+	execution hierarchydeletionbackupcleanup.Execution,
+) error {
 	remote, err := service.repository.PrepareRemote(ctx, execution)
 	if err != nil {
 		return err

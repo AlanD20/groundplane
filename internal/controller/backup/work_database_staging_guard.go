@@ -10,7 +10,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func attachDatabaseRecoveryGuard(source backupwork.StagingSource, nativeRestore *backupruntime.BackupRestoreRecord, disposition *agentpb.BackupStagingDisposition) error {
+func attachDatabaseRecoveryGuard(
+	source backupwork.StagingSource,
+	nativeRestore *backupruntime.BackupRestoreRecord,
+	disposition *agentpb.BackupStagingDisposition,
+) error {
 	if source.Input == nil || uint64(source.Ordinal) >= uint64(len(source.Input.Steps)) {
 		return invalidCaptureStaging()
 	}

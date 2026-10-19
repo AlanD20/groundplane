@@ -35,17 +35,31 @@ func (service *Service) selectComponentWork(ctx context.Context, work workqueue.
 		work.Task.Revision > work.ReadRevision || work.Item.Revision > work.ReadRevision ||
 		item.AttemptNumber != 0 || item.ForwardRevoked || item.ActiveAttemptID != "" ||
 		validateAuthoredRuntimeProjectionParent(task, snapshot) != nil {
-		return componentWorkSelection{}, errs.New(errs.KindStateConflict, "Component selection requires its captured Apply work")
+		return componentWorkSelection{}, errs.New(
+			errs.KindStateConflict,
+			"Component selection requires its captured Apply work",
+		)
 	}
 	source, err := service.loadAuthoredRuntimeProjectionSource(ctx, task)
 	if err != nil {
 		return componentWorkSelection{}, err
 	}
-	capability, spec, found := authoredComponentSpec(source.identities.Record.Components, source.desired.Record.Input.Components, unit.Target.ID)
+	capability, spec, found := authoredComponentSpec(
+		source.identities.Record.Components,
+		source.desired.Record.Input.Components,
+		unit.Target.ID,
+	)
 	if found == unit.Removal {
-		return componentWorkSelection{}, errs.New(errs.KindStateConflict, "Component membership differs from the captured Apply")
+		return componentWorkSelection{}, errs.New(
+			errs.KindStateConflict,
+			"Component membership differs from the captured Apply",
+		)
 	}
-	current, err := service.repository.ReadEnvironmentBlueprintRuntimeComponents(ctx, task.Scope.EnvironmentID, snapshot.ReadRevision)
+	current, err := service.repository.ReadEnvironmentBlueprintRuntimeComponents(
+		ctx,
+		task.Scope.EnvironmentID,
+		snapshot.ReadRevision,
+	)
 	if err != nil {
 		return componentWorkSelection{}, err
 	}
@@ -73,9 +87,18 @@ func (service *Service) selectComponentWork(ctx context.Context, work workqueue.
 			return componentWorkSelection{}, err
 		}
 		if len(changes.Effective) != 1 || changes.Effective[0].ID != item.TargetID {
-			return componentWorkSelection{}, errs.New(errs.KindStateConflict, "Component selection must preserve its singleton identity")
+			return componentWorkSelection{}, errs.New(
+				errs.KindStateConflict,
+				"Component selection must preserve its singleton identity",
+			)
 		}
-		return componentWorkSelection{Source: source, Current: selected, Capability: capability, Spec: spec, Candidate: changes.Effective[0]}, nil
+		return componentWorkSelection{
+			Source:     source,
+			Current:    selected,
+			Capability: capability,
+			Spec:       spec,
+			Candidate:  changes.Effective[0],
+		}, nil
 	}
 	return componentWorkSelection{}, errs.New(errs.KindStateConflict, "Component singleton is unavailable")
 }

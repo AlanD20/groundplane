@@ -10,7 +10,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (executor *Executor) RunRecovery(ctx context.Context, assignment backingprovision.Assignment, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) RunRecovery(
+	ctx context.Context,
+	assignment backingprovision.Assignment,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	if ctx == nil || exchange == nil || assignment.Validate() != nil || assignment.Recovery == nil ||
 		assignment.Procedure.VolumeRoot != executor.volumeRoot {
 		return workexecution.Attempt{}, invalidInput()
@@ -45,9 +49,15 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment backingpro
 			} else if ctx.Err() != nil {
 				status = backingprovision.RecoveryInterrupted
 			}
-			report = backingprovision.RecoveryReport{AttemptID: assignment.Attempt.ID, ForwardID: assignment.Recovery.Forward.ID,
-				Failure: assignment.Recovery.Evidence, Input: assignment.Attempt.Input, ServiceID: saved.Layout.ServiceID,
-				Status: status, ObservedAt: time.Now().UTC()}
+			report = backingprovision.RecoveryReport{
+				AttemptID:  assignment.Attempt.ID,
+				ForwardID:  assignment.Recovery.Forward.ID,
+				Failure:    assignment.Recovery.Evidence,
+				Input:      assignment.Attempt.Input,
+				ServiceID:  saved.Layout.ServiceID,
+				Status:     status,
+				ObservedAt: time.Now().UTC(),
+			}
 		}
 		delivery, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		defer cancel()
@@ -65,14 +75,20 @@ func (executor *Executor) RunRecovery(ctx context.Context, assignment backingpro
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	completed, err := exchange.RecoverBackingProvision(ctx, &agentpb.BackingProvisionRecoveryRequest{Attempt: identity, Report: raw})
+	completed, err := exchange.RecoverBackingProvision(
+		ctx,
+		&agentpb.BackingProvisionRecoveryRequest{Attempt: identity, Report: raw},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
 	return executor.journal.AcknowledgeBackingRecovery(ctx, assignment, completed)
 }
 
-func (executor *Executor) cleanup(ctx context.Context, assignment backingprovision.Assignment) (backingprovision.RecoveryReport, error) {
+func (executor *Executor) cleanup(
+	ctx context.Context,
+	assignment backingprovision.Assignment,
+) (backingprovision.RecoveryReport, error) {
 	if err := executor.ownership.Check(); err != nil {
 		return backingprovision.RecoveryReport{}, err
 	}
@@ -110,8 +126,17 @@ func (executor *Executor) cleanup(ctx context.Context, assignment backingprovisi
 	if err := executor.ownership.Check(); err != nil {
 		return backingprovision.RecoveryReport{}, err
 	}
-	report := backingprovision.RecoveryReport{AttemptID: assignment.Attempt.ID, ForwardID: assignment.Recovery.Forward.ID,
-		Failure: assignment.Recovery.Evidence, Input: assignment.Attempt.Input, ServiceID: input.Layout.ServiceID,
-		Status: backingprovision.RecoveryComplete, HelperStopped: true, FilesStopped: true, RuntimeAbsent: observed.RuntimeAbsent, ObservedAt: observed.ObservedAt}
+	report := backingprovision.RecoveryReport{
+		AttemptID:     assignment.Attempt.ID,
+		ForwardID:     assignment.Recovery.Forward.ID,
+		Failure:       assignment.Recovery.Evidence,
+		Input:         assignment.Attempt.Input,
+		ServiceID:     input.Layout.ServiceID,
+		Status:        backingprovision.RecoveryComplete,
+		HelperStopped: true,
+		FilesStopped:  true,
+		RuntimeAbsent: observed.RuntimeAbsent,
+		ObservedAt:    observed.ObservedAt,
+	}
 	return report, report.Validate(assignment.Attempt, *assignment.Recovery, input.Layout)
 }

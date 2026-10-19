@@ -32,7 +32,10 @@ func (owner *RemovalPublication) PreparePublication(ctx context.Context, task wo
 		return owner.zones.PreparePublication(ctx, task, revision, at)
 	}
 	if ids.Validate(ids.KindTenant, task.Task.TargetID) == nil ||
-		ids.Validate(ids.KindProject, task.Task.TargetID) == nil || ids.Validate(ids.KindEnvironment, task.Task.TargetID) == nil {
+		ids.Validate(
+			ids.KindProject,
+			task.Task.TargetID,
+		) == nil || ids.Validate(ids.KindEnvironment, task.Task.TargetID) == nil {
 		return owner.hierarchy.PreparePublication(ctx, task, revision, at)
 	}
 	return PublicationBatch{}, errs.New(errs.KindStateConflict, "resource removal has no graph publication owner")

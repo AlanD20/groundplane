@@ -36,16 +36,29 @@ func NewRetryService(queue *workqueue.Repository, retries *workdispatch.Retries,
 	return &taskRetryService{queue: queue, retries: retries, receipts: receipts, coordinator: coordinator}, nil
 }
 
-func (service *taskRetryService) RetryTask(ctx context.Context, taskID, key string, request apiTypes.TaskRetryRequest) (idempotency.IdempotencyResponse, error) {
+func (service *taskRetryService) RetryTask(
+	ctx context.Context,
+	taskID, key string,
+	request apiTypes.TaskRetryRequest,
+) (idempotency.IdempotencyResponse, error) {
 	if ids.Validate(ids.KindTask, taskID) != nil || ids.Validate(ids.KindWorkItem, request.WorkItemID) != nil {
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Retry requires the exact Task, work item and attempt")
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Retry requires the exact Task, work item and attempt",
+		)
 	}
 	fields := []requestidempotency.Field{
 		{Name: "work_item_id", Value: requestidempotency.String(request.WorkItemID)},
 		{Name: "attempt", Value: requestidempotency.UnsignedInteger(request.Attempt)},
 	}
 	if request.QueuedFailureAt != nil {
-		fields = append(fields, requestidempotency.Field{Name: "queued_failure_at", Value: requestidempotency.String(request.QueuedFailureAt.UTC().Format(time.RFC3339Nano))})
+		fields = append(
+			fields,
+			requestidempotency.Field{
+				Name:  "queued_failure_at",
+				Value: requestidempotency.String(request.QueuedFailureAt.UTC().Format(time.RFC3339Nano)),
+			},
+		)
 	}
 	task, _, err := service.queue.ReadTask(ctx, taskID, 0)
 	if err != nil {
@@ -70,7 +83,13 @@ func (service *taskRetryService) RetryTask(ctx context.Context, taskID, key stri
 		return idempotency.IdempotencyResponse{}, err
 	}
 	defer clear(durable.Ciphertext)
-	locator := idempotency.IdempotencyLocator{ScopeKind: kind, ScopeID: owner, Method: http.MethodPost, Route: taskRetryRoute, Key: key}
+	locator := idempotency.IdempotencyLocator{
+		ScopeKind: kind,
+		ScopeID:   owner,
+		Method:    http.MethodPost,
+		Route:     taskRetryRoute,
+		Key:       key,
+	}
 	resolution, existing, err := service.coordinator.ResolveExisting(ctx, service.receipts, locator, evidence)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
@@ -82,7 +101,14 @@ func (service *taskRetryService) RetryTask(ctx context.Context, taskID, key stri
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	at := time.Now().UTC()
-	change, err := service.retries.Prepare(ctx, taskID, request.WorkItemID, request.Attempt, request.QueuedFailureAt, at)
+	change, err := service.retries.Prepare(
+		ctx,
+		taskID,
+		request.WorkItemID,
+		request.Attempt,
+		request.QueuedFailureAt,
+		at,
+	)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
@@ -92,9 +118,22 @@ func (service *taskRetryService) RetryTask(ctx context.Context, taskID, key stri
 		return idempotency.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(body)
-	response := idempotency.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}
-	marker := idempotency.IdempotencyMarker{Kind: idempotency.IdempotencyMarkerDirect, State: idempotency.IdempotencyMarkerCompleted,
-		Locator: locator, Intent: durable, Response: response, CreatedAt: at, UpdatedAt: at, TerminalAt: at, RetainUntil: at.Add(idempotency.MarkerRetention)}
+	response := idempotency.IdempotencyResponse{
+		Status:      http.StatusAccepted,
+		ContentKind: "application/json",
+		Body:        body,
+	}
+	marker := idempotency.IdempotencyMarker{
+		Kind:        idempotency.IdempotencyMarkerDirect,
+		State:       idempotency.IdempotencyMarkerCompleted,
+		Locator:     locator,
+		Intent:      durable,
+		Response:    response,
+		CreatedAt:   at,
+		UpdatedAt:   at,
+		TerminalAt:  at,
+		RetainUntil: at.Add(idempotency.MarkerRetention),
+	}
 	result, applyErr := service.receipts.ApplyExecutionRetry(ctx, change, marker)
 	if applyErr != nil {
 		if !errs.IsRetryable(applyErr) && ctx.Err() == nil {
@@ -113,19 +152,31 @@ func (service *taskRetryService) RetryTask(ctx context.Context, taskID, key stri
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindInternal, "Retry receipt resolution is inconsistent")
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Retry receipt resolution is inconsistent",
+		)
 	}
 }
 
 func retryScope(scope workexecution.Scope) (requestidempotency.Scope, idempotency.IdempotencyScopeKind, string) {
 	if scope.EnvironmentID != "" {
-		return requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: scope.EnvironmentID}, idempotency.IdempotencyScopeEnvironment, scope.EnvironmentID
+		return requestidempotency.Scope{
+			Kind: requestidempotency.ScopeEnvironment,
+			ID:   scope.EnvironmentID,
+		}, idempotency.IdempotencyScopeEnvironment, scope.EnvironmentID
 	}
 	if scope.ProjectID != "" {
-		return requestidempotency.Scope{Kind: requestidempotency.ScopeProject, ID: scope.ProjectID}, idempotency.IdempotencyScopeProject, scope.ProjectID
+		return requestidempotency.Scope{
+			Kind: requestidempotency.ScopeProject,
+			ID:   scope.ProjectID,
+		}, idempotency.IdempotencyScopeProject, scope.ProjectID
 	}
 	if scope.TenantID != "" {
-		return requestidempotency.Scope{Kind: requestidempotency.ScopeTenant, ID: scope.TenantID}, idempotency.IdempotencyScopeTenant, scope.TenantID
+		return requestidempotency.Scope{
+			Kind: requestidempotency.ScopeTenant,
+			ID:   scope.TenantID,
+		}, idempotency.IdempotencyScopeTenant, scope.TenantID
 	}
 	return requestidempotency.Scope{Kind: requestidempotency.ScopePlatform}, idempotency.IdempotencyScopePlatform, "-"
 }

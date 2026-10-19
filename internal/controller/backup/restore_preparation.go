@@ -19,7 +19,13 @@ import (
 )
 
 type restorePublication interface {
-	PublishWork(context.Context, workexecution.Task, workexecution.Item, *agentpb.BackupWorkInput, idempotency.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	PublishWork(
+		context.Context,
+		workexecution.Task,
+		workexecution.Item,
+		*agentpb.BackupWorkInput,
+		idempotency.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 	Clear()
 }
 
@@ -68,8 +74,14 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 		if err != nil {
 			return preparedRestore{}, err
 		}
-		return preparedRestore{HostID: selected.HostID, Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
-			Owner: selected.Owner, Publication: selected.Publication}, nil
+		return preparedRestore{
+			HostID:      selected.HostID,
+			Restore:     selected.Restore,
+			Scope:       selected.Scope,
+			Authority:   selected.Authority,
+			Owner:       selected.Owner,
+			Publication: selected.Publication,
+		}, nil
 	case backupruntime.BackupRuntimeSourceVolume:
 		selected, err := service.runtime.PrepareVolumeRestore(ctx, backupplanning.VolumeRestoreSelectionInput{
 			EnvironmentID: environmentID, SourceID: request.SourceID, RecoveryPointID: request.RecoveryPointID,
@@ -79,8 +91,15 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 		if err != nil {
 			return preparedRestore{}, err
 		}
-		return preparedRestore{HostID: selected.HostID, Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
-			Artifacts: selected.Artifacts, Owner: selected.Owner, Publication: selected.Publication}, nil
+		return preparedRestore{
+			HostID:      selected.HostID,
+			Restore:     selected.Restore,
+			Scope:       selected.Scope,
+			Authority:   selected.Authority,
+			Artifacts:   selected.Artifacts,
+			Owner:       selected.Owner,
+			Publication: selected.Publication,
+		}, nil
 	case backupruntime.BackupRuntimeSourceAttach:
 		selected, err := service.runtime.PrepareDatabaseRestore(ctx, backupplanning.DatabaseRestoreSelectionInput{
 			EnvironmentID: environmentID, SourceID: request.SourceID, RecoveryPointID: request.RecoveryPointID,
@@ -93,8 +112,15 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 		if err != nil {
 			return preparedRestore{}, err
 		}
-		return preparedRestore{HostID: selected.HostID, Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
-			Artifacts: selected.Artifacts, Owner: selected.Owner, Publication: selected.Publication}, nil
+		return preparedRestore{
+			HostID:      selected.HostID,
+			Restore:     selected.Restore,
+			Scope:       selected.Scope,
+			Authority:   selected.Authority,
+			Artifacts:   selected.Artifacts,
+			Owner:       selected.Owner,
+			Publication: selected.Publication,
+		}, nil
 	default:
 		return preparedRestore{}, errs.New(errs.KindStrategyNotImplemented, "Restore source execution is not available")
 	}

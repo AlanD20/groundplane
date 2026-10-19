@@ -26,7 +26,10 @@ func (repository *TaskRepository) PublishResolverWork(ctx context.Context, input
 		return IdempotencyTransactionResult{}, err
 	}
 	if marker.Locator.ScopeKind != idempotency.IdempotencyScopePlatform || marker.Locator.ScopeID != "-" {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "CoreDNS work requires platform request idempotency")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"CoreDNS work requires platform request idempotency",
+		)
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
 		return existing, err
@@ -50,27 +53,42 @@ func (repository *TaskRepository) PublishResolverWork(ctx context.Context, input
 		return IdempotencyTransactionResult{}, err
 	}
 	if host.Binding.HostID != input.HostID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "CoreDNS selected host changed before publication")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"CoreDNS selected host changed before publication",
+		)
 	}
-	keys := []string{componentrecord.RecordKey(input.ComponentID), platformcomponents.PlatformComponentOwnerKey(input.ComponentID),
-		platformcomponents.PlatformComponentKindKey(core.ComponentKindCoreDNS)}
+	keys := []string{
+		componentrecord.RecordKey(input.ComponentID),
+		platformcomponents.PlatformComponentOwnerKey(input.ComponentID),
+		platformcomponents.PlatformComponentKindKey(core.ComponentKindCoreDNS),
+	}
 	state, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: capture.ReadRevision})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if state == nil || state.ReadRevision != capture.ReadRevision || len(state.Values) != len(keys) ||
 		state.Values[0] == nil || state.Values[1] == nil || state.Values[2] == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "CoreDNS Component or singleton ownership is unavailable")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"CoreDNS Component or singleton ownership is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(state.Values)
 	for index, value := range state.Values {
 		if value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > capture.ReadRevision ||
 			index > 0 && string(value.Value) != input.ComponentID {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "CoreDNS Component ownership changed before publication")
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindStateConflict,
+				"CoreDNS Component ownership changed before publication",
+			)
 		}
 	}
 	if state.Values[0].ModRevision != capture.ComponentRevision {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "CoreDNS desired configuration changed during preparation; submit a new action")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"CoreDNS desired configuration changed during preparation; submit a new action",
+		)
 	}
 	current, err := componentrecord.DecodeRecord(state.Values[0].Value)
 	if err != nil {
@@ -91,7 +109,10 @@ func (repository *TaskRepository) PublishResolverWork(ctx context.Context, input
 	}
 	actual, err := resolverwork.DesiredDigest(replacement.Desired)
 	if err != nil || expected != actual {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "CoreDNS desired capture changed its stable resource identity")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"CoreDNS desired capture changed its stable resource identity",
+		)
 	}
 	value, err := componentrecord.EncodeRecord(replacement)
 	if err != nil {
@@ -106,18 +127,27 @@ func (repository *TaskRepository) PublishResolverWork(ctx context.Context, input
 		componentrecord.WriteFenceMutation(input.ComponentID))
 	if capture.ProjectionRevision == 0 {
 		if len(capture.Projection.Routes) != 0 {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "initial CoreDNS projection cannot invent existing Routes")
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"initial CoreDNS projection cannot invent existing Routes",
+			)
 		}
 		projection, err := hostresolution.EncodeHostResolutionProjectionRecord(capture.Projection)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clear(projection)
-		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: hostresolution.StorageKey, Value: projection})
+		mutations = append(
+			mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: hostresolution.StorageKey, Value: projection},
+		)
 	}
 	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations,
 		func(_ int64, _ []*keyvalue.KeyValue) error {
-			return errs.New(errs.KindStateConflict, "CoreDNS, its host or referenced DNS resources changed before acceptance; refresh and submit a new action")
+			return errs.New(
+				errs.KindStateConflict,
+				"CoreDNS, its host or referenced DNS resources changed before acceptance; refresh and submit a new action",
+			)
 		})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

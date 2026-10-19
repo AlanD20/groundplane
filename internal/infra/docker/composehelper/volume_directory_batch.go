@@ -15,7 +15,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func executeVolumeDirectoryBatch(ctx context.Context, taskRunner runner.Runner, root string, input executionplan.VolumeHelperInput) (*agentpb.VolumeWorkHelperResponse, error) {
+func executeVolumeDirectoryBatch(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	root string,
+	input executionplan.VolumeHelperInput,
+) (*agentpb.VolumeWorkHelperResponse, error) {
 	if input.DirectoryBatch == nil || input.InspectOnly {
 		return nil, errs.New(errs.KindValidationFailed, "Volume directory deletion requires its saved batch")
 	}
@@ -26,7 +31,10 @@ func executeVolumeDirectoryBatch(ctx context.Context, taskRunner runner.Runner, 
 		return nil, err
 	}
 	if !docker.Absent || !docker.ConsumersDetached {
-		return nil, errs.New(errs.KindResourceInUse, "Volume directory deletion requires all containers detached and the Docker Volume removed")
+		return nil, errs.New(
+			errs.KindResourceInUse,
+			"Volume directory deletion requires all containers detached and the Docker Volume removed",
+		)
 	}
 	at, err := ids.Timestamp(ids.KindWorkItem, input.Attempt.WorkItemID)
 	if err != nil {
@@ -60,7 +68,12 @@ func executeVolumeDirectoryBatch(ctx context.Context, taskRunner runner.Runner, 
 	if err != nil {
 		return nil, err
 	}
-	response.DirectoryResult, err = volumeexecution.EncodeDirectoryResult(input.Attempt, input.Progress, *input.DirectoryBatch, result)
+	response.DirectoryResult, err = volumeexecution.EncodeDirectoryResult(
+		input.Attempt,
+		input.Progress,
+		*input.DirectoryBatch,
+		result,
+	)
 	if err != nil {
 		return nil, err
 	}

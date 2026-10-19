@@ -21,7 +21,9 @@ func PrepareRestorePublication(task workexecution.Task, item workexecution.Item,
 	}
 	if task.ID != restore.TaskID || task.TargetID != restore.EnvironmentID ||
 		task.Actor != workexecution.OperatorActor || !task.CreatedAt.Equal(restore.CreatedAt) ||
-		!task.Deadline.Equal(restore.CreatedAt.Add(6*time.Hour)) || restore.State != backupruntime.BackupRestoreQueued || restore.MutationStarted ||
+		!task.Deadline.Equal(
+			restore.CreatedAt.Add(6*time.Hour),
+		) || restore.State != backupruntime.BackupRestoreQueued || restore.MutationStarted ||
 		restore.Artifact != nil || !restore.UpdatedAt.Equal(restore.CreatedAt) {
 		return workqueue.Change{}, conflict("Restore Task differs from its initial resource admission")
 	}

@@ -7,9 +7,19 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func DecodeFailureAck(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, reason FailureReason, ack *agentpb.ServiceLifecycleFailureAck) (workexecution.Attempt, Failure, error) {
-	if ack == nil || len(ack.ProtoReflect().GetUnknown()) != 0 || ack.Evidence == nil || len(ack.Evidence.ProtoReflect().GetUnknown()) != 0 || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil || len(ack.FinishedAt.ProtoReflect().GetUnknown()) != 0 ||
-		ack.Outcome != string(workexecution.Failed) && ack.Outcome != string(workexecution.Cancelled) && ack.Outcome != string(workexecution.Superseded) {
+func DecodeFailureAck(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	reason FailureReason,
+	ack *agentpb.ServiceLifecycleFailureAck,
+) (workexecution.Attempt, Failure, error) {
+	if ack == nil || len(ack.ProtoReflect().GetUnknown()) != 0 || ack.Evidence == nil ||
+		len(ack.Evidence.ProtoReflect().GetUnknown()) != 0 ||
+		ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil ||
+		len(ack.FinishedAt.ProtoReflect().GetUnknown()) != 0 ||
+		ack.Outcome != string(workexecution.Failed) && ack.Outcome != string(workexecution.Cancelled) &&
+			ack.Outcome != string(workexecution.Superseded) {
 		return workexecution.Attempt{}, Failure{}, invalid()
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, attempt.Executor)

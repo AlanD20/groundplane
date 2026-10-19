@@ -8,7 +8,10 @@ import (
 
 // OpenVolumeRecoveryInput binds inspection to the original failed execution.
 // It does not relax the forward-only validation used by ordinary assignments.
-func OpenVolumeRecoveryInput(attempt workexecution.Attempt, message *agentpb.VolumeWorkAssignment) (*agentpb.VolumeWorkInput, volumeexecution.Recovery, volumeexecution.Progress, error) {
+func OpenVolumeRecoveryInput(
+	attempt workexecution.Attempt,
+	message *agentpb.VolumeWorkAssignment,
+) (*agentpb.VolumeWorkInput, volumeexecution.Recovery, volumeexecution.Progress, error) {
 	if message == nil || RejectUnknown(message) != nil || attempt.Direction != workexecution.Recovery {
 		return nil, volumeexecution.Recovery{}, volumeexecution.Progress{}, invalidVolumeWork()
 	}
@@ -27,7 +30,12 @@ func OpenVolumeRecoveryInput(attempt workexecution.Attempt, message *agentpb.Vol
 	if reference != attempt.Input || source.Failure.Checkpoint == nil {
 		return nil, volumeexecution.Recovery{}, volumeexecution.Progress{}, invalidVolumeWork()
 	}
-	boundary, err := volumeexecution.DecodeProgress(source.Forward, input.Action, input.VolumeId, message.RecoveryBoundary)
+	boundary, err := volumeexecution.DecodeProgress(
+		source.Forward,
+		input.Action,
+		input.VolumeId,
+		message.RecoveryBoundary,
+	)
 	if err != nil {
 		return nil, volumeexecution.Recovery{}, volumeexecution.Progress{}, err
 	}

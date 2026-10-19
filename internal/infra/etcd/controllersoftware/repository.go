@@ -23,20 +23,34 @@ func New(backend store) (*Repository, error) {
 	return &Repository{store: backend}, nil
 }
 
-func (repository *Repository) Load(ctx context.Context, item workexecution.Item, revision int64) (keyvalue.Versioned[Capture], error) {
+func (repository *Repository) Load(
+	ctx context.Context,
+	item workexecution.Item,
+	revision int64,
+) (keyvalue.Versioned[Capture], error) {
 	if item.Validate() != nil || item.Operation != workexecution.ControllerSoftware || revision < 0 {
 		return keyvalue.Versioned[Capture]{}, errs.New(errs.KindValidationFailed, "Controller software work is invalid")
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{InputKey(item.ID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{InputKey(item.ID)}, Revision: revision},
+	)
 	if err != nil {
 		return keyvalue.Versioned[Capture]{}, err
 	}
 	if read == nil {
-		return keyvalue.Versioned[Capture]{}, errs.New(errs.KindStorageUnavailable, "Controller software input read is unavailable")
+		return keyvalue.Versioned[Capture]{}, errs.New(
+			errs.KindStorageUnavailable,
+			"Controller software input read is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return keyvalue.Versioned[Capture]{}, errs.New(errs.KindStateConflict, "Controller software captured input is missing")
+	if read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 ||
+		read.Values[0] == nil {
+		return keyvalue.Versioned[Capture]{}, errs.New(
+			errs.KindStateConflict,
+			"Controller software captured input is missing",
+		)
 	}
 	capture, err := decodeCapture(read.Values[0].Value)
 	if err != nil {
@@ -45,7 +59,11 @@ func (repository *Repository) Load(ctx context.Context, item workexecution.Item,
 	if err := capture.Match(item); err != nil {
 		return keyvalue.Versioned[Capture]{}, err
 	}
-	return keyvalue.Versioned[Capture]{Record: capture, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[Capture]{
+		Record:       capture,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }
 
 func decodeCapture(raw []byte) (Capture, error) {
@@ -76,8 +94,9 @@ func EncodeCurrent(current Current) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if current.Settled && current.Outcome == "" || current.Outcome != "" && current.Outcome != workexecution.Succeeded &&
-		current.Outcome != workexecution.Failed && current.Outcome != workexecution.Cancelled && current.Outcome != workexecution.Superseded {
+	if current.Settled && current.Outcome == "" ||
+		current.Outcome != "" && current.Outcome != workexecution.Succeeded &&
+			current.Outcome != workexecution.Failed && current.Outcome != workexecution.Cancelled && current.Outcome != workexecution.Superseded {
 		return nil, errs.New(errs.KindValidationFailed, "Controller software current outcome is invalid")
 	}
 	return recordcodec.Encode("controller_software_current", current)
@@ -89,11 +108,17 @@ func (repository *Repository) Current(ctx context.Context, revision int64) (keyv
 		return keyvalue.Versioned[Current]{}, false, err
 	}
 	if read == nil {
-		return keyvalue.Versioned[Current]{}, false, errs.New(errs.KindStorageUnavailable, "Controller software current read is unavailable")
+		return keyvalue.Versioned[Current]{}, false, errs.New(
+			errs.KindStorageUnavailable,
+			"Controller software current read is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 {
-		return keyvalue.Versioned[Current]{}, false, errs.New(errs.KindStateConflict, "Controller software current snapshot is unavailable")
+		return keyvalue.Versioned[Current]{}, false, errs.New(
+			errs.KindStateConflict,
+			"Controller software current snapshot is unavailable",
+		)
 	}
 	if read.Values[0] == nil {
 		return keyvalue.Versioned[Current]{ReadRevision: read.ReadRevision}, false, nil
@@ -105,7 +130,14 @@ func (repository *Repository) Current(ctx context.Context, revision int64) (keyv
 	raw, err := EncodeCurrent(value)
 	clear(raw)
 	if err != nil {
-		return keyvalue.Versioned[Current]{}, false, errs.New(errs.KindInternal, "Controller software current projection is corrupt")
+		return keyvalue.Versioned[Current]{}, false, errs.New(
+			errs.KindInternal,
+			"Controller software current projection is corrupt",
+		)
 	}
-	return keyvalue.Versioned[Current]{Record: value, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, true, nil
+	return keyvalue.Versioned[Current]{
+		Record:       value,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, true, nil
 }

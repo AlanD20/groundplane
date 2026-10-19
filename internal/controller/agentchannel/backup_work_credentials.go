@@ -10,7 +10,12 @@ import (
 )
 
 type BackupWorkSecretResolver interface {
-	ResolveWorkSecretSlots(context.Context, agentregistration.WorkAuthorization, *agentpb.WorkAttemptIdentity, uint32) (*agentpb.BackupWorkInput, map[agentpb.BackupSecretSlotPurpose][]byte, error)
+	ResolveWorkSecretSlots(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.WorkAttemptIdentity,
+		uint32,
+	) (*agentpb.BackupWorkInput, map[agentpb.BackupSecretSlotPurpose][]byte, error)
 }
 
 func (server *Server) ConfigureBackupWorkSecrets(resolver BackupWorkSecretResolver) error {
@@ -34,10 +39,23 @@ func (server *Server) deliverBackupWorkSecrets(stream agentpb.AgentChannel_Conne
 	if err != nil {
 		return err
 	}
-	assignment, slots, err := server.backupWorkSecrets.ResolveWorkSecretSlots(session.ctx, authorization, request.Attempt, request.SourceOrdinal)
+	assignment, slots, err := server.backupWorkSecrets.ResolveWorkSecretSlots(
+		session.ctx,
+		authorization,
+		request.Attempt,
+		request.SourceOrdinal,
+	)
 	defer clearBackupSecretSlots(slots)
 	if err != nil {
 		return err
 	}
-	return sendBackupWorkSecrets(session.ctx, stream, assignment, request.Attempt, request.SourceOrdinal, authorization.Identity(), slots)
+	return sendBackupWorkSecrets(
+		session.ctx,
+		stream,
+		assignment,
+		request.Attempt,
+		request.SourceOrdinal,
+		authorization.Identity(),
+		slots,
+	)
 }

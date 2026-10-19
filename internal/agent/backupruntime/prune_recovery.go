@@ -18,9 +18,14 @@ import (
 func InspectPruneRecovery(ctx context.Context, ownership *agentownership.Lease,
 	attempt workexecution.Attempt, input *agentpb.BackupWorkInput, source executionplan.BackupWorkRecovery,
 ) (executionplan.BackupRecoveryReport, error) {
-	if ctx == nil || ownership == nil || input == nil || input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_PRUNE ||
-		attempt.StartedAt == nil || attempt.FinishedAt != nil {
-		return executionplan.BackupRecoveryReport{}, errs.New(errs.KindStateConflict, "Backup prune inspection requires its started recovery and host ownership")
+	if ctx == nil || ownership == nil || input == nil ||
+		input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_PRUNE ||
+		attempt.StartedAt == nil ||
+		attempt.FinishedAt != nil {
+		return executionplan.BackupRecoveryReport{}, errs.New(
+			errs.KindStateConflict,
+			"Backup prune inspection requires its started recovery and host ownership",
+		)
 	}
 	if err := ctx.Err(); err != nil {
 		return executionplan.BackupRecoveryReport{}, err
@@ -34,7 +39,10 @@ func InspectPruneRecovery(ctx context.Context, ownership *agentownership.Lease,
 		return executionplan.BackupRecoveryReport{}, err
 	}
 	if reference != attempt.Input {
-		return executionplan.BackupRecoveryReport{}, errs.New(errs.KindStateConflict, "Backup prune recovery input differs from its failed execution")
+		return executionplan.BackupRecoveryReport{}, errs.New(
+			errs.KindStateConflict,
+			"Backup prune recovery input differs from its failed execution",
+		)
 	}
 	if err := ownership.CheckRecovery(source.Forward, attempt); err != nil {
 		return executionplan.BackupRecoveryReport{}, err

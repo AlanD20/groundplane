@@ -33,7 +33,13 @@ func (service *WorkReports) FailEntry(ctx context.Context, authorization agentre
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
 		at := time.Now().UTC()
-		proof, result, err := service.records.PrepareFailure(ctx, view, entryexecution.FailureReason(request.Reason), at, false)
+		proof, result, err := service.records.PrepareFailure(
+			ctx,
+			view,
+			entryexecution.FailureReason(request.Reason),
+			at,
+			false,
+		)
 		if err != nil {
 			return nil, err
 		}

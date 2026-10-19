@@ -18,7 +18,12 @@ func cleanupCompletedVolumeRestore(ctx context.Context, assignment *agentpb.Back
 	identity workexecution.Identity, ordinal uint32, resume *agentpb.BackupRestoreResume,
 	staging *Staging, volumeRoot string,
 ) error {
-	binding, err := backupvolumetransfer.Bind(assignment, identity, ordinal, agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW)
+	binding, err := backupvolumetransfer.Bind(
+		assignment,
+		identity,
+		ordinal,
+		agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW,
+	)
 	if err != nil {
 		return err
 	}
@@ -84,7 +89,11 @@ func cleanupCompletedVolumeRestoreEvidence(ctx context.Context, binding backupvo
 	return cleanupCompletedVolumeManifest(ctx, binding, step)
 }
 
-func cleanupCompletedVolumeManifest(ctx context.Context, binding backupvolumetransfer.Binding, step *agentpb.BackupStepAuthority) error {
+func cleanupCompletedVolumeManifest(
+	ctx context.Context,
+	binding backupvolumetransfer.Binding,
+	step *agentpb.BackupStepAuthority,
+) error {
 	rows, err := agentvolumemanifest.Inventory(ctx, agentvolumemanifest.AgentRoot)
 	if err != nil {
 		return err
@@ -96,11 +105,13 @@ func cleanupCompletedVolumeManifest(ctx context.Context, binding backupvolumetra
 		config := row.Config
 		archive := step.GetRestore().GetVolume().Archive
 		evidence := step.GetRestore().ExpectedEvidence
-		if row.Unbound || row.Discarding || config.Binding != binding || config.PointID != step.GetRestore().PointId || config.RestoreGenerationID != step.ExecutionId ||
+		if row.Unbound || row.Discarding || config.Binding != binding || config.PointID != step.GetRestore().PointId ||
+			config.RestoreGenerationID != step.ExecutionId ||
 			config.ExpectedArchive.EntryCount != archive.EntryCount ||
 			!bytes.Equal(config.ExpectedArchive.ContentManifestSHA256[:], archive.ContentManifestSha256) ||
 			!bytes.Equal(config.ExpectedArchive.FullTreeSHA256[:], archive.FullTreeSha256) ||
-			config.ExpectedSource.SizeBytes != evidence.SourceSizeBytes || !bytes.Equal(config.ExpectedSource.SHA256[:], evidence.SourceSha256) {
+			config.ExpectedSource.SizeBytes != evidence.SourceSizeBytes ||
+			!bytes.Equal(config.ExpectedSource.SHA256[:], evidence.SourceSha256) {
 			return errs.New(errs.KindStateConflict, "Volume Restore cleanup manifest differs from completed source")
 		}
 		if row.Retiring {

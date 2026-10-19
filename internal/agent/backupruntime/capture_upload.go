@@ -42,7 +42,10 @@ func uploadCapture(ctx context.Context, assignment *agentpb.BackupWorkAssignment
 		return backupartifact.Result{}, errs.New(errs.KindStateConflict, "Backup capture cursor is unavailable")
 	}
 	if resume.PreparedArtifact != nil && !proto.Equal(resume.PreparedArtifact, prepared) {
-		return backupartifact.Result{}, errs.New(errs.KindStateConflict, "Backup staged artifact differs from acknowledged preparation")
+		return backupartifact.Result{}, errs.New(
+			errs.KindStateConflict,
+			"Backup staged artifact differs from acknowledged preparation",
+		)
 	}
 	var result backupartifact.Result
 	err = exchange.ConsumeBackupSecret(ctx, assignment.Attempt, ordinal,

@@ -26,8 +26,12 @@ func ExecuteDetach(ctx context.Context, executor *backingcommand.Executor, recor
 func ExecuteLifecycle(ctx context.Context, executor *backingcommand.Executor, recorder backingcommand.Recorder,
 	containerID string, definition backinghook.Definition, input backinghook.Input,
 ) error {
-	if executor == nil || (input.Context.Event != backinghook.BeforeStop && input.Context.Event != backinghook.AfterStart) {
-		return errs.New(errs.KindValidationFailed, "Service lifecycle requires its captured BeforeStop or AfterStart hook")
+	if executor == nil ||
+		(input.Context.Event != backinghook.BeforeStop && input.Context.Event != backinghook.AfterStart) {
+		return errs.New(
+			errs.KindValidationFailed,
+			"Service lifecycle requires its captured BeforeStop or AfterStart hook",
+		)
 	}
 	return executeNoFacts(ctx, executor, recorder, containerID, definition, input)
 }
@@ -47,7 +51,9 @@ func executeNoFacts(ctx context.Context, executor *backingcommand.Executor, reco
 	variables := backingHookProcessEnvironment(environment)
 	defer clear(variables)
 	command := append([]string{"/bin/sh", "-c", capturedHookScript, "groundplane-hook",
-		backingHookDurationArgument(backingHookKillAfter), backingHookDurationArgument(duration)}, definition.Command...)
+		backingHookDurationArgument(
+			backingHookKillAfter,
+		), backingHookDurationArgument(duration)}, definition.Command...)
 	result := &capturedHookResult{}
 	defer func() { clear(result.content) }()
 	exitCode, err := executor.Execute(ctx, recorder, containerID, command, variables, nil, result)

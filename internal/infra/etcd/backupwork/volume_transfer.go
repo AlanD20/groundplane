@@ -26,7 +26,13 @@ func (repository *InputRepository) VolumeTransferGuard(queue *workqueue.Reposito
 		if err != nil {
 			return nil, err
 		}
-		_, active, err := queue.ReadAttempt(ctx, original.TaskID, original.WorkItemID, work.Item.Item.AttemptNumber, revision)
+		_, active, err := queue.ReadAttempt(
+			ctx,
+			original.TaskID,
+			original.WorkItemID,
+			work.Item.Item.AttemptNumber,
+			revision,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -56,7 +62,12 @@ func (repository *InputRepository) VolumeTransferGuard(queue *workqueue.Reposito
 				return nil, conflict("Volume recovery has no captured live mutation")
 			}
 			guarded = change
-			expected, err = backupvolumetransfer.BindRecoverySource(assignment, live.Executor, binding.SourceOrdinal, binding.Direction)
+			expected, err = backupvolumetransfer.BindRecoverySource(
+				assignment,
+				live.Executor,
+				binding.SourceOrdinal,
+				binding.Direction,
+			)
 		} else {
 			if task.Stop != nil || item.ForwardRevoked || !at.Before(item.Deadline) || !at.Before(task.Deadline) {
 				return nil, conflict("Volume forward transfer is stopped or expired")

@@ -15,7 +15,10 @@ import (
 
 type Exchange interface {
 	StartAttempt(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
-	ResolverCheckpoint(context.Context, *agentpb.ResolverWorkCheckpointRequest) (*agentpb.ResolverWorkCheckpointAck, error)
+	ResolverCheckpoint(
+		context.Context,
+		*agentpb.ResolverWorkCheckpointRequest,
+	) (*agentpb.ResolverWorkCheckpointAck, error)
 	CompleteResolver(context.Context, *agentpb.ResolverWorkCompletionRequest) (*agentpb.ResolverWorkResultAck, error)
 	FailResolver(context.Context, *agentpb.ResolverWorkFailureRequest) (*agentpb.ResolverWorkResultAck, error)
 	RecoverResolver(context.Context, *agentpb.ResolverWorkRecoveryRequest) (*agentpb.ResolverWorkResultAck, error)
@@ -44,7 +47,11 @@ func New(journal *agentworkjournal.Journal, helper Helper, ownership *agentowner
 	return &Executor{journal: journal, helper: helper, ownership: ownership}, nil
 }
 
-func (executor *Executor) Run(ctx context.Context, assignment resolverexecution.Assignment, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) Run(
+	ctx context.Context,
+	assignment resolverexecution.Assignment,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	if ctx == nil || exchange == nil || assignment.Attempt.Validate() != nil {
 		return workexecution.Attempt{}, invalidInput()
 	}
@@ -78,7 +85,15 @@ func (executor *Executor) Run(ctx context.Context, assignment resolverexecution.
 		return executor.deliverFailure(ctx, assignment, exchange, saved.FailureReason)
 	}
 	if saved == nil && reconcile {
-		return executor.fail(ctx, assignment, exchange, errs.New(errs.KindStateConflict, "CoreDNS started previously but its local journal is unavailable; captured restoration is required"))
+		return executor.fail(
+			ctx,
+			assignment,
+			exchange,
+			errs.New(
+				errs.KindStateConflict,
+				"CoreDNS started previously but its local journal is unavailable; captured restoration is required",
+			),
+		)
 	}
 	var progress resolverexecution.Progress
 	if saved != nil && saved.Progress != nil {
@@ -131,8 +146,12 @@ func (executor *Executor) Run(ctx context.Context, assignment resolverexecution.
 	return executor.complete(ctx, assignment, exchange)
 }
 
-func (executor *Executor) observe(ctx context.Context, assignment resolverexecution.Assignment, start *agentpb.WorkStartAck,
-	progress resolverexecution.Progress, fresh bool,
+func (executor *Executor) observe(
+	ctx context.Context,
+	assignment resolverexecution.Assignment,
+	start *agentpb.WorkStartAck,
+	progress resolverexecution.Progress,
+	fresh bool,
 ) (resolverexecution.Observation, *agentpb.DNSResolverObservationEvidence, error) {
 	if progress.Stage == resolverexecution.VerifyDNS {
 		saved, err := executor.journal.Resolver(ctx, assignment.Attempt, assignment.Input)

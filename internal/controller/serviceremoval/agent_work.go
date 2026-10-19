@@ -21,18 +21,35 @@ type AgentWork struct {
 
 type SettlementRecords interface {
 	PrepareServiceRemovalDecision(context.Context, workqueue.View, time.Time) (workqueue.Change, error)
-	PrepareServiceRemovalCompletion(context.Context, workqueue.ResumeView, *agentpb.ServiceLifecycleWorkInput, time.Time) (workqueue.Change, error)
-	PrepareRecoveredServiceRemoval(context.Context, workqueue.ResumeView, *agentpb.ServiceLifecycleWorkInput, time.Time) (workqueue.Change, workexecution.Completion, error)
+	PrepareServiceRemovalCompletion(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.ServiceLifecycleWorkInput,
+		time.Time,
+	) (workqueue.Change, error)
+	PrepareRecoveredServiceRemoval(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.ServiceLifecycleWorkInput,
+		time.Time,
+	) (workqueue.Change, workexecution.Completion, error)
 }
 
-func NewAgentWork(inputs *serviceremovalwork.Repository, queue *workqueue.Repository, records SettlementRecords) (*AgentWork, error) {
+func NewAgentWork(
+	inputs *serviceremovalwork.Repository,
+	queue *workqueue.Repository,
+	records SettlementRecords,
+) (*AgentWork, error) {
 	if inputs == nil || queue == nil || records == nil {
 		return nil, errs.New(errs.KindInternal, "Service removal requires captured input and work storage")
 	}
 	return &AgentWork{inputs: inputs, queue: queue, records: records}, nil
 }
 
-func (owner *AgentWork) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ServiceLifecycleAssignment, error) {
+func (owner *AgentWork) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ServiceLifecycleAssignment, error) {
 	assignment, _, err := owner.capturedAssignment(ctx, view)
 	return assignment, err
 }
@@ -50,12 +67,21 @@ func (owner *AgentWork) AuthorizeAgentStart(ctx context.Context, view workqueue.
 
 // capturedAssignment selects only the frozen runtime; neither reconnect nor
 // delayed delivery may rebuild a removal from current desired state.
-func (owner *AgentWork) capturedAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ServiceLifecycleAssignment, workqueue.Change, error) {
+func (owner *AgentWork) capturedAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ServiceLifecycleAssignment, workqueue.Change, error) {
 	item, task, attempt := view.Work.Item.Item, view.Work.Task.Task, view.Attempt.Attempt
 	if !view.CurrentExecutor || !view.ActiveAttempt || item.Operation != workexecution.ServiceRemoval ||
 		attempt.Direction != workexecution.Forward || attempt.Executor.Executor != workexecution.Agent ||
-		workexecution.ValidateDelivery(item, attempt) != nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil {
-		return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "Service removal no longer owns this host assignment")
+		workexecution.ValidateDelivery(
+			item,
+			attempt,
+		) != nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil {
+		return nil, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Service removal no longer owns this host assignment",
+		)
 	}
 	captured, guard, err := owner.inputs.Load(ctx, view.Work)
 	if err != nil {
@@ -86,7 +112,10 @@ func (owner *AgentWork) capturedAssignment(ctx context.Context, view workqueue.R
 	return assignment, workqueue.Change{Conditions: []keyvalue.Condition{guard, continuationGuard}}, nil
 }
 
-func (owner *AgentWork) authorizeForwardStart(ctx context.Context, view workqueue.ResumeView) (workqueue.Change, error) {
+func (owner *AgentWork) authorizeForwardStart(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (workqueue.Change, error) {
 	if view.Attempt.Attempt.StartedAt != nil || view.Work.Task.Task.Stop != nil || view.Work.Item.Item.ForwardRevoked {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service removal cannot obtain a new start grant")
 	}

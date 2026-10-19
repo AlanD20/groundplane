@@ -34,9 +34,13 @@ func (ledger *ReleaseLedger) PublishGroupReleaseWithWork(ctx context.Context, ca
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment || marker.Locator.ScopeID != task.Scope.EnvironmentID ||
+	if marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != task.Scope.EnvironmentID ||
 		!time.Now().Before(task.Deadline) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Group admission scope or deadline changed")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Group admission scope or deadline changed",
+		)
 	}
 	seal, err := ledger.stageGroupRelease(ctx, capture)
 	if err != nil {
@@ -55,20 +59,34 @@ func (ledger *ReleaseLedger) PublishGroupReleaseWithWork(ctx context.Context, ca
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Group admission has no matching sealed draft")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Group admission has no matching sealed draft",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	draft, err := recordcodec.Decode[groupReleaseDraft](read.Values[0].Value, "group-release-draft")
 	if err != nil || draft.TaskID != task.ID || draft.Intent != task.Intent ||
 		!draft.CreatedAt.Equal(task.CreatedAt) || !draft.Deadline.Equal(task.Deadline) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Group admission seal differs from its captured Task")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Group admission seal differs from its captured Task",
+		)
 	}
 	firstID := capture.Root.Policy.Members[0].ForwardID
 	firstIndex := slices.IndexFunc(capture.Root.Graph, func(item workexecution.Item) bool { return item.ID == firstID })
 	if firstIndex < 0 {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Group admission lost its initial member")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Group admission lost its initial member",
+		)
 	}
-	change, err := workqueue.PrepareStagedGraph(task, capture.Root.Graph, []workexecution.Item{capture.Root.Graph[firstIndex]}, marker)
+	change, err := workqueue.PrepareStagedGraph(
+		task,
+		capture.Root.Graph,
+		[]workexecution.Item{capture.Root.Graph[firstIndex]},
+		marker,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -83,7 +101,10 @@ func (ledger *ReleaseLedger) PublishGroupReleaseWithWork(ctx context.Context, ca
 		return IdempotencyTransactionResult{}, err
 	}
 	if host.Binding.HostID != capture.Root.Placement.HostID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Group target host changed during acceptance")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Group target host changed during acceptance",
+		)
 	}
 	var sources []keyvalue.Condition
 	for _, member := range capture.Members {

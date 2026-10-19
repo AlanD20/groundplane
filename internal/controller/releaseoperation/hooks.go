@@ -42,7 +42,10 @@ func (service *Service) prepareReleaseHooks(
 		item.AttemptNumber != 0 || item.ForwardRevoked || task.Stop != nil || task.FinishedAt != nil ||
 		(item.Phase != workexecution.Waiting && item.Phase != workexecution.Ready) ||
 		len(members) != 1 || members[0].Render.ServiceID != item.TargetID {
-		return preparedReleaseHooks{}, errs.New(errs.KindValidationFailed, "release hooks require unstarted native Service work")
+		return preparedReleaseHooks{}, errs.New(
+			errs.KindValidationFailed,
+			"release hooks require unstarted native Service work",
+		)
 	}
 	selectionScope := scope.Clone()
 	selectionScope.ReadRevision = revision

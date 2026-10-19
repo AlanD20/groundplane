@@ -11,7 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *TaskRepository) CreateAgentWork(ctx context.Context, capture agentoperations.Capture, marker idempotency.IdempotencyMarker) (IdempotencyTransactionResult, error) {
+func (repository *TaskRepository) CreateAgentWork(
+	ctx context.Context,
+	capture agentoperations.Capture,
+	marker idempotency.IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
 	task, item, err := capture.Work()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -26,12 +30,24 @@ func (repository *TaskRepository) CreateAgentWork(ctx context.Context, capture a
 		return IdempotencyTransactionResult{}, err
 	}
 	defer keyvalue.ClearMutationValues(work.Mutations)
-	work.Conditions = append(work.Conditions, keyvalue.Condition{Key: agentoperations.InputKey(item.ID)}, keyvalue.Condition{Key: imagefence.Key})
-	work.Mutations = append(work.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: agentoperations.InputKey(item.ID), Value: input})
+	work.Conditions = append(
+		work.Conditions,
+		keyvalue.Condition{Key: agentoperations.InputKey(item.ID)},
+		keyvalue.Condition{Key: imagefence.Key},
+	)
+	work.Mutations = append(
+		work.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: agentoperations.InputKey(item.ID), Value: input},
+	)
 	classify := func(_ int64, _ []*keyvalue.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "Agent lifecycle admission changed")
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, work.Conditions, work.Mutations, classify)
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerTask,
+		work.Conditions,
+		work.Mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

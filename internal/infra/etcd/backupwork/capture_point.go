@@ -21,7 +21,11 @@ func (repository *InputRepository) prepareCapturedPoint(ctx context.Context, run
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	point.Capture = backupruntime.BackupRecoveryPointCapture{TaskID: run.TaskID, CreatedAt: run.CreatedAt, SourceCount: len(run.Sources)}
+	point.Capture = backupruntime.BackupRecoveryPointCapture{
+		TaskID:      run.TaskID,
+		CreatedAt:   run.CreatedAt,
+		SourceCount: len(run.Sources),
+	}
 	environmentIndex, err := backupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -51,7 +55,10 @@ func (repository *InputRepository) prepareCapturedPoint(ctx context.Context, run
 		if index >= 2 && read.Values[index] != nil {
 			return workqueue.Change{}, conflict("Backup Point publication already has resource ownership")
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])},
+		)
 	}
 	pointValue, err := backupruntime.EncodeBackupRecoveryPointRecord(point)
 	if err != nil {
@@ -68,8 +75,17 @@ func (repository *InputRepository) prepareCapturedPoint(ctx context.Context, run
 		return workqueue.Change{}, err
 	}
 	defer clear(sweepValue)
-	fence, err := environmentfence.LoadOwned(ctx, repository.store, run.EnvironmentID, revision,
-		environmentfence.Owner{Kind: backupruntime.BackupOperationBackup, OperationID: run.OperationID, TaskID: run.TaskID})
+	fence, err := environmentfence.LoadOwned(
+		ctx,
+		repository.store,
+		run.EnvironmentID,
+		revision,
+		environmentfence.Owner{
+			Kind:        backupruntime.BackupOperationBackup,
+			OperationID: run.OperationID,
+			TaskID:      run.TaskID,
+		},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

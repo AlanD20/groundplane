@@ -95,7 +95,10 @@ func ValidateScriptExecutionRecord(record ScriptExecutionRecord) error {
 	}
 	if !ValidRawScriptExecutionID(record.ID) || !ValidRawScriptExecutionID(record.SnapshotID) ||
 		ids.Validate(ids.KindOperation, record.OperationID) != nil ||
-		ids.Validate(ids.KindTask, record.CurrentTaskID) != nil || ids.Validate(ids.KindWorkItem, record.WorkItemID) != nil ||
+		ids.Validate(
+			ids.KindTask,
+			record.CurrentTaskID,
+		) != nil || ids.Validate(ids.KindWorkItem, record.WorkItemID) != nil ||
 		ids.Validate(ids.KindScript, record.ScriptID) != nil ||
 		record.ScriptGeneration == 0 || ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		ids.Validate(

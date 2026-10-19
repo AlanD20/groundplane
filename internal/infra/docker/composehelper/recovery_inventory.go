@@ -14,7 +14,12 @@ import (
 // InspectRecoveryRuntime checks the failed Release's captured ownership and
 // image identities without executing Compose or changing traffic. A foreign or
 // ambiguous container fails inspection instead of becoming a cleanup target.
-func InspectRecoveryRuntime(ctx context.Context, taskRunner runner.Runner, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport) (releaseexecution.RecoveryInventory, error) {
+func InspectRecoveryRuntime(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+) (releaseexecution.RecoveryInventory, error) {
 	if ctx == nil || taskRunner == nil || report.Validate(input) != nil || report.Ack == nil ||
 		!report.Progress.InFlight || report.Progress.Phase != releaseexecution.InspectFailedRuntime {
 		return releaseexecution.RecoveryInventory{}, invalidReleaseHelper()
@@ -36,7 +41,11 @@ func InspectRecoveryRuntime(ctx context.Context, taskRunner runner.Runner, input
 	return result, nil
 }
 
-func recoveryRuntimeInventory(ctx context.Context, taskRunner runner.Runner, input releaseexecution.RecoveryInput) (executionplan.ReleaseWorkArtifacts, servingInventory, error) {
+func recoveryRuntimeInventory(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.RecoveryInput,
+) (executionplan.ReleaseWorkArtifacts, servingInventory, error) {
 	artifacts, err := executionplan.OpenReleaseWorkArtifacts(input.Input.Attempt, input.Input.Release)
 	if err != nil {
 		return artifacts, servingInventory{}, err

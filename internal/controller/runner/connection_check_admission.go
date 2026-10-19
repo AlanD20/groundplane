@@ -12,11 +12,20 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (executor *ConnectionCheckExecutor) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (executor *ConnectionCheckExecutor) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
-	if item.Operation != workexecution.RunnerCheck || item.Placement.Executor != workexecution.Controller || item.Input == nil ||
-		request.Direction != workexecution.Forward || item.AttemptNumber != 0 {
-		return workdispatch.Decision{}, errs.New(errs.KindValidationFailed, "Runner checks cannot retry captured queries")
+	if item.Operation != workexecution.RunnerCheck || item.Placement.Executor != workexecution.Controller ||
+		item.Input == nil ||
+		request.Direction != workexecution.Forward ||
+		item.AttemptNumber != 0 {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindValidationFailed,
+			"Runner checks cannot retry captured queries",
+		)
 	}
 	loaded, err := executor.records.Load(ctx, item.TaskID)
 	if err != nil {
@@ -24,9 +33,14 @@ func (executor *ConnectionCheckExecutor) Admit(ctx context.Context, request work
 	}
 	record := loaded.Record
 	digest, err := runnerchecks.PlanHash(record)
-	if err != nil || record.Phase != runnerchecks.Ready || record.Owner.WorkItemID != item.ID || record.Owner.PlanID != item.Input.ID ||
-		digest != item.Input.SHA256 || record.Source.RunnerID != item.TargetID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Runner work differs from captured Runner runtime input")
+	if err != nil || record.Phase != runnerchecks.Ready || record.Owner.WorkItemID != item.ID ||
+		record.Owner.PlanID != item.Input.ID ||
+		digest != item.Input.SHA256 ||
+		record.Source.RunnerID != item.TargetID {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Runner work differs from captured Runner runtime input",
+		)
 	}
 	if !item.Deadline.After(at) {
 		change, err := executor.settleUnstartedRunner(ctx, request.Task, request.Item, workexecution.Failed, at)
@@ -36,10 +50,17 @@ func (executor *ConnectionCheckExecutor) Admit(ctx context.Context, request work
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, nil
 	}
 	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: item.Deadline,
-		Change: workqueue.Change{Conditions: []keyvalue.Condition{{Key: runnerchecks.RecordKey(item.TaskID), ModRevision: loaded.Revision}}}}, nil
+		Change: workqueue.Change{
+			Conditions: []keyvalue.Condition{{Key: runnerchecks.RecordKey(item.TaskID), ModRevision: loaded.Revision}},
+		}}, nil
 }
 
-func (executor *ConnectionCheckExecutor) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (executor *ConnectionCheckExecutor) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Runner check has no stop request")
 	}

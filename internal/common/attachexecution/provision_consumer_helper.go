@@ -15,12 +15,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func EncodeProvisionConsumerHelper(input ProvisionInput, progress ProvisionProgress, inspectOnly bool) (*agentpb.AttachConsumerHelperRequest, error) {
+func EncodeProvisionConsumerHelper(
+	input ProvisionInput,
+	progress ProvisionProgress,
+	inspectOnly bool,
+) (*agentpb.AttachConsumerHelperRequest, error) {
 	authority, err := input.Authority()
 	if err != nil {
 		return nil, err
 	}
-	if progress.Validate(input.Attempt, authority) != nil || !progress.InFlight || !authority.IsConsumerCommand(progress.Completed) {
+	if progress.Validate(input.Attempt, authority) != nil || !progress.InFlight ||
+		!authority.IsConsumerCommand(progress.Completed) {
 		return nil, invalid("Attach connection requires its acknowledged command boundary")
 	}
 	identity, err := workexecution.EncodeAgentAttempt(input.Attempt)
@@ -41,22 +46,38 @@ func EncodeProvisionConsumerHelper(input ProvisionInput, progress ProvisionProgr
 	}
 	return &agentpb.AttachConsumerHelperRequest{
 		Attempt: identity, Consumer: proto.CloneOf(input.Provision.Consumer), Authority: raw,
-		Start:  &agentpb.WorkStartAck{Attempt: proto.CloneOf(identity), StartedAt: timestamppb.New(*input.Attempt.StartedAt)},
+		Start: &agentpb.WorkStartAck{
+			Attempt:   proto.CloneOf(identity),
+			StartedAt: timestamppb.New(*input.Attempt.StartedAt),
+		},
 		Report: report, InspectOnly: inspectOnly,
-		ProvisionAcknowledgement: &agentpb.AttachProvisionCheckpointAck{Attempt: proto.CloneOf(identity), Report: append([]byte(nil), report...)},
+		ProvisionAcknowledgement: &agentpb.AttachProvisionCheckpointAck{
+			Attempt: proto.CloneOf(identity),
+			Report:  append([]byte(nil), report...),
+		},
 	}, nil
 }
 
 // The helper receives only network authority, never backing credentials or hook
 // inputs. Its start grant and checkpoint must describe the same assignment.
-func openProvisionConsumerHelper(ctx context.Context, request *agentpb.AttachConsumerHelperRequest) (ConsumerHelperInput, error) {
+func openProvisionConsumerHelper(
+	ctx context.Context,
+	request *agentpb.AttachConsumerHelperRequest,
+) (ConsumerHelperInput, error) {
 	if ctx == nil || request == nil || request.Attempt == nil || request.ProvisionAcknowledgement == nil ||
 		request.Acknowledgement != nil || len(request.Recovery) != 0 || len(request.ProvisionRecovery) != 0 || executionplan.RejectUnknown(request) != nil ||
-		proto.Size(request) > executionplan.MaximumPlanBytes || len(request.Authority) == 0 || len(request.Authority) > 4096 {
+		proto.Size(
+			request,
+		) > executionplan.MaximumPlanBytes || len(request.Authority) == 0 || len(request.Authority) > 4096 {
 		return ConsumerHelperInput{}, invalid("Attach connection helper envelope is invalid")
 	}
 	claimed := request.Attempt
-	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: claimed.HostId, AgentID: claimed.AgentId, Generation: claimed.ExecutorGeneration}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     claimed.HostId,
+		AgentID:    claimed.AgentId,
+		Generation: claimed.ExecutorGeneration,
+	}
 	attempt, err := workexecution.DecodeAgentAttempt(claimed, identity)
 	if err != nil {
 		return ConsumerHelperInput{}, err
@@ -90,13 +111,22 @@ func openProvisionConsumerHelper(ctx context.Context, request *agentpb.AttachCon
 		return ConsumerHelperInput{}, invalid("Attach connection command has not been acknowledged")
 	}
 	acknowledged, err := workexecution.DecodeAgentAttempt(request.ProvisionAcknowledgement.Attempt, identity)
-	if err != nil || !workexecution.SameAssignment(attempt, acknowledged) || !bytes.Equal(request.Report, request.ProvisionAcknowledgement.Report) {
+	if err != nil || !workexecution.SameAssignment(attempt, acknowledged) ||
+		!bytes.Equal(request.Report, request.ProvisionAcknowledgement.Report) {
 		return ConsumerHelperInput{}, invalid("Attach connection acknowledgement differs from its command")
 	}
-	return ConsumerHelperInput{Attempt: attempt, Consumer: proto.CloneOf(consumer), InspectOnly: request.InspectOnly}, nil
+	return ConsumerHelperInput{
+		Attempt:     attempt,
+		Consumer:    proto.CloneOf(consumer),
+		InspectOnly: request.InspectOnly,
+	}, nil
 }
 
-func validateProvisionConsumerAuthority(ctx context.Context, authority ProvisionAuthority, consumer *agentpb.AttachConsumerTransition) error {
+func validateProvisionConsumerAuthority(
+	ctx context.Context,
+	authority ProvisionAuthority,
+	consumer *agentpb.AttachConsumerTransition,
+) error {
 	if err := executionplan.ValidateAttachConsumerTransition(ctx, consumer); err != nil {
 		return err
 	}
@@ -106,8 +136,11 @@ func validateProvisionConsumerAuthority(ctx context.Context, authority Provision
 	}
 	digest := sha256.Sum256(raw)
 	clear(raw)
-	if consumer.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT || authority.ConsumerSHA256 != hex.EncodeToString(digest[:]) ||
-		authority.ConsumerNetworkID != consumer.NetworkId || authority.ConsumerServiceID != consumer.ServiceId || authority.ConsumerCandidateSHA256 != hex.EncodeToString(consumer.Candidate.YamlSha256) {
+	if consumer.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT ||
+		authority.ConsumerSHA256 != hex.EncodeToString(digest[:]) ||
+		authority.ConsumerNetworkID != consumer.NetworkId ||
+		authority.ConsumerServiceID != consumer.ServiceId ||
+		authority.ConsumerCandidateSHA256 != hex.EncodeToString(consumer.Candidate.YamlSha256) {
 		return invalid("Attach connection differs from its captured authority")
 	}
 	return nil

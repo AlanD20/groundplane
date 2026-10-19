@@ -8,7 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 )
 
-func hierarchyActionCompletion(task workexecution.Task, item workexecution.Item, captured HierarchyWorkInput, at time.Time) ([]byte, workexecution.Input, error) {
+func hierarchyActionCompletion(
+	task workexecution.Task,
+	item workexecution.Item,
+	captured HierarchyWorkInput,
+	at time.Time,
+) ([]byte, workexecution.Input, error) {
 	action := captured.Action
 	procedure := action.ControllerProcedure
 	proof := hierarchydeletion.HierarchyDeletionActionCompletion{
@@ -24,7 +29,10 @@ func hierarchyActionCompletion(task workexecution.Task, item workexecution.Item,
 			PostconditionTemplateDigest: procedure.PostconditionTemplateDigest,
 		}, CompletedAt: at,
 	}
-	value, err := hierarchydeletion.EncodeHierarchyDeletionRecord(proof, hierarchydeletion.HierarchyDeletionCompletionRecordBytes)
+	value, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		proof,
+		hierarchydeletion.HierarchyDeletionCompletionRecordBytes,
+	)
 	if err != nil {
 		return nil, workexecution.Input{}, err
 	}

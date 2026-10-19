@@ -127,8 +127,14 @@ func (repository *Repository) Delete(
 	conditions = append(conditions, forwardGuard)
 	// Final removal follows settlement, not merely container termination. Host
 	// reservations survive process loss and cannot be silently reassigned.
-	conditions = append(conditions,
-		etcdstore.Condition{Key: workqueue.SlotsPrefix(workexecution.Identity{Executor: workexecution.Agent, HostID: binding.Binding.HostID}), Prefix: true},
+	conditions = append(
+		conditions,
+		etcdstore.Condition{
+			Key: workqueue.SlotsPrefix(
+				workexecution.Identity{Executor: workexecution.Agent, HostID: binding.Binding.HostID},
+			),
+			Prefix: true,
+		},
 		etcdstore.Condition{Key: workqueue.HostClaimsPrefix(binding.Binding.HostID), Prefix: true},
 		etcdstore.Condition{Key: workqueue.HostEffectsPrefix(binding.Binding.HostID), Prefix: true},
 	)

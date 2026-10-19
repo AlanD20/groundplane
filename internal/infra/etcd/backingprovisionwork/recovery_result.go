@@ -18,8 +18,11 @@ func RecoveryResultKey(attemptID string) string {
 func (repository *Repository) PrepareRecoveryResult(ctx context.Context, view workqueue.ResumeView,
 	raw []byte, at time.Time,
 ) (workqueue.Change, workexecution.Input, error) {
-	if !view.ActiveAttempt || view.Attempt.Attempt.Direction != workexecution.Recovery || view.Attempt.Attempt.FinishedAt != nil {
-		return workqueue.Change{}, workexecution.Input{}, invalid("backing creation cleanup requires its actual started assignment")
+	if !view.ActiveAttempt || view.Attempt.Attempt.Direction != workexecution.Recovery ||
+		view.Attempt.Attempt.FinishedAt != nil {
+		return workqueue.Change{}, workexecution.Input{}, invalid(
+			"backing creation cleanup requires its actual started assignment",
+		)
 	}
 	input, _, err := repository.Load(ctx, view.Work)
 	if err != nil {
@@ -43,7 +46,9 @@ func (repository *Repository) PrepareRecoveryResult(ctx context.Context, view wo
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
 	if report.ObservedAt.After(at) {
-		return workqueue.Change{}, workexecution.Input{}, invalid("backing creation cleanup observation is ahead of its settlement time")
+		return workqueue.Change{}, workexecution.Input{}, invalid(
+			"backing creation cleanup observation is ahead of its settlement time",
+		)
 	}
 	queue, err := workqueue.NewRepository(repository.store)
 	if err != nil {
@@ -61,16 +66,29 @@ func (repository *Repository) PrepareRecoveryResult(ctx context.Context, view wo
 	if settled {
 		outcome = workexecution.Succeeded
 	}
-	completion.At, completion.Result = at, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: settled}
+	completion.At, completion.Result = at, workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       evidence,
+		EffectsSettled: settled,
+	}
 	change, err := workqueue.PrepareCompletion(completion)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
 	key := RecoveryResultKey(view.Attempt.Attempt.ID)
 	change.Conditions = append(change.Conditions, source.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.ExecutorKey(view.Attempt.Attempt.Executor), ModRevision: view.ExecutorRevision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{
+			Key:         workqueue.ExecutorKey(view.Attempt.Attempt.Executor),
+			ModRevision: view.ExecutorRevision,
+		},
+	)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: bytes.Clone(raw)})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: bytes.Clone(raw)},
+	)
 	if settled {
 		directories, err := repository.prepareDirectoryState(ctx, view.Work, input, false)
 		if err != nil {
@@ -106,7 +124,10 @@ func (repository *Repository) ReadRecoveryResult(ctx context.Context, view workq
 		return nil, err
 	}
 	key := RecoveryResultKey(attempt.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if err != nil {
 		return nil, err
 	}

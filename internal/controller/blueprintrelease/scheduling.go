@@ -11,7 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (service *Service) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	if err := ctx.Err(); err != nil {
 		return workdispatch.Decision{}, err
 	}
@@ -33,7 +37,8 @@ func (service *Service) Admit(ctx context.Context, request workqueue.Assignment,
 		change, err := releasework.PrepareQueuedStop(request.Task, request.Item, at)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
-	if request.Task.Task.Action == workexecution.ActionDeploy || request.Task.Task.Action == workexecution.ActionRollback {
+	if request.Task.Task.Action == workexecution.ActionDeploy ||
+		request.Task.Task.Action == workexecution.ActionRollback {
 		view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
 		captured, _, err := service.ledger.ReadDirectReleasePreparation(ctx, view)
 		if err != nil {
@@ -51,7 +56,12 @@ func (service *Service) Admit(ctx context.Context, request workqueue.Assignment,
 	return service.PrepareForwardAssignment(ctx, request, at)
 }
 
-func (service *Service) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (service *Service) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if err := ctx.Err(); err != nil {
 		return workqueue.Change{}, err
 	}

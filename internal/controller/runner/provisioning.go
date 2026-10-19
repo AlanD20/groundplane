@@ -45,7 +45,11 @@ type provisioningRepository interface {
 		workexecution.Task,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	PrepareRunnerRetry(context.Context, etcdstore.Versioned[runnerrecord.RunnerRecord], runnerwork.Input) (workqueue.Change, error)
+	PrepareRunnerRetry(
+		context.Context,
+		etcdstore.Versioned[runnerrecord.RunnerRecord],
+		runnerwork.Input,
+	) (workqueue.Change, error)
 }
 
 type runnerProjectReader interface {
@@ -167,7 +171,11 @@ func (service *ProvisioningService) CreateRunner(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task := workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor,
-		Scope:  workexecution.Scope{TenantID: desired.TenantID, ProjectID: desired.ProjectID(), EnvironmentID: desired.EnvironmentID()},
+		Scope: workexecution.Scope{
+			TenantID:      desired.TenantID,
+			ProjectID:     desired.ProjectID(),
+			EnvironmentID: desired.EnvironmentID(),
+		},
 		Action: workexecution.ActionCreate, TargetID: desired.ID, TargetName: desired.Slug,
 		Intent: ref, ExpectedItems: 1, CreatedAt: now, UpdatedAt: now,
 		Deadline: now.Add(time.Duration(runnerCreateTimeoutSeconds) * time.Second)}
@@ -271,7 +279,11 @@ func (service *ProvisioningService) RetryRunner(
 	// Retry is a completed admission receipt, not a second pending Task.
 	marker.Kind, marker.State, marker.TaskID = idempotencyrecord.IdempotencyMarkerDirect, idempotencyrecord.IdempotencyMarkerCompleted, ""
 	marker.TerminalAt, marker.RetainUntil = now, now.Add(idempotencyrecord.MarkerRetention)
-	key := TokenKey{TaskID: source.Record.TaskID, WorkItemID: source.Record.WorkItemID, Attempt: view.Item.Item.AttemptNumber + 1}
+	key := TokenKey{
+		TaskID:     source.Record.TaskID,
+		WorkItemID: source.Record.WorkItemID,
+		Attempt:    view.Item.Item.AttemptNumber + 1,
+	}
 	if err := service.broker.Stage(key, token, now.Add(time.Duration(runnerCreateTimeoutSeconds)*time.Second)); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

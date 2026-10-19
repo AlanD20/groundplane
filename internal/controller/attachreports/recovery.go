@@ -58,7 +58,8 @@ func (service *Reports) CompleteAttachRecovery(ctx context.Context, authorizatio
 	if report.ExecutionStopped() {
 		outcome = workexecution.Succeeded
 	}
-	if terminal.FinishedAt == nil || terminal.Result == nil || *terminal.Result != evidence || terminal.Outcome != outcome {
+	if terminal.FinishedAt == nil || terminal.Result == nil || *terminal.Result != evidence ||
+		terminal.Outcome != outcome {
 		return nil, errs.New(errs.KindStateConflict, "Attach inspection has no matching saved outcome")
 	}
 	raw, err := owner.LoadRemovalInspection(ctx, view)
@@ -70,8 +71,12 @@ func (service *Reports) CompleteAttachRecovery(ctx context.Context, authorizatio
 	if !same {
 		return nil, errs.New(errs.KindStateConflict, "Attach inspection differs from its saved evidence")
 	}
-	ack := &agentpb.AttachRecoveryCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: proto.CloneOf(request.Evidence),
-		Outcome: string(terminal.Outcome), FinishedAt: timestamppb.New(*terminal.FinishedAt)}
+	ack := &agentpb.AttachRecoveryCompletionAck{
+		Attempt:    proto.CloneOf(request.Attempt),
+		Evidence:   proto.CloneOf(request.Evidence),
+		Outcome:    string(terminal.Outcome),
+		FinishedAt: timestamppb.New(*terminal.FinishedAt),
+	}
 	if terminal.StartedAt != nil {
 		ack.StartedAt = timestamppb.New(*terminal.StartedAt)
 	}

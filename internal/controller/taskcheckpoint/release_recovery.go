@@ -14,8 +14,14 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (service *ReleaseCheckpointService) CheckpointRecovery(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.ReleaseRecoveryCheckpointRequest) (*agentpb.ReleaseRecoveryCheckpointAck, error) {
-	if service == nil || ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 || len(request.Report) > releaseexecution.MaximumCheckpointBytes {
+func (service *ReleaseCheckpointService) CheckpointRecovery(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.ReleaseRecoveryCheckpointRequest,
+) (*agentpb.ReleaseRecoveryCheckpointAck, error) {
+	if service == nil || ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil ||
+		len(request.Report) == 0 ||
+		len(request.Report) > releaseexecution.MaximumCheckpointBytes {
 		return nil, errs.New(errs.KindValidationFailed, "Release recovery checkpoint is invalid")
 	}
 	guards, err := authorization.Conditions()
@@ -30,8 +36,11 @@ func (service *ReleaseCheckpointService) CheckpointRecovery(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	if !view.ActiveAttempt || !view.CurrentExecutor || !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Attempt.Attempt.StartedAt == nil ||
-		view.Work.Task.Task.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil || !view.Work.Task.Task.PublicationComplete {
+	if !view.ActiveAttempt || !view.CurrentExecutor || !workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
+		view.Attempt.Attempt.StartedAt == nil ||
+		view.Work.Task.Task.FinishedAt != nil ||
+		view.Work.Task.Task.CollectionStartedAt != nil ||
+		!view.Work.Task.Task.PublicationComplete {
 		return nil, errs.New(errs.KindStateConflict, "Recovery checkpoint no longer owns an active cleanup attempt")
 	}
 	owner := service.restorations[view.Work.Item.Item.Operation]
@@ -45,7 +54,8 @@ func (service *ReleaseCheckpointService) CheckpointRecovery(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	if !workexecution.SameAssignment(input.Input.Attempt, view.Attempt.Attempt) || input.Input.Attempt.StartedAt == nil ||
+	if !workexecution.SameAssignment(input.Input.Attempt, view.Attempt.Attempt) ||
+		input.Input.Attempt.StartedAt == nil ||
 		!input.Input.Attempt.StartedAt.Equal(*view.Attempt.Attempt.StartedAt) {
 		return nil, errs.New(errs.KindInternal, "Recovery owner returned a different attempt")
 	}
@@ -66,7 +76,8 @@ func (service *ReleaseCheckpointService) CheckpointRecovery(ctx context.Context,
 		return nil, err
 	}
 	defer keyvalue.ClearMutationValues(change.Mutations)
-	if previous.Record != nil && releaseexecution.EqualRecoveryProgress(previous.Record.Report.Progress, report.Progress) {
+	if previous.Record != nil &&
+		releaseexecution.EqualRecoveryProgress(previous.Record.Report.Progress, report.Progress) {
 		service.reportRecovery(ctx, input, previous, report)
 		return releaseexecution.EncodeRecoveryAck(input, report)
 	}
@@ -90,7 +101,10 @@ func (service *ReleaseCheckpointService) CheckpointRecovery(ctx context.Context,
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Recovery checkpoint authority changed; reload the saved cleanup attempt")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Recovery checkpoint authority changed; reload the saved cleanup attempt",
+		)
 	}
 	service.reportRecovery(ctx, input, previous, report)
 	return releaseexecution.EncodeRecoveryAck(input, report)

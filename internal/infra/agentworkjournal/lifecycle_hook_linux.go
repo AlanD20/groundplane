@@ -9,14 +9,26 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func lifecycleHookWritable(state *attemptRecord, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput) bool {
-	return matchesLifecycle(state, attempt, input) && state.Lifecycle.Completion == nil && state.Lifecycle.Acknowledged &&
-		state.Lifecycle.Progress.BeganAt != nil && state.Lifecycle.Stages[len(state.Lifecycle.Progress.Completed)].Expected == lifecycleexecution.HookSucceeded
+func lifecycleHookWritable(
+	state *attemptRecord,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+) bool {
+	return matchesLifecycle(state, attempt, input) && state.Lifecycle.Completion == nil &&
+		state.Lifecycle.Acknowledged &&
+		state.Lifecycle.Progress.BeganAt != nil &&
+		state.Lifecycle.Stages[len(state.Lifecycle.Progress.Completed)].Expected == lifecycleexecution.HookSucceeded
 }
 
 // PrepareLifecycleHookExec persists identity before Docker attaches the stdin
 // gate. Even an identical second call cannot authorize another exec.
-func (journal *Journal) PrepareLifecycleHookExec(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, containerID, execID string, at time.Time) error {
+func (journal *Journal) PrepareLifecycleHookExec(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	containerID, execID string,
+	at time.Time,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -29,13 +41,24 @@ func (journal *Journal) PrepareLifecycleHookExec(ctx context.Context, attempt wo
 	if !lifecycleHookWritable(state, attempt, input) || state.Lifecycle.Failure != nil || state.Lifecycle.Hook != nil {
 		return conflict()
 	}
-	state.Lifecycle.Hook = &LifecycleHookRecord{Boundary: state.Lifecycle.Progress, ContainerID: containerID, ExecID: execID, CreatedAt: at.UTC()}
+	state.Lifecycle.Hook = &LifecycleHookRecord{
+		Boundary:    state.Lifecycle.Progress,
+		ContainerID: containerID,
+		ExecID:      execID,
+		CreatedAt:   at.UTC(),
+	}
 	return journal.writeRecord(ctx, *state)
 }
 
 // AuthorizeLifecycleHookExec is called after the wrapper's readiness message
 // and before writing its single permission line. It rejects duplicate grants.
-func (journal *Journal) AuthorizeLifecycleHookExec(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, execID string, at time.Time) error {
+func (journal *Journal) AuthorizeLifecycleHookExec(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	execID string,
+	at time.Time,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -59,7 +82,14 @@ func (journal *Journal) AuthorizeLifecycleHookExec(ctx context.Context, attempt 
 
 // ObserveLifecycleHookExit records only process exit. Successful output parsing
 // and a separately saved Result are required before reporting hook success.
-func (journal *Journal) ObserveLifecycleHookExit(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, execID string, exitCode int, at time.Time) error {
+func (journal *Journal) ObserveLifecycleHookExit(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	execID string,
+	exitCode int,
+	at time.Time,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -87,7 +117,12 @@ func (journal *Journal) ObserveLifecycleHookExit(ctx context.Context, attempt wo
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) SaveLifecycleHookResult(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, result lifecycleexecution.Receipt) error {
+func (journal *Journal) SaveLifecycleHookResult(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	result lifecycleexecution.Receipt,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err

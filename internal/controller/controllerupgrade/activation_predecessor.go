@@ -21,7 +21,10 @@ func (service *Service) ActivationPredecessor(ctx context.Context) (upgrade.Dige
 		return "", err
 	}
 	if installed != service.process {
-		return "", errs.New(errs.KindStateConflict, "running Controller differs from the installed activation predecessor")
+		return "", errs.New(
+			errs.KindStateConflict,
+			"running Controller differs from the installed activation predecessor",
+		)
 	}
 	return installed, nil
 }

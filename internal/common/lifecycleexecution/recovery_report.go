@@ -26,7 +26,11 @@ type RecoveryReport struct {
 	Receipt          *Receipt            `json:"receipt,omitempty"`
 }
 
-func (report RecoveryReport) Validate(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, source Recovery) error {
+func (report RecoveryReport) Validate(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	source Recovery,
+) error {
 	if err := source.ValidateFor(attempt, input); err != nil {
 		return err
 	}
@@ -79,7 +83,12 @@ func (report RecoveryReport) BoundaryCompleted() bool {
 	return report.ExecutionStopped && report.Receipt != nil
 }
 
-func EncodeRecoveryReport(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, source Recovery, report RecoveryReport) ([]byte, workexecution.Input, error) {
+func EncodeRecoveryReport(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	source Recovery,
+	report RecoveryReport,
+) ([]byte, workexecution.Input, error) {
 	if err := report.Validate(attempt, input, source); err != nil {
 		return nil, workexecution.Input{}, err
 	}
@@ -92,7 +101,12 @@ func EncodeRecoveryReport(attempt workexecution.Attempt, input *agentpb.ServiceL
 
 // EncodeRecoveryReportStages validates journal metadata without persisting the
 // full Compose artifact or any private hook inputs on the Agent.
-func EncodeRecoveryReportStages(attempt workexecution.Attempt, stages []Stage, source Recovery, report RecoveryReport) ([]byte, workexecution.Input, error) {
+func EncodeRecoveryReportStages(
+	attempt workexecution.Attempt,
+	stages []Stage,
+	source Recovery,
+	report RecoveryReport,
+) ([]byte, workexecution.Input, error) {
 	if err := report.ValidateStages(attempt, stages, source); err != nil {
 		return nil, workexecution.Input{}, err
 	}
@@ -109,10 +123,18 @@ func EncodeRecoveryReportStages(attempt workexecution.Attempt, stages []Stage, s
 		return nil, workexecution.Input{}, err
 	}
 	digest := sha256.Sum256(raw)
-	return raw, workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, at, attempt.ID, "service-lifecycle/recovery"), SHA256: hex.EncodeToString(digest[:])}, nil
+	return raw, workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, at, attempt.ID, "service-lifecycle/recovery"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }
 
-func DecodeRecoveryReport(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, source Recovery, raw []byte) (RecoveryReport, workexecution.Input, error) {
+func DecodeRecoveryReport(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	source Recovery,
+	raw []byte,
+) (RecoveryReport, workexecution.Input, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return RecoveryReport{}, workexecution.Input{}, invalid()
 	}

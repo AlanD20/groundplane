@@ -14,7 +14,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (owner *AgentWork) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
@@ -23,7 +27,10 @@ func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue
 	if actor.Executor != workexecution.Agent || actor.HostID != previous.HostID || actor == previous ||
 		view.CurrentExecutor || !view.ActiveAttempt || view.Work.Task.Task.CollectionStartedAt != nil ||
 		view.Work.Item.Item.Operation != workexecution.ServiceRemoval {
-		return errs.New(errs.KindStateConflict, "service removal interruption requires the replacement Agent on the same host")
+		return errs.New(
+			errs.KindStateConflict,
+			"service removal interruption requires the replacement Agent on the same host",
+		)
 	}
 	captured, _, err := owner.inputs.Load(ctx, view.Work)
 	if err != nil {
@@ -60,7 +67,12 @@ func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue
 	return nil
 }
 
-func (owner *AgentWork) interruptedResult(ctx context.Context, view workqueue.ResumeView, input *agentpb.ServiceLifecycleWorkInput, at time.Time) (workqueue.Change, workexecution.Completion, error) {
+func (owner *AgentWork) interruptedResult(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input *agentpb.ServiceLifecycleWorkInput,
+	at time.Time,
+) (workqueue.Change, workexecution.Completion, error) {
 	if view.Attempt.Attempt.Direction == workexecution.Recovery {
 		saved, err := owner.inputs.LoadRecovery(ctx, view.Work, input)
 		if err != nil {
@@ -84,7 +96,11 @@ func (owner *AgentWork) interruptedResult(ctx context.Context, view workqueue.Re
 	if progress != nil && progress.BeganAt == nil && len(progress.Completed) == len(input.Members) &&
 		view.Work.Task.Task.Stop == nil && !view.Work.Item.Item.ForwardRevoked {
 		proof, err := owner.records.PrepareServiceRemovalCompletion(ctx, view, input, at)
-		return proof, workexecution.Completion{Outcome: workexecution.Succeeded, Evidence: view.Checkpoint.Record.Evidence, EffectsSettled: true}, err
+		return proof, workexecution.Completion{
+			Outcome:        workexecution.Succeeded,
+			Evidence:       view.Checkpoint.Record.Evidence,
+			EffectsSettled: true,
+		}, err
 	}
 	return owner.inputs.PrepareFailure(ctx, view, input, lifecycleexecution.ExecutionInterrupted, at, true)
 }

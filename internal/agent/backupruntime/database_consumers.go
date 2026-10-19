@@ -68,7 +68,13 @@ func databaseStopConsumers(ctx context.Context, consumers BackupConsumers, assig
 		}
 		if volumeObservedRunning(observed, serviceID) {
 			*attempted = true
-			_, digest, err = consumers.Execute(ctx, assignment, sourceOrdinal, serviceID, agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_STOP)
+			_, digest, err = consumers.Execute(
+				ctx,
+				assignment,
+				sourceOrdinal,
+				serviceID,
+				agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_STOP,
+			)
 			if err != nil {
 				return err
 			}
@@ -93,7 +99,13 @@ func databaseRecoverConsumers(ctx context.Context, consumers BackupConsumers, as
 			return consumers.Observe(ctx, assignment, sourceOrdinal, serviceID)
 		},
 		recover: func(ctx context.Context, serviceID string) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
-			return consumers.Execute(ctx, assignment, sourceOrdinal, serviceID, agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_RECOVER)
+			return consumers.Execute(
+				ctx,
+				assignment,
+				sourceOrdinal,
+				serviceID,
+				agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_RECOVER,
+			)
 		},
 	})
 }

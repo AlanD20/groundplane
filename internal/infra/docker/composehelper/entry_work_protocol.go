@@ -21,7 +21,10 @@ func MarshalEntryConfigurationWorkRequest(request *agentpb.EntryConfigurationWor
 	return frame(raw)
 }
 
-func ReadEntryConfigurationWorkRequest(ctx context.Context, input io.Reader) (*agentpb.EntryConfigurationWorkHelperRequest, error) {
+func ReadEntryConfigurationWorkRequest(
+	ctx context.Context,
+	input io.Reader,
+) (*agentpb.EntryConfigurationWorkHelperRequest, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
@@ -37,7 +40,11 @@ func ReadEntryConfigurationWorkRequest(ctx context.Context, input io.Reader) (*a
 	return request, nil
 }
 
-func ReadEntryConfigurationWorkResponse(ctx context.Context, input io.Reader, captured entryexecution.HelperInput) (*agentpb.EntryConfigurationWorkHelperResponse, error) {
+func ReadEntryConfigurationWorkResponse(
+	ctx context.Context,
+	input io.Reader,
+	captured entryexecution.HelperInput,
+) (*agentpb.EntryConfigurationWorkHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
@@ -56,7 +63,12 @@ func ReadEntryConfigurationWorkResponse(ctx context.Context, input io.Reader, ca
 	return response, nil
 }
 
-func WriteEntryConfigurationWorkResponse(ctx context.Context, output io.Writer, captured entryexecution.HelperInput, response *agentpb.EntryConfigurationWorkHelperResponse) error {
+func WriteEntryConfigurationWorkResponse(
+	ctx context.Context,
+	output io.Writer,
+	captured entryexecution.HelperInput,
+	response *agentpb.EntryConfigurationWorkHelperResponse,
+) error {
 	if err := validateEntryHelperResponse(captured, response); err != nil {
 		return err
 	}
@@ -87,7 +99,10 @@ func WriteEntryConfigurationWorkResponse(ctx context.Context, output io.Writer, 
 	return nil
 }
 
-func validateEntryHelperResponse(captured entryexecution.HelperInput, response *agentpb.EntryConfigurationWorkHelperResponse) error {
+func validateEntryHelperResponse(
+	captured entryexecution.HelperInput,
+	response *agentpb.EntryConfigurationWorkHelperResponse,
+) error {
 	if captured.Recovery != nil {
 		_, err := entryexecution.ReadHelperRestoration(captured, response)
 		return err

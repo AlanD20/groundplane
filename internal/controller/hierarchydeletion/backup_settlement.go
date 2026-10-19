@@ -25,7 +25,12 @@ func (owner *BackupWork) RejectUnstarted(ctx context.Context, delivery workqueue
 	return nil
 }
 
-func (owner *BackupWork) Settle(ctx context.Context, queue *workqueue.Repository, delivery workqueue.Delivery, at time.Time) error {
+func (owner *BackupWork) Settle(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	delivery workqueue.Delivery,
+	at time.Time,
+) error {
 	attempt := delivery.Attempt.Attempt
 	view, err := queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 	if err != nil {

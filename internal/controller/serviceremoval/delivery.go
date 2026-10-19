@@ -43,7 +43,8 @@ func BuildHostInput(input serviceremovalwork.Input) (*agentpb.ServiceLifecycleWo
 		Action: agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_DESTROY,
 	}
 	for _, artifact := range artifacts {
-		if artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT || artifact.OwnerId != input.Scope.EnvironmentID {
+		if artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+			artifact.OwnerId != input.Scope.EnvironmentID {
 			return nil, errs.New(errs.KindStateConflict, "Service removal member belongs to another Environment")
 		}
 		step := ids.DeriveAt(ids.KindStep, input.CreatedAt, input.WorkItemID, artifact.Services[0].ComposeName)
@@ -51,7 +52,10 @@ func BuildHostInput(input serviceremovalwork.Input) (*agentpb.ServiceLifecycleWo
 		if err != nil {
 			return nil, err
 		}
-		result.Members = append(result.Members, &agentpb.ServiceLifecycleMember{Artifact: artifact, Ownership: ownership})
+		result.Members = append(
+			result.Members,
+			&agentpb.ServiceLifecycleMember{Artifact: artifact, Ownership: ownership},
+		)
 	}
 	if err := executionplan.ValidateServiceLifecycleWorkInput(result); err != nil {
 		return nil, err

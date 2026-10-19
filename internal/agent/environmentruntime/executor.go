@@ -18,11 +18,18 @@ import (
 
 type Exchange interface {
 	StartAttempt(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
-	ReportEnvironmentProvision(context.Context, *agentpb.EnvironmentProvisionResultRequest) (*agentpb.EnvironmentProvisionResultAck, error)
+	ReportEnvironmentProvision(
+		context.Context,
+		*agentpb.EnvironmentProvisionResultRequest,
+	) (*agentpb.EnvironmentProvisionResultAck, error)
 }
 
 type Host interface {
-	ExecuteEnvironmentProvision(context.Context, string, *agentpb.EnvironmentProvisionHelperRequest) (*agentpb.EnvironmentProvisionHelperResponse, error)
+	ExecuteEnvironmentProvision(
+		context.Context,
+		string,
+		*agentpb.EnvironmentProvisionHelperRequest,
+	) (*agentpb.EnvironmentProvisionHelperResponse, error)
 }
 
 type Executor struct {
@@ -33,14 +40,24 @@ type Executor struct {
 
 func NewExecutor(root string, journal *agentworkjournal.Journal, host Host) (*Executor, error) {
 	if environmentpath.ValidateRoot(root) != nil || journal == nil || host == nil {
-		return nil, errs.New(errs.KindInternal, "environment provisioning requires its host root, journal and helper runtime")
+		return nil, errs.New(
+			errs.KindInternal,
+			"environment provisioning requires its host root, journal and helper runtime",
+		)
 	}
 	return &Executor{root: root, journal: journal, host: host}, nil
 }
 
-func (executor *Executor) Run(ctx context.Context, input environmentexecution.Input, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) Run(
+	ctx context.Context,
+	input environmentexecution.Input,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	if ctx == nil || exchange == nil || input.Validate() != nil || input.Creation.VolumeRoot != executor.root {
-		return workexecution.Attempt{}, errs.New(errs.KindValidationFailed, "environment provisioning input does not match this host")
+		return workexecution.Attempt{}, errs.New(
+			errs.KindValidationFailed,
+			"environment provisioning input does not match this host",
+		)
 	}
 	savedAttempt, pending, err := executor.journal.LoadEnvironmentProvision(ctx, input.Attempt)
 	if err != nil {
@@ -76,7 +93,11 @@ func (executor *Executor) Run(ctx context.Context, input environmentexecution.In
 		return workexecution.Attempt{}, err
 	}
 	inspect := reconcile || input.Attempt.Direction == workexecution.Recovery
-	request := &agentpb.EnvironmentProvisionHelperRequest{Assignment: assignment, Start: proto.CloneOf(start), InspectOnly: inspect}
+	request := &agentpb.EnvironmentProvisionHelperRequest{
+		Assignment:  assignment,
+		Start:       proto.CloneOf(start),
+		InspectOnly: inspect,
+	}
 	result := environmentexecution.Result{AttemptID: input.Attempt.ID, ObservedAt: time.Now().UTC()}
 	if saved != nil {
 		result = saved.Result
@@ -90,7 +111,8 @@ func (executor *Executor) Run(ctx context.Context, input environmentexecution.In
 			effectErr = environmentexecution.ValidateHelperResponse(input, request.InspectOnly, response)
 		}
 		if effectErr == nil {
-			result.DirectoryReady, result.HelpersAbsent, result.ObservedAt = response.DirectoryReady, true, time.Now().UTC()
+			result.DirectoryReady, result.HelpersAbsent, result.ObservedAt = response.DirectoryReady, true, time.Now().
+				UTC()
 			if !response.DirectoryReady && input.Attempt.Direction == workexecution.Forward {
 				result.Failure = "The captured Environment directory is absent after interrupted provisioning; Retry can create it after this inspection settles"
 			}
@@ -131,7 +153,11 @@ func (executor *Executor) Run(ctx context.Context, input environmentexecution.In
 	return executor.deliver(ctx, input, exchange)
 }
 
-func (executor *Executor) deliver(ctx context.Context, input environmentexecution.Input, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) deliver(
+	ctx context.Context,
+	input environmentexecution.Input,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	saved, err := executor.journal.SubmitEnvironmentProvision(ctx, input.Attempt)
 	if err != nil {
 		return workexecution.Attempt{}, err

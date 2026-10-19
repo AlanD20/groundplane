@@ -17,8 +17,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (service *WorkReports) RecoverComponent(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.ComponentWorkRecoveryReportRequest) (*agentpb.ComponentWorkRecoveryReportAck, error) {
-	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 || len(request.Report) > componentexecution.MaximumProgressBytes {
+func (service *WorkReports) RecoverComponent(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.ComponentWorkRecoveryReportRequest,
+) (*agentpb.ComponentWorkRecoveryReportAck, error) {
+	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 ||
+		len(request.Report) > componentexecution.MaximumProgressBytes {
 		return nil, errs.New(errs.KindValidationFailed, "Component recovery report is missing or invalid")
 	}
 	guards, err := authorization.Conditions()
@@ -52,7 +57,10 @@ func (service *WorkReports) RecoverComponent(ctx context.Context, authorization 
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Component recovery ownership changed; resend the saved report")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Component recovery ownership changed; resend the saved report",
+			)
 		}
 		view, err = service.reportView(ctx, authorization, request.Attempt)
 		if err != nil {

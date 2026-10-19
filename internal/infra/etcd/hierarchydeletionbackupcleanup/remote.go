@@ -50,7 +50,8 @@ func (repository *Repository) PrepareRemote(ctx context.Context, execution Execu
 				return RemoteAuthority{}, err
 			}
 		}
-		local.remote.ConfirmedAbsent = intent.Selected != (backupruntime.BackupObjectIdentity{}) && intent.ConfirmedAbsent == intent.Selected
+		local.remote.ConfirmedAbsent = intent.Selected != (backupruntime.BackupObjectIdentity{}) &&
+			intent.ConfirmedAbsent == intent.Selected
 		return local.remote, nil
 	}
 	selected := local.remote.Point.Object

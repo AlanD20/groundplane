@@ -16,7 +16,10 @@ type Restoration struct {
 	ConfigurationSHA256 string `json:"configuration_sha256,omitempty"`
 }
 
-func CaptureRestoration(attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput) (Restoration, error) {
+func CaptureRestoration(
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+) (Restoration, error) {
 	layout, err := CaptureLayout(attempt, input)
 	if err != nil {
 		return Restoration{}, err

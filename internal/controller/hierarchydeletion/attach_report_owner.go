@@ -9,11 +9,17 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (owner *AgentWork) RemovalInput(ctx context.Context, view workqueue.ResumeView) (attachexecution.RemovalInput, error) {
+func (owner *AgentWork) RemovalInput(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (attachexecution.RemovalInput, error) {
 	return owner.capturedAttachInput(ctx, view)
 }
 
-func (owner *AgentWork) RecoveryInput(ctx context.Context, view workqueue.ResumeView) (attachexecution.RecoveryInput, error) {
+func (owner *AgentWork) RecoveryInput(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (attachexecution.RecoveryInput, error) {
 	source, err := owner.records.LoadHierarchyAttachRecovery(ctx, view.Work)
 	if err != nil {
 		return attachexecution.RecoveryInput{}, err

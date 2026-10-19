@@ -63,7 +63,10 @@ func (source *BackupSource) UploadVerified(ctx context.Context, value *agentpb.B
 	})
 }
 
-func (source *BackupSource) SourceCleanupCompleted(ctx context.Context, value *agentpb.BackupSourceCleanupCompleted) error {
+func (source *BackupSource) SourceCleanupCompleted(
+	ctx context.Context,
+	value *agentpb.BackupSourceCleanupCompleted,
+) error {
 	return source.publish(ctx, &agentpb.BackupWorkCheckpointRequest{
 		Checkpoint: &agentpb.BackupWorkCheckpointRequest_SourceCleanupCompleted{SourceCleanupCompleted: value},
 	})
@@ -81,7 +84,10 @@ func (source *BackupSource) Volume(ctx context.Context, value *agentpb.BackupVol
 	})
 }
 
-func (source *BackupSource) RestoreArtifactValidated(ctx context.Context, value *agentpb.BackupRestoreArtifactValidated) error {
+func (source *BackupSource) RestoreArtifactValidated(
+	ctx context.Context,
+	value *agentpb.BackupRestoreArtifactValidated,
+) error {
 	return source.publish(ctx, &agentpb.BackupWorkCheckpointRequest{
 		Checkpoint: &agentpb.BackupWorkCheckpointRequest_RestoreArtifactValidated{RestoreArtifactValidated: value},
 	})

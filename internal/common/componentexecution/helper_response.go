@@ -11,15 +11,27 @@ import (
 )
 
 func HelperObservation(input HelperInput, observation Observation) (*agentpb.ComponentWorkHelperResponse, error) {
-	if input.Recovery != nil || input.Procedure == nil || input.Progress.Validate(input.Attempt, input.Procedure) != nil ||
-		!input.Progress.InFlight || observation.ComponentID != input.Procedure.ComponentId || observation.Input != input.Attempt.Input ||
-		observation.Stage != input.Progress.Stage || observation.At.IsZero() || observation.At.Location() != time.UTC || observation.At.Before(*input.Progress.BeganAt) {
+	if input.Recovery != nil || input.Procedure == nil ||
+		input.Progress.Validate(input.Attempt, input.Procedure) != nil ||
+		!input.Progress.InFlight ||
+		observation.ComponentID != input.Procedure.ComponentId ||
+		observation.Input != input.Attempt.Input ||
+		observation.Stage != input.Progress.Stage ||
+		observation.At.IsZero() ||
+		observation.At.Location() != time.UTC ||
+		observation.At.Before(*input.Progress.BeganAt) {
 		return nil, invalidProgress()
 	}
 	// An inspection may report that the expected effect is absent, but cannot
 	// carry contradictory proofs or facts belonging to another stage.
-	empty := Observation{ComponentID: observation.ComponentID, Input: observation.Input, Stage: observation.Stage, At: observation.At}
-	if !observation.Satisfies(input.Progress.Stage, input.Procedure.Remove) && (!input.InspectOnly || observation != empty) {
+	empty := Observation{
+		ComponentID: observation.ComponentID,
+		Input:       observation.Input,
+		Stage:       observation.Stage,
+		At:          observation.At,
+	}
+	if !observation.Satisfies(input.Progress.Stage, input.Procedure.Remove) &&
+		(!input.InspectOnly || observation != empty) {
 		return nil, invalidProgress()
 	}
 	raw, err := json.Marshal(observation)
@@ -50,9 +62,16 @@ func ReadHelperObservation(input HelperInput, response *agentpb.ComponentWorkHel
 }
 
 func ReadHelperRecovery(input HelperInput, response *agentpb.ComponentWorkHelperResponse) (RecoveryReport, error) {
-	if input.Recovery == nil || response == nil || executionplan.RejectUnknown(response) != nil || len(response.Observation) != 0 {
+	if input.Recovery == nil || response == nil || executionplan.RejectUnknown(response) != nil ||
+		len(response.Observation) != 0 {
 		return RecoveryReport{}, invalidProgress()
 	}
-	report, _, err := DecodeRecoveryReport(input.Attempt, *input.Recovery, input.Procedure, input.Progress, response.RecoveryReport)
+	report, _, err := DecodeRecoveryReport(
+		input.Attempt,
+		*input.Recovery,
+		input.Procedure,
+		input.Progress,
+		response.RecoveryReport,
+	)
 	return report, err
 }

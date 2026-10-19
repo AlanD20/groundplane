@@ -103,7 +103,11 @@ func BindProxyServiceRollouts(captured ProxyServicePreflight,
 		conditions = append(
 			conditions,
 			keyvalue.Condition{
-				Key:         ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, rollout.WorkItemID),
+				Key: ProxyServiceRolloutKey(
+					preflight.EnvironmentID,
+					preflight.ParentTaskID,
+					rollout.WorkItemID,
+				),
 				ModRevision: rollout.Revision,
 			},
 			keyvalue.Condition{

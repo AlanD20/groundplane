@@ -27,7 +27,14 @@ type ReleaseCheckpointService struct {
 	outcomes     map[workexecution.Operation]ReleaseOutcomeOwner
 }
 
-func NewReleaseCheckpointService(queue *workqueue.Repository, store releasework.Reader, files CapturedFileReader, diagnostics *executiondiagnostics.Repository, logger *slog.Logger, registrations []ReleaseCheckpointRegistration) (*ReleaseCheckpointService, error) {
+func NewReleaseCheckpointService(
+	queue *workqueue.Repository,
+	store releasework.Reader,
+	files CapturedFileReader,
+	diagnostics *executiondiagnostics.Repository,
+	logger *slog.Logger,
+	registrations []ReleaseCheckpointRegistration,
+) (*ReleaseCheckpointService, error) {
 	if queue == nil || store == nil || files == nil || diagnostics == nil || logger == nil || len(registrations) == 0 {
 		return nil, errs.New(errs.KindInternal, "Release checkpoints require storage and operation owners")
 	}
@@ -35,7 +42,8 @@ func NewReleaseCheckpointService(queue *workqueue.Repository, store releasework.
 	restorations := make(map[workexecution.Operation]ReleaseRestorationOwner, len(registrations))
 	outcomes := make(map[workexecution.Operation]ReleaseOutcomeOwner, len(registrations))
 	for _, registration := range registrations {
-		if !workexecution.ValidOperation(registration.Operation) || registration.Outcome == nil || outcomes[registration.Operation] != nil ||
+		if !workexecution.ValidOperation(registration.Operation) || registration.Outcome == nil ||
+			outcomes[registration.Operation] != nil ||
 			registration.Forward == nil && registration.Restoration == nil {
 			return nil, errs.New(errs.KindInternal, "Release checkpoint operation is invalid or duplicated")
 		}
@@ -47,11 +55,23 @@ func NewReleaseCheckpointService(queue *workqueue.Repository, store releasework.
 			restorations[registration.Operation] = registration.Restoration
 		}
 	}
-	return &ReleaseCheckpointService{queue: queue, store: store, files: files, forwards: forwards, restorations: restorations,
-		outcomes: outcomes, diagnostics: diagnostics, logger: logger}, nil
+	return &ReleaseCheckpointService{
+		queue:        queue,
+		store:        store,
+		files:        files,
+		forwards:     forwards,
+		restorations: restorations,
+		outcomes:     outcomes,
+		diagnostics:  diagnostics,
+		logger:       logger,
+	}, nil
 }
 
-func (service *ReleaseCheckpointService) CheckpointRelease(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.ReleaseWorkCheckpointRequest) (*agentpb.ReleaseWorkCheckpointAck, error) {
+func (service *ReleaseCheckpointService) CheckpointRelease(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.ReleaseWorkCheckpointRequest,
+) (*agentpb.ReleaseWorkCheckpointAck, error) {
 	if ctx == nil || service == nil || request == nil || len(request.ProtoReflect().GetUnknown()) != 0 ||
 		len(request.Report) == 0 || len(request.Report) > releaseexecution.MaximumCheckpointBytes {
 		return nil, errs.New(errs.KindValidationFailed, "Release checkpoint request is invalid")
@@ -80,7 +100,8 @@ func (service *ReleaseCheckpointService) CheckpointRelease(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	if !workexecution.SameAssignment(input.Attempt, view.Attempt.Attempt) || input.Attempt.StartedAt == nil || !input.Attempt.StartedAt.Equal(*view.Attempt.Attempt.StartedAt) {
+	if !workexecution.SameAssignment(input.Attempt, view.Attempt.Attempt) || input.Attempt.StartedAt == nil ||
+		!input.Attempt.StartedAt.Equal(*view.Attempt.Attempt.StartedAt) {
 		return nil, errs.New(errs.KindInternal, "Release checkpoint owner returned a different attempt")
 	}
 	report, err := releaseexecution.DecodeCheckpointRequest(input, request)
@@ -101,7 +122,8 @@ func (service *ReleaseCheckpointService) CheckpointRelease(ctx context.Context, 
 	defer keyvalue.ZeroMutationBytes(change.Mutations)
 	// Exact replay returns saved permission/evidence; it must not seek a new
 	// cutover grant or repeat an operation-owned effect.
-	if previous.Record != nil && previous.Record.CheckpointSequence == report.Sequence && releaseexecution.EqualProgress(previous.Record.Progress, report.Progress) {
+	if previous.Record != nil && previous.Record.CheckpointSequence == report.Sequence &&
+		releaseexecution.EqualProgress(previous.Record.Progress, report.Progress) {
 		return releaseexecution.EncodeCheckpointAck(input, report)
 	}
 	if report.Progress.InFlight && !time.Now().UTC().Before(input.Attempt.Deadline) {
@@ -131,7 +153,13 @@ func (service *ReleaseCheckpointService) CheckpointRelease(ctx context.Context, 
 	if len(evidence.Conditions) == 0 {
 		return nil, errs.New(errs.KindInternal, "Release checkpoint requires operation evidence comparisons")
 	}
-	result, err := service.queue.Commit(ctx, workqueue.Change{Conditions: guards}, workqueue.Change{Conditions: hookConditions}, evidence, change)
+	result, err := service.queue.Commit(
+		ctx,
+		workqueue.Change{Conditions: guards},
+		workqueue.Change{Conditions: hookConditions},
+		evidence,
+		change,
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return nil, err

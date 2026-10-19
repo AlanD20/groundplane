@@ -19,13 +19,25 @@ import (
 func InactiveRouterConditions(ctx context.Context, store interface {
 	Range(context.Context, keyvalue.RangeRequest) (*keyvalue.RangeResult, error)
 }, environmentID string, kinds []core.ComponentKind, revision int64) ([]keyvalue.Condition, error) {
-	if ctx == nil || store == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil || revision <= 0 || len(kinds) == 0 {
-		return nil, errs.New(errs.KindValidationFailed, "Router absence requires its Environment snapshot and registered provider kinds")
+	if ctx == nil || store == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil || revision <= 0 ||
+		len(kinds) == 0 {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Router absence requires its Environment snapshot and registered provider kinds",
+		)
 	}
 	var conditions []keyvalue.Condition
 	cursor := ""
 	for {
-		page, err := store.Range(ctx, keyvalue.RangeRequest{Prefix: componentRuntimePrefix, StartExclusive: cursor, Limit: 128, Revision: revision})
+		page, err := store.Range(
+			ctx,
+			keyvalue.RangeRequest{
+				Prefix:         componentRuntimePrefix,
+				StartExclusive: cursor,
+				Limit:          128,
+				Revision:       revision,
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -34,7 +46,8 @@ func InactiveRouterConditions(ctx context.Context, store interface {
 		}
 		for index := range page.Values {
 			value := &page.Values[index]
-			if !strings.HasPrefix(value.Key, componentRuntimePrefix) || value.Key <= cursor || value.ModRevision <= 0 || value.ModRevision > revision {
+			if !strings.HasPrefix(value.Key, componentRuntimePrefix) || value.Key <= cursor || value.ModRevision <= 0 ||
+				value.ModRevision > revision {
 				clearRuntimePage(page)
 				return nil, recordcodec.CorruptRecord()
 			}
@@ -49,7 +62,10 @@ func InactiveRouterConditions(ctx context.Context, store interface {
 			}
 			if record.Component.Desired.Enabled || len(record.Artifact) != 0 {
 				clearRuntimePage(page)
-				return nil, errs.New(errs.KindStateConflict, "A retained router runtime must be stopped before this Route can change without host execution")
+				return nil, errs.New(
+					errs.KindStateConflict,
+					"A retained router runtime must be stopped before this Route can change without host execution",
+				)
 			}
 			conditions = append(conditions, keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision})
 		}

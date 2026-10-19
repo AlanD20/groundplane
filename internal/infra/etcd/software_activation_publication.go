@@ -12,13 +12,21 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *TaskRepository) CreateSoftwareActivationWork(ctx context.Context, record activation.Record, prepared keyvalue.Versioned[preparation.Record], marker idempotency.IdempotencyMarker) (IdempotencyTransactionResult, error) {
+func (repository *TaskRepository) CreateSoftwareActivationWork(
+	ctx context.Context,
+	record activation.Record,
+	prepared keyvalue.Versioned[preparation.Record],
+	marker idempotency.IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
 	task, items, err := record.Graph()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if prepared.Revision <= 0 || !sameSoftwarePreparation(record.Input.Preparation, prepared.Record) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "software activation must retain its exact verified preparation")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"software activation must retain its exact verified preparation",
+		)
 	}
 	raw, err := activation.Encode(record)
 	if err != nil {
@@ -30,12 +38,25 @@ func (repository *TaskRepository) CreateSoftwareActivationWork(ctx context.Conte
 		return IdempotencyTransactionResult{}, err
 	}
 	defer keyvalue.ClearMutationValues(change.Mutations)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: activation.Key(task.ID)}, keyvalue.Condition{Key: preparation.Key(prepared.Record.TaskID), ModRevision: prepared.Revision}, keyvalue.Condition{Key: imagefence.Key})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: activation.Key(task.ID), Value: raw})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: activation.Key(task.ID)},
+		keyvalue.Condition{Key: preparation.Key(prepared.Record.TaskID), ModRevision: prepared.Revision},
+		keyvalue.Condition{Key: imagefence.Key},
+	)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: activation.Key(task.ID), Value: raw},
+	)
 	classify := func(_ int64, _ []*keyvalue.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "software preparation or activation admission changed")
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, change.Conditions, change.Mutations, classify)
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerTask,
+		change.Conditions,
+		change.Mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -43,6 +64,10 @@ func (repository *TaskRepository) CreateSoftwareActivationWork(ctx context.Conte
 }
 
 func sameSoftwarePreparation(left, right preparation.Record) bool {
-	return left.TaskID == right.TaskID && left.OperationID == right.OperationID && left.InputSHA256 == right.InputSHA256 &&
-		left.Source.Equal(right.Source) && left.Progress.Equal(right.Progress) && left.CreatedAt.Equal(right.CreatedAt) && left.UpdatedAt.Equal(right.UpdatedAt)
+	return left.TaskID == right.TaskID && left.OperationID == right.OperationID &&
+		left.InputSHA256 == right.InputSHA256 &&
+		left.Source.Equal(right.Source) &&
+		left.Progress.Equal(right.Progress) &&
+		left.CreatedAt.Equal(right.CreatedAt) &&
+		left.UpdatedAt.Equal(right.UpdatedAt)
 }

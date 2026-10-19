@@ -18,8 +18,11 @@ type EffectRecord struct {
 }
 
 func (record EffectRecord) validate(attempt workexecution.Attempt) error {
-	if record.Boundary.ValidateEnvelope(attempt) != nil || record.Boundary.Ack == nil || !record.Boundary.Progress.InFlight ||
-		record.Reference.Validate() != nil || len(record.Raw) == 0 || len(record.Raw) > releaseexecution.MaximumCheckpointBytes {
+	if record.Boundary.ValidateEnvelope(attempt) != nil || record.Boundary.Ack == nil ||
+		!record.Boundary.Progress.InFlight ||
+		record.Reference.Validate() != nil ||
+		len(record.Raw) == 0 ||
+		len(record.Raw) > releaseexecution.MaximumCheckpointBytes {
 		return invalid()
 	}
 	digest := sha256.Sum256(record.Raw)

@@ -13,7 +13,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) LoadRecoveryInput(ctx context.Context, view workqueue.ResumeView) (scriptexecution.RecoveryInput, error) {
+func (service *Service) LoadRecoveryInput(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (scriptexecution.RecoveryInput, error) {
 	return service.repository.LoadScriptRecoveryInput(ctx, view)
 }
 
@@ -38,8 +41,12 @@ func (service *Service) CompleteRecovery(ctx context.Context, authorization agen
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if view.Work.Item.Item.Operation != workexecution.Script || !workexecution.SameAssignment(view.Attempt.Attempt, claimed) {
-		return workexecution.Attempt{}, errs.New(errs.KindStateConflict, "Script recovery completion belongs to another assignment")
+	if view.Work.Item.Item.Operation != workexecution.Script ||
+		!workexecution.SameAssignment(view.Attempt.Attempt, claimed) {
+		return workexecution.Attempt{}, errs.New(
+			errs.KindStateConflict,
+			"Script recovery completion belongs to another assignment",
+		)
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
 		if err := service.repository.SettleRecoveredScript(ctx, view, raw, reference, guards, time.Now().UTC()); err != nil {
@@ -53,7 +60,10 @@ func (service *Service) CompleteRecovery(ctx context.Context, authorization agen
 	attempt := view.Attempt.Attempt
 	if !workexecution.SameAssignment(attempt, claimed) || attempt.FinishedAt == nil || attempt.Result == nil ||
 		*attempt.Result != reference || attempt.Outcome != workexecution.Succeeded {
-		return workexecution.Attempt{}, errs.New(errs.KindStateConflict, "saved Script recovery does not acknowledge this proof")
+		return workexecution.Attempt{}, errs.New(
+			errs.KindStateConflict,
+			"saved Script recovery does not acknowledge this proof",
+		)
 	}
 	return attempt, nil
 }

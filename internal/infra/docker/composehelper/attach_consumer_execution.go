@@ -11,7 +11,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func ExecuteAttachConsumer(ctx context.Context, taskRunner runner.Runner, request *agentpb.AttachConsumerHelperRequest) (*agentpb.AttachConsumerHelperResponse, error) {
+func ExecuteAttachConsumer(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	request *agentpb.AttachConsumerHelperRequest,
+) (*agentpb.AttachConsumerHelperResponse, error) {
 	input, err := attachexecution.OpenConsumerHelperRequest(ctx, request)
 	if err != nil {
 		return nil, err
@@ -35,9 +39,15 @@ func ExecuteAttachConsumer(ctx context.Context, taskRunner runner.Runner, reques
 	if err != nil {
 		return nil, err
 	}
-	response := &agentpb.AttachConsumerHelperResponse{ServiceId: observation.ServiceID, NetworkId: observation.NetworkID,
-		Input:    &agentpb.WorkInputReference{InputId: input.Attempt.Input.ID, Sha256: digest},
-		Detached: observation.Detached, Connected: observation.Connected, ObservedAt: timestamppb.New(observation.At), Inspection: input.InspectOnly}
+	response := &agentpb.AttachConsumerHelperResponse{
+		ServiceId:  observation.ServiceID,
+		NetworkId:  observation.NetworkID,
+		Input:      &agentpb.WorkInputReference{InputId: input.Attempt.Input.ID, Sha256: digest},
+		Detached:   observation.Detached,
+		Connected:  observation.Connected,
+		ObservedAt: timestamppb.New(observation.At),
+		Inspection: input.InspectOnly,
+	}
 	if err := attachexecution.ValidateConsumerHelperResponse(input, response); err != nil {
 		return nil, err
 	}

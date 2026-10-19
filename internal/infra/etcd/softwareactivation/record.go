@@ -146,20 +146,27 @@ func (record Record) Reference() (workexecution.Input, error) {
 	if hash != record.InputSHA256 {
 		return workexecution.Input{}, errs.New(errs.KindStateConflict, "software activation input digest changed")
 	}
-	return workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, record.CreatedAt, record.TaskID, "software-activation"), SHA256: hash}, nil
+	return workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, record.CreatedAt, record.TaskID, "software-activation"),
+		SHA256: hash,
+	}, nil
 }
 
 func ValidateRecord(record Record) error {
 	if ids.Validate(ids.KindTask, record.TaskID) != nil || ids.Validate(ids.KindWorkItem, record.WorkItemID) != nil ||
 		ids.Validate(ids.KindOperation, record.OperationID) != nil || record.OperationID != record.Input.OperationID ||
-		!recordcodec.IsCanonicalUTC(record.CreatedAt) || !recordcodec.IsCanonicalUTC(record.UpdatedAt) || record.UpdatedAt.Before(record.CreatedAt) {
+		!recordcodec.IsCanonicalUTC(
+			record.CreatedAt,
+		) || !recordcodec.IsCanonicalUTC(record.UpdatedAt) || record.UpdatedAt.Before(record.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "software activation identity or timestamps are invalid")
 	}
 	selection := record.Input.Preparation.Source.Selection
-	if selection.IncludesController() != (record.ControllerWorkItemID != "") || selection.IncludesAgent() != (record.AgentWorkItemID != "") ||
+	if selection.IncludesController() != (record.ControllerWorkItemID != "") ||
+		selection.IncludesAgent() != (record.AgentWorkItemID != "") ||
 		record.ControllerWorkItemID != "" && ids.Validate(ids.KindWorkItem, record.ControllerWorkItemID) != nil ||
 		record.AgentWorkItemID != "" && ids.Validate(ids.KindWorkItem, record.AgentWorkItemID) != nil ||
-		record.WorkItemID == record.ControllerWorkItemID || record.WorkItemID == record.AgentWorkItemID ||
+		record.WorkItemID == record.ControllerWorkItemID ||
+		record.WorkItemID == record.AgentWorkItemID ||
 		record.ControllerWorkItemID != "" && record.ControllerWorkItemID == record.AgentWorkItemID {
 		return errs.New(errs.KindValidationFailed, "software activation work membership is invalid")
 	}
@@ -172,26 +179,37 @@ func ValidateRecord(record Record) error {
 func ValidateProgress(progress Progress, input Input) error {
 	selection := input.Preparation.Source.Selection
 	if len(progress.ErrorCode) > 128 || len(progress.ErrorDetail) > 2048 ||
-		progress.ControllerApplied && !selection.IncludesController() || progress.AgentApplied && !selection.IncludesAgent() ||
+		progress.ControllerApplied &&
+			!selection.IncludesController() || progress.AgentApplied && !selection.IncludesAgent() ||
 		progress.AgentStaged && !selection.IncludesAgent() ||
-		progress.StagedController != nil && (!selection.IncludesController() || progress.StagedController.ValidateRecord() != nil ||
-			string(progress.StagedController.Manifest.ControllerSHA256) != input.Preparation.Progress.Result.Controller.BinarySHA256 ||
-			progress.StagedController.Manifest.AgentImage != input.StagingAgentImage) {
+		progress.StagedController != nil &&
+			(!selection.IncludesController() || progress.StagedController.ValidateRecord() != nil ||
+				string(progress.StagedController.Manifest.ControllerSHA256) != input.Preparation.Progress.Result.Controller.BinarySHA256 ||
+				progress.StagedController.Manifest.AgentImage != input.StagingAgentImage) {
 		return errs.New(errs.KindValidationFailed, "software activation output does not match captured components")
 	}
 	switch progress.Phase {
 	case PhaseAccepted:
-		if progress.StagedController != nil || progress.AgentStaged || progress.ControllerApplied || progress.AgentApplied || progress.ErrorCode != "" || progress.ErrorDetail != "" {
+		if progress.StagedController != nil || progress.AgentStaged || progress.ControllerApplied ||
+			progress.AgentApplied ||
+			progress.ErrorCode != "" ||
+			progress.ErrorDetail != "" {
 			return invalidProgress()
 		}
 	case PhaseStaged:
-		if selection.IncludesController() != (progress.StagedController != nil) || selection.IncludesAgent() != progress.AgentStaged ||
-			progress.ControllerApplied || progress.AgentApplied || progress.ErrorCode != "" || progress.ErrorDetail != "" {
+		if selection.IncludesController() != (progress.StagedController != nil) ||
+			selection.IncludesAgent() != progress.AgentStaged ||
+			progress.ControllerApplied ||
+			progress.AgentApplied ||
+			progress.ErrorCode != "" ||
+			progress.ErrorDetail != "" {
 			return invalidProgress()
 		}
 	case PhaseCompleted:
-		if selection.IncludesController() != progress.ControllerApplied || selection.IncludesAgent() != progress.AgentApplied ||
-			progress.ErrorCode != "" || progress.ErrorDetail != "" {
+		if selection.IncludesController() != progress.ControllerApplied ||
+			selection.IncludesAgent() != progress.AgentApplied ||
+			progress.ErrorCode != "" ||
+			progress.ErrorDetail != "" {
 			return invalidProgress()
 		}
 	case PhaseFailed:

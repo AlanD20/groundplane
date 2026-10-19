@@ -15,16 +15,26 @@ import (
 // PrepareHierarchyControllerProgress removes at most one page of inactive Script
 // locators before Environment finalization. It never commits during preparation
 // and never reports the removal work complete merely because a page was removed.
-func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerProgress(ctx context.Context, request workqueue.Assignment, at time.Time) (workqueue.Change, error) {
+func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerProgress(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workqueue.Change, error) {
 	fence, err := workqueue.PrepareDecisionFence(request)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if request.Task.Task.Action != workexecution.ActionRemove || request.Item.Item.Operation != workexecution.Hierarchy ||
-		at.IsZero() || at.Before(request.Item.Item.UpdatedAt) || !at.Before(request.Item.Item.Deadline) {
+	if request.Task.Task.Action != workexecution.ActionRemove ||
+		request.Item.Item.Operation != workexecution.Hierarchy ||
+		at.IsZero() ||
+		at.Before(request.Item.Item.UpdatedAt) ||
+		!at.Before(request.Item.Item.Deadline) {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "removal preparation requires hierarchy work")
 	}
-	captured, err := repository.LoadHierarchyWork(ctx, workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision})
+	captured, err := repository.LoadHierarchyWork(
+		ctx,
+		workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -32,10 +42,18 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyControllerProgres
 		return workqueue.Change{}, nil
 	}
 	operation := captured.Operation
-	conditions, mutations, err := scriptmutations.PrepareEnvironmentDeletionScriptLocatorBatch(ctx, repository.store, captured.Action.TargetID, keyvalue.Condition{
-		Key:         hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID),
-		ModRevision: operation.TombstoneRevision,
-	})
+	conditions, mutations, err := scriptmutations.PrepareEnvironmentDeletionScriptLocatorBatch(
+		ctx,
+		repository.store,
+		captured.Action.TargetID,
+		keyvalue.Condition{
+			Key: hierarchydeletion.HierarchyDeletionTombstoneKey(
+				string(operation.Tombstone.TargetKind),
+				operation.Tombstone.TargetID,
+			),
+			ModRevision: operation.TombstoneRevision,
+		},
+	)
 	if err != nil || len(mutations) == 0 {
 		return workqueue.Change{}, err
 	}

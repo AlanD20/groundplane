@@ -20,7 +20,8 @@ func validateProxyRolloutCapture(preparation BlueprintProxyServiceRollout,
 	capture releaserender.ServiceRolloutCapture,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) error {
-	if capture.Action != workexecution.ActionApply || len(preparation.Members) != 1 || len(preparation.Manifest.Record.Members) != 1 {
+	if capture.Action != workexecution.ActionApply || len(preparation.Members) != 1 ||
+		len(preparation.Manifest.Record.Members) != 1 {
 		return errs.New(errs.KindStateConflict, "captured proxy rollout requires one Service")
 	}
 	render, err := releaserender.OpenServiceRolloutCapture(capture)
@@ -69,11 +70,16 @@ func validateProxyRolloutCapture(preparation BlueprintProxyServiceRollout,
 		sources.RenderInput.Record.Projection = projectionrecord.CloneEnvironmentComposeProjection(projection)
 		snapshot := &agentpb.ResolvedRunnerSnapshot{}
 		if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(hook.RunnerSnapshot, snapshot); err != nil ||
-			snapshot.GetScriptExecutionId() != hook.ScriptExecutionID || snapshot.GetSnapshotId() != hook.RunnerSnapshotID ||
-			snapshot.GetServiceId() != render.ServiceID || snapshot.GetReleaseId() != render.ReleaseID ||
+			snapshot.GetScriptExecutionId() != hook.ScriptExecutionID ||
+			snapshot.GetSnapshotId() != hook.RunnerSnapshotID ||
+			snapshot.GetServiceId() != render.ServiceID ||
+			snapshot.GetReleaseId() != render.ReleaseID ||
 			sources.Script.Record.ScriptSetGeneration != capture.TaskID ||
 			scriptsourcequeries.ValidateScriptContextSources(sources, snapshot) != nil {
-			return errs.New(errs.KindStateConflict, "captured proxy rollout hook sources differ from its execution input")
+			return errs.New(
+				errs.KindStateConflict,
+				"captured proxy rollout hook sources differ from its execution input",
+			)
 		}
 	}
 	return nil

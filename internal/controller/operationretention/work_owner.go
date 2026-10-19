@@ -35,7 +35,12 @@ type WorkRegistration struct {
 	Owner     WorkOwner
 }
 
-func (collector *Collector) collectGraph(ctx context.Context, task workqueue.TaskSnapshot, revision int64, at time.Time) (bool, error) {
+func (collector *Collector) collectGraph(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	revision int64,
+	at time.Time,
+) (bool, error) {
 	if task.Task.CollectionStartedAt == nil {
 		change, err := workqueue.PrepareCollection(task, at)
 		if err != nil {
@@ -66,9 +71,22 @@ func (collector *Collector) collectGraph(ctx context.Context, task workqueue.Tas
 		if err != nil {
 			return false, err
 		}
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskEventsKey(task.Task.ID)})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskExpiryKey(task.Task.ID)})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: scriptexecutions.SourceRetirementPrefix(task.Task.ID), Prefix: true})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskEventsKey(task.Task.ID)},
+		)
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskExpiryKey(task.Task.ID)},
+		)
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{
+				Type:   keyvalue.MutationDelete,
+				Key:    scriptexecutions.SourceRetirementPrefix(task.Task.ID),
+				Prefix: true,
+			},
+		)
 		result, err := collector.queue.Commit(ctx, authority, change)
 		return result.Succeeded, err
 	}
@@ -98,7 +116,10 @@ func (collector *Collector) collectOwnedWork(ctx context.Context, taskID, workID
 				return false, err
 			}
 			if len(prepared.Conditions) == 0 {
-				return false, errs.New(errs.KindInternal, "unprepared work retirement requires operation protection comparisons")
+				return false, errs.New(
+					errs.KindInternal,
+					"unprepared work retirement requires operation protection comparisons",
+				)
 			}
 			authority = prepared
 		}

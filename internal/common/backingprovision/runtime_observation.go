@@ -31,7 +31,9 @@ func DecodeRuntimeObservation(raw []byte) (backingruntimefact.Observation, error
 	}
 	canonical, err := EncodeRuntimeObservation(observation)
 	if err != nil || !bytes.Equal(canonical, raw) {
-		return backingruntimefact.Observation{}, invalid("backing creation runtime observation differs from its canonical evidence")
+		return backingruntimefact.Observation{}, invalid(
+			"backing creation runtime observation differs from its canonical evidence",
+		)
 	}
 	return observation, nil
 }

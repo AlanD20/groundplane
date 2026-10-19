@@ -26,7 +26,11 @@ func (sch *Scheduler) runRetentionMaintenance(ctx context.Context, now time.Time
 	)
 	cancelMarkers()
 	if sch.logger != nil && (markers != 0 || markerErr != nil) {
-		sch.logger.Info("scheduler: submission replay cleanup", slog.Int("idempotency_records", markers), slog.Any("error", markerErr))
+		sch.logger.Info(
+			"scheduler: submission replay cleanup",
+			slog.Int("idempotency_records", markers),
+			slog.Any("error", markerErr),
+		)
 	}
 	resultErr := errors.Join(markerErr, ctx.Err())
 	if sch.storageMaintenance != nil && ctx.Err() == nil {

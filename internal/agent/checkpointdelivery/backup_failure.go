@@ -25,14 +25,23 @@ func (delivery *Backup) Fail(ctx context.Context, reason executionplan.BackupFai
 	}
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
-	record, err := delivery.journal.PrepareBackupFailure(ctx, delivery.assignment, delivery.attempt, reason, time.Now().UTC())
+	record, err := delivery.journal.PrepareBackupFailure(
+		ctx,
+		delivery.assignment,
+		delivery.attempt,
+		reason,
+		time.Now().UTC(),
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
 	if record.Completion != nil {
 		return *record.Completion, nil
 	}
-	ack, err := exchange(ctx, &agentpb.BackupWorkFailureRequest{Attempt: delivery.assignment.Attempt, Reason: string(record.FailureReason)})
+	ack, err := exchange(
+		ctx,
+		&agentpb.BackupWorkFailureRequest{Attempt: delivery.assignment.Attempt, Reason: string(record.FailureReason)},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

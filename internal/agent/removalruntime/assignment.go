@@ -22,8 +22,12 @@ type Input struct {
 	configuration *agentpb.WorkConfigurationReference
 }
 
-func DecodeAssignment(message *agentpb.ServiceRemovalRecoveryAssignment, authenticated workexecution.Identity) (Input, error) {
-	if message == nil || proto.Size(message) > executionplan.MaximumPlanBytes || executionplan.RejectUnknown(message) != nil ||
+func DecodeAssignment(
+	message *agentpb.ServiceRemovalRecoveryAssignment,
+	authenticated workexecution.Identity,
+) (Input, error) {
+	if message == nil || proto.Size(message) > executionplan.MaximumPlanBytes ||
+		executionplan.RejectUnknown(message) != nil ||
 		executionplan.ValidateServiceLifecycleWorkInput(message.Removal) != nil {
 		return Input{}, invalidInput()
 	}
@@ -66,5 +70,8 @@ func (input Input) WithStart(ack *agentpb.WorkStartAck) (Input, bool, error) {
 }
 
 func invalidInput() error {
-	return errs.New(errs.KindValidationFailed, "Service removal recovery message differs from its captured host assignment")
+	return errs.New(
+		errs.KindValidationFailed,
+		"Service removal recovery message differs from its captured host assignment",
+	)
 }

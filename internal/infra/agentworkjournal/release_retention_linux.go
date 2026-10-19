@@ -11,10 +11,16 @@ import (
 // completion was acknowledged. Its accepted quiescence proof accounts for the
 // captured forward attempt and earlier retries of this same work/input helper.
 // It never removes runtime files, application data or unrelated journals.
-func (journal *Journal) retireRecoveredRelease(ctx context.Context, attempt workexecution.Attempt, recovery RecoveryRecord) error {
+func (journal *Journal) retireRecoveredRelease(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	recovery RecoveryRecord,
+) error {
 	input := recovery.input(attempt)
-	if input.ValidateIdentity() != nil || recovery.Completion == nil || recovery.Completion.Outcome != workexecution.Succeeded ||
-		recovery.Report.Progress.Phase != releaseexecution.RecoveryComplete || recovery.Report.Ack == nil {
+	if input.ValidateIdentity() != nil || recovery.Completion == nil ||
+		recovery.Completion.Outcome != workexecution.Succeeded ||
+		recovery.Report.Progress.Phase != releaseexecution.RecoveryComplete ||
+		recovery.Report.Ack == nil {
 		return conflict()
 	}
 	attempts, err := journal.attempts(ctx)
@@ -39,7 +45,8 @@ func (journal *Journal) retireRecoveredRelease(ctx context.Context, attempt work
 			return conflict()
 		}
 		if id == recovery.Forward.ID {
-			if !workexecution.SameAssignment(state.Attempt, recovery.Forward) || state.Attempt.Executor.HostID != attempt.Executor.HostID {
+			if !workexecution.SameAssignment(state.Attempt, recovery.Forward) ||
+				state.Attempt.Executor.HostID != attempt.Executor.HostID {
 				return conflict()
 			}
 			if state.Completion != nil && (recovery.Forward.Outcome != workexecution.Succeeded ||
@@ -50,16 +57,18 @@ func (journal *Journal) retireRecoveredRelease(ctx context.Context, attempt work
 				state.Release.Ack == nil || state.Release.Ack.Evidence != *recovery.Forward.Result) {
 				return conflict()
 			}
-			if state.Failure != nil && state.Failure.Receipt != nil && (state.Failure.Receipt.Evidence != *recovery.Forward.Result ||
-				state.Failure.Receipt.Outcome != recovery.Forward.Outcome) {
+			if state.Failure != nil && state.Failure.Receipt != nil &&
+				(state.Failure.Receipt.Evidence != *recovery.Forward.Result ||
+					state.Failure.Receipt.Outcome != recovery.Forward.Outcome) {
 				return conflict()
 			}
 			continue
 		}
 		if recovery.Interruption != nil && id == recovery.Interruption.Attempt.ID {
 			previous := recovery.Interruption.Attempt
-			if !workexecution.SameAssignment(state.Attempt, previous) || state.Failure != nil && state.Failure.Receipt != nil &&
-				state.Failure.Receipt.Evidence != *previous.Result {
+			if !workexecution.SameAssignment(state.Attempt, previous) ||
+				state.Failure != nil && state.Failure.Receipt != nil &&
+					state.Failure.Receipt.Evidence != *previous.Result {
 				return conflict()
 			}
 		}

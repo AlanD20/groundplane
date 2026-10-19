@@ -12,7 +12,11 @@ import (
 
 // ResolveLifecycleHookContainer is read-only and accepts only the single exact
 // captured workload, never a proxy or a replacement with the same Service name.
-func ResolveLifecycleHookContainer(ctx context.Context, taskRunner runner.Runner, input *agentpb.ServiceLifecycleWorkInput) (string, error) {
+func ResolveLifecycleHookContainer(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input *agentpb.ServiceLifecycleWorkInput,
+) (string, error) {
 	if executionplan.ValidateServiceLifecycleWorkInput(input) != nil || input.Hook == nil || taskRunner == nil {
 		return "", errs.New(errs.KindValidationFailed, "Lifecycle hook requires its captured workload")
 	}
@@ -27,14 +31,25 @@ func ResolveLifecycleHookContainer(ctx context.Context, taskRunner runner.Runner
 			return "", err
 		}
 		if len(containers) != 1 || target != "" {
-			return "", errs.New(errs.KindStateConflict, "Lifecycle hook requires exactly one captured backing container")
+			return "", errs.New(
+				errs.KindStateConflict,
+				"Lifecycle hook requires exactly one captured backing container",
+			)
 		}
 		target = containers[0]
 	}
 	if target == "" {
 		return "", errs.New(errs.KindStateConflict, "Lifecycle hook backing container is absent")
 	}
-	state, err := lifecycleDocker(ctx, taskRunner, "container", "inspect", "--format", "{{.State.Running}} {{.State.Paused}} {{.State.Restarting}}", target)
+	state, err := lifecycleDocker(
+		ctx,
+		taskRunner,
+		"container",
+		"inspect",
+		"--format",
+		"{{.State.Running}} {{.State.Paused}} {{.State.Restarting}}",
+		target,
+	)
 	if err != nil {
 		return "", err
 	}

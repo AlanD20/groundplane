@@ -47,8 +47,9 @@ func validateDatabaseWorkProgress(state *agentpb.BackupRestoreResume, step *agen
 			!bytes.Equal(apply.ExpectedLabelsSha256, observation.ObservedLabelsSha256)) {
 			return invalid()
 		}
-		if verified && (!applied || verification.ContainerId != apply.ContainerId || verification.PointId != restore.PointId ||
-			!proto.Equal(verification.Evidence, restore.ExpectedEvidence) || !backupCheckpointDigest(verification.VerificationSha256)) {
+		if verified &&
+			(!applied || verification.ContainerId != apply.ContainerId || verification.PointId != restore.PointId ||
+				!proto.Equal(verification.Evidence, restore.ExpectedEvidence) || !backupCheckpointDigest(verification.VerificationSha256)) {
 			return invalid()
 		}
 	} else {
@@ -86,7 +87,11 @@ func validateDatabaseWorkProgress(state *agentpb.BackupRestoreResume, step *agen
 	return validateDatabaseConsumerCursor(state, step, recovering)
 }
 
-func validateDatabaseConsumerCursor(state *agentpb.BackupRestoreResume, step *agentpb.BackupStepAuthority, recovering bool) error {
+func validateDatabaseConsumerCursor(
+	state *agentpb.BackupRestoreResume,
+	step *agentpb.BackupStepAuthority,
+	recovering bool,
+) error {
 	progress := state.DatabaseProgress
 	phase := progress.ConsumerPhase
 	if phase == agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_UNSPECIFIED {

@@ -16,7 +16,10 @@ type ReleaseCompletion struct {
 	Receipt *releaseexecution.CompletionReceipt
 }
 
-func (journal *Journal) LoadReleaseCompletion(ctx context.Context, input releaseexecution.Input) (*ReleaseCompletion, error) {
+func (journal *Journal) LoadReleaseCompletion(
+	ctx context.Context,
+	input releaseexecution.Input,
+) (*ReleaseCompletion, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -39,7 +42,11 @@ func (journal *Journal) LoadReleaseCompletion(ctx context.Context, input release
 	return &ReleaseCompletion{Attempt: state.Attempt, Report: *state.Release, Receipt: state.Completion}, nil
 }
 
-func (journal *Journal) AcknowledgeReleaseCompletion(ctx context.Context, input releaseexecution.Input, ack *agentpb.ReleaseWorkCompletionAck) (releaseexecution.CompletionReceipt, error) {
+func (journal *Journal) AcknowledgeReleaseCompletion(
+	ctx context.Context,
+	input releaseexecution.Input,
+	ack *agentpb.ReleaseWorkCompletionAck,
+) (releaseexecution.CompletionReceipt, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return releaseexecution.CompletionReceipt{}, err

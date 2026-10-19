@@ -24,7 +24,11 @@ type Failure struct {
 	RecordedAt      time.Time                        `json:"recorded_at"`
 }
 
-func (failure Failure) Validate(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture) error {
+func (failure Failure) Validate(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+) error {
 	if err := capture.ValidateFor(attempt, input); err != nil {
 		return err
 	}
@@ -52,7 +56,12 @@ func (failure Failure) ValidateEnvelope(attempt workexecution.Attempt) error {
 	return nil
 }
 
-func EncodeFailure(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture, failure Failure) ([]byte, workexecution.Input, error) {
+func EncodeFailure(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+	failure Failure,
+) ([]byte, workexecution.Input, error) {
 	if err := failure.Validate(attempt, input, capture); err != nil {
 		return nil, workexecution.Input{}, err
 	}
@@ -73,7 +82,13 @@ func EncodeFailure(attempt workexecution.Attempt, input *agentpb.ServiceLifecycl
 		SHA256: hex.EncodeToString(digest[:])}, nil
 }
 
-func DecodeFailure(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture, raw []byte, reference workexecution.Input) (Failure, error) {
+func DecodeFailure(
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture RecoveryCapture,
+	raw []byte,
+	reference workexecution.Input,
+) (Failure, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return Failure{}, invalid()
 	}

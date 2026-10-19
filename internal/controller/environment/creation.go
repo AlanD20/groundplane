@@ -274,7 +274,11 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	}
 	capture := environmentprovision.Input{
 		TaskID: taskID, WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
-		Scope:  workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.ID},
+		Scope: workexecution.Scope{
+			TenantID:      project.Record.TenantID,
+			ProjectID:     project.Record.ID,
+			EnvironmentID: environment.ID,
+		},
 		HostID: placement.HostID, VolumeRoot: service.volumeRoot, Environment: environment, CreatedAt: now,
 	}
 	if err := capture.Validate(); err != nil {

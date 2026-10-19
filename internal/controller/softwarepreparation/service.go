@@ -110,7 +110,13 @@ func (service *Service) Start(ctx context.Context, request Request, key string) 
 		input.ControllerCatalogSHA256 = sha256Value(input.ControllerToolCatalog)
 	}
 	now := service.now().UTC()
-	capture := preparationrecord.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan), Input: input, CreatedAt: now}
+	capture := preparationrecord.Capture{
+		TaskID:     ids.New(ids.KindTask),
+		WorkItemID: ids.New(ids.KindWorkItem),
+		PlanID:     ids.New(ids.KindPlan),
+		Input:      input,
+		CreatedAt:  now,
+	}
 	reference, err := capture.Reference()
 	if err != nil {
 		return Accepted{}, err

@@ -18,8 +18,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (service *WorkReports) RecoverEntry(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.EntryConfigurationWorkRecoveryReportRequest) (*agentpb.EntryConfigurationWorkRecoveryReportAck, error) {
-	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 || len(request.Report) > entryexecution.MaximumRecoveryBytes {
+func (service *WorkReports) RecoverEntry(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.EntryConfigurationWorkRecoveryReportRequest,
+) (*agentpb.EntryConfigurationWorkRecoveryReportAck, error) {
+	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 ||
+		len(request.Report) > entryexecution.MaximumRecoveryBytes {
 		return nil, errs.New(errs.KindValidationFailed, "Entry recovery report is missing or invalid")
 	}
 	guards, err := authorization.Conditions()

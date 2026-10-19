@@ -12,9 +12,19 @@ import (
 // RetireCapturePins releases the exact captured Secret set after the caller
 // proves settled work and expiry. It advances at most one release batch. The
 // collecting Task prevents dispatch and Retry throughout the release.
-func RetireCapturePins(ctx context.Context, store workqueue.Store, revision int64, capture WorkCapture, guards []keyvalue.Condition) (bool, workqueue.Change, error) {
-	if ctx == nil || store == nil || revision <= 0 || capture.Validate() != nil || capture.Pins == nil || len(guards) == 0 {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Attach Secret release requires captured pins and settled-work comparisons")
+func RetireCapturePins(
+	ctx context.Context,
+	store workqueue.Store,
+	revision int64,
+	capture WorkCapture,
+	guards []keyvalue.Condition,
+) (bool, workqueue.Change, error) {
+	if ctx == nil || store == nil || revision <= 0 || capture.Validate() != nil || capture.Pins == nil ||
+		len(guards) == 0 {
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Attach Secret release requires captured pins and settled-work comparisons",
+		)
 	}
 	pins, err := tasksecretpins.NewEtcdRepository(store, capture.BackingProjectID)
 	if err != nil {
@@ -53,7 +63,13 @@ func RetireCapturePins(ctx context.Context, store workqueue.Store, revision int6
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
-	result, err := queue.Commit(ctx, workqueue.Change{Conditions: append(append([]keyvalue.Condition(nil), guards...), conditions...), Mutations: mutations})
+	result, err := queue.Commit(
+		ctx,
+		workqueue.Change{
+			Conditions: append(append([]keyvalue.Condition(nil), guards...), conditions...),
+			Mutations:  mutations,
+		},
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	return false, workqueue.Change{}, err
 }

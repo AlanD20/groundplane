@@ -62,7 +62,10 @@ func (journal *Journal) PrepareEnvironmentRemoval(ctx context.Context, input hie
 	state.EnvironmentRemoval = &EnvironmentRemovalRecord{
 		Recovery:      input.Recovery,
 		EnvironmentID: input.Removal.EnvironmentId, Directory: input.Removal.ExpectedVolumeDir,
-		Source: workexecution.Input{ID: input.Removal.CapturedSource.InputId, SHA256: hex.EncodeToString(input.Removal.CapturedSource.Sha256)},
+		Source: workexecution.Input{
+			ID:     input.Removal.CapturedSource.InputId,
+			SHA256: hex.EncodeToString(input.Removal.CapturedSource.Sha256),
+		},
 		Report: hierarchyexecution.EnvironmentReport{Progress: next},
 	}
 	state.Sequence, state.UpdatedAt = next.Sequence, next.UpdatedAt
@@ -96,7 +99,10 @@ func (journal *Journal) AcknowledgeEnvironmentRemoval(ctx context.Context, input
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) EnvironmentRemoval(ctx context.Context, input hierarchyexecution.EnvironmentInput) (*EnvironmentRemovalRecord, error) {
+func (journal *Journal) EnvironmentRemoval(
+	ctx context.Context,
+	input hierarchyexecution.EnvironmentInput,
+) (*EnvironmentRemovalRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err

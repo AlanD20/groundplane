@@ -49,8 +49,10 @@ func HookCheckpointConditions(
 		return nil, err
 	}
 	progress := record.Progress
-	if record.TaskID != attempt.TaskID || record.WorkItemID != attempt.WorkItemID || record.Input != attempt.Input || record.ActiveHookID != executionID ||
-		progress.AttemptID != attempt.ID || !progress.InFlight ||
+	if record.TaskID != attempt.TaskID || record.WorkItemID != attempt.WorkItemID || record.Input != attempt.Input ||
+		record.ActiveHookID != executionID ||
+		progress.AttemptID != attempt.ID ||
+		!progress.InFlight ||
 		progress.BeganAt == nil ||
 		progress.BeganAt.Before(*attempt.StartedAt) ||
 		progress.UpdatedAt.Before(*progress.BeganAt) ||

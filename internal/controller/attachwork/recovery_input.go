@@ -12,7 +12,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (owner *Reports) LoadRecoveryAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.AttachProvisionRecoveryAssignment, error) {
+func (owner *Reports) LoadRecoveryAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.AttachProvisionRecoveryAssignment, error) {
 	if !view.CurrentExecutor || !view.ActiveAttempt || view.Work.Task.Task.CollectionStartedAt != nil ||
 		!view.Work.Task.Task.PublicationComplete || workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
 		return nil, errs.New(errs.KindStateConflict, "Attach inspection no longer owns active execution")
@@ -26,7 +29,11 @@ func (owner *Reports) LoadRecoveryAssignment(ctx context.Context, view workqueue
 
 // Recovery loads inspection authority without opening encrypted credentials.
 // The work's original generation remains pinned while effects are unresolved.
-func (owner *Inputs) Recovery(ctx context.Context, view workqueue.View, attempt workexecution.Attempt) (attachexecution.ProvisionRecoveryInput, []keyvalue.Condition, error) {
+func (owner *Inputs) Recovery(
+	ctx context.Context,
+	view workqueue.View,
+	attempt workexecution.Attempt,
+) (attachexecution.ProvisionRecoveryInput, []keyvalue.Condition, error) {
 	saved, err := owner.repository.LoadRecovery(ctx, view)
 	if err != nil {
 		return attachexecution.ProvisionRecoveryInput{}, nil, err
@@ -46,7 +53,10 @@ func (owner *Inputs) Recovery(ctx context.Context, view workqueue.View, attempt 
 		return attachexecution.ProvisionRecoveryInput{}, nil, err
 	}
 	if capture.SettlesInController() || authority != expected {
-		return attachexecution.ProvisionRecoveryInput{}, nil, errs.New(errs.KindStateConflict, "Attach inspection differs from the original provisioning input")
+		return attachexecution.ProvisionRecoveryInput{}, nil, errs.New(
+			errs.KindStateConflict,
+			"Attach inspection differs from the original provisioning input",
+		)
 	}
 	if input.RequiresConsumer() {
 		input.Consumer, err = capture.Consumer()
@@ -57,6 +67,9 @@ func (owner *Inputs) Recovery(ctx context.Context, view workqueue.View, attempt 
 	if err := input.Validate(); err != nil {
 		return attachexecution.ProvisionRecoveryInput{}, nil, err
 	}
-	guards := append(source.Conditions, keyvalue.Condition{Key: attachprovision.RecoveryKey(view.Item.Item.ID), ModRevision: saved.Revision})
+	guards := append(
+		source.Conditions,
+		keyvalue.Condition{Key: attachprovision.RecoveryKey(view.Item.Item.ID), ModRevision: saved.Revision},
+	)
 	return input, guards, nil
 }

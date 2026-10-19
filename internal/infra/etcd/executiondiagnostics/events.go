@@ -43,7 +43,12 @@ type Events struct {
 // Events returns retained observations at the same revision as membership and
 // stage state. An expired cursor is explicit; callers must not silently bridge
 // a missing interval or interpret it as an execution failure.
-func (repository *Repository) Events(ctx context.Context, taskID, workID, attemptID string, after uint64, revision int64) (Events, error) {
+func (repository *Repository) Events(
+	ctx context.Context,
+	taskID, workID, attemptID string,
+	after uint64,
+	revision int64,
+) (Events, error) {
 	snapshot, err := repository.Read(ctx, taskID, workID, attemptID, revision)
 	if err != nil {
 		return Events{}, err
@@ -52,7 +57,14 @@ func (repository *Repository) Events(ctx context.Context, taskID, workID, attemp
 	if err != nil {
 		return Events{}, err
 	}
-	result := Events{Items: []Event{}, Incomplete: snapshot.Incomplete, Expired: snapshot.Expired, Revision: snapshot.ReadRevision, FinishedAt: snapshot.FinishedAt, Outcome: snapshot.Outcome}
+	result := Events{
+		Items:      []Event{},
+		Incomplete: snapshot.Incomplete,
+		Expired:    snapshot.Expired,
+		Revision:   snapshot.ReadRevision,
+		FinishedAt: snapshot.FinishedAt,
+		Outcome:    snapshot.Outcome,
+	}
 	if record == nil {
 		result.Expired = result.Expired || after != 0
 		result.Incomplete = result.Incomplete || snapshot.Record != nil
@@ -75,8 +87,15 @@ func (repository *Repository) Events(ctx context.Context, taskID, workID, attemp
 	return result, nil
 }
 
-func (repository *Repository) readEvents(ctx context.Context, taskID, workID, attemptID string, revision int64) (*eventRecord, int64, error) {
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{EventsKey(attemptID)}, Revision: revision})
+func (repository *Repository) readEvents(
+	ctx context.Context,
+	taskID, workID, attemptID string,
+	revision int64,
+) (*eventRecord, int64, error) {
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{EventsKey(attemptID)}, Revision: revision},
+	)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -97,24 +116,33 @@ func (repository *Repository) readEvents(ctx context.Context, taskID, workID, at
 	if err != nil {
 		return nil, 0, err
 	}
-	if record.TaskID != taskID || record.WorkItemID != workID || record.AttemptID != attemptID || len(record.Items) < 1 || len(record.Items) > maximumEvents {
+	if record.TaskID != taskID || record.WorkItemID != workID || record.AttemptID != attemptID ||
+		len(record.Items) < 1 ||
+		len(record.Items) > maximumEvents {
 		return nil, 0, invalid()
 	}
 	for index, event := range record.Items {
 		if event.Sequence == 0 || !recordcodec.IsCanonicalUTC(event.RecordedAt) || event.Stage.Validate() != nil {
 			return nil, 0, invalid()
 		}
-		if event.Stage.StartedAt != nil && event.Stage.StartedAt.After(event.RecordedAt) || event.Stage.FinishedAt != nil && event.Stage.FinishedAt.After(event.RecordedAt) {
+		if event.Stage.StartedAt != nil && event.Stage.StartedAt.After(event.RecordedAt) ||
+			event.Stage.FinishedAt != nil && event.Stage.FinishedAt.After(event.RecordedAt) {
 			return nil, 0, invalid()
 		}
-		if index > 0 && (event.Sequence-1 != record.Items[index-1].Sequence || event.RecordedAt.Before(record.Items[index-1].RecordedAt)) {
+		if index > 0 &&
+			(event.Sequence-1 != record.Items[index-1].Sequence || event.RecordedAt.Before(record.Items[index-1].RecordedAt)) {
 			return nil, 0, invalid()
 		}
 	}
 	return &record, read.Values[0].ModRevision, nil
 }
 
-func (repository *Repository) prepareEvent(ctx context.Context, next Record, stage workexecution.Stage, revision int64) (keyvalue.Condition, keyvalue.Mutation, error) {
+func (repository *Repository) prepareEvent(
+	ctx context.Context,
+	next Record,
+	stage workexecution.Stage,
+	revision int64,
+) (keyvalue.Condition, keyvalue.Mutation, error) {
 	previous, modRevision, err := repository.readEvents(ctx, next.TaskID, next.WorkItemID, next.AttemptID, revision)
 	if err != nil {
 		return keyvalue.Condition{}, keyvalue.Mutation{}, err
@@ -138,7 +166,14 @@ func (repository *Repository) prepareEvent(ctx context.Context, next Record, sta
 			return keyvalue.Condition{}, keyvalue.Mutation{}, err
 		}
 		if len(value) <= maximumBytes {
-			return keyvalue.Condition{Key: EventsKey(next.AttemptID), ModRevision: modRevision}, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: EventsKey(next.AttemptID), Value: value}, nil
+			return keyvalue.Condition{
+				Key:         EventsKey(next.AttemptID),
+				ModRevision: modRevision,
+			}, keyvalue.Mutation{
+				Type:  keyvalue.MutationPut,
+				Key:   EventsKey(next.AttemptID),
+				Value: value,
+			}, nil
 		}
 		clear(value)
 		if len(record.Items) == 1 {

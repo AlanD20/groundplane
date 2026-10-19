@@ -10,7 +10,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func retainRunnerRuntimeImages(retention *imageRetention, read func(string, func(keyvalue.KeyValue) error) error) error {
+func retainRunnerRuntimeImages(
+	retention *imageRetention,
+	read func(string, func(keyvalue.KeyValue) error) error,
+) error {
 	if err := read(runnerwork.AllocationPlanKey(""), func(value keyvalue.KeyValue) error {
 		plan, err := runnerwork.DecodeAllocationPlan(value.Value)
 		if err != nil {
@@ -39,7 +42,12 @@ func retainRunnerRuntimeImages(retention *imageRetention, read func(string, func
 	})
 }
 
-func (service *Service) retainRunnerWorkImages(ctx context.Context, retention *imageRetention, value keyvalue.KeyValue, revision int64) error {
+func (service *Service) retainRunnerWorkImages(
+	ctx context.Context,
+	retention *imageRetention,
+	value keyvalue.KeyValue,
+	revision int64,
+) error {
 	item, err := workqueue.DecodeItem(value.Value)
 	if err != nil {
 		return err

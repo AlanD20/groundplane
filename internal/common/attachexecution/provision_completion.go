@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func EncodeProvisionCompletion(input ProvisionInput, progress ProvisionProgress) (*agentpb.AttachProvisionCompletionRequest, error) {
+func EncodeProvisionCompletion(
+	input ProvisionInput,
+	progress ProvisionProgress,
+) (*agentpb.AttachProvisionCompletionRequest, error) {
 	authority, err := input.Authority()
 	if err != nil {
 		return nil, err
@@ -32,15 +35,24 @@ func EncodeProvisionCompletion(input ProvisionInput, progress ProvisionProgress)
 		CheckpointEvidence: &agentpb.WorkInputReference{InputId: checkpoint.Evidence.ID, Sha256: digest}}, nil
 }
 
-func DecodeProvisionCompletion(input ProvisionInput, progress ProvisionProgress, ack *agentpb.AttachProvisionCompletionAck) (workexecution.Attempt, error) {
+func DecodeProvisionCompletion(
+	input ProvisionInput,
+	progress ProvisionProgress,
+	ack *agentpb.AttachProvisionCompletionAck,
+) (workexecution.Attempt, error) {
 	authority, err := input.Authority()
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.CheckpointEvidence == nil || ack.BindingResult == nil ||
-		ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil || !progress.Complete(input.Attempt, authority) ||
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.CheckpointEvidence == nil ||
+		ack.BindingResult == nil ||
+		ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil ||
+		!progress.Complete(input.Attempt, authority) ||
 		ack.CheckpointSequence != progress.Sequence {
-		return workexecution.Attempt{}, invalid("Attach provisioning completion lacks its final checkpoint or binding result")
+		return workexecution.Attempt{}, invalid(
+			"Attach provisioning completion lacks its final checkpoint or binding result",
+		)
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, input.Attempt.Executor)
 	if err != nil || !workexecution.SameAssignment(claimed, input.Attempt) {
@@ -50,7 +62,10 @@ func DecodeProvisionCompletion(input ProvisionInput, progress ProvisionProgress,
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	evidence := workexecution.Input{ID: ack.CheckpointEvidence.InputId, SHA256: hex.EncodeToString(ack.CheckpointEvidence.Sha256)}
+	evidence := workexecution.Input{
+		ID:     ack.CheckpointEvidence.InputId,
+		SHA256: hex.EncodeToString(ack.CheckpointEvidence.Sha256),
+	}
 	binding := workexecution.Input{ID: ack.BindingResult.InputId, SHA256: hex.EncodeToString(ack.BindingResult.Sha256)}
 	finished, outcome := ack.FinishedAt.AsTime(), workexecution.Outcome(ack.Outcome)
 	if evidence != checkpoint.Evidence || binding.Validate() != nil || finished.Before(progress.UpdatedAt) ||

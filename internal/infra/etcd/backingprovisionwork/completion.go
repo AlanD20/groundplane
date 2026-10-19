@@ -53,7 +53,12 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 		progress.Last.ContainerID != observation.ContainerID || observation.ObservedAt.Before(progress.Last.At) {
 		return prepared, result, invalid("backing creation has not proved every captured execution stage")
 	}
-	workload, err := backingruntimefact.Workload(procedure.Runtime, procedure.ServiceId, input.PlanID, procedure.RenderGeneration)
+	workload, err := backingruntimefact.Workload(
+		procedure.Runtime,
+		procedure.ServiceId,
+		input.PlanID,
+		procedure.RenderGeneration,
+	)
 	if err != nil {
 		return prepared, result, err
 	}
@@ -70,8 +75,10 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 		return prepared, result, err
 	}
 	defer clear(runtimeBytes)
-	if !found || projection.Record.EnvironmentID != procedure.EnvironmentId || projection.Record.RevisionID != procedure.TaskId ||
-		projection.Record.RenderGeneration != procedure.RenderGeneration || !bytes.Equal(projection.Record.ComposeArtifact, runtimeBytes) {
+	if !found || projection.Record.EnvironmentID != procedure.EnvironmentId ||
+		projection.Record.RevisionID != procedure.TaskId ||
+		projection.Record.RenderGeneration != procedure.RenderGeneration ||
+		!bytes.Equal(projection.Record.ComposeArtifact, runtimeBytes) {
 		return prepared, result, invalid("backing creation applied projection differs from its captured runtime")
 	}
 	if _, err := repository.LoadConfiguration(ctx, view.Work); err != nil {
@@ -82,17 +89,27 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 		return prepared, result, err
 	}
 	configuration := procedure.Configuration
-	reference := runtimeconfiguration.Reference{ID: configuration.ConfigurationId, EnvironmentID: configuration.EnvironmentId,
-		Generation: configuration.Generation, SHA256: hex.EncodeToString(configuration.Sha256)}
+	reference := runtimeconfiguration.Reference{
+		ID:            configuration.ConfigurationId,
+		EnvironmentID: configuration.EnvironmentId,
+		Generation:    configuration.Generation,
+		SHA256:        hex.EncodeToString(configuration.Sha256),
+	}
 	fileConditions, fileMutation, err := sources.PrepareInitialAcknowledgement(ctx, reference, view.Work.ReadRevision)
 	if err != nil {
 		return prepared, result, err
 	}
 	prepared.Conditions = append(prepared.Conditions, guard)
 	for _, condition := range fileConditions {
-		prepared.Conditions = append(prepared.Conditions, keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision})
+		prepared.Conditions = append(
+			prepared.Conditions,
+			keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision},
+		)
 	}
-	prepared.Mutations = append(prepared.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: fileMutation.Key, Value: fileMutation.Value})
+	prepared.Mutations = append(
+		prepared.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: fileMutation.Key, Value: fileMutation.Value},
+	)
 	queue, err := workqueue.NewRepository(repository.store)
 	if err != nil {
 		return prepared, result, err
@@ -111,7 +128,11 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 	} else if view.Work.Item.Item.ForwardRevoked {
 		outcome = workexecution.Superseded
 	}
-	completion.At, completion.Result = at, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: true}
+	completion.At, completion.Result = at, workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       evidence,
+		EffectsSettled: true,
+	}
 	_, terminal, err := workexecution.Finish(view.Work.Item.Item, view.Attempt.Attempt, completion.Result, at)
 	if err != nil {
 		return prepared, result, err
@@ -122,7 +143,10 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 		return prepared, result, err
 	}
 	prepared.Conditions = append(prepared.Conditions, keyvalue.Condition{Key: ResultKey(terminal.ID)})
-	prepared.Mutations = append(prepared.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ResultKey(terminal.ID), Value: receipt})
+	prepared.Mutations = append(
+		prepared.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ResultKey(terminal.ID), Value: receipt},
+	)
 	applied := environmentprojection.CloneEnvironmentComposeProjection(projection.Record)
 	if backingruntimepublication.IsManagedDatabase(applied, procedure.ServiceId) {
 		conditions, err := backingruntimepublication.Prepare(ctx, repository.store, backingruntimepublication.Input{
@@ -141,7 +165,10 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 	}
 	projectionKey := environmentprojection.EnvironmentComposeProjectionStorageKey(procedure.EnvironmentId)
 	prepared.Conditions = append(prepared.Conditions, keyvalue.Condition{Key: projectionKey})
-	prepared.Mutations = append(prepared.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: projectionKey, Value: value})
+	prepared.Mutations = append(
+		prepared.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: projectionKey, Value: value},
+	)
 	if applied.BackingRuntime != nil && applied.BackingRuntime.Adapter == "postgres" {
 		backing, err := backingpostgresruntime.FromProvisioning(applied)
 		if err != nil {
@@ -153,7 +180,10 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 		}
 		key := backingpostgresruntime.Key(procedure.EnvironmentId, procedure.ServiceId)
 		prepared.Conditions = append(prepared.Conditions, keyvalue.Condition{Key: key})
-		prepared.Mutations = append(prepared.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
+		prepared.Mutations = append(
+			prepared.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value},
+		)
 	}
 	directories, err := repository.prepareDirectoryState(ctx, view.Work, input, true)
 	if err != nil {
@@ -171,9 +201,17 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 	return prepared, evidence, nil
 }
 
-func (repository *Repository) prepareDirectoryState(ctx context.Context, view workqueue.View, input Input, ready bool) (workqueue.Change, error) {
+func (repository *Repository) prepareDirectoryState(
+	ctx context.Context,
+	view workqueue.View,
+	input Input,
+	ready bool,
+) (workqueue.Change, error) {
 	key := hierarchy.EnvironmentKey(view.Task.Task.Scope.EnvironmentID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -198,12 +236,15 @@ func (repository *Repository) prepareDirectoryState(ctx context.Context, view wo
 	if !ready && current.CreateTaskID != view.Task.Task.ID {
 		return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: stored.ModRevision}}}, nil
 	}
-	if current.ID != input.Environment.ID || current.CreateTaskID != view.Task.Task.ID || current.ProjectID != input.Environment.ProjectID ||
-		current.VolumeDir != input.Environment.VolumeDir || current.DeletionTaskID != "" {
+	if current.ID != input.Environment.ID || current.CreateTaskID != view.Task.Task.ID ||
+		current.ProjectID != input.Environment.ProjectID ||
+		current.VolumeDir != input.Environment.VolumeDir ||
+		current.DeletionTaskID != "" {
 		return workqueue.Change{}, invalid("backing creation directory no longer belongs to this action")
 	}
 	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: stored.ModRevision}}}
-	if current.ProvisioningState == hierarchy.EnvironmentProvisioningReady || !ready && current.ProvisioningState == hierarchy.EnvironmentProvisioningFailed {
+	if current.ProvisioningState == hierarchy.EnvironmentProvisioningReady ||
+		!ready && current.ProvisioningState == hierarchy.EnvironmentProvisioningFailed {
 		return change, nil
 	}
 	if current.ProvisioningState == hierarchy.EnvironmentProvisioningFailed {

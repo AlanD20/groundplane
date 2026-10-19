@@ -24,7 +24,12 @@ func retainResolverAppliedImages(retention *imageRetention, value keyvalue.KeyVa
 	return nil
 }
 
-func (service *Service) retainResolverWorkImages(ctx context.Context, retention *imageRetention, value keyvalue.KeyValue, revision int64) error {
+func (service *Service) retainResolverWorkImages(
+	ctx context.Context,
+	retention *imageRetention,
+	value keyvalue.KeyValue,
+	revision int64,
+) error {
 	item, err := workqueue.DecodeItem(value.Value)
 	if err != nil {
 		return err
@@ -32,7 +37,8 @@ func (service *Service) retainResolverWorkImages(ctx context.Context, retention 
 	if value.Key != workqueue.ItemKey(item.ID) {
 		return errs.New(errs.KindStateConflict, "CoreDNS image work identity differs from its stored key")
 	}
-	if item.Operation != workexecution.Resolver || item.Phase == workexecution.Settled && item.Outcome != workexecution.Failed {
+	if item.Operation != workexecution.Resolver ||
+		item.Phase == workexecution.Settled && item.Outcome != workexecution.Failed {
 		return nil
 	}
 	queue, err := workqueue.NewRepository(service.store)

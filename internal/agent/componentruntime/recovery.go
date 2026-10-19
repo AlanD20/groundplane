@@ -10,8 +10,18 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange Exchange) (workexecution.Attempt, error) {
-	saved, err := executor.journal.PrepareComponentRecovery(ctx, input.attempt, input.procedure, *input.recovery, input.boundary)
+func (executor *Executor) runRecovery(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
+	saved, err := executor.journal.PrepareComponentRecovery(
+		ctx,
+		input.attempt,
+		input.procedure,
+		*input.recovery,
+		input.boundary,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -36,7 +46,13 @@ func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange
 		}
 		saved.Report = &report
 	}
-	raw, evidence, err := componentexecution.EncodeRecoveryReport(input.attempt, *input.recovery, input.procedure, input.boundary, *saved.Report)
+	raw, evidence, err := componentexecution.EncodeRecoveryReport(
+		input.attempt,
+		*input.recovery,
+		input.procedure,
+		input.boundary,
+		*saved.Report,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -44,7 +60,10 @@ func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	ack, err := exchange.RecoverComponent(ctx, &agentpb.ComponentWorkRecoveryReportRequest{Attempt: identity, Report: raw})
+	ack, err := exchange.RecoverComponent(
+		ctx,
+		&agentpb.ComponentWorkRecoveryReportRequest{Attempt: identity, Report: raw},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

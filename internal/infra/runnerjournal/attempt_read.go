@@ -35,7 +35,10 @@ func (journal *Journal) ReadAttempt(ctx context.Context, attempt runnerallocatio
 		progress.Executor != attempt.Executor || progress.Operation != operation ||
 		progress.RunnerID != attempt.Plan.RunnerID || progress.PlanDigest != attempt.Plan.Digest() ||
 		progress.RuntimeEpoch != attempt.Plan.RuntimeEpoch || progress.OwnershipNonce != attempt.OwnershipNonce {
-		return runnerallocation.RunnerRuntimeProgress{}, false, errs.New(errs.KindStateConflict, "Runner journal does not belong to this captured attempt")
+		return runnerallocation.RunnerRuntimeProgress{}, false, errs.New(
+			errs.KindStateConflict,
+			"Runner journal does not belong to this captured attempt",
+		)
 	}
 	return progress, true, nil
 }

@@ -48,11 +48,17 @@ func prepareDefinitionWorkSettlement(snapshot Snapshot, view workqueue.View, uni
 		item.TargetID != unit.Target.ID || item.Input == nil || item.ForwardRevoked ||
 		item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Phase != workexecution.Ready ||
 		sourceRevision <= 0 || sourceRevision > view.ReadRevision {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Resource definition cannot settle outside its current ready Apply work")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Resource definition cannot settle outside its current ready Apply work",
+		)
 	}
 	expected, err := DefinitionWorkInput(task, unit)
 	if err != nil || expected != *item.Input {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Resource definition work input differs from the accepted Blueprint")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Resource definition work input differs from the accepted Blueprint",
+		)
 	}
 	operationID := ids.DeriveAt(ids.KindOperation, task.CreatedAt, item.ID, "definition-settlement")
 	var receipt MutationPlan
@@ -87,7 +93,10 @@ func prepareDefinitionWorkSettlement(snapshot Snapshot, view workqueue.View, uni
 		return workqueue.Change{}, err
 	}
 	digest := sha256.Sum256(value)
-	evidence := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, task.CreatedAt, item.ID, "definition-result"), SHA256: hex.EncodeToString(digest[:])}
+	evidence := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, task.CreatedAt, item.ID, "definition-result"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	settled, err := workqueue.PrepareUnstartedSettlement(view.Task, view.Item, workexecution.Completion{
 		Outcome: workexecution.Succeeded, Evidence: evidence, EffectsSettled: true,
 	}, at)

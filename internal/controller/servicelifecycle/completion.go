@@ -35,7 +35,10 @@ func (service *WorkReports) CompleteLifecycle(ctx context.Context, authorization
 		return nil, err
 	}
 	if view.Checkpoint.Record == nil || view.Checkpoint.Record.Evidence != evidence {
-		return nil, errs.New(errs.KindStateConflict, "Service lifecycle completion differs from its acknowledged checkpoint")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle completion differs from its acknowledged checkpoint",
+		)
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
 		captured, err := service.records.LoadLifecycleInput(ctx, view.Work)
@@ -56,7 +59,11 @@ func (service *WorkReports) CompleteLifecycle(ctx context.Context, authorization
 		if err != nil {
 			return nil, err
 		}
-		completion.Result = workexecution.Completion{Outcome: completedLifecycleOutcome(view.Work), Evidence: evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        completedLifecycleOutcome(view.Work),
+			Evidence:       evidence,
+			EffectsSettled: true,
+		}
 		completion.At = at
 		change, err := workqueue.PrepareCompletion(completion)
 		if err != nil {
@@ -69,7 +76,10 @@ func (service *WorkReports) CompleteLifecycle(ctx context.Context, authorization
 			return nil, err
 		}
 		if !result.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Service lifecycle completion ownership changed; resend the saved result")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Service lifecycle completion ownership changed; resend the saved result",
+			)
 		}
 		view, err = service.reportView(ctx, authorization, request.Attempt)
 		if err != nil {
@@ -79,10 +89,20 @@ func (service *WorkReports) CompleteLifecycle(ctx context.Context, authorization
 	attempt := view.Attempt.Attempt
 	if attempt.FinishedAt == nil || attempt.Result == nil || *attempt.Result != evidence ||
 		(attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled && attempt.Outcome != workexecution.Superseded) {
-		return nil, errs.New(errs.KindStateConflict, "saved Service lifecycle result does not acknowledge successful completion")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"saved Service lifecycle result does not acknowledge successful completion",
+		)
 	}
-	return &agentpb.ServiceLifecycleCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: proto.CloneOf(request.Evidence),
-		StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt), Outcome: string(attempt.Outcome)}, nil
+	return &agentpb.ServiceLifecycleCompletionAck{
+		Attempt:  proto.CloneOf(request.Attempt),
+		Evidence: proto.CloneOf(request.Evidence),
+		StartedAt: timestamppb.New(
+			*attempt.StartedAt,
+		),
+		FinishedAt: timestamppb.New(*attempt.FinishedAt),
+		Outcome:    string(attempt.Outcome),
+	}, nil
 }
 
 // A proven host effect remains applied, but cannot turn cancelled or superseded

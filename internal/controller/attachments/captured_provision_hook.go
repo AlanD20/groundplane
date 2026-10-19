@@ -18,8 +18,11 @@ import (
 
 // ResolveCapturedProvisionHook opens the generation published with the work.
 // It does not reread Secrets, current backing definitions or old Task records.
-func (service *FactService) ResolveCapturedProvisionHook(ctx context.Context, generation blueprintattachinputs.Generation,
-	scope workexecution.Scope, consume attachplan.HookInputConsumer,
+func (service *FactService) ResolveCapturedProvisionHook(
+	ctx context.Context,
+	generation blueprintattachinputs.Generation,
+	scope workexecution.Scope,
+	consume attachplan.HookInputConsumer,
 ) error {
 	if service == nil || ctx == nil || consume == nil || blueprintattachinputs.Validate(generation) != nil ||
 		generation.SettlesInController() || generation.Provision != nil || generation.Hook.Attach == nil ||
@@ -31,10 +34,21 @@ func (service *FactService) ResolveCapturedProvisionHook(ctx context.Context, ge
 	if err != nil {
 		return err
 	}
-	record, err := attachrecord.NewPendingAttachRecord(generation.AttachID, generation.EnvironmentID,
-		generation.AttachName, generation.BackingProjectID, generation.BackingEnvironmentID, generation.BackingServiceID,
-		generation.BackingNetworkID, generation.ConsumerServiceID, generation.CredentialOwnerID, nil,
-		generation.FactSets, generation.ParentTaskID, createdAt)
+	record, err := attachrecord.NewPendingAttachRecord(
+		generation.AttachID,
+		generation.EnvironmentID,
+		generation.AttachName,
+		generation.BackingProjectID,
+		generation.BackingEnvironmentID,
+		generation.BackingServiceID,
+		generation.BackingNetworkID,
+		generation.ConsumerServiceID,
+		generation.CredentialOwnerID,
+		nil,
+		generation.FactSets,
+		generation.ParentTaskID,
+		createdAt,
+	)
 	if err != nil {
 		return err
 	}
@@ -45,9 +59,15 @@ func (service *FactService) ResolveCapturedProvisionHook(ctx context.Context, ge
 			TenantID: scope.TenantID, ProjectID: scope.ProjectID, EnvironmentID: scope.EnvironmentID,
 			ServiceID: generation.ConsumerServiceID}}
 		defer clearBackingHookInput(&input)
-		input.Values = append(input.Values, backinghook.Value{Key: "HOST", Value: []byte(backingendpoint.New(generation.BackingServiceID))})
+		input.Values = append(
+			input.Values,
+			backinghook.Value{Key: "HOST", Value: []byte(backingendpoint.New(generation.BackingServiceID))},
+		)
 		for _, value := range bundle.HookInputs {
-			input.Values = append(input.Values, backinghook.Value{Key: value.Key, Value: append([]byte(nil), value.Value...)})
+			input.Values = append(
+				input.Values,
+				backinghook.Value{Key: value.Key, Value: append([]byte(nil), value.Value...)},
+			)
 		}
 		if generation.ResolvedInputs != nil {
 			expected := taskconfiguration.TaskBackingHookInputSet{ProjectID: generation.BackingProjectID,
@@ -62,7 +82,10 @@ func (service *FactService) ResolveCapturedProvisionHook(ctx context.Context, ge
 				return err
 			}
 		}
-		slices.SortFunc(input.Values, func(left, right backinghook.Value) int { return strings.Compare(left.Key, right.Key) })
+		slices.SortFunc(
+			input.Values,
+			func(left, right backinghook.Value) int { return strings.Compare(left.Key, right.Key) },
+		)
 		for _, expected := range generation.Hook.Inputs {
 			found := false
 			for _, value := range input.Values {

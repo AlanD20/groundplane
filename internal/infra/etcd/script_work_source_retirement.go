@@ -21,8 +21,12 @@ func (repository *ScriptRepository) drainScriptWorkSources(ctx context.Context, 
 ) (bool, scriptsourcepublication.ScriptSourceReleaseFragment, error) {
 	var empty scriptsourcepublication.ScriptSourceReleaseFragment
 	task := view.Task.Task
-	if task.Validate() != nil || task.CollectionStartedAt == nil || task.FinishedAt == nil || task.Progress.Unsettled() != 0 {
-		return false, empty, errs.New(errs.KindStateConflict, "Script input cleanup requires a fully settled Task closed to Retry")
+	if task.Validate() != nil || task.CollectionStartedAt == nil || task.FinishedAt == nil ||
+		task.Progress.Unsettled() != 0 {
+		return false, empty, errs.New(
+			errs.KindStateConflict,
+			"Script input cleanup requires a fully settled Task closed to Retry",
+		)
 	}
 	execution := loaded.Execution
 	if execution.Recovery == nil && execution.State != scriptexecutions.ScriptExecutionNotStarted &&
@@ -37,7 +41,10 @@ func (repository *ScriptRepository) drainScriptWorkSources(ctx context.Context, 
 	defer clear(value.Value)
 	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(value.Value)
 	if err != nil || !manualScriptRootMatches(execution, root) {
-		return false, empty, errs.New(errs.KindStateConflict, "Script retained input membership differs from its captured operation")
+		return false, empty, errs.New(
+			errs.KindStateConflict,
+			"Script retained input membership differs from its captured operation",
+		)
 	}
 	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
@@ -57,7 +64,10 @@ func (repository *ScriptRepository) drainScriptWorkSources(ctx context.Context, 
 	}
 	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing ||
 		root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal || root.RetryDisposition != sourceref.RetryDispositionForbidden {
-		return false, empty, errs.New(errs.KindStateConflict, "Script source cleanup is owned by a different retention operation")
+		return false, empty, errs.New(
+			errs.KindStateConflict,
+			"Script source cleanup is owned by a different retention operation",
+		)
 	}
 	processed, drained, err := authority.ReleaseNext(ctx, execution.OperationID, guards)
 	if err != nil || processed || !drained {

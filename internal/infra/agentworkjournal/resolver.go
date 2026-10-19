@@ -68,17 +68,23 @@ func (record attemptRecord) validateResolver() error {
 		}
 	}
 	if verification := entry.Verification; verification != nil {
-		if verification.Validate(record.Attempt, entry.Layout) != nil || verification.InFlight || verification.Last == nil ||
-			verification.Last.Stage != resolverexecution.VerifyDNS || entry.Proof == nil ||
+		if verification.Validate(record.Attempt, entry.Layout) != nil || verification.InFlight ||
+			verification.Last == nil ||
+			verification.Last.Stage != resolverexecution.VerifyDNS ||
+			entry.Proof == nil ||
 			verification.Last.ServingProofSHA256 != hex.EncodeToString(entry.Proof.ProofSha256) ||
-			!verification.Last.At.Equal(entry.Proof.ObservedAt.AsTime()) || entry.Progress == nil ||
-			verification.Sequence > entry.Progress.Sequence || verification.UpdatedAt.After(entry.Progress.UpdatedAt) {
+			!verification.Last.At.Equal(entry.Proof.ObservedAt.AsTime()) ||
+			entry.Progress == nil ||
+			verification.Sequence > entry.Progress.Sequence ||
+			verification.UpdatedAt.After(entry.Progress.UpdatedAt) {
 			return invalid()
 		}
 	}
 	if entry.FailureReason != "" {
-		if entry.FailureReason != resolverexecution.ExecutionFailed && entry.FailureReason != resolverexecution.Interrupted &&
-			entry.FailureReason != resolverexecution.DeadlineExpired || entry.Progress != nil && entry.Progress.Stage == resolverexecution.Complete {
+		if entry.FailureReason != resolverexecution.ExecutionFailed &&
+			entry.FailureReason != resolverexecution.Interrupted &&
+			entry.FailureReason != resolverexecution.DeadlineExpired ||
+			entry.Progress != nil && entry.Progress.Stage == resolverexecution.Complete {
 			return invalid()
 		}
 		if receipt := entry.Receipt; receipt != nil {
@@ -139,7 +145,8 @@ func (record attemptRecord) validateResolverRecovery() error {
 }
 
 func sameResolverTerminal(active, terminal workexecution.Attempt) bool {
-	if terminal.Validate() != nil || !workexecution.SameAssignment(active, terminal) || terminal.FinishedAt == nil || terminal.Result == nil ||
+	if terminal.Validate() != nil || !workexecution.SameAssignment(active, terminal) || terminal.FinishedAt == nil ||
+		terminal.Result == nil ||
 		(active.StartedAt == nil) != (terminal.StartedAt == nil) {
 		return false
 	}

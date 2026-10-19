@@ -19,9 +19,16 @@ type Recovery struct {
 	exchange RecoveryExchange
 }
 
-func NewRecovery(input releaseexecution.RecoveryInput, journal *agentworkjournal.Journal, exchange RecoveryExchange) (*Recovery, error) {
+func NewRecovery(
+	input releaseexecution.RecoveryInput,
+	journal *agentworkjournal.Journal,
+	exchange RecoveryExchange,
+) (*Recovery, error) {
 	if input.Validate() != nil || input.Input.Attempt.StartedAt == nil || journal == nil || exchange == nil {
-		return nil, errs.New(errs.KindValidationFailed, "Recovery checkpoint delivery requires a started cleanup attempt")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Recovery checkpoint delivery requires a started cleanup attempt",
+		)
 	}
 	return &Recovery{input: input, journal: journal, exchange: exchange}, nil
 }

@@ -33,7 +33,9 @@ func (repository *InputRepository) PrepareCascadeConsumer(ctx context.Context, t
 	if input.Cascade == nil || input.Cascade.ZoneID != task.Task.TargetID ||
 		!slices.Equal(item.Claims, input.Claims(item.Placement.HostID)) ||
 		input.HasHostEffects() != (item.Placement.Executor == workexecution.Agent) {
-		return workqueue.Change{}, checkpointConflict("Backing Zone consumer differs from its captured placement or claims")
+		return workqueue.Change{}, checkpointConflict(
+			"Backing Zone consumer differs from its captured placement or claims",
+		)
 	}
 	fenceKey := deletions.TombstoneKey(string(deletions.DeletionTargetZone), task.Task.TargetID)
 	read, err := repository.read(ctx, []string{fenceKey}, revision)
@@ -55,7 +57,12 @@ func (repository *InputRepository) PrepareCascadeConsumer(ctx context.Context, t
 		return workqueue.Change{}, err
 	}
 	defer func() { keyvalue.ClearMutationValues(ownership.Mutations) }()
-	exclusion, err := attachments.RequireAttachBackupSourceExclusionAbsent(ctx, repository.store, source.Attach.ID, revision)
+	exclusion, err := attachments.RequireAttachBackupSourceExclusionAbsent(
+		ctx,
+		repository.store,
+		source.Attach.ID,
+		revision,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

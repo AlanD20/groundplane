@@ -24,7 +24,12 @@ func (service *Service) PrepareForwardStart(ctx context.Context, view workqueue.
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	storage, err := service.ledger.PostgresPatchConditions(ctx, artifact, view.Work.Item.Item.TargetID, view.Work.ReadRevision)
+	storage, err := service.ledger.PostgresPatchConditions(
+		ctx,
+		artifact,
+		view.Work.Item.Item.TargetID,
+		view.Work.ReadRevision,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

@@ -50,12 +50,23 @@ func Acquire(ctx context.Context) (*Lease, error) {
 		return nil, errs.WrapJoined(errs.KindInternal, err, lease.Close())
 	}
 	if stat.Uid != uint32(os.Geteuid()) || stat.Mode&0o777 != 0o700 {
-		return nil, errs.WrapJoined(errs.KindStateConflict, errs.New(errs.KindStateConflict, "controller ownership directory must be private and owned by the Controller account"), lease.Close())
+		return nil, errs.WrapJoined(
+			errs.KindStateConflict,
+			errs.New(
+				errs.KindStateConflict,
+				"controller ownership directory must be private and owned by the Controller account",
+			),
+			lease.Close(),
+		)
 	}
 	if err := unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		closeErr := lease.Close()
 		if errors.Is(err, unix.EWOULDBLOCK) {
-			return nil, errs.WrapJoined(errs.KindStateConflict, errs.New(errs.KindStateConflict, "another Controller owns local execution"), closeErr)
+			return nil, errs.WrapJoined(
+				errs.KindStateConflict,
+				errs.New(errs.KindStateConflict, "another Controller owns local execution"),
+				closeErr,
+			)
 		}
 		return nil, errs.WrapJoined(errs.KindInternal, err, closeErr)
 	}

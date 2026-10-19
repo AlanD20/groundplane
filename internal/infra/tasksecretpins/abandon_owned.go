@@ -7,7 +7,11 @@ import (
 
 // AbandonOwned removes at most one preparation batch for cancelled native work.
 // Every write compares the caller's stopped-work guards and root absence.
-func (repository *Repository) AbandonOwned(ctx context.Context, operationID, taskID, workID string, guards []Condition) (bool, error) {
+func (repository *Repository) AbandonOwned(
+	ctx context.Context,
+	operationID, taskID, workID string,
+	guards []Condition,
+) (bool, error) {
 	if ctx == nil || ids.Validate(ids.KindOperation, operationID) != nil || ids.Validate(ids.KindTask, taskID) != nil ||
 		ids.Validate(ids.KindWorkItem, workID) != nil || len(guards) == 0 {
 		return false, validation("Secret abandonment requires captured work ownership")
@@ -24,7 +28,8 @@ func (repository *Repository) AbandonOwned(ctx context.Context, operationID, tas
 	}
 	value := read.Values[0]
 	descriptor, err := decodeSet(value.Value)
-	if err != nil || descriptor.OperationID != operationID || descriptor.TaskID != taskID || descriptor.WorkItemID != workID ||
+	if err != nil || descriptor.OperationID != operationID || descriptor.TaskID != taskID ||
+		descriptor.WorkItemID != workID ||
 		(descriptor.Phase != phasePreparing && descriptor.Phase != phaseSealed && descriptor.Phase != phaseAbandoning) {
 		return false, conflict("Secret preparation belongs to different work")
 	}

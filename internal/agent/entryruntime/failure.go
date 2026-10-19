@@ -12,7 +12,12 @@ import (
 
 // Failure delivery never performs host effects or treats cancellation as proof
 // that an earlier command stopped. The Controller retains the accepted boundary.
-func (executor *Executor) fail(ctx context.Context, input Input, exchange Exchange, _ error) (workexecution.Attempt, error) {
+func (executor *Executor) fail(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	_ error,
+) (workexecution.Attempt, error) {
 	reason := entryexecution.ExecutionFailed
 	if !time.Now().Before(input.attempt.Deadline) {
 		reason = entryexecution.DeadlineExpired
@@ -21,7 +26,12 @@ func (executor *Executor) fail(ctx context.Context, input Input, exchange Exchan
 	}
 	deliveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
-	failure, err := executor.journal.PrepareEntryConfigurationFailure(deliveryCtx, input.attempt, input.procedure, reason)
+	failure, err := executor.journal.PrepareEntryConfigurationFailure(
+		deliveryCtx,
+		input.attempt,
+		input.procedure,
+		reason,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

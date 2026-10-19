@@ -48,25 +48,39 @@ func (repository *Repository) EnsureSchema(ctx context.Context) error {
 	defer keyvalue.ClearValues(read.Values)
 	wanted := "native-execution/v1;storage-epoch=" + strconv.Itoa(controllerupgrade.StorageEpoch)
 	current, rejection := read.Values[0], read.Values[1]
-	if current != nil && (string(current.Value) != wanted || rejection == nil || string(rejection.Value) != retiredJournalRejection) {
-		return errs.New(errs.KindStateConflict, "execution storage schema is incompatible; do not replace binaries against this store")
+	if current != nil &&
+		(string(current.Value) != wanted || rejection == nil || string(rejection.Value) != retiredJournalRejection) {
+		return errs.New(
+			errs.KindStateConflict,
+			"execution storage schema is incompatible; do not replace binaries against this store",
+		)
 	}
 	if current == nil && (len(state.Values) != 0 || rejection != nil) {
-		return errs.New(errs.KindStateConflict, "execution cutover requires an empty execution store; preserve existing data and reconcile the previous installation offline")
+		return errs.New(
+			errs.KindStateConflict,
+			"execution cutover requires an empty execution store; preserve existing data and reconcile the previous installation offline",
+		)
 	}
 	conditions := []keyvalue.Condition{{Key: root, Prefix: true}, {Key: retiredJournalSchemaKey}}
 	for _, prefix := range retiredExecutionRoots {
-		old, err := repository.store.Range(ctx, keyvalue.RangeRequest{Prefix: prefix, Revision: state.ReadRevision, Limit: 1})
+		old, err := repository.store.Range(
+			ctx,
+			keyvalue.RangeRequest{Prefix: prefix, Revision: state.ReadRevision, Limit: 1},
+		)
 		if err != nil {
 			return err
 		}
-		if old == nil || old.ReadRevision != state.ReadRevision || len(old.Values) > 1 || old.More && len(old.Values) == 0 {
+		if old == nil || old.ReadRevision != state.ReadRevision || len(old.Values) > 1 ||
+			old.More && len(old.Values) == 0 {
 			return corrupt()
 		}
 		present := len(old.Values) != 0
 		keyvalue.ClearRangeValues(old.Values)
 		if present {
-			return errs.New(errs.KindStateConflict, "superseded Task records remain; export history and reconcile outstanding effects before the native execution cutover")
+			return errs.New(
+				errs.KindStateConflict,
+				"superseded Task records remain; export history and reconcile outstanding effects before the native execution cutover",
+			)
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: prefix, Prefix: true})
 	}
@@ -84,7 +98,10 @@ func (repository *Repository) EnsureSchema(ctx context.Context) error {
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "execution store changed during schema initialization; no cutover was performed")
+		return errs.New(
+			errs.KindStateConflict,
+			"execution store changed during schema initialization; no cutover was performed",
+		)
 	}
 	return nil
 }

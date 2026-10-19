@@ -17,14 +17,24 @@ import (
 )
 
 type Helper interface {
-	ExecuteRemovalRecovery(context.Context, string, *agentpb.ServiceRemovalRecoveryHelperRequest) (*agentpb.ServiceRemovalRecoveryHelperResponse, error)
-	QuiesceRemovalRecovery(context.Context, *agentpb.ServiceRemovalRecoveryHelperRequest) (*agentpb.ServiceRemovalRecoveryHelperResponse, error)
+	ExecuteRemovalRecovery(
+		context.Context,
+		string,
+		*agentpb.ServiceRemovalRecoveryHelperRequest,
+	) (*agentpb.ServiceRemovalRecoveryHelperResponse, error)
+	QuiesceRemovalRecovery(
+		context.Context,
+		*agentpb.ServiceRemovalRecoveryHelperRequest,
+	) (*agentpb.ServiceRemovalRecoveryHelperResponse, error)
 }
 
 // Configuration restores or verifies only the immutable configuration selected
 // by the captured runtime. The delivery owner must not resolve latest Entries.
 type Configuration interface {
-	RestoreRemovalConfiguration(context.Context, *agentpb.ServiceRemovalRecoveryHelperRequest) (*agentpb.ServiceRemovalRecoveryHelperResponse, error)
+	RestoreRemovalConfiguration(
+		context.Context,
+		*agentpb.ServiceRemovalRecoveryHelperRequest,
+	) (*agentpb.ServiceRemovalRecoveryHelperResponse, error)
 }
 
 type RuntimeHost struct {
@@ -35,26 +45,57 @@ type RuntimeHost struct {
 	ownership     *agentownership.Lease
 }
 
-func NewHost(root string, journal *agentworkjournal.Journal, helper Helper, configuration Configuration, ownership *agentownership.Lease) (*RuntimeHost, error) {
-	if environmentpath.ValidateRoot(root) != nil || journal == nil || helper == nil || configuration == nil || ownership == nil {
-		return nil, errs.New(errs.KindInternal, "Service removal recovery requires its host root, journal, helpers, configuration and ownership")
+func NewHost(
+	root string,
+	journal *agentworkjournal.Journal,
+	helper Helper,
+	configuration Configuration,
+	ownership *agentownership.Lease,
+) (*RuntimeHost, error) {
+	if environmentpath.ValidateRoot(root) != nil || journal == nil || helper == nil || configuration == nil ||
+		ownership == nil {
+		return nil, errs.New(
+			errs.KindInternal,
+			"Service removal recovery requires its host root, journal, helpers, configuration and ownership",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
 	}
-	return &RuntimeHost{root: root, journal: journal, helper: helper, configuration: configuration, ownership: ownership}, nil
+	return &RuntimeHost{
+		root:          root,
+		journal:       journal,
+		helper:        helper,
+		configuration: configuration,
+		ownership:     ownership,
+	}, nil
 }
 
-func (host *RuntimeHost) Inspect(ctx context.Context, input Input, progress removalexecution.Progress) (*workexecution.Input, error) {
+func (host *RuntimeHost) Inspect(
+	ctx context.Context,
+	input Input,
+	progress removalexecution.Progress,
+) (*workexecution.Input, error) {
 	return host.execute(ctx, input, progress, true, nil)
 }
 
-func (host *RuntimeHost) Apply(ctx context.Context, input Input, progress removalexecution.Progress, grant workexecution.Checkpoint) error {
+func (host *RuntimeHost) Apply(
+	ctx context.Context,
+	input Input,
+	progress removalexecution.Progress,
+	grant workexecution.Checkpoint,
+) error {
 	_, err := host.execute(ctx, input, progress, false, &grant)
 	return err
 }
 
-func (host *RuntimeHost) execute(ctx context.Context, input Input, progress removalexecution.Progress, inspect bool, grant *workexecution.Checkpoint) (*workexecution.Input, error) {
+func (host *RuntimeHost) execute(
+	ctx context.Context,
+	input Input,
+	progress removalexecution.Progress,
+	inspect bool,
+	grant *workexecution.Checkpoint,
+) (*workexecution.Input, error) {
 	if err := host.ownership.CheckRecovery(input.capture.Source.Forward, input.attempt); err != nil {
 		return nil, err
 	}
@@ -107,7 +148,11 @@ func (host *RuntimeHost) execute(ctx context.Context, input Input, progress remo
 	return executionplan.ReadRemovalRecoveryHelperReceipt(captured, response)
 }
 
-func (input Input) helperRequest(progress removalexecution.Progress, checkpoint workexecution.Checkpoint, inspect bool) (*agentpb.ServiceRemovalRecoveryHelperRequest, error) {
+func (input Input) helperRequest(
+	progress removalexecution.Progress,
+	checkpoint workexecution.Checkpoint,
+	inspect bool,
+) (*agentpb.ServiceRemovalRecoveryHelperRequest, error) {
 	identity, err := workexecution.EncodeAgentAttempt(input.attempt)
 	if err != nil {
 		return nil, err
@@ -125,11 +170,18 @@ func (input Input) helperRequest(progress removalexecution.Progress, checkpoint 
 		return nil, err
 	}
 	return &agentpb.ServiceRemovalRecoveryHelperRequest{
-		Assignment: &agentpb.ServiceRemovalRecoveryAssignment{Attempt: identity, Removal: proto.CloneOf(input.procedure),
-			CapturedFailure: raw, Configuration: proto.CloneOf(input.configuration)},
+		Assignment: &agentpb.ServiceRemovalRecoveryAssignment{
+			Attempt:         identity,
+			Removal:         proto.CloneOf(input.procedure),
+			CapturedFailure: raw,
+			Configuration:   proto.CloneOf(input.configuration),
+		},
 		Start:  &agentpb.WorkStartAck{Attempt: identity, StartedAt: timestamppb.New(*input.attempt.StartedAt)},
 		Report: report, Acknowledgement: &agentpb.ServiceRemovalRecoveryCheckpointAck{Attempt: identity,
 			Sequence: checkpoint.Sequence, StageId: checkpoint.StageID, RecordedAt: timestamppb.New(checkpoint.RecordedAt),
-			Evidence: &agentpb.WorkInputReference{InputId: checkpoint.Evidence.ID, Sha256: digest}}, InspectOnly: inspect,
+			Evidence: &agentpb.WorkInputReference{
+				InputId: checkpoint.Evidence.ID,
+				Sha256:  digest,
+			}}, InspectOnly: inspect,
 	}, nil
 }

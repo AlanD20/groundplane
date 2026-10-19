@@ -39,7 +39,8 @@ func (removal Removal) Consumers() ([]string, error) {
 	found := false
 	for _, volume := range baseline.Volumes {
 		if volume.GetVolumeId() == removal.VolumeID {
-			if found || volume.GetComposeName() != removal.Key || volume.GetDockerName() != "gp_vol_"+strings.ToLower(removal.VolumeID) {
+			if found || volume.GetComposeName() != removal.Key ||
+				volume.GetDockerName() != "gp_vol_"+strings.ToLower(removal.VolumeID) {
 				return nil, invalidRemoval()
 			}
 			found = true
@@ -137,5 +138,8 @@ func mountedServices(artifact *agentpb.ComposeArtifact, key string) (map[string]
 }
 
 func invalidRemoval() error {
-	return errs.New(errs.KindValidationFailed, "Volume removal must capture the exact mounted workloads and their detached configuration")
+	return errs.New(
+		errs.KindValidationFailed,
+		"Volume removal must capture the exact mounted workloads and their detached configuration",
+	)
 }

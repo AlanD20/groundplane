@@ -18,7 +18,10 @@ func (prepared PreparedReleaseWorkHooks) Publication(evidence ReleaseHookWorkPub
 		prepared.stage.TaskID != evidence.Task.ID || prepared.stage.WorkItemID != evidence.Item.ID ||
 		prepared.stage.OperationID != evidence.OperationID || prepared.stage.Input != *evidence.Item.Input ||
 		prepared.stage.Count != len(evidence.Hooks) || len(prepared.snapshotRevisions) != len(evidence.Hooks) {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Blueprint hooks do not match their prepared work")
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint hooks do not match their prepared work",
+		)
 	}
 	// Match the original capture before adding retention metadata. That metadata
 	// is produced only after the inert snapshots have acquired storage revisions.
@@ -27,7 +30,10 @@ func (prepared PreparedReleaseWorkHooks) Publication(evidence ReleaseHookWorkPub
 	for index, hook := range evidence.Hooks {
 		if hook.Execution.SourceMembershipCount == 0 || hook.Execution.SourceMembershipSHA256 == "" ||
 			hook.SnapshotRevision <= 0 || hook.SnapshotRevision != prepared.snapshotRevisions[hook.Execution.SnapshotID] {
-			return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Blueprint hook retained sources or snapshot revision are missing")
+			return workqueue.Change{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint hook retained sources or snapshot revision are missing",
+			)
 		}
 		unretained.Hooks[index].Execution.SourceMembershipCount = 0
 		unretained.Hooks[index].Execution.SourceMembershipSHA256 = ""
@@ -44,7 +50,10 @@ func (prepared PreparedReleaseWorkHooks) Publication(evidence ReleaseHookWorkPub
 		hash.Write(mutation.Value)
 	}
 	if hex.EncodeToString(hash.Sum(nil)) != prepared.stage.Digest {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint hook captured inputs changed after preparation")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint hook captured inputs changed after preparation",
+		)
 	}
 	fragment, err := prepareReleaseWorkHookPublicationFragment(evidence)
 	if err != nil {

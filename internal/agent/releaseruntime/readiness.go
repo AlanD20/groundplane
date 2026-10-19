@@ -18,11 +18,17 @@ type Observer interface {
 // WaitCandidate waits only inside an acknowledged readiness boundary and the
 // original attempt deadline. Lost observation or missing probe executable is a
 // concrete failure, not an invitation to wait until an unrelated timeout.
-func WaitCandidate(ctx context.Context, observer Observer, input releaseexecution.Input, report releaseexecution.CheckpointReport,
+func WaitCandidate(
+	ctx context.Context,
+	observer Observer,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
 	progress func(*agentpb.ObservedProject),
 ) (*agentpb.ObservedProject, error) {
-	if ctx == nil || observer == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil || report.Progress.Validate(input) != nil ||
-		!report.Progress.InFlight || report.Progress.Phase != releaseexecution.Rollout {
+	if ctx == nil || observer == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil ||
+		report.Progress.Validate(input) != nil ||
+		!report.Progress.InFlight ||
+		report.Progress.Phase != releaseexecution.Rollout {
 		return nil, errs.New(errs.KindStateConflict, "Release has no acknowledged candidate-readiness boundary")
 	}
 	deadline := input.Attempt.Deadline

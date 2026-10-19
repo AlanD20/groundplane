@@ -18,7 +18,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (service *WorkReports) LoadRemovalConfigurationFile(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *WorkReports) LoadRemovalConfigurationFile(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.ServiceRemovalConfigurationFileRequest,
 ) (delivery *agentpb.ServiceRemovalConfigurationFileDelivery, resultErr error) {
 	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil ||
@@ -29,15 +31,29 @@ func (service *WorkReports) LoadRemovalConfigurationFile(ctx context.Context, au
 	if err != nil {
 		return nil, err
 	}
-	index := slices.IndexFunc(selection.files, func(file taskmaterialization.Record) bool { return file.Destination == request.Destination })
+	index := slices.IndexFunc(
+		selection.files,
+		func(file taskmaterialization.Record) bool { return file.Destination == request.Destination },
+	)
 	if index < 0 || selection.reference == nil {
 		return nil, errs.New(errs.KindStateConflict, "Requested file is not part of captured removal recovery")
 	}
-	expected, err := materialization.CapturedFileHeader(request.Attempt.TaskId, request.StageId, selection.reference.Generation, selection.files[index])
+	expected, err := materialization.CapturedFileHeader(
+		request.Attempt.TaskId,
+		request.StageId,
+		selection.reference.Generation,
+		selection.files[index],
+	)
 	if err != nil {
 		return nil, err
 	}
-	header, source, err := service.files.OpenCapturedFile(ctx, request.Attempt.TaskId, request.StageId, selection.reference.Generation, selection.files[index])
+	header, source, err := service.files.OpenCapturedFile(
+		ctx,
+		request.Attempt.TaskId,
+		request.StageId,
+		selection.reference.Generation,
+		selection.files[index],
+	)
 	if source != nil {
 		defer func() {
 			resultErr = errors.Join(resultErr, source.Close())
@@ -76,8 +92,13 @@ func (service *WorkReports) LoadRemovalConfigurationFile(ctx context.Context, au
 	if err := service.records.AuthorizeServiceRemovalConfiguration(ctx, selection.guards); err != nil {
 		return nil, err
 	}
-	delivery = &agentpb.ServiceRemovalConfigurationFileDelivery{Attempt: proto.CloneOf(request.Attempt), StageId: request.StageId,
-		Configuration: selection.reference, File: removalFileHeader(header), Content: content}
+	delivery = &agentpb.ServiceRemovalConfigurationFileDelivery{
+		Attempt:       proto.CloneOf(request.Attempt),
+		StageId:       request.StageId,
+		Configuration: selection.reference,
+		File:          removalFileHeader(header),
+		Content:       content,
+	}
 	owned = true
 	return delivery, nil
 }

@@ -71,7 +71,11 @@ func PrepareComponentDefinitionSettlement(view workqueue.View, unit Unit,
 	})
 }
 
-func PrepareComponentDefinitionStop(view workqueue.View, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func PrepareComponentDefinitionStop(
+	view workqueue.View,
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	stopped := task.Stop != nil && outcome == task.Stop.Outcome
 	expired := outcome == workexecution.Failed && (!at.Before(task.Deadline) || !at.Before(item.Deadline))

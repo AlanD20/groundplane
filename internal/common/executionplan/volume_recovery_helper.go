@@ -13,7 +13,12 @@ func openVolumeRecoveryHelper(request *agentpb.VolumeWorkHelperRequest) (VolumeH
 		return VolumeHelperInput{}, invalidVolumeWork()
 	}
 	claimed := request.Assignment.Attempt
-	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: claimed.HostId, AgentID: claimed.AgentId, Generation: claimed.ExecutorGeneration}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     claimed.HostId,
+		AgentID:    claimed.AgentId,
+		Generation: claimed.ExecutorGeneration,
+	}
 	attempt, err := workexecution.DecodeAgentAttempt(claimed, identity)
 	if err != nil {
 		return VolumeHelperInput{}, err
@@ -27,5 +32,11 @@ func openVolumeRecoveryHelper(request *agentpb.VolumeWorkHelperRequest) (VolumeH
 		return VolumeHelperInput{}, err
 	}
 	attempt.StartedAt = &started
-	return VolumeHelperInput{Attempt: attempt, Procedure: procedure, Progress: boundary, InspectOnly: true, Recovery: &source}, nil
+	return VolumeHelperInput{
+		Attempt:     attempt,
+		Procedure:   procedure,
+		Progress:    boundary,
+		InspectOnly: true,
+		Recovery:    &source,
+	}, nil
 }

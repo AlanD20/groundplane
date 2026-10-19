@@ -97,7 +97,8 @@ func (service *durableServiceLifecycleIdempotency) Prepare(
 		return serviceLifecycleEvidence{}, err
 	}
 	defer digest.Destroy()
-	if taskType != workexecution.ActionStart && taskType != workexecution.ActionStop && taskType != workexecution.ActionDestroy {
+	if taskType != workexecution.ActionStart && taskType != workexecution.ActionStop &&
+		taskType != workexecution.ActionDestroy {
 		return serviceLifecycleEvidence{}, errs.New(errs.KindInternal, "Service lifecycle intent type is invalid")
 	}
 	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)

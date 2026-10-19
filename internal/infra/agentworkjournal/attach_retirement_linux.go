@@ -39,7 +39,8 @@ func (journal *Journal) retireAttachPredecessors(ctx context.Context, terminal w
 		return conflict()
 	}
 	saved := current.AttachRemoval.Completion
-	if saved.Result == nil || *saved.Result != *terminal.Result || saved.FinishedAt == nil || !saved.FinishedAt.Equal(*terminal.FinishedAt) {
+	if saved.Result == nil || *saved.Result != *terminal.Result || saved.FinishedAt == nil ||
+		!saved.FinishedAt.Equal(*terminal.FinishedAt) {
 		return conflict()
 	}
 	attempts, err := journal.attempts(ctx)
@@ -54,7 +55,8 @@ func (journal *Journal) retireAttachPredecessors(ctx context.Context, terminal w
 		if err != nil {
 			return err
 		}
-		if previous == nil || previous.Attempt.TaskID != terminal.TaskID || previous.Attempt.WorkItemID != terminal.WorkItemID {
+		if previous == nil || previous.Attempt.TaskID != terminal.TaskID ||
+			previous.Attempt.WorkItemID != terminal.WorkItemID {
 			continue
 		}
 		if previous.Attempt.Input != terminal.Input || previous.Attempt.Executor.HostID != terminal.Executor.HostID ||
@@ -67,7 +69,8 @@ func (journal *Journal) retireAttachPredecessors(ctx context.Context, terminal w
 				return conflict()
 			}
 		case previous.AttachRemoval != nil:
-			if previous.AttachRemoval.Authority != current.AttachRemoval.Authority || previous.AttachRemoval.Completion != nil {
+			if previous.AttachRemoval.Authority != current.AttachRemoval.Authority ||
+				previous.AttachRemoval.Completion != nil {
 				return conflict()
 			}
 		case previous.AttachFailure != nil:

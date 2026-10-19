@@ -66,7 +66,8 @@ func (journal *Journal) PrepareAttachProvision(ctx context.Context, input attach
 			// A caller-supplied Confirm cannot erase unknown effects. Require
 			// the successful command result to have been saved first.
 			result := saved.CommandResult
-			if result == nil || next.LastResult == nil || !attachexecution.SameProvisionCommandResult(*result, *next.LastResult) {
+			if result == nil || next.LastResult == nil ||
+				!attachexecution.SameProvisionCommandResult(*result, *next.LastResult) {
 				return nil, conflict()
 			}
 		}
@@ -76,7 +77,10 @@ func (journal *Journal) PrepareAttachProvision(ctx context.Context, input attach
 	if err := attachexecution.ValidateProvisionTransition(input.Attempt, authority, previous, next); err != nil {
 		return nil, err
 	}
-	state.AttachProvision = &AttachProvisionRecord{Authority: authority, Report: attachexecution.ProvisionReport{Progress: next}}
+	state.AttachProvision = &AttachProvisionRecord{
+		Authority: authority,
+		Report:    attachexecution.ProvisionReport{Progress: next},
+	}
 	state.Sequence, state.UpdatedAt = next.Sequence, next.UpdatedAt
 	if err := journal.writeRecord(ctx, *state); err != nil {
 		return nil, err
@@ -106,7 +110,10 @@ func (journal *Journal) AcknowledgeAttachProvision(ctx context.Context, input at
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) AttachProvision(ctx context.Context, input attachexecution.ProvisionInput) (*AttachProvisionRecord, error) {
+func (journal *Journal) AttachProvision(
+	ctx context.Context,
+	input attachexecution.ProvisionInput,
+) (*AttachProvisionRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -116,7 +123,8 @@ func (journal *Journal) AttachProvision(ctx context.Context, input attachexecuti
 	if err != nil || state == nil {
 		return nil, err
 	}
-	if !matchesAttachProvisionState(state, input) || state.AttachProvision.Report.Progress.Validate(input.Attempt, state.AttachProvision.Authority) != nil {
+	if !matchesAttachProvisionState(state, input) ||
+		state.AttachProvision.Report.Progress.Validate(input.Attempt, state.AttachProvision.Authority) != nil {
 		return nil, conflict()
 	}
 	return state.AttachProvision, nil
@@ -124,14 +132,20 @@ func (journal *Journal) AttachProvision(ctx context.Context, input attachexecuti
 
 func matchesAttachProvisionState(state *attemptRecord, input attachexecution.ProvisionInput) bool {
 	authority, err := input.Authority()
-	return err == nil && state != nil && state.AttachProvision != nil && workexecution.SameAssignment(state.Attempt, input.Attempt) &&
-		state.Attempt.StartedAt != nil && input.Attempt.StartedAt != nil && state.Attempt.StartedAt.Equal(*input.Attempt.StartedAt) &&
+	return err == nil && state != nil && state.AttachProvision != nil &&
+		workexecution.SameAssignment(state.Attempt, input.Attempt) &&
+		state.Attempt.StartedAt != nil &&
+		input.Attempt.StartedAt != nil &&
+		state.Attempt.StartedAt.Equal(*input.Attempt.StartedAt) &&
 		state.AttachProvision.Authority == authority
 }
 
 // LoadAttachProvision restores the original start time before report replay.
 // Redelivery does not replace the saved authority or create a new execution.
-func (journal *Journal) LoadAttachProvision(ctx context.Context, input attachexecution.ProvisionInput) (*workexecution.Attempt, *AttachProvisionRecord, error) {
+func (journal *Journal) LoadAttachProvision(
+	ctx context.Context,
+	input attachexecution.ProvisionInput,
+) (*workexecution.Attempt, *AttachProvisionRecord, error) {
 	authority, err := input.Authority()
 	if err != nil {
 		return nil, nil, err

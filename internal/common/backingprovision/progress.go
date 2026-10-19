@@ -42,7 +42,9 @@ func CaptureLayout(attempt workexecution.Attempt, input *agentpb.BackingProvisio
 		return Layout{}, invalid("backing creation progress has a different captured assignment")
 	}
 	layout := Layout{Input: reference, ServiceID: input.ServiceId, ManagedVolume: len(input.ManagedVolumeIds) != 0,
-		WriteFiles: len(input.Files) != 0, Healthcheck: input.Runtime.Services[0].HasHealthcheck, Hook: input.AfterStart != nil}
+		WriteFiles: len(
+			input.Files,
+		) != 0, Healthcheck: input.Runtime.Services[0].HasHealthcheck, Hook: input.AfterStart != nil}
 	return layout, layout.Validate(attempt)
 }
 
@@ -181,7 +183,12 @@ func (progress Progress) Begin(attempt workexecution.Attempt, layout Layout, at 
 	return next, next.Validate(attempt, layout)
 }
 
-func (progress Progress) Confirm(attempt workexecution.Attempt, layout Layout, observation Observation, at time.Time) (Progress, error) {
+func (progress Progress) Confirm(
+	attempt workexecution.Attempt,
+	layout Layout,
+	observation Observation,
+	at time.Time,
+) (Progress, error) {
 	if progress.Validate(attempt, layout) != nil || !progress.InFlight || at.Before(progress.UpdatedAt) ||
 		!at.Before(attempt.Deadline) || observation.At.Before(*progress.BeganAt) || observation.At.After(at) ||
 		!observation.Satisfies(progress.Stage, layout) || progress.Last != nil && progress.Last.ContainerID != "" &&

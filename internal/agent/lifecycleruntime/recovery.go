@@ -10,7 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) runRecovery(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	if input.recovery == nil || input.attempt.StartedAt == nil {
 		return workexecution.Attempt{}, invalidInput()
 	}
@@ -18,7 +22,11 @@ func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	saved, err := executor.journal.PrepareLifecycleRecovery(ctx, input.attempt, agentworkjournal.LifecycleRecoveryRecord{Stages: stages, Source: *input.recovery})
+	saved, err := executor.journal.PrepareLifecycleRecovery(
+		ctx,
+		input.attempt,
+		agentworkjournal.LifecycleRecoveryRecord{Stages: stages, Source: *input.recovery},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -34,8 +42,13 @@ func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange
 			} else if ctx.Err() != nil {
 				reason = lifecycleexecution.ExecutionInterrupted
 			}
-			report = lifecycleexecution.RecoveryReport{AttemptID: input.attempt.ID, ForwardID: input.recovery.Forward.ID,
-				Failure: input.recovery.Evidence, FailureReason: reason, ObservedAt: time.Now().UTC()}
+			report = lifecycleexecution.RecoveryReport{
+				AttemptID:     input.attempt.ID,
+				ForwardID:     input.recovery.Forward.ID,
+				Failure:       input.recovery.Evidence,
+				FailureReason: reason,
+				ObservedAt:    time.Now().UTC(),
+			}
 		}
 		saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		err = executor.journal.SaveLifecycleRecoveryReport(saveCtx, input.attempt, report)
@@ -45,7 +58,12 @@ func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange
 		}
 		saved.Report = &report
 	}
-	raw, _, err := lifecycleexecution.EncodeRecoveryReport(input.attempt, input.procedure, *input.recovery, *saved.Report)
+	raw, _, err := lifecycleexecution.EncodeRecoveryReport(
+		input.attempt,
+		input.procedure,
+		*input.recovery,
+		*saved.Report,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -55,11 +73,20 @@ func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange
 	}
 	deliveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
-	ack, err := exchange.RecoverLifecycle(deliveryCtx, &agentpb.ServiceLifecycleRecoveryReportRequest{Attempt: identity, Report: raw})
+	ack, err := exchange.RecoverLifecycle(
+		deliveryCtx,
+		&agentpb.ServiceLifecycleRecoveryReportRequest{Attempt: identity, Report: raw},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	terminal, err := lifecycleexecution.DecodeRecoveryAck(input.attempt, input.procedure, *input.recovery, *saved.Report, ack)
+	terminal, err := lifecycleexecution.DecodeRecoveryAck(
+		input.attempt,
+		input.procedure,
+		*input.recovery,
+		*saved.Report,
+		ack,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

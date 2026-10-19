@@ -39,8 +39,11 @@ func (repository *Planner) captureAttachInput(ctx context.Context,
 	if err != nil {
 		return attachremoval.Input{}, err
 	}
-	if input.Attach.ID != attachID || input.AttachRevision != attachRevision || input.SnapshotRevision != operation.SnapshotRevision ||
-		input.HookInputs != nil || input.HookInputSet != nil || input.HookOperationID != "" {
+	if input.Attach.ID != attachID || input.AttachRevision != attachRevision ||
+		input.SnapshotRevision != operation.SnapshotRevision ||
+		input.HookInputs != nil ||
+		input.HookInputSet != nil ||
+		input.HookOperationID != "" {
 		attachremoval.Clear(&input)
 		return attachremoval.Input{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}

@@ -14,8 +14,13 @@ import (
 // SettleFailedBlueprintRelease releases execution capacity, not unresolved host
 // ownership. Captured inputs and conflict claims survive for native recovery.
 // Desired heads are deliberately not consulted when recording the original failure.
-func (ledger *ReleaseLedger) SettleFailedBlueprintRelease(ctx context.Context, view workqueue.ResumeView, input releaseexecution.Input,
-	reason releaseexecution.FailureReason, authorization []keyvalue.Condition, at time.Time,
+func (ledger *ReleaseLedger) SettleFailedBlueprintRelease(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input releaseexecution.Input,
+	reason releaseexecution.FailureReason,
+	authorization []keyvalue.Condition,
+	at time.Time,
 ) error {
 	if ledger == nil || ledger.store == nil || len(authorization) == 0 {
 		return errs.New(errs.KindStateConflict, "Release failure requires authenticated execution authority")
@@ -53,7 +58,13 @@ func (ledger *ReleaseLedger) SettleFailedBlueprintRelease(ctx context.Context, v
 		return err
 	}
 	defer keyvalue.ZeroMutationBytes(execution.Mutations)
-	committed, err := queue.Commit(ctx, workqueue.Change{Conditions: authorization}, workqueue.Change{Conditions: sources.Conditions}, failure, execution)
+	committed, err := queue.Commit(
+		ctx,
+		workqueue.Change{Conditions: authorization},
+		workqueue.Change{Conditions: sources.Conditions},
+		failure,
+		execution,
+	)
 	keyvalue.ClearValues(committed.FailureReads)
 	if err != nil {
 		return err
@@ -64,8 +75,13 @@ func (ledger *ReleaseLedger) SettleFailedBlueprintRelease(ctx context.Context, v
 	return nil
 }
 
-func (ledger *ReleaseLedger) SettleFailedReleaseRestoration(ctx context.Context, view workqueue.ResumeView, input releaseexecution.RecoveryInput,
-	reason releaseexecution.FailureReason, authorization []keyvalue.Condition, at time.Time,
+func (ledger *ReleaseLedger) SettleFailedReleaseRestoration(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input releaseexecution.RecoveryInput,
+	reason releaseexecution.FailureReason,
+	authorization []keyvalue.Condition,
+	at time.Time,
 ) error {
 	if ledger == nil || ledger.store == nil || len(authorization) == 0 {
 		return errs.New(errs.KindStateConflict, "Release recovery failure requires authenticated execution authority")

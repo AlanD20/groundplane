@@ -61,14 +61,26 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if task.Validate() != nil || task.Action != workexecution.ActionRemove || task.Actor != workexecution.OperatorActor ||
-		task.TargetID != scriptID || task.TargetName != current.Record.Desired.Slug || task.ExpectedItems != 1 ||
+	if task.Validate() != nil || task.Action != workexecution.ActionRemove ||
+		task.Actor != workexecution.OperatorActor ||
+		task.TargetID != scriptID ||
+		task.TargetName != current.Record.Desired.Slug ||
+		task.ExpectedItems != 1 ||
 		task.Scope != (workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID}) ||
-		input.TaskID != task.ID || input.ScriptID != scriptID || input.ScriptRevision != current.Revision ||
-		input.EnvironmentID != environment.Record.ID || input.ProjectID != project.Record.ID || input.TenantID != project.Record.TenantID ||
-		input.ServiceID != target.Record.Desired.ID || input.ScriptSetGeneration != current.Record.ScriptSetGeneration ||
-		task.Intent != ref || !task.CreatedAt.Equal(input.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Script removal differs from its captured input")
+		input.TaskID != task.ID ||
+		input.ScriptID != scriptID ||
+		input.ScriptRevision != current.Revision ||
+		input.EnvironmentID != environment.Record.ID ||
+		input.ProjectID != project.Record.ID ||
+		input.TenantID != project.Record.TenantID ||
+		input.ServiceID != target.Record.Desired.ID ||
+		input.ScriptSetGeneration != current.Record.ScriptSetGeneration ||
+		task.Intent != ref ||
+		!task.CreatedAt.Equal(input.CreatedAt) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Script removal differs from its captured input",
+		)
 	}
 	tombstone := deletionrecord.DeletionTombstoneRecord{
 		TargetKind: deletionrecord.DeletionTargetScript, TargetID: scriptID, TargetRevision: current.Revision,
@@ -112,8 +124,11 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 	if indexes != nil {
 		defer etcdstore.ClearValues(indexes.Values)
 	}
-	if indexes == nil || indexes.ReadRevision != current.ReadRevision || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-		string(indexes.Values[0].Value) != scriptID || string(indexes.Values[1].Value) != scriptID {
+	if indexes == nil || indexes.ReadRevision != current.ReadRevision || len(indexes.Values) != 2 ||
+		indexes.Values[0] == nil ||
+		indexes.Values[1] == nil ||
+		string(indexes.Values[0].Value) != scriptID ||
+		string(indexes.Values[1].Value) != scriptID {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Script deletion indexes are corrupt")
 	}
 
@@ -223,7 +238,12 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotencyrecord.IdempotencyMarkerTask, conditions, mutations, classify)
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotencyrecord.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

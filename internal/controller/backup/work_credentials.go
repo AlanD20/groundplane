@@ -15,8 +15,11 @@ import (
 // ResolveWorkSecretSlots opens plaintext only after the authenticated attempt
 // and every credential lookup have survived one atomic comparison. A lost
 // transaction response never authorizes delivery. Reconnect repeats the checks.
-func (delivery *WorkSecretDelivery) ResolveWorkSecretSlots(ctx context.Context, authorization agentregistration.WorkAuthorization,
-	attempt *agentpb.WorkAttemptIdentity, ordinal uint32,
+func (delivery *WorkSecretDelivery) ResolveWorkSecretSlots(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	attempt *agentpb.WorkAttemptIdentity,
+	ordinal uint32,
 ) (*agentpb.BackupWorkInput, map[agentpb.BackupSecretSlotPurpose][]byte, error) {
 	if delivery == nil || delivery.resolver == nil {
 		return nil, nil, errs.New(errs.KindInternal, "Backup work credential delivery is not configured")
@@ -49,7 +52,14 @@ func (delivery *WorkSecretDelivery) ResolveWorkSecretSlots(ctx context.Context, 
 	if !time.Now().Before(deadline) {
 		return nil, nil, errs.New(errs.KindStateConflict, "Backup credential source expired before delivery")
 	}
-	slots, err := resolver.openCapturedSlots(ctx, resolved.Attempt.TaskID, deadline, step, resolved.Evidence, resolved.Source.Purposes)
+	slots, err := resolver.openCapturedSlots(
+		ctx,
+		resolved.Attempt.TaskID,
+		deadline,
+		step,
+		resolved.Evidence,
+		resolved.Source.Purposes,
+	)
 	if err != nil {
 		return nil, nil, err
 	}

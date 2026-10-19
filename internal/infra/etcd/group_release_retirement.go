@@ -19,9 +19,15 @@ func (ledger *ReleaseLedger) PrepareGroupReleaseCaptureRetirement(ctx context.Co
 		return workqueue.Change{}, err
 	}
 	accepted, err := root.Record.Task()
-	if err != nil || task.Task.CollectionStartedAt == nil || task.Task.FinishedAt == nil || task.Task.Progress.Unsettled() != 0 ||
-		root.Revision <= 0 || root.ReadRevision < task.Revision || accepted.ID != task.Task.ID || accepted.Intent != task.Task.Intent ||
-		accepted.TargetID != task.Task.TargetID || accepted.Scope != task.Task.Scope || accepted.Action != task.Task.Action ||
+	if err != nil || task.Task.CollectionStartedAt == nil || task.Task.FinishedAt == nil ||
+		task.Task.Progress.Unsettled() != 0 ||
+		root.Revision <= 0 ||
+		root.ReadRevision < task.Revision ||
+		accepted.ID != task.Task.ID ||
+		accepted.Intent != task.Task.Intent ||
+		accepted.TargetID != task.Task.TargetID ||
+		accepted.Scope != task.Task.Scope ||
+		accepted.Action != task.Task.Action ||
 		at.Before(*task.Task.CollectionStartedAt) {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Group capture still protects retained execution")
 	}

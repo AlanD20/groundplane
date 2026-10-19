@@ -56,7 +56,10 @@ func (manifest GroupWorkManifest) Validate() error {
 	seen := make(map[string]bool, len(manifest.Members)*2)
 	for index, member := range manifest.Members {
 		if member.Member != manifest.Manifest.Members[index] ||
-			ids.Validate(ids.KindWorkItem, member.ForwardID) != nil || ids.Validate(ids.KindWorkItem, member.RestoreID) != nil ||
+			ids.Validate(
+				ids.KindWorkItem,
+				member.ForwardID,
+			) != nil || ids.Validate(ids.KindWorkItem, member.RestoreID) != nil ||
 			member.ForwardID == member.RestoreID || seen[member.ForwardID] || seen[member.RestoreID] {
 			return invalid("native Release Group work identity or order is invalid")
 		}
@@ -79,7 +82,8 @@ func DecideGroupWork(manifest GroupWorkManifest, items []workexecution.Item, at 
 	byID := make(map[string]workexecution.Item, len(items))
 	reads := make([]string, 0, len(items))
 	for _, item := range items {
-		if item.Validate() != nil || item.TaskID != manifest.TaskID || byID[item.ID].ID != "" || at.Before(item.UpdatedAt) {
+		if item.Validate() != nil || item.TaskID != manifest.TaskID || byID[item.ID].ID != "" ||
+			at.Before(item.UpdatedAt) {
 			return GroupWorkDecision{}, invalid("native Release Group work snapshot is inconsistent")
 		}
 		byID[item.ID] = item
@@ -88,9 +92,12 @@ func DecideGroupWork(manifest GroupWorkManifest, items []workexecution.Item, at 
 	for _, member := range manifest.Members {
 		forward, forwardFound := byID[member.ForwardID]
 		restore, restoreFound := byID[member.RestoreID]
-		if !forwardFound || !restoreFound || forward.TargetID != member.Member.ServiceID || restore.TargetID != member.Member.ServiceID ||
-			forward.Operation != workexecution.Release || restore.Operation != workexecution.ReleaseRestoration ||
-			forward.Placement != restore.Placement || forward.Placement.Executor != workexecution.Agent {
+		if !forwardFound || !restoreFound || forward.TargetID != member.Member.ServiceID ||
+			restore.TargetID != member.Member.ServiceID ||
+			forward.Operation != workexecution.Release ||
+			restore.Operation != workexecution.ReleaseRestoration ||
+			forward.Placement != restore.Placement ||
+			forward.Placement.Executor != workexecution.Agent {
 			return GroupWorkDecision{}, invalid("native Release Group work belongs to different members or hosts")
 		}
 	}
@@ -154,16 +161,27 @@ func DecideGroupWork(manifest GroupWorkManifest, items []workexecution.Item, at 
 		item := byID[member.RestoreID]
 		if item.Phase != workexecution.Settled {
 			if item.Input == nil && item.AttemptNumber == 0 && item.ActiveAttemptID == "" && !item.ForwardRevoked {
-				selected := decision(GroupWorkRestore, item.ID, "", "Restore the earlier serving member in reverse order")
+				selected := decision(
+					GroupWorkRestore,
+					item.ID,
+					"",
+					"Restore the earlier serving member in reverse order",
+				)
 				selected.SourceWorkID, selected.FailureWorkID = member.ForwardID, manifest.Members[failed].ForwardID
 				return selected, nil
 			}
-			selected := decision(GroupWorkWait, item.ID, "", "Waiting for captured restoration and its effects to settle")
+			selected := decision(
+				GroupWorkWait,
+				item.ID,
+				"",
+				"Waiting for captured restoration and its effects to settle",
+			)
 			selected.SourceWorkID, selected.FailureWorkID = member.ForwardID, manifest.Members[failed].ForwardID
 			return selected, nil
 		}
 		outcome := MemberCompensated
-		if item.Outcome != workexecution.Succeeded && (item.Cleanup != workexecution.CleanupComplete || item.CleanupResult == nil) {
+		if item.Outcome != workexecution.Succeeded &&
+			(item.Cleanup != workexecution.CleanupComplete || item.CleanupResult == nil) {
 			outcome = MemberRecoveryRequired
 		}
 		progress, err = executor.RecordCompensation(progress, MemberResult{
@@ -174,7 +192,12 @@ func DecideGroupWork(manifest GroupWorkManifest, items []workexecution.Item, at 
 			return GroupWorkDecision{}, err
 		}
 		if outcome == MemberRecoveryRequired {
-			return decision(GroupWorkWait, item.ID, workexecution.Failed, "Restoration failed; preserve remaining captured members for operator recovery"), nil
+			return decision(
+				GroupWorkWait,
+				item.ID,
+				workexecution.Failed,
+				"Restoration failed; preserve remaining captured members for operator recovery",
+			), nil
 		}
 	}
 	for _, member := range manifest.Members {
@@ -190,11 +213,26 @@ func DecideGroupWork(manifest GroupWorkManifest, items []workexecution.Item, at 
 	return decision(GroupWorkFinish, "", outcome, "All required member effects are settled"), nil
 }
 
-func skipGroupWork(item workexecution.Item, outcome workexecution.Outcome, reason string, reads []string) (GroupWorkDecision, error) {
-	if item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Input != nil || item.Cleanup != workexecution.CleanupNone {
-		return GroupWorkDecision{}, errs.New(errs.KindStateConflict, "Release Group cannot skip work that obtained executable input or an attempt")
+func skipGroupWork(
+	item workexecution.Item,
+	outcome workexecution.Outcome,
+	reason string,
+	reads []string,
+) (GroupWorkDecision, error) {
+	if item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Input != nil ||
+		item.Cleanup != workexecution.CleanupNone {
+		return GroupWorkDecision{}, errs.New(
+			errs.KindStateConflict,
+			"Release Group cannot skip work that obtained executable input or an attempt",
+		)
 	}
-	return GroupWorkDecision{Action: GroupWorkSkip, WorkID: item.ID, Outcome: outcome, Reason: reason, Reads: reads}, nil
+	return GroupWorkDecision{
+		Action:  GroupWorkSkip,
+		WorkID:  item.ID,
+		Outcome: outcome,
+		Reason:  reason,
+		Reads:   reads,
+	}, nil
 }
 
 func finishStoppedGroup(manifest GroupWorkManifest, items map[string]workexecution.Item, failed int,
@@ -212,5 +250,10 @@ func finishStoppedGroup(manifest GroupWorkManifest, items map[string]workexecuti
 			return skipGroupWork(item, outcome, "Stopped work cannot obtain a new restoration grant", reads)
 		}
 	}
-	return GroupWorkDecision{Action: GroupWorkFinish, Outcome: outcome, Reads: reads, Reason: "Stopped Release Group effects are settled"}, nil
+	return GroupWorkDecision{
+		Action:  GroupWorkFinish,
+		Outcome: outcome,
+		Reads:   reads,
+		Reason:  "Stopped Release Group effects are settled",
+	}, nil
 }

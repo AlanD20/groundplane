@@ -54,9 +54,13 @@ func ValidateTransition(input Input, previous *Progress, next Progress) error {
 }
 
 func EqualProgress(left, right Progress) bool {
-	if left.AttemptID != right.AttemptID || left.Sequence != right.Sequence || left.Phase != right.Phase || left.Hook != right.Hook || left.Action != right.Action ||
-		left.InFlight != right.InFlight || !left.UpdatedAt.Equal(right.UpdatedAt) ||
-		(left.BeganAt == nil) != (right.BeganAt == nil) || (left.Evidence == nil) != (right.Evidence == nil) ||
+	if left.AttemptID != right.AttemptID || left.Sequence != right.Sequence || left.Phase != right.Phase ||
+		left.Hook != right.Hook ||
+		left.Action != right.Action ||
+		left.InFlight != right.InFlight ||
+		!left.UpdatedAt.Equal(right.UpdatedAt) ||
+		(left.BeganAt == nil) != (right.BeganAt == nil) ||
+		(left.Evidence == nil) != (right.Evidence == nil) ||
 		(left.Rolling == nil) != (right.Rolling == nil) {
 		return false
 	}
@@ -69,7 +73,9 @@ func EqualProgress(left, right Progress) bool {
 	if left.Rolling != nil {
 		a, b := *left.Rolling, *right.Rolling
 		return a.Change == b.Change && a.Phase == b.Phase && a.InFlight == b.InFlight &&
-			a.ReplicaStartedAt.Equal(b.ReplicaStartedAt) && a.ReplicaDeadline.Equal(b.ReplicaDeadline) && a.DrainUntil.Equal(b.DrainUntil)
+			a.ReplicaStartedAt.Equal(
+				b.ReplicaStartedAt,
+			) && a.ReplicaDeadline.Equal(b.ReplicaDeadline) && a.DrainUntil.Equal(b.DrainUntil)
 	}
 	return true
 }

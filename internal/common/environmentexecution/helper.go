@@ -11,7 +11,9 @@ func ValidateHelperResponse(input Input, inspection bool, response *agentpb.Envi
 	if input.Validate() != nil || response == nil || executionplan.RejectUnknown(response) != nil ||
 		response.EnvironmentId != input.Creation.EnvironmentId || response.Inspection != inspection ||
 		response.ObservedAt == nil || response.ObservedAt.CheckValid() != nil ||
-		response.ObservedAt.AsTime().Before(input.Attempt.AssignedAt) || response.ObservedAt.AsTime().After(time.Now().Add(30*time.Second)) {
+		response.ObservedAt.AsTime().
+			Before(input.Attempt.AssignedAt) ||
+		response.ObservedAt.AsTime().After(time.Now().Add(30*time.Second)) {
 		return invalid("environment provisioning helper observation is invalid")
 	}
 	reference, err := DecodeReference(response.Input)

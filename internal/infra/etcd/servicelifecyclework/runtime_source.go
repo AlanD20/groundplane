@@ -15,17 +15,36 @@ func runtimeSourceConditions(input Input) []keyvalue.Condition {
 		return []keyvalue.Condition{{Key: serviceruntimerecord.Key(input.ServiceID)}}
 	}
 	conditions := []keyvalue.Condition{
-		{Key: environmentprojection.EnvironmentComposeProjectionStorageKey(input.Scope.EnvironmentID), ModRevision: runtime.AppliedProjectionRevision},
+		{
+			Key:         environmentprojection.EnvironmentComposeProjectionStorageKey(input.Scope.EnvironmentID),
+			ModRevision: runtime.AppliedProjectionRevision,
+		},
 		{Key: serviceruntimerecord.Key(input.ServiceID), ModRevision: runtime.AcknowledgedRuntimeRevision},
 	}
 	if release := runtime.Release; release != nil {
-		conditions = append(conditions,
-			keyvalue.Condition{Key: releases.ReleaseProjectionKey(input.ServiceID), ModRevision: release.ProjectionRevision},
-			keyvalue.Condition{Key: releases.ReleaseIntentStagingKey("", release.ServingReleaseID), ModRevision: release.IntentRevision},
-			keyvalue.Condition{Key: releases.ReleaseRenderInputStagingKey("", release.ServingReleaseID), ModRevision: release.RenderRevision},
+		conditions = append(
+			conditions,
+			keyvalue.Condition{
+				Key:         releases.ReleaseProjectionKey(input.ServiceID),
+				ModRevision: release.ProjectionRevision,
+			},
+			keyvalue.Condition{
+				Key:         releases.ReleaseIntentStagingKey("", release.ServingReleaseID),
+				ModRevision: release.IntentRevision,
+			},
+			keyvalue.Condition{
+				Key:         releases.ReleaseRenderInputStagingKey("", release.ServingReleaseID),
+				ModRevision: release.RenderRevision,
+			},
 		)
 		if release.RetainedPrior != nil {
-			conditions = append(conditions, keyvalue.Condition{Key: releases.ReleaseRenderInputStagingKey("", release.PriorServingReleaseID), ModRevision: release.RetainedPriorRenderRevision})
+			conditions = append(
+				conditions,
+				keyvalue.Condition{
+					Key:         releases.ReleaseRenderInputStagingKey("", release.PriorServingReleaseID),
+					ModRevision: release.RetainedPriorRenderRevision,
+				},
+			)
 		}
 	}
 	return conditions

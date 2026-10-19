@@ -19,7 +19,8 @@ import (
 func (owner *AgentWork) Fail(ctx context.Context, authorization agentregistration.WorkAuthorization,
 	request *agentpb.BackupWorkFailureRequest,
 ) (*agentpb.BackupWorkFailureAck, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || !executionplan.BackupFailureReason(request.Reason).Valid() {
+	if request == nil || executionplan.RejectUnknown(request) != nil ||
+		!executionplan.BackupFailureReason(request.Reason).Valid() {
 		return nil, errs.New(errs.KindValidationFailed, "Backup failure reason is missing or invalid")
 	}
 	guards, err := authorization.Conditions()
@@ -44,7 +45,13 @@ func (owner *AgentWork) Fail(ctx context.Context, authorization agentregistratio
 		var proof workqueue.Change
 		var result workexecution.Completion
 		if attempt.Direction == workexecution.Recovery {
-			proof, result, err = owner.inputs.PrepareRecoveryFailure(ctx, view, executionplan.BackupFailureReason(request.Reason), at, false)
+			proof, result, err = owner.inputs.PrepareRecoveryFailure(
+				ctx,
+				view,
+				executionplan.BackupFailureReason(request.Reason),
+				at,
+				false,
+			)
 		} else {
 			proof, result, err = owner.inputs.PrepareStoppedFailure(ctx, view, executionplan.BackupFailureReason(request.Reason), at)
 		}
@@ -90,5 +97,7 @@ func (owner *AgentWork) Fail(ctx context.Context, authorization agentregistratio
 	}
 	return &agentpb.BackupWorkFailureAck{Attempt: proto.CloneOf(request.Attempt),
 		Evidence: &agentpb.WorkInputReference{InputId: saved.Result.ID, Sha256: digest}, Failure: raw,
-		Outcome: string(saved.Outcome), StartedAt: timestamppb.New(*saved.StartedAt), FinishedAt: timestamppb.New(*saved.FinishedAt)}, nil
+		Outcome: string(
+			saved.Outcome,
+		), StartedAt: timestamppb.New(*saved.StartedAt), FinishedAt: timestamppb.New(*saved.FinishedAt)}, nil
 }

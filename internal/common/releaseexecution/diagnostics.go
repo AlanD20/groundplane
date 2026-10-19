@@ -38,7 +38,12 @@ func DeploymentStage(input Input, before *Progress, progress Progress) (workexec
 		completed = "Hook completion was recorded"
 	case Rollout:
 		if boundary.Rolling != nil {
-			stage.Key += "_" + strconv.FormatUint(uint64(boundary.Rolling.Change), 10) + "_" + string(boundary.Rolling.Phase)
+			stage.Key += "_" + strconv.FormatUint(
+				uint64(boundary.Rolling.Change),
+				10,
+			) + "_" + string(
+				boundary.Rolling.Phase,
+			)
 			switch boundary.Rolling.Phase {
 			case rollingrelease.StartCandidate:
 				stage.Name, stage.Expected, completed = "Start candidate replica", "Create the captured replacement replica", "Candidate replica was started"

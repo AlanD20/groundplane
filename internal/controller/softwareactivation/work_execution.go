@@ -12,15 +12,22 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) loadDelivery(ctx context.Context, delivery workqueue.Delivery) (keyvalue.Versioned[activation.Record], error) {
+func (service *Service) loadDelivery(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (keyvalue.Versioned[activation.Record], error) {
 	attempt := delivery.Attempt.Attempt
 	view, err := service.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 	if err != nil {
 		return keyvalue.Versioned[activation.Record]{}, err
 	}
-	if !view.ActiveAttempt || view.Attempt.Attempt.FinishedAt != nil || attempt.Executor.Executor != workexecution.Controller ||
+	if !view.ActiveAttempt || view.Attempt.Attempt.FinishedAt != nil ||
+		attempt.Executor.Executor != workexecution.Controller ||
 		!workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
-		return keyvalue.Versioned[activation.Record]{}, errs.New(errs.KindStateConflict, "software staging attempt no longer owns execution")
+		return keyvalue.Versioned[activation.Record]{}, errs.New(
+			errs.KindStateConflict,
+			"software staging attempt no longer owns execution",
+		)
 	}
 	record, err := service.records.At(ctx, attempt.TaskID, view.Work.ReadRevision)
 	if err != nil {
@@ -30,7 +37,9 @@ func (service *Service) loadDelivery(ctx context.Context, delivery workqueue.Del
 }
 
 func activationGuard(record keyvalue.Versioned[activation.Record]) workqueue.Change {
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: activation.Key(record.Record.TaskID), ModRevision: record.Revision}}}
+	return workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: activation.Key(record.Record.TaskID), ModRevision: record.Revision}},
+	}
 }
 
 func (service *Service) AuthorizeStart(ctx context.Context, delivery workqueue.Delivery) (workqueue.Change, error) {
@@ -50,7 +59,9 @@ func (service *Service) RejectUnstarted(ctx context.Context, delivery workqueue.
 		return errs.New(errs.KindStateConflict, "started staging needs cleanup proof")
 	}
 	result := activation.StagingResult{Settled: attempt.Direction == workexecution.Forward,
-		Failure: taskprogress.CaptureControllerFailure(errs.New(errs.KindRequestFailed, "software staging ended before execution"))}
+		Failure: taskprogress.CaptureControllerFailure(
+			errs.New(errs.KindRequestFailed, "software staging ended before execution"),
+		)}
 	return service.records.SaveStagingResult(ctx, service.queue, attempt, result, time.Now().UTC())
 }
 
@@ -69,13 +80,24 @@ func (service *Service) Execute(ctx context.Context, delivery workqueue.Delivery
 	result := activation.StagingResult{}
 	selection := record.Record.Input.Preparation.Source.Selection
 	if selection.IncludesController() {
-		err := service.observe(ctx, delivery, "software_controller_stage", "Stage verified Controller bundle", "Copy the pinned bundle into an immutable native release without starting it", func(ctx context.Context) error {
-			staged, err := service.stager.Stage(ctx, record.Record.Input.Preparation, record.Record.Input.StagingAgentImage)
-			if err == nil {
-				result.Controller = &staged
-			}
-			return err
-		})
+		err := service.observe(
+			ctx,
+			delivery,
+			"software_controller_stage",
+			"Stage verified Controller bundle",
+			"Copy the pinned bundle into an immutable native release without starting it",
+			func(ctx context.Context) error {
+				staged, err := service.stager.Stage(
+					ctx,
+					record.Record.Input.Preparation,
+					record.Record.Input.StagingAgentImage,
+				)
+				if err == nil {
+					result.Controller = &staged
+				}
+				return err
+			},
+		)
 		if err != nil {
 			return service.failStaging(ctx, delivery, record, err)
 		}
@@ -94,13 +116,25 @@ func (service *Service) Execute(ctx context.Context, delivery workqueue.Delivery
 	return service.records.SaveStagingResult(saving, service.queue, attempt, result, time.Now().UTC())
 }
 
-func (service *Service) failStaging(ctx context.Context, delivery workqueue.Delivery, record keyvalue.Versioned[activation.Record], cause error) error {
+func (service *Service) failStaging(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+	record keyvalue.Versioned[activation.Record],
+	cause error,
+) error {
 	if ctx.Err() == context.Canceled {
 		return ctx.Err()
 	}
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 	defer cancel()
-	err := service.observe(cleanup, delivery, "software_stage_cleanup", "Remove staging helper and scratch", "Remove only the owned stopped copy helper and private staging directory", func(ctx context.Context) error { return service.stager.Cleanup(ctx, record.Record.Input.Preparation) })
+	err := service.observe(
+		cleanup,
+		delivery,
+		"software_stage_cleanup",
+		"Remove staging helper and scratch",
+		"Remove only the owned stopped copy helper and private staging directory",
+		func(ctx context.Context) error { return service.stager.Cleanup(ctx, record.Record.Input.Preparation) },
+	)
 	result := activation.StagingResult{Settled: err == nil, Failure: taskprogress.CaptureControllerFailure(cause)}
 	if err != nil {
 		result.CleanupFailure = taskprogress.CaptureControllerFailure(err)
@@ -128,11 +162,24 @@ func (service *Service) Reconcile(ctx context.Context, delivery workqueue.Delive
 	if found && saved.Record.Result.Settled {
 		return nil
 	}
-	cause := errs.New(errs.KindRequestFailed, "software staging was interrupted before its complete receipt; apply the preparation again after cleanup")
+	cause := errs.New(
+		errs.KindRequestFailed,
+		"software staging was interrupted before its complete receipt; apply the preparation again after cleanup",
+	)
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 	defer cancel()
-	cleanupErr := service.observe(cleanup, delivery, "software_stage_reconcile", "Reconcile staging helper and scratch", "Prove staging scratch is retired without rerunning the import or replacing software", func(ctx context.Context) error { return service.stager.Cleanup(ctx, record.Record.Input.Preparation) })
-	result := activation.StagingResult{Settled: cleanupErr == nil, Failure: taskprogress.CaptureControllerFailure(cause)}
+	cleanupErr := service.observe(
+		cleanup,
+		delivery,
+		"software_stage_reconcile",
+		"Reconcile staging helper and scratch",
+		"Prove staging scratch is retired without rerunning the import or replacing software",
+		func(ctx context.Context) error { return service.stager.Cleanup(ctx, record.Record.Input.Preparation) },
+	)
+	result := activation.StagingResult{
+		Settled: cleanupErr == nil,
+		Failure: taskprogress.CaptureControllerFailure(cause),
+	}
 	if cleanupErr != nil {
 		result.CleanupFailure = taskprogress.CaptureControllerFailure(cleanupErr)
 	}
@@ -147,7 +194,12 @@ func (service *Service) Reconcile(ctx context.Context, delivery workqueue.Delive
 	return cleanupErr
 }
 
-func (service *Service) Settle(ctx context.Context, queue *workqueue.Repository, delivery workqueue.Delivery, at time.Time) error {
+func (service *Service) Settle(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	delivery workqueue.Delivery,
+	at time.Time,
+) error {
 	attempt := delivery.Attempt.Attempt
 	view, err := queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 	if err != nil || view.Attempt.Attempt.FinishedAt != nil {

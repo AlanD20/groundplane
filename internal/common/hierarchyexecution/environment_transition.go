@@ -1,6 +1,10 @@
 package hierarchyexecution
 
-func ValidateEnvironmentTransition(input EnvironmentInput, previous *EnvironmentProgress, next EnvironmentProgress) error {
+func ValidateEnvironmentTransition(
+	input EnvironmentInput,
+	previous *EnvironmentProgress,
+	next EnvironmentProgress,
+) error {
 	if err := next.Validate(input); err != nil {
 		return err
 	}
@@ -40,8 +44,11 @@ func ValidateEnvironmentTransition(input EnvironmentInput, previous *Environment
 }
 
 func EqualEnvironmentProgress(left, right EnvironmentProgress) bool {
-	if left.AttemptID != right.AttemptID || left.Sequence != right.Sequence || left.Phase != right.Phase || left.InFlight != right.InFlight ||
-		!left.UpdatedAt.Equal(right.UpdatedAt) || (left.BeganAt == nil) != (right.BeganAt == nil) || (left.Observation == nil) != (right.Observation == nil) {
+	if left.AttemptID != right.AttemptID || left.Sequence != right.Sequence || left.Phase != right.Phase ||
+		left.InFlight != right.InFlight ||
+		!left.UpdatedAt.Equal(right.UpdatedAt) ||
+		(left.BeganAt == nil) != (right.BeganAt == nil) ||
+		(left.Observation == nil) != (right.Observation == nil) {
 		return false
 	}
 	if left.BeganAt != nil && !left.BeganAt.Equal(*right.BeganAt) {

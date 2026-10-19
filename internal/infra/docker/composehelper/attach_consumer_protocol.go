@@ -37,7 +37,11 @@ func ReadAttachConsumerRequest(ctx context.Context, input io.Reader) (*agentpb.A
 	return request, nil
 }
 
-func ReadAttachConsumerResponse(ctx context.Context, input io.Reader, captured attachexecution.ConsumerHelperInput) (*agentpb.AttachConsumerHelperResponse, error) {
+func ReadAttachConsumerResponse(
+	ctx context.Context,
+	input io.Reader,
+	captured attachexecution.ConsumerHelperInput,
+) (*agentpb.AttachConsumerHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
@@ -56,7 +60,12 @@ func ReadAttachConsumerResponse(ctx context.Context, input io.Reader, captured a
 	return response, nil
 }
 
-func WriteAttachConsumerResponse(ctx context.Context, output io.Writer, captured attachexecution.ConsumerHelperInput, response *agentpb.AttachConsumerHelperResponse) error {
+func WriteAttachConsumerResponse(
+	ctx context.Context,
+	output io.Writer,
+	captured attachexecution.ConsumerHelperInput,
+	response *agentpb.AttachConsumerHelperResponse,
+) error {
 	if err := attachexecution.ValidateConsumerHelperResponse(captured, response); err != nil {
 		return err
 	}

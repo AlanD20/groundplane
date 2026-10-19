@@ -37,8 +37,10 @@ func (repository *InputRepository) LoadRecovery(ctx context.Context, view workqu
 	if err != nil {
 		return RecoverySnapshot{}, err
 	}
-	if source.Forward.TaskID != view.Task.Task.ID || source.Forward.WorkItemID != item.ID || source.Forward.Input != *item.Input ||
-		source.Forward.Executor.HostID != item.Placement.HostID || source.Forward.Number > item.AttemptNumber {
+	if source.Forward.TaskID != view.Task.Task.ID || source.Forward.WorkItemID != item.ID ||
+		source.Forward.Input != *item.Input ||
+		source.Forward.Executor.HostID != item.Placement.HostID ||
+		source.Forward.Number > item.AttemptNumber {
 		return RecoverySnapshot{}, conflict("Entry recovery source belongs to different execution")
 	}
 	return RecoverySnapshot{Source: source, Revision: read.Values[0].ModRevision}, nil

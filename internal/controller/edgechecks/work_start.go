@@ -11,13 +11,19 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (executor *Executor) loadDelivery(ctx context.Context, delivery workqueue.Delivery) (keyvalue.Versioned[checkrecord.Record], error) {
+func (executor *Executor) loadDelivery(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (keyvalue.Versioned[checkrecord.Record], error) {
 	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
 	if item.Validate() != nil || attempt.Validate() != nil || item.Operation != workexecution.EdgeCheck ||
 		attempt.Executor.Executor != workexecution.Controller || attempt.TaskID != item.TaskID ||
 		attempt.WorkItemID != item.ID || item.ActiveAttemptID != attempt.ID || attempt.FinishedAt != nil ||
 		item.Input == nil || *item.Input != attempt.Input {
-		return keyvalue.Versioned[checkrecord.Record]{}, errs.New(errs.KindStateConflict, "edge check does not own this execution attempt")
+		return keyvalue.Versioned[checkrecord.Record]{}, errs.New(
+			errs.KindStateConflict,
+			"edge check does not own this execution attempt",
+		)
 	}
 	loaded, err := executor.repository.Load(ctx, item.TaskID)
 	if err != nil {
@@ -27,7 +33,10 @@ func (executor *Executor) loadDelivery(ctx context.Context, delivery workqueue.D
 	digest, err := checkrecord.PlanHash(record)
 	if err != nil || record.Owner.TaskID != item.TaskID || record.Owner.WorkItemID != item.ID ||
 		record.Owner.PlanID != attempt.Input.ID || digest != attempt.Input.SHA256 || record.Source.Request.TargetID() != item.TargetID {
-		return keyvalue.Versioned[checkrecord.Record]{}, errs.New(errs.KindStateConflict, "edge check differs from its captured input")
+		return keyvalue.Versioned[checkrecord.Record]{}, errs.New(
+			errs.KindStateConflict,
+			"edge check differs from its captured input",
+		)
 	}
 	return loaded, nil
 }
@@ -39,10 +48,16 @@ func (executor *Executor) AuthorizeStart(ctx context.Context, delivery workqueue
 	}
 	record, attempt := loaded.Record, delivery.Attempt.Attempt
 	if attempt.Direction == workexecution.Forward && record.Phase != checkrecord.Ready ||
-		attempt.Direction == workexecution.Recovery && (record.Phase != checkrecord.CleanupRequired || !record.CleanupPending) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "edge check is not ready for this execution direction")
+		attempt.Direction == workexecution.Recovery &&
+			(record.Phase != checkrecord.CleanupRequired || !record.CleanupPending) {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"edge check is not ready for this execution direction",
+		)
 	}
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: checkrecord.Key(record.Owner.TaskID), ModRevision: loaded.Revision}}}, nil
+	return workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: checkrecord.Key(record.Owner.TaskID), ModRevision: loaded.Revision}},
+	}, nil
 }
 
 func (executor *Executor) RejectUnstarted(ctx context.Context, delivery workqueue.Delivery) error {
@@ -54,7 +69,8 @@ func (executor *Executor) RejectUnstarted(ctx context.Context, delivery workqueu
 	if attempt.StartedAt != nil || delivery.Item.Item.Phase != workexecution.Assigned {
 		return errs.New(errs.KindStateConflict, "edge check has started; reconcile its effects")
 	}
-	if loaded.Record.Phase == checkrecord.Finished || attempt.Direction == workexecution.Recovery && loaded.Record.Phase == checkrecord.CleanupRequired {
+	if loaded.Record.Phase == checkrecord.Finished ||
+		attempt.Direction == workexecution.Recovery && loaded.Record.Phase == checkrecord.CleanupRequired {
 		return nil
 	}
 	journal, err := checkrecord.NewJournal(executor.repository, loaded.Record.Owner, attempt.ID, attempt.Executor)
@@ -77,7 +93,8 @@ func (executor *Executor) reconcile(ctx context.Context, delivery workqueue.Deli
 	if attempt.StartedAt == nil || delivery.Item.Item.Phase != workexecution.Running {
 		return errs.New(errs.KindStateConflict, "edge reconciliation requires a started attempt")
 	}
-	if record.Phase == checkrecord.Finished || record.Phase == checkrecord.CleanupRequired && attempt.Direction == workexecution.Forward {
+	if record.Phase == checkrecord.Finished ||
+		record.Phase == checkrecord.CleanupRequired && attempt.Direction == workexecution.Forward {
 		return nil
 	}
 	journal, err := checkrecord.NewJournal(executor.repository, record.Owner, attempt.ID, attempt.Executor)

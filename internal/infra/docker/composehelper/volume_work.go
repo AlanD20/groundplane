@@ -48,7 +48,11 @@ func ApplyVolumeDocker(ctx context.Context, taskRunner runner.Runner, input *age
 // ObserveVolumeDocker uses a successful explicit inventory to prove absence.
 // An inspect error is never interpreted as an absent Volume. Removal also checks
 // stopped containers and direct bind mounts before reporting detachment.
-func ObserveVolumeDocker(ctx context.Context, taskRunner runner.Runner, input *agentpb.VolumeWorkInput) (VolumeDockerObservation, error) {
+func ObserveVolumeDocker(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input *agentpb.VolumeWorkInput,
+) (VolumeDockerObservation, error) {
 	artifact, volume, err := capturedVolume(input)
 	if err != nil {
 		return VolumeDockerObservation{}, err
@@ -78,7 +82,10 @@ func ObserveVolumeDocker(ctx context.Context, taskRunner runner.Runner, input *a
 	}
 	if failure != nil || !present || !managedVolumeMatches(inspection, volume,
 		artifact.AuthorizedVolumeDir+"/"+volume.ComposeName, artifact.ProjectName) {
-		return VolumeDockerObservation{}, errs.New(errs.KindStateConflict, "Volume Docker ownership or bind source differs from captured input")
+		return VolumeDockerObservation{}, errs.New(
+			errs.KindStateConflict,
+			"Volume Docker ownership or bind source differs from captured input",
+		)
 	}
 	observation.Ready = true
 	return observation, nil

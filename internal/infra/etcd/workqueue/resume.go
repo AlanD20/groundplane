@@ -27,7 +27,12 @@ func (view ResumeView) CanSettleResult() bool {
 	return view.CurrentExecutor || view.receiptReplay && view.ExecutorRevision > 0
 }
 
-func (repository *Repository) ReadResult(ctx context.Context, taskID, workID, attemptID string, identity workexecution.Identity, receiptOnly bool) (ResumeView, error) {
+func (repository *Repository) ReadResult(
+	ctx context.Context,
+	taskID, workID, attemptID string,
+	identity workexecution.Identity,
+	receiptOnly bool,
+) (ResumeView, error) {
 	view, err := repository.ReadResume(ctx, taskID, workID, attemptID, identity)
 	if err != nil {
 		return ResumeView{}, err
@@ -62,7 +67,11 @@ func (repository *Repository) ReadResumeAt(ctx context.Context, taskID, workID, 
 	if err != nil {
 		return ResumeView{}, err
 	}
-	read, err := repository.read(ctx, []string{AttemptKey(attemptID), CheckpointKey(attemptID), ExecutorKey(identity)}, work.ReadRevision)
+	read, err := repository.read(
+		ctx,
+		[]string{AttemptKey(attemptID), CheckpointKey(attemptID), ExecutorKey(identity)},
+		work.ReadRevision,
+	)
 	if err != nil {
 		return ResumeView{}, err
 	}
@@ -92,7 +101,8 @@ func (repository *Repository) ReadResumeAt(ctx context.Context, taskID, workID, 
 		if err != nil {
 			return ResumeView{}, err
 		}
-		if checkpoint.AttemptID != attemptID || attempt.StartedAt == nil || checkpoint.RecordedAt.Before(*attempt.StartedAt) ||
+		if checkpoint.AttemptID != attemptID || attempt.StartedAt == nil ||
+			checkpoint.RecordedAt.Before(*attempt.StartedAt) ||
 			attempt.FinishedAt != nil && checkpoint.RecordedAt.After(*attempt.FinishedAt) {
 			return ResumeView{}, corrupt()
 		}

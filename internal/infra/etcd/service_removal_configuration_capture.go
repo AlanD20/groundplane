@@ -20,9 +20,14 @@ func (repository *ServiceRepository) captureRemovalConfiguration(ctx context.Con
 		return input, nil, input.Validate()
 	}
 	if revision <= 0 || ids.Validate(ids.KindEnvironment, input.Scope.EnvironmentID) != nil ||
-		serviceruntimerecord.Validate(*input.Runtime) != nil || input.Runtime.EnvironmentID != input.Scope.EnvironmentID ||
+		serviceruntimerecord.Validate(
+			*input.Runtime,
+		) != nil || input.Runtime.EnvironmentID != input.Scope.EnvironmentID ||
 		input.Configuration != nil || input.ConfigurationRevision != 0 {
-		return input, nil, errs.New(errs.KindValidationFailed, "Service removal configuration capture requires an uncaptured runtime input")
+		return input, nil, errs.New(
+			errs.KindValidationFailed,
+			"Service removal configuration capture requires an uncaptured runtime input",
+		)
 	}
 	key := runtimeconfiguration.HeadKey(input.Scope.EnvironmentID)
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: revision})

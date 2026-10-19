@@ -13,8 +13,14 @@ import (
 
 // prepareRemovalRecoverySource joins original failure and its inspection authority
 // before the shared queue may release the forward slot and dispatch recovery.
-func prepareRemovalRecoverySource(ctx context.Context, reader Reader, view workqueue.ResumeView,
-	input attachexecution.RemovalInput, reason attachexecution.FailureReason, result workexecution.Completion, at time.Time,
+func prepareRemovalRecoverySource(
+	ctx context.Context,
+	reader Reader,
+	view workqueue.ResumeView,
+	input attachexecution.RemovalInput,
+	reason attachexecution.FailureReason,
+	result workexecution.Completion,
+	at time.Time,
 ) (workqueue.Change, error) {
 	if result.EffectsSettled || input.Attempt.Direction != workexecution.Forward || view.Checkpoint.Record == nil ||
 		view.Checkpoint.Record.Sequence%2 != 1 {
@@ -51,18 +57,25 @@ func prepareRemovalRecoverySource(ctx context.Context, reader Reader, view workq
 	}
 	if value := read.Values[0]; value != nil {
 		previous, err := attachexecution.DecodeRemovalRecovery(value.Value)
-		if err != nil || previous.Forward.TaskID != forward.TaskID || previous.Forward.WorkItemID != forward.WorkItemID ||
-			previous.Forward.Input != forward.Input || previous.Forward.Executor.HostID != forward.Executor.HostID ||
+		if err != nil || previous.Forward.TaskID != forward.TaskID ||
+			previous.Forward.WorkItemID != forward.WorkItemID ||
+			previous.Forward.Input != forward.Input ||
+			previous.Forward.Executor.HostID != forward.Executor.HostID ||
 			previous.Forward.Number >= forward.Number {
 			clear(raw)
 			return workqueue.Change{}, recordcodec.CorruptRecord()
 		}
 	}
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])}},
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}}}, nil
+	return workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])}},
+		Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}},
+	}, nil
 }
 
-func (repository *InputRepository) LoadDetachRecovery(ctx context.Context, view workqueue.View) (RecoverySnapshot, error) {
+func (repository *InputRepository) LoadDetachRecovery(
+	ctx context.Context,
+	view workqueue.View,
+) (RecoverySnapshot, error) {
 	if view.Item.Item.Operation != workexecution.Detach {
 		return RecoverySnapshot{}, recordcodec.CorruptRecord()
 	}
@@ -94,6 +107,9 @@ func (repository *InputRepository) DetachRecoveryInput(ctx context.Context, view
 		attachexecution.ClearRecoveryInput(&input)
 		return attachexecution.RecoveryInput{}, nil, err
 	}
-	conditions := append(capture.Conditions, keyvalue.Condition{Key: WorkRecoveryKey(attempt.WorkItemID), ModRevision: source.Revision})
+	conditions := append(
+		capture.Conditions,
+		keyvalue.Condition{Key: WorkRecoveryKey(attempt.WorkItemID), ModRevision: source.Revision},
+	)
 	return input, conditions, nil
 }

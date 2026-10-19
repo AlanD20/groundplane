@@ -18,22 +18,32 @@ func FailureKey(attemptID string) string {
 // PrepareFailure keeps unknown effects protected. A command error, lease loss or
 // deadline does not prove that a host effect stopped. Only an acknowledged
 // between-effects boundary permits settlement without inspection.
-func (repository *Repository) PrepareLifecycleFailure(ctx context.Context, view workqueue.ResumeView, supplied Input, input *agentpb.ServiceLifecycleWorkInput,
-	reason lifecycleexecution.FailureReason, at time.Time, interrupted bool,
+func (repository *Repository) PrepareLifecycleFailure(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	supplied Input,
+	input *agentpb.ServiceLifecycleWorkInput,
+	reason lifecycleexecution.FailureReason,
+	at time.Time,
+	interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
 	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 ||
 		attempt.FinishedAt != nil ||
 		item.Operation != workexecution.ServiceLifecycle || !task.PublicationComplete || task.CollectionStartedAt != nil ||
 		interrupted && reason != lifecycleexecution.ExecutionInterrupted {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Service lifecycle failure no longer owns the active execution")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Service lifecycle failure no longer owns the active execution",
+		)
 	}
 	captured, guard, err := repository.Load(ctx, view.Work)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	if attempt.Direction != workexecution.Forward || !sameCapture(captured, supplied, input) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Service lifecycle failure differs from its captured assignment")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Service lifecycle failure differs from its captured assignment",
+		)
 	}
 	guards := []keyvalue.Condition{guard}
 	checkpoint := view.Checkpoint.Record
@@ -47,15 +57,20 @@ func (repository *Repository) PrepareLifecycleFailure(ctx context.Context, view 
 		}
 		defer keyvalue.ClearValues(read.Values)
 		if read.Values[0] == nil {
-			return workqueue.Change{}, workexecution.Completion{}, conflict("Service lifecycle failure is missing its acknowledged progress")
+			return workqueue.Change{}, workexecution.Completion{}, conflict(
+				"Service lifecycle failure is missing its acknowledged progress",
+			)
 		}
 		progress, err := lifecycleexecution.DecodeProgress(attempt, input, read.Values[0].Value)
 		if err != nil {
 			return workqueue.Change{}, workexecution.Completion{}, err
 		}
 		expected, err := progress.Checkpoint(attempt, input)
-		if err != nil || expected != *checkpoint || progress.BeganAt == nil && len(progress.Completed) == len(input.Members)+hookCount(input) {
-			return workqueue.Change{}, workexecution.Completion{}, conflict("Service lifecycle failure differs from acknowledged progress; completed work must report completion")
+		if err != nil || expected != *checkpoint ||
+			progress.BeganAt == nil && len(progress.Completed) == len(input.Members)+hookCount(input) {
+			return workqueue.Change{}, workexecution.Completion{}, conflict(
+				"Service lifecycle failure differs from acknowledged progress; completed work must report completion",
+			)
 		}
 		settled = progress.BeganAt == nil
 		guards = append(guards, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
@@ -84,9 +99,14 @@ func (repository *Repository) PrepareLifecycleFailure(ctx context.Context, view 
 	}}, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: settled}, nil
 }
 
-func (repository *Repository) LoadLifecycleFailure(ctx context.Context, view workqueue.ResumeView, input *agentpb.ServiceLifecycleWorkInput) ([]byte, error) {
+func (repository *Repository) LoadLifecycleFailure(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input *agentpb.ServiceLifecycleWorkInput,
+) ([]byte, error) {
 	attempt := view.Attempt.Attempt
-	if view.Work.Item.Item.Operation != workexecution.ServiceLifecycle || attempt.FinishedAt == nil || attempt.Result == nil {
+	if view.Work.Item.Item.Operation != workexecution.ServiceLifecycle || attempt.FinishedAt == nil ||
+		attempt.Result == nil {
 		return nil, conflict("Service lifecycle failure has no retained result")
 	}
 	read, err := repository.read(ctx, []string{FailureKey(attempt.ID)}, view.Work.ReadRevision)

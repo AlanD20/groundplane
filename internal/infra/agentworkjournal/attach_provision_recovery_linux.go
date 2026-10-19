@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 )
 
-func (journal *Journal) SaveProvisionInspection(ctx context.Context, input attachexecution.ProvisionRecoveryInput, report attachexecution.ProvisionInspection) error {
+func (journal *Journal) SaveProvisionInspection(
+	ctx context.Context,
+	input attachexecution.ProvisionRecoveryInput,
+	report attachexecution.ProvisionInspection,
+) error {
 	if report.Validate(input) != nil {
 		return invalid()
 	}
@@ -43,7 +47,10 @@ func (journal *Journal) SaveProvisionInspection(ctx context.Context, input attac
 		AttachProvisionRecovery: &AttachProvisionRecoveryRecord{Source: input.Source, Report: report}})
 }
 
-func (journal *Journal) LoadProvisionInspection(ctx context.Context, input attachexecution.ProvisionRecoveryInput) (*workexecution.Attempt, *AttachProvisionRecoveryRecord, error) {
+func (journal *Journal) LoadProvisionInspection(
+	ctx context.Context,
+	input attachexecution.ProvisionRecoveryInput,
+) (*workexecution.Attempt, *AttachProvisionRecoveryRecord, error) {
 	if input.Validate() != nil {
 		return nil, nil, invalid()
 	}
@@ -62,7 +69,11 @@ func (journal *Journal) LoadProvisionInspection(ctx context.Context, input attac
 	return &state.Attempt, state.AttachProvisionRecovery, nil
 }
 
-func (journal *Journal) AcknowledgeProvisionInspection(ctx context.Context, input attachexecution.ProvisionRecoveryInput, terminal workexecution.Attempt) error {
+func (journal *Journal) AcknowledgeProvisionInspection(
+	ctx context.Context,
+	input attachexecution.ProvisionRecoveryInput,
+	terminal workexecution.Attempt,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -78,7 +89,10 @@ func (journal *Journal) AcknowledgeProvisionInspection(ctx context.Context, inpu
 	if previous := state.AttachProvisionRecovery.Receipt; previous != nil {
 		if terminal.Result == nil || terminal.FinishedAt == nil || previous.Outcome != terminal.Outcome ||
 			*previous.Result != *terminal.Result || !previous.FinishedAt.Equal(*terminal.FinishedAt) ||
-			!workexecution.SameAssignment(*previous, terminal) || (previous.StartedAt == nil) != (terminal.StartedAt == nil) ||
+			!workexecution.SameAssignment(
+				*previous,
+				terminal,
+			) || (previous.StartedAt == nil) != (terminal.StartedAt == nil) ||
 			previous.StartedAt != nil && !previous.StartedAt.Equal(*terminal.StartedAt) {
 			return conflict()
 		}
@@ -90,7 +104,8 @@ func (journal *Journal) AcknowledgeProvisionInspection(ctx context.Context, inpu
 }
 
 func matchesProvisionRecovery(state *attemptRecord, input attachexecution.ProvisionRecoveryInput) bool {
-	if state == nil || state.AttachProvisionRecovery == nil || !workexecution.SameAssignment(state.Attempt, input.Attempt) {
+	if state == nil || state.AttachProvisionRecovery == nil ||
+		!workexecution.SameAssignment(state.Attempt, input.Attempt) {
 		return false
 	}
 	left, err := attachexecution.EncodeProvisionRecovery(state.AttachProvisionRecovery.Source)

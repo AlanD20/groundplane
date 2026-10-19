@@ -14,7 +14,12 @@ import (
 
 // PrepareVolumeDirectoryBatch returns a pending batch unchanged for inspection,
 // never permission to replay it. Only a saved result permits the next cursor.
-func (journal *Journal) PrepareVolumeDirectoryBatch(ctx context.Context, attempt workexecution.Attempt, volumeID string, at time.Time) (*VolumeDirectoryRecord, bool, error) {
+func (journal *Journal) PrepareVolumeDirectoryBatch(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	volumeID string,
+	at time.Time,
+) (*VolumeDirectoryRecord, bool, error) {
 	if attempt.Validate() != nil {
 		return nil, false, invalid()
 	}
@@ -56,7 +61,13 @@ func (journal *Journal) PrepareVolumeDirectoryBatch(ctx context.Context, attempt
 	return state.Volume.Directory, true, nil
 }
 
-func (journal *Journal) SaveVolumeDirectoryResult(ctx context.Context, attempt workexecution.Attempt, volumeID string, batch volumeexecution.DirectoryBatch, result volumeexecution.DirectoryResult) error {
+func (journal *Journal) SaveVolumeDirectoryResult(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	volumeID string,
+	batch volumeexecution.DirectoryBatch,
+	result volumeexecution.DirectoryResult,
+) error {
 	if attempt.Validate() != nil {
 		return invalid()
 	}

@@ -18,8 +18,13 @@ func preparedCascadeCaptureKey(workID string) string {
 // StageCascadeCapture stores encrypted admission inputs before Task acceptance.
 // It activates no pins and grants no work: publication later verifies the exact
 // Secret versions and joins active capture, binding ownership and queue item.
-func (repository *InputRepository) StageCascadeCapture(ctx context.Context, task workexecution.Task, item workexecution.Item,
-	input DetachInput, capture WorkCapture, admission []keyvalue.Condition,
+func (repository *InputRepository) StageCascadeCapture(
+	ctx context.Context,
+	task workexecution.Task,
+	item workexecution.Item,
+	input DetachInput,
+	capture WorkCapture,
+	admission []keyvalue.Condition,
 ) error {
 	view := workqueue.View{Task: workqueue.TaskSnapshot{Task: task}, Item: workqueue.ItemSnapshot{Item: item}}
 	if task.Validate() != nil || task.PublicationComplete || task.Action != workexecution.ActionRemove ||
@@ -75,7 +80,10 @@ func (repository *InputRepository) StageCascadeCapture(ctx context.Context, task
 	return nil
 }
 
-func (repository *InputRepository) LoadPreparedCascadeCapture(ctx context.Context, view workqueue.View) (DetachCapture, error) {
+func (repository *InputRepository) LoadPreparedCascadeCapture(
+	ctx context.Context,
+	view workqueue.View,
+) (DetachCapture, error) {
 	input, guards, err := repository.LoadDetach(ctx, view)
 	if err != nil {
 		return DetachCapture{}, err

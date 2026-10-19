@@ -61,10 +61,14 @@ func (owner *VolumeWorkPreparation) Prepare(ctx context.Context, taskID, workID 
 		if captured.ID != item.ID {
 			continue
 		}
-		if captured.TaskID != item.TaskID || captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
-			captured.Placement != item.Placement || !slices.Equal(captured.Dependencies, item.Dependencies) ||
-			!slices.Equal(captured.Claims, item.Claims) || captured.Input != nil ||
-			!captured.CreatedAt.Equal(item.CreatedAt) || !captured.Deadline.Equal(item.Deadline) {
+		if captured.TaskID != item.TaskID || captured.Operation != item.Operation ||
+			captured.TargetID != item.TargetID ||
+			captured.Placement != item.Placement ||
+			!slices.Equal(captured.Dependencies, item.Dependencies) ||
+			!slices.Equal(captured.Claims, item.Claims) ||
+			captured.Input != nil ||
+			!captured.CreatedAt.Equal(item.CreatedAt) ||
+			!captured.Deadline.Equal(item.Deadline) {
 			return errs.New(errs.KindStateConflict, "Blueprint Volume work differs from its accepted graph")
 		}
 		unit = &graph.Record.Units[index]
@@ -84,7 +88,10 @@ func (owner *VolumeWorkPreparation) Prepare(ctx context.Context, taskID, workID 
 		}
 	}
 	if applied == nil || (applied.State != blueprintunits.Absent && applied.State != blueprintunits.Applied) {
-		return errs.New(errs.KindStateConflict, "Blueprint Volume needs a proven present or absent state before execution")
+		return errs.New(
+			errs.KindStateConflict,
+			"Blueprint Volume needs a proven present or absent state before execution",
+		)
 	}
 	dependencies := make([]workqueue.ItemSnapshot, len(item.Dependencies))
 	for index, id := range item.Dependencies {
@@ -101,11 +108,21 @@ func (owner *VolumeWorkPreparation) Prepare(ctx context.Context, taskID, workID 
 	if err != nil {
 		return err
 	}
-	guards = append(guards,
-		keyvalue.Condition{Key: blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID), ModRevision: graph.Revision},
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID), ModRevision: snapshot.HeadRevision},
+	guards = append(
+		guards,
+		keyvalue.Condition{
+			Key:         blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID),
+			ModRevision: graph.Revision,
+		},
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID),
+			ModRevision: snapshot.HeadRevision,
+		},
 		keyvalue.Condition{Key: blueprintunits.EpochKey(task.Scope.EnvironmentID), ModRevision: snapshot.EpochRevision},
-		keyvalue.Condition{Key: blueprintunits.DesiredPlanKey(task.Scope.EnvironmentID), ModRevision: snapshot.Desired.Revision},
+		keyvalue.Condition{
+			Key:         blueprintunits.DesiredPlanKey(task.Scope.EnvironmentID),
+			ModRevision: snapshot.Desired.Revision,
+		},
 	)
 	change, err := owner.inputs.PrepareBlueprintInput(ctx, work, input, dependencies, guards, time.Now().UTC())
 	if err != nil {

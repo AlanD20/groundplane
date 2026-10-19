@@ -37,7 +37,10 @@ func (repository *ScriptRepository) LoadScriptWork(ctx context.Context, view wor
 	var authority []keyvalue.Condition
 	if task.Action == workexecution.ActionScript {
 		if task.TargetID != item.TargetID || *item.Input != task.Intent {
-			return ScriptWorkInput{}, errs.New(errs.KindStateConflict, "Standalone Script differs from its accepted Task input")
+			return ScriptWorkInput{}, errs.New(
+				errs.KindStateConflict,
+				"Standalone Script differs from its accepted Task input",
+			)
 		}
 	} else if (task.Action == workexecution.ActionDeploy || task.Action == workexecution.ActionRollback) &&
 		ids.Validate(ids.KindReleaseGroup, task.TargetID) == nil {
@@ -53,7 +56,10 @@ func (repository *ScriptRepository) LoadScriptWork(ctx context.Context, view wor
 		return ScriptWorkInput{}, errs.New(errs.KindStateConflict, "Task action does not authorize this Script work")
 	}
 	key := scriptexecutions.WorkKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return ScriptWorkInput{}, err
 	}
@@ -101,7 +107,10 @@ func (repository *ScriptRepository) loadScriptExecutionForWork(ctx context.Conte
 		executionRead.Values[0].ModRevision <= 0 || executionRead.Values[0].ModRevision > view.ReadRevision {
 		return ScriptWorkInput{}, errs.New(errs.KindStateConflict, "Script captured execution is unavailable")
 	}
-	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](executionRead.Values[0].Value, "script-execution")
+	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](
+		executionRead.Values[0].Value,
+		"script-execution",
+	)
 	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
 		execution.ID != executionID || execution.CurrentTaskID != task.ID || execution.WorkItemID != item.ID ||
 		execution.Input != expected ||

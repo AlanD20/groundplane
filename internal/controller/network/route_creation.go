@@ -100,7 +100,17 @@ func (service *routeMutationService) createRouteOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.acceptRouteWork(ctx, environment, project, target, nil, record, workexecution.ActionCreate, locator, evidence)
+	return service.acceptRouteWork(
+		ctx,
+		environment,
+		project,
+		target,
+		nil,
+		record,
+		workexecution.ActionCreate,
+		locator,
+		evidence,
+	)
 }
 
 func validateRouteCreationInput(input apiTypes.RouteCreate) error {

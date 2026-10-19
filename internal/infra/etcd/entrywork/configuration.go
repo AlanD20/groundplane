@@ -12,12 +12,19 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (repository *InputRepository) LoadActiveConfiguration(ctx context.Context, view workqueue.ResumeView) (entryexecution.FileInput, []taskmaterialization.Record, error) {
+func (repository *InputRepository) LoadActiveConfiguration(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (entryexecution.FileInput, []taskmaterialization.Record, error) {
 	var empty entryexecution.FileInput
 	attempt := view.Attempt.Attempt
-	if !view.ActiveAttempt || !view.CurrentExecutor || attempt.Direction != workexecution.Forward || attempt.FinishedAt != nil ||
-		attempt.StartedAt == nil || view.Checkpoint.Record == nil || view.Work.Task.Task.FinishedAt != nil ||
-		view.Work.Task.Task.CollectionStartedAt != nil || view.Work.Task.Task.Stop != nil {
+	if !view.ActiveAttempt || !view.CurrentExecutor || attempt.Direction != workexecution.Forward ||
+		attempt.FinishedAt != nil ||
+		attempt.StartedAt == nil ||
+		view.Checkpoint.Record == nil ||
+		view.Work.Task.Task.FinishedAt != nil ||
+		view.Work.Task.Task.CollectionStartedAt != nil ||
+		view.Work.Task.Task.Stop != nil {
 		return empty, nil, conflict("Entry configuration requires an active file stage")
 	}
 	input, capture, _, err := repository.Load(ctx, view.Work)
@@ -44,7 +51,8 @@ func (repository *InputRepository) LoadActiveConfiguration(ctx context.Context, 
 		return empty, nil, err
 	}
 	checkpoint, err := progress.Checkpoint(attempt, input)
-	if err != nil || checkpoint != *view.Checkpoint.Record || !progress.InFlight || (progress.Stage != entryexecution.WriteConfiguration && progress.Stage != entryexecution.VerifyConfiguration) {
+	if err != nil || checkpoint != *view.Checkpoint.Record || !progress.InFlight ||
+		(progress.Stage != entryexecution.WriteConfiguration && progress.Stage != entryexecution.VerifyConfiguration) {
 		return empty, nil, conflict("Entry configuration does not match its acknowledged file stage")
 	}
 	sources, err := runtimeconfiguration.New(repository.store)

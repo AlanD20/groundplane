@@ -79,7 +79,10 @@ func (service *WorkReports) forwardReport(ctx context.Context, authorization age
 	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || claimed.Direction != workexecution.Forward ||
 		view.Attempt.Attempt.StartedAt == nil || view.Work.Item.Item.Operation != workexecution.ServiceRemoval ||
 		!view.Work.Task.Task.PublicationComplete || view.Work.Task.Task.CollectionStartedAt != nil {
-		return workqueue.ResumeView{}, nil, errs.New(errs.KindStateConflict, "Service removal report has no retained started execution")
+		return workqueue.ResumeView{}, nil, errs.New(
+			errs.KindStateConflict,
+			"Service removal report has no retained started execution",
+		)
 	}
 	captured, _, err := service.inputs.Load(ctx, view.Work)
 	if err != nil {

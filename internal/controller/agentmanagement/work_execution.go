@@ -70,9 +70,25 @@ func (owner *Work) run(ctx context.Context, delivery workqueue.Delivery, forward
 	var result agentoperations.Result
 	var effectErr error
 	if forward {
-		owner.report(operationContext, delivery, "agent_lifecycle", "Apply captured Agent change", "Use only the selected image, credentials and generation", true, nil)
+		owner.report(
+			operationContext,
+			delivery,
+			"agent_lifecycle",
+			"Apply captured Agent change",
+			"Use only the selected image, credentials and generation",
+			true,
+			nil,
+		)
 		result, effectErr = owner.executeFresh(operationContext, capture)
-		owner.report(operationContext, delivery, "agent_lifecycle", "Apply captured Agent change", "Use only the selected image, credentials and generation", false, effectErr)
+		owner.report(
+			operationContext,
+			delivery,
+			"agent_lifecycle",
+			"Apply captured Agent change",
+			"Use only the selected image, credentials and generation",
+			false,
+			effectErr,
+		)
 		owner.mu.Lock()
 		stopping = stopping || active.stopped
 		owner.mu.Unlock()
@@ -95,14 +111,34 @@ func (owner *Work) run(ctx context.Context, delivery workqueue.Delivery, forward
 	}
 	recovery, finish := context.WithTimeout(context.WithoutCancel(ctx), localagent.RemovalRecoveryTimeout)
 	defer finish()
-	owner.report(recovery, delivery, "agent_reconcile", "Reconcile Agent effects", "Verify authenticated readiness or retire only this operation's captured runtime", true, nil)
+	owner.report(
+		recovery,
+		delivery,
+		"agent_reconcile",
+		"Reconcile Agent effects",
+		"Verify authenticated readiness or retire only this operation's captured runtime",
+		true,
+		nil,
+	)
 	result, recoveryErr := owner.recoverLifecycle(recovery, capture, failure, stopping)
-	owner.report(recovery, delivery, "agent_reconcile", "Reconcile Agent effects", "Verify authenticated readiness or retire only this operation's captured runtime", false, recoveryErr)
+	owner.report(
+		recovery,
+		delivery,
+		"agent_reconcile",
+		"Reconcile Agent effects",
+		"Verify authenticated readiness or retire only this operation's captured runtime",
+		false,
+		recoveryErr,
+	)
 	if recoveryErr != nil {
 		if failure == nil {
 			failure = taskprogress.CaptureControllerFailure(recoveryErr)
 		}
-		result = agentoperations.Result{Outcome: workexecution.Failed, Observed: agentoperations.Unresolved, Failure: failure}
+		result = agentoperations.Result{
+			Outcome:  workexecution.Failed,
+			Observed: agentoperations.Unresolved,
+			Failure:  failure,
+		}
 	}
 	if stopping {
 		result.Outcome = workexecution.Cancelled
@@ -132,7 +168,11 @@ func (owner *Work) executeFresh(ctx context.Context, capture agentoperations.Cap
 		if err != nil {
 			return agentoperations.Result{}, err
 		}
-		return agentoperations.Result{Outcome: workexecution.Succeeded, Observed: agentoperations.ReadyDesired, Generation: agent.Generation}, nil
+		return agentoperations.Result{
+			Outcome:    workexecution.Succeeded,
+			Observed:   agentoperations.ReadyDesired,
+			Generation: agent.Generation,
+		}, nil
 	case workexecution.ActionRemove:
 		if err := owner.agents.Remove(ctx, capture.AgentID, capture.Image, capture.StartingGeneration); err != nil {
 			return agentoperations.Result{}, err
@@ -152,7 +192,12 @@ func (owner *Work) executeFresh(ctx context.Context, capture agentoperations.Cap
 	}
 }
 
-func (owner *Work) recoverLifecycle(ctx context.Context, capture agentoperations.Capture, failure *taskprogress.Failure, stopping bool) (agentoperations.Result, error) {
+func (owner *Work) recoverLifecycle(
+	ctx context.Context,
+	capture agentoperations.Capture,
+	failure *taskprogress.Failure,
+	stopping bool,
+) (agentoperations.Result, error) {
 	result := agentoperations.Result{Outcome: workexecution.Failed, Failure: failure}
 	switch capture.Action {
 	case workexecution.ActionCreate:
@@ -188,7 +233,9 @@ func (owner *Work) recoverLifecycle(ctx context.Context, capture agentoperations
 			return result, err
 		}
 		goal := localagent.UpdateRestore
-		if failure == nil && !stopping && health.Agent.Phase == localagent.PhaseReady && health.Agent.Image == capture.Image && health.Agent.Generation == capture.StartingGeneration+1 {
+		if failure == nil && !stopping && health.Agent.Phase == localagent.PhaseReady &&
+			health.Agent.Image == capture.Image &&
+			health.Agent.Generation == capture.StartingGeneration+1 {
 			// This is qualification of an already committed Ready generation,
 			// not permission to start or finish a new candidate replacement.
 			goal = localagent.UpdateFinish
@@ -208,18 +255,36 @@ func (owner *Work) pauseReplacement(ctx context.Context, capture agentoperations
 	if err != nil {
 		return err
 	}
-	return owner.registrations.PauseReplacement(ctx, capture.AgentID, capture.StartingGeneration, health.Agent.Generation)
+	return owner.registrations.PauseReplacement(
+		ctx,
+		capture.AgentID,
+		capture.StartingGeneration,
+		health.Agent.Generation,
+	)
 }
 
-func (owner *Work) finishReplacement(ctx context.Context, capture agentoperations.Capture, observed localagent.UpdateResult, failure *taskprogress.Failure) (agentoperations.Result, error) {
+func (owner *Work) finishReplacement(
+	ctx context.Context,
+	capture agentoperations.Capture,
+	observed localagent.UpdateResult,
+	failure *taskprogress.Failure,
+) (agentoperations.Result, error) {
 	health, err := owner.agents.Health(ctx, capture.AgentID)
 	if err != nil {
 		return agentoperations.Result{}, err
 	}
 	if health.Agent.Phase != localagent.PhaseReady || !health.Online || !health.Healthy {
-		return agentoperations.Result{}, errs.New(errs.KindStateConflict, "Agent has not proved authenticated readiness")
+		return agentoperations.Result{}, errs.New(
+			errs.KindStateConflict,
+			"Agent has not proved authenticated readiness",
+		)
 	}
-	result := agentoperations.Result{Outcome: workexecution.Failed, Observed: agentoperations.ReadyPrevious, Generation: health.Agent.Generation, Failure: failure}
+	result := agentoperations.Result{
+		Outcome:    workexecution.Failed,
+		Observed:   agentoperations.ReadyPrevious,
+		Generation: health.Agent.Generation,
+		Failure:    failure,
+	}
 	if observed == localagent.UpdateReadyDesired {
 		if health.Agent.Generation != capture.StartingGeneration+1 || health.Agent.Image != capture.Image {
 			return result, errs.New(errs.KindStateConflict, "Agent desired-generation readiness changed")

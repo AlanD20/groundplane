@@ -19,11 +19,17 @@ func (ledger *ReleaseLedger) PrepareGroupReleaseMemberPublication(ctx context.Co
 ) (bool, workqueue.Change, error) {
 	if task.Revision <= 0 || task.Task.PublicationComplete || root.Revision <= 0 || root.ReadRevision != revision ||
 		root.Record.Policy.TaskID != task.Task.ID || index < 0 || index >= len(root.Record.Policy.Members) {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Group member publication requires its open captured graph")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Group member publication requires its open captured graph",
+		)
 	}
 	accepted, err := root.Record.Task()
 	if err != nil || accepted.Intent != task.Task.Intent || accepted.ID != task.Task.ID {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Group member publication differs from its accepted Task")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Group member publication differs from its accepted Task",
+		)
 	}
 	member := root.Record.Policy.Members[index]
 	preparationKey := GroupReleasePreparationKey(member.ForwardID)
@@ -36,19 +42,28 @@ func (ledger *ReleaseLedger) PrepareGroupReleaseMemberPublication(ctx context.Co
 		return false, workqueue.Change{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Group member publication read is incomplete")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Group member publication read is incomplete",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > revision) {
-			return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Group member publication has an invalid record revision")
+			return false, workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Group member publication has an invalid record revision",
+			)
 		}
 	}
 	preparation, rollout := read.Values[0], read.Values[1]
 	ready := preparation != nil && rollout != nil
 	if ready {
 		if read.Values[2] != nil || read.Values[3] != nil {
-			return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Group member has both staged and published ownership")
+			return false, workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Group member has both staged and published ownership",
+			)
 		}
 	} else {
 		if preparation != nil || rollout != nil || read.Values[2] == nil || read.Values[3] == nil {
@@ -74,7 +89,10 @@ func (ledger *ReleaseLedger) PrepareGroupReleaseMemberPublication(ctx context.Co
 	}
 	if request.Intent.ID != member.Member.ReleaseID || request.Intent.GroupMemberOrdinal != member.Member.Ordinal ||
 		request.Intent.GroupOperationID != root.Record.Policy.Manifest.OperationID || request.GroupID != task.Task.TargetID {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Group member differs from its sealed admission reference")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Group member differs from its sealed admission reference",
+		)
 	}
 	if err := request.Matches(task.Task, descriptor, capture); err != nil {
 		return false, workqueue.Change{}, err
@@ -86,10 +104,17 @@ func (ledger *ReleaseLedger) PrepareGroupReleaseMemberPublication(ctx context.Co
 		{Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision},
 		{Key: releasegroups.ExecutionCaptureKey(task.Task.ID), ModRevision: root.Revision},
 		{Key: preparationKey}, {Key: rolloutKey},
-		{Key: stagedPreparation, ModRevision: preparation.ModRevision}, {Key: stagedRollout, ModRevision: rollout.ModRevision},
+		{
+			Key:         stagedPreparation,
+			ModRevision: preparation.ModRevision,
+		}, {Key: stagedRollout, ModRevision: rollout.ModRevision},
 	}, Mutations: []keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: preparationKey, Value: append([]byte(nil), preparation.Value...)},
 		{Type: keyvalue.MutationPut, Key: rolloutKey, Value: append([]byte(nil), rollout.Value...)},
-		{Type: keyvalue.MutationDelete, Key: groupReleaseDraftMemberKey(task.Task.ID, member.ForwardID, ""), Prefix: true},
+		{
+			Type:   keyvalue.MutationDelete,
+			Key:    groupReleaseDraftMemberKey(task.Task.ID, member.ForwardID, ""),
+			Prefix: true,
+		},
 	}}, nil
 }

@@ -85,8 +85,10 @@ func prepareInterruptedHook(
 	defer keyvalue.ClearValues(prior.Values)
 	value := prior.Values[0]
 	previous, err := workqueue.DecodeAttempt(value.Value)
-	if err != nil || value.Key != attemptKey || value.ModRevision <= 0 || previous.ID != record.AttemptID || previous.Direction != workexecution.Recovery ||
-		previous.TaskID != input.Input.Attempt.TaskID || previous.WorkItemID != input.Input.Attempt.WorkItemID ||
+	if err != nil || value.Key != attemptKey || value.ModRevision <= 0 || previous.ID != record.AttemptID ||
+		previous.Direction != workexecution.Recovery ||
+		previous.TaskID != input.Input.Attempt.TaskID ||
+		previous.WorkItemID != input.Input.Attempt.WorkItemID ||
 		previous.Input != input.Input.Attempt.Input ||
 		previous.Executor != *record.Executor ||
 		previous.Executor.HostID != input.Input.Attempt.Executor.HostID ||

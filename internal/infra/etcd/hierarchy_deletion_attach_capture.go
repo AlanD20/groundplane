@@ -32,14 +32,23 @@ func (capture *HierarchyAttachCapture) Clear() {
 
 // LoadHierarchyAttachCapture distinguishes unprepared work from an invalid or
 // changed source. Absence is useful only to preparation, never to execution.
-func (repository *HierarchyDeletionRepository) LoadHierarchyAttachCapture(ctx context.Context, view workqueue.View) (HierarchyAttachCapture, error) {
+func (repository *HierarchyDeletionRepository) LoadHierarchyAttachCapture(
+	ctx context.Context,
+	view workqueue.View,
+) (HierarchyAttachCapture, error) {
 	source, err := repository.LoadHierarchyAttachInput(ctx, view)
 	if err != nil {
 		return HierarchyAttachCapture{}, err
 	}
-	result := HierarchyAttachCapture{Source: source, Conditions: append([]keyvalue.Condition(nil), source.Conditions...)}
+	result := HierarchyAttachCapture{
+		Source:     source,
+		Conditions: append([]keyvalue.Condition(nil), source.Conditions...),
+	}
 	key := attachremoval.WorkCaptureKey(view.Item.Item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -78,7 +87,11 @@ func (repository *HierarchyDeletionRepository) LoadHierarchyAttachCapture(ctx co
 	return result, nil
 }
 
-func matchesHierarchyAttachCapture(view workqueue.View, source attachremoval.Input, capture attachremoval.WorkCapture) bool {
+func matchesHierarchyAttachCapture(
+	view workqueue.View,
+	source attachremoval.Input,
+	capture attachremoval.WorkCapture,
+) bool {
 	requiresHook := false
 	if source.Backing.Desired.Adapter == "custom" && source.Backing.Desired.Hooks != nil {
 		for _, input := range source.Backing.Desired.Hooks.Inputs {
@@ -89,9 +102,13 @@ func matchesHierarchyAttachCapture(view workqueue.View, source attachremoval.Inp
 		return false
 	}
 	digest, err := attachremoval.Digest(source)
-	return err == nil && capture.Validate() == nil && view.Item.Item.Input != nil && capture.TaskID == view.Task.Task.ID &&
-		capture.WorkItemID == view.Item.Item.ID && capture.OperationID == HierarchyAttachOperation(view) &&
-		capture.Action == *view.Item.Item.Input && capture.FrozenSHA256 == digest && capture.BackingProjectID == source.Attach.BackingProjectID
+	return err == nil && capture.Validate() == nil && view.Item.Item.Input != nil &&
+		capture.TaskID == view.Task.Task.ID &&
+		capture.WorkItemID == view.Item.Item.ID &&
+		capture.OperationID == HierarchyAttachOperation(view) &&
+		capture.Action == *view.Item.Item.Input &&
+		capture.FrozenSHA256 == digest &&
+		capture.BackingProjectID == source.Attach.BackingProjectID
 }
 
 // PrepareHierarchyAttachCapture atomically publishes the encrypted capture and
@@ -101,7 +118,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachCapture(ctx
 ) (workqueue.Change, error) {
 	item, task := view.Item.Item, view.Task.Task
 	if !hierarchyCaptureMayActivate(view) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Attach input preparation requires unstarted removal work")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Attach input preparation requires unstarted removal work",
+		)
 	}
 	current, err := repository.LoadHierarchyAttachCapture(ctx, view)
 	if err != nil {
@@ -109,7 +129,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachCapture(ctx
 	}
 	defer current.Clear()
 	if current.Revision != 0 || !matchesHierarchyAttachCapture(view, current.Source.Input, capture) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Attach removal input is already captured or changed")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Attach removal input is already captured or changed",
+		)
 	}
 	if (capture.Pins == nil) != prepared.IsZero() {
 		return workqueue.Change{}, hierarchydeletion.CorruptHierarchyDeletion()
@@ -152,7 +175,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachCapture(ctx
 
 // HierarchyAttachAdmission guards the published capture and its live Secret
 // ownership in the same assignment or Start transaction as the shared work CAS.
-func (repository *HierarchyDeletionRepository) HierarchyAttachAdmission(ctx context.Context, view workqueue.View) (workqueue.Change, error) {
+func (repository *HierarchyDeletionRepository) HierarchyAttachAdmission(
+	ctx context.Context,
+	view workqueue.View,
+) (workqueue.Change, error) {
 	capture, err := repository.LoadHierarchyAttachCapture(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -177,13 +203,19 @@ func (repository *HierarchyDeletionRepository) HierarchyAttachAdmission(ctx cont
 			return workqueue.Change{}, err
 		}
 		if !found {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Attach removal lost its captured Secret retention")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Attach removal lost its captured Secret retention",
+			)
 		}
 		condition, err := root.AdmissionCondition(*capture.Capture.Pins)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision},
+		)
 	}
 	return change, nil
 }

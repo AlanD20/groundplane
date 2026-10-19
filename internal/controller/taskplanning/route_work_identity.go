@@ -12,11 +12,18 @@ import (
 
 // NewRouteConfigurationWork names the operator's Route action while assigning
 // its router effect to the owning Component. Both resources remain claimed.
-func NewRouteConfigurationWork(scope workexecution.Scope, placement workexecution.Placement,
-	claim blueprints.EnvironmentBlueprintStageClaim, action workexecution.Action, routeID, routeName, componentID string,
+func NewRouteConfigurationWork(
+	scope workexecution.Scope,
+	placement workexecution.Placement,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	action workexecution.Action,
+	routeID, routeName, componentID string,
 ) (workexecution.Task, workexecution.Item, error) {
 	if placement.Executor != workexecution.Agent || ids.Validate(ids.KindComponent, componentID) != nil {
-		return workexecution.Task{}, workexecution.Item{}, errs.New(errs.KindValidationFailed, "Route configuration requires its router host")
+		return workexecution.Task{}, workexecution.Item{}, errs.New(
+			errs.KindValidationFailed,
+			"Route configuration requires its router host",
+		)
 	}
 	return newRouteWork(scope, placement, claim, action, routeID, routeName, componentID)
 }
@@ -26,25 +33,45 @@ func NewRouteConfigurationWork(scope workexecution.Scope, placement workexecutio
 func NewRouteDefinitionWork(scope workexecution.Scope, claim blueprints.EnvironmentBlueprintStageClaim,
 	action workexecution.Action, routeID, routeName string,
 ) (workexecution.Task, workexecution.Item, error) {
-	return newRouteWork(scope, workexecution.Placement{Executor: workexecution.Controller}, claim, action, routeID, routeName, "")
+	return newRouteWork(
+		scope,
+		workexecution.Placement{Executor: workexecution.Controller},
+		claim,
+		action,
+		routeID,
+		routeName,
+		"",
+	)
 }
 
-func newRouteWork(scope workexecution.Scope, placement workexecution.Placement,
-	claim blueprints.EnvironmentBlueprintStageClaim, action workexecution.Action, routeID, routeName, componentID string,
+func newRouteWork(
+	scope workexecution.Scope,
+	placement workexecution.Placement,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	action workexecution.Action,
+	routeID, routeName, componentID string,
 ) (workexecution.Task, workexecution.Item, error) {
 	if blueprints.ValidateEnvironmentBlueprintStageClaim(claim) != nil ||
 		claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		claim.EnvironmentID != scope.EnvironmentID || claim.RevisionID != claim.TaskID ||
 		ids.Validate(ids.KindRoute, routeID) != nil ||
 		(action != workexecution.ActionCreate && action != workexecution.ActionUpdate && action != workexecution.ActionRemove) {
-		return workexecution.Task{}, workexecution.Item{}, errs.New(errs.KindValidationFailed, "Route action requires its sealed mutation and router host")
+		return workexecution.Task{}, workexecution.Item{}, errs.New(
+			errs.KindValidationFailed,
+			"Route action requires its sealed mutation and router host",
+		)
 	}
 	task := workexecution.Task{
 		ID: claim.TaskID, Actor: workexecution.OperatorActor, Scope: scope, Action: action,
 		TargetID: routeID, TargetName: routeName,
-		Intent:    workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, claim.CreatedAt, claim.TaskID, "request-intent"), SHA256: claim.Intent.CiphertextDigest},
+		Intent: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, claim.CreatedAt, claim.TaskID, "request-intent"),
+			SHA256: claim.Intent.CiphertextDigest,
+		},
 		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
-		Deadline: claim.CreatedAt.Add(time.Duration(desiredrevision.TaskTimeoutSeconds) * time.Second), ExpectedItems: 1,
+		Deadline: claim.CreatedAt.Add(
+			time.Duration(desiredrevision.TaskTimeoutSeconds) * time.Second,
+		), ExpectedItems: 1,
 	}
 	item := workexecution.Item{
 		ID: ids.DeriveAt(ids.KindWorkItem, claim.CreatedAt, claim.TaskID, "route-configuration"), TaskID: task.ID,
@@ -54,8 +81,14 @@ func newRouteWork(scope workexecution.Scope, placement workexecution.Placement,
 		Claims: []workexecution.Claim{{ScopeID: scope.EnvironmentID}, {ScopeID: routeID}},
 	}
 	if placement.Executor == workexecution.Agent {
-		item.Claims = append(item.Claims, workexecution.Claim{HostID: placement.HostID, ScopeID: scope.EnvironmentID},
-			workexecution.Claim{ScopeID: componentID}, workexecution.Claim{HostID: placement.HostID, ScopeID: componentID})
+		item.Claims = append(
+			item.Claims,
+			workexecution.Claim{HostID: placement.HostID, ScopeID: scope.EnvironmentID},
+			workexecution.Claim{
+				ScopeID: componentID,
+			},
+			workexecution.Claim{HostID: placement.HostID, ScopeID: componentID},
+		)
 	} else {
 		item.TargetID = routeID
 	}

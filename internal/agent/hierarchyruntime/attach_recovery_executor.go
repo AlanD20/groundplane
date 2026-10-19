@@ -9,7 +9,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (executor *AttachExecutor) Recover(ctx context.Context, input attachexecution.RecoveryInput, exchange AttachExchange) (*workexecution.Attempt, error) {
+func (executor *AttachExecutor) Recover(
+	ctx context.Context,
+	input attachexecution.RecoveryInput,
+	exchange AttachExchange,
+) (*workexecution.Attempt, error) {
 	if err := input.Validate(); err != nil {
 		return nil, err
 	}
@@ -56,7 +60,11 @@ func (executor *AttachExecutor) Recover(ctx context.Context, input attachexecuti
 	return &terminal, nil
 }
 
-func (executor *AttachExecutor) inspectRecovery(ctx context.Context, input attachexecution.RecoveryInput, exchange AttachExchange) (attachexecution.RecoveryInput, attachexecution.RemovalInspection, error) {
+func (executor *AttachExecutor) inspectRecovery(
+	ctx context.Context,
+	input attachexecution.RecoveryInput,
+	exchange AttachExchange,
+) (attachexecution.RecoveryInput, attachexecution.RemovalInspection, error) {
 	interrupted := func() attachexecution.RemovalInspection {
 		return attachexecution.RemovalInspection{AttemptID: input.Attempt.ID, ForwardID: input.Source.Forward.ID,
 			Failure: input.Source.Evidence, CommandOrdinal: uint32(input.Source.Failure.Checkpoint.Sequence / 2),

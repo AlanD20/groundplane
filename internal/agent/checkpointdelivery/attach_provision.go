@@ -22,8 +22,12 @@ type AttachProvision struct {
 func NewAttachProvision(input attachexecution.ProvisionInput, journal *agentworkjournal.Journal,
 	exchange AttachProvisionExchange,
 ) (*AttachProvision, error) {
-	if input.Validate() != nil || input.Attempt.StartedAt == nil || input.Attempt.FinishedAt != nil || journal == nil || exchange == nil {
-		return nil, errs.New(errs.KindValidationFailed, "Attach provisioning reporting requires a started Agent attempt")
+	if input.Validate() != nil || input.Attempt.StartedAt == nil || input.Attempt.FinishedAt != nil || journal == nil ||
+		exchange == nil {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Attach provisioning reporting requires a started Agent attempt",
+		)
 	}
 	return &AttachProvision{input: input, journal: journal, exchange: exchange}, nil
 }
@@ -57,7 +61,10 @@ func (delivery *AttachProvision) Current(ctx context.Context) (*attachexecution.
 		return nil, err
 	}
 	if !record.Acknowledged {
-		return nil, errs.New(errs.KindStateConflict, "Attach provisioning command boundary is not acknowledged by the Controller")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Attach provisioning command boundary is not acknowledged by the Controller",
+		)
 	}
 	return &record.Report.Progress, nil
 }

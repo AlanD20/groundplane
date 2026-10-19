@@ -54,11 +54,17 @@ func BuildBackingZoneWorkGraph(task workexecution.Task, bridge workexecution.Ite
 		bridge.ForwardRevoked || bridge.ActiveAttemptID != "" || bridge.Result != nil ||
 		bridge.Cleanup != workexecution.CleanupNone ||
 		len(captured) != len(plans) || len(captured) >= int(workexecution.MaximumTaskItems) {
-		return BackingZoneWorkGraph{}, errs.New(errs.KindValidationFailed, "Backing Zone removal requires one captured bridge and its consumer work")
+		return BackingZoneWorkGraph{}, errs.New(
+			errs.KindValidationFailed,
+			"Backing Zone removal requires one captured bridge and its consumer work",
+		)
 	}
 	impact, err := hex.DecodeString(impactSHA256)
 	if err != nil || len(impact) != 32 || strings.ToLower(impactSHA256) != impactSHA256 {
-		return BackingZoneWorkGraph{}, errs.New(errs.KindValidationFailed, "Backing Zone removal requires its exact impact digest")
+		return BackingZoneWorkGraph{}, errs.New(
+			errs.KindValidationFailed,
+			"Backing Zone removal requires its exact impact digest",
+		)
 	}
 	byAttach := make(map[string]CascadeDetachPlan, len(plans))
 	for _, plan := range plans {
@@ -66,7 +72,10 @@ func BuildBackingZoneWorkGraph(task workexecution.Task, bridge workexecution.Ite
 			(plan.Placement.Executor != workexecution.Agent && plan.Placement.Executor != workexecution.Controller) ||
 			plan.Placement.HostID != bridge.Placement.HostID ||
 			plan.Input == nil || plan.Input.Validate() != nil {
-			return BackingZoneWorkGraph{}, errs.New(errs.KindValidationFailed, "Backing Zone Detach requires captured input and the Backing host")
+			return BackingZoneWorkGraph{}, errs.New(
+				errs.KindValidationFailed,
+				"Backing Zone Detach requires captured input and the Backing host",
+			)
 		}
 		if _, duplicate := byAttach[plan.AttachID]; duplicate {
 			return BackingZoneWorkGraph{}, errs.New(errs.KindValidationFailed, "Backing Zone Detach plan is duplicated")
@@ -79,10 +88,16 @@ func BuildBackingZoneWorkGraph(task workexecution.Task, bridge workexecution.Ite
 			source.ReadRevision != frozenRevision || source.Revision > frozenRevision ||
 			attach.BackingProjectID != task.Scope.ProjectID ||
 			attach.BackingEnvironmentID != task.Scope.EnvironmentID || attach.BackingNetworkID != task.TargetID {
-			return BackingZoneWorkGraph{}, errs.New(errs.KindStateConflict, "Backing Zone consumer differs from its frozen removal snapshot")
+			return BackingZoneWorkGraph{}, errs.New(
+				errs.KindStateConflict,
+				"Backing Zone consumer differs from its frozen removal snapshot",
+			)
 		}
 		if _, found := byAttach[attach.ID]; !found {
-			return BackingZoneWorkGraph{}, errs.New(errs.KindValidationFailed, "Backing Zone consumer has no captured Detach plan")
+			return BackingZoneWorkGraph{}, errs.New(
+				errs.KindValidationFailed,
+				"Backing Zone consumer has no captured Detach plan",
+			)
 		}
 	}
 	ordered, err := orderBackingZoneCascadeAttaches(captured)
@@ -97,11 +112,19 @@ func BuildBackingZoneWorkGraph(task workexecution.Task, bridge workexecution.Ite
 	for _, source := range ordered {
 		attach, plan := source.Record, byAttach[source.Record.ID]
 		sources = append(sources, CascadeAttachSource{AttachID: attach.ID, Revision: source.Revision})
-		item := workexecution.Item{ID: ids.DeriveAt(ids.KindWorkItem, task.CreatedAt, task.ID, "backing-zone-detach/"+attach.ID),
-			TaskID: task.ID, Operation: workexecution.Detach, TargetID: attach.ID,
-			Placement: plan.Placement, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
-			CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline,
-			Claims: attachremoval.RemovalClaims(attach, plan.Placement.HostID)}
+		item := workexecution.Item{
+			ID:        ids.DeriveAt(ids.KindWorkItem, task.CreatedAt, task.ID, "backing-zone-detach/"+attach.ID),
+			TaskID:    task.ID,
+			Operation: workexecution.Detach,
+			TargetID:  attach.ID,
+			Placement: plan.Placement,
+			Phase:     workexecution.Ready,
+			Cleanup:   workexecution.CleanupNone,
+			CreatedAt: task.CreatedAt,
+			UpdatedAt: task.CreatedAt,
+			Deadline:  task.Deadline,
+			Claims:    attachremoval.RemovalClaims(attach, plan.Placement.HostID),
+		}
 		input := *plan.Input
 		item.Input = &input
 		if previous != "" {
@@ -122,5 +145,11 @@ func BuildBackingZoneWorkGraph(task workexecution.Task, bridge workexecution.Ite
 	if err := workexecution.ValidateGraph(task, items); err != nil {
 		return BackingZoneWorkGraph{}, err
 	}
-	return BackingZoneWorkGraph{Task: task, Items: items, Sources: sources, SnapshotRevision: frozenRevision, ImpactSHA256: impactSHA256}, nil
+	return BackingZoneWorkGraph{
+		Task:             task,
+		Items:            items,
+		Sources:          sources,
+		SnapshotRevision: frozenRevision,
+		ImpactSHA256:     impactSHA256,
+	}, nil
 }

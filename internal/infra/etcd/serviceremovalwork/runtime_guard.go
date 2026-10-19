@@ -13,7 +13,11 @@ import (
 // RuntimeGuards fences the resource side of a removal boundary. Callers must
 // also compare native Task/item ownership and the selected Blueprint unit before
 // authorizing effects. A tombstone alone is not permission to execute.
-func (repository *Repository) RuntimeGuards(ctx context.Context, input Input, revision int64) ([]keyvalue.Condition, error) {
+func (repository *Repository) RuntimeGuards(
+	ctx context.Context,
+	input Input,
+	revision int64,
+) ([]keyvalue.Condition, error) {
 	if err := input.Validate(); err != nil {
 		return nil, err
 	}

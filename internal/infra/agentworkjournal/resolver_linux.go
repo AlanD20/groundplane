@@ -36,13 +36,15 @@ func (journal *Journal) resolverState(ctx context.Context, attempt workexecution
 		}
 		return &attemptRecord{Attempt: attempt, UpdatedAt: at.UTC(), Resolver: &ResolverRecord{Layout: layout}}, nil
 	}
-	if state.Resolver == nil || state.Resolver.Layout != layout || !workexecution.SameAssignment(state.Attempt, attempt) ||
+	if state.Resolver == nil || state.Resolver.Layout != layout ||
+		!workexecution.SameAssignment(state.Attempt, attempt) ||
 		(state.Attempt.StartedAt == nil) != (attempt.StartedAt == nil) ||
 		attempt.StartedAt != nil && !state.Attempt.StartedAt.Equal(*attempt.StartedAt) {
 		return nil, conflict()
 	}
 	entry := state.Resolver
-	if entry.Proof != nil && (input.Candidate == nil || resolverexecution.ValidateServingProof(*input.Candidate, entry.Proof) != nil) {
+	if entry.Proof != nil &&
+		(input.Candidate == nil || resolverexecution.ValidateServingProof(*input.Candidate, entry.Proof) != nil) {
 		return nil, conflict()
 	}
 	if entry.Source != nil && entry.Recovery != nil {
@@ -54,7 +56,13 @@ func (journal *Journal) resolverState(ctx context.Context, attempt workexecution
 		if entry.Progress == nil {
 			return nil, conflict()
 		}
-		evidence, err := resolverexecution.CompletionEvidence(*entry.Receipt, input, *entry.Progress, entry.Verification, entry.Proof)
+		evidence, err := resolverexecution.CompletionEvidence(
+			*entry.Receipt,
+			input,
+			*entry.Progress,
+			entry.Verification,
+			entry.Proof,
+		)
 		if err != nil || evidence != *entry.Receipt.Result {
 			return nil, conflict()
 		}
@@ -62,7 +70,11 @@ func (journal *Journal) resolverState(ctx context.Context, attempt workexecution
 	return state, nil
 }
 
-func (journal *Journal) Resolver(ctx context.Context, attempt workexecution.Attempt, input resolverexecution.Input) (*ResolverRecord, error) {
+func (journal *Journal) Resolver(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input resolverexecution.Input,
+) (*ResolverRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -147,7 +159,8 @@ func (journal *Journal) AcknowledgeResolver(ctx context.Context, attempt workexe
 	if err != nil {
 		return err
 	}
-	if state == nil || state.Resolver.Progress == nil || state.Resolver.Receipt != nil || state.Resolver.FailureReason != "" ||
+	if state == nil || state.Resolver.Progress == nil || state.Resolver.Receipt != nil ||
+		state.Resolver.FailureReason != "" ||
 		!resolverexecution.EqualProgress(*state.Resolver.Progress, progress) {
 		return conflict()
 	}
@@ -174,8 +187,11 @@ func (journal *Journal) SaveResolverProof(ctx context.Context, attempt workexecu
 	if err != nil {
 		return err
 	}
-	if state == nil || state.Resolver.Progress == nil || !state.Resolver.Acknowledged || !state.Resolver.Progress.InFlight ||
-		state.Resolver.Progress.Stage != resolverexecution.VerifyDNS || state.Resolver.Receipt != nil || state.Resolver.FailureReason != "" ||
+	if state == nil || state.Resolver.Progress == nil || !state.Resolver.Acknowledged ||
+		!state.Resolver.Progress.InFlight ||
+		state.Resolver.Progress.Stage != resolverexecution.VerifyDNS ||
+		state.Resolver.Receipt != nil ||
+		state.Resolver.FailureReason != "" ||
 		observed.At.Before(*state.Resolver.Progress.BeganAt) {
 		return conflict()
 	}

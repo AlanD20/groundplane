@@ -13,15 +13,23 @@ import (
 
 // CleanupHook removes only captured artifacts under the caller's exclusive
 // recovery ownership. It does not convert a stopped hook into successful work.
-func (runtime *Runtime) CleanupHook(ctx context.Context, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport,
-	hook *agentpb.ReleaseWorkHook, projection *agentpb.ScriptRunnerProjection, artifacts *agentpb.ScriptCleanupArtifacts,
+func (runtime *Runtime) CleanupHook(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+	hook *agentpb.ReleaseWorkHook,
+	projection *agentpb.ScriptRunnerProjection,
+	artifacts *agentpb.ScriptCleanupArtifacts,
 ) (scriptexecution.CleanupProof, error) {
 	if err := runtime.validateRecoveryHook(ctx, input, report, hook, projection); err != nil {
 		return scriptexecution.CleanupProof{}, err
 	}
 	if artifacts == nil || executionplan.RejectUnknown(artifacts) != nil || artifacts.BodyMetadata == nil ||
 		artifacts.BodyMetadata.ScriptExecutionId != hook.ExecutionId || artifacts.BodyMetadata.ScriptId != hook.ScriptId {
-		return scriptexecution.CleanupProof{}, errs.New(errs.KindStateConflict, "Script cleanup metadata does not identify the captured hook")
+		return scriptexecution.CleanupProof{}, errs.New(
+			errs.KindStateConflict,
+			"Script cleanup metadata does not identify the captured hook",
+		)
 	}
 	if !time.Now().Before(input.Input.Attempt.Deadline) {
 		return scriptexecution.CleanupProof{}, context.DeadlineExceeded

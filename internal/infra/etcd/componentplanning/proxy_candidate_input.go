@@ -194,7 +194,10 @@ func BindWorkProxyCandidateInput(task workexecution.Task, item workexecution.Ite
 		)
 	}
 	if preflight.CandidateInput != nil && *preflight.CandidateInput != reference.Record {
-		return nil, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Component work already captured different router input")
+		return nil, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Component work already captured different router input",
+		)
 	}
 	result := cloneProxyServicePreflight(&preflight)
 	owned := reference.Record

@@ -146,9 +146,24 @@ func PrepareBlueprintBackupPolicyPublication(
 			)
 		}
 		if !state.retain && source.record.Kind == core.BackupSourceAttach {
-			compare(backuppolicymutations.BackupPolicyCompareAttach, source.record.TargetID, attachrecord.AttachKey(source.record.TargetID), source.attach.Revision)
-			compare(backuppolicymutations.BackupPolicyCompareTargetOwnerIndex, source.record.TargetID, attachrecord.AttachOwnerKey(state.environmentID, source.record.TargetID), source.attachOwner.ModRevision)
-			compare(backuppolicymutations.BackupPolicyCompareTargetTombstone, source.record.TargetID, deletionrecord.TombstoneKey("attach", source.record.TargetID), 0)
+			compare(
+				backuppolicymutations.BackupPolicyCompareAttach,
+				source.record.TargetID,
+				attachrecord.AttachKey(source.record.TargetID),
+				source.attach.Revision,
+			)
+			compare(
+				backuppolicymutations.BackupPolicyCompareTargetOwnerIndex,
+				source.record.TargetID,
+				attachrecord.AttachOwnerKey(state.environmentID, source.record.TargetID),
+				source.attachOwner.ModRevision,
+			)
+			compare(
+				backuppolicymutations.BackupPolicyCompareTargetTombstone,
+				source.record.TargetID,
+				deletionrecord.TombstoneKey("attach", source.record.TargetID),
+				0,
+			)
 		}
 	}
 	if state.retain && state.retainedConnectorID != "" {

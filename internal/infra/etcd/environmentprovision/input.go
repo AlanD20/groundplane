@@ -31,7 +31,10 @@ func InputKey(workID string) string { return "/v1/execution/environment-provisio
 
 func (input Input) Validate() error {
 	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil ||
-		ids.Validate(ids.KindPlan, input.PlanID) != nil || input.Scope.Validate() != nil || input.Scope.EnvironmentID == "" ||
+		ids.Validate(
+			ids.KindPlan,
+			input.PlanID,
+		) != nil || input.Scope.Validate() != nil || input.Scope.EnvironmentID == "" ||
 		input.Scope.TenantID == "" || hierarchy.ValidateEnvironment(input.Environment) != nil ||
 		input.Environment.ID != input.Scope.EnvironmentID || input.Environment.ProjectID != input.Scope.ProjectID ||
 		input.Environment.CreateTaskID != input.TaskID || input.Environment.ProvisioningState != hierarchy.EnvironmentProvisioningProvisioning ||
@@ -45,7 +48,10 @@ func (input Input) Validate() error {
 	}
 	if scope.ProjectKind != environmentpath.ProjectKindTenant || scope.TenantID != input.Scope.TenantID ||
 		scope.ProjectID != input.Scope.ProjectID || scope.EnvironmentID != input.Scope.EnvironmentID {
-		return errs.New(errs.KindValidationFailed, "Environment provisioning directory does not match its captured ownership")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Environment provisioning directory does not match its captured ownership",
+		)
 	}
 	return nil
 }
@@ -116,7 +122,9 @@ func (input Input) Match(task workexecution.Task, item workexecution.Item) error
 		task.Intent != expectedTask.Intent || task.ExpectedItems != 1 || !task.CreatedAt.Equal(input.CreatedAt) ||
 		item.ID != input.WorkItemID || item.TaskID != input.TaskID || item.Operation != expectedItem.Operation || item.TargetID != input.Environment.ID ||
 		item.Placement != expectedItem.Placement || item.Input == nil || *item.Input != expectedTask.Intent ||
-		len(item.Dependencies) != 0 || len(item.Claims) != 1 || item.Claims[0] != expectedItem.Claims[0] || !item.CreatedAt.Equal(input.CreatedAt) {
+		len(
+			item.Dependencies,
+		) != 0 || len(item.Claims) != 1 || item.Claims[0] != expectedItem.Claims[0] || !item.CreatedAt.Equal(input.CreatedAt) {
 		return errs.New(errs.KindStateConflict, "Environment provisioning work differs from its captured input")
 	}
 	return nil

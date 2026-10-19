@@ -38,14 +38,21 @@ func ReadLifecycleWorkRequest(ctx context.Context, input io.Reader) (*agentpb.Se
 	return request, nil
 }
 
-func ReadLifecycleWorkResponse(ctx context.Context, input io.Reader, captured executionplan.LifecycleHelperInput) (*agentpb.ServiceLifecycleHelperResponse, error) {
+func ReadLifecycleWorkResponse(
+	ctx context.Context,
+	input io.Reader,
+	captured executionplan.LifecycleHelperInput,
+) (*agentpb.ServiceLifecycleHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
 	}
 	defer clear(raw)
 	if len(raw) > lifecycleexecution.MaximumProgressBytes {
-		return nil, errs.New(errs.KindValidationFailed, "Service lifecycle helper response exceeds its observation bound")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Service lifecycle helper response exceeds its observation bound",
+		)
 	}
 	response := &agentpb.ServiceLifecycleHelperResponse{}
 	if proto.Unmarshal(raw, response) != nil {
@@ -57,7 +64,12 @@ func ReadLifecycleWorkResponse(ctx context.Context, input io.Reader, captured ex
 	return response, nil
 }
 
-func WriteLifecycleWorkResponse(ctx context.Context, output io.Writer, captured executionplan.LifecycleHelperInput, response *agentpb.ServiceLifecycleHelperResponse) error {
+func WriteLifecycleWorkResponse(
+	ctx context.Context,
+	output io.Writer,
+	captured executionplan.LifecycleHelperInput,
+	response *agentpb.ServiceLifecycleHelperResponse,
+) error {
 	if err := executionplan.ValidateLifecycleHelperResponse(captured, response); err != nil {
 		return err
 	}

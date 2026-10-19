@@ -43,7 +43,11 @@ func (service *Reports) reportForwardResult(ctx context.Context, identity workex
 	}
 }
 
-func (service *Reports) reportFailure(ctx context.Context, attempt workexecution.Attempt, failure attachexecution.ProvisionFailure) {
+func (service *Reports) reportFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	failure attachexecution.ProvisionFailure,
+) {
 	stage := workexecution.Stage{Key: "provision-result", Name: "Complete Attach provisioning",
 		Expected: "Complete provisioning and publish the ready connection with its captured facts",
 		State:    workexecution.StageFailed, StartedAt: attempt.StartedAt, FinishedAt: attempt.FinishedAt,
@@ -67,7 +71,11 @@ func (service *Reports) reportFailure(ctx context.Context, attempt workexecution
 	service.reportResultStage(ctx, attempt, stage)
 }
 
-func (service *Reports) reportInspection(ctx context.Context, attempt workexecution.Attempt, report attachexecution.ProvisionInspection) {
+func (service *Reports) reportInspection(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	report attachexecution.ProvisionInspection,
+) {
 	stage := workexecution.Stage{Key: "inspect-result", Name: "Inspect interrupted provisioning",
 		Expected: "Determine whether the captured provisioning command stopped without replaying it or deleting its effects",
 		State:    workexecution.StageFailed, StartedAt: attempt.StartedAt, FinishedAt: attempt.FinishedAt}
@@ -105,7 +113,11 @@ func (service *Reports) reportInspection(ctx context.Context, attempt workexecut
 	service.reportResultStage(ctx, attempt, stage)
 }
 
-func (service *Reports) reportResultStage(ctx context.Context, attempt workexecution.Attempt, stage workexecution.Stage) {
+func (service *Reports) reportResultStage(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	stage workexecution.Stage,
+) {
 	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	snapshot, err := service.diagnostics.Read(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, 0)

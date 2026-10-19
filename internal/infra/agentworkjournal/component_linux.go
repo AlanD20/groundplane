@@ -8,7 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareComponent(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, next componentexecution.Progress) (*ComponentRecord, error) {
+func (journal *Journal) PrepareComponent(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	next componentexecution.Progress,
+) (*ComponentRecord, error) {
 	layout, err := componentexecution.CaptureLayout(attempt, input)
 	if err != nil || next.ValidateLayout(attempt, layout) != nil || next.Sequence == 0 {
 		return nil, invalid()
@@ -55,7 +60,11 @@ func (journal *Journal) PrepareComponent(ctx context.Context, attempt workexecut
 	return state.Component, nil
 }
 
-func (journal *Journal) Component(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ComponentWorkInput) (*ComponentRecord, error) {
+func (journal *Journal) Component(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+) (*ComponentRecord, error) {
 	layout, err := componentexecution.CaptureLayout(attempt, input)
 	if err != nil {
 		return nil, err

@@ -58,7 +58,10 @@ func ValidateRuntime(record Runtime) error {
 		if record.ProxyPreflight.EnvironmentID != record.EnvironmentID ||
 			record.ProxyPreflight.ParentTaskID != record.RevisionID ||
 			string(record.ProxyPreflight.Implementation) != string(record.Component.Desired.Kind) {
-			return errs.New(errs.KindValidationFailed, "Component runtime proxy dependencies belong to another captured revision")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Component runtime proxy dependencies belong to another captured revision",
+			)
 		}
 		if input := record.ProxyPreflight.CandidateInput; input != nil &&
 			(input.SourceOwner != ProxyInputAgentWork || input.SourceID != record.Execution.WorkItemID ||

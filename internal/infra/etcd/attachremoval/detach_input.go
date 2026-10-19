@@ -55,7 +55,13 @@ func (input DetachInput) Claims(hostID string) []workexecution.Claim {
 // RemovalClaims protects the same resource identities for direct removal and
 // removal inside a Backing Zone graph, including credential and grant owners.
 func RemovalClaims(attach attachments.Record, hostID string) []workexecution.Claim {
-	resources := []string{attach.ID, attach.EnvironmentID, attach.ServiceID, attach.BackingServiceID, attach.BackingEnvironmentID}
+	resources := []string{
+		attach.ID,
+		attach.EnvironmentID,
+		attach.ServiceID,
+		attach.BackingServiceID,
+		attach.BackingEnvironmentID,
+	}
 	resources = append(resources, attach.GrantAttachIDs...)
 	if !attach.OwnsCredential() {
 		resources = append(resources, attach.CredentialAttachID)
@@ -103,7 +109,8 @@ func NewDetachInput(ctx context.Context, taskID, workID string, snapshot *Detach
 }
 
 func (input DetachInput) Validate(ctx context.Context) error {
-	if ctx == nil || ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil {
+	if ctx == nil || ids.Validate(ids.KindTask, input.TaskID) != nil ||
+		ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil {
 		return recordcodec.CorruptRecord()
 	}
 	if err := input.Snapshot.Validate(); err != nil {
@@ -116,9 +123,13 @@ func (input DetachInput) Validate(ctx context.Context) error {
 	if source.HookInputSet != nil || source.HookInputs != nil || source.HookOperationID != "" {
 		return errs.New(errs.KindValidationFailed, "Detach admission input cannot contain unbound hook delivery inputs")
 	}
-	requiresConsumer := input.Snapshot.Runtime != nil && source.Attach.Status != "detached" && !input.keepsConsumerNetwork()
+	requiresConsumer := input.Snapshot.Runtime != nil && source.Attach.Status != "detached" &&
+		!input.keepsConsumerNetwork()
 	if requiresConsumer != (len(input.Consumer) != 0) {
-		return errs.New(errs.KindValidationFailed, "Detach consumer work does not match its captured runtime and binding union")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Detach consumer work does not match its captured runtime and binding union",
+		)
 	}
 	if !requiresConsumer {
 		return nil
@@ -169,7 +180,10 @@ func captureDetachInput(ctx context.Context, inputID string, input DetachInput) 
 	}
 	if len(raw) > maximumDetachBytes {
 		clear(raw)
-		return nil, workexecution.Input{}, errs.New(errs.KindValidationFailed, "captured Detach input exceeds its storage bound")
+		return nil, workexecution.Input{}, errs.New(
+			errs.KindValidationFailed,
+			"captured Detach input exceeds its storage bound",
+		)
 	}
 	digest := sha256.Sum256(raw)
 	return raw, workexecution.Input{ID: inputID, SHA256: hex.EncodeToString(digest[:])}, nil

@@ -44,7 +44,12 @@ func (repository *InputRepository) PrepareRestoreRecoveryCheckpoint(ctx context.
 			return workqueue.Change{}, nil, conflict("Restore recovery Config transfer revision is not fenced")
 		}
 	}
-	next, err := executionplan.AdvanceBackupRestoreRecovery(admitted.Recovery, admitted.Request, attempt.Executor, evidence.Config)
+	next, err := executionplan.AdvanceBackupRestoreRecovery(
+		admitted.Recovery,
+		admitted.Request,
+		attempt.Executor,
+		evidence.Config,
+	)
 	if err != nil {
 		return workqueue.Change{}, nil, err
 	}

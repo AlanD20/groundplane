@@ -9,7 +9,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (executor *Executor) requireSources(assignment *agentpb.BackupWorkAssignment, identity workexecution.Identity, staging *Staging) error {
+func (executor *Executor) requireSources(
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+	staging *Staging,
+) error {
 	if err := executor.ownership.Check(); err != nil {
 		return err
 	}
@@ -26,7 +30,13 @@ func (executor *Executor) requireSources(assignment *agentpb.BackupWorkAssignmen
 		return err
 	}
 	for _, step := range assignment.Input.Steps {
-		if step.GetCapture().GetVolume() == nil && step.GetRestore().GetVolume() == nil && step.GetCapture().GetConfig() == nil && step.GetRestore().GetConfig() == nil && step.GetCapture().GetPostgres() == nil && step.GetCapture().GetMysql() == nil && step.GetRestore().GetPostgres() == nil && step.GetRestore().GetMysql() == nil {
+		if step.GetCapture().GetVolume() == nil && step.GetRestore().GetVolume() == nil &&
+			step.GetCapture().GetConfig() == nil &&
+			step.GetRestore().GetConfig() == nil &&
+			step.GetCapture().GetPostgres() == nil &&
+			step.GetCapture().GetMysql() == nil &&
+			step.GetRestore().GetPostgres() == nil &&
+			step.GetRestore().GetMysql() == nil {
 			return errs.New(errs.KindStateConflict, "Backup source has no native execution procedure")
 		}
 	}

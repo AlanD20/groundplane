@@ -58,12 +58,18 @@ func (repository *InputRepository) LoadWaitingCapture(ctx context.Context, work 
 	if !task.PublicationComplete || task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
 		item.ForwardRevoked || item.Phase != workexecution.Waiting || item.Wait == nil ||
 		item.Wait.Reason != workexecution.WaitInput || item.Input != nil || item.AttemptNumber != 0 || item.ActiveAttemptID != "" {
-		return CapturedInput{}, errs.New(errs.KindStateConflict, "Attach provisioning is not waiting for captured input")
+		return CapturedInput{}, errs.New(
+			errs.KindStateConflict,
+			"Attach provisioning is not waiting for captured input",
+		)
 	}
 	return repository.loadCaptured(ctx, work)
 }
 
-func (repository *InputRepository) loadCaptured(ctx context.Context, work workqueue.View) (_ CapturedInput, resultErr error) {
+func (repository *InputRepository) loadCaptured(
+	ctx context.Context,
+	work workqueue.View,
+) (_ CapturedInput, resultErr error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return CapturedInput{}, err
 	}
@@ -75,7 +81,13 @@ func (repository *InputRepository) loadCaptured(ctx context.Context, work workqu
 		item.Operation != workexecution.Attach {
 		return CapturedInput{}, errs.New(errs.KindValidationFailed, "Attach provisioning requires captured native work")
 	}
-	generation, found, err := blueprintattachinputs.ReadAtRevision(ctx, repository.store, task.ID, item.TargetID, work.ReadRevision)
+	generation, found, err := blueprintattachinputs.ReadAtRevision(
+		ctx,
+		repository.store,
+		task.ID,
+		item.TargetID,
+		work.ReadRevision,
+	)
 	if err != nil {
 		return CapturedInput{}, err
 	}
@@ -113,7 +125,10 @@ func (repository *InputRepository) loadCaptured(ctx context.Context, work workqu
 			return CapturedInput{}, err
 		}
 		if !found {
-			return CapturedInput{}, errs.New(errs.KindStateConflict, "Attach provisioning no longer retains its captured Secret values")
+			return CapturedInput{}, errs.New(
+				errs.KindStateConflict,
+				"Attach provisioning no longer retains its captured Secret values",
+			)
 		}
 		condition, err := root.AdmissionCondition(*capture.SecretPins)
 		if err != nil {

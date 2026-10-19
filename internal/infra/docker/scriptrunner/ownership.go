@@ -84,7 +84,11 @@ func validateOwnedContainer(
 	return nil
 }
 
-func validateCleanupProjection(inspected client.ContainerInspectResult, containerID string, projection *agentpb.ScriptRunnerProjection) error {
+func validateCleanupProjection(
+	inspected client.ContainerInspectResult,
+	containerID string,
+	projection *agentpb.ScriptRunnerProjection,
+) error {
 	value := inspected.Container
 	if projection == nil || !validDockerContainerID(containerID) || value.ID != containerID || value.Config == nil ||
 		!hasExactGroundplaneLabels(value.Config.Labels, pairMap(projection.Labels)) {

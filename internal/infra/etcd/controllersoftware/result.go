@@ -36,20 +36,36 @@ func encodeReceipt(receipt Receipt) ([]byte, error) {
 	return recordcodec.Encode("controller_software_result", receipt)
 }
 
-func (repository *Repository) ReadResult(ctx context.Context, attempt workexecution.Attempt, revision int64) (keyvalue.Versioned[Receipt], bool, error) {
+func (repository *Repository) ReadResult(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	revision int64,
+) (keyvalue.Versioned[Receipt], bool, error) {
 	if attempt.Validate() != nil || attempt.Executor.Executor != workexecution.Controller {
-		return keyvalue.Versioned[Receipt]{}, false, errs.New(errs.KindValidationFailed, "Controller activation receipt requires its Controller attempt")
+		return keyvalue.Versioned[Receipt]{}, false, errs.New(
+			errs.KindValidationFailed,
+			"Controller activation receipt requires its Controller attempt",
+		)
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{ResultKey(attempt.ID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{ResultKey(attempt.ID)}, Revision: revision},
+	)
 	if err != nil {
 		return keyvalue.Versioned[Receipt]{}, false, err
 	}
 	if read == nil {
-		return keyvalue.Versioned[Receipt]{}, false, errs.New(errs.KindStorageUnavailable, "Controller activation receipt read is unavailable")
+		return keyvalue.Versioned[Receipt]{}, false, errs.New(
+			errs.KindStorageUnavailable,
+			"Controller activation receipt read is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 {
-		return keyvalue.Versioned[Receipt]{}, false, errs.New(errs.KindStateConflict, "Controller activation receipt snapshot is unavailable")
+		return keyvalue.Versioned[Receipt]{}, false, errs.New(
+			errs.KindStateConflict,
+			"Controller activation receipt snapshot is unavailable",
+		)
 	}
 	if read.Values[0] == nil {
 		return keyvalue.Versioned[Receipt]{ReadRevision: read.ReadRevision}, false, nil
@@ -60,16 +76,30 @@ func (repository *Repository) ReadResult(ctx context.Context, attempt workexecut
 	}
 	raw, err := encodeReceipt(receipt)
 	clear(raw)
-	if err != nil || receipt.TaskID != attempt.TaskID || receipt.WorkItemID != attempt.WorkItemID || receipt.AttemptID != attempt.ID || receipt.Input != attempt.Input {
-		return keyvalue.Versioned[Receipt]{}, false, errs.New(errs.KindInternal, "Controller activation receipt owner is corrupt")
+	if err != nil || receipt.TaskID != attempt.TaskID || receipt.WorkItemID != attempt.WorkItemID ||
+		receipt.AttemptID != attempt.ID ||
+		receipt.Input != attempt.Input {
+		return keyvalue.Versioned[Receipt]{}, false, errs.New(
+			errs.KindInternal,
+			"Controller activation receipt owner is corrupt",
+		)
 	}
-	return keyvalue.Versioned[Receipt]{Record: receipt, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, true, nil
+	return keyvalue.Versioned[Receipt]{
+		Record:       receipt,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, true, nil
 }
 
 // SaveResult can account for a replaced executor's effects, but never authorizes
 // a new release, launch or host mutation. Exact native ownership fences writes.
-func (repository *Repository) SaveResult(ctx context.Context, queue *workqueue.Repository, attempt workexecution.Attempt,
-	expected upgrade.Journal, result upgrade.ExecutionResult, at time.Time,
+func (repository *Repository) SaveResult(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	attempt workexecution.Attempt,
+	expected upgrade.Journal,
+	result upgrade.ExecutionResult,
+	at time.Time,
 ) error {
 	if err := result.Validate(expected); err != nil {
 		return err
@@ -78,7 +108,8 @@ func (repository *Repository) SaveResult(ctx context.Context, queue *workqueue.R
 	if err != nil {
 		return err
 	}
-	if !view.ActiveAttempt || view.Attempt.Attempt.FinishedAt != nil || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
+	if !view.ActiveAttempt || view.Attempt.Attempt.FinishedAt != nil ||
+		!workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
 		return errs.New(errs.KindStateConflict, "Controller activation result no longer owns execution")
 	}
 	captured, err := repository.Load(ctx, view.Work.Item.Item, view.Work.ReadRevision)
@@ -96,8 +127,16 @@ func (repository *Repository) SaveResult(ctx context.Context, queue *workqueue.R
 	if found && previous.Record.Result.Settled {
 		return nil
 	}
-	receipt := Receipt{TaskID: attempt.TaskID, WorkItemID: attempt.WorkItemID, AttemptID: attempt.ID, Input: attempt.Input,
-		OriginAssignedAt: expected.StartedAt, OriginDeadline: expected.Deadline, Result: result, At: at}
+	receipt := Receipt{
+		TaskID:           attempt.TaskID,
+		WorkItemID:       attempt.WorkItemID,
+		AttemptID:        attempt.ID,
+		Input:            attempt.Input,
+		OriginAssignedAt: expected.StartedAt,
+		OriginDeadline:   expected.Deadline,
+		Result:           result,
+		At:               at,
+	}
 	raw, err := encodeReceipt(receipt)
 	if err != nil {
 		return err
@@ -117,7 +156,14 @@ func (repository *Repository) SaveResult(ctx context.Context, queue *workqueue.R
 	} else if result.Settled && (result.Journal == nil || result.Journal.Phase == upgrade.PhaseCancelled) && view.Work.Task.Task.Stop != nil {
 		projectionOutcome = view.Work.Task.Task.Stop.Outcome
 	}
-	projection, err := repository.PrepareCurrent(ctx, captured, view.Work.ReadRevision, view.Attempt.Attempt.StartedAt != nil, projectionOutcome, result.Settled)
+	projection, err := repository.PrepareCurrent(
+		ctx,
+		captured,
+		view.Work.ReadRevision,
+		view.Attempt.Attempt.StartedAt != nil,
+		projectionOutcome,
+		result.Settled,
+	)
 	if err != nil {
 		return err
 	}
@@ -135,7 +181,11 @@ func (repository *Repository) SaveResult(ctx context.Context, queue *workqueue.R
 	return nil
 }
 
-func PrepareResult(capture keyvalue.Versioned[Capture], saved keyvalue.Versioned[Receipt], attempt workexecution.Attempt) (workqueue.Change, workexecution.Completion, error) {
+func PrepareResult(
+	capture keyvalue.Versioned[Capture],
+	saved keyvalue.Versioned[Receipt],
+	attempt workexecution.Attempt,
+) (workqueue.Change, workexecution.Completion, error) {
 	receipt := saved.Record
 	expected, err := capture.Record.Journal(receipt.OriginAssignedAt, receipt.OriginDeadline)
 	if err != nil {
@@ -148,9 +198,14 @@ func PrepareResult(capture keyvalue.Versioned[Capture], saved keyvalue.Versioned
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
-	if capture.Revision <= 0 || saved.Revision <= 0 || reference != attempt.Input || receipt.Input != reference || receipt.AttemptID != attempt.ID ||
-		receipt.TaskID != attempt.TaskID || receipt.WorkItemID != attempt.WorkItemID {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "Controller activation result differs from its captured input")
+	if capture.Revision <= 0 || saved.Revision <= 0 || reference != attempt.Input || receipt.Input != reference ||
+		receipt.AttemptID != attempt.ID ||
+		receipt.TaskID != attempt.TaskID ||
+		receipt.WorkItemID != attempt.WorkItemID {
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Controller activation result differs from its captured input",
+		)
 	}
 	raw, err := encodeReceipt(receipt)
 	if err != nil {
@@ -162,7 +217,21 @@ func PrepareResult(capture keyvalue.Versioned[Capture], saved keyvalue.Versioned
 	if attempt.Direction == workexecution.Recovery && receipt.Result.Settled {
 		outcome = workexecution.Succeeded
 	}
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: InputKey(attempt.WorkItemID), ModRevision: capture.Revision}, {Key: ResultKey(attempt.ID), ModRevision: saved.Revision}}},
-		workexecution.Completion{Outcome: outcome, EffectsSettled: receipt.Result.Settled, Evidence: workexecution.Input{
-			ID: ids.DeriveAt(ids.KindPlan, capture.Record.CreatedAt, attempt.ID, "controller-activation-result"), SHA256: hex.EncodeToString(digest[:])}}, nil
+	return workqueue.Change{
+			Conditions: []keyvalue.Condition{
+				{Key: InputKey(attempt.WorkItemID), ModRevision: capture.Revision},
+				{Key: ResultKey(attempt.ID), ModRevision: saved.Revision},
+			},
+		},
+		workexecution.Completion{
+			Outcome:        outcome,
+			EffectsSettled: receipt.Result.Settled,
+			Evidence: workexecution.Input{
+				ID: ids.DeriveAt(
+					ids.KindPlan,
+					capture.Record.CreatedAt,
+					attempt.ID,
+					"controller-activation-result",
+				), SHA256: hex.EncodeToString(digest[:])},
+		}, nil
 }

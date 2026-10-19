@@ -38,8 +38,14 @@ func (service *Service) stagingOutcome(ctx context.Context, attempt workexecutio
 		return errs.New(errs.KindStateConflict, "software staging observation differs from its accepted result")
 	}
 	value := saved.Record.Result
-	stage := workexecution.Stage{Key: "software_staging_result", Name: "Software staging outcome", Expected: "Verify and import the selected artifacts without replacing running software",
-		State: workexecution.StageFailed, StartedAt: attempt.StartedAt, FinishedAt: attempt.FinishedAt}
+	stage := workexecution.Stage{
+		Key:        "software_staging_result",
+		Name:       "Software staging outcome",
+		Expected:   "Verify and import the selected artifacts without replacing running software",
+		State:      workexecution.StageFailed,
+		StartedAt:  attempt.StartedAt,
+		FinishedAt: attempt.FinishedAt,
+	}
 	switch {
 	case attempt.StartedAt == nil:
 		stage.State, stage.Observed = workexecution.StageSkipped, "Staging ended before execution; running software was not changed."

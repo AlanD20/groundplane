@@ -13,7 +13,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) runRecovery(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	saved, err := executor.journal.PrepareNetworkRecovery(ctx, input.attempt, agentworkjournal.NetworkRecoveryRecord{
 		Action: input.procedure.Action, NetworkID: input.procedure.NetworkId, Source: *input.recovery, Boundary: input.boundary,
 	})
@@ -40,7 +44,14 @@ func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange
 		}
 		saved.Report = &report
 	}
-	raw, evidence, err := networkexecution.EncodeRecoveryReport(input.attempt, *input.recovery, input.procedure.Action, input.procedure.NetworkId, input.boundary, *saved.Report)
+	raw, evidence, err := networkexecution.EncodeRecoveryReport(
+		input.attempt,
+		*input.recovery,
+		input.procedure.Action,
+		input.procedure.NetworkId,
+		input.boundary,
+		*saved.Report,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -52,12 +63,15 @@ func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil ||
-		ack.FinishedAt.AsTime().Before(saved.Report.Observation.At) || ack.BoundaryCompleted != saved.Report.BoundaryCompleted(input.boundary) {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil ||
+		ack.FinishedAt.AsTime().Before(saved.Report.Observation.At) ||
+		ack.BoundaryCompleted != saved.Report.BoundaryCompleted(input.boundary) {
 		return workexecution.Attempt{}, invalidInput()
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, input.attempt.Executor)
-	if err != nil || !workexecution.SameAssignment(claimed, input.attempt) || ack.Evidence.InputId != evidence.ID || hex.EncodeToString(ack.Evidence.Sha256) != evidence.SHA256 {
+	if err != nil || !workexecution.SameAssignment(claimed, input.attempt) || ack.Evidence.InputId != evidence.ID ||
+		hex.EncodeToString(ack.Evidence.Sha256) != evidence.SHA256 {
 		return workexecution.Attempt{}, invalidInput()
 	}
 	terminal := input.attempt
@@ -80,7 +94,12 @@ func (host *RuntimeHost) InspectRecovery(ctx context.Context, input Input) (netw
 	if err != nil {
 		return networkexecution.Observation{}, err
 	}
-	boundary, err := networkexecution.EncodeProgress(input.recovery.Forward, input.procedure.Action, input.procedure.NetworkId, input.boundary)
+	boundary, err := networkexecution.EncodeProgress(
+		input.recovery.Forward,
+		input.procedure.Action,
+		input.procedure.NetworkId,
+		input.boundary,
+	)
 	if err != nil {
 		return networkexecution.Observation{}, err
 	}
@@ -89,8 +108,16 @@ func (host *RuntimeHost) InspectRecovery(ctx context.Context, input Input) (netw
 		return networkexecution.Observation{}, err
 	}
 	request := &agentpb.NetworkWorkHelperRequest{
-		Assignment: &agentpb.NetworkWorkAssignment{Attempt: identity, Input: input.procedure, RecoverySource: source, RecoveryBoundary: boundary},
-		Start:      &agentpb.WorkStartAck{Attempt: identity, StartedAt: timestamppb.New(*input.attempt.StartedAt)}, InspectOnly: true,
+		Assignment: &agentpb.NetworkWorkAssignment{
+			Attempt:          identity,
+			Input:            input.procedure,
+			RecoverySource:   source,
+			RecoveryBoundary: boundary,
+		},
+		Start: &agentpb.WorkStartAck{
+			Attempt:   identity,
+			StartedAt: timestamppb.New(*input.attempt.StartedAt),
+		}, InspectOnly: true,
 	}
 	captured, err := executionplan.OpenNetworkHelperRequest(request)
 	if err != nil {

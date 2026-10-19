@@ -22,7 +22,10 @@ func (repository *RunnerRepository) PrepareRunnerRetry(ctx context.Context,
 		record.CreateTaskID != input.TaskID || record.ProvisioningState != runners.RunnerProvisioningFailed ||
 		record.ContainerID != "" || record.Allocation != input.Plan.Allocation ||
 		!runnerCreationDesiredEqual(record.Desired, input.Desired) || record.RuntimeEpoch > input.Plan.RuntimeEpoch {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Runner creation does not have a cleaned, unchanged allocation to retry")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Runner creation does not have a cleaned, unchanged allocation to retry",
+		)
 	}
 	parents, err := repository.ResolveRunnerParents(ctx, record.Desired)
 	if err != nil {
@@ -42,8 +45,14 @@ func (repository *RunnerRepository) PrepareRunnerRetry(ctx context.Context,
 		{Key: runners.RunnerLifecycleKey(record.Desired.ID), ModRevision: record.LifecycleRevision},
 		{Key: runners.RunnerRuntimeOwnershipKey(record.Desired.ID)},
 		{Key: deletions.TombstoneKey(string(deletions.DeletionTargetRunner), record.Desired.ID)},
-		{Key: runners.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID), ModRevision: allocation.Owner.ModRevision},
-		{Key: runners.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug), ModRevision: allocation.Slug.ModRevision},
+		{
+			Key:         runners.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
+			ModRevision: allocation.Owner.ModRevision,
+		},
+		{
+			Key:         runners.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+			ModRevision: allocation.Slug.ModRevision,
+		},
 		{Key: runners.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.Quota.ModRevision},
 		{Key: runners.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.Host.ModRevision},
 		{Key: runners.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},

@@ -16,7 +16,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (service *WorkReports) CompleteBackingProvision(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *WorkReports) CompleteBackingProvision(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.BackingProvisionCompletionRequest,
 ) (*agentpb.BackingProvisionCompletionAck, error) {
 	if request == nil || executionplan.RejectUnknown(request) != nil || request.Evidence == nil {
@@ -48,7 +50,10 @@ func (service *WorkReports) CompleteBackingProvision(ctx context.Context, author
 	if view.Attempt.Attempt.FinishedAt == nil {
 		at := time.Now().UTC()
 		if observation.ObservedAt.After(at.Add(30 * time.Second)) {
-			return nil, errs.New(errs.KindValidationFailed, "backing creation observation is ahead of the Controller clock")
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"backing creation observation is ahead of the Controller clock",
+			)
 		}
 		if observation.ObservedAt.After(at) {
 			at = observation.ObservedAt
@@ -65,16 +70,26 @@ func (service *WorkReports) CompleteBackingProvision(ctx context.Context, author
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "backing creation completion ownership changed; resend the saved result")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"backing creation completion ownership changed; resend the saved result",
+			)
 		}
-		view, err = authorization.ReadResult(ctx, service.queue, view.Attempt.Attempt.TaskID, view.Attempt.Attempt.WorkItemID, view.Attempt.Attempt.ID)
+		view, err = authorization.ReadResult(
+			ctx,
+			service.queue,
+			view.Attempt.Attempt.TaskID,
+			view.Attempt.Attempt.WorkItemID,
+			view.Attempt.Attempt.ID,
+		)
 		if err != nil {
 			return nil, err
 		}
 	}
 	attempt := view.Attempt.Attempt
 	if attempt.Result == nil || *attempt.Result != evidence || attempt.FinishedAt == nil || attempt.StartedAt == nil ||
-		attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled && attempt.Outcome != workexecution.Superseded {
+		attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled &&
+			attempt.Outcome != workexecution.Superseded {
 		return nil, errs.New(errs.KindStateConflict, "backing creation completion replay differs from its saved result")
 	}
 	encoded, err := encodeBackingReference(evidence)
@@ -83,5 +98,7 @@ func (service *WorkReports) CompleteBackingProvision(ctx context.Context, author
 	}
 	service.reportTerminal(ctx, view, false)
 	return &agentpb.BackingProvisionCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: encoded,
-		Outcome: string(attempt.Outcome), StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
+		Outcome: string(
+			attempt.Outcome,
+		), StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
 }

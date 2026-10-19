@@ -126,7 +126,8 @@ func hookCleanupRecordConditions(
 		return nil, invalid()
 	}
 	evidence.PayloadSHA256 = expected.SHA256
-	if scriptexecutions.ValidateScriptCheckpointInput(evidence) != nil || evidence.ExecutionID != record.ID || evidence.TaskID != record.CurrentTaskID ||
+	if scriptexecutions.ValidateScriptCheckpointInput(evidence) != nil || evidence.ExecutionID != record.ID ||
+		evidence.TaskID != record.CurrentTaskID ||
 		evidence.WorkItemID != record.WorkItemID ||
 		evidence.AttemptID != record.AttemptID ||
 		evidence.Executor != *record.Executor ||

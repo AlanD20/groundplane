@@ -99,8 +99,10 @@ func validateComponentWorkArtifact(artifact *agentpb.ComposeArtifact, environmen
 	if err := validateArtifactContent(artifact); err != nil {
 		return err
 	}
-	if artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT || artifact.OwnerId != environmentID ||
-		len(artifact.Services) != 1 || artifact.Services[0] == nil ||
+	if artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+		artifact.OwnerId != environmentID ||
+		len(artifact.Services) != 1 ||
+		artifact.Services[0] == nil ||
 		artifact.Services[0].OwnerComponentId != componentID ||
 		artifact.Services[0].ExpectedReplicas != 1 {
 		return invalidComponentWork()

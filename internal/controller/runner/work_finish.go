@@ -14,7 +14,11 @@ import (
 
 // PrepareFinish closes the visible action after work settlement has committed
 // the runtime result and allocation changes together. It never repeats effects.
-func (executor *Executor) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
+func (executor *Executor) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	_ time.Time,
+) (workqueue.Change, error) {
 	task := finished.Task.Task
 	if task.ExpectedItems != 1 || len(finished.Items) != 1 {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Runner action requires one settled work item")
@@ -38,7 +42,10 @@ func (executor *Executor) PrepareFinish(ctx context.Context, finished workqueue.
 	desired := input.Record.Desired
 	if task.ID != input.Record.TaskID || task.Action != action || task.TargetID != desired.ID ||
 		task.Scope != (workexecution.Scope{TenantID: desired.TenantID, ProjectID: desired.ProjectID(), EnvironmentID: desired.EnvironmentID()}) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Runner completion differs from its captured action")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Runner completion differs from its captured action",
+		)
 	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{
 		{Key: workqueue.ItemKey(item.Item.ID), ModRevision: item.Revision},

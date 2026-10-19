@@ -14,11 +14,18 @@ import (
 
 // PrepareRetention releases execution-only Secret holds in bounded passes.
 // Applied runtime and configuration snapshots remain resource-owned records.
-func (repository *Repository) PrepareRetention(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (repository *Repository) PrepareRetention(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Validate() != nil || item.Validate() != nil || view.Task.Revision <= 0 || view.Item.Revision <= 0 ||
 		task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil || at.IsZero() || at.Location() != time.UTC ||
-		at.Before(*task.CollectionStartedAt) || at.Before(*task.RetainUntil) || item.Operation != workexecution.BackingProvision ||
+		at.Before(
+			*task.CollectionStartedAt,
+		) || at.Before(*task.RetainUntil) || item.Operation != workexecution.BackingProvision ||
 		item.Phase != workexecution.Settled || item.ActiveAttemptID != "" || item.Result == nil ||
 		item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete {
 		return false, workqueue.Change{}, invalid("backing creation history requires expired, settled execution")
@@ -33,7 +40,10 @@ func (repository *Repository) PrepareRetention(ctx context.Context, view workque
 		return false, workqueue.Change{}, err
 	}
 	change := workqueue.Change{Conditions: []keyvalue.Condition{capture,
-		{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision}, {Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision}}}
+		{
+			Key:         workqueue.TaskKey(task.ID),
+			ModRevision: view.Task.Revision,
+		}, {Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision}}}
 	if input.Hook != nil && input.Hook.Pins != nil {
 		ready, guards, err := repository.retireHookPins(ctx, view, *input.Hook.Pins, change.Conditions)
 		if err != nil || !ready {
@@ -47,7 +57,10 @@ func (repository *Repository) PrepareRetention(ctx context.Context, view workque
 			return false, workqueue.Change{}, err
 		}
 		change.Conditions = append(change.Conditions, collected.Conditions...)
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: InputKey(item.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: InputKey(item.ID)},
+		)
 		if procedure.AfterStart != nil && procedure.AfterStart.EncryptedInputs != nil {
 			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete,
 				Key: taskconfiguration.BackingHookTaskInputKey(procedure.OperationId)})
@@ -72,7 +85,9 @@ func (repository *Repository) retireHookPins(ctx context.Context, view workqueue
 	}
 	if !found {
 		return true, []keyvalue.Condition{{Key: tasksecretpins.RootKey(binding.OperationID)},
-			{Key: tasksecretpins.PreparationKey(binding.OperationID)}, {Key: tasksecretpins.ReversePrefix(binding.OperationID), Prefix: true}}, nil
+			{
+				Key: tasksecretpins.PreparationKey(binding.OperationID),
+			}, {Key: tasksecretpins.ReversePrefix(binding.OperationID), Prefix: true}}, nil
 	}
 	_, releasing, err := root.RetentionCondition(binding)
 	if err != nil {
@@ -92,16 +107,25 @@ func (repository *Repository) retireHookPins(ctx context.Context, view workqueue
 		return false, nil, err
 	}
 	defer keyvalue.ClearMutationValues(mutations)
-	result, err := repository.store.Transact(ctx, append(append([]keyvalue.Condition(nil), guards...), conditions...), mutations)
+	result, err := repository.store.Transact(
+		ctx,
+		append(append([]keyvalue.Condition(nil), guards...), conditions...),
+		mutations,
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	return false, nil, err
 }
 
 func PrepareAttemptRetirement(view workqueue.View, snapshot workqueue.AttemptSnapshot) (workqueue.Change, error) {
 	item, attempt := view.Item.Item, snapshot.Attempt
-	if item.Operation != workexecution.BackingProvision || item.Placement.Executor != workexecution.Agent || item.Input == nil ||
-		attempt.Input != *item.Input || attempt.Executor.HostID != item.Placement.HostID || attempt.Executor.Executor != workexecution.Agent {
-		return workqueue.Change{}, invalid("backing creation attempt collection differs from its captured work and host")
+	if item.Operation != workexecution.BackingProvision || item.Placement.Executor != workexecution.Agent ||
+		item.Input == nil ||
+		attempt.Input != *item.Input ||
+		attempt.Executor.HostID != item.Placement.HostID ||
+		attempt.Executor.Executor != workexecution.Agent {
+		return workqueue.Change{}, invalid(
+			"backing creation attempt collection differs from its captured work and host",
+		)
 	}
 	collected, err := workqueue.PrepareAttemptCollection(view.Task, view.Item, snapshot)
 	if err != nil {

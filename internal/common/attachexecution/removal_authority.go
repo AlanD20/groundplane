@@ -54,9 +54,13 @@ func (input RemovalInput) Authority() (RemovalAuthority, error) {
 }
 
 func (authority RemovalAuthority) Validate(attempt workexecution.Attempt) error {
-	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward || attempt.Executor.Executor != workexecution.Agent ||
-		authority.Source.Validate() != nil || ids.Validate(ids.KindAttach, authority.AttachID) != nil ||
-		ids.Validate(ids.KindService, authority.BackingServiceID) != nil || authority.Commands == 0 || authority.Commands > MaximumGrants+2 {
+	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		authority.Source.Validate() != nil ||
+		ids.Validate(ids.KindAttach, authority.AttachID) != nil ||
+		ids.Validate(ids.KindService, authority.BackingServiceID) != nil ||
+		authority.Commands == 0 ||
+		authority.Commands > MaximumGrants+2 {
 		return invalid("Attach removal journal authority is invalid")
 	}
 	if authority.HasConsumer {

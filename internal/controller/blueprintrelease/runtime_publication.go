@@ -77,7 +77,10 @@ func (service *Service) finishSelectedRuntime(
 				execution.Clear()
 				return Prepared{}, errs.New(errs.KindInternal, "Blueprint post-deploy execution source is missing")
 			}
-			hookWork.Hooks = append(hookWork.Hooks, etcd.ReleaseHookExecutionPublication{Sources: sources, Execution: execution})
+			hookWork.Hooks = append(
+				hookWork.Hooks,
+				etcd.ReleaseHookExecutionPublication{Sources: sources, Execution: execution},
+			)
 		}
 	}
 	if len(hookWork.Hooks) != hooks.executions {

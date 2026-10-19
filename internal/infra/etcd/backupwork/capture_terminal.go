@@ -35,7 +35,8 @@ func (repository *InputRepository) PrepareCaptureCompletion(ctx context.Context,
 	}
 	for index, source := range run.Sources {
 		cleanup := assignment.Sources[index].GetCapture().GetSourceCleanupCompleted()
-		if source.State != backupruntime.BackupSourceAttemptSucceeded || cleanup == nil || cleanup.PointId != source.RecoveryPointID ||
+		if source.State != backupruntime.BackupSourceAttemptSucceeded || cleanup == nil ||
+			cleanup.PointId != source.RecoveryPointID ||
 			!backupruntime.BackupArtifactEvidenceMatchesWire(source.Evidence, cleanup.Evidence) {
 			return workqueue.Change{}, conflict("Backup completion requires every source's cleanup and retention")
 		}
@@ -66,8 +67,19 @@ func (repository *InputRepository) prepareCaptureRelease(ctx context.Context, vi
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	backings, err := postgresbackingguard.PrepareOwnership(ctx, repository.store, environments, run.EnvironmentID,
-		postgresbackingguard.Owner(backupruntime.BackupOperationBackup, run.OperationID, run.TaskID), view.ReadRevision, true)
+	backings, err := postgresbackingguard.PrepareOwnership(
+		ctx,
+		repository.store,
+		environments,
+		run.EnvironmentID,
+		postgresbackingguard.Owner(
+			backupruntime.BackupOperationBackup,
+			run.OperationID,
+			run.TaskID,
+		),
+		view.ReadRevision,
+		true,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -81,22 +93,40 @@ func (repository *InputRepository) prepareCaptureRelease(ctx context.Context, vi
 		if err != nil {
 			return workqueue.Change{}, err
 		}
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: guard.Key, Value: encoded})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: guard.Key, Value: encoded},
+		)
 	}
 	change.Conditions = append(change.Conditions, guard)
 	change.Conditions = append(change.Conditions, exclusions...)
 	change.Conditions = append(change.Conditions, fence.TransactionConditions()...)
 	change.Conditions = append(change.Conditions, backings.Conditions...)
-	change.Mutations = append(change.Mutations,
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: hierarchy.EnvironmentOperationLockKey(run.EnvironmentID)}, epoch)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{
+			Type: keyvalue.MutationDelete,
+			Key:  hierarchy.EnvironmentOperationLockKey(run.EnvironmentID),
+		},
+		epoch,
+	)
 	for _, exclusion := range exclusions {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: exclusion.Key})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: exclusion.Key},
+		)
 	}
 	for index := range run.Sources {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: credentialGrantKey(view.Item.Item.ID, uint32(index))})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: credentialGrantKey(view.Item.Item.ID, uint32(index))},
+		)
 	}
 	for _, mutation := range backings.Mutations {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...)},
+		)
 	}
 	return change, nil
 }

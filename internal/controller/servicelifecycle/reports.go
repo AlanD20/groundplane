@@ -22,15 +22,51 @@ import (
 // WorkRecords owns the captured Service lifecycle mutation and its atomic resource changes.
 // Report handlers cannot settle queue ownership independently of these writes.
 type WorkRecords interface {
-	PrepareRecoveryResult(context.Context, workqueue.ResumeView, *agentpb.ServiceLifecycleWorkInput, []byte, time.Time) (workqueue.Change, workexecution.Completion, error)
+	PrepareRecoveryResult(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.ServiceLifecycleWorkInput,
+		[]byte,
+		time.Time,
+	) (workqueue.Change, workexecution.Completion, error)
 	LoadRecoveryResult(context.Context, workqueue.ResumeView, *agentpb.ServiceLifecycleWorkInput) ([]byte, bool, error)
-	LoadHookInputs(context.Context, workqueue.View) (servicelifecyclework.Input, *taskconfiguration.BackingHookEncryptedInputs, []keyvalue.Condition, error)
-	PrepareHookDelivery(context.Context, workqueue.ResumeView, *agentpb.ServiceLifecycleWorkInput, string, time.Time) (workqueue.Change, error)
-	PrepareLifecycleFailure(context.Context, workqueue.ResumeView, servicelifecyclework.Input, *agentpb.ServiceLifecycleWorkInput, lifecycleexecution.FailureReason, time.Time, bool) (workqueue.Change, workexecution.Completion, error)
+	LoadHookInputs(
+		context.Context,
+		workqueue.View,
+	) (servicelifecyclework.Input, *taskconfiguration.BackingHookEncryptedInputs, []keyvalue.Condition, error)
+	PrepareHookDelivery(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.ServiceLifecycleWorkInput,
+		string,
+		time.Time,
+	) (workqueue.Change, error)
+	PrepareLifecycleFailure(
+		context.Context,
+		workqueue.ResumeView,
+		servicelifecyclework.Input,
+		*agentpb.ServiceLifecycleWorkInput,
+		lifecycleexecution.FailureReason,
+		time.Time,
+		bool,
+	) (workqueue.Change, workexecution.Completion, error)
 	LoadLifecycleFailure(context.Context, workqueue.ResumeView, *agentpb.ServiceLifecycleWorkInput) ([]byte, error)
-	PrepareLifecycleCompletion(context.Context, workqueue.ResumeView, servicelifecyclework.Input, *agentpb.ServiceLifecycleWorkInput, time.Time) (workqueue.Change, error)
+	PrepareLifecycleCompletion(
+		context.Context,
+		workqueue.ResumeView,
+		servicelifecyclework.Input,
+		*agentpb.ServiceLifecycleWorkInput,
+		time.Time,
+	) (workqueue.Change, error)
 	LoadLifecycleInput(context.Context, workqueue.View) (servicelifecyclework.Input, error)
-	PrepareLifecycleCheckpoint(context.Context, workqueue.ResumeView, servicelifecyclework.Input, *agentpb.ServiceLifecycleWorkInput, lifecycleexecution.Progress, time.Time) (workqueue.Change, error)
+	PrepareLifecycleCheckpoint(
+		context.Context,
+		workqueue.ResumeView,
+		servicelifecyclework.Input,
+		*agentpb.ServiceLifecycleWorkInput,
+		lifecycleexecution.Progress,
+		time.Time,
+	) (workqueue.Change, error)
 }
 
 type WorkReports struct {
@@ -39,9 +75,16 @@ type WorkReports struct {
 	hooks   LifecycleHookResolver
 }
 
-func NewWorkReports(queue *workqueue.Repository, records WorkRecords, hooks LifecycleHookResolver) (*WorkReports, error) {
+func NewWorkReports(
+	queue *workqueue.Repository,
+	records WorkRecords,
+	hooks LifecycleHookResolver,
+) (*WorkReports, error) {
 	if queue == nil || records == nil || hooks == nil {
-		return nil, errs.New(errs.KindInternal, "Service lifecycle reporting requires execution storage and its publication owner")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Service lifecycle reporting requires execution storage and its publication owner",
+		)
 	}
 	return &WorkReports{queue: queue, records: records, hooks: hooks}, nil
 }
@@ -88,15 +131,22 @@ func (service *WorkReports) CheckpointLifecycle(ctx context.Context, authorizati
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Service lifecycle checkpoint ownership changed; resend the saved report")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle checkpoint ownership changed; resend the saved report",
+		)
 	}
 	digest, err := hex.DecodeString(checkpoint.Evidence.SHA256)
 	if err != nil {
 		return nil, err
 	}
-	return &agentpb.ServiceLifecycleCheckpointAck{Attempt: proto.CloneOf(request.Attempt), Sequence: checkpoint.Sequence,
-		StageId: checkpoint.StageID, Evidence: &agentpb.WorkInputReference{InputId: checkpoint.Evidence.ID, Sha256: digest},
-		RecordedAt: timestamppb.New(checkpoint.RecordedAt)}, nil
+	return &agentpb.ServiceLifecycleCheckpointAck{
+		Attempt:    proto.CloneOf(request.Attempt),
+		Sequence:   checkpoint.Sequence,
+		StageId:    checkpoint.StageID,
+		Evidence:   &agentpb.WorkInputReference{InputId: checkpoint.Evidence.ID, Sha256: digest},
+		RecordedAt: timestamppb.New(checkpoint.RecordedAt),
+	}, nil
 }
 
 func (service *WorkReports) reportView(ctx context.Context, authorization agentregistration.WorkAuthorization,
@@ -113,7 +163,10 @@ func (service *WorkReports) reportView(ctx context.Context, authorization agentr
 	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Attempt.Attempt.StartedAt == nil ||
 		view.Work.Item.Item.Operation != workexecution.ServiceLifecycle || !view.Work.Task.Task.PublicationComplete ||
 		view.Work.Task.Task.CollectionStartedAt != nil {
-		return workqueue.ResumeView{}, errs.New(errs.KindStateConflict, "Service lifecycle report has no retained started execution")
+		return workqueue.ResumeView{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle report has no retained started execution",
+		)
 	}
 	return view, nil
 }

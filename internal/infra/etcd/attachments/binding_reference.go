@@ -30,9 +30,17 @@ type BindingReader interface {
 	GetMany(context.Context, keyvalue.GetManyRequest) (*keyvalue.GetManyResult, error)
 }
 
-func ReadBindingReference(ctx context.Context, store BindingReader, attachID string, revision int64) (BindingReference, []keyvalue.Condition, error) {
+func ReadBindingReference(
+	ctx context.Context,
+	store BindingReader,
+	attachID string,
+	revision int64,
+) (BindingReference, []keyvalue.Condition, error) {
 	if ids.Validate(ids.KindAttach, attachID) != nil || revision <= 0 {
-		return BindingReference{}, nil, errs.New(errs.KindValidationFailed, "Attach binding reference requires a fixed resource revision")
+		return BindingReference{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"Attach binding reference requires a fixed resource revision",
+		)
 	}
 	keys := []string{AttachKey(attachID), AttachFactsKey(attachID)}
 	read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
@@ -48,7 +56,10 @@ func ReadBindingReference(ctx context.Context, store BindingReader, attachID str
 	conditions := make([]keyvalue.Condition, 0, 2)
 	for index, value := range read.Values {
 		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > revision) {
-			return BindingReference{}, nil, errs.New(errs.KindStateConflict, "Attach binding reference revision changed")
+			return BindingReference{}, nil, errs.New(
+				errs.KindStateConflict,
+				"Attach binding reference revision changed",
+			)
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: keys[index], ModRevision: keyvalue.RevisionOf(value)})
 	}

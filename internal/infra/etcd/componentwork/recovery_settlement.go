@@ -46,7 +46,10 @@ func (repository *InputRepository) PrepareRestoredState(ctx context.Context, vie
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	for _, condition := range conditions {
-		proof.Conditions = append(proof.Conditions, keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision})
+		proof.Conditions = append(
+			proof.Conditions,
+			keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision},
+		)
 	}
 	proof.Conditions = append(proof.Conditions, keyvalue.Condition{
 		Key: componentplanning.RuntimeKey(view.Work.Item.Item.TargetID), ModRevision: capture.RuntimeRevision})

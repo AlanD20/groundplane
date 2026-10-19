@@ -23,7 +23,13 @@ type RecoveryReport struct {
 	Observation   Observation         `json:"observation"`
 }
 
-func (report RecoveryReport) Validate(attempt workexecution.Attempt, source Recovery, action agentpb.NetworkWorkAction, networkID string, boundary Progress) error {
+func (report RecoveryReport) Validate(
+	attempt workexecution.Attempt,
+	source Recovery,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	boundary Progress,
+) error {
 	if source.ValidateFor(attempt) != nil || attempt.StartedAt == nil || report.AttemptID != attempt.ID ||
 		report.ForwardID != source.Forward.ID || report.Failure != source.Evidence || !report.HelperStopped ||
 		source.Failure.Checkpoint == nil || boundary.Validate(source.Forward, action, networkID) != nil || !boundary.InFlight {
@@ -49,7 +55,14 @@ func (report RecoveryReport) BoundaryCompleted(boundary Progress) bool {
 	return report.HelperStopped && report.Observation.proves(boundary.Stage)
 }
 
-func EncodeRecoveryReport(attempt workexecution.Attempt, source Recovery, action agentpb.NetworkWorkAction, networkID string, boundary Progress, report RecoveryReport) ([]byte, workexecution.Input, error) {
+func EncodeRecoveryReport(
+	attempt workexecution.Attempt,
+	source Recovery,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	boundary Progress,
+	report RecoveryReport,
+) ([]byte, workexecution.Input, error) {
 	if err := report.Validate(attempt, source, action, networkID, boundary); err != nil {
 		return nil, workexecution.Input{}, err
 	}
@@ -69,10 +82,20 @@ func EncodeRecoveryReport(attempt workexecution.Attempt, source Recovery, action
 		return nil, workexecution.Input{}, err
 	}
 	digest := sha256.Sum256(raw)
-	return raw, workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, at, attempt.ID, "network/recovery"), SHA256: hex.EncodeToString(digest[:])}, nil
+	return raw, workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, at, attempt.ID, "network/recovery"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }
 
-func DecodeRecoveryReport(attempt workexecution.Attempt, source Recovery, action agentpb.NetworkWorkAction, networkID string, boundary Progress, raw []byte) (RecoveryReport, workexecution.Input, error) {
+func DecodeRecoveryReport(
+	attempt workexecution.Attempt,
+	source Recovery,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	boundary Progress,
+	raw []byte,
+) (RecoveryReport, workexecution.Input, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return RecoveryReport{}, workexecution.Input{}, invalidProgress()
 	}

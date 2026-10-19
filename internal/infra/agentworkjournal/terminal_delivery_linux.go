@@ -14,7 +14,10 @@ import (
 
 // PrepareTerminalDelivery is called before a report can enter the stream.
 // A lost response cannot be replaced by a different terminal outcome.
-func (journal *Journal) PrepareTerminalDelivery(ctx context.Context, request *agentpb.AgentMessage) (*agentpb.ControllerMessage, error) {
+func (journal *Journal) PrepareTerminalDelivery(
+	ctx context.Context,
+	request *agentpb.AgentMessage,
+) (*agentpb.ControllerMessage, error) {
 	identity, _, supported, err := workreceipt.Describe(request)
 	if err != nil || !supported {
 		return nil, invalid()
@@ -52,7 +55,11 @@ func (journal *Journal) PrepareTerminalDelivery(ctx context.Context, request *ag
 
 // AcknowledgeTerminalDelivery runs before waking the operation waiting for its
 // result. A crash between transport ACK and typed settlement retains the reply.
-func (journal *Journal) AcknowledgeTerminalDelivery(ctx context.Context, request *agentpb.AgentMessage, reply *agentpb.ControllerMessage) error {
+func (journal *Journal) AcknowledgeTerminalDelivery(
+	ctx context.Context,
+	request *agentpb.AgentMessage,
+	reply *agentpb.ControllerMessage,
+) error {
 	if err := workreceipt.Match(request, reply); err != nil {
 		return err
 	}
@@ -141,7 +148,10 @@ func (journal *Journal) Inventory(ctx context.Context, after string) (JournalPag
 		}
 		entry := JournalEntry{Attempt: record.Attempt}
 		if delivery := record.TerminalDelivery; delivery != nil {
-			entry.Delivery = &TerminalDelivery{Request: slices.Clone(delivery.Request), Reply: slices.Clone(delivery.Reply)}
+			entry.Delivery = &TerminalDelivery{
+				Request: slices.Clone(delivery.Request),
+				Reply:   slices.Clone(delivery.Reply),
+			}
 		}
 		page.Entries = append(page.Entries, entry)
 	}

@@ -102,7 +102,10 @@ func (ledger *ReleaseLedger) GetServiceRollout(ctx context.Context,
 		return empty, err
 	}
 	if capture.SourceReadRevision > value.ModRevision {
-		return empty, errs.New(errs.KindStateConflict, "Service rollout source revision is newer than its stored capture")
+		return empty, errs.New(
+			errs.KindStateConflict,
+			"Service rollout source revision is newer than its stored capture",
+		)
 	}
 	if err := capture.MatchesWork(task, item); err != nil {
 		return empty, err
@@ -118,9 +121,14 @@ func ServiceRolloutPublicationCondition(work workqueue.View,
 	stored keyvalue.Versioned[releaserender.ServiceRolloutCapture],
 	captured workexecution.Input,
 ) (keyvalue.Condition, error) {
-	if stored.Revision <= 0 || stored.ReadRevision < stored.Revision || stored.Record.SourceReadRevision > stored.Revision ||
-		stored.Revision > work.ReadRevision || captured.Validate() != nil {
-		return keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Service rollout publication has no captured source revision")
+	if stored.Revision <= 0 || stored.ReadRevision < stored.Revision ||
+		stored.Record.SourceReadRevision > stored.Revision ||
+		stored.Revision > work.ReadRevision ||
+		captured.Validate() != nil {
+		return keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Service rollout publication has no captured source revision",
+		)
 	}
 	if err := stored.Record.MatchesWork(work.Task.Task, work.Item.Item); err != nil {
 		return keyvalue.Condition{}, err

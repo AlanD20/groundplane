@@ -35,7 +35,13 @@ func (client *Client) replayWorkJournal(ctx context.Context, stream agentStream)
 			}
 			if len(entry.Delivery.Reply) != 0 {
 				if err := client.workJournal.SettleTerminalDelivery(ctx, entry.Attempt.ID); err != nil {
-					client.logger.Warn("saved work acknowledgement retains local evidence", "attempt_id", entry.Attempt.ID, "error", err)
+					client.logger.Warn(
+						"saved work acknowledgement retains local evidence",
+						"attempt_id",
+						entry.Attempt.ID,
+						"error",
+						err,
+					)
 				}
 				continue
 			}
@@ -53,14 +59,32 @@ func (client *Client) replayWorkJournal(ctx context.Context, stream agentStream)
 			}
 			ack := response.GetWorkJournalReplayAck()
 			digest := sha256.Sum256(entry.Delivery.Request)
-			if ack == nil || executionplan.RejectUnknown(response) != nil || proto.Size(response) > workreceipt.MaximumBytes+1024 ||
-				ack.Complete || ack.AccountedAttemptId != "" || !bytes.Equal(ack.ReportSha256, digest[:]) ||
+			if ack == nil || executionplan.RejectUnknown(response) != nil ||
+				proto.Size(response) > workreceipt.MaximumBytes+1024 ||
+				ack.Complete ||
+				ack.AccountedAttemptId != "" ||
+				!bytes.Equal(ack.ReportSha256, digest[:]) ||
 				(ack.FailureCode != "") == (len(ack.Acknowledgement) != 0) ||
 				ack.FailureCode == "" && ack.FailureDetail != "" {
-				return errs.New(errs.KindStateConflict, "startup result acknowledgement differs from the retained report")
+				return errs.New(
+					errs.KindStateConflict,
+					"startup result acknowledgement differs from the retained report",
+				)
 			}
 			if ack.FailureCode != "" {
-				client.logger.Warn("saved work result remains unresolved", "task_id", entry.Attempt.TaskID, "work_id", entry.Attempt.WorkItemID, "attempt_id", entry.Attempt.ID, "code", ack.FailureCode, "detail", ack.FailureDetail)
+				client.logger.Warn(
+					"saved work result remains unresolved",
+					"task_id",
+					entry.Attempt.TaskID,
+					"work_id",
+					entry.Attempt.WorkItemID,
+					"attempt_id",
+					entry.Attempt.ID,
+					"code",
+					ack.FailureCode,
+					"detail",
+					ack.FailureDetail,
+				)
 				continue
 			}
 			request, err := entry.Delivery.Message()
@@ -75,7 +99,13 @@ func (client *Client) replayWorkJournal(ctx context.Context, stream agentStream)
 				return err
 			}
 			if err := client.workJournal.SettleTerminalDelivery(ctx, entry.Attempt.ID); err != nil {
-				client.logger.Warn("replayed work acknowledgement retains local evidence", "attempt_id", entry.Attempt.ID, "error", err)
+				client.logger.Warn(
+					"replayed work acknowledgement retains local evidence",
+					"attempt_id",
+					entry.Attempt.ID,
+					"error",
+					err,
+				)
 			}
 		}
 		for _, attemptID := range page.Uncommitted {
@@ -99,7 +129,9 @@ func (client *Client) replayWorkJournal(ctx context.Context, stream agentStream)
 	}
 	ack := response.GetWorkJournalReplayAck()
 	if ack == nil || executionplan.RejectUnknown(response) != nil || !ack.Complete || len(ack.ReportSha256) != 0 ||
-		len(ack.Acknowledgement) != 0 || ack.FailureCode != "" || ack.FailureDetail != "" || ack.AccountedAttemptId != "" {
+		len(
+			ack.Acknowledgement,
+		) != 0 || ack.FailureCode != "" || ack.FailureDetail != "" || ack.AccountedAttemptId != "" {
 		return errs.New(errs.KindStateConflict, "Controller did not acknowledge completed startup result replay")
 	}
 	return nil
@@ -107,7 +139,12 @@ func (client *Client) replayWorkJournal(ctx context.Context, stream agentStream)
 
 // Accounting is read-only with respect to execution. In particular, a partial
 // local write is never promoted, discarded or treated as an effect receipt.
-func (client *Client) accountWorkJournal(ctx context.Context, stream agentStream, attemptID string, request *agentpb.WorkJournalReplayRequest) error {
+func (client *Client) accountWorkJournal(
+	ctx context.Context,
+	stream agentStream,
+	attemptID string,
+	request *agentpb.WorkJournalReplayRequest,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -122,8 +159,13 @@ func (client *Client) accountWorkJournal(ctx context.Context, stream agentStream
 		return err
 	}
 	ack := response.GetWorkJournalReplayAck()
-	if ack == nil || executionplan.RejectUnknown(response) != nil || proto.Size(response) > 1024 || ack.AccountedAttemptId != attemptID ||
-		ack.Complete || len(ack.ReportSha256) != 0 || len(ack.Acknowledgement) != 0 || ack.FailureCode != "" || ack.FailureDetail != "" {
+	if ack == nil || executionplan.RejectUnknown(response) != nil || proto.Size(response) > 1024 ||
+		ack.AccountedAttemptId != attemptID ||
+		ack.Complete ||
+		len(ack.ReportSha256) != 0 ||
+		len(ack.Acknowledgement) != 0 ||
+		ack.FailureCode != "" ||
+		ack.FailureDetail != "" {
 		return errs.New(errs.KindStateConflict, "Controller did not account for the retained local work journal")
 	}
 	return nil

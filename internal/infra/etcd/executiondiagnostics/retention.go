@@ -52,7 +52,12 @@ func TaskExpired(ctx context.Context, store Store, task workqueue.TaskSnapshot, 
 // ExpireTask advances one work item and at most four attempts. It removes only
 // diagnostic records; exact attempts, checkpoints, failures and resource state
 // remain untouched. A durable cursor bounds restart and large Blueprint work.
-func (repository *Repository) ExpireTask(ctx context.Context, taskID string, at time.Time, retention time.Duration) (bool, error) {
+func (repository *Repository) ExpireTask(
+	ctx context.Context,
+	taskID string,
+	at time.Time,
+	retention time.Duration,
+) (bool, error) {
 	if retention < time.Hour || retention > workexecution.TaskHistoryRetention || at.IsZero() {
 		return false, invalid()
 	}
@@ -60,7 +65,8 @@ func (repository *Repository) ExpireTask(ctx context.Context, taskID string, at 
 	if err != nil {
 		return false, err
 	}
-	if task.Task.FinishedAt == nil || task.Task.CollectionStartedAt != nil || at.Before(task.Task.FinishedAt.Add(retention)) {
+	if task.Task.FinishedAt == nil || task.Task.CollectionStartedAt != nil ||
+		at.Before(task.Task.FinishedAt.Add(retention)) {
 		return false, nil
 	}
 	previous, previousRevision, err := readExpiry(ctx, repository.store, taskID, revision)
@@ -89,16 +95,28 @@ func (repository *Repository) ExpireTask(ctx context.Context, taskID string, at 
 		if err != nil {
 			return false, err
 		}
-		conditions = append(conditions, keyvalue.Condition{Key: workqueue.ItemKey(item.Item.ID), ModRevision: item.Revision})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: workqueue.ItemKey(item.Item.ID), ModRevision: item.Revision},
+		)
 		for _, attempt := range attempts.Attempts {
 			if attempt.Attempt.FinishedAt == nil {
 				return false, invalid()
 			}
-			conditions = append(conditions, keyvalue.Condition{Key: workqueue.AttemptKey(attempt.Attempt.ID), ModRevision: attempt.Revision})
-			mutations = append(mutations,
+			conditions = append(
+				conditions,
+				keyvalue.Condition{Key: workqueue.AttemptKey(attempt.Attempt.ID), ModRevision: attempt.Revision},
+			)
+			mutations = append(
+				mutations,
 				keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: Key(attempt.Attempt.ID)},
 				keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: EventsKey(attempt.Attempt.ID)},
-				keyvalue.Mutation{Type: keyvalue.MutationPut, Key: LossKey(attempt.Attempt.ID), Value: []byte("expired")})
+				keyvalue.Mutation{
+					Type:  keyvalue.MutationPut,
+					Key:   LossKey(attempt.Attempt.ID),
+					Value: []byte("expired"),
+				},
+			)
 		}
 		next.AfterAttempt = attempts.LastNumber
 		if !attempts.More {
@@ -122,7 +140,10 @@ func (repository *Repository) ExpireTask(ctx context.Context, taskID string, at 
 				return false, err
 			}
 			conditions = append(conditions, keyvalue.Condition{Key: TaskEventsKey(taskID), ModRevision: eventsRevision})
-			mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: TaskEventsKey(taskID), Value: value})
+			mutations = append(
+				mutations,
+				keyvalue.Mutation{Type: keyvalue.MutationPut, Key: TaskEventsKey(taskID), Value: value},
+			)
 		}
 	}
 	value, err := recordcodec.Encode("diagnostic_expiry", next)
@@ -130,7 +151,10 @@ func (repository *Repository) ExpireTask(ctx context.Context, taskID string, at 
 		keyvalue.ClearMutationValues(mutations)
 		return false, err
 	}
-	mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: TaskExpiryKey(taskID), Value: value})
+	mutations = append(
+		mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: TaskExpiryKey(taskID), Value: value},
+	)
 	defer keyvalue.ClearMutationValues(mutations)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	keyvalue.ClearValues(result.FailureReads)

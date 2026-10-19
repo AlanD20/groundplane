@@ -26,7 +26,10 @@ func (repository *Repository) PrepareUnaffectedRetry(ctx context.Context, view w
 		item.Input == nil || item.Result == nil || attempt.Result == nil || *item.Result != *attempt.Result ||
 		attempt.Direction != workexecution.Forward || attempt.Number != item.AttemptNumber ||
 		attempt.Number == ^uint64(0) || attempt.FinishedAt == nil || !deadline.After(at) {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Service removal Retry requires a failed action without host effects")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Service removal Retry requires a failed action without host effects",
+		)
 	}
 	input, capture, err := repository.Load(ctx, view)
 	if err != nil {
@@ -42,7 +45,10 @@ func (repository *Repository) PrepareUnaffectedRetry(ctx context.Context, view w
 		return workqueue.Change{}, err
 	}
 	if failure.Checkpoint != nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Service removal already received an effect grant; recovery proof is required")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Service removal already received an effect grant; recovery proof is required",
+		)
 	}
 	prior, priorGuard, err := repository.LoadContinuation(ctx, view, attempt, delivery)
 	if err != nil {
@@ -54,7 +60,10 @@ func (repository *Repository) PrepareUnaffectedRetry(ctx context.Context, view w
 			return workqueue.Change{}, err
 		}
 		if len(completed) != 0 {
-			return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Service removal retains earlier host effects; recovery proof is required")
+			return workqueue.Change{}, errs.New(
+				errs.KindTaskNotRetryable,
+				"Service removal retains earlier host effects; recovery proof is required",
+			)
 		}
 	}
 	continuation := lifecycleexecution.Continuation{Source: lifecycleexecution.Recovery{
@@ -78,9 +87,18 @@ func (repository *Repository) PrepareUnaffectedRetry(ctx context.Context, view w
 		return workqueue.Change{}, err
 	}
 	continuationKey := servicelifecyclework.ContinuationKey(item.ID, attempt.Number+1)
-	change.Conditions = append(change.Conditions, capture, failureGuard, priorGuard, keyvalue.Condition{Key: continuationKey})
+	change.Conditions = append(
+		change.Conditions,
+		capture,
+		failureGuard,
+		priorGuard,
+		keyvalue.Condition{Key: continuationKey},
+	)
 	change.Conditions = append(change.Conditions, fence.Conditions...)
 	change.Mutations = append(change.Mutations, fence.Mutations...)
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: continuationKey, Value: encoded})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: continuationKey, Value: encoded},
+	)
 	return change, nil
 }

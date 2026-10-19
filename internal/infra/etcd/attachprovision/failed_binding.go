@@ -12,15 +12,25 @@ import (
 
 // PrepareFailedBinding changes only lifecycle visibility. It retains facts and
 // reverse references: failure does not prove database or hook effects absent.
-func (repository *InputRepository) PrepareFailedBinding(ctx context.Context, work workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareFailedBinding(
+	ctx context.Context,
+	work workqueue.View,
+) (workqueue.Change, error) {
 	return repository.prepareBindingTransition(ctx, work, core.AttachPending, core.AttachFailed)
 }
 
-func (repository *InputRepository) prepareRetryBinding(ctx context.Context, work workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) prepareRetryBinding(
+	ctx context.Context,
+	work workqueue.View,
+) (workqueue.Change, error) {
 	return repository.prepareBindingTransition(ctx, work, core.AttachFailed, core.AttachPending)
 }
 
-func (repository *InputRepository) prepareBindingTransition(ctx context.Context, work workqueue.View, from, to core.AttachStatus) (workqueue.Change, error) {
+func (repository *InputRepository) prepareBindingTransition(
+	ctx context.Context,
+	work workqueue.View,
+	from, to core.AttachStatus,
+) (workqueue.Change, error) {
 	source, err := repository.LoadCaptured(ctx, work)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -35,7 +45,10 @@ func (repository *InputRepository) prepareBindingTransition(ctx context.Context,
 	}
 	expected.Status = from
 	key := attachments.AttachKey(expected.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: work.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -58,6 +71,8 @@ func (repository *InputRepository) prepareBindingTransition(ctx context.Context,
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	return workqueue.Change{Conditions: append(source.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}),
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}}}, nil
+	return workqueue.Change{
+		Conditions: append(source.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}),
+		Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}},
+	}, nil
 }

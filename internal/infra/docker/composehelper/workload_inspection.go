@@ -14,7 +14,12 @@ import (
 // A captured name is not permission to adopt an unrelated container. Inspect
 // all current replicas against the baseline labels and image before Compose can
 // recreate them. No current container means no startup merely to remove a mount.
-func inspectCapturedWorkloads(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact, name string) ([]string, error) {
+func inspectCapturedWorkloads(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	artifact *agentpb.ComposeArtifact,
+	name string,
+) ([]string, error) {
 	var selected *agentpb.ComposeService
 	for _, service := range artifact.Services {
 		if service == nil {
@@ -33,7 +38,12 @@ func inspectCapturedWorkloads(ctx context.Context, taskRunner runner.Runner, art
 
 // Lifecycle operations also own stable proxy members. Their caller selects the
 // exact captured member; workload-only operations retain the restriction above.
-func inspectCapturedContainers(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact, selected *agentpb.ComposeService) ([]string, error) {
+func inspectCapturedContainers(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	artifact *agentpb.ComposeArtifact,
+	selected *agentpb.ComposeService,
+) ([]string, error) {
 	name := selected.ComposeName
 	listed, err := taskRunner.Run(ctx, runner.RunCmdOpts{
 		Name: DockerExecutable, Args: []string{"container", "ls", "--all", "--quiet", "--no-trunc",
@@ -60,7 +70,10 @@ func inspectCapturedContainers(ctx context.Context, taskRunner runner.Runner, ar
 			labels["com.groundplane.managed"] != "true" || labels["com.groundplane.environment-id"] != artifact.OwnerId ||
 			labels["com.groundplane.service-id"] != selected.ServiceId ||
 			!hasAllExpectedLabels(labels, selected.ExpectedLabels) {
-			return nil, errs.New(errs.KindStateConflict, "captured workload ownership differs from the captured workload")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"captured workload ownership differs from the captured workload",
+			)
 		}
 		if err := inspectRestorationImage(ctx, taskRunner, id, selected); err != nil {
 			return nil, err

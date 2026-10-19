@@ -13,7 +13,10 @@ import (
 
 // resumeCheckpoint incorporates at most the one report whose acknowledgement
 // was lost after assignment delivery. It never reconstructs an unrecorded effect.
-func resumeCheckpoint(invocation Invocation, record *agentworkjournal.ScriptRecord) (*agentpb.ScriptExecutionCheckpoint, error) {
+func resumeCheckpoint(
+	invocation Invocation,
+	record *agentworkjournal.ScriptRecord,
+) (*agentpb.ScriptExecutionCheckpoint, error) {
 	checkpoint, err := executionplan.ValidateScriptExecutionCheckpoint(invocation.Checkpoint)
 	if err != nil {
 		return nil, err
@@ -24,7 +27,8 @@ func resumeCheckpoint(invocation Invocation, record *agentworkjournal.ScriptReco
 		}
 		return checkpoint, nil
 	}
-	if record.Validate() != nil || record.Ack == nil || !workexecution.SameAssignment(record.Attempt, invocation.Attempt) {
+	if record.Validate() != nil || record.Ack == nil ||
+		!workexecution.SameAssignment(record.Attempt, invocation.Attempt) {
 		return nil, errs.New(errs.KindStateConflict, "Script journal has no acknowledged report for this attempt")
 	}
 	report := record.Report

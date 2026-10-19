@@ -45,16 +45,24 @@ func (applied Applied) ConfigurationSHA256() string {
 }
 
 func (applied Applied) Validate() error {
-	if ids.Validate(ids.KindHost, applied.HostID) != nil || ids.Validate(ids.KindComponent, applied.ComponentID) != nil ||
-		applied.Generation == 0 || applied.Desired.ID != applied.ComponentID || applied.Desired.Owner != core.ComponentOwnerPlatform ||
-		applied.Desired.OwnerID != "" || applied.Desired.Kind != core.ComponentKindCoreDNS ||
+	if ids.Validate(ids.KindHost, applied.HostID) != nil ||
+		ids.Validate(ids.KindComponent, applied.ComponentID) != nil ||
+		applied.Generation == 0 ||
+		applied.Desired.ID != applied.ComponentID ||
+		applied.Desired.Owner != core.ComponentOwnerPlatform ||
+		applied.Desired.OwnerID != "" ||
+		applied.Desired.Kind != core.ComponentKindCoreDNS ||
 		componentrecord.ValidateRecord(componentrecord.Record{Desired: applied.Desired}) != nil ||
-		(applied.Configuration == nil) != (applied.FileOwner == "") || applied.Configuration != nil && !resolverexecution.ValidFileOwner(applied.FileOwner) || !recordcodec.IsCanonicalUTC(applied.ObservedAt) ||
-		!recordcodec.ValidSHA256(applied.BaselineSHA256) || !recordcodec.ValidSHA256(applied.ProjectionSHA256) {
+		(applied.Configuration == nil) != (applied.FileOwner == "") ||
+		applied.Configuration != nil && !resolverexecution.ValidFileOwner(applied.FileOwner) ||
+		!recordcodec.IsCanonicalUTC(applied.ObservedAt) ||
+		!recordcodec.ValidSHA256(applied.BaselineSHA256) ||
+		!recordcodec.ValidSHA256(applied.ProjectionSHA256) {
 		return invalid("DNS resolver applied state has invalid resource identity or configuration")
 	}
 	configuration := applied.Configuration
-	if configuration != nil && (configuration.Validate(applied.ComponentID) != nil || configuration.Generation > applied.Generation) {
+	if configuration != nil &&
+		(configuration.Validate(applied.ComponentID) != nil || configuration.Generation > applied.Generation) {
 		return invalid("DNS resolver applied state has invalid retained file configuration")
 	}
 	if applied.Desired.Enabled {
@@ -96,17 +104,29 @@ func DecodeApplied(raw []byte) (Applied, error) {
 	return applied, applied.Validate()
 }
 
-func (repository *Repository) ReadApplied(ctx context.Context, hostID, componentID string, revision int64) (keyvalue.Versioned[Applied], bool, error) {
+func (repository *Repository) ReadApplied(
+	ctx context.Context,
+	hostID, componentID string,
+	revision int64,
+) (keyvalue.Versioned[Applied], bool, error) {
 	return ReadApplied(ctx, repository.store, hostID, componentID, revision)
 }
 
 // ReadApplied needs no mutation capability, Task lookup or live Agent binding.
-func ReadApplied(ctx context.Context, store hostbindings.Reader, hostID, componentID string, revision int64) (keyvalue.Versioned[Applied], bool, error) {
+func ReadApplied(
+	ctx context.Context,
+	store hostbindings.Reader,
+	hostID, componentID string,
+	revision int64,
+) (keyvalue.Versioned[Applied], bool, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return keyvalue.Versioned[Applied]{}, false, err
 	}
-	if store == nil || revision < 0 || ids.Validate(ids.KindHost, hostID) != nil || ids.Validate(ids.KindComponent, componentID) != nil {
-		return keyvalue.Versioned[Applied]{}, false, invalid("DNS resolver applied read requires its actual host and Component")
+	if store == nil || revision < 0 || ids.Validate(ids.KindHost, hostID) != nil ||
+		ids.Validate(ids.KindComponent, componentID) != nil {
+		return keyvalue.Versioned[Applied]{}, false, invalid(
+			"DNS resolver applied read requires its actual host and Component",
+		)
 	}
 	key := AppliedKey(hostID, componentID)
 	read, err := readStateKeys(ctx, store, []string{key}, revision)
@@ -122,7 +142,13 @@ func ReadApplied(ctx context.Context, store hostbindings.Reader, hostID, compone
 		return keyvalue.Versioned[Applied]{}, false, err
 	}
 	if applied.HostID != hostID || applied.ComponentID != componentID {
-		return keyvalue.Versioned[Applied]{}, false, invalid("DNS resolver applied record belongs to another host or Component")
+		return keyvalue.Versioned[Applied]{}, false, invalid(
+			"DNS resolver applied record belongs to another host or Component",
+		)
 	}
-	return keyvalue.Versioned[Applied]{Record: applied, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, true, nil
+	return keyvalue.Versioned[Applied]{
+		Record:       applied,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, true, nil
 }

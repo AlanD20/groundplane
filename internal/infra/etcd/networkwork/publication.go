@@ -44,12 +44,18 @@ func (repository *InputRepository) prepareRemovalInput(ctx context.Context, task
 	if err := executionplan.ValidateNetworkWorkInput(input); err != nil {
 		return workqueue.Change{}, err
 	}
-	if task.Action != workexecution.ActionRemove || input.Action != agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE ||
-		item.Operation != workexecution.Network || item.Input == nil || item.Phase != workexecution.Ready ||
-		item.Placement.Executor != workexecution.Agent || item.TargetID != input.NetworkId ||
-		task.TargetID != input.NetworkId || task.Scope.EnvironmentID != input.EnvironmentId ||
+	if task.Action != workexecution.ActionRemove ||
+		input.Action != agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE ||
+		item.Operation != workexecution.Network ||
+		item.Input == nil ||
+		item.Phase != workexecution.Ready ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.TargetID != input.NetworkId ||
+		task.TargetID != input.NetworkId ||
+		task.Scope.EnvironmentID != input.EnvironmentId ||
 		task.Intent.SHA256 != hex.EncodeToString(input.IntentSha256) ||
-		marker.Intent.CiphertextDigest != task.Intent.SHA256 || input.RemovalSubnet == "" {
+		marker.Intent.CiphertextDigest != task.Intent.SHA256 ||
+		input.RemovalSubnet == "" {
 		return workqueue.Change{}, conflict("Zone publication differs from its captured removal")
 	}
 	want := []workexecution.Claim{{ScopeID: input.EnvironmentId},
@@ -90,6 +96,9 @@ func (repository *InputRepository) prepareRemovalInput(ctx context.Context, task
 	change.Conditions = append(change.Conditions, captured.Conditions...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: DesiredKey(item.ID)})
 	change.Mutations = append(change.Mutations, captured.Mutations...)
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DesiredKey(item.ID), Value: desired})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DesiredKey(item.ID), Value: desired},
+	)
 	return change, nil
 }

@@ -166,7 +166,10 @@ func readAppliedProxyServicePreflight(ctx context.Context, store planningStore,
 		runtime.Record.RevisionID != receipt.ParentTaskID ||
 		runtime.Record.Component.Desired.ID != receipt.Target.ID ||
 		runtime.Record.Execution != *receipt.Execution {
-		return nil, errs.New(errs.KindStateConflict, "Applied router dependencies do not match the acknowledged runtime")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Applied router dependencies do not match the acknowledged runtime",
+		)
 	}
 	return cloneProxyServicePreflight(runtime.Record.ProxyPreflight), nil
 }

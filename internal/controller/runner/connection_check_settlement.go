@@ -9,12 +9,23 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (executor *ConnectionCheckExecutor) Settle(ctx context.Context, queue *workqueue.Repository, delivery workqueue.Delivery, at time.Time) error {
+func (executor *ConnectionCheckExecutor) Settle(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	delivery workqueue.Delivery,
+	at time.Time,
+) error {
 	if queue == nil {
 		return errs.New(errs.KindInternal, "Runner check settlement requires execution storage")
 	}
 	attempt := delivery.Attempt.Attempt
-	request, recorded, err := queue.ReadCompletion(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+	request, recorded, err := queue.ReadCompletion(
+		ctx,
+		attempt.TaskID,
+		attempt.WorkItemID,
+		attempt.ID,
+		attempt.Executor,
+	)
 	if err != nil || recorded {
 		return err
 	}

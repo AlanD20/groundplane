@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func EncodeEnvironmentCheckpointRequest(input EnvironmentInput, report EnvironmentReport) (*agentpb.EnvironmentRemovalCheckpointRequest, error) {
+func EncodeEnvironmentCheckpointRequest(
+	input EnvironmentInput,
+	report EnvironmentReport,
+) (*agentpb.EnvironmentRemovalCheckpointRequest, error) {
 	raw, err := EncodeEnvironmentReport(input, report)
 	if err != nil {
 		return nil, err
@@ -20,7 +23,10 @@ func EncodeEnvironmentCheckpointRequest(input EnvironmentInput, report Environme
 	return &agentpb.EnvironmentRemovalCheckpointRequest{Attempt: attempt, Report: raw}, nil
 }
 
-func DecodeEnvironmentCheckpointRequest(input EnvironmentInput, request *agentpb.EnvironmentRemovalCheckpointRequest) (EnvironmentReport, error) {
+func DecodeEnvironmentCheckpointRequest(
+	input EnvironmentInput,
+	request *agentpb.EnvironmentRemovalCheckpointRequest,
+) (EnvironmentReport, error) {
 	if request == nil || executionplan.RejectUnknown(request) != nil {
 		return EnvironmentReport{}, invalidEnvironmentProgress()
 	}
@@ -31,7 +37,10 @@ func DecodeEnvironmentCheckpointRequest(input EnvironmentInput, request *agentpb
 	return DecodeEnvironmentReport(input, request.Report)
 }
 
-func EncodeEnvironmentCheckpointAck(input EnvironmentInput, report EnvironmentReport) (*agentpb.EnvironmentRemovalCheckpointAck, error) {
+func EncodeEnvironmentCheckpointAck(
+	input EnvironmentInput,
+	report EnvironmentReport,
+) (*agentpb.EnvironmentRemovalCheckpointAck, error) {
 	request, err := EncodeEnvironmentCheckpointRequest(input, report)
 	if err != nil {
 		return nil, err
@@ -39,7 +48,11 @@ func EncodeEnvironmentCheckpointAck(input EnvironmentInput, report EnvironmentRe
 	return &agentpb.EnvironmentRemovalCheckpointAck{Attempt: request.Attempt, Report: request.Report}, nil
 }
 
-func ValidateEnvironmentCheckpointAck(input EnvironmentInput, report EnvironmentReport, ack *agentpb.EnvironmentRemovalCheckpointAck) error {
+func ValidateEnvironmentCheckpointAck(
+	input EnvironmentInput,
+	report EnvironmentReport,
+	ack *agentpb.EnvironmentRemovalCheckpointAck,
+) error {
 	if ack == nil || executionplan.RejectUnknown(ack) != nil {
 		return invalidEnvironmentProgress()
 	}

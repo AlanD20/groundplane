@@ -10,7 +10,10 @@ import (
 func readHostEffect(value *keyvalue.KeyValue, item workexecution.Item, required bool) (HostEffectSnapshot, error) {
 	if value == nil {
 		if required {
-			return HostEffectSnapshot{}, errs.New(errs.KindStateConflict, "host work still needs its retained effect protection")
+			return HostEffectSnapshot{}, errs.New(
+				errs.KindStateConflict,
+				"host work still needs its retained effect protection",
+			)
 		}
 		return HostEffectSnapshot{}, nil
 	}
@@ -24,7 +27,12 @@ func readHostEffect(value *keyvalue.KeyValue, item workexecution.Item, required 
 	return HostEffectSnapshot{Owner: &owner, Revision: value.ModRevision}, nil
 }
 
-func assignHostEffect(change *Change, item workexecution.Item, snapshot HostEffectSnapshot, direction workexecution.Direction) error {
+func assignHostEffect(
+	change *Change,
+	item workexecution.Item,
+	snapshot HostEffectSnapshot,
+	direction workexecution.Direction,
+) error {
 	if item.Placement.Executor != workexecution.Agent {
 		if snapshot.Revision != 0 || snapshot.Owner != nil {
 			return invalid("host-independent work cannot own host-effect membership")
@@ -36,7 +44,10 @@ func assignHostEffect(change *Change, item workexecution.Item, snapshot HostEffe
 		if snapshot.Revision <= 0 || snapshot.Owner == nil || *snapshot.Owner != owner {
 			return errs.New(errs.KindStateConflict, "recovery lost its host-effect protection")
 		}
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: HostEffectKey(item.Placement.HostID, item.ID), ModRevision: snapshot.Revision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: HostEffectKey(item.Placement.HostID, item.ID), ModRevision: snapshot.Revision},
+		)
 		return nil
 	}
 	if snapshot.Revision != 0 || snapshot.Owner != nil {
@@ -46,9 +57,15 @@ func assignHostEffect(change *Change, item workexecution.Item, snapshot HostEffe
 	if err != nil {
 		return err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: HostEffectKey(item.Placement.HostID, item.ID)},
-		keyvalue.Condition{Key: HostForwardFenceKey(item.Placement.HostID)})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: HostEffectKey(item.Placement.HostID, item.ID), Value: raw})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: HostEffectKey(item.Placement.HostID, item.ID)},
+		keyvalue.Condition{Key: HostForwardFenceKey(item.Placement.HostID)},
+	)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: HostEffectKey(item.Placement.HostID, item.ID), Value: raw},
+	)
 	return nil
 }
 
@@ -59,7 +76,8 @@ func completeHostEffect(change *Change, item workexecution.Item, snapshot HostEf
 		}
 		return nil
 	}
-	if snapshot.Revision <= 0 || snapshot.Owner == nil || *snapshot.Owner != (ClaimOwner{TaskID: item.TaskID, WorkItemID: item.ID}) {
+	if snapshot.Revision <= 0 || snapshot.Owner == nil ||
+		*snapshot.Owner != (ClaimOwner{TaskID: item.TaskID, WorkItemID: item.ID}) {
 		return errs.New(errs.KindStateConflict, "host-effect completion does not own its retained protection")
 	}
 	key := HostEffectKey(item.Placement.HostID, item.ID)

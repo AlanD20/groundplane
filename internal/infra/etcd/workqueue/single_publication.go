@@ -9,7 +9,11 @@ import (
 // PrepareSingleTask publishes a one-item action without staging batches. Its
 // caller must join request idempotency, captured input and resource admission in
 // the same transaction. There is no independently visible partially ready Task.
-func PrepareSingleTask(task workexecution.Task, item workexecution.Item, marker idempotency.IdempotencyMarker) (Change, error) {
+func PrepareSingleTask(
+	task workexecution.Task,
+	item workexecution.Item,
+	marker idempotency.IdempotencyMarker,
+) (Change, error) {
 	if task.ExpectedItems != 1 {
 		return Change{}, invalid("single work publication requires one work item")
 	}
@@ -18,7 +22,11 @@ func PrepareSingleTask(task workexecution.Task, item workexecution.Item, marker 
 
 // PrepareSmallGraph publishes bounded component activations atomically. Large
 // Blueprint graphs retain their staged publication and complete-graph barrier.
-func PrepareSmallGraph(task workexecution.Task, items []workexecution.Item, marker idempotency.IdempotencyMarker) (Change, error) {
+func PrepareSmallGraph(
+	task workexecution.Task,
+	items []workexecution.Item,
+	marker idempotency.IdempotencyMarker,
+) (Change, error) {
 	if len(items) < 1 || len(items) > 8 || task.PublicationComplete || task.Progress.Total() != 0 ||
 		task.Outcome != "" || task.FirstFailure != nil || task.FinishedAt != nil || task.Stop != nil || task.Activation != nil ||
 		!task.UpdatedAt.Equal(task.CreatedAt) {
@@ -47,7 +55,10 @@ func PrepareSmallGraph(task workexecution.Task, items []workexecution.Item, mark
 		change.Mutations = append(change.Mutations, part.Mutations...)
 	}
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: TaskKey(task.ID)})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: TaskKey(task.ID), Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: TaskKey(task.ID), Value: value},
+	)
 	if err := bindReplay(&change, task, marker); err != nil {
 		return Change{}, err
 	}

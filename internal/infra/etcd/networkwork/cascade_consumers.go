@@ -16,7 +16,8 @@ import (
 func (repository *InputRepository) PublishNextCascadeConsumer(ctx context.Context, task workqueue.TaskSnapshot,
 	graph []workexecution.Item, authority workqueue.Change, revision int64, at time.Time,
 ) (bool, error) {
-	if task.Task.PublicationComplete || task.Revision <= 0 || revision < task.Revision || len(authority.Conditions) == 0 {
+	if task.Task.PublicationComplete || task.Revision <= 0 || revision < task.Revision ||
+		len(authority.Conditions) == 0 {
 		return false, conflict("Backing Zone publication has no captured graph authority")
 	}
 	if err := workexecution.ValidateGraph(task.Task, graph); err != nil {

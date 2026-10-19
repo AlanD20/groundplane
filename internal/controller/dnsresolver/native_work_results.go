@@ -17,7 +17,8 @@ import (
 func (service *WorkReports) CompleteResolver(ctx context.Context, authorization agentregistration.WorkAuthorization,
 	request *agentpb.ResolverWorkCompletionRequest,
 ) (*agentpb.ResolverWorkResultAck, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || proto.Size(request) > resolverexecution.MaximumReportBytes {
+	if request == nil || executionplan.RejectUnknown(request) != nil ||
+		proto.Size(request) > resolverexecution.MaximumReportBytes {
 		return nil, errs.New(errs.KindValidationFailed, "CoreDNS completion report is invalid or oversized")
 	}
 	claimed, err := resolverexecution.DecodeReference(request.Evidence)
@@ -39,7 +40,10 @@ func (service *WorkReports) CompleteResolver(ctx context.Context, authorization 
 		}
 		defer keyvalue.ClearMutationValues(change.Mutations)
 		if expected != claimed {
-			return nil, errs.New(errs.KindStateConflict, "CoreDNS completion names different acknowledged runtime evidence")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"CoreDNS completion names different acknowledged runtime evidence",
+			)
 		}
 		if err := service.commitReport(ctx, guards, change); err != nil {
 			return nil, err
@@ -53,7 +57,8 @@ func (service *WorkReports) CompleteResolver(ctx context.Context, authorization 
 	if err != nil {
 		return nil, err
 	}
-	if record.Attempt.Result == nil || *record.Attempt.Result != claimed || !proto.Equal(record.Proof, request.ServingProof) {
+	if record.Attempt.Result == nil || *record.Attempt.Result != claimed ||
+		!proto.Equal(record.Proof, request.ServingProof) {
 		return nil, errs.New(errs.KindStateConflict, "CoreDNS completion replay differs from its saved result")
 	}
 	service.reportTerminal(ctx, view, "completion")
@@ -108,7 +113,8 @@ func (service *WorkReports) FailResolver(ctx context.Context, authorization agen
 func (service *WorkReports) RecoverResolver(ctx context.Context, authorization agentregistration.WorkAuthorization,
 	request *agentpb.ResolverWorkRecoveryRequest,
 ) (*agentpb.ResolverWorkResultAck, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 || len(request.Report) > resolverexecution.MaximumReportBytes {
+	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 ||
+		len(request.Report) > resolverexecution.MaximumReportBytes {
 		return nil, errs.New(errs.KindValidationFailed, "CoreDNS cleanup report is missing or oversized")
 	}
 	guards, err := authorization.Conditions()

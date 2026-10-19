@@ -12,7 +12,11 @@ import (
 
 // PrepareUnstarted settles only operations that never obtained an Agent attempt.
 // Success is possible only when admission captured the absence of runtime.
-func (repository *Repository) PrepareUnstarted(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareUnstarted(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Cleanup != workexecution.CleanupNone ||
 		item.Input == nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||

@@ -19,7 +19,13 @@ type routeMutationIntent struct {
 }
 
 type routeMutationIdempotency interface {
-	ResolveReplayLocator(context.Context, idempotencyrecord.IdempotencyReplayTarget, string, string, string) (idempotencyrecord.IdempotencyLocator, bool, error)
+	ResolveReplayLocator(
+		context.Context,
+		idempotencyrecord.IdempotencyReplayTarget,
+		string,
+		string,
+		string,
+	) (idempotencyrecord.IdempotencyLocator, bool, error)
 	Prepare(context.Context, routeMutationIntent) (routeMutationEvidence, error)
 	MatchesStaged(context.Context, routeMutationEvidence, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 	ResolveExisting(

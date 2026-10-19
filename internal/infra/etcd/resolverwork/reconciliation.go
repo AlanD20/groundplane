@@ -36,10 +36,14 @@ func RequestKey(hostID, componentID string) string {
 }
 
 func (request Request) validate() error {
-	if ids.Validate(ids.KindHost, request.HostID) != nil || ids.Validate(ids.KindComponent, request.ComponentID) != nil ||
-		ids.Validate(ids.KindWorkItem, request.WorkID) != nil || ids.Validate(ids.KindTask, request.TaskID) != nil ||
-		!recordcodec.ValidSHA256(request.Fingerprint) || !recordcodec.ValidSHA256(request.DesiredSHA256) ||
-		!recordcodec.ValidSHA256(request.DNSFingerprint) || len(request.References) > 256 {
+	if ids.Validate(ids.KindHost, request.HostID) != nil ||
+		ids.Validate(ids.KindComponent, request.ComponentID) != nil ||
+		ids.Validate(ids.KindWorkItem, request.WorkID) != nil ||
+		ids.Validate(ids.KindTask, request.TaskID) != nil ||
+		!recordcodec.ValidSHA256(request.Fingerprint) ||
+		!recordcodec.ValidSHA256(request.DesiredSHA256) ||
+		!recordcodec.ValidSHA256(request.DNSFingerprint) ||
+		len(request.References) > 256 {
 		return invalid("CoreDNS reconciliation request is corrupt")
 	}
 	if request.Outcome != "" && request.Outcome != workexecution.Succeeded && request.Outcome != workexecution.Failed &&
@@ -88,7 +92,11 @@ func fingerprint(input resolverexecution.Input, capture Capture, predecessor int
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func (repository *Repository) ReadRequest(ctx context.Context, hostID, componentID string, revision int64) (keyvalue.Versioned[Request], error) {
+func (repository *Repository) ReadRequest(
+	ctx context.Context,
+	hostID, componentID string,
+	revision int64,
+) (keyvalue.Versioned[Request], error) {
 	if ids.Validate(ids.KindHost, hostID) != nil || ids.Validate(ids.KindComponent, componentID) != nil {
 		return keyvalue.Versioned[Request]{}, invalid("CoreDNS request requires its host and Component")
 	}
@@ -108,7 +116,11 @@ func (repository *Repository) ReadRequest(ctx context.Context, hostID, component
 	if request.validate() != nil || request.HostID != hostID || request.ComponentID != componentID {
 		return keyvalue.Versioned[Request]{}, invalid("CoreDNS reconciliation request belongs to another resource")
 	}
-	return keyvalue.Versioned[Request]{Record: request, Revision: value.ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[Request]{
+		Record:       request,
+		Revision:     value.ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }
 
 func decodeRequest(raw []byte) (Request, error) {
@@ -131,13 +143,28 @@ func prepareRequest(input resolverexecution.Input, capture Capture) (workqueue.C
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	dns, err := platformcomponents.ResolverConfigurationFingerprint(capture.PrivateListener, capture.EnvironmentDNS, capture.ZoneListeners)
+	dns, err := platformcomponents.ResolverConfigurationFingerprint(
+		capture.PrivateListener,
+		capture.EnvironmentDNS,
+		capture.ZoneListeners,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	request := Request{HostID: input.HostID, ComponentID: input.ComponentID, WorkID: input.WorkID, TaskID: input.TaskID, Fingerprint: digest,
-		DesiredSHA256: desired, DNSFingerprint: dns, PrivateListener: capture.PrivateListener,
-		ZoneListeners: append([]string(nil), capture.ZoneListeners...), References: append([]keyvalue.Condition(nil), capture.References...)}
+	request := Request{
+		HostID:          input.HostID,
+		ComponentID:     input.ComponentID,
+		WorkID:          input.WorkID,
+		TaskID:          input.TaskID,
+		Fingerprint:     digest,
+		DesiredSHA256:   desired,
+		DNSFingerprint:  dns,
+		PrivateListener: capture.PrivateListener,
+		ZoneListeners: append(
+			[]string(nil),
+			capture.ZoneListeners...),
+		References: append([]keyvalue.Condition(nil), capture.References...),
+	}
 	if err := request.validate(); err != nil {
 		return workqueue.Change{}, err
 	}
@@ -157,7 +184,11 @@ func prepareRequest(input resolverexecution.Input, capture Capture) (workqueue.C
 // NeedsAutomaticWork waits for the latest accepted action, then compares actual
 // applied resource state. Failed input is not automatically retried, even after
 // its Task is collected. A different target or predecessor is a new request.
-func (repository *Repository) NeedsAutomaticWork(ctx context.Context, input resolverexecution.Input, capture Capture) (bool, error) {
+func (repository *Repository) NeedsAutomaticWork(
+	ctx context.Context,
+	input resolverexecution.Input,
+	capture Capture,
+) (bool, error) {
 	request, err := repository.ReadRequest(ctx, input.HostID, input.ComponentID, capture.ReadRevision)
 	if err != nil {
 		return false, err
@@ -166,7 +197,11 @@ func (repository *Repository) NeedsAutomaticWork(ctx context.Context, input reso
 		return false, invalid("CoreDNS request changed during automatic preparation")
 	}
 	if request.Revision > 0 {
-		read, err := repository.read(ctx, []string{IntentKey(input.HostID, input.ComponentID), workqueue.ItemKey(request.Record.WorkID)}, capture.ReadRevision)
+		read, err := repository.read(
+			ctx,
+			[]string{IntentKey(input.HostID, input.ComponentID), workqueue.ItemKey(request.Record.WorkID)},
+			capture.ReadRevision,
+		)
 		if err != nil {
 			return false, err
 		}

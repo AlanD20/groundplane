@@ -18,7 +18,8 @@ type TokenKey struct {
 }
 
 func (key TokenKey) valid() bool {
-	return ids.Validate(ids.KindTask, key.TaskID) == nil && ids.Validate(ids.KindWorkItem, key.WorkItemID) == nil && key.Attempt != 0
+	return ids.Validate(ids.KindTask, key.TaskID) == nil && ids.Validate(ids.KindWorkItem, key.WorkItemID) == nil &&
+		key.Attempt != 0
 }
 
 // TokenBroker owns transient Runner registration tokens between intent

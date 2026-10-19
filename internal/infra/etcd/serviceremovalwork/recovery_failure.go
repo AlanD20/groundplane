@@ -18,8 +18,13 @@ func RecoveryFailureKey(attemptID string) string {
 
 // PrepareRecoveryFailure never releases the deletion fence. Unknown restoration
 // effects remain protected while queue completion releases the worker slot.
-func (repository *Repository) PrepareRecoveryFailure(ctx context.Context, view workqueue.ResumeView,
-	delivery *agentpb.ServiceLifecycleWorkInput, reason lifecycleexecution.FailureReason, at time.Time, interrupted bool,
+func (repository *Repository) PrepareRecoveryFailure(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	delivery *agentpb.ServiceLifecycleWorkInput,
+	reason lifecycleexecution.FailureReason,
+	at time.Time,
+	interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
 	task, item, attempt := view.Work.Task.Task, view.Work.Item.Item, view.Attempt.Attempt
 	if !view.ActiveAttempt || view.CanSettleResult() == interrupted || view.ExecutorRevision <= 0 ||
@@ -27,7 +32,9 @@ func (repository *Repository) PrepareRecoveryFailure(ctx context.Context, view w
 		item.Operation != workexecution.ServiceRemoval || item.Cleanup != workexecution.CleanupRunning ||
 		!task.PublicationComplete || task.CollectionStartedAt != nil ||
 		interrupted && reason != lifecycleexecution.ExecutionInterrupted {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Service removal recovery failure does not own active cleanup")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Service removal recovery failure does not own active cleanup",
+		)
 	}
 	input, captureGuard, err := repository.Load(ctx, view.Work)
 	if err != nil {
@@ -60,7 +67,9 @@ func (repository *Repository) PrepareRecoveryFailure(ctx context.Context, view w
 		}
 		defer keyvalue.ClearValues(read.Values)
 		if read.Values[0] == nil {
-			return workqueue.Change{}, workexecution.Completion{}, conflict("Recovery failure has no saved checkpoint evidence")
+			return workqueue.Change{}, workexecution.Completion{}, conflict(
+				"Recovery failure has no saved checkpoint evidence",
+			)
 		}
 		progress, err := removalexecution.DecodeProgress(attempt, delivery, saved.Capture, read.Values[0].Value)
 		if err != nil {
@@ -68,7 +77,9 @@ func (repository *Repository) PrepareRecoveryFailure(ctx context.Context, view w
 		}
 		expected, err := progress.Checkpoint(attempt, delivery, saved.Capture)
 		if err != nil || expected != *checkpoint {
-			return workqueue.Change{}, workexecution.Completion{}, conflict("Recovery failure differs from its saved checkpoint")
+			return workqueue.Change{}, workexecution.Completion{}, conflict(
+				"Recovery failure differs from its saved checkpoint",
+			)
 		}
 		failure.Progress = &progress
 		conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})

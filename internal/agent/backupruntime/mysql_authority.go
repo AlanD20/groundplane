@@ -32,7 +32,11 @@ type mysqlStepAuthority struct {
 	role         string
 }
 
-func mysqlAuthority(assignment *agentpb.BackupWorkAssignment, identity workexecution.Identity, ordinal uint32) (mysqlStepAuthority, error) {
+func mysqlAuthority(
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+	ordinal uint32,
+) (mysqlStepAuthority, error) {
 	owned, _, err := executionplan.OpenBackupWorkAssignment(assignment, identity)
 	if err != nil {
 		return mysqlStepAuthority{}, err

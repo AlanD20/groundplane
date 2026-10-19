@@ -14,7 +14,12 @@ import (
 // PrepareDetachRetention preserves authority independently of diagnostic
 // lifetime. Unknown effects never reach this collector: the item must be fully
 // settled and cleanup complete before either captured inputs or reports expire.
-func (repository *InputRepository) PrepareDetachRetention(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (repository *InputRepository) PrepareDetachRetention(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Validate() != nil || item.Validate() != nil || view.Task.Revision <= 0 || view.Item.Revision <= 0 ||
 		task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil ||
@@ -22,7 +27,10 @@ func (repository *InputRepository) PrepareDetachRetention(ctx context.Context, v
 		item.Operation != workexecution.Detach || item.TaskID != task.ID || item.Input == nil || item.Result == nil ||
 		item.Phase != workexecution.Settled || item.ActiveAttemptID != "" ||
 		item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach history requires expired, fully settled execution")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Detach history requires expired, fully settled execution",
+		)
 	}
 	active, err := repository.read(ctx, []string{WorkCaptureKey(item.ID)}, view.ReadRevision)
 	if err != nil {
@@ -39,7 +47,10 @@ func (repository *InputRepository) PrepareDetachRetention(ctx context.Context, v
 	}
 	defer capture.Clear()
 	if capture.Revision <= 0 {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "executed Detach has lost its captured inputs")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"executed Detach has lost its captured inputs",
+		)
 	}
 	change, err := repository.prepareRetiredDetach(ctx, view, capture.Input, at)
 	if err != nil {
@@ -58,7 +69,10 @@ func (repository *InputRepository) PrepareDetachRetention(ctx context.Context, v
 		return false, workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, pins.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true},
+	)
 	change.Mutations = append(change.Mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: DetachInputPrefix(item.ID), Prefix: true},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: WorkCaptureKey(item.ID)},
@@ -66,7 +80,12 @@ func (repository *InputRepository) PrepareDetachRetention(ctx context.Context, v
 	return true, change, nil
 }
 
-func (repository *InputRepository) retireDetachPins(ctx context.Context, view workqueue.View, capture DetachCapture, guards []keyvalue.Condition) (bool, workqueue.Change, error) {
+func (repository *InputRepository) retireDetachPins(
+	ctx context.Context,
+	view workqueue.View,
+	capture DetachCapture,
+	guards []keyvalue.Condition,
+) (bool, workqueue.Change, error) {
 	if capture.Capture.Pins != nil {
 		return RetireCapturePins(ctx, repository.store, view.ReadRevision, capture.Capture, guards)
 	}
@@ -83,7 +102,10 @@ func PrepareDetachAttemptRetirement(view workqueue.View, snapshot workqueue.Atte
 	item, attempt := view.Item.Item, snapshot.Attempt
 	if item.Operation != workexecution.Detach || item.Input == nil || attempt.Input != *item.Input ||
 		attempt.Executor.Executor != workexecution.Agent || attempt.Executor.HostID != item.Placement.HostID {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach attempt history differs from captured input or host")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Detach attempt history differs from captured input or host",
+		)
 	}
 	prepared, err := workqueue.PrepareAttemptCollection(view.Task, view.Item, snapshot)
 	if err != nil {

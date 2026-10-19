@@ -12,7 +12,13 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (publication *WorkPublication) rejectPlanning(ctx context.Context, task workqueue.TaskSnapshot, revision int64, reason hierarchyrecords.PlanningRejectionReason, at time.Time) (workdispatch.PublicationBatch, error) {
+func (publication *WorkPublication) rejectPlanning(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	revision int64,
+	reason hierarchyrecords.PlanningRejectionReason,
+	at time.Time,
+) (workdispatch.PublicationBatch, error) {
 	authority, evidence, err := publication.records.PrepareHierarchyPlanningRejection(ctx, task, revision, reason, at)
 	if err != nil {
 		return workdispatch.PublicationBatch{}, err
@@ -22,7 +28,14 @@ func (publication *WorkPublication) rejectPlanning(ctx context.Context, task wor
 	if task.Task.Stop != nil {
 		outcome = task.Task.Stop.Outcome
 	}
-	finish, err := publication.queue.PreparePlanningRejection(ctx, task, outcome, evidence, at, at.Add(publication.retention))
+	finish, err := publication.queue.PreparePlanningRejection(
+		ctx,
+		task,
+		outcome,
+		evidence,
+		at,
+		at.Add(publication.retention),
+	)
 	if err != nil {
 		return workdispatch.PublicationBatch{}, err
 	}
@@ -33,7 +46,10 @@ func (publication *WorkPublication) rejectPlanning(ctx context.Context, task wor
 		return workdispatch.PublicationBatch{}, err
 	}
 	if !result.Succeeded {
-		return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "removal planning changed before failure settlement")
+		return workdispatch.PublicationBatch{}, errs.New(
+			errs.KindStateConflict,
+			"removal planning changed before failure settlement",
+		)
 	}
 	return workdispatch.PublicationBatch{Planning: true}, nil
 }

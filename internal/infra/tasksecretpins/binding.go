@@ -18,7 +18,10 @@ type Binding struct {
 
 func (binding Binding) Validate() error {
 	if ids.Validate(ids.KindOperation, binding.OperationID) != nil ||
-		ids.Validate(ids.KindTask, binding.TaskID) != nil || ids.Validate(ids.KindWorkItem, binding.WorkItemID) != nil ||
+		ids.Validate(
+			ids.KindTask,
+			binding.TaskID,
+		) != nil || ids.Validate(ids.KindWorkItem, binding.WorkItemID) != nil ||
 		binding.Count == 0 || binding.Count > MaximumPins || !validSHA256(binding.SHA256) {
 		return validation("work Secret retention binding is invalid")
 	}
@@ -63,5 +66,8 @@ func (root ActiveRoot) RetentionCondition(binding Binding) (Condition, bool, err
 		root.record.MembershipSHA256 != binding.SHA256 {
 		return Condition{}, false, conflict("work item no longer owns its captured Secret values")
 	}
-	return Condition{Key: RootKey(binding.OperationID), ModRevision: root.revision}, root.record.Phase == phaseReleasing, nil
+	return Condition{
+		Key:         RootKey(binding.OperationID),
+		ModRevision: root.revision,
+	}, root.record.Phase == phaseReleasing, nil
 }

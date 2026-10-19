@@ -14,7 +14,10 @@ func newTaskAttemptEventsCmd() *cobra.Command {
 	var after uint64
 	var revision int64
 	var follow bool
-	cmd := &cobra.Command{Use: "attempt-events <task-id> <work-id> <attempt-id>", Short: "Read retained execution events for an attempt", Args: cobra.ExactArgs(3),
+	cmd := &cobra.Command{
+		Use:   "attempt-events <task-id> <work-id> <attempt-id>",
+		Short: "Read retained execution events for an attempt",
+		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if follow && revision != 0 {
 				return errs.New(errs.KindValidationFailed, "follow cannot use a fixed historical revision")
@@ -40,7 +43,14 @@ func newTaskAttemptEventsCmd() *cobra.Command {
 				}
 				rows := make([][]string, len(events.Items))
 				for index, event := range events.Items {
-					rows[index] = []string{strconv.FormatUint(event.Sequence, 10), event.RecordedAt.Format(time.RFC3339Nano), event.Stage.Name, string(event.Stage.State), event.Stage.Observed, event.Stage.FailureCode}
+					rows[index] = []string{
+						strconv.FormatUint(event.Sequence, 10),
+						event.RecordedAt.Format(time.RFC3339Nano),
+						event.Stage.Name,
+						string(event.Stage.State),
+						event.Stage.Observed,
+						event.Stage.FailureCode,
+					}
 				}
 				if first || len(events.Items) > 0 || events.FinishedAt != nil {
 					if err := app.Out.Render([]string{"SEQUENCE", "RECORDED", "STAGE", "STATE", "OBSERVED", "ERROR"}, rows, events); err != nil {
@@ -60,7 +70,8 @@ func newTaskAttemptEventsCmd() *cobra.Command {
 					return err
 				}
 			}
-		}}
+		},
+	}
 	cmd.Flags().BoolVar(&follow, "follow", false, "follow this attempt until its recorded completion")
 	cmd.Flags().Uint64Var(&after, "after", 0, "last event sequence already read for this attempt")
 	cmd.Flags().Int64Var(&revision, "revision", 0, "fixed snapshot revision; zero reads current retained events")

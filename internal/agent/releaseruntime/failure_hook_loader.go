@@ -37,7 +37,8 @@ func (loader *ChannelHookLoader) LoadFailureHook(
 	defer releaseexecution.ClearHookDelivery(delivery)
 	proof := delivery.InterruptedCleanup
 	reference := workexecution.Input{ID: proof.InputId, SHA256: hex.EncodeToString(proof.Sha256)}
-	if reference.Validate() != nil || delivery.Body != nil || len(delivery.Entries) != 0 || delivery.Snapshot != nil || delivery.Checkpoint != nil ||
+	if reference.Validate() != nil || delivery.Body != nil || len(delivery.Entries) != 0 || delivery.Snapshot != nil ||
+		delivery.Checkpoint != nil ||
 		delivery.Projection == nil ||
 		delivery.Cleanup == nil ||
 		delivery.Cleanup.BodyMetadata == nil ||

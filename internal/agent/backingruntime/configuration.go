@@ -17,7 +17,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (executor *Executor) configure(ctx context.Context, input backingprovision.HelperInput, exchange Exchange, inspectOnly bool) (backingprovision.Observation, error) {
+func (executor *Executor) configure(
+	ctx context.Context,
+	input backingprovision.HelperInput,
+	exchange Exchange,
+	inspectOnly bool,
+) (backingprovision.Observation, error) {
 	attempt, procedure := input.Assignment.Attempt, input.Assignment.Procedure
 	identity, err := workexecution.EncodeAgentAttempt(attempt)
 	if err != nil {
@@ -27,7 +32,10 @@ func (executor *Executor) configure(ctx context.Context, input backingprovision.
 	if err != nil {
 		return backingprovision.Observation{}, err
 	}
-	manifest, err := exchange.BackingProvisionConfiguration(ctx, &agentpb.BackingProvisionConfigurationRequest{Attempt: identity, StageId: stage})
+	manifest, err := exchange.BackingProvisionConfiguration(
+		ctx,
+		&agentpb.BackingProvisionConfigurationRequest{Attempt: identity, StageId: stage},
+	)
 	if err != nil {
 		return backingprovision.Observation{}, err
 	}

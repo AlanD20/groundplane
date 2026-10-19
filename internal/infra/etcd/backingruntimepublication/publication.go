@@ -58,7 +58,9 @@ func Prepare(ctx context.Context, storage CatalogReader, input Input,
 	projection.BackingRuntime = nil
 	serviceID := input.Source.ServiceID
 	if projectionrecord.ValidateBackingProvisioningReceipt(input.Source) != nil || input.CreatedAt.IsZero() ||
-		input.Source.Observation.ObservedAt.Before(input.CreatedAt) || input.Source.RenderGeneration != projection.RenderGeneration {
+		input.Source.Observation.ObservedAt.Before(
+			input.CreatedAt,
+		) || input.Source.RenderGeneration != projection.RenderGeneration {
 		return nil, invalidBackingAcknowledgement()
 	}
 	artifact := &agentpb.ComposeArtifact{}

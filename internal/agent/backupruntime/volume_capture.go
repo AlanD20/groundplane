@@ -22,7 +22,12 @@ func captureVolume(ctx context.Context, assignment *agentpb.BackupWorkAssignment
 	identity workexecution.Identity, ordinal uint32, staging *Staging, volumeRoot string,
 	delivery *checkpointdelivery.Backup, exchange Exchange,
 ) (resultErr error) {
-	binding, err := backupvolumetransfer.Bind(assignment, identity, ordinal, agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_CAPTURE)
+	binding, err := backupvolumetransfer.Bind(
+		assignment,
+		identity,
+		ordinal,
+		agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_CAPTURE,
+	)
 	if err != nil {
 		return err
 	}
@@ -53,7 +58,13 @@ func captureVolume(ctx context.Context, assignment *agentpb.BackupWorkAssignment
 		return nil
 	}
 	if resume.Phase == agentpb.BackupCapturePhase_BACKUP_CAPTURE_PHASE_POINT_COMMIT && absent {
-		return publisher.SourceCleanupCompleted(ctx, &agentpb.BackupSourceCleanupCompleted{PointId: capture.PointId, Evidence: proto.CloneOf(resume.GetUploadVerified().GetEvidence())})
+		return publisher.SourceCleanupCompleted(
+			ctx,
+			&agentpb.BackupSourceCleanupCompleted{
+				PointId:  capture.PointId,
+				Evidence: proto.CloneOf(resume.GetUploadVerified().GetEvidence()),
+			},
+		)
 	}
 	captured, err := staging.VolumeCapture(ctx, assignment, identity, ordinal, resume)
 	if err != nil {
@@ -168,7 +179,10 @@ func captureVolume(ctx context.Context, assignment *agentpb.BackupWorkAssignment
 	if err := staging.Cleanup(ctx, captured); err != nil {
 		return err
 	}
-	return publisher.SourceCleanupCompleted(ctx, &agentpb.BackupSourceCleanupCompleted{PointId: capture.PointId, Evidence: proto.CloneOf(prepared.Evidence)})
+	return publisher.SourceCleanupCompleted(
+		ctx,
+		&agentpb.BackupSourceCleanupCompleted{PointId: capture.PointId, Evidence: proto.CloneOf(prepared.Evidence)},
+	)
 }
 
 type volumeArtifactWriter struct {

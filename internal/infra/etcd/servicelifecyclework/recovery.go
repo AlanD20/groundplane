@@ -18,7 +18,11 @@ type RecoverySnapshot struct {
 	Revision int64
 }
 
-func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.View, input *agentpb.ServiceLifecycleWorkInput) (RecoverySnapshot, error) {
+func (repository *Repository) LoadRecovery(
+	ctx context.Context,
+	view workqueue.View,
+	input *agentpb.ServiceLifecycleWorkInput,
+) (RecoverySnapshot, error) {
 	captured, _, err := repository.Load(ctx, view)
 	if err != nil {
 		return RecoverySnapshot{}, err
@@ -47,13 +51,23 @@ func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.V
 
 // PrepareRecoveryRetry atomically queues inspection with the failed execution's
 // captured source. Repeated recovery retains the original forward failure.
-func (repository *Repository) PrepareRecoveryRetry(ctx context.Context, view workqueue.View, previous workqueue.AttemptSnapshot,
-	input *agentpb.ServiceLifecycleWorkInput, at, deadline time.Time,
+func (repository *Repository) PrepareRecoveryRetry(
+	ctx context.Context,
+	view workqueue.View,
+	previous workqueue.AttemptSnapshot,
+	input *agentpb.ServiceLifecycleWorkInput,
+	at, deadline time.Time,
 ) (workqueue.Change, error) {
 	task, item, attempt := view.Task.Task, view.Item.Item, previous.Attempt
-	if task.CollectionStartedAt != nil || item.Operation != workexecution.ServiceLifecycle || item.Phase != workexecution.Attention ||
-		item.ActiveAttemptID != "" || item.Input == nil || attempt.FinishedAt == nil || attempt.Result == nil ||
-		attempt.Input != *item.Input || attempt.Number != item.AttemptNumber || !deadline.After(at) ||
+	if task.CollectionStartedAt != nil || item.Operation != workexecution.ServiceLifecycle ||
+		item.Phase != workexecution.Attention ||
+		item.ActiveAttemptID != "" ||
+		item.Input == nil ||
+		attempt.FinishedAt == nil ||
+		attempt.Result == nil ||
+		attempt.Input != *item.Input ||
+		attempt.Number != item.AttemptNumber ||
+		!deadline.After(at) ||
 		(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped) {
 		return workqueue.Change{}, conflict("Service lifecycle has no unresolved captured effects to recover")
 	}

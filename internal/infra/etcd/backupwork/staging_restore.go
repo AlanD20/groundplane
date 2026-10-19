@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (repository *InputRepository) LoadStagingRestore(ctx context.Context, source StagingSource) (backupruntime.BackupRestoreRecord, keyvalue.Condition, error) {
+func (repository *InputRepository) LoadStagingRestore(
+	ctx context.Context,
+	source StagingSource,
+) (backupruntime.BackupRestoreRecord, keyvalue.Condition, error) {
 	var zero backupruntime.BackupRestoreRecord
 	if source.Input == nil || source.Input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_RESTORE {
 		return zero, keyvalue.Condition{}, conflict("Source staging is not a captured Restore")

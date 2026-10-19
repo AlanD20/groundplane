@@ -15,7 +15,10 @@ func (repository *Repository) ResolveResourceHost(ctx context.Context) (workexec
 	return repository.publication.ResolveResourceHost(ctx)
 }
 
-func (repository *Repository) PublishNetworkWork(ctx context.Context, request etcd.NetworkWorkPublication) (etcd.IdempotencyTransactionResult, error) {
+func (repository *Repository) PublishNetworkWork(
+	ctx context.Context,
+	request etcd.NetworkWorkPublication,
+) (etcd.IdempotencyTransactionResult, error) {
 	return repository.publication.PublishNetworkWork(ctx, request)
 }
 
@@ -47,8 +50,12 @@ func (repository *Repository) CaptureBackingZoneDetaches(ctx context.Context, pr
 		return nil, errs.New(errs.KindValidationFailed, "Backing Zone removal exceeds the Task work limit")
 	}
 	for _, attach := range attaches {
-		if attach.ReadRevision != revision || attach.Record.BackingProjectID != projectID || attach.Record.BackingNetworkID != zoneID {
-			return snapshots, errs.New(errs.KindStateConflict, "Backing Zone consumer list differs from the removal snapshot")
+		if attach.ReadRevision != revision || attach.Record.BackingProjectID != projectID ||
+			attach.Record.BackingNetworkID != zoneID {
+			return snapshots, errs.New(
+				errs.KindStateConflict,
+				"Backing Zone consumer list differs from the removal snapshot",
+			)
 		}
 		snapshot, err := repository.attaches.CaptureDetachSnapshot(ctx, attach)
 		if err != nil {

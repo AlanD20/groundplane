@@ -30,7 +30,11 @@ func (publication *Publication) Abandon(ctx context.Context) error {
 	return publication.pins.Abandon(ctx, publication.Input.HookInputs.OperationID)
 }
 
-func (repository *Repository) PrepareInput(ctx context.Context, input Input, envelope *taskconfiguration.BackingHookEncryptedInputs) (_ Publication, resultErr error) {
+func (repository *Repository) PrepareInput(
+	ctx context.Context,
+	input Input,
+	envelope *taskconfiguration.BackingHookEncryptedInputs,
+) (_ Publication, resultErr error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return Publication{}, err
 	}
@@ -66,9 +70,15 @@ func (repository *Repository) PrepareInput(ctx context.Context, input Input, env
 				return Publication{}, err
 			}
 			publication.pins = pins
-			prepared, err := pins.PrepareOwned(ctx, hook.OperationID, input.TaskID, input.WorkItemID, hook.SecretSources,
+			prepared, err := pins.PrepareOwned(
+				ctx,
+				hook.OperationID,
+				input.TaskID,
+				input.WorkItemID,
+				hook.SecretSources,
 				[]tasksecretpins.Condition{{Key: workqueue.TaskKey(input.TaskID)},
-					{Key: workqueue.ItemKey(input.WorkItemID)}, {Key: InputKey(input.WorkItemID)}})
+					{Key: workqueue.ItemKey(input.WorkItemID)}, {Key: InputKey(input.WorkItemID)}},
+			)
 			if err != nil {
 				return Publication{}, err
 			}
@@ -95,7 +105,10 @@ func (repository *Repository) PrepareInput(ctx context.Context, input Input, env
 		}
 		key := taskconfiguration.BackingHookTaskInputKey(hook.OperationID)
 		publication.Change.Conditions = append(publication.Change.Conditions, keyvalue.Condition{Key: key})
-		publication.Change.Mutations = append(publication.Change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
+		publication.Change.Mutations = append(
+			publication.Change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value},
+		)
 	}
 	change, err := PreparePublication(publication.Input)
 	if err != nil {

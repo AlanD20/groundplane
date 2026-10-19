@@ -11,7 +11,10 @@ import (
 
 // Removal uses the same local worker bound and process lease as other native
 // operations. The Controller remains responsible for conflicts and assignment.
-func (workers *executionWorkers) submitEnvironmentRemoval(delivery *agentpb.EnvironmentRemovalAssignment, available int) error {
+func (workers *executionWorkers) submitEnvironmentRemoval(
+	delivery *agentpb.EnvironmentRemovalAssignment,
+	available int,
+) error {
 	input, err := hierarchyexecution.DecodeEnvironmentAssignment(delivery, workers.identity)
 	if err != nil {
 		return err
@@ -39,7 +42,11 @@ func (workers *executionWorkers) submitEnvironmentRemoval(delivery *agentpb.Envi
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()
-		result, err := workers.hierarchy.RunEnvironment(workers.executionContext(input.Attempt), input, workers.exchange)
+		result, err := workers.hierarchy.RunEnvironment(
+			workers.executionContext(input.Attempt),
+			input,
+			workers.exchange,
+		)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: input.Attempt, environment: result.Progress, environmentFailure: result.Failure, err: err}:

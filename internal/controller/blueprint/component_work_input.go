@@ -94,7 +94,10 @@ func (service *Service) prepareComponentWork(ctx context.Context, work workqueue
 	for _, zone := range placement.Zones {
 		capture.Zones = append(capture.Zones, zone.Record)
 	}
-	slices.SortFunc(capture.Zones, func(left, right zonerecord.Record) int { return strings.Compare(left.Desired.ID, right.Desired.ID) })
+	slices.SortFunc(
+		capture.Zones,
+		func(left, right zonerecord.Record) int { return strings.Compare(left.Desired.ID, right.Desired.ID) },
+	)
 	if _, changed := placement.Authority.ProxyServiceCapture(); changed {
 		var proxyChange workqueue.Change
 		capture.Proxy, proxyChange, err = service.prepareComponentProxyRollouts(ctx, work, services,

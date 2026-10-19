@@ -24,7 +24,11 @@ type ConsumerHelperInput struct {
 	Forward     *workexecution.Attempt
 }
 
-func EncodeConsumerHelperRequest(input RemovalInput, progress RemovalProgress, inspectOnly bool) (*agentpb.AttachConsumerHelperRequest, error) {
+func EncodeConsumerHelperRequest(
+	input RemovalInput,
+	progress RemovalProgress,
+	inspectOnly bool,
+) (*agentpb.AttachConsumerHelperRequest, error) {
 	authority, err := input.Authority()
 	if err != nil {
 		return nil, err
@@ -62,7 +66,10 @@ func EncodeConsumerHelperRequest(input RemovalInput, progress RemovalProgress, i
 
 // OpenConsumerHelperRequest verifies the start grant and exact acknowledged
 // command. It needs no adapter credentials or hook plaintext.
-func OpenConsumerHelperRequest(ctx context.Context, request *agentpb.AttachConsumerHelperRequest) (ConsumerHelperInput, error) {
+func OpenConsumerHelperRequest(
+	ctx context.Context,
+	request *agentpb.AttachConsumerHelperRequest,
+) (ConsumerHelperInput, error) {
 	if request != nil && len(request.ProvisionRecovery) != 0 {
 		return openProvisionConsumerRecoveryHelper(ctx, request)
 	}
@@ -123,7 +130,11 @@ func OpenConsumerHelperRequest(ctx context.Context, request *agentpb.AttachConsu
 		Progress: report.Progress, InspectOnly: request.InspectOnly}, nil
 }
 
-func validateConsumerAuthority(ctx context.Context, authority RemovalAuthority, consumer *agentpb.AttachConsumerTransition) error {
+func validateConsumerAuthority(
+	ctx context.Context,
+	authority RemovalAuthority,
+	consumer *agentpb.AttachConsumerTransition,
+) error {
 	if err := executionplan.ValidateAttachConsumerTransition(ctx, consumer); err != nil {
 		return err
 	}

@@ -10,15 +10,35 @@ import (
 )
 
 type NetworkReporter interface {
-	CheckpointNetwork(context.Context, agentregistration.WorkAuthorization, *agentpb.NetworkWorkCheckpointRequest) (*agentpb.NetworkWorkCheckpointAck, error)
-	CompleteNetwork(context.Context, agentregistration.WorkAuthorization, *agentpb.NetworkWorkCompletionRequest) (*agentpb.NetworkWorkCompletionAck, error)
-	FailNetwork(context.Context, agentregistration.WorkAuthorization, *agentpb.NetworkWorkFailureRequest) (*agentpb.NetworkWorkFailureAck, error)
-	RecoverNetwork(context.Context, agentregistration.WorkAuthorization, *agentpb.NetworkWorkRecoveryReportRequest) (*agentpb.NetworkWorkRecoveryReportAck, error)
+	CheckpointNetwork(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.NetworkWorkCheckpointRequest,
+	) (*agentpb.NetworkWorkCheckpointAck, error)
+	CompleteNetwork(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.NetworkWorkCompletionRequest,
+	) (*agentpb.NetworkWorkCompletionAck, error)
+	FailNetwork(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.NetworkWorkFailureRequest,
+	) (*agentpb.NetworkWorkFailureAck, error)
+	RecoverNetwork(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.NetworkWorkRecoveryReportRequest,
+	) (*agentpb.NetworkWorkRecoveryReportAck, error)
 }
 
 func (server *Server) ConfigureNetworkWork(reports NetworkReporter) { server.networkReports = reports }
 
-func (server *Server) networkReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
+func (server *Server) networkReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
 	if message.GetNetworkWorkCheckpointRequest() == nil {
 		return false, nil, nil
 	}

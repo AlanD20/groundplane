@@ -318,7 +318,10 @@ func validateAttempt(
 	operation runnerallocation.RuntimeOperation,
 ) error {
 	if ctx == nil || ctx.Err() != nil || ids.Validate(ids.KindTask, attempt.TaskID) != nil ||
-		ids.Validate(ids.KindWorkItem, attempt.WorkItemID) != nil || ids.Validate(ids.KindAttempt, attempt.AttemptID) != nil || attempt.AttemptNumber == 0 ||
+		ids.Validate(
+			ids.KindWorkItem,
+			attempt.WorkItemID,
+		) != nil || ids.Validate(ids.KindAttempt, attempt.AttemptID) != nil || attempt.AttemptNumber == 0 ||
 		attempt.Executor.Validate() != nil || attempt.Executor.Executor != workexecution.Controller || ids.Validate(ids.KindRunner, attempt.Plan.RunnerID) != nil ||
 		attempt.Plan.RuntimeEpoch == 0 || attempt.Plan.Digest() == "" ||
 		!validLowerHex(attempt.OwnershipNonce, maximumOwnershipNonceLen) ||
@@ -330,7 +333,10 @@ func validateAttempt(
 
 func validateProgress(progress runnerallocation.RunnerRuntimeProgress) error {
 	if ids.Validate(ids.KindRunner, progress.RunnerID) != nil || ids.Validate(ids.KindTask, progress.TaskID) != nil ||
-		ids.Validate(ids.KindWorkItem, progress.WorkItemID) != nil || ids.Validate(ids.KindAttempt, progress.AttemptID) != nil || progress.AttemptNumber == 0 ||
+		ids.Validate(
+			ids.KindWorkItem,
+			progress.WorkItemID,
+		) != nil || ids.Validate(ids.KindAttempt, progress.AttemptID) != nil || progress.AttemptNumber == 0 ||
 		!validBootID(progress.BootID) || progress.Plan.RunnerID != progress.RunnerID ||
 		progress.Plan.RuntimeEpoch != progress.RuntimeEpoch || progress.Plan.Digest() != progress.PlanDigest ||
 		progress.Plan.IdentityDigest() != progress.IdentityDigest ||

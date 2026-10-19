@@ -32,9 +32,15 @@ func (service *FactService) ResolveCapturedDetachHook(ctx context.Context, sourc
 			BackingServiceID: source.Attach.BackingServiceID, AttachID: source.Attach.ID,
 			TenantID: source.TenantID, ProjectID: source.ProjectID, EnvironmentID: source.Attach.EnvironmentID, ServiceID: source.Attach.ServiceID}}
 		defer clearBackingHookInput(&input)
-		input.Values = append(input.Values, backinghook.Value{Key: "HOST", Value: []byte(backingendpoint.New(source.Attach.BackingServiceID))})
+		input.Values = append(
+			input.Values,
+			backinghook.Value{Key: "HOST", Value: []byte(backingendpoint.New(source.Attach.BackingServiceID))},
+		)
 		for _, value := range bundle.HookInputs {
-			input.Values = append(input.Values, backinghook.Value{Key: value.Key, Value: append([]byte(nil), value.Value...)})
+			input.Values = append(
+				input.Values,
+				backinghook.Value{Key: value.Key, Value: append([]byte(nil), value.Value...)},
+			)
 		}
 		if source.HookInputSet != nil {
 			if source.HookInputs == nil {
@@ -55,10 +61,16 @@ func (service *FactService) ResolveCapturedDetachHook(ctx context.Context, sourc
 		}
 		if len(bundle.Sets) == 1 {
 			for _, value := range bundle.Sets[0].Facts {
-				input.Facts = append(input.Facts, backinghook.Value{Key: value.Key, Value: append([]byte(nil), value.Value...)})
+				input.Facts = append(
+					input.Facts,
+					backinghook.Value{Key: value.Key, Value: append([]byte(nil), value.Value...)},
+				)
 			}
 		}
-		slices.SortFunc(input.Values, func(left, right backinghook.Value) int { return strings.Compare(left.Key, right.Key) })
+		slices.SortFunc(
+			input.Values,
+			func(left, right backinghook.Value) int { return strings.Compare(left.Key, right.Key) },
+		)
 		return consume(input)
 	})
 }

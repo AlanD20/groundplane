@@ -14,7 +14,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (service *WorkReports) CompleteRemovalRecovery(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *WorkReports) CompleteRemovalRecovery(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.ServiceRemovalRecoveryCompletionRequest,
 ) (*agentpb.ServiceRemovalRecoveryCompletionAck, error) {
 	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || request.Evidence == nil {
@@ -33,7 +35,10 @@ func (service *WorkReports) CompleteRemovalRecovery(ctx context.Context, authori
 		return nil, err
 	}
 	if view.Checkpoint.Record == nil || view.Checkpoint.Record.Evidence != evidence {
-		return nil, errs.New(errs.KindStateConflict, "Service removal completion differs from its acknowledged restoration proof")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Service removal completion differs from its acknowledged restoration proof",
+		)
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
 		captured, _, err := service.inputs.Load(ctx, view.Work)
@@ -55,7 +60,10 @@ func (service *WorkReports) CompleteRemovalRecovery(ctx context.Context, authori
 	attempt := view.Attempt.Attempt
 	if attempt.FinishedAt == nil || attempt.StartedAt == nil || attempt.Result == nil ||
 		attempt.Outcome != workexecution.Succeeded || *attempt.Result != evidence {
-		return nil, errs.New(errs.KindStateConflict, "Service removal recovery completion differs from its stored outcome")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Service removal recovery completion differs from its stored outcome",
+		)
 	}
 	return &agentpb.ServiceRemovalRecoveryCompletionAck{Attempt: proto.CloneOf(request.Attempt),
 		Evidence: proto.CloneOf(request.Evidence), StartedAt: timestamppb.New(*attempt.StartedAt),

@@ -9,7 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (platform *Platform) newControllerSoftware(ctx context.Context, coordinator *controllerupgrade.Coordinator) (*controllersoftware.Repository, *controllerupgrade.Work, error) {
+func (platform *Platform) newControllerSoftware(
+	ctx context.Context,
+	coordinator *controllerupgrade.Coordinator,
+) (*controllersoftware.Repository, *controllerupgrade.Work, error) {
 	records, err := controllersoftware.New(platform.dependencies.Store)
 	if err != nil {
 		return nil, nil, err

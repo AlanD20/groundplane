@@ -19,12 +19,18 @@ func prepareVolumeWorkPolicy(prepared VolumeRemovalBackupPolicyPreparation,
 ) (workqueue.Change, error) {
 	if task.Action != workexecution.ActionRemove {
 		if prepared.state != nil {
-			return workqueue.Change{}, errs.New(errs.KindValidationFailed, "only Volume removal may replace Backup sources")
+			return workqueue.Change{}, errs.New(
+				errs.KindValidationFailed,
+				"only Volume removal may replace Backup sources",
+			)
 		}
 		return workqueue.Change{}, nil
 	}
 	if task.ID != claim.TaskID || task.Scope.EnvironmentID != claim.EnvironmentID || marker.TaskID != task.ID {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Volume Backup policy does not belong to this action")
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume Backup policy does not belong to this action",
+		)
 	}
 	if err := prepared.validateDesiredPublication(claim, projection, marker, task.TargetID); err != nil {
 		return workqueue.Change{}, err

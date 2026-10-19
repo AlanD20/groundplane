@@ -22,10 +22,14 @@ func (repository *InputRepository) PrepareRecoveryFailure(ctx context.Context, v
 		attempt.Direction != workexecution.Recovery || attempt.FinishedAt != nil ||
 		!reason.Valid() || interrupted && reason != executionplan.BackupExecutionInterrupted ||
 		!interrupted && attempt.StartedAt == nil {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Backup recovery failure no longer owns the active inspection")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Backup recovery failure no longer owns the active inspection",
+		)
 	}
 	if item.Operation == workexecution.BackupPrune && (view.Checkpoint.Record != nil || view.Checkpoint.Revision != 0) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Backup prune recovery has unexpected checkpoint evidence")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Backup prune recovery has unexpected checkpoint evidence",
+		)
 	}
 	_, change, err := repository.PrepareAdmission(ctx, view.Work)
 	if err != nil {
@@ -53,6 +57,13 @@ func (repository *InputRepository) PrepareRecoveryFailure(ctx context.Context, v
 		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision},
 		keyvalue.Condition{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision},
 		keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: FailureKey(attempt.ID), Value: raw})
-	return change, workexecution.Completion{Outcome: workexecution.Failed, Evidence: evidence, EffectsSettled: false}, nil
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: FailureKey(attempt.ID), Value: raw},
+	)
+	return change, workexecution.Completion{
+		Outcome:        workexecution.Failed,
+		Evidence:       evidence,
+		EffectsSettled: false,
+	}, nil
 }

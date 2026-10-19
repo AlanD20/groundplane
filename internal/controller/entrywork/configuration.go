@@ -21,10 +21,20 @@ import (
 )
 
 type CapturedFileReader interface {
-	OpenCapturedFile(context.Context, string, string, uint64, taskmaterialization.Record) (entrymaterialization.Header, io.ReadCloser, error)
+	OpenCapturedFile(
+		context.Context,
+		string,
+		string,
+		uint64,
+		taskmaterialization.Record,
+	) (entrymaterialization.Header, io.ReadCloser, error)
 }
 
-func (service *WorkReports) LoadEntryConfiguration(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.EntryConfigurationRequest) (*agentpb.EntryConfigurationManifest, error) {
+func (service *WorkReports) LoadEntryConfiguration(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.EntryConfigurationRequest,
+) (*agentpb.EntryConfigurationManifest, error) {
 	if request == nil || executionplan.RejectUnknown(request) != nil {
 		return nil, invalidConfigurationRequest()
 	}
@@ -32,9 +42,18 @@ func (service *WorkReports) LoadEntryConfiguration(ctx context.Context, authoriz
 	if err != nil {
 		return nil, err
 	}
-	manifest := &agentpb.EntryConfigurationManifest{Attempt: proto.CloneOf(request.Attempt), StageId: selection.stage, Configuration: proto.CloneOf(selection.reference)}
+	manifest := &agentpb.EntryConfigurationManifest{
+		Attempt:       proto.CloneOf(request.Attempt),
+		StageId:       selection.stage,
+		Configuration: proto.CloneOf(selection.reference),
+	}
 	for _, file := range selection.files {
-		header, err := materialization.CapturedFileHeader(selection.attempt.TaskID, selection.stage, selection.generation, file)
+		header, err := materialization.CapturedFileHeader(
+			selection.attempt.TaskID,
+			selection.stage,
+			selection.generation,
+			file,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -43,23 +62,42 @@ func (service *WorkReports) LoadEntryConfiguration(ctx context.Context, authoriz
 	return manifest, nil
 }
 
-func (service *WorkReports) LoadEntryConfigurationFile(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.EntryConfigurationFileRequest) (delivery *agentpb.EntryConfigurationFileDelivery, resultErr error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || entrymaterialization.ValidateDesiredDestination(request.Destination) != nil {
+func (service *WorkReports) LoadEntryConfigurationFile(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.EntryConfigurationFileRequest,
+) (delivery *agentpb.EntryConfigurationFileDelivery, resultErr error) {
+	if request == nil || executionplan.RejectUnknown(request) != nil ||
+		entrymaterialization.ValidateDesiredDestination(request.Destination) != nil {
 		return nil, invalidConfigurationRequest()
 	}
 	selection, err := service.activeFileSelection(ctx, authorization, request.Attempt, request.StageId)
 	if err != nil {
 		return nil, err
 	}
-	index := slices.IndexFunc(selection.files, func(file taskmaterialization.Record) bool { return file.Destination == request.Destination })
+	index := slices.IndexFunc(
+		selection.files,
+		func(file taskmaterialization.Record) bool { return file.Destination == request.Destination },
+	)
 	if index < 0 {
 		return nil, invalidConfigurationRequest()
 	}
-	expected, err := materialization.CapturedFileHeader(selection.attempt.TaskID, selection.stage, selection.generation, selection.files[index])
+	expected, err := materialization.CapturedFileHeader(
+		selection.attempt.TaskID,
+		selection.stage,
+		selection.generation,
+		selection.files[index],
+	)
 	if err != nil {
 		return nil, err
 	}
-	header, source, err := service.files.OpenCapturedFile(ctx, selection.attempt.TaskID, selection.stage, selection.generation, selection.files[index])
+	header, source, err := service.files.OpenCapturedFile(
+		ctx,
+		selection.attempt.TaskID,
+		selection.stage,
+		selection.generation,
+		selection.files[index],
+	)
 	if source != nil {
 		defer func() {
 			resultErr = errors.Join(resultErr, source.Close())
@@ -95,13 +133,25 @@ func (service *WorkReports) LoadEntryConfigurationFile(ctx context.Context, auth
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	delivery = &agentpb.EntryConfigurationFileDelivery{Attempt: proto.CloneOf(request.Attempt), StageId: selection.stage,
-		Configuration: proto.CloneOf(selection.reference), File: entryexecution.EncodeConfigurationFile(header), Content: content}
+	delivery = &agentpb.EntryConfigurationFileDelivery{
+		Attempt: proto.CloneOf(request.Attempt),
+		StageId: selection.stage,
+		Configuration: proto.CloneOf(
+			selection.reference,
+		),
+		File:    entryexecution.EncodeConfigurationFile(header),
+		Content: content,
+	}
 	owned = true
 	return delivery, nil
 }
 
-func (service *WorkReports) activeFileSelection(ctx context.Context, authorization agentregistration.WorkAuthorization, identity *agentpb.WorkAttemptIdentity, stage string) (entryFileSelection, error) {
+func (service *WorkReports) activeFileSelection(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	identity *agentpb.WorkAttemptIdentity,
+	stage string,
+) (entryFileSelection, error) {
 	if service == nil || ctx == nil || service.files == nil {
 		return entryFileSelection{}, invalidConfigurationRequest()
 	}
@@ -137,7 +187,13 @@ func (service *WorkReports) activeFileSelection(ctx context.Context, authorizati
 	if err := entryexecution.ValidateConfigurationFiles(input, headers); err != nil {
 		return entryFileSelection{}, err
 	}
-	return entryFileSelection{attempt: input.Attempt, stage: stage, generation: generation, reference: reference, files: files}, nil
+	return entryFileSelection{
+		attempt:    input.Attempt,
+		stage:      stage,
+		generation: generation,
+		reference:  reference,
+		files:      files,
+	}, nil
 }
 
 type entryFileSelection struct {

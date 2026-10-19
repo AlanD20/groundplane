@@ -35,7 +35,11 @@ type View struct {
 	ReadRevision int64
 }
 
-func (repository *Repository) ReadTask(ctx context.Context, taskID string, revision int64) (TaskSnapshot, int64, error) {
+func (repository *Repository) ReadTask(
+	ctx context.Context,
+	taskID string,
+	revision int64,
+) (TaskSnapshot, int64, error) {
 	if ids.Validate(ids.KindTask, taskID) != nil || revision < 0 {
 		return TaskSnapshot{}, 0, invalid("task read identity or revision is invalid")
 	}
@@ -60,7 +64,12 @@ func (repository *Repository) ReadWork(ctx context.Context, taskID, workID strin
 	return repository.readWork(ctx, taskID, workID, revision, false)
 }
 
-func (repository *Repository) readWork(ctx context.Context, taskID, workID string, revision int64, collecting bool) (View, error) {
+func (repository *Repository) readWork(
+	ctx context.Context,
+	taskID, workID string,
+	revision int64,
+	collecting bool,
+) (View, error) {
 	if ids.Validate(ids.KindTask, taskID) != nil || ids.Validate(ids.KindWorkItem, workID) != nil || revision < 0 {
 		return View{}, invalid("execution read identity or revision is invalid")
 	}
@@ -112,7 +121,12 @@ type Page struct {
 
 // ListWork pages stable membership, without needing dispatch eligibility or
 // diagnostics. The caller carries ReadRevision into subsequent pages.
-func (repository *Repository) ListWork(ctx context.Context, taskID, after string, limit int64, revision int64) (Page, error) {
+func (repository *Repository) ListWork(
+	ctx context.Context,
+	taskID, after string,
+	limit int64,
+	revision int64,
+) (Page, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return Page{}, err
 	}
@@ -132,7 +146,11 @@ func (repository *Repository) ListWork(ctx context.Context, taskID, after string
 		int64(len(members.Values)) > limit || members.More && len(members.Values) == 0 {
 		return Page{}, corrupt()
 	}
-	page := Page{ReadRevision: members.ReadRevision, More: members.More, Items: make([]ItemSnapshot, 0, len(members.Values))}
+	page := Page{
+		ReadRevision: members.ReadRevision,
+		More:         members.More,
+		Items:        make([]ItemSnapshot, 0, len(members.Values)),
+	}
 	keys := make([]string, 0, len(members.Values))
 	owners := make([]ClaimOwner, 0, len(members.Values))
 	for _, member := range members.Values {
@@ -166,7 +184,11 @@ func (repository *Repository) ListWork(ctx context.Context, taskID, after string
 	return page, nil
 }
 
-func (repository *Repository) read(ctx context.Context, keys []string, revision int64) (*keyvalue.GetManyResult, error) {
+func (repository *Repository) read(
+	ctx context.Context,
+	keys []string,
+	revision int64,
+) (*keyvalue.GetManyResult, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
@@ -187,11 +209,13 @@ func (repository *Repository) read(ctx context.Context, keys []string, revision 
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != len(keys) {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		len(read.Values) != len(keys) {
 		return nil, corrupt()
 	}
 	for index, value := range read.Values {
-		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
+		if value != nil &&
+			(value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
 			return nil, corrupt()
 		}
 	}

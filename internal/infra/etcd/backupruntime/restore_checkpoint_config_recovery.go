@@ -18,12 +18,16 @@ func PrepareConfigRestoreRecoveryCheckpoint(current BackupRestoreRecord, input *
 		current.ConfigProgress.SourceCleanupCompleted || request == nil ||
 		(request.GetConfig().GetMaterializationVerified() == nil && request.GetSourceCleanupCompleted() == nil &&
 			request.GetConfig().GetTransferCompleted() == nil) {
-		return BackupRestoreRecord{}, invalidBackupRuntimeRecord("Config recovery requires its published generation and remaining file or cleanup proof")
+		return BackupRestoreRecord{}, invalidBackupRuntimeRecord(
+			"Config recovery requires its published generation and remaining file or cleanup proof",
+		)
 	}
 	progress := current.ConfigProgress
 	if progress.PublishedHeadRevision <= 0 || progress.DeleteEntryOrdinal != progress.DeleteEntryCount ||
 		progress.UpsertEntryOrdinal != current.Point.ConfigArchive.EntryCount {
-		return BackupRestoreRecord{}, invalidBackupRuntimeRecord("Config recovery must finish publishing its captured generation before file verification")
+		return BackupRestoreRecord{}, invalidBackupRuntimeRecord(
+			"Config recovery must finish publishing its captured generation before file verification",
+		)
 	}
 	if completed := request.GetConfig().GetTransferCompleted(); completed != nil {
 		archive, err := current.Point.ConfigArchive.Wire()
@@ -35,7 +39,9 @@ func PrepareConfigRestoreRecoveryCheckpoint(current BackupRestoreRecord, input *
 			!proto.Equal(completed.Content, archive.Content) || progress.MaterializationSHA256 != "" ||
 			publication.RevisionRootRevision != progress.RevisionRootRevision ||
 			publication.ExpectedMaterializationSHA256 != progress.ExpectedMaterializationSHA256 {
-			return BackupRestoreRecord{}, invalidBackupRuntimeRecord("Config recovery transfer receipt differs from the published generation")
+			return BackupRestoreRecord{}, invalidBackupRuntimeRecord(
+				"Config recovery transfer receipt differs from the published generation",
+			)
 		}
 		// Publication is already durable. Restore only its missing source receipt,
 		// never rewind the Entry mutation cursors or clear the original failure.

@@ -55,7 +55,8 @@ func (loader *ChannelHookLoader) loadHookDelivery(
 		return invalid()
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(delivery.Attempt, input.Attempt.Executor)
-	if err != nil || !workexecution.SameAssignment(attempt, input.Attempt) || delivery.OperationId != input.Release.OperationId ||
+	if err != nil || !workexecution.SameAssignment(attempt, input.Attempt) ||
+		delivery.OperationId != input.Release.OperationId ||
 		!proto.Equal(delivery.Input, hook.Input) ||
 		delivery.Run == nil ||
 		delivery.Run.ScriptExecutionId != hook.ExecutionId ||

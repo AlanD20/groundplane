@@ -21,18 +21,38 @@ func EncodeProvisionConsumerRecoveryHelper(input ProvisionRecoveryInput) (*agent
 	if err != nil {
 		return nil, err
 	}
-	return &agentpb.AttachConsumerHelperRequest{Attempt: identity, Consumer: proto.CloneOf(input.Consumer), InspectOnly: true,
-		Start: &agentpb.WorkStartAck{Attempt: proto.CloneOf(identity), StartedAt: timestamppb.New(*input.Attempt.StartedAt)}, ProvisionRecovery: source}, nil
+	return &agentpb.AttachConsumerHelperRequest{
+		Attempt:     identity,
+		Consumer:    proto.CloneOf(input.Consumer),
+		InspectOnly: true,
+		Start: &agentpb.WorkStartAck{
+			Attempt:   proto.CloneOf(identity),
+			StartedAt: timestamppb.New(*input.Attempt.StartedAt),
+		},
+		ProvisionRecovery: source,
+	}, nil
 }
 
-func openProvisionConsumerRecoveryHelper(ctx context.Context, request *agentpb.AttachConsumerHelperRequest) (ConsumerHelperInput, error) {
+func openProvisionConsumerRecoveryHelper(
+	ctx context.Context,
+	request *agentpb.AttachConsumerHelperRequest,
+) (ConsumerHelperInput, error) {
 	if ctx == nil || request == nil || request.Attempt == nil || !request.InspectOnly || request.Start == nil ||
-		len(request.Authority) != 0 || len(request.Report) != 0 || len(request.Recovery) != 0 || request.Acknowledgement != nil || request.ProvisionAcknowledgement != nil ||
-		len(request.ProvisionRecovery) == 0 || len(request.ProvisionRecovery) > MaximumProvisionRecoveryBytes || proto.Size(request) > executionplan.MaximumPlanBytes || executionplan.RejectUnknown(request) != nil {
+		len(
+			request.Authority,
+		) != 0 || len(request.Report) != 0 || len(request.Recovery) != 0 || request.Acknowledgement != nil || request.ProvisionAcknowledgement != nil ||
+		len(
+			request.ProvisionRecovery,
+		) == 0 || len(request.ProvisionRecovery) > MaximumProvisionRecoveryBytes || proto.Size(request) > executionplan.MaximumPlanBytes || executionplan.RejectUnknown(request) != nil {
 		return ConsumerHelperInput{}, invalid("Attach connection recovery permits captured inspection only")
 	}
 	claimed := request.Attempt
-	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: claimed.HostId, AgentID: claimed.AgentId, Generation: claimed.ExecutorGeneration}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     claimed.HostId,
+		AgentID:    claimed.AgentId,
+		Generation: claimed.ExecutorGeneration,
+	}
 	attempt, err := workexecution.DecodeAgentAttempt(claimed, identity)
 	if err != nil {
 		return ConsumerHelperInput{}, err
@@ -51,5 +71,10 @@ func openProvisionConsumerRecoveryHelper(ctx context.Context, request *agentpb.A
 		return ConsumerHelperInput{}, invalid("Attach connection recovery differs from its original failure")
 	}
 	forward := source.Forward
-	return ConsumerHelperInput{Attempt: attempt, Forward: &forward, Consumer: proto.CloneOf(input.Consumer), InspectOnly: true}, nil
+	return ConsumerHelperInput{
+		Attempt:     attempt,
+		Forward:     &forward,
+		Consumer:    proto.CloneOf(input.Consumer),
+		InspectOnly: true,
+	}, nil
 }

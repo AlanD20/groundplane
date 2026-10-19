@@ -12,7 +12,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (executor *Executor) hook(ctx context.Context, input backingprovision.HelperInput, exchange Exchange, inspectOnly bool) (backingprovision.Observation, error) {
+func (executor *Executor) hook(
+	ctx context.Context,
+	input backingprovision.HelperInput,
+	exchange Exchange,
+	inspectOnly bool,
+) (backingprovision.Observation, error) {
 	assignment := input.Assignment
 	saved, err := executor.journal.Backing(ctx, assignment.Attempt, assignment.Procedure)
 	if err != nil {
@@ -31,7 +36,10 @@ func (executor *Executor) hook(ctx context.Context, input backingprovision.Helpe
 				return backingprovision.Observation{}, err
 			}
 			if observed.Running {
-				return backingprovision.Observation{}, errs.New(errs.KindStateConflict, "backing creation after-start hook is still running")
+				return backingprovision.Observation{}, errs.New(
+					errs.KindStateConflict,
+					"backing creation after-start hook is still running",
+				)
 			}
 			if err := executor.journal.ObserveBackingHookExit(ctx, assignment.Attempt, assignment.Procedure,
 				hook.ExecID, observed.ExitCode, time.Now().UTC()); err != nil {
@@ -40,8 +48,10 @@ func (executor *Executor) hook(ctx context.Context, input backingprovision.Helpe
 		}
 		// Exit alone cannot prove the private no-facts result was validated.
 		// Never rerun a command whose saved result is missing.
-		return backingprovision.Observation{}, errs.New(errs.KindStateConflict,
-			"backing creation after-start hook was interrupted before its validated result was saved; cleanup inspection is required")
+		return backingprovision.Observation{}, errs.New(
+			errs.KindStateConflict,
+			"backing creation after-start hook was interrupted before its validated result was saved; cleanup inspection is required",
+		)
 	}
 	if inspectOnly {
 		return backingprovision.Observation{}, errs.New(errs.KindStateConflict,
@@ -55,7 +65,10 @@ func (executor *Executor) hook(ctx context.Context, input backingprovision.Helpe
 	if err != nil {
 		return backingprovision.Observation{}, err
 	}
-	delivery, err := exchange.BackingProvisionHook(ctx, &agentpb.BackingProvisionHookRequest{Attempt: identity, StageId: stage})
+	delivery, err := exchange.BackingProvisionHook(
+		ctx,
+		&agentpb.BackingProvisionHookRequest{Attempt: identity, StageId: stage},
+	)
 	defer func() {
 		if delivery != nil && delivery.Hook != nil {
 			for _, value := range delivery.Hook.Inputs {
@@ -92,16 +105,36 @@ func (recorder hookRecorder) Created(ctx context.Context, containerID, execID st
 	if err := recorder.executor.ownership.Check(); err != nil {
 		return err
 	}
-	return recorder.executor.journal.PrepareBackingHookExec(ctx, recorder.assignment.Attempt, recorder.assignment.Procedure, containerID, execID, at)
+	return recorder.executor.journal.PrepareBackingHookExec(
+		ctx,
+		recorder.assignment.Attempt,
+		recorder.assignment.Procedure,
+		containerID,
+		execID,
+		at,
+	)
 }
 
 func (recorder hookRecorder) Ready(ctx context.Context, execID string, at time.Time) error {
 	if err := recorder.executor.ownership.Check(); err != nil {
 		return err
 	}
-	return recorder.executor.journal.AuthorizeBackingHookExec(ctx, recorder.assignment.Attempt, recorder.assignment.Procedure, execID, at)
+	return recorder.executor.journal.AuthorizeBackingHookExec(
+		ctx,
+		recorder.assignment.Attempt,
+		recorder.assignment.Procedure,
+		execID,
+		at,
+	)
 }
 
 func (recorder hookRecorder) Exited(ctx context.Context, execID string, exitCode int, at time.Time) error {
-	return recorder.executor.journal.ObserveBackingHookExit(ctx, recorder.assignment.Attempt, recorder.assignment.Procedure, execID, exitCode, at)
+	return recorder.executor.journal.ObserveBackingHookExit(
+		ctx,
+		recorder.assignment.Attempt,
+		recorder.assignment.Procedure,
+		execID,
+		exitCode,
+		at,
+	)
 }

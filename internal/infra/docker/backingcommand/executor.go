@@ -44,8 +44,16 @@ IFS= read -r permission || exit 125
 [ "$permission" = groundplane-command-run ] || exit 125
 exec "$@"`
 
-func (executor *Executor) Execute(ctx context.Context, recorder Recorder, containerID string, command, environment []string, input []byte, output io.Writer) (int, error) {
-	if ctx == nil || recorder == nil || output == nil || len(containerID) != 64 || !ids.ValidContainerID(containerID) || len(command) == 0 {
+func (executor *Executor) Execute(
+	ctx context.Context,
+	recorder Recorder,
+	containerID string,
+	command, environment []string,
+	input []byte,
+	output io.Writer,
+) (int, error) {
+	if ctx == nil || recorder == nil || output == nil || len(containerID) != 64 || !ids.ValidContainerID(containerID) ||
+		len(command) == 0 {
 		return 0, unavailable("backing command requires its exact container and durable recorder")
 	}
 	if _, bounded := ctx.Deadline(); !bounded {

@@ -16,7 +16,10 @@ import (
 func (service *Service) retireCapturedSources(ctx context.Context, view workqueue.View, at time.Time,
 ) (etcd.ReleaseWorkSources, bool, workqueue.Change, error) {
 	if service == nil || service.ledger == nil || service.scripts == nil {
-		return etcd.ReleaseWorkSources{}, false, workqueue.Change{}, errs.New(errs.KindInternal, "Release retention is not configured")
+		return etcd.ReleaseWorkSources{}, false, workqueue.Change{}, errs.New(
+			errs.KindInternal,
+			"Release retention is not configured",
+		)
 	}
 	sources, err := service.ledger.LoadRetiringReleaseWorkInput(ctx, view)
 	if err != nil {
@@ -37,7 +40,13 @@ func (service *Service) retireCapturedSources(ctx context.Context, view workqueu
 		guards.Conditions = append(guards.Conditions, pins.Conditions...)
 	}
 	for _, hook := range sources.Rollout.Record.Render.Hooks {
-		retired, references, err := service.scripts.RetireReleaseHookSources(ctx, view, hook.ScriptExecutionID, hook.Input, at)
+		retired, references, err := service.scripts.RetireReleaseHookSources(
+			ctx,
+			view,
+			hook.ScriptExecutionID,
+			hook.Input,
+			at,
+		)
 		if err != nil || !retired {
 			return etcd.ReleaseWorkSources{}, false, workqueue.Change{}, err
 		}

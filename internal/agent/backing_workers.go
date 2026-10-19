@@ -58,7 +58,10 @@ func (workers *executionWorkers) finishBacking(output executionOutput, active ac
 	if output.err == nil {
 		if output.backing == nil || output.backing.Validate() != nil || output.backing.FinishedAt == nil ||
 			output.backing.Result == nil || !workexecution.SameAssignment(*output.backing, output.attempt) {
-			return true, errs.New(errs.KindStateConflict, "backing creation requires its saved terminal acknowledgement")
+			return true, errs.New(
+				errs.KindStateConflict,
+				"backing creation requires its saved terminal acknowledgement",
+			)
 		}
 		if err := workers.backings.Retire(workers.ctx, *output.backing); err != nil {
 			return true, err

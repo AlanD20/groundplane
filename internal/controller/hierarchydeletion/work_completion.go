@@ -18,14 +18,21 @@ type RemovalCompletion struct {
 	networks workdispatch.CompletionOwner
 }
 
-func NewRemovalCompletion(records *etcd.HierarchyDeletionRepository, volumes, networks workdispatch.CompletionOwner) (*RemovalCompletion, error) {
+func NewRemovalCompletion(
+	records *etcd.HierarchyDeletionRepository,
+	volumes, networks workdispatch.CompletionOwner,
+) (*RemovalCompletion, error) {
 	if records == nil || volumes == nil || networks == nil {
 		return nil, errs.New(errs.KindInternal, "removal completion requires captured storage")
 	}
 	return &RemovalCompletion{records: records, volumes: volumes, networks: networks}, nil
 }
 
-func (owner *RemovalCompletion) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, at time.Time) (workqueue.Change, error) {
+func (owner *RemovalCompletion) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	at time.Time,
+) (workqueue.Change, error) {
 	if finished.Task.Task.Action != workexecution.ActionRemove || len(finished.Items) == 0 {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "removal completion requires settled removal work")
 	}
@@ -40,6 +47,9 @@ func (owner *RemovalCompletion) PrepareFinish(ctx context.Context, finished work
 	case workexecution.Hierarchy, workexecution.RemovalBackupObject:
 		return owner.records.PrepareHierarchyWorkFinish(ctx, finished, at)
 	default:
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "removal operation has no aggregate completion owner")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"removal operation has no aggregate completion owner",
+		)
 	}
 }

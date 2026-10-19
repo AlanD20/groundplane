@@ -33,7 +33,13 @@ func (service *WorkReports) FailNetwork(ctx context.Context, authorization agent
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
 		at := time.Now().UTC()
-		proof, result, err := service.records.PrepareFailure(ctx, view, networkexecution.FailureReason(request.Reason), at, false)
+		proof, result, err := service.records.PrepareFailure(
+			ctx,
+			view,
+			networkexecution.FailureReason(request.Reason),
+			at,
+			false,
+		)
 		if err != nil {
 			return nil, err
 		}

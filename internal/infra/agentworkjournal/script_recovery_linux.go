@@ -10,7 +10,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (journal *Journal) BeginScriptRecovery(ctx context.Context, input scriptexecution.RecoveryInput) (*ScriptRecoveryRecord, error) {
+func (journal *Journal) BeginScriptRecovery(
+	ctx context.Context,
+	input scriptexecution.RecoveryInput,
+) (*ScriptRecoveryRecord, error) {
 	if input.Validate() != nil || input.Attempt.StartedAt == nil {
 		return nil, invalid()
 	}
@@ -36,7 +39,9 @@ func (journal *Journal) BeginScriptRecovery(ctx context.Context, input scriptexe
 			return nil, conflict()
 		}
 		if !workexecution.SameAssignment(state.Attempt, input.Attempt) || state.Attempt.StartedAt == nil ||
-			!state.Attempt.StartedAt.Equal(*input.Attempt.StartedAt) || state.ScriptRecovery == nil || !bytes.Equal(state.ScriptRecovery.Assignment, raw) {
+			!state.Attempt.StartedAt.Equal(
+				*input.Attempt.StartedAt,
+			) || state.ScriptRecovery == nil || !bytes.Equal(state.ScriptRecovery.Assignment, raw) {
 			return nil, conflict()
 		}
 		return state.ScriptRecovery, nil
@@ -48,7 +53,11 @@ func (journal *Journal) BeginScriptRecovery(ctx context.Context, input scriptexe
 	if _, reserved := attempts[input.Attempt.ID]; !reserved && len(attempts) >= MaximumAttempts {
 		return nil, conflict()
 	}
-	state = &attemptRecord{Attempt: input.Attempt, UpdatedAt: *input.Attempt.StartedAt, ScriptRecovery: &ScriptRecoveryRecord{Assignment: raw}}
+	state = &attemptRecord{
+		Attempt:        input.Attempt,
+		UpdatedAt:      *input.Attempt.StartedAt,
+		ScriptRecovery: &ScriptRecoveryRecord{Assignment: raw},
+	}
 	if err := journal.writeRecord(ctx, *state); err != nil {
 		return nil, err
 	}
@@ -57,7 +66,10 @@ func (journal *Journal) BeginScriptRecovery(ctx context.Context, input scriptexe
 
 // LoadScriptRecovery returns the captured input, including its acknowledged
 // Start time, so completed cleanup can be replayed without another Start grant.
-func (journal *Journal) LoadScriptRecovery(ctx context.Context, attempt workexecution.Attempt) (scriptexecution.RecoveryInput, *ScriptRecoveryRecord, error) {
+func (journal *Journal) LoadScriptRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (scriptexecution.RecoveryInput, *ScriptRecoveryRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return scriptexecution.RecoveryInput{}, nil, err
@@ -77,7 +89,11 @@ func (journal *Journal) LoadScriptRecovery(ctx context.Context, attempt workexec
 	return input, state.ScriptRecovery, nil
 }
 
-func (journal *Journal) SaveScriptRecoveryProof(ctx context.Context, attempt workexecution.Attempt, proof scriptexecution.RecoveryProof) error {
+func (journal *Journal) SaveScriptRecoveryProof(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	proof scriptexecution.RecoveryProof,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -87,7 +103,8 @@ func (journal *Journal) SaveScriptRecoveryProof(ctx context.Context, attempt wor
 	if err != nil {
 		return err
 	}
-	if state == nil || state.ScriptFailure != nil || !workexecution.SameAssignment(state.Attempt, attempt) || state.ScriptRecovery == nil {
+	if state == nil || state.ScriptFailure != nil || !workexecution.SameAssignment(state.Attempt, attempt) ||
+		state.ScriptRecovery == nil {
 		return conflict()
 	}
 	input, err := state.ScriptRecovery.input(state.Attempt)
@@ -112,7 +129,11 @@ func (journal *Journal) SaveScriptRecoveryProof(ctx context.Context, attempt wor
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) AcknowledgeScriptRecovery(ctx context.Context, attempt workexecution.Attempt, ack *agentpb.ScriptRecoveryCompletionAck) (workexecution.Attempt, error) {
+func (journal *Journal) AcknowledgeScriptRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	ack *agentpb.ScriptRecoveryCompletionAck,
+) (workexecution.Attempt, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return workexecution.Attempt{}, err
@@ -122,7 +143,9 @@ func (journal *Journal) AcknowledgeScriptRecovery(ctx context.Context, attempt w
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if state == nil || state.ScriptFailure != nil || !workexecution.SameAssignment(state.Attempt, attempt) || state.ScriptRecovery == nil || state.ScriptRecovery.Proof == nil {
+	if state == nil || state.ScriptFailure != nil || !workexecution.SameAssignment(state.Attempt, attempt) ||
+		state.ScriptRecovery == nil ||
+		state.ScriptRecovery.Proof == nil {
 		return workexecution.Attempt{}, conflict()
 	}
 	input, err := state.ScriptRecovery.input(state.Attempt)
@@ -134,7 +157,8 @@ func (journal *Journal) AcknowledgeScriptRecovery(ctx context.Context, attempt w
 		return workexecution.Attempt{}, err
 	}
 	if saved := state.ScriptRecovery.Receipt; saved != nil {
-		if !saved.FinishedAt.Equal(*terminal.FinishedAt) || *saved.Result != *terminal.Result || saved.Outcome != terminal.Outcome {
+		if !saved.FinishedAt.Equal(*terminal.FinishedAt) || *saved.Result != *terminal.Result ||
+			saved.Outcome != terminal.Outcome {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *saved, nil

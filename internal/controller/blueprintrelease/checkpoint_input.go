@@ -13,9 +13,15 @@ import (
 // LoadCheckpointInput uses the assigned input and stored Start receipt, not
 // today's Blueprint or Agent-provided candidate bytes. Permission to cross a
 // new effect boundary is checked separately in the checkpoint transaction.
-func (service *Service) LoadCheckpointInput(ctx context.Context, view workqueue.ResumeView) (releaseexecution.Input, error) {
+func (service *Service) LoadCheckpointInput(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (releaseexecution.Input, error) {
 	if view.Attempt.Attempt.StartedAt == nil || view.Attempt.Attempt.FinishedAt != nil {
-		return releaseexecution.Input{}, errs.New(errs.KindStateConflict, "Release checkpoint requires a started unfinished attempt")
+		return releaseexecution.Input{}, errs.New(
+			errs.KindStateConflict,
+			"Release checkpoint requires a started unfinished attempt",
+		)
 	}
 	delivery, err := service.loadCapturedAssignment(ctx, view)
 	if err != nil {

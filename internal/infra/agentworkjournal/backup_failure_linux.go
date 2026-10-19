@@ -42,7 +42,11 @@ func (journal *Journal) PrepareBackupFailure(ctx context.Context, assignment *ag
 		if _, reserved := attempts[attempt.ID]; !reserved && len(attempts) >= MaximumAttempts {
 			return nil, conflict()
 		}
-		state = &attemptRecord{Attempt: attempt, Sequence: 1, Backup: &BackupRecord{Sources: make([]BackupSourceReport, len(owned.Input.Steps))}}
+		state = &attemptRecord{
+			Attempt:  attempt,
+			Sequence: 1,
+			Backup:   &BackupRecord{Sources: make([]BackupSourceReport, len(owned.Input.Steps))},
+		}
 	} else if err := validateBackupState(state, attempt, owned.Input); err != nil {
 		return nil, err
 	}

@@ -49,7 +49,11 @@ func (repository *InputRepository) retireSecretPins(ctx context.Context, view wo
 		return false, workqueue.Change{}, err
 	}
 	defer keyvalue.ClearMutationValues(mutations)
-	result, err := repository.store.Transact(ctx, append(append([]keyvalue.Condition(nil), guards...), conditions...), mutations)
+	result, err := repository.store.Transact(
+		ctx,
+		append(append([]keyvalue.Condition(nil), guards...), conditions...),
+		mutations,
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	return false, workqueue.Change{}, err
 }

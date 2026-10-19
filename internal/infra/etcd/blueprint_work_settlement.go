@@ -17,7 +17,13 @@ import (
 // Release history and work outcome together. A failed comparison writes none
 // of them. An uncertain transaction result requires rereading this attempt;
 // it never authorizes another deployment.
-func (ledger *ReleaseLedger) SettleCompletedBlueprintRelease(ctx context.Context, view workqueue.ResumeView, input releaseexecution.Input, authorization []keyvalue.Condition, at time.Time) error {
+func (ledger *ReleaseLedger) SettleCompletedBlueprintRelease(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input releaseexecution.Input,
+	authorization []keyvalue.Condition,
+	at time.Time,
+) error {
 	if !view.CurrentExecutor {
 		return errs.New(errs.KindStateConflict, "Release completion requires its current executor")
 	}
@@ -26,8 +32,12 @@ func (ledger *ReleaseLedger) SettleCompletedBlueprintRelease(ctx context.Context
 
 // SettleInterruptedBlueprintRelease records a fully proven completion after
 // replacement. No effect is replayed and no old identity is adopted.
-func (ledger *ReleaseLedger) SettleInterruptedBlueprintRelease(ctx context.Context, view workqueue.ResumeView, input releaseexecution.Input,
-	authorization agentregistration.WorkAuthorization, at time.Time,
+func (ledger *ReleaseLedger) SettleInterruptedBlueprintRelease(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input releaseexecution.Input,
+	authorization agentregistration.WorkAuthorization,
+	at time.Time,
 ) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
@@ -53,7 +63,13 @@ func (ledger *ReleaseLedger) SettleInterruptedBlueprintRelease(ctx context.Conte
 	return ledger.settleProvenBlueprintRelease(ctx, view, input, guards, at)
 }
 
-func (ledger *ReleaseLedger) settleProvenBlueprintRelease(ctx context.Context, view workqueue.ResumeView, input releaseexecution.Input, authorization []keyvalue.Condition, at time.Time) error {
+func (ledger *ReleaseLedger) settleProvenBlueprintRelease(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input releaseexecution.Input,
+	authorization []keyvalue.Condition,
+	at time.Time,
+) error {
 	if len(authorization) == 0 {
 		return errs.New(errs.KindStateConflict, "Release completion requires authenticated executor comparisons")
 	}
@@ -109,7 +125,11 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRelease(ctx context.Context, v
 		outcome = workexecution.Superseded
 	}
 	request.At = at
-	request.Result = workexecution.Completion{Outcome: outcome, EffectsSettled: true, Evidence: view.Checkpoint.Record.Evidence}
+	request.Result = workexecution.Completion{
+		Outcome:        outcome,
+		EffectsSettled: true,
+		Evidence:       view.Checkpoint.Record.Evidence,
+	}
 	execution, err := workqueue.PrepareCompletion(request)
 	if err != nil {
 		return err
@@ -121,7 +141,10 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRelease(ctx context.Context, v
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Release completion changed before it could be saved; reload the same attempt")
+		return errs.New(
+			errs.KindStateConflict,
+			"Release completion changed before it could be saved; reload the same attempt",
+		)
 	}
 	return nil
 }

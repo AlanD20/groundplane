@@ -16,16 +16,29 @@ import (
 )
 
 type CreationHookResolver interface {
-	ResolveCapturedCreationHook(context.Context, backingprovisionwork.Input, *taskconfiguration.BackingHookEncryptedInputs, attachplan.HookInputConsumer) error
+	ResolveCapturedCreationHook(
+		context.Context,
+		backingprovisionwork.Input,
+		*taskconfiguration.BackingHookEncryptedInputs,
+		attachplan.HookInputConsumer,
+	) error
 }
 
-func (service *WorkReports) DeliverBackingProvisionHook(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *WorkReports) DeliverBackingProvisionHook(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.BackingProvisionHookRequest,
 ) (_ *agentpb.BackingProvisionHookDelivery, resultErr error) {
 	if request == nil || executionplan.RejectUnknown(request) != nil {
 		return nil, invalidBackingDelivery()
 	}
-	selection, err := service.activeDelivery(ctx, authorization, request.Attempt, request.StageId, backingprovision.AfterStart)
+	selection, err := service.activeDelivery(
+		ctx,
+		authorization,
+		request.Attempt,
+		request.StageId,
+		backingprovision.AfterStart,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +63,10 @@ func (service *WorkReports) DeliverBackingProvisionHook(ctx context.Context, aut
 		delivery.Hook = &agentpb.BackingHookProcedure{Event: agentpb.BackingHookEvent_BACKING_HOOK_EVENT_AFTER_START,
 			BackingServiceId: selection.input.Layout.ServiceID, Command: slices.Clone(hook.Command), TimeoutSeconds: hook.TimeoutSeconds}
 		for _, value := range input.Values {
-			delivery.Hook.Inputs = append(delivery.Hook.Inputs, &agentpb.BackingHookValue{Key: value.Key, Value: slices.Clone(value.Value)})
+			delivery.Hook.Inputs = append(
+				delivery.Hook.Inputs,
+				&agentpb.BackingHookValue{Key: value.Key, Value: slices.Clone(value.Value)},
+			)
 		}
 		return backingprovision.ValidateHookDelivery(selection.input, delivery)
 	})

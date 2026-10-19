@@ -21,10 +21,20 @@ import (
 )
 
 type CapturedFileReader interface {
-	OpenCapturedFile(context.Context, string, string, uint64, taskmaterialization.Record) (entrymaterialization.Header, io.ReadCloser, error)
+	OpenCapturedFile(
+		context.Context,
+		string,
+		string,
+		uint64,
+		taskmaterialization.Record,
+	) (entrymaterialization.Header, io.ReadCloser, error)
 }
 
-func (service *ReleaseCheckpointService) LoadReleaseConfiguration(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.ReleaseConfigurationRequest) (*agentpb.ReleaseConfigurationManifest, error) {
+func (service *ReleaseCheckpointService) LoadReleaseConfiguration(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.ReleaseConfigurationRequest,
+) (*agentpb.ReleaseConfigurationManifest, error) {
 	if request == nil || executionplan.RejectUnknown(request) != nil {
 		return nil, invalidConfigurationRequest()
 	}
@@ -32,9 +42,18 @@ func (service *ReleaseCheckpointService) LoadReleaseConfiguration(ctx context.Co
 	if err != nil {
 		return nil, err
 	}
-	manifest := &agentpb.ReleaseConfigurationManifest{Attempt: proto.CloneOf(request.Attempt), StageId: selection.stage, Configuration: proto.CloneOf(selection.reference)}
+	manifest := &agentpb.ReleaseConfigurationManifest{
+		Attempt:       proto.CloneOf(request.Attempt),
+		StageId:       selection.stage,
+		Configuration: proto.CloneOf(selection.reference),
+	}
 	for _, file := range selection.files {
-		header, err := materialization.CapturedFileHeader(selection.attempt.TaskID, selection.stage, selection.generation, file)
+		header, err := materialization.CapturedFileHeader(
+			selection.attempt.TaskID,
+			selection.stage,
+			selection.generation,
+			file,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -43,23 +62,42 @@ func (service *ReleaseCheckpointService) LoadReleaseConfiguration(ctx context.Co
 	return manifest, nil
 }
 
-func (service *ReleaseCheckpointService) LoadReleaseConfigurationFile(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.ReleaseConfigurationFileRequest) (delivery *agentpb.ReleaseConfigurationFileDelivery, resultErr error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || entrymaterialization.ValidateDesiredDestination(request.Destination) != nil {
+func (service *ReleaseCheckpointService) LoadReleaseConfigurationFile(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.ReleaseConfigurationFileRequest,
+) (delivery *agentpb.ReleaseConfigurationFileDelivery, resultErr error) {
+	if request == nil || executionplan.RejectUnknown(request) != nil ||
+		entrymaterialization.ValidateDesiredDestination(request.Destination) != nil {
 		return nil, invalidConfigurationRequest()
 	}
 	selection, err := service.activeFileSelection(ctx, authorization, request.Attempt, request.StageId)
 	if err != nil {
 		return nil, err
 	}
-	index := slices.IndexFunc(selection.files, func(file taskmaterialization.Record) bool { return file.Destination == request.Destination })
+	index := slices.IndexFunc(
+		selection.files,
+		func(file taskmaterialization.Record) bool { return file.Destination == request.Destination },
+	)
 	if index < 0 {
 		return nil, invalidConfigurationRequest()
 	}
-	expected, err := materialization.CapturedFileHeader(selection.attempt.TaskID, selection.stage, selection.generation, selection.files[index])
+	expected, err := materialization.CapturedFileHeader(
+		selection.attempt.TaskID,
+		selection.stage,
+		selection.generation,
+		selection.files[index],
+	)
 	if err != nil {
 		return nil, err
 	}
-	header, source, err := service.files.OpenCapturedFile(ctx, selection.attempt.TaskID, selection.stage, selection.generation, selection.files[index])
+	header, source, err := service.files.OpenCapturedFile(
+		ctx,
+		selection.attempt.TaskID,
+		selection.stage,
+		selection.generation,
+		selection.files[index],
+	)
 	if source != nil {
 		defer func() {
 			resultErr = errors.Join(resultErr, source.Close())
@@ -95,13 +133,25 @@ func (service *ReleaseCheckpointService) LoadReleaseConfigurationFile(ctx contex
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	delivery = &agentpb.ReleaseConfigurationFileDelivery{Attempt: proto.CloneOf(request.Attempt), StageId: selection.stage,
-		Configuration: proto.CloneOf(selection.reference), File: releaseexecution.EncodeConfigurationFile(header), Content: content}
+	delivery = &agentpb.ReleaseConfigurationFileDelivery{
+		Attempt: proto.CloneOf(request.Attempt),
+		StageId: selection.stage,
+		Configuration: proto.CloneOf(
+			selection.reference,
+		),
+		File:    releaseexecution.EncodeConfigurationFile(header),
+		Content: content,
+	}
 	owned = true
 	return delivery, nil
 }
 
-func (service *ReleaseCheckpointService) activeConfiguration(ctx context.Context, authorization agentregistration.WorkAuthorization, identity *agentpb.WorkAttemptIdentity, stage string) (releaseexecution.Input, releaseexecution.CheckpointReport, []taskmaterialization.Record, error) {
+func (service *ReleaseCheckpointService) activeConfiguration(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	identity *agentpb.WorkAttemptIdentity,
+	stage string,
+) (releaseexecution.Input, releaseexecution.CheckpointReport, []taskmaterialization.Record, error) {
 	var empty releaseexecution.Input
 	var noReport releaseexecution.CheckpointReport
 	if service == nil || ctx == nil || service.files == nil {
@@ -118,8 +168,10 @@ func (service *ReleaseCheckpointService) activeConfiguration(ctx context.Context
 	if err != nil {
 		return empty, noReport, nil, err
 	}
-	if !view.ActiveAttempt || !view.CurrentExecutor || !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Attempt.Attempt.StartedAt == nil ||
-		view.Work.Task.Task.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil {
+	if !view.ActiveAttempt || !view.CurrentExecutor || !workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
+		view.Attempt.Attempt.StartedAt == nil ||
+		view.Work.Task.Task.FinishedAt != nil ||
+		view.Work.Task.Task.CollectionStartedAt != nil {
 		return empty, noReport, nil, invalidConfigurationRequest()
 	}
 	owner := service.forwards[view.Work.Item.Item.Operation]
@@ -130,13 +182,19 @@ func (service *ReleaseCheckpointService) activeConfiguration(ctx context.Context
 	if err != nil {
 		return empty, noReport, nil, err
 	}
-	if !workexecution.SameAssignment(input.Attempt, view.Attempt.Attempt) || report.StageID != stage || report.Ack == nil ||
-		report.ValidateEnvelope(input.Attempt) != nil || report.Progress.Validate(input) != nil || !report.Progress.InFlight || report.Progress.Phase != releaseexecution.Configuration ||
-		len(files) > 512 || len(files) != len(input.Release.ConfigurationDestinations) {
+	if !workexecution.SameAssignment(input.Attempt, view.Attempt.Attempt) || report.StageID != stage ||
+		report.Ack == nil ||
+		report.ValidateEnvelope(input.Attempt) != nil ||
+		report.Progress.Validate(input) != nil ||
+		!report.Progress.InFlight ||
+		report.Progress.Phase != releaseexecution.Configuration ||
+		len(files) > 512 ||
+		len(files) != len(input.Release.ConfigurationDestinations) {
 		return empty, noReport, nil, invalidConfigurationRequest()
 	}
 	for index, file := range files {
-		if file.EnvironmentID != input.Release.EnvironmentId || file.Destination != input.Release.ConfigurationDestinations[index] {
+		if file.EnvironmentID != input.Release.EnvironmentId ||
+			file.Destination != input.Release.ConfigurationDestinations[index] {
 			return empty, noReport, nil, invalidConfigurationRequest()
 		}
 	}

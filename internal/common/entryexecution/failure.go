@@ -43,7 +43,11 @@ func FailureID(attemptID string) (string, error) {
 	return ids.DeriveAt(ids.KindPlan, at, attemptID, "entry/failure"), nil
 }
 
-func EncodeFailure(attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, failure Failure) ([]byte, workexecution.Input, error) {
+func EncodeFailure(
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	failure Failure,
+) ([]byte, workexecution.Input, error) {
 	layout, err := CaptureLayout(attempt, input)
 	if err != nil {
 		return nil, workexecution.Input{}, invalidLayout()
@@ -51,21 +55,30 @@ func EncodeFailure(attempt workexecution.Attempt, input *agentpb.EntryConfigurat
 	return EncodeLayoutFailure(attempt, layout, failure)
 }
 
-func EncodeLayoutFailure(attempt workexecution.Attempt, layout Layout, failure Failure) ([]byte, workexecution.Input, error) {
+func EncodeLayoutFailure(
+	attempt workexecution.Attempt,
+	layout Layout,
+	failure Failure,
+) ([]byte, workexecution.Input, error) {
 	if layout.Validate(attempt) != nil {
 		return nil, workexecution.Input{}, invalidLayout()
 	}
 	if attempt.Validate() != nil || failure.AttemptID != attempt.ID ||
 		attempt.Direction != workexecution.Forward ||
 		failure.Input != attempt.Input || !failure.Reason.Valid() || failure.RecordedAt.IsZero() || failure.RecordedAt.Location() != time.UTC ||
-		failure.RecordedAt.Before(attempt.AssignedAt) || attempt.StartedAt != nil && failure.RecordedAt.Before(*attempt.StartedAt) ||
+		failure.RecordedAt.Before(
+			attempt.AssignedAt,
+		) || attempt.StartedAt != nil && failure.RecordedAt.Before(*attempt.StartedAt) ||
 		failure.Reason == DeadlineExpired && failure.RecordedAt.Before(attempt.Deadline) {
 		return nil, workexecution.Input{}, invalidLayout()
 	}
 	if checkpoint := failure.Checkpoint; checkpoint != nil {
-		if attempt.StartedAt == nil || checkpoint.AttemptID != attempt.ID || checkpoint.Sequence < 1 || checkpoint.Sequence > uint64(2*len(layout.stages())) ||
-			ids.Validate(ids.KindStep, checkpoint.StageID) != nil || checkpoint.Evidence.Validate() != nil ||
-			checkpoint.RecordedAt.Before(*attempt.StartedAt) || checkpoint.RecordedAt.After(failure.RecordedAt) {
+		if attempt.StartedAt == nil || checkpoint.AttemptID != attempt.ID || checkpoint.Sequence < 1 ||
+			checkpoint.Sequence > uint64(2*len(layout.stages())) ||
+			ids.Validate(ids.KindStep, checkpoint.StageID) != nil ||
+			checkpoint.Evidence.Validate() != nil ||
+			checkpoint.RecordedAt.Before(*attempt.StartedAt) ||
+			checkpoint.RecordedAt.After(failure.RecordedAt) {
 			return nil, workexecution.Input{}, invalidLayout()
 		}
 		stageAt, err := ids.Timestamp(ids.KindWorkItem, attempt.WorkItemID)
@@ -94,7 +107,12 @@ func EncodeLayoutFailure(attempt workexecution.Attempt, layout Layout, failure F
 	return raw, workexecution.Input{ID: id, SHA256: hex.EncodeToString(digest[:])}, nil
 }
 
-func DecodeFailure(attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, raw []byte, reference workexecution.Input) (Failure, error) {
+func DecodeFailure(
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	raw []byte,
+	reference workexecution.Input,
+) (Failure, error) {
 	layout, err := CaptureLayout(attempt, input)
 	if err != nil {
 		return Failure{}, err
@@ -102,7 +120,12 @@ func DecodeFailure(attempt workexecution.Attempt, input *agentpb.EntryConfigurat
 	return DecodeLayoutFailure(attempt, layout, raw, reference)
 }
 
-func DecodeLayoutFailure(attempt workexecution.Attempt, layout Layout, raw []byte, reference workexecution.Input) (Failure, error) {
+func DecodeLayoutFailure(
+	attempt workexecution.Attempt,
+	layout Layout,
+	raw []byte,
+	reference workexecution.Input,
+) (Failure, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return Failure{}, invalidLayout()
 	}

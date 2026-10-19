@@ -17,7 +17,10 @@ import (
 // PrepareBlueprintServiceRemoval publishes the captured removal input and its
 // protections with readiness. No Agent may observe ready work without the
 // deletion fence and retained configuration Secrets in the same transaction.
-func (repository *ServiceRepository) PrepareBlueprintServiceRemoval(ctx context.Context, taskID, workID string) (resultErr error) {
+func (repository *ServiceRepository) PrepareBlueprintServiceRemoval(
+	ctx context.Context,
+	taskID, workID string,
+) (resultErr error) {
 	queue, err := workqueue.NewRepository(repository.store)
 	if err != nil {
 		return err
@@ -56,20 +59,32 @@ func (repository *ServiceRepository) PrepareBlueprintServiceRemoval(ctx context.
 		if err != nil {
 			return err
 		}
-		if dependency.Item.Item.Phase != workexecution.Settled || dependency.Item.Item.Outcome != workexecution.Succeeded {
+		if dependency.Item.Item.Phase != workexecution.Settled ||
+			dependency.Item.Item.Outcome != workexecution.Succeeded {
 			return errs.New(errs.KindStateConflict, "Blueprint removal is waiting for its dependencies")
 		}
 		guards = append(guards, keyvalue.Condition{Key: workqueue.ItemKey(id), ModRevision: dependency.Item.Revision})
 	}
-	dns, err := dnsrecords.NewReader(repository.store).RequireDNSUnreferenced(ctx, capture.input.ServiceID, "", view.ReadRevision)
+	dns, err := dnsrecords.NewReader(repository.store).
+		RequireDNSUnreferenced(ctx, capture.input.ServiceID, "", view.ReadRevision)
 	if err != nil {
 		return err
 	}
-	scripts, err := scriptsourceevidence.PrepareServiceScriptAbsence(ctx, repository.store, capture.input.ServiceID, view.ReadRevision)
+	scripts, err := scriptsourceevidence.PrepareServiceScriptAbsence(
+		ctx,
+		repository.store,
+		capture.input.ServiceID,
+		view.ReadRevision,
+	)
 	if err != nil {
 		return err
 	}
-	fence, err := environmentfence.LoadOrdinary(ctx, repository.store, capture.input.Scope.EnvironmentID, view.ReadRevision)
+	fence, err := environmentfence.LoadOrdinary(
+		ctx,
+		repository.store,
+		capture.input.Scope.EnvironmentID,
+		view.ReadRevision,
+	)
 	if err != nil {
 		return err
 	}
@@ -110,7 +125,13 @@ func (repository *ServiceRepository) PrepareBlueprintServiceRemoval(ctx context.
 		return err
 	}
 	defer clear(epoch.Value)
-	result, err := queue.Commit(ctx, ready, resource, pins, workqueue.Change{Conditions: guards, Mutations: []keyvalue.Mutation{epoch}})
+	result, err := queue.Commit(
+		ctx,
+		ready,
+		resource,
+		pins,
+		workqueue.Change{Conditions: guards, Mutations: []keyvalue.Mutation{epoch}},
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return err

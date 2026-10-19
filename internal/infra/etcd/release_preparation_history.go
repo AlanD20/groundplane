@@ -35,7 +35,11 @@ func releasePreparationHistoryReference(key string, value []byte) (*storagemaint
 		OwnerID: capture.WorkItemID, Revision: capture.SourceReadRevision}, nil
 }
 
-func (s *store) releasePreparationHistoryHeld(ctx context.Context, pin *storagemaintenance.Pin, revision int64) (bool, error) {
+func (s *store) releasePreparationHistoryHeld(
+	ctx context.Context,
+	pin *storagemaintenance.Pin,
+	revision int64,
+) (bool, error) {
 	key := workqueue.ItemKey(pin.OwnerID)
 	read, err := s.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {

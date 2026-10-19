@@ -74,6 +74,9 @@ func (repository *InputRepository) PrepareReleaseEnsure(ctx context.Context, tas
 		return workqueue.Change{}, false, conflict("Release bridge staging changed its captured input")
 	}
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: keys[1]})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: keys[1], Value: desired})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: keys[1], Value: desired},
+	)
 	return change, false, nil
 }

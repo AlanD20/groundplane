@@ -38,12 +38,19 @@ type EntryWorkPublication struct {
 
 // PublishEntryConfigurationWork atomically accepts a direct Entry action.
 // Removal keeps the staged desired head private until acknowledged file cleanup.
-func (repository *HierarchyRepository) PublishEntryConfigurationWork(ctx context.Context, request EntryWorkPublication) (IdempotencyTransactionResult, error) {
+func (repository *HierarchyRepository) PublishEntryConfigurationWork(
+	ctx context.Context,
+	request EntryWorkPublication,
+) (IdempotencyTransactionResult, error) {
 	project, environment, claim := request.Project, request.Environment, request.Claim
 	task, item := request.Task, request.Item
 	if ctx == nil || repository == nil || hierarchyrecord.ValidateProject(project.Record) != nil ||
-		hierarchyrecord.ValidateEnvironment(environment.Record) != nil || task.Validate() != nil || item.Validate() != nil ||
-		blueprints.ValidateEnvironmentBlueprintStageClaim(claim) != nil || project.Revision <= 0 || environment.Revision <= 0 ||
+		hierarchyrecord.ValidateEnvironment(
+			environment.Record,
+		) != nil || task.Validate() != nil || item.Validate() != nil ||
+		blueprints.ValidateEnvironmentBlueprintStageClaim(
+			claim,
+		) != nil || project.Revision <= 0 || environment.Revision <= 0 ||
 		environment.Record.ProjectID != project.Record.ID || environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		task.Scope.ProjectID != project.Record.ID || task.Scope.EnvironmentID != environment.Record.ID ||
 		claim.EnvironmentID != environment.Record.ID || claim.TaskID != task.ID || claim.RevisionID != task.ID ||
@@ -54,9 +61,13 @@ func (repository *HierarchyRepository) PublishEntryConfigurationWork(ctx context
 			item.Placement.Executor != workexecution.Controller || !request.Secrets.IsZero())) ||
 		request.Marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
 		request.Marker.Locator.ScopeID != environment.Record.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Entry publication authority is inconsistent")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Entry publication authority is inconsistent",
+		)
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil || found {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
+		found {
 		return existing, err
 	}
 	fence, err := repository.loadEnvironmentBlueprintMutationFence(ctx, project, environment)
@@ -64,7 +75,10 @@ func (repository *HierarchyRepository) PublishEntryConfigurationWork(ctx context
 		return IdempotencyTransactionResult{}, err
 	}
 	if epoch, found := fence.EpochRevision(); !found || epoch != request.EpochRevision {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Entry running consumers changed before publication")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Entry running consumers changed before publication",
+		)
 	}
 	publication, err := repository.prepareEnvironmentBlueprintPublication(ctx, claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: environment.Record.ID, RevisionID: task.ID},
@@ -88,17 +102,30 @@ func (repository *HierarchyRepository) PublishEntryConfigurationWork(ctx context
 	guards = append(guards, request.PreparationConditions...)
 	guards = append(guards, identities.conditions...)
 	if request.Capture.Removal != nil {
-		scripts, err := entries.PrepareEntryScriptAbsence(ctx, repository.store, request.Capture.Removal.EntryID, fence.ReadRevision())
+		scripts, err := entries.PrepareEntryScriptAbsence(
+			ctx,
+			repository.store,
+			request.Capture.Removal.EntryID,
+			fence.ReadRevision(),
+		)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 		guards = append(guards, scripts...)
 	}
-	guards = append(guards,
+	guards = append(
+		guards,
 		keyvalue.Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		keyvalue.Condition{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintRootKey(environment.Record.ID, task.ID), ModRevision: publication.rootRevision},
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), ModRevision: claim.BaselineHeadRevision})
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintRootKey(environment.Record.ID, task.ID),
+			ModRevision: publication.rootRevision,
+		},
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
+			ModRevision: claim.BaselineHeadRevision,
+		},
+	)
 	if request.Input != nil {
 		configuration, err := sources.WorkConditions(ctx, request.Capture.Configuration, fence.ReadRevision())
 		if err != nil {
@@ -114,7 +141,14 @@ func (repository *HierarchyRepository) PublishEntryConfigurationWork(ctx context
 	}
 	var change workqueue.Change
 	if request.Input == nil {
-		change, err = repository.prepareEntryDefinitionPublication(ctx, request, inputs, sources, fence.ReadRevision(), guards)
+		change, err = repository.prepareEntryDefinitionPublication(
+			ctx,
+			request,
+			inputs,
+			sources,
+			fence.ReadRevision(),
+			guards,
+		)
 	} else {
 		_, change, err = inputs.PreparePublication(ctx, task, item, request.InputID, request.Input,
 			request.Capture, request.Secrets, request.Marker, guards, time.Now().UTC())
@@ -137,10 +171,20 @@ func (repository *HierarchyRepository) PublishEntryConfigurationWork(ctx context
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
-		change.Mutations = append(change.Mutations,
-			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), Value: reference},
-			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: publication.descriptorKey, Value: append([]byte(nil), publication.publishedDescriptor...)},
-			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: publication.locatorKey})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{
+				Type:  keyvalue.MutationPut,
+				Key:   blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
+				Value: reference,
+			},
+			keyvalue.Mutation{
+				Type:  keyvalue.MutationPut,
+				Key:   publication.descriptorKey,
+				Value: append([]byte(nil), publication.publishedDescriptor...),
+			},
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: publication.locatorKey},
+		)
 	}
 	queue, err := workqueue.NewRepository(repository.store)
 	if err != nil {
@@ -154,8 +198,12 @@ func (repository *HierarchyRepository) PublishEntryConfigurationWork(ctx context
 	if result.Succeeded {
 		return IdempotencyTransactionResult{kind: idempotencyTransactionApplied, revision: result.Revision}, nil
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil || found {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
+		found {
 		return existing, err
 	}
-	return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Entry publication changed before atomic acceptance")
+	return IdempotencyTransactionResult{}, errs.New(
+		errs.KindStateConflict,
+		"Entry publication changed before atomic acceptance",
+	)
 }

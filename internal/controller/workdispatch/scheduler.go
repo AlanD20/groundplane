@@ -114,7 +114,12 @@ type Sweep struct {
 // sweep; an empty cursor wraps to the oldest item. Blocked or failing work cannot
 // keep every later item behind it. Concurrent schedulers are serialized by the
 // assignment transaction, not by an in-process global lock.
-func (scheduler *Scheduler) Schedule(ctx context.Context, identity workexecution.Identity, after string, at time.Time) (Sweep, error) {
+func (scheduler *Scheduler) Schedule(
+	ctx context.Context,
+	identity workexecution.Identity,
+	after string,
+	at time.Time,
+) (Sweep, error) {
 	if ctx == nil || at.IsZero() {
 		return Sweep{}, errs.New(errs.KindInternal, "work scheduling requires context and time")
 	}
@@ -124,7 +129,11 @@ func (scheduler *Scheduler) Schedule(ctx context.Context, identity workexecution
 	if err := identity.Validate(); err != nil {
 		return Sweep{}, err
 	}
-	page, err := scheduler.queue.ScanReady(ctx, workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID}, after)
+	page, err := scheduler.queue.ScanReady(
+		ctx,
+		workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID},
+		after,
+	)
 	if err != nil {
 		return Sweep{}, err
 	}
@@ -252,18 +261,21 @@ func (decision Decision) validate(at, deadline time.Time) error {
 	invalid := func() error { return errs.New(errs.KindInternal, "operation admission returned an invalid decision") }
 	switch decision.Disposition {
 	case Dispatch:
-		if decision.Wait != nil || !decision.Deadline.After(at) || decision.Deadline.After(deadline) || len(decision.Change.Conditions) == 0 {
+		if decision.Wait != nil || !decision.Deadline.After(at) || decision.Deadline.After(deadline) ||
+			len(decision.Change.Conditions) == 0 {
 			return invalid()
 		}
 	case Wait:
-		if decision.Wait == nil || !decision.Deadline.IsZero() || len(decision.Change.Conditions) != 0 || len(decision.Change.Mutations) != 0 {
+		if decision.Wait == nil || !decision.Deadline.IsZero() || len(decision.Change.Conditions) != 0 ||
+			len(decision.Change.Mutations) != 0 {
 			return invalid()
 		}
 		if err := decision.Wait.Validate(); err != nil {
 			return invalid()
 		}
 	case Settle, NeedsAttention, Advance:
-		if decision.Wait != nil || !decision.Deadline.IsZero() || len(decision.Change.Conditions) == 0 || len(decision.Change.Mutations) == 0 {
+		if decision.Wait != nil || !decision.Deadline.IsZero() || len(decision.Change.Conditions) == 0 ||
+			len(decision.Change.Mutations) == 0 {
 			return invalid()
 		}
 	default:

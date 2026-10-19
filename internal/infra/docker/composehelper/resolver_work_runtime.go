@@ -12,7 +12,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func inspectResolverRuntime(ctx context.Context, taskRunner runner.Runner, input resolverexecution.HelperInput) ([]componentWorkContainer, error) {
+func inspectResolverRuntime(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input resolverexecution.HelperInput,
+) ([]componentWorkContainer, error) {
 	listed, err := runComponentWork(ctx, taskRunner, "container", "ls", "--all", "--no-trunc",
 		"--filter", "label=com.groundplane.component-id="+input.Layout.ComponentID,
 		"--filter", "label=com.docker.compose.project=groundplane-infra", "--format", "{{.ID}}")
@@ -56,17 +60,26 @@ func resolverContainerMatches(container componentWorkContainer, artifact *agentp
 	}
 	service := artifact.Services[0]
 	labels := container.Config.Labels
-	return labels["com.docker.compose.project"] == artifact.ProjectName && labels["com.docker.compose.service"] == service.ComposeName &&
-		labels["com.groundplane.managed"] == "true" && labels["com.groundplane.kind"] == "service" &&
-		labels["com.groundplane.component-id"] == service.OwnerComponentId && labels["com.groundplane.environment-id"] == "" &&
-		hasAllExpectedLabels(labels, service.ExpectedLabels) && container.Config.Image == service.ImageReference
+	return labels["com.docker.compose.project"] == artifact.ProjectName &&
+		labels["com.docker.compose.service"] == service.ComposeName &&
+		labels["com.groundplane.managed"] == "true" &&
+		labels["com.groundplane.kind"] == "service" &&
+		labels["com.groundplane.component-id"] == service.OwnerComponentId &&
+		labels["com.groundplane.environment-id"] == "" &&
+		hasAllExpectedLabels(labels, service.ExpectedLabels) &&
+		container.Config.Image == service.ImageReference
 }
 
 func resolverRuntimeReady(inventory []componentWorkContainer, artifact *agentpb.ComposeArtifact) bool {
 	return len(inventory) == 1 && resolverContainerMatches(inventory[0], artifact) && componentWorkReady(inventory)
 }
 
-func reconcileResolverRuntime(ctx context.Context, taskRunner runner.Runner, input resolverexecution.HelperInput, restore bool) error {
+func reconcileResolverRuntime(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input resolverexecution.HelperInput,
+	restore bool,
+) error {
 	configuration := input.Assignment.Input
 	target := configuration.Candidate
 	if restore {
@@ -134,5 +147,8 @@ func removeResolverRuntime(ctx context.Context, taskRunner runner.Runner, input 
 }
 
 func invalidResolverRuntime() error {
-	return errs.New(errs.KindStateConflict, "CoreDNS runtime does not match the captured container; no unrelated runtime was selected for removal")
+	return errs.New(
+		errs.KindStateConflict,
+		"CoreDNS runtime does not match the captured container; no unrelated runtime was selected for removal",
+	)
 }

@@ -16,15 +16,20 @@ func (c *Client) captureQueuedTaskRetry(ctx context.Context, taskID, workID stri
 		if err != nil {
 			return time.Time{}, err
 		}
-		if page.Task.ID != taskID || page.Work.Revision <= 0 || options.Revision != 0 && options.Revision != page.Work.Revision {
+		if page.Task.ID != taskID || page.Work.Revision <= 0 ||
+			options.Revision != 0 && options.Revision != page.Work.Revision {
 			return time.Time{}, errs.New(errs.KindInternal, "Task work returned a different snapshot")
 		}
 		for _, work := range page.Work.Items {
 			if work.ID != workID {
 				continue
 			}
-			if work.AttemptCount != 0 || work.Phase != "settled" || work.Outcome != "failed" || !work.Retry.Allowed || work.UpdatedAt.IsZero() {
-				return time.Time{}, errs.New(errs.KindTaskNotRetryable, "selected work no longer has a retryable queued failure")
+			if work.AttemptCount != 0 || work.Phase != "settled" || work.Outcome != "failed" || !work.Retry.Allowed ||
+				work.UpdatedAt.IsZero() {
+				return time.Time{}, errs.New(
+					errs.KindTaskNotRetryable,
+					"selected work no longer has a retryable queued failure",
+				)
 			}
 			return work.UpdatedAt, nil
 		}

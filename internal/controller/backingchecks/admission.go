@@ -171,10 +171,22 @@ func (service *Service) admit(ctx context.Context, environmentID string, input a
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
-	task := workexecution.Task{ID: checkOwner.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionCheck,
-		Scope:    workexecution.Scope{TenantID: owner.TenantID, ProjectID: owner.ProjectID, EnvironmentID: owner.EnvironmentID},
-		TargetID: input.AttachID, TargetName: facts.Consumer.Record.Name,
-		Intent: workexecution.Input{ID: checkOwner.PlanID, SHA256: hash}, ExpectedItems: 1,
-		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(60 * time.Second)}
+	task := workexecution.Task{
+		ID:     checkOwner.TaskID,
+		Actor:  workexecution.OperatorActor,
+		Action: workexecution.ActionCheck,
+		Scope: workexecution.Scope{
+			TenantID:      owner.TenantID,
+			ProjectID:     owner.ProjectID,
+			EnvironmentID: owner.EnvironmentID,
+		},
+		TargetID:      input.AttachID,
+		TargetName:    facts.Consumer.Record.Name,
+		Intent:        workexecution.Input{ID: checkOwner.PlanID, SHA256: hash},
+		ExpectedItems: 1,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		Deadline:      now.Add(60 * time.Second),
+	}
 	return service.publish(ctx, source, check, task, locator, evidence)
 }

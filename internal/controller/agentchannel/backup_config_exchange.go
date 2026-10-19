@@ -28,7 +28,11 @@ type configTransferExchange struct {
 	done     chan struct{}
 }
 
-func newConfigTransferExchange(ctx context.Context, assignment *agentpb.BackupWorkAssignment, identity workexecution.Identity) (*configTransferExchange, error) {
+func newConfigTransferExchange(
+	ctx context.Context,
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+) (*configTransferExchange, error) {
 	if ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Config exchange requires its attempt context")
 	}

@@ -73,7 +73,11 @@ func (inbox *Inbox) Register(assignment *agentpb.BackupWorkAssignment, identity 
 		key := transferSlotKey{binding.Attempt.ID, binding.SourceOrdinal}
 		if binding.Direction == agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_RESTORE {
 			if inbox.restores[key] == nil {
-				inbox.restores[key] = &restoreSlot{binding: binding, credits: make(chan *agentpb.BackupConfigCredit, 1), done: make(chan struct{})}
+				inbox.restores[key] = &restoreSlot{
+					binding: binding,
+					credits: make(chan *agentpb.BackupConfigCredit, 1),
+					done:    make(chan struct{}),
+				}
 			}
 		} else if inbox.slots[key] == nil {
 			inbox.slots[key] = &captureSlot{binding: binding, frames: make(chan *agentpb.BackupConfigTransfer, backupconfigtransfer.MetadataCreditRecords),

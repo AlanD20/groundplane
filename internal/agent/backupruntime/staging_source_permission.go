@@ -9,7 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (state *Staging) AuthorizeSourceResume(assignment *agentpb.BackupWorkAssignment, identity workexecution.Identity) error {
+func (state *Staging) AuthorizeSourceResume(
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+) error {
 	owned, attempt, err := executionplan.OpenBackupWorkAssignment(assignment, identity)
 	if err != nil {
 		return err
@@ -50,7 +53,10 @@ func (state *Staging) AuthorizeSourceResume(assignment *agentpb.BackupWorkAssign
 			}
 		}
 		if !bytes.Equal(digest, resume.AssignmentResumeSha256) {
-			return errs.New(errs.KindStateConflict, "Backup source resume differs from the acknowledged startup decision")
+			return errs.New(
+				errs.KindStateConflict,
+				"Backup source resume differs from the acknowledged startup decision",
+			)
 		}
 	}
 	return nil

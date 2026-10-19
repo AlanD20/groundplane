@@ -14,12 +14,19 @@ import (
 func (service *Service) captureComponentWorkConfiguration(ctx context.Context, work workqueue.View,
 	placement componentWorkPlacement, files []taskmaterialization.Record,
 ) (runtimeconfiguration.WorkCapture, error) {
-	configurationID := ids.DeriveAt(ids.KindConfig, work.Item.Item.CreatedAt, work.Item.Item.ID, "component-configuration")
+	configurationID := ids.DeriveAt(
+		ids.KindConfig,
+		work.Item.Item.CreatedAt,
+		work.Item.Item.ID,
+		"component-configuration",
+	)
 	return service.repository.PrepareComponentWorkConfiguration(ctx, work, configurationID,
 		placement.Selection.Source.desired.Record.RenderGeneration, files)
 }
 
-func componentWorkConfigurationReference(reference runtimeconfiguration.Reference) (*agentpb.WorkConfigurationReference, error) {
+func componentWorkConfigurationReference(
+	reference runtimeconfiguration.Reference,
+) (*agentpb.WorkConfigurationReference, error) {
 	if err := runtimeconfiguration.ValidateReference(reference); err != nil {
 		return nil, err
 	}

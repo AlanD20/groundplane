@@ -33,15 +33,22 @@ func RemovalFailureID(attemptID string) (string, error) {
 }
 
 func EncodeRemovalFailure(attempt workexecution.Attempt, failure RemovalFailure) ([]byte, workexecution.Input, error) {
-	if failure.Authority.Validate(attempt) != nil || failure.AttemptID != attempt.ID || failure.Input != attempt.Input ||
-		!failure.Reason.Valid() || failure.RecordedAt.IsZero() || failure.RecordedAt.Location() != time.UTC ||
-		failure.RecordedAt.Before(attempt.AssignedAt) || attempt.StartedAt != nil && failure.RecordedAt.Before(*attempt.StartedAt) ||
+	if failure.Authority.Validate(attempt) != nil || failure.AttemptID != attempt.ID ||
+		failure.Input != attempt.Input ||
+		!failure.Reason.Valid() ||
+		failure.RecordedAt.IsZero() ||
+		failure.RecordedAt.Location() != time.UTC ||
+		failure.RecordedAt.Before(attempt.AssignedAt) ||
+		attempt.StartedAt != nil && failure.RecordedAt.Before(*attempt.StartedAt) ||
 		failure.Reason == DeadlineExpired && failure.RecordedAt.Before(attempt.Deadline) {
 		return nil, workexecution.Input{}, invalid("Attach removal failure has invalid assignment or timing")
 	}
 	if cursor := failure.Checkpoint; cursor != nil {
-		if attempt.StartedAt == nil || cursor.AttemptID != attempt.ID || cursor.Sequence == 0 || cursor.Sequence >= uint64(failure.Authority.Commands)*2 ||
-			ids.Validate(ids.KindStep, cursor.StageID) != nil || cursor.Evidence.Validate() != nil || cursor.RecordedAt.Before(*attempt.StartedAt) ||
+		if attempt.StartedAt == nil || cursor.AttemptID != attempt.ID || cursor.Sequence == 0 ||
+			cursor.Sequence >= uint64(failure.Authority.Commands)*2 ||
+			ids.Validate(ids.KindStep, cursor.StageID) != nil ||
+			cursor.Evidence.Validate() != nil ||
+			cursor.RecordedAt.Before(*attempt.StartedAt) ||
 			cursor.RecordedAt.After(failure.RecordedAt) {
 			return nil, workexecution.Input{}, invalid("Attach removal failure has an invalid command checkpoint")
 		}
@@ -62,7 +69,11 @@ func EncodeRemovalFailure(attempt workexecution.Attempt, failure RemovalFailure)
 	return raw, workexecution.Input{ID: id, SHA256: hex.EncodeToString(digest[:])}, nil
 }
 
-func DecodeRemovalFailure(attempt workexecution.Attempt, raw []byte, reference workexecution.Input) (RemovalFailure, error) {
+func DecodeRemovalFailure(
+	attempt workexecution.Attempt,
+	raw []byte,
+	reference workexecution.Input,
+) (RemovalFailure, error) {
 	if len(raw) == 0 || len(raw) > MaximumRemovalReportBytes {
 		return RemovalFailure{}, invalid("Attach removal failure evidence is missing or oversized")
 	}

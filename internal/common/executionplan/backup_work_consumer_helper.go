@@ -18,7 +18,10 @@ type BackupConsumerHelperInput struct {
 	SourceOrdinal uint32
 }
 
-func OpenBackupConsumerHelper(ctx context.Context, request *agentpb.BackupConsumerHelperRequest) (BackupConsumerHelperInput, error) {
+func OpenBackupConsumerHelper(
+	ctx context.Context,
+	request *agentpb.BackupConsumerHelperRequest,
+) (BackupConsumerHelperInput, error) {
 	if ctx == nil || request == nil || proto.Size(request) > MaximumPlanBytes || RejectUnknown(request) != nil {
 		return BackupConsumerHelperInput{}, invalidBackupConsumerHelper()
 	}
@@ -32,7 +35,12 @@ func OpenBackupConsumerHelper(ctx context.Context, request *agentpb.BackupConsum
 	if request.Recovery != nil {
 		wire = request.Recovery.Attempt
 	}
-	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: wire.GetHostId(), AgentID: wire.GetAgentId(), Generation: wire.GetExecutorGeneration()}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     wire.GetHostId(),
+		AgentID:    wire.GetAgentId(),
+		Generation: wire.GetExecutorGeneration(),
+	}
 	var consumer BackupConsumerInput
 	var err error
 	if request.Recovery != nil {
@@ -53,19 +61,32 @@ func OpenBackupConsumerHelper(ctx context.Context, request *agentpb.BackupConsum
 		return BackupConsumerHelperInput{}, invalidBackupConsumerHelper()
 	}
 	consumer.Attempt.StartedAt = &started
-	result := BackupConsumerHelperInput{Consumer: consumer, Inspection: request.InspectOnly, Operation: request.Operation, SourceOrdinal: request.SourceOrdinal}
+	result := BackupConsumerHelperInput{
+		Consumer:      consumer,
+		Inspection:    request.InspectOnly,
+		Operation:     request.Operation,
+		SourceOrdinal: request.SourceOrdinal,
+	}
 	if request.InspectOnly {
-		if request.Operation != agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_UNSPECIFIED || request.Checkpoint != nil || request.Acknowledgement != nil {
+		if request.Operation != agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_UNSPECIFIED ||
+			request.Checkpoint != nil ||
+			request.Acknowledgement != nil {
 			return BackupConsumerHelperInput{}, invalidBackupConsumerHelper()
 		}
 		return result, nil
 	}
-	if request.Checkpoint.GetSourceOrdinal() != request.SourceOrdinal || !proto.Equal(request.Checkpoint.GetAttempt(), wire) {
+	if request.Checkpoint.GetSourceOrdinal() != request.SourceOrdinal ||
+		!proto.Equal(request.Checkpoint.GetAttempt(), wire) {
 		return BackupConsumerHelperInput{}, invalidBackupConsumerHelper()
 	}
 	var ack *agentpb.BackupWorkCheckpointAck
 	if request.Recovery != nil {
-		ack, err = ValidateBackupRestoreRecoveryCheckpointAck(request.Acknowledgement, request.Checkpoint, request.Recovery, identity)
+		ack, err = ValidateBackupRestoreRecoveryCheckpointAck(
+			request.Acknowledgement,
+			request.Checkpoint,
+			request.Recovery,
+			identity,
+		)
 	} else {
 		ack, err = ValidateBackupWorkCheckpointAck(request.Acknowledgement, request.Checkpoint, request.Assignment.Input, identity)
 	}
@@ -98,5 +119,8 @@ func OpenBackupConsumerHelper(ctx context.Context, request *agentpb.BackupConsum
 }
 
 func invalidBackupConsumerHelper() error {
-	return errs.New(errs.KindStateConflict, "Volume consumer command lacks its captured workload and acknowledged execution intent")
+	return errs.New(
+		errs.KindStateConflict,
+		"Volume consumer command lacks its captured workload and acknowledged execution intent",
+	)
 }

@@ -38,7 +38,10 @@ func (journal *Journal) SettleTerminalDelivery(ctx context.Context, attemptID st
 	return journal.Retire(ctx, terminal)
 }
 
-func (journal *Journal) saveTerminalDeliveryReceipt(ctx context.Context, attemptID string) (workexecution.Attempt, string, error) {
+func (journal *Journal) saveTerminalDeliveryReceipt(
+	ctx context.Context,
+	attemptID string,
+) (workexecution.Attempt, string, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return workexecution.Attempt{}, "", err
@@ -79,7 +82,12 @@ func (journal *Journal) saveTerminalDeliveryReceipt(ctx context.Context, attempt
 	return terminal, kind, err
 }
 
-func (record *attemptRecord) applyTerminalReceipt(request *agentpb.AgentMessage, reply *agentpb.ControllerMessage, terminal workexecution.Attempt, failure []byte) error {
+func (record *attemptRecord) applyTerminalReceipt(
+	request *agentpb.AgentMessage,
+	reply *agentpb.ControllerMessage,
+	terminal workexecution.Attempt,
+	failure []byte,
+) error {
 	_, kind, _, err := workreceipt.Describe(request)
 	if err != nil {
 		return err
@@ -134,17 +142,28 @@ func (record *attemptRecord) applyTerminalReceipt(request *agentpb.AgentMessage,
 		if record.RemovalRecovery == nil || record.RemovalRecovery.Failure == nil {
 			return conflict()
 		}
-		record.RemovalRecovery.Failure.Receipt, record.RemovalRecovery.Failure.Evidence = &terminal, slices.Clone(failure)
+		record.RemovalRecovery.Failure.Receipt, record.RemovalRecovery.Failure.Evidence = &terminal, slices.Clone(
+			failure,
+		)
 	case "lifecycle_completion":
 		if record.Lifecycle == nil {
 			return conflict()
 		}
 		if reply.GetServiceLifecycleCompletionAck().GetStopped() != nil {
-			proof, err := lifecycleexecution.DecodeFailureStages(terminal, record.Lifecycle.Stages, failure, *terminal.Result)
+			proof, err := lifecycleexecution.DecodeFailureStages(
+				terminal,
+				record.Lifecycle.Stages,
+				failure,
+				*terminal.Result,
+			)
 			if err != nil {
 				return err
 			}
-			record.Lifecycle.Failure = &LifecycleFailureDelivery{Reason: proof.Reason, Receipt: &terminal, Evidence: slices.Clone(failure)}
+			record.Lifecycle.Failure = &LifecycleFailureDelivery{
+				Reason:   proof.Reason,
+				Receipt:  &terminal,
+				Evidence: slices.Clone(failure),
+			}
 		} else {
 			record.Lifecycle.Completion = &terminal
 		}
@@ -182,7 +201,9 @@ func (record *attemptRecord) applyTerminalReceipt(request *agentpb.AgentMessage,
 		if record.EntryConfiguration == nil || record.EntryConfiguration.Failure == nil {
 			return conflict()
 		}
-		record.EntryConfiguration.Failure.Receipt, record.EntryConfiguration.Failure.Evidence = &terminal, slices.Clone(failure)
+		record.EntryConfiguration.Failure.Receipt, record.EntryConfiguration.Failure.Evidence = &terminal, slices.Clone(
+			failure,
+		)
 	case "entry_recovery":
 		if record.EntryRecovery == nil {
 			return conflict()
@@ -290,7 +311,11 @@ func (record *attemptRecord) applyTerminalReceipt(request *agentpb.AgentMessage,
 		if record.Failure == nil {
 			return conflict()
 		}
-		receipt, err := releaseexecution.DecodeFailureAck(record.Attempt, record.Failure.Reason, reply.GetReleaseWorkFailureAck())
+		receipt, err := releaseexecution.DecodeFailureAck(
+			record.Attempt,
+			record.Failure.Reason,
+			reply.GetReleaseWorkFailureAck(),
+		)
 		if err != nil {
 			return err
 		}

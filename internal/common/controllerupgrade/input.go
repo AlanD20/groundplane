@@ -17,14 +17,16 @@ type Input struct {
 }
 
 func (input Input) ValidateRecord() error {
-	if !input.Release.Valid() || !input.PreviousController.Valid() || input.Manifest.ControllerSHA256 == input.PreviousController {
+	if !input.Release.Valid() || !input.PreviousController.Valid() ||
+		input.Manifest.ControllerSHA256 == input.PreviousController {
 		return errs.New(errs.KindValidationFailed, "controller update identities are invalid or unchanged")
 	}
 	if err := (Release{Release: input.Release, Manifest: input.Manifest}).ValidateRecord(); err != nil {
 		return err
 	}
-	if input.Agent != nil && (ids.Validate(ids.KindAgent, input.Agent.ID) != nil || !imageref.IsDigestPinned(input.Agent.Image) ||
-		len(input.Agent.Image) > 1024 || input.Agent.Generation == 0 || input.Agent.Generation > math.MaxUint64-4) {
+	if input.Agent != nil &&
+		(ids.Validate(ids.KindAgent, input.Agent.ID) != nil || !imageref.IsDigestPinned(input.Agent.Image) ||
+			len(input.Agent.Image) > 1024 || input.Agent.Generation == 0 || input.Agent.Generation > math.MaxUint64-4) {
 		return errs.New(errs.KindValidationFailed, "controller activation Agent predecessor is invalid")
 	}
 	return nil

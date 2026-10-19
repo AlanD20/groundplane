@@ -13,7 +13,12 @@ func openNetworkRecoveryHelper(request *agentpb.NetworkWorkHelperRequest) (Netwo
 		return NetworkHelperInput{}, invalidNetworkWork()
 	}
 	claimed := request.Assignment.Attempt
-	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: claimed.HostId, AgentID: claimed.AgentId, Generation: claimed.ExecutorGeneration}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     claimed.HostId,
+		AgentID:    claimed.AgentId,
+		Generation: claimed.ExecutorGeneration,
+	}
 	attempt, err := workexecution.DecodeAgentAttempt(claimed, identity)
 	if err != nil {
 		return NetworkHelperInput{}, err
@@ -27,5 +32,11 @@ func openNetworkRecoveryHelper(request *agentpb.NetworkWorkHelperRequest) (Netwo
 		return NetworkHelperInput{}, err
 	}
 	attempt.StartedAt = &started
-	return NetworkHelperInput{Attempt: attempt, Procedure: procedure, Progress: boundary, InspectOnly: true, Recovery: &source}, nil
+	return NetworkHelperInput{
+		Attempt:     attempt,
+		Procedure:   procedure,
+		Progress:    boundary,
+		InspectOnly: true,
+		Recovery:    &source,
+	}, nil
 }

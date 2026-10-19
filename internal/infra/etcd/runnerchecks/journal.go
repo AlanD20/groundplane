@@ -19,7 +19,12 @@ type Journal struct {
 	identity   workexecution.Identity
 }
 
-func NewJournal(repository *Repository, owner Owner, attemptID string, identity workexecution.Identity) (*Journal, error) {
+func NewJournal(
+	repository *Repository,
+	owner Owner,
+	attemptID string,
+	identity workexecution.Identity,
+) (*Journal, error) {
 	if repository == nil || ids.Validate(ids.KindTask, owner.TaskID) != nil ||
 		ids.Validate(ids.KindPlan, owner.PlanID) != nil ||
 		ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
@@ -31,7 +36,11 @@ func NewJournal(repository *Repository, owner Owner, attemptID string, identity 
 }
 
 func (journal *Journal) Start(ctx context.Context, now time.Time) error {
-	return journal.mutate(ctx, true, func(record *Record, deadline time.Time) error { return record.Start(now, deadline) })
+	return journal.mutate(
+		ctx,
+		true,
+		func(record *Record, deadline time.Time) error { return record.Start(now, deadline) },
+	)
 }
 
 func (journal *Journal) Finish(ctx context.Context, result runnerconnectioncheck.Result, now time.Time) error {
@@ -55,7 +64,11 @@ func (journal *Journal) RejectAssigned(ctx context.Context, failure string, at t
 	})
 }
 
-func (journal *Journal) mutateState(ctx context.Context, forward, assignedOnly bool, change func(*Record, time.Time) error) error {
+func (journal *Journal) mutateState(
+	ctx context.Context,
+	forward, assignedOnly bool,
+	change func(*Record, time.Time) error,
+) error {
 	keys := []string{RecordKey(journal.owner.TaskID), workqueue.AttemptKey(journal.attemptID),
 		workqueue.ItemKey(journal.owner.WorkItemID), OperationKey(journal.owner.OperationID),
 		workqueue.TaskKey(journal.owner.TaskID), workqueue.ExecutorKey(journal.identity)}

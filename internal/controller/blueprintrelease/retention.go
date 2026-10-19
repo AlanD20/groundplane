@@ -13,7 +13,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (service *Service) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (service *Service) RetireWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	if view.Item.Item.Input == nil {
 		return service.RetireUnpreparedWork(ctx, view, at)
 	}
@@ -31,24 +36,51 @@ func (service *Service) RetireWork(ctx context.Context, view workqueue.View, at 
 	}
 	// Keep the immutable input until the last attempt is collected. These keys
 	// belong to execution, unlike the published Release and applied runtime.
-	guards.Mutations = append(guards.Mutations,
+	guards.Mutations = append(
+		guards.Mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: etcd.ReleaseWorkInputKey(view.Item.Item.ID)},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: releaserender.ServiceRolloutKey(view.Task.Task.Scope.EnvironmentID, view.Task.Task.ID, view.Item.Item.ID)},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: etcd.BlueprintProxyServiceRolloutKey(view.Task.Task.Scope.EnvironmentID, view.Task.Task.ID, view.Item.Item.ID)},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: releasework.UnstartedKey(view.Item.Item.ID) + "/", Prefix: true},
+		keyvalue.Mutation{
+			Type: keyvalue.MutationDelete,
+			Key: releaserender.ServiceRolloutKey(
+				view.Task.Task.Scope.EnvironmentID,
+				view.Task.Task.ID,
+				view.Item.Item.ID,
+			),
+		},
+		keyvalue.Mutation{
+			Type: keyvalue.MutationDelete,
+			Key: etcd.BlueprintProxyServiceRolloutKey(
+				view.Task.Task.Scope.EnvironmentID,
+				view.Task.Task.ID,
+				view.Item.Item.ID,
+			),
+		},
+		keyvalue.Mutation{
+			Type:   keyvalue.MutationDelete,
+			Key:    releasework.UnstartedKey(view.Item.Item.ID) + "/",
+			Prefix: true,
+		},
 	)
 	for _, hook := range sources.Rollout.Record.Render.Hooks {
 		key := scriptexecutions.ScriptExecutionKey(hook.ScriptExecutionID)
-		guards.Mutations = append(guards.Mutations,
+		guards.Mutations = append(
+			guards.Mutations,
 			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key},
 			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key + "/checkpoints/", Prefix: true},
-			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: scriptexecutions.ScriptRunnerSnapshotKey(hook.RunnerSnapshotID)},
+			keyvalue.Mutation{
+				Type: keyvalue.MutationDelete,
+				Key:  scriptexecutions.ScriptRunnerSnapshotKey(hook.RunnerSnapshotID),
+			},
 		)
 	}
 	return true, guards, nil
 }
 
-func (service *Service) RetireUnpreparedWork(ctx context.Context, view workqueue.View, at time.Time) (bool, workqueue.Change, error) {
+func (service *Service) RetireUnpreparedWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (bool, workqueue.Change, error) {
 	retired, err := service.ledger.RetireUnpublishedHookStage(ctx, view)
 	if err != nil || !retired {
 		return false, workqueue.Change{}, err
@@ -64,7 +96,11 @@ func (service *Service) RetireUnpreparedWork(ctx context.Context, view workqueue
 	return err == nil, change, err
 }
 
-func (service *Service) retireDirectPreparation(ctx context.Context, view workqueue.View, change workqueue.Change) (workqueue.Change, error) {
+func (service *Service) retireDirectPreparation(
+	ctx context.Context,
+	view workqueue.View,
+	change workqueue.Change,
+) (workqueue.Change, error) {
 	if view.Task.Task.Action == workexecution.ActionApply {
 		return change, nil
 	}
@@ -77,6 +113,9 @@ func (service *Service) retireDirectPreparation(ctx context.Context, view workqu
 	return change, nil
 }
 
-func (service *Service) PrepareAttemptRetirement(view workqueue.View, attempt workqueue.AttemptSnapshot) (workqueue.Change, error) {
+func (service *Service) PrepareAttemptRetirement(
+	view workqueue.View,
+	attempt workqueue.AttemptSnapshot,
+) (workqueue.Change, error) {
 	return releasework.PrepareAttemptRetirement(view, attempt)
 }

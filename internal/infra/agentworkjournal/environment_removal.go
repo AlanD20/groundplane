@@ -21,7 +21,9 @@ type EnvironmentRemovalRecord struct {
 	Completion    *workexecution.Attempt                  `json:"completion,omitempty"`
 }
 
-func (record EnvironmentRemovalRecord) input(attempt workexecution.Attempt) (hierarchyexecution.EnvironmentInput, error) {
+func (record EnvironmentRemovalRecord) input(
+	attempt workexecution.Attempt,
+) (hierarchyexecution.EnvironmentInput, error) {
 	if record.Source.Validate() != nil {
 		return hierarchyexecution.EnvironmentInput{}, invalid()
 	}
@@ -29,10 +31,14 @@ func (record EnvironmentRemovalRecord) input(attempt workexecution.Attempt) (hie
 	if err != nil {
 		return hierarchyexecution.EnvironmentInput{}, invalid()
 	}
-	return hierarchyexecution.EnvironmentInput{Attempt: attempt, Recovery: record.Recovery, Removal: &agentpb.EnvironmentRemovalInput{
-		CapturedSource: &agentpb.WorkInputReference{InputId: record.Source.ID, Sha256: digest},
-		EnvironmentId:  record.EnvironmentID, ExpectedVolumeDir: record.Directory,
-	}}, nil
+	return hierarchyexecution.EnvironmentInput{
+		Attempt:  attempt,
+		Recovery: record.Recovery,
+		Removal: &agentpb.EnvironmentRemovalInput{
+			CapturedSource: &agentpb.WorkInputReference{InputId: record.Source.ID, Sha256: digest},
+			EnvironmentId:  record.EnvironmentID, ExpectedVolumeDir: record.Directory,
+		},
+	}, nil
 }
 
 func (record EnvironmentRemovalRecord) matches(input hierarchyexecution.EnvironmentInput) bool {
@@ -49,8 +55,10 @@ func (record EnvironmentRemovalRecord) matches(input hierarchyexecution.Environm
 			return false
 		}
 	}
-	return input.Removal != nil && input.Removal.CapturedSource != nil && record.EnvironmentID == input.Removal.EnvironmentId &&
-		record.Directory == input.Removal.ExpectedVolumeDir && record.Source.ID == input.Removal.CapturedSource.InputId &&
+	return input.Removal != nil && input.Removal.CapturedSource != nil &&
+		record.EnvironmentID == input.Removal.EnvironmentId &&
+		record.Directory == input.Removal.ExpectedVolumeDir &&
+		record.Source.ID == input.Removal.CapturedSource.InputId &&
 		record.Source.SHA256 == hex.EncodeToString(input.Removal.CapturedSource.Sha256)
 }
 
@@ -68,16 +76,24 @@ func (record attemptRecord) validateEnvironmentRemoval() error {
 	if _, err := removal.Report.Checkpoint(input); err != nil {
 		return err
 	}
-	if removal.Report.Progress.Sequence != record.Sequence || !removal.Report.Progress.UpdatedAt.Equal(record.UpdatedAt) {
+	if removal.Report.Progress.Sequence != record.Sequence ||
+		!removal.Report.Progress.UpdatedAt.Equal(record.UpdatedAt) {
 		return invalid()
 	}
 	if terminal := removal.Completion; terminal != nil {
 		checkpoint, err := removal.Report.Checkpoint(input)
-		if err != nil || !removal.Acknowledged || removal.Report.Progress.Phase != hierarchyexecution.EnvironmentRemoved ||
-			terminal.Validate() != nil || !workexecution.SameAssignment(*terminal, record.Attempt) ||
-			terminal.StartedAt == nil || record.Attempt.StartedAt == nil || !terminal.StartedAt.Equal(*record.Attempt.StartedAt) ||
-			terminal.FinishedAt == nil || terminal.FinishedAt.Before(record.UpdatedAt) || terminal.Outcome != workexecution.Succeeded ||
-			terminal.Result == nil || *terminal.Result != checkpoint.Evidence {
+		if err != nil || !removal.Acknowledged ||
+			removal.Report.Progress.Phase != hierarchyexecution.EnvironmentRemoved ||
+			terminal.Validate() != nil ||
+			!workexecution.SameAssignment(*terminal, record.Attempt) ||
+			terminal.StartedAt == nil ||
+			record.Attempt.StartedAt == nil ||
+			!terminal.StartedAt.Equal(*record.Attempt.StartedAt) ||
+			terminal.FinishedAt == nil ||
+			terminal.FinishedAt.Before(record.UpdatedAt) ||
+			terminal.Outcome != workexecution.Succeeded ||
+			terminal.Result == nil ||
+			*terminal.Result != checkpoint.Evidence {
 			return invalid()
 		}
 	}

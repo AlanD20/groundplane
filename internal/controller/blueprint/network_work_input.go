@@ -19,7 +19,10 @@ import (
 
 // A bridge must be prepared before Services can render their runtime. Its input
 // therefore depends on the captured authored Zone, not the runtime projection.
-func (service *Service) prepareAuthoredNetworkInput(ctx context.Context, work workqueue.View) (*agentpb.NetworkWorkInput, []keyvalue.Condition, error) {
+func (service *Service) prepareAuthoredNetworkInput(
+	ctx context.Context,
+	work workqueue.View,
+) (*agentpb.NetworkWorkInput, []keyvalue.Condition, error) {
 	source, err := service.loadAuthoredRuntimeProjectionSource(ctx, work.Task.Task)
 	if err != nil {
 		return nil, nil, err
@@ -27,10 +30,17 @@ func (service *Service) prepareAuthoredNetworkInput(ctx context.Context, work wo
 	for _, revision := range []int64{source.desired.Revision, source.identities.Revision,
 		source.environment.Revision, source.project.Revision} {
 		if revision <= 0 || revision > work.ReadRevision {
-			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Zone source changed after its preparation snapshot")
+			return nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Zone source changed after its preparation snapshot",
+			)
 		}
 	}
-	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(ctx, source.desired.Record, source.identities.Record)
+	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
+		ctx,
+		source.desired.Record,
+		source.identities.Record,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -55,14 +65,23 @@ func (service *Service) prepareAuthoredNetworkInput(ctx context.Context, work wo
 	}
 	if source.project.Record.Kind == hierarchy.ProjectKindTenant {
 		if source.tenant.Revision <= 0 || source.tenant.Revision > work.ReadRevision {
-			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Zone Tenant changed after its preparation snapshot")
+			return nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Zone Tenant changed after its preparation snapshot",
+			)
 		}
 		ownerKind = composerender.ComposeProjectOwnerTenant
-		guards = append(guards, keyvalue.Condition{Key: hierarchy.TenantKey(source.tenant.Record.ID), ModRevision: source.tenant.Revision})
+		guards = append(
+			guards,
+			keyvalue.Condition{Key: hierarchy.TenantKey(source.tenant.Record.ID), ModRevision: source.tenant.Revision},
+		)
 	}
 	item := work.Item.Item
 	artifact, err := composerender.RenderCompose(composerender.ComposeRenderInput{
-		Project:          &composetypes.Project{Name: project.Name, Networks: composetypes.Networks{identity.Name: network}},
+		Project: &composetypes.Project{
+			Name:     project.Name,
+			Networks: composetypes.Networks{identity.Name: network},
+		},
 		ArtifactID:       ids.DeriveAt(ids.KindConfig, item.CreatedAt, item.ID, "network-artifact"),
 		ProjectOwnerKind: ownerKind, TenantID: work.Task.Task.Scope.TenantID,
 		ProjectID: source.project.Record.ID, EnvironmentID: source.environment.Record.ID,

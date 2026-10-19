@@ -15,7 +15,11 @@ import (
 
 // Only execution evidence expires here. Component metadata, applied receipts
 // and any retained proxy rollout inputs keep their resource-owned lifetimes.
-func (repository *Repository) PrepareComponentDefinitionRetention(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareComponentDefinitionRetention(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return workqueue.Change{}, err
 	}
@@ -28,7 +32,10 @@ func (repository *Repository) PrepareComponentDefinitionRetention(ctx context.Co
 		return workqueue.Change{}, invalidRecord()
 	}
 	key := ComponentDefinitionResultKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}

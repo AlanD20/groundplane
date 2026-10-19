@@ -12,8 +12,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachCheckpoint(ctx context.Context, view workqueue.ResumeView,
-	input attachexecution.RemovalInput, report attachexecution.RemovalReport,
+func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachCheckpoint(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input attachexecution.RemovalInput,
+	report attachexecution.RemovalReport,
 ) (workqueue.Change, error) {
 	capture, err := repository.LoadHierarchyAttachCapture(ctx, view.Work)
 	if err != nil {
@@ -31,7 +34,11 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachCheckpoint(
 	return change, nil
 }
 
-func validateHierarchyAttachSource(view workqueue.View, capture HierarchyAttachCapture, input attachexecution.RemovalInput) error {
+func validateHierarchyAttachSource(
+	view workqueue.View,
+	capture HierarchyAttachCapture,
+	input attachexecution.RemovalInput,
+) error {
 	if capture.Revision <= 0 || input.Removal == nil || input.Removal.CapturedSource == nil {
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
@@ -42,8 +49,14 @@ func validateHierarchyAttachSource(view workqueue.View, capture HierarchyAttachC
 	digest := sha256.Sum256(raw)
 	clear(raw)
 	source := input.Removal.CapturedSource
-	if source.InputId != ids.DeriveAt(ids.KindPlan, view.Task.Task.CreatedAt, view.Item.Item.ID, "attach-removal-source") ||
-		!bytes.Equal(source.Sha256, digest[:]) || input.Removal.AttachId != capture.Source.Input.Attach.ID ||
+	if source.InputId != ids.DeriveAt(
+		ids.KindPlan,
+		view.Task.Task.CreatedAt,
+		view.Item.Item.ID,
+		"attach-removal-source",
+	) ||
+		!bytes.Equal(source.Sha256, digest[:]) ||
+		input.Removal.AttachId != capture.Source.Input.Attach.ID ||
 		input.Removal.BackingServiceId != capture.Source.Input.Attach.BackingServiceID {
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}

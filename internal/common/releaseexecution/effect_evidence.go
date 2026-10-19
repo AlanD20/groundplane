@@ -34,16 +34,30 @@ type EffectEvidence struct {
 	Result     EffectResult        `json:"result"`
 }
 
-func EncodeEffectEvidence(input Input, report CheckpointReport, result EffectResult, at time.Time) ([]byte, workexecution.Input, error) {
-	if report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil || result.validate(input, report.Progress, at) != nil ||
-		at.IsZero() || at.Before(report.Progress.UpdatedAt) {
+func EncodeEffectEvidence(
+	input Input,
+	report CheckpointReport,
+	result EffectResult,
+	at time.Time,
+) ([]byte, workexecution.Input, error) {
+	if report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil ||
+		result.validate(input, report.Progress, at) != nil ||
+		at.IsZero() ||
+		at.Before(report.Progress.UpdatedAt) {
 		return nil, workexecution.Input{}, invalidProgress()
 	}
 	stage, err := report.Progress.StageID(input)
 	if err != nil || stage != report.StageID {
 		return nil, workexecution.Input{}, invalidProgress()
 	}
-	record := EffectEvidence{AttemptID: input.Attempt.ID, Input: input.Attempt.Input, Sequence: report.Sequence, StageID: stage, RecordedAt: at.UTC(), Result: result}
+	record := EffectEvidence{
+		AttemptID:  input.Attempt.ID,
+		Input:      input.Attempt.Input,
+		Sequence:   report.Sequence,
+		StageID:    stage,
+		RecordedAt: at.UTC(),
+		Result:     result,
+	}
 	raw, err := json.Marshal(record)
 	if err != nil || len(raw) > MaximumCheckpointBytes {
 		return nil, workexecution.Input{}, invalidProgress()
@@ -56,12 +70,19 @@ func EncodeEffectEvidence(input Input, report CheckpointReport, result EffectRes
 	return raw, reference, err
 }
 
-func DecodeEffectEvidence(input Input, report CheckpointReport, raw []byte, reference workexecution.Input) (EffectEvidence, error) {
+func DecodeEffectEvidence(
+	input Input,
+	report CheckpointReport,
+	raw []byte,
+	reference workexecution.Input,
+) (EffectEvidence, error) {
 	if len(raw) == 0 || len(raw) > MaximumCheckpointBytes {
 		return EffectEvidence{}, invalidProgress()
 	}
 	record, err := jcs.Decode[EffectEvidence](raw)
-	if err != nil || record.AttemptID != input.Attempt.ID || record.Input != input.Attempt.Input || record.Sequence != report.Sequence || record.StageID != report.StageID {
+	if err != nil || record.AttemptID != input.Attempt.ID || record.Input != input.Attempt.Input ||
+		record.Sequence != report.Sequence ||
+		record.StageID != report.StageID {
 		return EffectEvidence{}, invalidProgress()
 	}
 	canonical, expected, err := EncodeEffectEvidence(input, report, record.Result, record.RecordedAt)
@@ -76,7 +97,12 @@ func effectEvidenceReference(input Input, report CheckpointReport, raw []byte) (
 	if err != nil {
 		return workexecution.Input{}, err
 	}
-	id := ids.DeriveAt(ids.KindPlan, at, input.Attempt.ID, fmt.Sprintf("release/effect/%d/%s", report.Sequence, report.StageID))
+	id := ids.DeriveAt(
+		ids.KindPlan,
+		at,
+		input.Attempt.ID,
+		fmt.Sprintf("release/effect/%d/%s", report.Sequence, report.StageID),
+	)
 	digest := sha256.Sum256(raw)
 	return workexecution.Input{ID: id, SHA256: hex.EncodeToString(digest[:])}, nil
 }

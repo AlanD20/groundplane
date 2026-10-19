@@ -68,7 +68,10 @@ func ValidateNetworkWorkInput(input *agentpb.NetworkWorkInput) error {
 	}
 }
 
-func CaptureNetworkWorkInput(inputID string, input *agentpb.NetworkWorkInput) (*agentpb.NetworkWorkInput, []byte, workexecution.Input, error) {
+func CaptureNetworkWorkInput(
+	inputID string,
+	input *agentpb.NetworkWorkInput,
+) (*agentpb.NetworkWorkInput, []byte, workexecution.Input, error) {
 	if err := ValidateNetworkWorkInput(input); err != nil {
 		return nil, nil, workexecution.Input{}, err
 	}
@@ -85,7 +88,10 @@ func CaptureNetworkWorkInput(inputID string, input *agentpb.NetworkWorkInput) (*
 	return owned, raw, reference, nil
 }
 
-func OpenNetworkWorkInput(attempt workexecution.Attempt, input *agentpb.NetworkWorkInput) (*agentpb.NetworkWorkInput, error) {
+func OpenNetworkWorkInput(
+	attempt workexecution.Attempt,
+	input *agentpb.NetworkWorkInput,
+) (*agentpb.NetworkWorkInput, error) {
 	if attempt.Validate() != nil || attempt.Executor.Executor != workexecution.Agent ||
 		attempt.Direction != workexecution.Forward || attempt.FinishedAt != nil {
 		return nil, invalidNetworkWork()
@@ -101,5 +107,8 @@ func OpenNetworkWorkInput(attempt workexecution.Attempt, input *agentpb.NetworkW
 }
 
 func invalidNetworkWork() error {
-	return errs.New(errs.KindValidationFailed, "Network execution requires one captured managed bridge and its Environment owner")
+	return errs.New(
+		errs.KindValidationFailed,
+		"Network execution requires one captured managed bridge and its Environment owner",
+	)
 }

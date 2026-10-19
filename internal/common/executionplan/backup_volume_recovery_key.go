@@ -13,7 +13,11 @@ import (
 // BackupVolumeRecoveryKey identifies one source's retained mutation journals.
 // The full attempt binds it to the captured input and original host generation;
 // a later attempt cannot inherit deletion or execution permission from this key.
-func BackupVolumeRecoveryKey(attempt workexecution.Attempt, ordinal uint32, pointID, generation string) ([]byte, error) {
+func BackupVolumeRecoveryKey(
+	attempt workexecution.Attempt,
+	ordinal uint32,
+	pointID, generation string,
+) ([]byte, error) {
 	if ids.Validate(ids.KindRecoveryPoint, pointID) != nil || len(generation) != 26 {
 		return nil, invalidBackupStaging()
 	}

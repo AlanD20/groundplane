@@ -35,7 +35,15 @@ func (service *Service) publishGroupWork(ctx context.Context, scope releasequeri
 		return idempotency.IdempotencyResponse{}, err
 	}
 	defer addresses.Clear()
-	capture, err := service.captureGroupWork(ctx, scope, group, projection, candidates, addresses, durable.CiphertextDigest)
+	capture, err := service.captureGroupWork(
+		ctx,
+		scope,
+		group,
+		projection,
+		candidates,
+		addresses,
+		durable.CiphertextDigest,
+	)
 	defer capture.Clear()
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err

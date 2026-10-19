@@ -10,7 +10,12 @@ import (
 // PrepareUnstartedSettlement joins the operation owner's immutable evidence and
 // resource comparisons. No attempt or worker slot is invented for Controller
 // decisions that make host execution unnecessary.
-func PrepareUnstartedSettlement(task TaskSnapshot, item ItemSnapshot, result workexecution.Completion, at time.Time) (Change, error) {
+func PrepareUnstartedSettlement(
+	task TaskSnapshot,
+	item ItemSnapshot,
+	result workexecution.Completion,
+	at time.Time,
+) (Change, error) {
 	if item.Revision <= 0 {
 		return Change{}, invalid("unstarted settlement requires current work")
 	}
@@ -21,7 +26,12 @@ func PrepareUnstartedSettlement(task TaskSnapshot, item ItemSnapshot, result wor
 	return prepareQueuedSettlement(task, item, next, at)
 }
 
-func PrepareQueuedRetrySettlement(task TaskSnapshot, item ItemSnapshot, result workexecution.Completion, at time.Time) (Change, error) {
+func PrepareQueuedRetrySettlement(
+	task TaskSnapshot,
+	item ItemSnapshot,
+	result workexecution.Completion,
+	at time.Time,
+) (Change, error) {
 	if item.Revision <= 0 {
 		return Change{}, invalid("retry settlement requires current work")
 	}
@@ -32,7 +42,12 @@ func PrepareQueuedRetrySettlement(task TaskSnapshot, item ItemSnapshot, result w
 	return prepareQueuedSettlement(task, item, next, at)
 }
 
-func prepareQueuedSettlement(task TaskSnapshot, item ItemSnapshot, next workexecution.Item, at time.Time) (Change, error) {
+func prepareQueuedSettlement(
+	task TaskSnapshot,
+	item ItemSnapshot,
+	next workexecution.Item,
+	at time.Time,
+) (Change, error) {
 	value, err := EncodeItem(next)
 	if err != nil {
 		return Change{}, err
@@ -42,7 +57,10 @@ func prepareQueuedSettlement(task TaskSnapshot, item ItemSnapshot, next workexec
 		Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: ItemKey(next.ID), Value: value}},
 	}
 	if item.Item.Phase == workexecution.Ready || retryWaiting(item.Item) {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: QueueKey(next)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: QueueKey(next)},
+		)
 	}
 	// Unassigned work has no claims: initial assignment has not acquired them,
 	// and admission of a forward retry required previous effects to be settled.

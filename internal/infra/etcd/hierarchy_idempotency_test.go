@@ -101,7 +101,7 @@ func hierarchyDeletionCreationTestBegin(
 	}
 	idempotencyDigest := sha256.Sum256([]byte(key))
 	return HierarchyDeletionBegin{
-		OperationID: "del_" + strings.Repeat(digestDigit, 32),
+		OperationID:   "del_" + strings.Repeat(digestDigit, 32),
 		OperationKind: operationKind, TargetKind: targetKind, TargetID: targetID,
 		TaskID: taskID, IdempotencyHash: hex.EncodeToString(idempotencyDigest[:]), Marker: marker,
 		CreatedAt: now, DeadlineAt: now.Add(testhierarchydeletion.AttemptTimeout),

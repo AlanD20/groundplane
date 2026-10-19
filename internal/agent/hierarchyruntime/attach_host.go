@@ -25,7 +25,10 @@ func NewBackingHost(journal *agentworkjournal.Journal, adapter *backingadapter.R
 	ownership *agentownership.Lease, commands *backingcommand.Executor,
 ) (*BackingHost, error) {
 	if journal == nil || adapter == nil || commands == nil {
-		return nil, errs.New(errs.KindInternal, "Attach removal host requires its journal, adapter catalog and durable command executor")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Attach removal host requires its journal, adapter catalog and durable command executor",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
@@ -37,14 +40,20 @@ func (host *BackingHost) ExecuteRemovalCommand(ctx context.Context, input attach
 	progress attachexecution.RemovalProgress, inspectOnly bool,
 ) (attachexecution.RemovalCommandResult, error) {
 	if ctx == nil || progress.Validate(input) != nil || !progress.InFlight {
-		return attachexecution.RemovalCommandResult{}, errs.New(errs.KindStateConflict, "Attach command requires an acknowledged in-flight boundary")
+		return attachexecution.RemovalCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Attach command requires an acknowledged in-flight boundary",
+		)
 	}
 	saved, err := host.journal.AttachRemoval(ctx, input)
 	if err != nil {
 		return attachexecution.RemovalCommandResult{}, err
 	}
 	if saved == nil || !saved.Acknowledged {
-		return attachexecution.RemovalCommandResult{}, errs.New(errs.KindStateConflict, "Attach command has no acknowledged Agent journal boundary")
+		return attachexecution.RemovalCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Attach command has no acknowledged Agent journal boundary",
+		)
 	}
 	want, err := (attachexecution.RemovalReport{Progress: progress}).Checkpoint(input)
 	if err != nil {
@@ -52,7 +61,10 @@ func (host *BackingHost) ExecuteRemovalCommand(ctx context.Context, input attach
 	}
 	got, err := saved.Report.Checkpoint(input)
 	if err != nil || got.Sequence != want.Sequence || got.Evidence != want.Evidence {
-		return attachexecution.RemovalCommandResult{}, errs.New(errs.KindStateConflict, "Attach command differs from its saved authorization")
+		return attachexecution.RemovalCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Attach command differs from its saved authorization",
+		)
 	}
 	if result := saved.CommandResult; result != nil {
 		return *result, nil
@@ -61,7 +73,10 @@ func (host *BackingHost) ExecuteRemovalCommand(ctx context.Context, input attach
 		if err := host.observeRemovalExecs(ctx, input, saved); err != nil {
 			return attachexecution.RemovalCommandResult{}, err
 		}
-		return attachexecution.RemovalCommandResult{}, errs.New(errs.KindStateConflict, "Attach command was interrupted without a saved result; automatic replay is disabled")
+		return attachexecution.RemovalCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Attach command was interrupted without a saved result; automatic replay is disabled",
+		)
 	}
 	if err := host.ownership.Check(); err != nil {
 		return attachexecution.RemovalCommandResult{}, err
@@ -96,7 +111,11 @@ func (host *BackingHost) ExecuteRemovalCommand(ctx context.Context, input attach
 			return attachexecution.RemovalCommandResult{}, err
 		}
 	}
-	result := attachexecution.RemovalCommandResult{Ordinal: progress.Completed, StartedAt: *progress.BeganAt, FinishedAt: time.Now().UTC()}
+	result := attachexecution.RemovalCommandResult{
+		Ordinal:    progress.Completed,
+		StartedAt:  *progress.BeganAt,
+		FinishedAt: time.Now().UTC(),
+	}
 	// A cancelled delivery still must durably save its observed successful
 	// return; this bounded write does not authorize another external effect.
 	storage, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)

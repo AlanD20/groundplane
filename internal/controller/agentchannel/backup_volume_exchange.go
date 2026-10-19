@@ -24,7 +24,11 @@ type volumeManifestExchange struct {
 	closed bool
 }
 
-func newVolumeManifestExchange(ctx context.Context, assignment *agentpb.BackupWorkAssignment, identity workexecution.Identity) (*volumeManifestExchange, error) {
+func newVolumeManifestExchange(
+	ctx context.Context,
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+) (*volumeManifestExchange, error) {
 	owned, _, err := executionplan.OpenBackupWorkAssignment(assignment, identity)
 	if err != nil {
 		return nil, err

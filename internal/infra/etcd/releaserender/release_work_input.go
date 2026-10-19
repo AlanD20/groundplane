@@ -67,7 +67,10 @@ func EncodeReleaseWorkInput(input ReleaseWorkInput) ([]byte, workexecution.Input
 	}
 	if len(value) > keyvalue.MaximumBytes {
 		clear(value)
-		return nil, workexecution.Input{}, errs.New(errs.KindReleasePlanTooLarge, "Service Release work input exceeds the storage budget")
+		return nil, workexecution.Input{}, errs.New(
+			errs.KindReleasePlanTooLarge,
+			"Service Release work input exceeds the storage budget",
+		)
 	}
 	digest := sha256.Sum256(value)
 	return value, workexecution.Input{ID: input.Rollout.ID, SHA256: hex.EncodeToString(digest[:])}, nil
@@ -75,7 +78,10 @@ func EncodeReleaseWorkInput(input ReleaseWorkInput) ([]byte, workexecution.Input
 
 func DecodeReleaseWorkInput(value []byte, expected workexecution.Input) (ReleaseWorkInput, error) {
 	if len(value) == 0 || len(value) > keyvalue.MaximumBytes || expected.Validate() != nil {
-		return ReleaseWorkInput{}, errs.New(errs.KindValidationFailed, "Service Release work input reference is invalid")
+		return ReleaseWorkInput{}, errs.New(
+			errs.KindValidationFailed,
+			"Service Release work input reference is invalid",
+		)
 	}
 	digest := sha256.Sum256(value)
 	if hex.EncodeToString(digest[:]) != expected.SHA256 {

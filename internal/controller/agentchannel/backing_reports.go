@@ -11,21 +11,56 @@ import (
 )
 
 type BackingReporter interface {
-	CheckpointBackingProvision(context.Context, agentregistration.WorkAuthorization, *agentpb.BackingProvisionCheckpointRequest) (*agentpb.BackingProvisionCheckpointAck, error)
-	CompleteBackingProvision(context.Context, agentregistration.WorkAuthorization, *agentpb.BackingProvisionCompletionRequest) (*agentpb.BackingProvisionCompletionAck, error)
-	FailBackingProvision(context.Context, agentregistration.WorkAuthorization, *agentpb.BackingProvisionFailureRequest) (*agentpb.BackingProvisionFailureAck, error)
-	RecoverBackingProvision(context.Context, agentregistration.WorkAuthorization, *agentpb.BackingProvisionRecoveryRequest) (*agentpb.BackingProvisionRecoveryAck, error)
-	LoadBackingProvisionConfiguration(context.Context, agentregistration.WorkAuthorization, *agentpb.BackingProvisionConfigurationRequest) (*agentpb.BackingProvisionConfigurationManifest, error)
-	LoadBackingProvisionFile(context.Context, agentregistration.WorkAuthorization, *agentpb.BackingProvisionFileRequest) (*agentpb.BackingProvisionFileDelivery, error)
-	DeliverBackingProvisionHook(context.Context, agentregistration.WorkAuthorization, *agentpb.BackingProvisionHookRequest) (*agentpb.BackingProvisionHookDelivery, error)
+	CheckpointBackingProvision(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackingProvisionCheckpointRequest,
+	) (*agentpb.BackingProvisionCheckpointAck, error)
+	CompleteBackingProvision(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackingProvisionCompletionRequest,
+	) (*agentpb.BackingProvisionCompletionAck, error)
+	FailBackingProvision(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackingProvisionFailureRequest,
+	) (*agentpb.BackingProvisionFailureAck, error)
+	RecoverBackingProvision(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackingProvisionRecoveryRequest,
+	) (*agentpb.BackingProvisionRecoveryAck, error)
+	LoadBackingProvisionConfiguration(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackingProvisionConfigurationRequest,
+	) (*agentpb.BackingProvisionConfigurationManifest, error)
+	LoadBackingProvisionFile(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackingProvisionFileRequest,
+	) (*agentpb.BackingProvisionFileDelivery, error)
+	DeliverBackingProvisionHook(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.BackingProvisionHookRequest,
+	) (*agentpb.BackingProvisionHookDelivery, error)
 }
 
 func (server *Server) ConfigureBackingWork(reports BackingReporter) {
 	server.backingReports = reports
 }
 
-func (server *Server) backingReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
-	if message.GetBackingProvisionCheckpointRequest() == nil && message.GetBackingProvisionConfigurationRequest() == nil && message.GetBackingProvisionFileRequest() == nil && message.GetBackingProvisionHookRequest() == nil {
+func (server *Server) backingReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
+	if message.GetBackingProvisionCheckpointRequest() == nil &&
+		message.GetBackingProvisionConfigurationRequest() == nil &&
+		message.GetBackingProvisionFileRequest() == nil &&
+		message.GetBackingProvisionHookRequest() == nil {
 		return false, nil, nil
 	}
 	if server.backingReports == nil {

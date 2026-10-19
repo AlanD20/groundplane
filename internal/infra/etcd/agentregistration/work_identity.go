@@ -33,14 +33,21 @@ func (authorization WorkAuthorization) ForReceipt(previous workexecution.Identit
 	}
 	if previous.Validate() != nil || previous.Executor != workexecution.Agent ||
 		previous.HostID != authorization.identity.HostID || previous.Generation > authorization.identity.Generation {
-		return WorkAuthorization{}, errs.New(errs.KindStateConflict, "retained result belongs to a different host or future executor")
+		return WorkAuthorization{}, errs.New(
+			errs.KindStateConflict,
+			"retained result belongs to a different host or future executor",
+		)
 	}
 	return WorkAuthorization{identity: previous, conditions: guards, receiptOnly: true}, nil
 }
 
 // ReadResult preserves the distinction between settlement of a retained report
 // and permission for the current process to perform another execution stage.
-func (authorization WorkAuthorization) ReadResult(ctx context.Context, queue *workqueue.Repository, taskID, workID, attemptID string) (workqueue.ResumeView, error) {
+func (authorization WorkAuthorization) ReadResult(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	taskID, workID, attemptID string,
+) (workqueue.ResumeView, error) {
 	if _, err := authorization.Conditions(); err != nil {
 		return workqueue.ResumeView{}, err
 	}
@@ -48,7 +55,8 @@ func (authorization WorkAuthorization) ReadResult(ctx context.Context, queue *wo
 }
 
 func (authorization WorkAuthorization) Conditions() ([]keyvalue.Condition, error) {
-	if authorization.identity.Validate() != nil || authorization.identity.Executor != workexecution.Agent || len(authorization.conditions) != 4 {
+	if authorization.identity.Validate() != nil || authorization.identity.Executor != workexecution.Agent ||
+		len(authorization.conditions) != 4 {
 		return nil, errs.New(errs.KindStateConflict, "authenticated Agent execution authority is missing")
 	}
 	return append([]keyvalue.Condition(nil), authorization.conditions...), nil
@@ -79,14 +87,18 @@ func (repository *Repository) ResolveWorkIdentity(ctx context.Context, agentID s
 	defer keyvalue.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision {
-			return authorization, errs.New(errs.KindStateConflict, "Agent credential or executor registration is unavailable")
+			return authorization, errs.New(
+				errs.KindStateConflict,
+				"Agent credential or executor registration is unavailable",
+			)
 		}
 	}
 	credential, err := localagents.DecodeLocalAgentPrimary(read.Values[0].Value)
 	if err != nil {
 		return authorization, err
 	}
-	if credential.ID != agentID || credential.Generation != credentialGeneration || credential.Phase == localagents.LocalAgentPhaseDeleting {
+	if credential.ID != agentID || credential.Generation != credentialGeneration ||
+		credential.Phase == localagents.LocalAgentPhaseDeleting {
 		return authorization, agentCredentialNotFound()
 	}
 	executor, err := workqueue.DecodeExecutor(read.Values[1].Value)
@@ -94,7 +106,9 @@ func (repository *Repository) ResolveWorkIdentity(ctx context.Context, agentID s
 		return authorization, err
 	}
 	identity = executor.Identity
-	if identity.Executor != workexecution.Agent || identity.HostID != binding.Binding.HostID || identity.AgentID != agentID || executor.ProcessGeneration != processGeneration {
+	if identity.Executor != workexecution.Agent || identity.HostID != binding.Binding.HostID ||
+		identity.AgentID != agentID ||
+		executor.ProcessGeneration != processGeneration {
 		return authorization, errs.New(errs.KindStateConflict, "Agent no longer owns this host executor")
 	}
 	conditions := append([]keyvalue.Condition(nil), binding.Conditions...)

@@ -18,7 +18,11 @@ func (service *Service) captureGroupPreflight(ctx context.Context, task workexec
 	member *etcd.GroupReleaseMemberCapture, capture *etcd.GroupReleaseCapture,
 ) error {
 	operation := member.Preparation.Intent.OperationKind
-	phases, err := releaserender.OrderedReleaseHooks(operation, member.Rollout.Render.ServiceID, member.Rollout.Render.Hooks)
+	phases, err := releaserender.OrderedReleaseHooks(
+		operation,
+		member.Rollout.Render.ServiceID,
+		member.Rollout.Render.Hooks,
+	)
 	if err != nil {
 		return err
 	}
@@ -57,7 +61,10 @@ func (service *Service) captureGroupPreflight(ctx context.Context, task workexec
 		if err != nil {
 			return err
 		}
-		capture.Preflight = append(capture.Preflight, etcd.GroupReleasePreflightCapture{Sources: sources, Execution: execution})
+		capture.Preflight = append(
+			capture.Preflight,
+			etcd.GroupReleasePreflightCapture{Sources: sources, Execution: execution},
+		)
 		capture.Root.Preflight = append(capture.Root.Preflight, releasegroups.PreflightHook{
 			WorkItemID: workID, ScriptID: execution.ScriptID, ServiceID: execution.ServiceID, Ordinal: ordinal, Input: execution.Input,
 		})

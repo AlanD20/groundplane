@@ -68,7 +68,8 @@ func DecodePlanningRejection(raw []byte, task workexecution.Task) (PlanningRejec
 	if err != nil || task.FinishedAt == nil || task.Outcome != value.Outcome || !task.FinishedAt.Equal(value.At) {
 		return PlanningRejection{}, CorruptHierarchyDeletion()
 	}
-	if value.Outcome == workexecution.Failed && (task.FirstFailure == nil || *task.FirstFailure != PlanningRejectionEvidence(task, raw)) {
+	if value.Outcome == workexecution.Failed &&
+		(task.FirstFailure == nil || *task.FirstFailure != PlanningRejectionEvidence(task, raw)) {
 		return PlanningRejection{}, CorruptHierarchyDeletion()
 	}
 	return value, nil

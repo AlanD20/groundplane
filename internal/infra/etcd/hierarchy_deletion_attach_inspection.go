@@ -12,26 +12,42 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachInspection(ctx context.Context, view workqueue.ResumeView,
-	report attachexecution.RemovalInspection, at time.Time,
+func (repository *HierarchyDeletionRepository) PrepareHierarchyAttachInspection(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	report attachexecution.RemovalInspection,
+	at time.Time,
 ) (workqueue.Change, workexecution.Completion, error) {
 	return repository.prepareHierarchyAttachInspection(ctx, view, report, at, false)
 }
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyAttachInspection(ctx context.Context, view workqueue.ResumeView,
-	report attachexecution.RemovalInspection, at time.Time, interrupted bool,
+func (repository *HierarchyDeletionRepository) prepareHierarchyAttachInspection(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	report attachexecution.RemovalInspection,
+	at time.Time,
+	interrupted bool,
 ) (workqueue.Change, workexecution.Completion, error) {
 	attempt := view.Attempt.Attempt
-	if !view.ActiveAttempt || view.CurrentExecutor == interrupted || view.ExecutorRevision <= 0 || attempt.FinishedAt != nil ||
-		attempt.Direction != workexecution.Recovery || view.Work.Item.Item.Operation != workexecution.Hierarchy ||
-		report.ObservedAt.After(at) || interrupted && report.State != attachexecution.InspectionInterrupted {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "Attach inspection no longer owns its recovery attempt")
+	if !view.ActiveAttempt || view.CurrentExecutor == interrupted || view.ExecutorRevision <= 0 ||
+		attempt.FinishedAt != nil ||
+		attempt.Direction != workexecution.Recovery ||
+		view.Work.Item.Item.Operation != workexecution.Hierarchy ||
+		report.ObservedAt.After(at) ||
+		interrupted && report.State != attachexecution.InspectionInterrupted {
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Attach inspection no longer owns its recovery attempt",
+		)
 	}
 	source, err := repository.LoadHierarchyAttachRecovery(ctx, view.Work)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
-	raw, evidence, err := attachexecution.EncodeRemovalInspection(attachexecution.RecoveryInput{Attempt: attempt, Source: source.Source}, report)
+	raw, evidence, err := attachexecution.EncodeRemovalInspection(
+		attachexecution.RecoveryInput{Attempt: attempt, Source: source.Source},
+		report,
+	)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
@@ -47,15 +63,26 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyAttachInspection(
 		keyvalue.Condition{Key: workqueue.ItemKey(attempt.WorkItemID), ModRevision: view.Work.Item.Revision},
 		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision},
 		keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
-	authority.Mutations = append(authority.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: raw})
+	authority.Mutations = append(
+		authority.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: raw},
+	)
 	outcome := workexecution.Failed
 	if report.ExecutionStopped() {
 		outcome = workexecution.Succeeded
 	}
-	return authority, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: report.ExecutionStopped()}, nil
+	return authority, workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       evidence,
+		EffectsSettled: report.ExecutionStopped(),
+	}, nil
 }
 
-func (repository *HierarchyDeletionRepository) PrepareInterruptedAttachInspection(ctx context.Context, view workqueue.ResumeView, at time.Time) (workqueue.Change, workexecution.Completion, error) {
+func (repository *HierarchyDeletionRepository) PrepareInterruptedAttachInspection(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	at time.Time,
+) (workqueue.Change, workexecution.Completion, error) {
 	source, err := repository.LoadHierarchyAttachRecovery(ctx, view.Work)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
@@ -66,7 +93,10 @@ func (repository *HierarchyDeletionRepository) PrepareInterruptedAttachInspectio
 	return repository.prepareHierarchyAttachInspection(ctx, view, report, at, true)
 }
 
-func (repository *HierarchyDeletionRepository) LoadHierarchyAttachInspection(ctx context.Context, view workqueue.ResumeView) ([]byte, error) {
+func (repository *HierarchyDeletionRepository) LoadHierarchyAttachInspection(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) ([]byte, error) {
 	if view.Work.Item.Item.Operation != workexecution.Hierarchy {
 		return nil, errs.New(errs.KindStateConflict, "hierarchy Attach inspection belongs to another operation")
 	}

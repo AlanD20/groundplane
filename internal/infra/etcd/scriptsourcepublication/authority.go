@@ -188,13 +188,21 @@ func (authority *Authority) RecoverPreparations(ctx context.Context) error {
 
 // AbandonOwnedPreparation is the bounded live counterpart to startup recovery.
 // Its owner supplies immutable operation identity plus stopped-work CAS guards.
-func (authority *Authority) AbandonOwnedPreparation(ctx context.Context, operationID string, guards []etcdstore.Condition) (bool, error) {
+func (authority *Authority) AbandonOwnedPreparation(
+	ctx context.Context,
+	operationID string,
+	guards []etcdstore.Condition,
+) (bool, error) {
 	done, err := authority.repository.AbandonOwnedPreparation(ctx, operationID, scriptSourceReleaseGuards(guards))
 	return done, ref.ToApplicationError(err)
 }
 
 // DiscardUnpublishedPreparation never releases an activated source hold.
-func (authority *Authority) DiscardUnpublishedPreparation(ctx context.Context, operationID string, guards []etcdstore.Condition) (bool, error) {
+func (authority *Authority) DiscardUnpublishedPreparation(
+	ctx context.Context,
+	operationID string,
+	guards []etcdstore.Condition,
+) (bool, error) {
 	done, err := authority.repository.DiscardUnpublishedPreparation(ctx, operationID, scriptSourceReleaseGuards(guards))
 	return done, ref.ToApplicationError(err)
 }

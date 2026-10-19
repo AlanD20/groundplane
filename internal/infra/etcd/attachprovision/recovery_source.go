@@ -36,7 +36,10 @@ func (repository *InputRepository) prepareRecoverySource(ctx context.Context, vi
 		return workqueue.Change{}, err
 	}
 	key := RecoveryKey(forward.WorkItemID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -55,11 +58,15 @@ func (repository *InputRepository) prepareRecoverySource(ctx context.Context, vi
 			previous.Forward.Input != forward.Input || previous.Forward.Executor.HostID != forward.Executor.HostID ||
 			previous.Forward.Number >= forward.Number {
 			clear(raw)
-			return workqueue.Change{}, checkpointConflict("Attach recovery cannot replace unrelated or newer failure authority")
+			return workqueue.Change{}, checkpointConflict(
+				"Attach recovery cannot replace unrelated or newer failure authority",
+			)
 		}
 	}
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])}},
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}}}, nil
+	return workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])}},
+		Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}},
+	}, nil
 }
 
 func (repository *InputRepository) LoadRecovery(ctx context.Context, view workqueue.View) (RecoverySnapshot, error) {
@@ -68,7 +75,10 @@ func (repository *InputRepository) LoadRecovery(ctx context.Context, view workqu
 		return RecoverySnapshot{}, checkpointConflict("Attach recovery requires captured provisioning work")
 	}
 	key := RecoveryKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -88,9 +98,10 @@ func (repository *InputRepository) LoadRecovery(ctx context.Context, view workqu
 		source.Failure.Authority.AttachID != item.TargetID || source.Forward.Number > item.AttemptNumber {
 		return RecoverySnapshot{}, checkpointConflict("Attach recovery differs from its captured work")
 	}
-	if source.Forward.Number == item.AttemptNumber && (item.ActiveAttemptID != "" || item.Result == nil || *item.Result != source.Evidence ||
-		(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped) ||
-		(item.Phase != workexecution.Ready && item.Phase != workexecution.Waiting && item.Phase != workexecution.Attention)) {
+	if source.Forward.Number == item.AttemptNumber &&
+		(item.ActiveAttemptID != "" || item.Result == nil || *item.Result != source.Evidence ||
+			(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped) ||
+			(item.Phase != workexecution.Ready && item.Phase != workexecution.Waiting && item.Phase != workexecution.Attention)) {
 		return RecoverySnapshot{}, checkpointConflict("Attach failure is not awaiting effect inspection")
 	}
 	return RecoverySnapshot{Source: source, Revision: read.Values[0].ModRevision}, nil

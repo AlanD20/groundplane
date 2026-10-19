@@ -49,7 +49,12 @@ func OpenNetworkHelperRequest(request *agentpb.NetworkWorkHelperRequest) (Networ
 	if err != nil || !workexecution.SameAssignment(attempt, reported) {
 		return NetworkHelperInput{}, invalidNetworkWork()
 	}
-	progress, err := networkexecution.DecodeProgress(attempt, procedure.Action, procedure.NetworkId, request.Report.Progress)
+	progress, err := networkexecution.DecodeProgress(
+		attempt,
+		procedure.Action,
+		procedure.NetworkId,
+		request.Report.Progress,
+	)
 	if err != nil {
 		return NetworkHelperInput{}, err
 	}
@@ -72,10 +77,18 @@ func OpenNetworkHelperRequest(request *agentpb.NetworkWorkHelperRequest) (Networ
 		return NetworkHelperInput{}, invalidNetworkWork()
 	}
 
-	return NetworkHelperInput{Attempt: attempt, Procedure: procedure, Progress: progress, InspectOnly: request.InspectOnly}, nil
+	return NetworkHelperInput{
+		Attempt:     attempt,
+		Procedure:   procedure,
+		Progress:    progress,
+		InspectOnly: request.InspectOnly,
+	}, nil
 }
 
-func ReadNetworkHelperObservation(input NetworkHelperInput, response *agentpb.NetworkWorkHelperResponse) (networkexecution.Observation, error) {
+func ReadNetworkHelperObservation(
+	input NetworkHelperInput,
+	response *agentpb.NetworkWorkHelperResponse,
+) (networkexecution.Observation, error) {
 	if input.Procedure == nil || response == nil || RejectUnknown(response) != nil || response.Input == nil ||
 		response.ObservedAt == nil || response.ObservedAt.CheckValid() != nil || response.Inspection != input.InspectOnly {
 		return networkexecution.Observation{}, invalidNetworkWork()
@@ -96,7 +109,9 @@ func ReadNetworkHelperObservation(input NetworkHelperInput, response *agentpb.Ne
 	if input.InspectOnly {
 		if input.Progress.Validate(input.Attempt, input.Procedure.Action, input.Procedure.NetworkId) != nil ||
 			!input.Progress.InFlight || observation.NetworkID != input.Procedure.NetworkId || observation.Input != input.Attempt.Input ||
-			observation.At.Before(*input.Progress.BeganAt) || observation.Present == observation.Absent || observation.Ready && !observation.Present {
+			observation.At.Before(
+				*input.Progress.BeganAt,
+			) || observation.Present == observation.Absent || observation.Ready && !observation.Present {
 			return networkexecution.Observation{}, invalidNetworkWork()
 		}
 		return observation, nil

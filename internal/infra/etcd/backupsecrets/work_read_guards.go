@@ -16,7 +16,10 @@ type credentialReadGuards struct {
 	conditions map[string]keyvalue.Condition
 }
 
-func (tracked *credentialReadGuards) GetMany(ctx context.Context, request keyvalue.GetManyRequest) (*keyvalue.GetManyResult, error) {
+func (tracked *credentialReadGuards) GetMany(
+	ctx context.Context,
+	request keyvalue.GetManyRequest,
+) (*keyvalue.GetManyResult, error) {
 	if request.Revision != tracked.revision || tracked.revision <= 0 {
 		return nil, errs.New(errs.KindStateConflict, "Backup credential reads must use one captured revision")
 	}

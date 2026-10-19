@@ -20,14 +20,21 @@ type AgentWork struct {
 	queue  *workqueue.Repository
 }
 
-func NewAgentWork(inputs *componentrecord.InputRepository, queue *workqueue.Repository, ledger *blueprintunits.Repository) (*AgentWork, error) {
+func NewAgentWork(
+	inputs *componentrecord.InputRepository,
+	queue *workqueue.Repository,
+	ledger *blueprintunits.Repository,
+) (*AgentWork, error) {
 	if inputs == nil || queue == nil || ledger == nil {
 		return nil, errs.New(errs.KindInternal, "Component execution requires captured input storage")
 	}
 	return &AgentWork{inputs: inputs, queue: queue, ledger: ledger}, nil
 }
 
-func (owner *AgentWork) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ComponentWorkAssignment, error) {
+func (owner *AgentWork) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ComponentWorkAssignment, error) {
 	input, _, err := owner.capturedAssignment(ctx, view)
 	if err != nil {
 		return nil, err
@@ -36,8 +43,13 @@ func (owner *AgentWork) LoadWorkAssignment(ctx context.Context, view workqueue.R
 }
 
 func (owner *AgentWork) AuthorizeAgentStart(ctx context.Context, view workqueue.ResumeView) (workqueue.Change, error) {
-	if view.Attempt.Attempt.StartedAt != nil || view.Attempt.Attempt.Direction == workexecution.Forward && (view.Work.Task.Task.Stop != nil || view.Work.Item.Item.ForwardRevoked) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Component execution cannot obtain a new start grant")
+	if view.Attempt.Attempt.StartedAt != nil ||
+		view.Attempt.Attempt.Direction == workexecution.Forward &&
+			(view.Work.Task.Task.Stop != nil || view.Work.Item.Item.ForwardRevoked) {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Component execution cannot obtain a new start grant",
+		)
 	}
 	_, guards, err := owner.capturedAssignment(ctx, view)
 	if err != nil {
@@ -49,7 +61,10 @@ func (owner *AgentWork) AuthorizeAgentStart(ctx context.Context, view workqueue.
 			return workqueue.Change{}, err
 		}
 		if !current {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Component configuration changed before execution could start")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Component configuration changed before execution could start",
+			)
 		}
 		guards = append(guards, desired...)
 		resources, err := owner.inputs.AdmissionConditions(ctx, view.Work)
@@ -64,12 +79,18 @@ func (owner *AgentWork) AuthorizeAgentStart(ctx context.Context, view workqueue.
 		}
 		guards = append(guards, pins...)
 	}
-	guards = append(guards, keyvalue.Condition{Key: workqueue.TaskKey(view.Work.Task.Task.ID), ModRevision: view.Work.Task.Revision},
-		keyvalue.Condition{Key: workqueue.ItemKey(view.Work.Item.Item.ID), ModRevision: view.Work.Item.Revision})
+	guards = append(
+		guards,
+		keyvalue.Condition{Key: workqueue.TaskKey(view.Work.Task.Task.ID), ModRevision: view.Work.Task.Revision},
+		keyvalue.Condition{Key: workqueue.ItemKey(view.Work.Item.Item.ID), ModRevision: view.Work.Item.Revision},
+	)
 	return workqueue.Change{Conditions: guards}, nil
 }
 
-func (owner *AgentWork) capturedAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ComponentWorkAssignment, []keyvalue.Condition, error) {
+func (owner *AgentWork) capturedAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ComponentWorkAssignment, []keyvalue.Condition, error) {
 	item, task, attempt := view.Work.Item.Item, view.Work.Task.Task, view.Attempt.Attempt
 	if !view.CurrentExecutor || !view.ActiveAttempt || item.Operation != workexecution.Component ||
 		attempt.Executor.Executor != workexecution.Agent ||
@@ -94,7 +115,12 @@ func (owner *AgentWork) capturedAssignment(ctx context.Context, view workqueue.R
 		if err != nil {
 			return nil, nil, err
 		}
-		return &agentpb.ComponentWorkAssignment{Attempt: identity, Input: captured.Input, RecoverySource: source, RecoveryBoundary: boundary}, captured.Conditions, nil
+		return &agentpb.ComponentWorkAssignment{
+			Attempt:          identity,
+			Input:            captured.Input,
+			RecoverySource:   source,
+			RecoveryBoundary: boundary,
+		}, captured.Conditions, nil
 	}
 	input, _, guards, err := owner.inputs.Load(ctx, view.Work)
 	if err != nil {

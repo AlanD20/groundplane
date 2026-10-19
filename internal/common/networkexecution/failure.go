@@ -45,14 +45,19 @@ func FailureID(attemptID string) (string, error) {
 func EncodeFailure(attempt workexecution.Attempt, failure Failure) ([]byte, workexecution.Input, error) {
 	if attempt.Validate() != nil || failure.AttemptID != attempt.ID ||
 		failure.Input != attempt.Input || !failure.Reason.Valid() || failure.RecordedAt.IsZero() || failure.RecordedAt.Location() != time.UTC ||
-		failure.RecordedAt.Before(attempt.AssignedAt) || attempt.StartedAt != nil && failure.RecordedAt.Before(*attempt.StartedAt) ||
+		failure.RecordedAt.Before(
+			attempt.AssignedAt,
+		) || attempt.StartedAt != nil && failure.RecordedAt.Before(*attempt.StartedAt) ||
 		failure.Reason == DeadlineExpired && failure.RecordedAt.Before(attempt.Deadline) {
 		return nil, workexecution.Input{}, invalidProgress()
 	}
 	if checkpoint := failure.Checkpoint; checkpoint != nil {
-		if attempt.StartedAt == nil || checkpoint.AttemptID != attempt.ID || checkpoint.Sequence < 1 || checkpoint.Sequence > 2 ||
-			ids.Validate(ids.KindStep, checkpoint.StageID) != nil || checkpoint.Evidence.Validate() != nil ||
-			checkpoint.RecordedAt.Before(*attempt.StartedAt) || checkpoint.RecordedAt.After(failure.RecordedAt) {
+		if attempt.StartedAt == nil || checkpoint.AttemptID != attempt.ID || checkpoint.Sequence < 1 ||
+			checkpoint.Sequence > 2 ||
+			ids.Validate(ids.KindStep, checkpoint.StageID) != nil ||
+			checkpoint.Evidence.Validate() != nil ||
+			checkpoint.RecordedAt.Before(*attempt.StartedAt) ||
+			checkpoint.RecordedAt.After(failure.RecordedAt) {
 			return nil, workexecution.Input{}, invalidProgress()
 		}
 	}

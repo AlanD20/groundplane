@@ -15,7 +15,12 @@ import (
 // PrepareAdmission joins native Task/work publication and runtime intent. The
 // caller joins the prepared input/envelope, hierarchy fences and request receipt
 // in the same transaction. No executable payload is stored in the visible Task.
-func PrepareAdmission(input Input, current keyvalue.Versioned[services.ServiceRecord], deadline time.Time, marker idempotency.IdempotencyMarker) (workexecution.Task, workqueue.Change, error) {
+func PrepareAdmission(
+	input Input,
+	current keyvalue.Versioned[services.ServiceRecord],
+	deadline time.Time,
+	marker idempotency.IdempotencyMarker,
+) (workexecution.Task, workqueue.Change, error) {
 	ref, err := input.Reference()
 	if err != nil {
 		return workexecution.Task{}, workqueue.Change{}, err
@@ -41,7 +46,9 @@ func PrepareAdmission(input Input, current keyvalue.Versioned[services.ServiceRe
 		}
 		if !backinghook.EqualConfiguration(runtime.HookConfiguration, hooks) ||
 			hooks != nil && runtime.AdapterKey != current.Record.Desired.Adapter {
-			return workexecution.Task{}, workqueue.Change{}, conflict("Service lifecycle hook configuration changed before admission")
+			return workexecution.Task{}, workqueue.Change{}, conflict(
+				"Service lifecycle hook configuration changed before admission",
+			)
 		}
 	}
 	task := workexecution.Task{ID: input.TaskID, Actor: workexecution.OperatorActor,
@@ -67,7 +74,11 @@ func PrepareAdmission(input Input, current keyvalue.Versioned[services.ServiceRe
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workexecution.Task{}, workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, services.ServiceDesiredCondition(current), services.ServiceRuntimeCondition(current))
+	change.Conditions = append(
+		change.Conditions,
+		services.ServiceDesiredCondition(current),
+		services.ServiceRuntimeCondition(current),
+	)
 	change.Conditions = append(change.Conditions, runtimeSourceConditions(input)...)
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut,
 		Key: services.ServiceRuntimeKey(input.ServiceID), Value: value})

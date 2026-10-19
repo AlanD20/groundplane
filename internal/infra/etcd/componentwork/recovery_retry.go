@@ -12,15 +12,32 @@ import (
 
 // PrepareRecoveryRetry retains the original forward failure across repeated
 // cleanup attempts. It restores captured runtime/configuration, never newer intent.
-func (repository *InputRepository) PrepareRecoveryRetry(ctx context.Context, view workqueue.View, previous workqueue.AttemptSnapshot, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareRecoveryRetry(
+	ctx context.Context,
+	view workqueue.View,
+	previous workqueue.AttemptSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item, attempt := view.Task.Task, view.Item.Item, previous.Attempt
-	if task.CollectionStartedAt != nil || item.Operation != workexecution.Component || item.Placement.Executor != workexecution.Agent ||
-		item.Phase != workexecution.Attention || item.ActiveAttemptID != "" || item.Input == nil ||
-		item.TaskID != task.ID || attempt.TaskID != task.ID || attempt.WorkItemID != item.ID ||
-		attempt.Executor.Executor != workexecution.Agent || attempt.Executor.HostID != item.Placement.HostID ||
-		attempt.FinishedAt == nil || attempt.Result == nil || attempt.Input != *item.Input || attempt.Number != item.AttemptNumber ||
+	if task.CollectionStartedAt != nil || item.Operation != workexecution.Component ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Attention ||
+		item.ActiveAttemptID != "" ||
+		item.Input == nil ||
+		item.TaskID != task.ID ||
+		attempt.TaskID != task.ID ||
+		attempt.WorkItemID != item.ID ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		attempt.Executor.HostID != item.Placement.HostID ||
+		attempt.FinishedAt == nil ||
+		attempt.Result == nil ||
+		attempt.Input != *item.Input ||
+		attempt.Number != item.AttemptNumber ||
 		item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Component has no captured unresolved effects to recover")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Component has no captured unresolved effects to recover",
+		)
 	}
 	input, _, guards, err := repository.Load(ctx, view)
 	if err != nil {
@@ -46,7 +63,10 @@ func (repository *InputRepository) PrepareRecoveryRetry(ctx context.Context, vie
 			return workqueue.Change{}, err
 		}
 		source = componentexecution.Recovery{Forward: attempt, Failure: failure, Evidence: *attempt.Result}
-		guards = append(guards, keyvalue.Condition{Key: FailureKey(attempt.ID), ModRevision: read.Values[1].ModRevision})
+		guards = append(
+			guards,
+			keyvalue.Condition{Key: FailureKey(attempt.ID), ModRevision: read.Values[1].ModRevision},
+		)
 	} else {
 		if read.Values[0] == nil || item.CleanupResult == nil || *item.CleanupResult != *attempt.Result {
 			return workqueue.Change{}, conflict("Component recovery Retry is missing its preceding cleanup result")

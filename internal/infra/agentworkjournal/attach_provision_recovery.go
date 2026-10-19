@@ -34,8 +34,11 @@ func (record attemptRecord) validateAttachProvisionRecovery() error {
 		}
 		if receipt.Validate() != nil || !workexecution.SameAssignment(record.Attempt, *receipt) ||
 			(receipt.StartedAt == nil) != (record.Attempt.StartedAt == nil) ||
-			receipt.StartedAt != nil && !receipt.StartedAt.Equal(*record.Attempt.StartedAt) || receipt.FinishedAt == nil ||
-			receipt.FinishedAt.Before(record.UpdatedAt) || receipt.Result == nil || *receipt.Result != reference || receipt.Outcome != outcome {
+			receipt.StartedAt != nil &&
+				!receipt.StartedAt.Equal(*record.Attempt.StartedAt) || receipt.FinishedAt == nil ||
+			receipt.FinishedAt.Before(
+				record.UpdatedAt,
+			) || receipt.Result == nil || *receipt.Result != reference || receipt.Outcome != outcome {
 			return invalid()
 		}
 	}

@@ -58,7 +58,8 @@ func SplitRuntimeArtifacts(
 }
 
 func RuntimeSource(artifact *agentpb.ComposeArtifact, stepID string) (*agentpb.ServiceLifecycleSource, error) {
-	if artifact == nil || len(artifact.Services) != 1 || artifact.Services[0] == nil || ids.Validate(ids.KindStep, stepID) != nil {
+	if artifact == nil || len(artifact.Services) != 1 || artifact.Services[0] == nil ||
+		ids.Validate(ids.KindStep, stepID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Service lifecycle source requires one physical member")
 	}
 	member := artifact.Services[0]

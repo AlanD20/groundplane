@@ -30,7 +30,10 @@ func CaptureProvisionAuthority(input *agentpb.AttachProvisionInput) (ProvisionAu
 		return ProvisionAuthority{}, err
 	}
 	authority := ProvisionAuthority{
-		Source:   workexecution.Input{ID: input.CapturedSource.InputId, SHA256: hex.EncodeToString(input.CapturedSource.Sha256)},
+		Source: workexecution.Input{
+			ID:     input.CapturedSource.InputId,
+			SHA256: hex.EncodeToString(input.CapturedSource.Sha256),
+		},
 		AttachID: input.AttachId, BackingServiceID: input.BackingServiceId,
 		Custom: input.GetCustomAttach() != nil,
 	}
@@ -56,15 +59,22 @@ func CaptureProvisionAuthority(input *agentpb.AttachProvisionInput) (ProvisionAu
 }
 
 func (authority ProvisionAuthority) Validate(attempt workexecution.Attempt) error {
-	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward || attempt.Executor.Executor != workexecution.Agent ||
-		authority.Source.Validate() != nil || authority.Source != attempt.Input || ids.Validate(ids.KindAttach, authority.AttachID) != nil ||
-		ids.Validate(ids.KindService, authority.BackingServiceID) != nil || authority.Commands == 0 ||
+	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		authority.Source.Validate() != nil ||
+		authority.Source != attempt.Input ||
+		ids.Validate(ids.KindAttach, authority.AttachID) != nil ||
+		ids.Validate(ids.KindService, authority.BackingServiceID) != nil ||
+		authority.Commands == 0 ||
 		authority.Commands > MaximumGrants+2 {
 		return invalid("Attach provisioning journal authority is invalid")
 	}
 	if authority.ConsumerSHA256 != "" {
 		if !validConsumerDigest(authority.ConsumerSHA256) || !validConsumerDigest(authority.ConsumerCandidateSHA256) ||
-			ids.Validate(ids.KindNetwork, authority.ConsumerNetworkID) != nil || ids.Validate(ids.KindService, authority.ConsumerServiceID) != nil ||
+			ids.Validate(
+				ids.KindNetwork,
+				authority.ConsumerNetworkID,
+			) != nil || ids.Validate(ids.KindService, authority.ConsumerServiceID) != nil ||
 			authority.Custom && authority.Commands != 2 {
 			return invalid("Attach connection journal authority is invalid")
 		}

@@ -13,11 +13,17 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (s *Service) loadDelivery(ctx context.Context, delivery workqueue.Delivery) (keyvalue.Versioned[etcdconfiguration.Input], error) {
+func (s *Service) loadDelivery(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (keyvalue.Versioned[etcdconfiguration.Input], error) {
 	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
 	if workexecution.ValidateDelivery(item, attempt) != nil || attempt.Executor.Executor != workexecution.Controller ||
 		attempt.FinishedAt != nil || item.ActiveAttemptID != attempt.ID {
-		return keyvalue.Versioned[etcdconfiguration.Input]{}, errs.New(errs.KindStateConflict, "etcd configuration delivery is not its active attempt")
+		return keyvalue.Versioned[etcdconfiguration.Input]{}, errs.New(
+			errs.KindStateConflict,
+			"etcd configuration delivery is not its active attempt",
+		)
 	}
 	input, err := s.inputs.Load(ctx, item.ID, 0)
 	if err != nil {
@@ -74,7 +80,12 @@ func (s *Service) Execute(ctx context.Context, delivery workqueue.Delivery) erro
 	// publication have their own bounded deadline, even when Apply timed out.
 	observe, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
-	outcome, observeErr := s.runtime.ObserveApply(observe, input.Record.TaskID, input.Record.Candidate, input.Record.Previous)
+	outcome, observeErr := s.runtime.ObserveApply(
+		observe,
+		input.Record.TaskID,
+		input.Record.Candidate,
+		input.Record.Previous,
+	)
 	if observeErr != nil {
 		outcome = etcdactivation.Unresolved
 	}
@@ -105,7 +116,12 @@ func (s *Service) Reconcile(ctx context.Context, delivery workqueue.Delivery) er
 	if found && saved.Record.Observed != etcdactivation.Unresolved {
 		return nil
 	}
-	outcome, recoveryErr := s.runtime.RecoverApply(ctx, input.Record.TaskID, input.Record.Candidate, input.Record.Previous)
+	outcome, recoveryErr := s.runtime.RecoverApply(
+		ctx,
+		input.Record.TaskID,
+		input.Record.Candidate,
+		input.Record.Previous,
+	)
 	if recoveryErr != nil {
 		outcome = etcdactivation.Unresolved
 	}
@@ -117,7 +133,12 @@ func (s *Service) Reconcile(ctx context.Context, delivery workqueue.Delivery) er
 	return recoveryErr
 }
 
-func (s *Service) Settle(ctx context.Context, queue *workqueue.Repository, delivery workqueue.Delivery, at time.Time) error {
+func (s *Service) Settle(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	delivery workqueue.Delivery,
+	at time.Time,
+) error {
 	attempt := delivery.Attempt.Attempt
 	view, err := queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 	if err != nil || view.Attempt.Attempt.FinishedAt != nil {

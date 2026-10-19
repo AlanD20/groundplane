@@ -17,14 +17,24 @@ import (
 // CredentialConditions binds a connection to the exact acknowledged credential
 // owner. New owners must have a native resource receipt in this same Apply.
 // Runtime projection uses the same comparisons as connection publication.
-func (repository *InputRepository) CredentialConditions(ctx context.Context, generation blueprintattachinputs.Generation, revision int64) ([]keyvalue.Condition, error) {
+func (repository *InputRepository) CredentialConditions(
+	ctx context.Context,
+	generation blueprintattachinputs.Generation,
+	revision int64,
+) ([]keyvalue.Condition, error) {
 	if generation.Provision == nil || generation.CredentialOwnerID == generation.AttachID {
 		return nil, nil
 	}
 	reference := generation.Provision.Credential
 	keys := []string{attachments.AttachKey(reference.Record.ID), attachments.AttachFactsKey(reference.Record.ID)}
 	if reference.Revision == 0 {
-		keys = append(keys, blueprintunits.AppliedKey(generation.EnvironmentID, blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: reference.Record.ID}))
+		keys = append(
+			keys,
+			blueprintunits.AppliedKey(
+				generation.EnvironmentID,
+				blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: reference.Record.ID},
+			),
+		)
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if read != nil {
@@ -76,7 +86,8 @@ func (repository *InputRepository) CredentialConditions(ctx context.Context, gen
 		}
 		return guards, nil
 	}
-	if read.Values[1] == nil || reference.Revision > 0 && read.Values[1].ModRevision != generation.Provision.FactsRevision {
+	if read.Values[1] == nil ||
+		reference.Revision > 0 && read.Values[1].ModRevision != generation.Provision.FactsRevision {
 		return nil, checkpointConflict("Attach credential facts changed or are unavailable")
 	}
 	facts, err := attachments.DecodeAttachEncryptedFacts(read.Values[1].Value)
@@ -90,7 +101,8 @@ func (repository *InputRepository) CredentialConditions(ctx context.Context, gen
 		}
 		return guards, nil
 	}
-	if applied.Execution == nil || applied.Execution.TaskID != generation.ParentTaskID || applied.Execution.Validate() != nil {
+	if applied.Execution == nil || applied.Execution.TaskID != generation.ParentTaskID ||
+		applied.Execution.Validate() != nil {
 		return nil, checkpointConflict("Attach hook facts have no acknowledged native execution")
 	}
 	key := blueprintattachoutputs.Key(current.ID, applied.Execution.AttemptID)
@@ -101,8 +113,11 @@ func (repository *InputRepository) CredentialConditions(ctx context.Context, gen
 	if err != nil {
 		return nil, err
 	}
-	if outputRead == nil || outputRead.ReadRevision != revision || len(outputRead.Values) != 1 || outputRead.Values[0] == nil ||
-		outputRead.Values[0].Key != key || outputRead.Values[0].ModRevision <= 0 || outputRead.Values[0].ModRevision > revision {
+	if outputRead == nil || outputRead.ReadRevision != revision || len(outputRead.Values) != 1 ||
+		outputRead.Values[0] == nil ||
+		outputRead.Values[0].Key != key ||
+		outputRead.Values[0].ModRevision <= 0 ||
+		outputRead.Values[0].ModRevision > revision {
 		return nil, checkpointConflict("Attach hook output is unavailable")
 	}
 	output, err := blueprintattachoutputs.Decode(outputRead.Values[0].Value)
@@ -110,15 +125,23 @@ func (repository *InputRepository) CredentialConditions(ctx context.Context, gen
 		return nil, err
 	}
 	defer blueprintattachoutputs.Clear(&output)
-	if output.TaskID != applied.Execution.TaskID || output.WorkItemID != applied.Execution.WorkItemID || output.AttemptID != applied.Execution.AttemptID ||
-		output.Executor != applied.Execution.Executor || output.Input != applied.Execution.Input || output.EnvironmentID != generation.EnvironmentID ||
-		output.AttachID != current.ID || output.OperationID != generation.Provision.HookOwnerOperationID || !sameEncryptedFacts(facts, output.Facts) {
+	if output.TaskID != applied.Execution.TaskID || output.WorkItemID != applied.Execution.WorkItemID ||
+		output.AttemptID != applied.Execution.AttemptID ||
+		output.Executor != applied.Execution.Executor ||
+		output.Input != applied.Execution.Input ||
+		output.EnvironmentID != generation.EnvironmentID ||
+		output.AttachID != current.ID ||
+		output.OperationID != generation.Provision.HookOwnerOperationID ||
+		!sameEncryptedFacts(facts, output.Facts) {
 		return nil, checkpointConflict("Attach hook output differs from its applied credential owner")
 	}
 	return append(guards, keyvalue.Condition{Key: key, ModRevision: outputRead.Values[0].ModRevision}), nil
 }
 
 func sameEncryptedFacts(left, right attachments.EncryptedFacts) bool {
-	return left.AttachID == right.AttachID && left.EnvelopeVersion == right.EnvelopeVersion && left.Cipher == right.Cipher &&
-		left.DigestAlgorithm == right.DigestAlgorithm && left.CiphertextSHA256 == right.CiphertextSHA256 && bytes.Equal(left.Ciphertext, right.Ciphertext)
+	return left.AttachID == right.AttachID && left.EnvelopeVersion == right.EnvelopeVersion &&
+		left.Cipher == right.Cipher &&
+		left.DigestAlgorithm == right.DigestAlgorithm &&
+		left.CiphertextSHA256 == right.CiphertextSHA256 &&
+		bytes.Equal(left.Ciphertext, right.Ciphertext)
 }

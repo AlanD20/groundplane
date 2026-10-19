@@ -39,10 +39,15 @@ func (repository *ScriptRepository) settleProvenScriptWork(ctx context.Context, 
 	}
 	defer loaded.Execution.Clear()
 	execution, attempt, cursor := loaded.Execution, view.Attempt.Attempt, *view.Checkpoint.Record
-	if execution.State != scriptexecutions.ScriptExecutionCleanupProven || execution.Outcome == nil || execution.Cleanup == nil ||
-		execution.AttemptID != attempt.ID || execution.Executor == nil || *execution.Executor != attempt.Executor ||
-		execution.ReconciliationRequired || cursor.AttemptID != attempt.ID ||
-		!execution.UpdatedAt.Equal(cursor.RecordedAt) || execution.LastCheckpointSHA256 != cursor.Evidence.SHA256 ||
+	if execution.State != scriptexecutions.ScriptExecutionCleanupProven || execution.Outcome == nil ||
+		execution.Cleanup == nil ||
+		execution.AttemptID != attempt.ID ||
+		execution.Executor == nil ||
+		*execution.Executor != attempt.Executor ||
+		execution.ReconciliationRequired ||
+		cursor.AttemptID != attempt.ID ||
+		!execution.UpdatedAt.Equal(cursor.RecordedAt) ||
+		execution.LastCheckpointSHA256 != cursor.Evidence.SHA256 ||
 		at.Before(execution.UpdatedAt) {
 		return errs.New(errs.KindStateConflict, "Script completion lacks acknowledged outcome and cleanup evidence")
 	}
@@ -57,7 +62,12 @@ func (repository *ScriptRepository) settleProvenScriptWork(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	evidenceID, err := scriptexecutions.CheckpointEvidenceID(execution.CurrentTaskID, execution.ID, attempt.ID, cursor.Sequence)
+	evidenceID, err := scriptexecutions.CheckpointEvidenceID(
+		execution.CurrentTaskID,
+		execution.ID,
+		attempt.ID,
+		cursor.Sequence,
+	)
 	if err != nil {
 		return err
 	}
@@ -85,7 +95,8 @@ func (repository *ScriptRepository) settleProvenScriptWork(ctx context.Context, 
 		return err
 	}
 	outcome := workexecution.Failed
-	if execution.Outcome.Reason == scriptexecutions.ScriptOutcomeNormalExit && execution.Outcome.ExitCode != nil && *execution.Outcome.ExitCode == 0 {
+	if execution.Outcome.Reason == scriptexecutions.ScriptOutcomeNormalExit && execution.Outcome.ExitCode != nil &&
+		*execution.Outcome.ExitCode == 0 {
 		outcome = workexecution.Succeeded
 	}
 	// A successful process cannot undo cancellation/supersession. A failed
@@ -97,7 +108,8 @@ func (repository *ScriptRepository) settleProvenScriptWork(ctx context.Context, 
 			outcome = workexecution.Superseded
 		}
 	}
-	if execution.Outcome.Reason == scriptexecutions.ScriptOutcomeAbort || execution.Outcome.Reason == scriptexecutions.ScriptOutcomeAbortBeforeStart {
+	if execution.Outcome.Reason == scriptexecutions.ScriptOutcomeAbort ||
+		execution.Outcome.Reason == scriptexecutions.ScriptOutcomeAbortBeforeStart {
 		if view.Work.Task.Task.Stop != nil {
 			outcome = view.Work.Task.Task.Stop.Outcome
 		} else if view.Work.Item.Item.ForwardRevoked {

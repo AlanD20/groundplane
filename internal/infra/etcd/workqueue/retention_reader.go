@@ -29,7 +29,12 @@ func (repository *Repository) Expired(ctx context.Context, after string, at time
 // RetentionPageAt keeps maintenance/status readers on their selected snapshot.
 // Candidate membership never grants collection; each operation checks its own
 // actual deadline, protected inputs and recovery ownership before removal.
-func (repository *Repository) RetentionPageAt(ctx context.Context, after string, at time.Time, revision int64) (RetentionPage, error) {
+func (repository *Repository) RetentionPageAt(
+	ctx context.Context,
+	after string,
+	at time.Time,
+	revision int64,
+) (RetentionPage, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return RetentionPage{}, err
 	}
@@ -41,11 +46,16 @@ func (repository *Repository) RetentionPageAt(ctx context.Context, after string,
 			return RetentionPage{}, invalid("Task retention cursor is invalid")
 		}
 	}
-	index, err := repository.store.Range(ctx, keyvalue.RangeRequest{Prefix: retentionPrefix, StartExclusive: after, Limit: 16, Revision: revision})
+	index, err := repository.store.Range(
+		ctx,
+		keyvalue.RangeRequest{Prefix: retentionPrefix, StartExclusive: after, Limit: 16, Revision: revision},
+	)
 	if err != nil {
 		return RetentionPage{}, err
 	}
-	if index == nil || index.ReadRevision <= 0 || revision > 0 && index.ReadRevision != revision || len(index.Values) > 16 || index.More && len(index.Values) == 0 {
+	if index == nil || index.ReadRevision <= 0 || revision > 0 && index.ReadRevision != revision ||
+		len(index.Values) > 16 ||
+		index.More && len(index.Values) == 0 {
 		return RetentionPage{}, corrupt()
 	}
 	var page RetentionPage
@@ -54,7 +64,8 @@ func (repository *Repository) RetentionPageAt(ctx context.Context, after string,
 	reachedFuture := false
 	for _, entry := range index.Values {
 		id, until, err := parseRetentionKey(entry.Key)
-		if err != nil || entry.Key <= last || string(entry.Value) != id || entry.ModRevision <= 0 || entry.ModRevision > index.ReadRevision {
+		if err != nil || entry.Key <= last || string(entry.Value) != id || entry.ModRevision <= 0 ||
+			entry.ModRevision > index.ReadRevision {
 			return RetentionPage{}, corrupt()
 		}
 		if until.After(at) {

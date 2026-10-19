@@ -8,7 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareComponentFailure(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, reason componentexecution.FailureReason) (*ComponentFailureDelivery, error) {
+func (journal *Journal) PrepareComponentFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	reason componentexecution.FailureReason,
+) (*ComponentFailureDelivery, error) {
 	layout, err := componentexecution.CaptureLayout(attempt, input)
 	if err != nil || attempt.StartedAt == nil || attempt.FinishedAt != nil || !reason.Valid() {
 		return nil, invalid()
@@ -37,7 +42,8 @@ func (journal *Journal) PrepareComponentFailure(ctx context.Context, attempt wor
 		state = &attemptRecord{Attempt: attempt, UpdatedAt: progress.UpdatedAt,
 			Component: &ComponentRecord{Layout: layout, Progress: progress}}
 	}
-	if !matchesComponent(state, attempt, layout) || state.Component.Completion != nil || state.Component.Progress.Stage == componentexecution.Complete {
+	if !matchesComponent(state, attempt, layout) || state.Component.Completion != nil ||
+		state.Component.Progress.Stage == componentexecution.Complete {
 		return nil, conflict()
 	}
 	if state.Component.Failure != nil {
@@ -50,7 +56,12 @@ func (journal *Journal) PrepareComponentFailure(ctx context.Context, attempt wor
 	return state.Component.Failure, nil
 }
 
-func (journal *Journal) AcknowledgeComponentFailure(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, ack *agentpb.ComponentWorkFailureAck) (workexecution.Attempt, error) {
+func (journal *Journal) AcknowledgeComponentFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	ack *agentpb.ComponentWorkFailureAck,
+) (workexecution.Attempt, error) {
 	layout, err := componentexecution.CaptureLayout(attempt, input)
 	if err != nil {
 		return workexecution.Attempt{}, err
@@ -76,7 +87,8 @@ func (journal *Journal) AcknowledgeComponentFailure(ctx context.Context, attempt
 		return workexecution.Attempt{}, conflict()
 	}
 	if previous := failure.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result || !previous.FinishedAt.Equal(*terminal.FinishedAt) {
+		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result ||
+			!previous.FinishedAt.Equal(*terminal.FinishedAt) {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *previous, nil

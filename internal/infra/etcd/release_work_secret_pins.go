@@ -19,7 +19,10 @@ func (ledger *ReleaseLedger) PrepareReleaseWorkSecretPins(ctx context.Context,
 	work workqueue.View, operationID string, capture runtimeconfiguration.WorkCapture,
 ) (tasksecretpins.Prepared, error) {
 	if ledger == nil || work.Item.Item.Operation != workexecution.Release {
-		return tasksecretpins.Prepared{}, errs.New(errs.KindValidationFailed, "Secret retention requires native Release work")
+		return tasksecretpins.Prepared{}, errs.New(
+			errs.KindValidationFailed,
+			"Secret retention requires native Release work",
+		)
 	}
 	return prepareConfigurationWorkSecretPins(ctx, ledger.store, work, operationID, capture)
 }

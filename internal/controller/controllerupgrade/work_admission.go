@@ -13,7 +13,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Work) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	capture, err := owner.inputs.Load(ctx, request.Item.Item, request.ReadRevision)
 	if err != nil {
 		return workdispatch.Decision{}, err
@@ -34,10 +38,19 @@ func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at t
 	if request.Direction == workexecution.Forward && at.Add(upgrade.TaskTimeoutSeconds*time.Second).Before(deadline) {
 		deadline = at.Add(upgrade.TaskTimeoutSeconds * time.Second)
 	}
-	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: deadline, Change: captureGuard(capture)}, nil
+	return workdispatch.Decision{
+		Disposition: workdispatch.Dispatch,
+		Deadline:    deadline,
+		Change:      captureGuard(capture),
+	}, nil
 }
 
-func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *Work) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Controller activation has no stop request")
 	}
@@ -65,7 +78,12 @@ func (owner *Work) settleUnstarted(ctx context.Context, task workqueue.TaskSnaps
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change, err := workqueue.PrepareUnstartedSettlement(task, item, workexecution.Completion{Outcome: outcome, EffectsSettled: true, Evidence: reference}, at)
+	change, err := workqueue.PrepareUnstartedSettlement(
+		task,
+		item,
+		workexecution.Completion{Outcome: outcome, EffectsSettled: true, Evidence: reference},
+		at,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -86,14 +104,23 @@ func (owner *Work) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnap
 		return workqueue.Change{}, bootstrapUnavailable()
 	}
 	if item.Item.Phase != workexecution.Attention || previous.Attempt.Result == nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Controller activation cannot be replayed; Retry is available only for captured handoff reconciliation")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Controller activation cannot be replayed; Retry is available only for captured handoff reconciliation",
+		)
 	}
 	capture, err := owner.inputs.Load(ctx, item.Item, revision)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change, err := workqueue.PrepareRetry(task, item, previous, workexecution.RetryDecision{Direction: workexecution.Recovery,
-		Result: *previous.Attempt.Result, NotBefore: at, Deadline: at.Add(upgrade.RecoveryReserveSeconds * time.Second)}, at)
+	change, err := workqueue.PrepareRetry(
+		task,
+		item,
+		previous,
+		workexecution.RetryDecision{Direction: workexecution.Recovery,
+			Result: *previous.Attempt.Result, NotBefore: at, Deadline: at.Add(upgrade.RecoveryReserveSeconds * time.Second)},
+		at,
+	)
 	change.Conditions = append(change.Conditions, captureGuard(capture).Conditions...)
 	return change, err
 }

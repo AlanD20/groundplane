@@ -10,7 +10,10 @@ import (
 
 // LoadEnvironmentRemoval restores saved Start and progress before attempting
 // another Start RPC. A settled Controller attempt need not grant Start again.
-func (journal *Journal) LoadEnvironmentRemoval(ctx context.Context, input hierarchyexecution.EnvironmentInput) (*workexecution.Attempt, *EnvironmentRemovalRecord, error) {
+func (journal *Journal) LoadEnvironmentRemoval(
+	ctx context.Context,
+	input hierarchyexecution.EnvironmentInput,
+) (*workexecution.Attempt, *EnvironmentRemovalRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -44,7 +47,11 @@ func (journal *Journal) CompleteEnvironmentRemoval(ctx context.Context, input hi
 		state.Attempt.StartedAt == nil || input.Attempt.StartedAt == nil || !state.Attempt.StartedAt.Equal(*input.Attempt.StartedAt) {
 		return workexecution.Attempt{}, conflict()
 	}
-	terminal, err := hierarchyexecution.DecodeEnvironmentCompletion(input, state.EnvironmentRemoval.Report.Progress, ack)
+	terminal, err := hierarchyexecution.DecodeEnvironmentCompletion(
+		input,
+		state.EnvironmentRemoval.Report.Progress,
+		ack,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

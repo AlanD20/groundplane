@@ -28,7 +28,9 @@ type Result struct {
 func (result Result) Validate(attempt workexecution.Attempt) error {
 	if attempt.Validate() != nil || result.AttemptID != attempt.ID || result.ObservedAt.IsZero() ||
 		result.ObservedAt.Location() != time.UTC || result.ObservedAt.Before(attempt.AssignedAt) ||
-		len(result.Failure) > 512 || len(result.CleanupFailure) > 512 || !utf8.ValidString(result.Failure) || !utf8.ValidString(result.CleanupFailure) ||
+		len(
+			result.Failure,
+		) > 512 || len(result.CleanupFailure) > 512 || !utf8.ValidString(result.Failure) || !utf8.ValidString(result.CleanupFailure) ||
 		!result.HelpersAbsent && result.CleanupFailure == "" || result.HelpersAbsent && result.CleanupFailure != "" ||
 		attempt.Direction == workexecution.Forward && !result.DirectoryReady && result.Failure == "" {
 		return invalid("environment provisioning result is invalid")
@@ -45,7 +47,10 @@ func (result Result) Reference(attempt workexecution.Attempt) (workexecution.Inp
 		return workexecution.Input{}, err
 	}
 	digest := sha256.Sum256(raw)
-	return workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, attempt.AssignedAt, attempt.ID, "environment-provision-result"), SHA256: hex.EncodeToString(digest[:])}, nil
+	return workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, attempt.AssignedAt, attempt.ID, "environment-provision-result"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }
 
 func (result Result) Completion(attempt workexecution.Attempt) (workexecution.Completion, error) {
@@ -54,22 +59,30 @@ func (result Result) Completion(attempt workexecution.Attempt) (workexecution.Co
 		return workexecution.Completion{}, err
 	}
 	outcome := workexecution.Failed
-	if result.HelpersAbsent && (attempt.Direction == workexecution.Recovery || result.DirectoryReady && result.Failure == "") {
+	if result.HelpersAbsent &&
+		(attempt.Direction == workexecution.Recovery || result.DirectoryReady && result.Failure == "") {
 		outcome = workexecution.Succeeded
 	}
 	return workexecution.Completion{Outcome: outcome, Evidence: ref, EffectsSettled: result.HelpersAbsent}, nil
 }
 
 func DecodeResult(attempt workexecution.Attempt, message *agentpb.EnvironmentProvisionResultRequest) (Result, error) {
-	if message == nil || executionplan.RejectUnknown(message) != nil || message.ObservedAt == nil || message.ObservedAt.CheckValid() != nil {
+	if message == nil || executionplan.RejectUnknown(message) != nil || message.ObservedAt == nil ||
+		message.ObservedAt.CheckValid() != nil {
 		return Result{}, invalid("environment provisioning report is invalid")
 	}
 	identity, err := workexecution.DecodeAgentAttempt(message.Attempt, attempt.Executor)
 	if err != nil || !workexecution.SameAssignment(identity, attempt) {
 		return Result{}, invalid("environment provisioning report belongs to another attempt")
 	}
-	result := Result{AttemptID: attempt.ID, DirectoryReady: message.DirectoryReady, HelpersAbsent: message.HelpersAbsent,
-		Failure: message.Failure, CleanupFailure: message.CleanupFailure, ObservedAt: message.ObservedAt.AsTime().UTC()}
+	result := Result{
+		AttemptID:      attempt.ID,
+		DirectoryReady: message.DirectoryReady,
+		HelpersAbsent:  message.HelpersAbsent,
+		Failure:        message.Failure,
+		CleanupFailure: message.CleanupFailure,
+		ObservedAt:     message.ObservedAt.AsTime().UTC(),
+	}
 	return result, result.Validate(attempt)
 }
 
@@ -85,8 +98,13 @@ func EncodeResult(attempt workexecution.Attempt, result Result) (*agentpb.Enviro
 		HelpersAbsent: result.HelpersAbsent, Failure: result.Failure, CleanupFailure: result.CleanupFailure, ObservedAt: timestamppb.New(result.ObservedAt)}, nil
 }
 
-func DecodeResultAck(attempt workexecution.Attempt, result Result, ack *agentpb.EnvironmentProvisionResultAck) (workexecution.Attempt, error) {
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil {
+func DecodeResultAck(
+	attempt workexecution.Attempt,
+	result Result,
+	ack *agentpb.EnvironmentProvisionResultAck,
+) (workexecution.Attempt, error) {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil {
 		return workexecution.Attempt{}, invalid("environment provisioning result receipt is invalid")
 	}
 	identity, err := workexecution.DecodeAgentAttempt(ack.Attempt, attempt.Executor)

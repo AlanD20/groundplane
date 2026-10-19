@@ -37,7 +37,12 @@ func (workers *executionWorkers) submitScriptRecovery(delivery *agentpb.ScriptRe
 	workers.wait.Add(1)
 	go func() {
 		defer workers.wait.Done()
-		result, err := workers.scripts.RunRecovery(workers.executionContext(attempt), input, workers.exchange, workers.ownership)
+		result, err := workers.scripts.RunRecovery(
+			workers.executionContext(attempt),
+			input,
+			workers.exchange,
+			workers.ownership,
+		)
 		err = errors.Join(err, execution.Close())
 		select {
 		case workers.outputs <- executionOutput{attempt: attempt, scriptRecovery: result.Recovery, scriptFailure: result.Failure, err: err}:

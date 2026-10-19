@@ -42,8 +42,12 @@ func (record ScriptRecoveryRecord) input(attempt workexecution.Attempt) (scripte
 
 func (record attemptRecord) validateScriptRecovery() error {
 	recovery := record.ScriptRecovery
-	if recovery == nil || record.Recovery != nil || record.Release != nil || record.Failure != nil || record.Effect != nil ||
-		record.Completion != nil || record.ScriptCompletion != nil || len(record.Script) != 0 || record.Sequence != 0 {
+	if recovery == nil || record.Recovery != nil || record.Release != nil || record.Failure != nil ||
+		record.Effect != nil ||
+		record.Completion != nil ||
+		record.ScriptCompletion != nil ||
+		len(record.Script) != 0 ||
+		record.Sequence != 0 {
 		return invalid()
 	}
 	input, err := recovery.input(record.Attempt)
@@ -64,8 +68,12 @@ func (record attemptRecord) validateScriptRecovery() error {
 		return invalid()
 	}
 	if receipt := recovery.Receipt; receipt != nil {
-		if receipt.Validate() != nil || !workexecution.SameAssignment(record.Attempt, *receipt) || receipt.FinishedAt == nil ||
-			receipt.Result == nil || *receipt.Result != evidence || receipt.Outcome != workexecution.Succeeded || receipt.FinishedAt.Before(record.UpdatedAt) {
+		if receipt.Validate() != nil || !workexecution.SameAssignment(record.Attempt, *receipt) ||
+			receipt.FinishedAt == nil ||
+			receipt.Result == nil ||
+			*receipt.Result != evidence ||
+			receipt.Outcome != workexecution.Succeeded ||
+			receipt.FinishedAt.Before(record.UpdatedAt) {
 			return invalid()
 		}
 	}

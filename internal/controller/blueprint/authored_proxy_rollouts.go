@@ -97,7 +97,12 @@ func (service *Service) prepareAuthoredProxyServiceRollouts(ctx context.Context,
 			blueprintrelease.PrepareServiceUnitInput{
 				ServiceID: source.ServiceID, Projection: projection, Scripts: scripts,
 				Work: work, Files: files, CreatedAt: item.CreatedAt, AllocateNamed: allocate,
-				OperationID: ids.DeriveAt(ids.KindOperation, item.CreatedAt, item.ID, "release-operation"), PlanID: planID,
+				OperationID: ids.DeriveAt(
+					ids.KindOperation,
+					item.CreatedAt,
+					item.ID,
+					"release-operation",
+				), PlanID: planID,
 			}, reference, preflight)
 		if err != nil {
 			return nil, err
@@ -105,7 +110,10 @@ func (service *Service) prepareAuthoredProxyServiceRollouts(ctx context.Context,
 		result = append(result, captured)
 	}
 	if len(byService) != 0 {
-		return nil, errs.New(errs.KindStateConflict, "router rollout includes Services outside its captured replacement membership")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"router rollout includes Services outside its captured replacement membership",
+		)
 	}
 	return result, nil
 }

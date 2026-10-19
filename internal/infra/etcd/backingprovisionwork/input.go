@@ -39,7 +39,9 @@ func InputKey(workID string) string { return "/v1/execution/backing-provision/in
 
 func (input Input) Procedure() (*agentpb.BackingProvisionInput, error) {
 	if len(input.Wire) == 0 || len(input.Wire) > backingprovision.MaximumInputBytes || input.TargetName == "" ||
-		len(input.TargetName) > 256 || !utf8.ValidString(input.TargetName) || hierarchy.ValidateEnvironment(input.Environment) != nil {
+		len(
+			input.TargetName,
+		) > 256 || !utf8.ValidString(input.TargetName) || hierarchy.ValidateEnvironment(input.Environment) != nil {
 		return nil, invalid("backing creation capture is missing or invalid")
 	}
 	var procedure agentpb.BackingProvisionInput
@@ -103,7 +105,11 @@ func (input Input) Work() (workexecution.Task, workexecution.Item, error) {
 		Phase: workexecution.Ready, Input: &reference, Cleanup: workexecution.CleanupNone,
 		CreatedAt: at, UpdatedAt: at, Deadline: task.Deadline}
 	for _, id := range append([]string{procedure.EnvironmentId, procedure.ServiceId, procedure.Runtime.Networks[0].NetworkId}, procedure.ManagedVolumeIds...) {
-		item.Claims = append(item.Claims, workexecution.Claim{ScopeID: id}, workexecution.Claim{HostID: procedure.HostId, ScopeID: id})
+		item.Claims = append(
+			item.Claims,
+			workexecution.Claim{ScopeID: id},
+			workexecution.Claim{HostID: procedure.HostId, ScopeID: id},
+		)
 	}
 	if err := task.Validate(); err != nil {
 		return workexecution.Task{}, workexecution.Item{}, err

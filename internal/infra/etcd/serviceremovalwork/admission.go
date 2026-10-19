@@ -15,13 +15,20 @@ import (
 // PrepareAdmission constructs a direct Remove Task. The caller joins hierarchy,
 // references, DNS withdrawal, staged desired revision and request publication in
 // this same transaction. This does not delete the definition ahead of execution.
-func PrepareAdmission(input Input, current keyvalue.Versioned[services.ServiceRecord], deadline time.Time, marker idempotency.IdempotencyMarker) (workexecution.Task, workqueue.Change, error) {
+func PrepareAdmission(
+	input Input,
+	current keyvalue.Versioned[services.ServiceRecord],
+	deadline time.Time,
+	marker idempotency.IdempotencyMarker,
+) (workexecution.Task, workqueue.Change, error) {
 	ref, err := input.Reference()
 	if err != nil {
 		return workexecution.Task{}, workqueue.Change{}, err
 	}
 	if input.DesiredRevisionID != input.TaskID || !deadline.After(input.CreatedAt) {
-		return workexecution.Task{}, workqueue.Change{}, conflict("Service removal action does not own its desired revision or deadline")
+		return workexecution.Task{}, workqueue.Change{}, conflict(
+			"Service removal action does not own its desired revision or deadline",
+		)
 	}
 	resource, err := PrepareResource(input, current)
 	if err != nil {

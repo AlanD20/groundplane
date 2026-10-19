@@ -43,13 +43,26 @@ func (report RecoveryReport) Validate(attempt workexecution.Attempt, source Reco
 	return report.ValidateRestoration(attempt, source, restoration, boundary)
 }
 
-func (report RecoveryReport) ValidateRestoration(attempt workexecution.Attempt, source Recovery, restoration Restoration, boundary Progress) error {
-	if restoration.Validate(attempt) != nil || source.ValidateLayoutFor(attempt, restoration.Layout) != nil || attempt.StartedAt == nil || report.AttemptID != attempt.ID ||
-		report.ForwardID != source.Forward.ID || report.Failure != source.Evidence ||
-		report.ComponentID != restoration.Layout.ComponentID || report.Input != attempt.Input ||
-		!report.HelperStopped || !report.FilesRestored || source.Failure.Checkpoint == nil ||
-		boundary.ValidateLayout(source.Forward, restoration.Layout) != nil || report.ObservedAt.IsZero() ||
-		report.ObservedAt.Location() != time.UTC || report.ObservedAt.Before(*attempt.StartedAt) ||
+func (report RecoveryReport) ValidateRestoration(
+	attempt workexecution.Attempt,
+	source Recovery,
+	restoration Restoration,
+	boundary Progress,
+) error {
+	if restoration.Validate(attempt) != nil || source.ValidateLayoutFor(attempt, restoration.Layout) != nil ||
+		attempt.StartedAt == nil ||
+		report.AttemptID != attempt.ID ||
+		report.ForwardID != source.Forward.ID ||
+		report.Failure != source.Evidence ||
+		report.ComponentID != restoration.Layout.ComponentID ||
+		report.Input != attempt.Input ||
+		!report.HelperStopped ||
+		!report.FilesRestored ||
+		source.Failure.Checkpoint == nil ||
+		boundary.ValidateLayout(source.Forward, restoration.Layout) != nil ||
+		report.ObservedAt.IsZero() ||
+		report.ObservedAt.Location() != time.UTC ||
+		report.ObservedAt.Before(*attempt.StartedAt) ||
 		report.ObservedAt.Before(source.Failure.RecordedAt) {
 		return invalidProgress()
 	}
@@ -82,7 +95,13 @@ func EncodeRecoveryReport(attempt workexecution.Attempt, source Recovery, input 
 	return EncodeRestorationReport(attempt, source, restoration, boundary, report)
 }
 
-func EncodeRestorationReport(attempt workexecution.Attempt, source Recovery, restoration Restoration, boundary Progress, report RecoveryReport) ([]byte, workexecution.Input, error) {
+func EncodeRestorationReport(
+	attempt workexecution.Attempt,
+	source Recovery,
+	restoration Restoration,
+	boundary Progress,
+	report RecoveryReport,
+) ([]byte, workexecution.Input, error) {
 	if err := report.ValidateRestoration(attempt, source, restoration, boundary); err != nil {
 		return nil, workexecution.Input{}, err
 	}
@@ -102,7 +121,10 @@ func EncodeRestorationReport(attempt workexecution.Attempt, source Recovery, res
 		return nil, workexecution.Input{}, err
 	}
 	digest := sha256.Sum256(raw)
-	return raw, workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, at, attempt.ID, "component/recovery"), SHA256: hex.EncodeToString(digest[:])}, nil
+	return raw, workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, at, attempt.ID, "component/recovery"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }
 
 func DecodeRecoveryReport(attempt workexecution.Attempt, source Recovery, input *agentpb.ComponentWorkInput,

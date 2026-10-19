@@ -15,10 +15,14 @@ type HierarchyAttachInput struct {
 	Conditions []keyvalue.Condition
 }
 
-func (repository *HierarchyDeletionRepository) loadHierarchyAttachSnapshot(ctx context.Context,
-	operation hierarchydeletion.HierarchyDeletionOperation, action hierarchydeletion.HierarchyDeletionAction, revision int64,
+func (repository *HierarchyDeletionRepository) loadHierarchyAttachSnapshot(
+	ctx context.Context,
+	operation hierarchydeletion.HierarchyDeletionOperation,
+	action hierarchydeletion.HierarchyDeletionAction,
+	revision int64,
 ) (HierarchyAttachInput, error) {
-	if action.ActionKind != hierarchydeletion.HierarchyDeletionAttachDeprovision || action.AgentProcedure == nil || revision <= 0 {
+	if action.ActionKind != hierarchydeletion.HierarchyDeletionAttachDeprovision || action.AgentProcedure == nil ||
+		revision <= 0 {
 		return HierarchyAttachInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	key := attachremoval.FrozenKey(operation.Tombstone.OperationID, action.TargetID)
@@ -29,7 +33,9 @@ func (repository *HierarchyDeletionRepository) loadHierarchyAttachSnapshot(ctx c
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil || read.Values[0].Key != key || read.Values[0].ModRevision <= 0 {
+	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil ||
+		read.Values[0].Key != key ||
+		read.Values[0].ModRevision <= 0 {
 		return HierarchyAttachInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	input, err := attachremoval.Decode(read.Values[0].Value)
@@ -44,12 +50,18 @@ func (repository *HierarchyDeletionRepository) loadHierarchyAttachSnapshot(ctx c
 		attachremoval.Clear(&input)
 		return HierarchyAttachInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	return HierarchyAttachInput{Input: input, Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}, nil
+	return HierarchyAttachInput{
+		Input:      input,
+		Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}},
+	}, nil
 }
 
 // LoadHierarchyAttachInput binds native work to its frozen encrypted source. It
 // neither publishes a child Task nor mutates the Attach to fabricate ownership.
-func (repository *HierarchyDeletionRepository) LoadHierarchyAttachInput(ctx context.Context, view workqueue.View) (HierarchyAttachInput, error) {
+func (repository *HierarchyDeletionRepository) LoadHierarchyAttachInput(
+	ctx context.Context,
+	view workqueue.View,
+) (HierarchyAttachInput, error) {
 	captured, err := repository.LoadHierarchyWork(ctx, view)
 	if err != nil {
 		return HierarchyAttachInput{}, err

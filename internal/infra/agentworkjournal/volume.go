@@ -31,10 +31,20 @@ type VolumeDirectoryRecord struct {
 }
 
 func (record attemptRecord) validateVolume() error {
-	if record.Volume == nil || record.VolumeRecovery != nil || record.AttachRecovery != nil || record.AttachFailure != nil || record.AttachRemoval != nil ||
-		record.EnvironmentFailure != nil || record.EnvironmentRemoval != nil || record.ScriptFailure != nil ||
-		record.ScriptRecovery != nil || record.ScriptCompletion != nil || record.Release != nil || record.Effect != nil ||
-		record.Completion != nil || record.Failure != nil || record.Recovery != nil || len(record.Script) != 0 {
+	if record.Volume == nil || record.VolumeRecovery != nil || record.AttachRecovery != nil ||
+		record.AttachFailure != nil ||
+		record.AttachRemoval != nil ||
+		record.EnvironmentFailure != nil ||
+		record.EnvironmentRemoval != nil ||
+		record.ScriptFailure != nil ||
+		record.ScriptRecovery != nil ||
+		record.ScriptCompletion != nil ||
+		record.Release != nil ||
+		record.Effect != nil ||
+		record.Completion != nil ||
+		record.Failure != nil ||
+		record.Recovery != nil ||
+		len(record.Script) != 0 {
 		return invalid()
 	}
 	volume := record.Volume
@@ -44,7 +54,8 @@ func (record attemptRecord) validateVolume() error {
 	if err := volume.Progress.Validate(record.Attempt, volume.Action, volume.VolumeID); err != nil {
 		return err
 	}
-	if volume.Progress.Sequence == 0 && (volume.Failure == nil || volume.Acknowledged || volume.Directory != nil || volume.Completion != nil) {
+	if volume.Progress.Sequence == 0 &&
+		(volume.Failure == nil || volume.Acknowledged || volume.Directory != nil || volume.Completion != nil) {
 		return invalid()
 	}
 	if failure := volume.Failure; failure != nil {
@@ -52,9 +63,12 @@ func (record attemptRecord) validateVolume() error {
 			return invalid()
 		}
 		if terminal := failure.Receipt; terminal != nil {
-			if terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil || terminal.Outcome == workexecution.Succeeded ||
-				!workexecution.SameAssignment(record.Attempt, *terminal) || terminal.StartedAt == nil ||
-				!terminal.StartedAt.Equal(*record.Attempt.StartedAt) || terminal.FinishedAt.Before(record.UpdatedAt) {
+			if terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil ||
+				terminal.Outcome == workexecution.Succeeded ||
+				!workexecution.SameAssignment(record.Attempt, *terminal) ||
+				terminal.StartedAt == nil ||
+				!terminal.StartedAt.Equal(*record.Attempt.StartedAt) ||
+				terminal.FinishedAt.Before(record.UpdatedAt) {
 				return invalid()
 			}
 			captured, err := volumeexecution.DecodeFailure(*terminal, failure.Evidence, *terminal.Result)
@@ -66,12 +80,16 @@ func (record attemptRecord) validateVolume() error {
 		}
 	}
 	if directory := volume.Directory; directory != nil {
-		if volume.Action != agentpb.VolumeWorkAction_VOLUME_WORK_ACTION_REMOVE || directory.Batch.VolumeID != volume.VolumeID ||
-			directory.Batch.Validate(record.Attempt, directory.Boundary) != nil || directory.Boundary.Sequence > volume.Progress.Sequence ||
-			directory.Boundary.Sequence == volume.Progress.Sequence && !volumeexecution.EqualProgress(directory.Boundary, volume.Progress) {
+		if volume.Action != agentpb.VolumeWorkAction_VOLUME_WORK_ACTION_REMOVE ||
+			directory.Batch.VolumeID != volume.VolumeID ||
+			directory.Batch.Validate(record.Attempt, directory.Boundary) != nil ||
+			directory.Boundary.Sequence > volume.Progress.Sequence ||
+			directory.Boundary.Sequence == volume.Progress.Sequence &&
+				!volumeexecution.EqualProgress(directory.Boundary, volume.Progress) {
 			return invalid()
 		}
-		if directory.Result != nil && directory.Result.Validate(record.Attempt, directory.Boundary, directory.Batch) != nil {
+		if directory.Result != nil &&
+			directory.Result.Validate(record.Attempt, directory.Boundary, directory.Batch) != nil {
 			return invalid()
 		}
 	}

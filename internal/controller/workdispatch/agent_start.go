@@ -46,7 +46,8 @@ func NewAgentStarts(queue *workqueue.Repository, registrations []AgentStartRegis
 	}
 	owners := make(map[workexecution.Operation]AgentStartOwner, len(registrations))
 	for _, registration := range registrations {
-		if !workexecution.ValidOperation(registration.Operation) || registration.Owner == nil || owners[registration.Operation] != nil {
+		if !workexecution.ValidOperation(registration.Operation) || registration.Owner == nil ||
+			owners[registration.Operation] != nil {
 			return nil, errs.New(errs.KindInternal, "Agent start operation is invalid or duplicated")
 		}
 		owners[registration.Operation] = registration.Owner
@@ -93,7 +94,12 @@ func (starts *AgentStarts) Start(ctx context.Context, authorization agentregistr
 		if view.Checkpoint.Record != nil {
 			sequence = view.Checkpoint.Record.Sequence
 		}
-		return &agentpb.WorkStartAck{Attempt: identity, StartedAt: timestamppb.New(*attempt.StartedAt), Reconcile: true, CheckpointSequence: sequence}, nil
+		return &agentpb.WorkStartAck{
+			Attempt:            identity,
+			StartedAt:          timestamppb.New(*attempt.StartedAt),
+			Reconcile:          true,
+			CheckpointSequence: sequence,
+		}, nil
 	}
 	authority, err := owner.AuthorizeAgentStart(ctx, view)
 	if err != nil {

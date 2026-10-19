@@ -42,6 +42,11 @@ func (repository *InputRepository) CaptureCheckpointEvidence(ctx context.Context
 		return CheckpointEvidence{}, conflict("Volume archive differs from its completed capture manifest")
 	}
 	return CheckpointEvidence{VolumeManifest: proto.CloneOf(prepared.GetVolume()),
-		VolumeReference: backupruntime.BackupVolumeManifestReference{Binding: binding, CursorRevision: complete.Revision},
-		Conditions:      []keyvalue.Condition{{Key: backupvolumemanifest.CursorKey(binding), ModRevision: complete.Revision}}}, nil
+		VolumeReference: backupruntime.BackupVolumeManifestReference{
+			Binding:        binding,
+			CursorRevision: complete.Revision,
+		},
+		Conditions: []keyvalue.Condition{
+			{Key: backupvolumemanifest.CursorKey(binding), ModRevision: complete.Revision},
+		}}, nil
 }

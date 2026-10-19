@@ -20,8 +20,10 @@ func (executor *Executor) helperRequest(ctx context.Context, assignment backingp
 	if err != nil {
 		return nil, backingprovision.HelperInput{}, err
 	}
-	if saved == nil || !saved.Acknowledged || saved.Progress == nil || !saved.Progress.InFlight || saved.Progress.Stage != stage ||
-		saved.Completion != nil || saved.Failure != nil {
+	if saved == nil || !saved.Acknowledged || saved.Progress == nil || !saved.Progress.InFlight ||
+		saved.Progress.Stage != stage ||
+		saved.Completion != nil ||
+		saved.Failure != nil {
 		return nil, backingprovision.HelperInput{}, invalidInput()
 	}
 	report, err := checkpointRequest(assignment, *saved.Progress)
@@ -47,7 +49,10 @@ func (executor *Executor) helperRequest(ctx context.Context, assignment backingp
 	request := &agentpb.BackingProvisionHelperRequest{Assignment: message,
 		Start:  &agentpb.WorkStartAck{Attempt: identity, StartedAt: timestamppb.New(*assignment.Attempt.StartedAt)},
 		Report: report, Acknowledgement: &agentpb.BackingProvisionCheckpointAck{Attempt: identity, Progress: report.Progress,
-			Evidence: &agentpb.WorkInputReference{InputId: checkpoint.Evidence.ID, Sha256: digest}}, InspectOnly: inspectOnly}
+			Evidence: &agentpb.WorkInputReference{
+				InputId: checkpoint.Evidence.ID,
+				Sha256:  digest,
+			}}, InspectOnly: inspectOnly}
 	input, err := backingprovision.OpenHelperRequest(request)
 	return request, input, err
 }

@@ -13,7 +13,10 @@ import (
 // classification. Transport failures and unreadable captures remain errors.
 // The returned comparisons must join rejection publication so a concurrent
 // consumer publication cannot turn an old observation into a new failure.
-func (repository *InputRepository) CascadeSourceChange(ctx context.Context, view workqueue.View) (bool, workqueue.Change, error) {
+func (repository *InputRepository) CascadeSourceChange(
+	ctx context.Context,
+	view workqueue.View,
+) (bool, workqueue.Change, error) {
 	capture, err := repository.LoadPreparedCascadeCapture(ctx, view)
 	if err != nil {
 		return false, workqueue.Change{}, err
@@ -21,7 +24,9 @@ func (repository *InputRepository) CascadeSourceChange(ctx context.Context, view
 	defer capture.Clear()
 	if view.Task.Task.PublicationComplete || view.Item.Revision != 0 || capture.Input.Cascade == nil ||
 		capture.Input.Cascade.ZoneID != view.Task.Task.TargetID {
-		return false, workqueue.Change{}, checkpointConflict("source comparison requires an unpublished cascade consumer")
+		return false, workqueue.Change{}, checkpointConflict(
+			"source comparison requires an unpublished cascade consumer",
+		)
 	}
 	source := capture.Input.Snapshot.Source
 	expected := capture.Input.Snapshot.ConsumerConditions()
@@ -29,7 +34,10 @@ func (repository *InputRepository) CascadeSourceChange(ctx context.Context, view
 		keyvalue.Condition{Key: attachments.AttachKey(source.Attach.ID), ModRevision: source.AttachRevision},
 		keyvalue.Condition{Key: attachments.AttachFactsKey(source.Attach.ID), ModRevision: source.FactsRevision})
 	for _, pin := range capture.Capture.Sources {
-		expected = append(expected, keyvalue.Condition{Key: secrets.RecordKey(pin.SecretID), ModRevision: pin.MetadataRevision})
+		expected = append(
+			expected,
+			keyvalue.Condition{Key: secrets.RecordKey(pin.SecretID), ModRevision: pin.MetadataRevision},
+		)
 	}
 	for offset := 0; offset < len(expected); offset += 32 {
 		batch := expected[offset:min(offset+32, len(expected))]

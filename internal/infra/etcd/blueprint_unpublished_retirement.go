@@ -14,13 +14,20 @@ import (
 // PrepareUnpublishedReleaseRetirement handles work stopped before it prepared
 // any runtime. Staged captures need their own abandonment proof; do not drop
 // their owner merely because the executable input was never published.
-func (ledger *ReleaseLedger) PrepareUnpublishedReleaseRetirement(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (ledger *ReleaseLedger) PrepareUnpublishedReleaseRetirement(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if ctx == nil || ledger == nil || ledger.store == nil || task.Validate() != nil || item.Validate() != nil ||
 		task.CollectionStartedAt == nil || task.FinishedAt == nil || task.Progress.Unsettled() != 0 ||
 		at.Before(task.UpdatedAt) || item.Operation != workexecution.Release || item.TaskID != task.ID ||
 		item.Input != nil || item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Phase != workexecution.Settled || item.Result == nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Unpublished Release retirement requires settled unstarted work")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Unpublished Release retirement requires settled unstarted work",
+		)
 	}
 	keys := []string{ReleaseWorkInputKey(item.ID), blueprintReleaseHookStageKey(item.ID),
 		releaserender.ServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID)}
@@ -36,7 +43,10 @@ func (ledger *ReleaseLedger) PrepareUnpublishedReleaseRetirement(ctx context.Con
 		{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision}}
 	for index, key := range keys {
 		if read.Values[index] != nil {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Release preparation must be retired before its work history")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Release preparation must be retired before its work history",
+			)
 		}
 		guards = append(guards, keyvalue.Condition{Key: key})
 	}

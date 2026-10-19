@@ -10,12 +10,26 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *Planner) captureEnvironmentInput(ctx context.Context, operation hierarchydeletion.HierarchyDeletionTombstone, environmentID string, environmentRevision int64, artifact []byte) (string, error) {
-	source, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{hierarchy.EnvironmentKey(environmentID)}, Revision: operation.SnapshotRevision})
+func (repository *Planner) captureEnvironmentInput(
+	ctx context.Context,
+	operation hierarchydeletion.HierarchyDeletionTombstone,
+	environmentID string,
+	environmentRevision int64,
+	artifact []byte,
+) (string, error) {
+	source, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{
+			Keys:     []string{hierarchy.EnvironmentKey(environmentID)},
+			Revision: operation.SnapshotRevision,
+		},
+	)
 	if err != nil {
 		return "", err
 	}
-	if source == nil || source.ReadRevision != operation.SnapshotRevision || len(source.Values) != 1 || source.Values[0] == nil || source.Values[0].ModRevision != environmentRevision {
+	if source == nil || source.ReadRevision != operation.SnapshotRevision || len(source.Values) != 1 ||
+		source.Values[0] == nil ||
+		source.Values[0].ModRevision != environmentRevision {
 		if source != nil {
 			keyvalue.ClearValues(source.Values)
 		}
@@ -26,8 +40,14 @@ func (repository *Planner) captureEnvironmentInput(ctx context.Context, operatio
 	if err != nil || environment.ID != environmentID {
 		return "", hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	input := hierarchydeletion.EnvironmentInput{OperationID: operation.OperationID, SnapshotRevision: operation.SnapshotRevision,
-		EnvironmentID: environmentID, EnvironmentRevision: environmentRevision, VolumeDirectory: environment.VolumeDir, ComposeArtifact: artifact}
+	input := hierarchydeletion.EnvironmentInput{
+		OperationID:         operation.OperationID,
+		SnapshotRevision:    operation.SnapshotRevision,
+		EnvironmentID:       environmentID,
+		EnvironmentRevision: environmentRevision,
+		VolumeDirectory:     environment.VolumeDir,
+		ComposeArtifact:     artifact,
+	}
 	value, err := hierarchydeletion.EncodeEnvironmentInput(input)
 	if err != nil {
 		return "", err
@@ -54,12 +74,21 @@ func (repository *Planner) captureEnvironmentInput(ctx context.Context, operatio
 		return digest, nil
 	}
 	var current hierarchydeletion.HierarchyDeletionTombstone
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(read.Values[1].Value, hierarchydeletion.HierarchyDeletionLargeRecordBytes, &current) != nil ||
-		current.OperationID != operation.OperationID || current.SnapshotRevision != operation.SnapshotRevision || current.Phase != hierarchydeletion.HierarchyDeletionPlanning {
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		read.Values[1].Value,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+		&current,
+	) != nil ||
+		current.OperationID != operation.OperationID ||
+		current.SnapshotRevision != operation.SnapshotRevision ||
+		current.Phase != hierarchydeletion.HierarchyDeletionPlanning {
 		return "", hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	result, err := repository.store.Transact(ctx, []keyvalue.Condition{{Key: key}, {Key: tombstoneKey, ModRevision: read.Values[1].ModRevision}},
-		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}})
+	result, err := repository.store.Transact(
+		ctx,
+		[]keyvalue.Condition{{Key: key}, {Key: tombstoneKey, ModRevision: read.Values[1].ModRevision}},
+		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}},
+	)
 	if err != nil {
 		return "", err
 	}

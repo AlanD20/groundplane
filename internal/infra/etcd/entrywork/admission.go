@@ -12,7 +12,10 @@ import (
 
 // ReadDesiredMatch fences new effects. Receipts of already-authorized effects
 // remain valid even if a later operator action has requested supersession.
-func (repository *InputRepository) ReadDesiredMatch(ctx context.Context, view workqueue.View) (bool, []keyvalue.Condition, error) {
+func (repository *InputRepository) ReadDesiredMatch(
+	ctx context.Context,
+	view workqueue.View,
+) (bool, []keyvalue.Condition, error) {
 	_, capture, guards, err := repository.Load(ctx, view)
 	if err != nil {
 		return false, nil, err
@@ -33,14 +36,18 @@ func (repository *InputRepository) ReadDesiredMatch(ctx context.Context, view wo
 		return false, nil, err
 	}
 	if capture.Removal != nil {
-		return current == capture.Removal.BaseRevisionID && value.ModRevision == capture.Removal.HeadRevision, guards, nil
+		return current == capture.Removal.BaseRevisionID &&
+			value.ModRevision == capture.Removal.HeadRevision, guards, nil
 	}
 	return current == view.Task.Task.ID, guards, nil
 }
 
 // AdmissionConditions binds the original consumers, file predecessor and retained
 // Secret values. No source is refreshed to make an obsolete assignment runnable.
-func (repository *InputRepository) AdmissionConditions(ctx context.Context, view workqueue.View) ([]keyvalue.Condition, error) {
+func (repository *InputRepository) AdmissionConditions(
+	ctx context.Context,
+	view workqueue.View,
+) ([]keyvalue.Condition, error) {
 	_, capture, guards, err := repository.Load(ctx, view)
 	if err != nil {
 		return nil, err

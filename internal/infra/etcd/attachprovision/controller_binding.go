@@ -13,7 +13,10 @@ import (
 
 // PrepareControllerBinding must commit with the visible work item's settlement
 // and resource receipt. It never executes a provisioning hook or changes intent.
-func (repository *InputRepository) PrepareControllerBinding(ctx context.Context, work workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareControllerBinding(
+	ctx context.Context,
+	work workqueue.View,
+) (workqueue.Change, error) {
 	source, err := repository.LoadCaptured(ctx, work)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -42,7 +45,10 @@ func (repository *InputRepository) PrepareControllerBinding(ctx context.Context,
 			change.Conditions = append(change.Conditions, keyvalue.Condition{Key: deletions.TombstoneKey("attach", id)})
 		}
 		for _, grant := range generation.Binding.Grants {
-			change.Conditions = append(change.Conditions, keyvalue.Condition{Key: deletions.TombstoneKey("attach", grant.Record.ID)})
+			change.Conditions = append(
+				change.Conditions,
+				keyvalue.Condition{Key: deletions.TombstoneKey("attach", grant.Record.ID)},
+			)
 		}
 		for _, id := range []string{generation.EnvironmentID, generation.BackingEnvironmentID} {
 			fence, err := environmentfence.LoadOrdinary(ctx, repository.store, id, work.ReadRevision)

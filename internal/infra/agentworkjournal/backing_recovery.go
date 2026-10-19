@@ -14,9 +14,12 @@ type BackingRecoveryRecord struct {
 
 func (record attemptRecord) validateBackingRecovery() error {
 	recovery := record.BackingRecovery
-	if recovery == nil || record.Backing != nil || record.Attempt.Validate() != nil || record.Attempt.FinishedAt != nil ||
-		record.Attempt.StartedAt == nil || recovery.Source.ValidateFor(record.Attempt, recovery.Layout) != nil ||
-		record.Sequence != 0 || record.UpdatedAt.Before(*record.Attempt.StartedAt) {
+	if recovery == nil || record.Backing != nil || record.Attempt.Validate() != nil ||
+		record.Attempt.FinishedAt != nil ||
+		record.Attempt.StartedAt == nil ||
+		recovery.Source.ValidateFor(record.Attempt, recovery.Layout) != nil ||
+		record.Sequence != 0 ||
+		record.UpdatedAt.Before(*record.Attempt.StartedAt) {
 		return invalid()
 	}
 	for _, present := range []bool{record.EnvironmentProvision != nil, record.Backup != nil, record.RemovalRecovery != nil,
@@ -38,7 +41,12 @@ func (record attemptRecord) validateBackingRecovery() error {
 		}
 		return nil
 	}
-	_, evidence, err := backingprovision.EncodeRecoveryReport(record.Attempt, recovery.Source, recovery.Layout, *recovery.Report)
+	_, evidence, err := backingprovision.EncodeRecoveryReport(
+		record.Attempt,
+		recovery.Source,
+		recovery.Layout,
+		*recovery.Report,
+	)
 	if err != nil || !record.UpdatedAt.Equal(recovery.Report.ObservedAt) {
 		return invalid()
 	}
@@ -47,7 +55,8 @@ func (record attemptRecord) validateBackingRecovery() error {
 		if recovery.Report.Status == backingprovision.RecoveryComplete {
 			outcome = workexecution.Succeeded
 		}
-		if !sameBackingTerminal(record.Attempt, *terminal) || *terminal.Result != evidence || terminal.Outcome != outcome ||
+		if !sameBackingTerminal(record.Attempt, *terminal) || *terminal.Result != evidence ||
+			terminal.Outcome != outcome ||
 			terminal.FinishedAt.Before(record.UpdatedAt) {
 			return invalid()
 		}

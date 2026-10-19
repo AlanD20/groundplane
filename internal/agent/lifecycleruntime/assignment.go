@@ -19,8 +19,12 @@ type Input struct {
 	procedure    *agentpb.ServiceLifecycleWorkInput
 }
 
-func DecodeAssignment(message *agentpb.ServiceLifecycleAssignment, authenticated workexecution.Identity) (Input, error) {
-	if message == nil || proto.Size(message) > executionplan.MaximumPlanBytes || executionplan.RejectUnknown(message) != nil ||
+func DecodeAssignment(
+	message *agentpb.ServiceLifecycleAssignment,
+	authenticated workexecution.Identity,
+) (Input, error) {
+	if message == nil || proto.Size(message) > executionplan.MaximumPlanBytes ||
+		executionplan.RejectUnknown(message) != nil ||
 		executionplan.ValidateServiceLifecycleWorkInput(message.Input) != nil {
 		return Input{}, invalidInput()
 	}
@@ -38,7 +42,8 @@ func DecodeAssignment(message *agentpb.ServiceLifecycleAssignment, authenticated
 			return Input{}, invalidInput()
 		}
 		source, err := lifecycleexecution.DecodeRecovery(input.procedure, message.RecoverySource)
-		if err != nil || source.ValidateFor(attempt, input.procedure) != nil || source.Progress == nil || source.Progress.BeganAt == nil {
+		if err != nil || source.ValidateFor(attempt, input.procedure) != nil || source.Progress == nil ||
+			source.Progress.BeganAt == nil {
 			return Input{}, invalidInput()
 		}
 		input.recovery = &source

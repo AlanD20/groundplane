@@ -63,8 +63,13 @@ func (runtime *Runtime) ExecuteStep(
 
 // ExecuteProcedure executes a typed operation against the already selected
 // backing container, without rediscovering it between credential operations.
-func (runtime *Runtime) ExecuteProcedure(ctx context.Context, procedure *agentpb.AdapterProcedure, containerID string) (StepResult, error) {
-	if ctx == nil || runtime == nil || runtime.runner == nil || runtime.compiler == nil || !ids.ValidContainerID(containerID) {
+func (runtime *Runtime) ExecuteProcedure(
+	ctx context.Context,
+	procedure *agentpb.AdapterProcedure,
+	containerID string,
+) (StepResult, error) {
+	if ctx == nil || runtime == nil || runtime.runner == nil || runtime.compiler == nil ||
+		!ids.ValidContainerID(containerID) {
 		return StepResult{}, errs.New(errs.KindInternal, "adapter procedure runtime is not configured")
 	}
 	if err := adapterprocedure.Validate(procedure); err != nil {

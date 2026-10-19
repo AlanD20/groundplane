@@ -10,7 +10,12 @@ import (
 )
 
 type authoredEntryOmissionRepository interface {
-	PrepareBlueprintEntryOmission(context.Context, workqueue.View, blueprintunits.Unit, time.Time) (workqueue.Change, bool, error)
+	PrepareBlueprintEntryOmission(
+		context.Context,
+		workqueue.View,
+		blueprintunits.Unit,
+		time.Time,
+	) (workqueue.Change, bool, error)
 }
 
 func (service *Service) prepareEntryOmission(
@@ -28,7 +33,10 @@ func (service *Service) prepareEntryOmission(
 		return change, err
 	}
 	if !ready {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Entry removal requires managed-file cleanup before its definition can be retired")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Entry removal requires managed-file cleanup before its definition can be retired",
+		)
 	}
 	return change, nil
 }

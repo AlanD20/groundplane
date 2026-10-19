@@ -14,9 +14,16 @@ import (
 // VerifyReleaseServing observes the final runtime without starting, stopping or
 // repairing anything. A successful command or earlier readiness report cannot
 // substitute for this final ownership, workload and live/restart routing proof.
-func VerifyReleaseServing(ctx context.Context, taskRunner runner.Runner, input releaseexecution.Input, report releaseexecution.CheckpointReport) (*agentpb.ReleaseHelperResponse, error) {
+func VerifyReleaseServing(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+) (*agentpb.ReleaseHelperResponse, error) {
 	if ctx == nil || taskRunner == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil ||
-		report.Progress.Validate(input) != nil || !report.Progress.InFlight || report.Progress.Phase != releaseexecution.Rollout ||
+		report.Progress.Validate(
+			input,
+		) != nil || !report.Progress.InFlight || report.Progress.Phase != releaseexecution.Rollout ||
 		report.Progress.Action != releaseexecution.VerifyServing {
 		return nil, invalidReleaseHelper()
 	}
@@ -44,7 +51,15 @@ func VerifyReleaseServing(ctx context.Context, taskRunner runner.Runner, input r
 			expectedProxy = artifacts.Prior.Proxy
 		}
 	}
-	inventory, err := inspectServingInventory(bounded, taskRunner, prior, artifacts.Candidate, input.Release.ServiceId, input.Release.ReleaseId, expectedProxy)
+	inventory, err := inspectServingInventory(
+		bounded,
+		taskRunner,
+		prior,
+		artifacts.Candidate,
+		input.Release.ServiceId,
+		input.Release.ReleaseId,
+		expectedProxy,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +73,10 @@ func VerifyReleaseServing(ctx context.Context, taskRunner runner.Runner, input r
 		return nil, err
 	}
 	if !ready {
-		return nil, errs.New(errs.KindStateConflict, "Release workload is not running or its configured healthcheck is not passing")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Release workload is not running or its configured healthcheck is not passing",
+		)
 	}
 	if artifacts.Proxy == nil {
 		return &agentpb.ReleaseHelperResponse{Succeeded: true}, nil
@@ -70,12 +88,21 @@ func VerifyReleaseServing(ctx context.Context, taskRunner runner.Runner, input r
 	if err != nil {
 		return nil, err
 	}
-	proven, err := observeRestorationProxy(bounded, taskRunner, inventory.proxyID, artifacts.Proxy.ProxyImplementation, traffic.AfterSHA256[:])
+	proven, err := observeRestorationProxy(
+		bounded,
+		taskRunner,
+		inventory.proxyID,
+		artifacts.Proxy.ProxyImplementation,
+		traffic.AfterSHA256[:],
+	)
 	if err != nil {
 		return nil, err
 	}
 	if !proven {
-		return nil, errs.New(errs.KindStateConflict, "Release proxy live and restart routing do not match the captured candidate")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Release proxy live and restart routing do not match the captured candidate",
+		)
 	}
 	return releaseTrafficResponse(input, traffic, false), nil
 }

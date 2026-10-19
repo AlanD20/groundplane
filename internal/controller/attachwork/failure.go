@@ -19,7 +19,8 @@ import (
 func (service *Reports) FailAttachProvision(ctx context.Context, authorization agentregistration.WorkAuthorization,
 	request *agentpb.AttachProvisionFailureRequest,
 ) (*agentpb.AttachProvisionFailureAck, error) {
-	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || !attachexecution.FailureReason(request.Reason).Valid() {
+	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil ||
+		!attachexecution.FailureReason(request.Reason).Valid() {
 		return nil, errs.New(errs.KindValidationFailed, "Attach failure request is invalid")
 	}
 	view, guards, err := service.readView(ctx, authorization, request.Attempt)
@@ -33,7 +34,14 @@ func (service *Reports) FailAttachProvision(ctx context.Context, authorization a
 		}
 		defer attachexecution.ClearProvision(input.Provision)
 		at := time.Now().UTC()
-		failure, result, err := service.inputs.repository.PrepareFailure(ctx, view, input, attachexecution.FailureReason(request.Reason), at, false)
+		failure, result, err := service.inputs.repository.PrepareFailure(
+			ctx,
+			view,
+			input,
+			attachexecution.FailureReason(request.Reason),
+			at,
+			false,
+		)
 		if err != nil {
 			return nil, err
 		}

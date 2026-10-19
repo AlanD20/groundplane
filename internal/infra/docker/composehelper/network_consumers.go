@@ -14,7 +14,12 @@ import (
 // Disconnect only captured same-Environment consumers. Discovery is bounded and
 // every endpoint is checked before the first mutation. A new endpoint racing
 // this snapshot makes Docker refuse bridge removal, not expand our authority.
-func disconnectNetworkConsumers(ctx context.Context, taskRunner runner.Runner, input *agentpb.NetworkWorkInput, dockerID string) error {
+func disconnectNetworkConsumers(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input *agentpb.NetworkWorkInput,
+	dockerID string,
+) error {
 	if len(input.DisconnectServiceIds) == 0 {
 		return nil
 	}

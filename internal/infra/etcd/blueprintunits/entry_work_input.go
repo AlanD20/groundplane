@@ -26,5 +26,8 @@ func EntryWorkInput(task workexecution.Task, unit Unit) (workexecution.Input, er
 	}
 	digest := sha256.Sum256(value)
 	clear(value)
-	return workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "entry-input/"+unit.Target.ID), SHA256: hex.EncodeToString(digest[:])}, nil
+	return workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "entry-input/"+unit.Target.ID),
+		SHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }

@@ -9,7 +9,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (input Input) checkpointRequest(progress lifecycleexecution.Progress) (*agentpb.ServiceLifecycleCheckpointRequest, error) {
+func (input Input) checkpointRequest(
+	progress lifecycleexecution.Progress,
+) (*agentpb.ServiceLifecycleCheckpointRequest, error) {
 	if input.procedure == nil {
 		return nil, invalidInput()
 	}
@@ -24,7 +26,10 @@ func (input Input) checkpointRequest(progress lifecycleexecution.Progress) (*age
 	return &agentpb.ServiceLifecycleCheckpointRequest{Attempt: attempt, Progress: raw}, nil
 }
 
-func (input Input) checkpointAck(progress lifecycleexecution.Progress, ack *agentpb.ServiceLifecycleCheckpointAck) (workexecution.Checkpoint, error) {
+func (input Input) checkpointAck(
+	progress lifecycleexecution.Progress,
+	ack *agentpb.ServiceLifecycleCheckpointAck,
+) (workexecution.Checkpoint, error) {
 	if input.procedure == nil || ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil ||
 		ack.RecordedAt == nil || ack.RecordedAt.CheckValid() != nil {
 		return workexecution.Checkpoint{}, invalidInput()
@@ -45,7 +50,9 @@ func (input Input) checkpointAck(progress lifecycleexecution.Progress, ack *agen
 	return expected, nil
 }
 
-func (input Input) completionRequest(progress lifecycleexecution.Progress) (*agentpb.ServiceLifecycleCompletionRequest, error) {
+func (input Input) completionRequest(
+	progress lifecycleexecution.Progress,
+) (*agentpb.ServiceLifecycleCompletionRequest, error) {
 	if input.procedure == nil || !input.complete(progress) {
 		return nil, invalidInput()
 	}
@@ -66,10 +73,19 @@ func (input Input) completionRequest(progress lifecycleexecution.Progress) (*age
 	}}, nil
 }
 
-func (input Input) completionAck(progress lifecycleexecution.Progress, ack *agentpb.ServiceLifecycleCompletionAck) (workexecution.Attempt, error) {
-	if input.procedure == nil || ack == nil || ack.Stopped != nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil ||
-		ack.StartedAt == nil || ack.StartedAt.CheckValid() != nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil ||
-		input.attempt.StartedAt == nil || !input.attempt.StartedAt.Equal(ack.StartedAt.AsTime()) || !input.complete(progress) {
+func (input Input) completionAck(
+	progress lifecycleexecution.Progress,
+	ack *agentpb.ServiceLifecycleCompletionAck,
+) (workexecution.Attempt, error) {
+	if input.procedure == nil || ack == nil || ack.Stopped != nil || executionplan.RejectUnknown(ack) != nil ||
+		ack.Evidence == nil ||
+		ack.StartedAt == nil ||
+		ack.StartedAt.CheckValid() != nil ||
+		ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil ||
+		input.attempt.StartedAt == nil ||
+		!input.attempt.StartedAt.Equal(ack.StartedAt.AsTime()) ||
+		!input.complete(progress) {
 		return workexecution.Attempt{}, invalidInput()
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(ack.Attempt, input.attempt.Executor)
@@ -96,5 +112,6 @@ func (input Input) completionAck(progress lifecycleexecution.Progress, ack *agen
 
 func (input Input) complete(progress lifecycleexecution.Progress) bool {
 	stages, err := lifecycleexecution.Stages(input.procedure)
-	return err == nil && progress.BeganAt == nil && len(progress.Completed) == len(stages) && progress.Validate(input.attempt, input.procedure) == nil
+	return err == nil && progress.BeganAt == nil && len(progress.Completed) == len(stages) &&
+		progress.Validate(input.attempt, input.procedure) == nil
 }

@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func EncodeRemovalCompletion(input RemovalInput, progress RemovalProgress) (*agentpb.AttachRemovalCompletionRequest, error) {
+func EncodeRemovalCompletion(
+	input RemovalInput,
+	progress RemovalProgress,
+) (*agentpb.AttachRemovalCompletionRequest, error) {
 	if !progress.Complete(input) {
 		return nil, invalid("Attach removal cannot complete before every captured command succeeds")
 	}
@@ -28,10 +31,19 @@ func EncodeRemovalCompletion(input RemovalInput, progress RemovalProgress) (*age
 		CheckpointEvidence: &agentpb.WorkInputReference{InputId: checkpoint.Evidence.ID, Sha256: digest}}, nil
 }
 
-func DecodeRemovalCompletion(input RemovalInput, progress RemovalProgress, ack *agentpb.AttachRemovalCompletionAck) (workexecution.Attempt, error) {
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.CheckpointEvidence == nil || ack.FinishedAt == nil ||
-		ack.FinishedAt.CheckValid() != nil || !progress.Complete(input) || ack.CheckpointSequence != progress.Sequence {
-		return workexecution.Attempt{}, invalid("Attach removal completion does not acknowledge the final command result")
+func DecodeRemovalCompletion(
+	input RemovalInput,
+	progress RemovalProgress,
+	ack *agentpb.AttachRemovalCompletionAck,
+) (workexecution.Attempt, error) {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.CheckpointEvidence == nil ||
+		ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil ||
+		!progress.Complete(input) ||
+		ack.CheckpointSequence != progress.Sequence {
+		return workexecution.Attempt{}, invalid(
+			"Attach removal completion does not acknowledge the final command result",
+		)
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, input.Attempt.Executor)
 	if err != nil || !workexecution.SameAssignment(claimed, input.Attempt) {
@@ -41,7 +53,10 @@ func DecodeRemovalCompletion(input RemovalInput, progress RemovalProgress, ack *
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	evidence := workexecution.Input{ID: ack.CheckpointEvidence.InputId, SHA256: hex.EncodeToString(ack.CheckpointEvidence.Sha256)}
+	evidence := workexecution.Input{
+		ID:     ack.CheckpointEvidence.InputId,
+		SHA256: hex.EncodeToString(ack.CheckpointEvidence.Sha256),
+	}
 	finished := ack.FinishedAt.AsTime()
 	outcome := workexecution.Outcome(ack.Outcome)
 	if evidence != checkpoint.Evidence || finished.Before(progress.UpdatedAt) ||

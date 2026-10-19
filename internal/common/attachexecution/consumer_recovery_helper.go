@@ -23,11 +23,17 @@ func EncodeConsumerRecoveryHelperRequest(input RecoveryInput) (*agentpb.AttachCo
 		return nil, err
 	}
 	return &agentpb.AttachConsumerHelperRequest{Attempt: identity, Consumer: proto.CloneOf(input.Consumer),
-		Start:    &agentpb.WorkStartAck{Attempt: proto.CloneOf(identity), StartedAt: timestamppb.New(*input.Attempt.StartedAt)},
+		Start: &agentpb.WorkStartAck{
+			Attempt:   proto.CloneOf(identity),
+			StartedAt: timestamppb.New(*input.Attempt.StartedAt),
+		},
 		Recovery: source, InspectOnly: true}, nil
 }
 
-func openConsumerRecoveryHelper(ctx context.Context, request *agentpb.AttachConsumerHelperRequest) (ConsumerHelperInput, error) {
+func openConsumerRecoveryHelper(
+	ctx context.Context,
+	request *agentpb.AttachConsumerHelperRequest,
+) (ConsumerHelperInput, error) {
 	if request == nil || request.Attempt == nil || request.Start == nil || !request.InspectOnly ||
 		len(request.Authority) != 0 || len(request.Report) != 0 || request.Acknowledgement != nil ||
 		len(request.Recovery) > MaximumRemovalRecoveryBytes || proto.Size(request) > executionplan.MaximumPlanBytes ||

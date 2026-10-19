@@ -15,8 +15,11 @@ func (repository *InputRepository) PrepareCaptureRetention(ctx context.Context, 
 	at time.Time, final bool,
 ) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
-	if task.Validate() != nil || item.Validate() != nil || task.Action != workexecution.ActionBackup || task.ExpectedItems != 1 ||
-		task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil ||
+	if task.Validate() != nil || item.Validate() != nil || task.Action != workexecution.ActionBackup ||
+		task.ExpectedItems != 1 ||
+		task.CollectionStartedAt == nil ||
+		task.FinishedAt == nil ||
+		task.RetainUntil == nil ||
 		at.Before(*task.CollectionStartedAt) ||
 		at.Before(*task.RetainUntil) {
 		return false, workqueue.Change{}, conflict("Backup history requires expired settled execution")

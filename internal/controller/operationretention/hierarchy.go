@@ -10,7 +10,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (collector *Collector) collectHierarchy(ctx context.Context, task workqueue.TaskSnapshot, revision int64, guard etcd.HierarchyCollection, at time.Time) (bool, error) {
+func (collector *Collector) collectHierarchy(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	revision int64,
+	guard etcd.HierarchyCollection,
+	at time.Time,
+) (bool, error) {
 	if !guard.Eligible {
 		return false, nil
 	}
@@ -46,8 +52,14 @@ func (collector *Collector) collectHierarchy(ctx context.Context, task workqueue
 		return false, err
 	}
 	defer keyvalue.ClearMutationValues(change.Mutations)
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskEventsKey(task.Task.ID)})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskExpiryKey(task.Task.ID)})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskEventsKey(task.Task.ID)},
+	)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskExpiryKey(task.Task.ID)},
+	)
 	result, err := collector.queue.Commit(ctx, change)
 	return result.Succeeded, err
 }

@@ -41,7 +41,10 @@ func (reference BlueprintNativePredecessorReference) Validate() error {
 	digest, err := hex.DecodeString(reference.PriorRuntimeSHA256)
 	if err != nil || len(digest) != 32 || hex.EncodeToString(digest) != reference.PriorRuntimeSHA256 ||
 		reference.ProjectionRevision <= 0 || reference.RuntimeRevision <= 0 || reference.RuntimeRevision > reference.FixedReadRevision ||
-		ids.Validate(ids.KindDeployment, reference.Serving.ServingReleaseID) != nil || reference.Serving.Target.Validate() != nil ||
+		ids.Validate(
+			ids.KindDeployment,
+			reference.Serving.ServingReleaseID,
+		) != nil || reference.Serving.Target.Validate() != nil ||
 		reference.Serving.RetainedPriorReleaseID != "" &&
 			ids.Validate(ids.KindDeployment, reference.Serving.RetainedPriorReleaseID) != nil {
 		return CorruptReleaseRecord()

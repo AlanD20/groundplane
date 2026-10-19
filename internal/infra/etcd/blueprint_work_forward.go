@@ -26,20 +26,36 @@ func (ledger *ReleaseLedger) LoadReleaseForwardSources(ctx context.Context,
 	if task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil || !task.PublicationComplete ||
 		item.Phase != workexecution.Ready || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
 		item.ForwardRevoked || item.Cleanup != workexecution.CleanupNone {
-		return empty, errs.New(errs.KindStateConflict, "Blueprint Release is not ready for its first forward assignment")
+		return empty, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Release is not ready for its first forward assignment",
+		)
 	}
 	return ledger.loadReleaseForwardSources(ctx, work)
 }
 
 // LoadReleaseStartSources repeats current intent and predecessor
 // comparisons at the first-effect boundary, not just when reserving capacity.
-func (ledger *ReleaseLedger) LoadReleaseStartSources(ctx context.Context, view workqueue.ResumeView) (ReleaseWorkSources, error) {
+func (ledger *ReleaseLedger) LoadReleaseStartSources(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (ReleaseWorkSources, error) {
 	task, item, attempt := view.Work.Task.Task, view.Work.Item.Item, view.Attempt.Attempt
-	if !view.CurrentExecutor || !view.ActiveAttempt || attempt.Direction != workexecution.Forward || attempt.Number != 1 ||
-		attempt.StartedAt != nil || workexecution.ValidateDelivery(item, attempt) != nil ||
-		task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil || !task.PublicationComplete ||
-		item.Phase != workexecution.Assigned || item.ForwardRevoked || item.Cleanup != workexecution.CleanupNone {
-		return ReleaseWorkSources{}, errs.New(errs.KindStateConflict, "Blueprint Release cannot authorize its first forward effect")
+	if !view.CurrentExecutor || !view.ActiveAttempt || attempt.Direction != workexecution.Forward ||
+		attempt.Number != 1 ||
+		attempt.StartedAt != nil ||
+		workexecution.ValidateDelivery(item, attempt) != nil ||
+		task.Stop != nil ||
+		task.FinishedAt != nil ||
+		task.CollectionStartedAt != nil ||
+		!task.PublicationComplete ||
+		item.Phase != workexecution.Assigned ||
+		item.ForwardRevoked ||
+		item.Cleanup != workexecution.CleanupNone {
+		return ReleaseWorkSources{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Release cannot authorize its first forward effect",
+		)
 	}
 	return ledger.loadReleaseForwardSources(ctx, view.Work)
 }
@@ -48,18 +64,27 @@ func (ledger *ReleaseLedger) LoadReleaseStartSources(ctx context.Context, view w
 // proxy cutover. A Start receipt does not indefinitely authorize later effects
 // after a newer Blueprint has replaced the accepted intent. Confirm/recovery
 // readers intentionally do not use this current-head gate.
-func (ledger *ReleaseLedger) LoadReleaseCheckpointSources(ctx context.Context, view workqueue.ResumeView) (ReleaseWorkSources, error) {
+func (ledger *ReleaseLedger) LoadReleaseCheckpointSources(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (ReleaseWorkSources, error) {
 	task, item, attempt := view.Work.Task.Task, view.Work.Item.Item, view.Attempt.Attempt
 	if !view.CurrentExecutor || !view.ActiveAttempt || attempt.Direction != workexecution.Forward ||
 		attempt.StartedAt == nil || attempt.FinishedAt != nil || workexecution.ValidateDelivery(item, attempt) != nil ||
 		task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil || !task.PublicationComplete ||
 		item.Phase != workexecution.Running || item.ForwardRevoked || item.Cleanup != workexecution.CleanupNone {
-		return ReleaseWorkSources{}, errs.New(errs.KindStateConflict, "Blueprint Release cannot authorize another forward effect")
+		return ReleaseWorkSources{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Release cannot authorize another forward effect",
+		)
 	}
 	return ledger.loadReleaseForwardSources(ctx, view.Work)
 }
 
-func (ledger *ReleaseLedger) loadReleaseForwardSources(ctx context.Context, work workqueue.View) (ReleaseWorkSources, error) {
+func (ledger *ReleaseLedger) loadReleaseForwardSources(
+	ctx context.Context,
+	work workqueue.View,
+) (ReleaseWorkSources, error) {
 	var empty ReleaseWorkSources
 	task, item := work.Task.Task, work.Item.Item
 	sources, err := ledger.LoadReleaseWorkInput(ctx, work)
@@ -74,7 +99,13 @@ func (ledger *ReleaseLedger) loadReleaseForwardSources(ctx context.Context, work
 		if err := request.Matches(task, item, sources.Rollout.Record); err != nil {
 			return empty, err
 		}
-		conditions, err := ledger.directReleaseSourceConditions(ctx, task.Scope, request.Source, item.TargetID, work.ReadRevision)
+		conditions, err := ledger.directReleaseSourceConditions(
+			ctx,
+			task.Scope,
+			request.Source,
+			item.TargetID,
+			work.ReadRevision,
+		)
 		if err != nil {
 			return empty, err
 		}
@@ -127,7 +158,10 @@ func (ledger *ReleaseLedger) loadReleaseForwardSources(ctx context.Context, work
 	}
 	sources.Conditions = append(sources.Conditions, configuration...)
 	for _, predecessor := range sources.Predecessors {
-		keys := []string{releases.ReleaseProjectionKey(predecessor.ServiceID), serviceruntimerecord.Key(predecessor.ServiceID)}
+		keys := []string{
+			releases.ReleaseProjectionKey(predecessor.ServiceID),
+			serviceruntimerecord.Key(predecessor.ServiceID),
+		}
 		read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: work.ReadRevision})
 		if err != nil {
 			return empty, err
@@ -141,7 +175,10 @@ func (ledger *ReleaseLedger) loadReleaseForwardSources(ctx context.Context, work
 			if expected[index] == 0 && value != nil || expected[index] > 0 &&
 				(value == nil || value.Key != key || value.ModRevision != expected[index]) {
 				keyvalue.ClearValues(read.Values)
-				return empty, errs.New(errs.KindStateConflict, "Service runtime changed after Blueprint Release preparation")
+				return empty, errs.New(
+					errs.KindStateConflict,
+					"Service runtime changed after Blueprint Release preparation",
+				)
 			}
 			sources.Conditions = append(sources.Conditions, keyvalue.Condition{Key: key, ModRevision: expected[index]})
 		}

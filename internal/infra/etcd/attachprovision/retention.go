@@ -14,7 +14,12 @@ import (
 
 // PrepareRetention collects execution-owned captures only. Applied bindings and
 // their encrypted facts belong to resources and are never deleted here.
-func (repository *InputRepository) PrepareRetention(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (repository *InputRepository) PrepareRetention(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return false, workqueue.Change{}, err
@@ -28,7 +33,13 @@ func (repository *InputRepository) PrepareRetention(ctx context.Context, view wo
 		item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete {
 		return false, workqueue.Change{}, checkpointConflict("Attach history requires expired, fully settled execution")
 	}
-	source, found, err := blueprintattachinputs.ReadAtRevision(ctx, repository.store, task.ID, item.TargetID, view.ReadRevision)
+	source, found, err := blueprintattachinputs.ReadAtRevision(
+		ctx,
+		repository.store,
+		task.ID,
+		item.TargetID,
+		view.ReadRevision,
+	)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
@@ -73,7 +84,12 @@ func (repository *InputRepository) PrepareRetention(ctx context.Context, view wo
 	}}, nil
 }
 
-func (repository *InputRepository) retirePins(ctx context.Context, revision int64, capture blueprintattachinputs.Generation, guards []keyvalue.Condition) (bool, []keyvalue.Condition, error) {
+func (repository *InputRepository) retirePins(
+	ctx context.Context,
+	revision int64,
+	capture blueprintattachinputs.Generation,
+	guards []keyvalue.Condition,
+) (bool, []keyvalue.Condition, error) {
 	absence := []keyvalue.Condition{
 		{Key: tasksecretpins.RootKey(capture.OperationID)},
 		{Key: tasksecretpins.PreparationKey(capture.OperationID)},

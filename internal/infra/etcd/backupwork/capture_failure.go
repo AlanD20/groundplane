@@ -57,8 +57,19 @@ func (repository *InputRepository) PrepareCaptureFailure(ctx context.Context, vi
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	backings, err := postgresbackingguard.PrepareOwnership(ctx, repository.store, environments, run.EnvironmentID,
-		postgresbackingguard.Owner(backupruntime.BackupOperationBackup, run.OperationID, run.TaskID), view.Work.ReadRevision, false)
+	backings, err := postgresbackingguard.PrepareOwnership(
+		ctx,
+		repository.store,
+		environments,
+		run.EnvironmentID,
+		postgresbackingguard.Owner(
+			backupruntime.BackupOperationBackup,
+			run.OperationID,
+			run.TaskID,
+		),
+		view.Work.ReadRevision,
+		false,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -78,7 +89,10 @@ func (repository *InputRepository) PrepareCaptureFailure(ctx context.Context, vi
 	change.Conditions = append(change.Conditions, backings.Conditions...)
 	change.Conditions = append(change.Conditions, orphan.Conditions...)
 	if !allSucceeded {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: guard.Key, Value: encoded})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: guard.Key, Value: encoded},
+		)
 	} else {
 		// Preserve completed source receipts. Recovery will settle the resource
 		// after helper exclusion; the separate Task failure is still recorded.
@@ -86,7 +100,10 @@ func (repository *InputRepository) PrepareCaptureFailure(ctx context.Context, vi
 	}
 	change.Mutations = append(change.Mutations, orphan.Mutations...)
 	for _, mutation := range backings.Mutations {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...)},
+		)
 	}
 	return change, nil
 }

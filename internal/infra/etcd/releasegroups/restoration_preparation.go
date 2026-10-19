@@ -27,9 +27,18 @@ type RestorationPreparation struct {
 
 func (preparation RestorationPreparation) Reference() (workexecution.Input, error) {
 	if ids.Validate(ids.KindPlan, preparation.PlanID) != nil || ids.Validate(ids.KindTask, preparation.TaskID) != nil ||
-		ids.Validate(ids.KindReleaseGroup, preparation.GroupID) != nil || ids.Validate(ids.KindOperation, preparation.GroupOperationID) != nil ||
-		ids.Validate(ids.KindService, preparation.ServiceID) != nil || ids.Validate(ids.KindWorkItem, preparation.SourceWorkID) != nil ||
-		ids.Validate(ids.KindWorkItem, preparation.WorkItemID) != nil || preparation.SourceWorkID == preparation.WorkItemID ||
+		ids.Validate(
+			ids.KindReleaseGroup,
+			preparation.GroupID,
+		) != nil || ids.Validate(ids.KindOperation, preparation.GroupOperationID) != nil ||
+		ids.Validate(
+			ids.KindService,
+			preparation.ServiceID,
+		) != nil || ids.Validate(ids.KindWorkItem, preparation.SourceWorkID) != nil ||
+		ids.Validate(
+			ids.KindWorkItem,
+			preparation.WorkItemID,
+		) != nil || preparation.SourceWorkID == preparation.WorkItemID ||
 		preparation.Ordinal == 0 || preparation.Ordinal > 32 || preparation.SourcePreparation.Validate() != nil {
 		return workexecution.Input{}, errs.New(errs.KindValidationFailed, "Group restoration preparation is invalid")
 	}
@@ -43,12 +52,18 @@ func (preparation RestorationPreparation) Reference() (workexecution.Input, erro
 }
 
 func (capture ExecutionCapture) RestorationPreparation(index int) (RestorationPreparation, error) {
-	if capture.Policy.Validate() != nil || index < 0 || index >= len(capture.Policy.Members) || index >= len(capture.Members) {
+	if capture.Policy.Validate() != nil || index < 0 || index >= len(capture.Policy.Members) ||
+		index >= len(capture.Members) {
 		return RestorationPreparation{}, errs.New(errs.KindValidationFailed, "Group restoration has no captured member")
 	}
 	member := capture.Policy.Members[index]
 	preparation := RestorationPreparation{
-		PlanID: ids.DeriveAt(ids.KindPlan, capture.CreatedAt, capture.Policy.TaskID, "group-restoration/"+member.RestoreID),
+		PlanID: ids.DeriveAt(
+			ids.KindPlan,
+			capture.CreatedAt,
+			capture.Policy.TaskID,
+			"group-restoration/"+member.RestoreID,
+		),
 		TaskID: capture.Policy.TaskID, GroupID: capture.Policy.Manifest.ReleaseGroupID,
 		GroupOperationID: capture.Policy.Manifest.OperationID, Ordinal: member.Member.Ordinal, ServiceID: member.Member.ServiceID,
 		SourceWorkID: member.ForwardID, WorkItemID: member.RestoreID, SourcePreparation: capture.Members[index].Forward,

@@ -16,7 +16,11 @@ type RecoverySnapshot struct {
 	Revision int64
 }
 
-func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.View, delivery *agentpb.ServiceLifecycleWorkInput) (RecoverySnapshot, error) {
+func (repository *Repository) LoadRecovery(
+	ctx context.Context,
+	view workqueue.View,
+	delivery *agentpb.ServiceLifecycleWorkInput,
+) (RecoverySnapshot, error) {
 	input, _, err := repository.Load(ctx, view)
 	if err != nil {
 		return RecoverySnapshot{}, err

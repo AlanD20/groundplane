@@ -37,7 +37,13 @@ func (repository *BackupRuntimeRepository) configRestoreExecutionGuard(ctx conte
 	var input *agentpb.BackupWorkInput
 	var conditions []etcdstore.Condition
 	if recovery != nil {
-		assignment, guards, loadErr := inputs.LoadConfigRecoveryTransfer(ctx, queue, owner.Transfer.Binding, *recovery, revision)
+		assignment, guards, loadErr := inputs.LoadConfigRecoveryTransfer(
+			ctx,
+			queue,
+			owner.Transfer.Binding,
+			*recovery,
+			revision,
+		)
 		if loadErr != nil {
 			return nil, loadErr
 		}

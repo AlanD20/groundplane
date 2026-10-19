@@ -36,9 +36,13 @@ type stagedRouteWork struct {
 	Provider      *environmentchanges.RouteProviderPin
 }
 
-func (publisher *RouteWorkPublisher) stage(ctx context.Context, request routeWorkStageRequest) (stagedRouteWork, error) {
+func (publisher *RouteWorkPublisher) stage(
+	ctx context.Context,
+	request routeWorkStageRequest,
+) (stagedRouteWork, error) {
 	current := request.Current
-	if request.Idempotency == nil || request.CreatedAt.IsZero() || request.Route.EnvironmentID != current.Record.EnvironmentID ||
+	if request.Idempotency == nil || request.CreatedAt.IsZero() ||
+		request.Route.EnvironmentID != current.Record.EnvironmentID ||
 		(request.Action != workexecution.ActionCreate && request.Action != workexecution.ActionUpdate && request.Action != workexecution.ActionRemove) {
 		return stagedRouteWork{}, errs.New(errs.KindValidationFailed, "Route staged action is invalid")
 	}
@@ -74,7 +78,10 @@ func (publisher *RouteWorkPublisher) stageClaimed(ctx context.Context, request r
 			return stagedRouteWork{}, err
 		}
 	}
-	audit := blueprints.EnvironmentRouteMutationAudit{BaseRevisionID: request.Current.Record.RevisionID, RouteID: record.Desired.ID}
+	audit := blueprints.EnvironmentRouteMutationAudit{
+		BaseRevisionID: request.Current.Record.RevisionID,
+		RouteID:        record.Desired.ID,
+	}
 	var candidate environmentprojection.EnvironmentComposeProjection
 	if request.Action == workexecution.ActionRemove {
 		audit.Action = blueprints.EnvironmentRouteMutationRemove
@@ -137,5 +144,11 @@ func (publisher *RouteWorkPublisher) stageClaimed(ctx context.Context, request r
 	if err != nil {
 		return stagedRouteWork{}, err
 	}
-	return stagedRouteWork{Claim: claim, Candidate: candidate, Route: record, EpochRevision: epoch, Provider: provider}, nil
+	return stagedRouteWork{
+		Claim:         claim,
+		Candidate:     candidate,
+		Route:         record,
+		EpochRevision: epoch,
+		Provider:      provider,
+	}, nil
 }

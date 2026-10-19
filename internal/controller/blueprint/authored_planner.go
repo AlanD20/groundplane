@@ -24,7 +24,10 @@ func (service *Service) planAuthoredUnits(
 		input.identities.EnvironmentID != input.desired.EnvironmentID ||
 		input.identities.RevisionID != input.desired.RevisionID ||
 		input.identities.RenderGeneration != input.desired.RenderGeneration {
-		return blueprintunits.DesiredPlan{}, errs.New(errs.KindStateConflict, "Blueprint planning sources do not describe one captured revision")
+		return blueprintunits.DesiredPlan{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint planning sources do not describe one captured revision",
+		)
 	}
 	targets, err := selectAuthoredOwnedUnitTargets(input.identities)
 	if err != nil {

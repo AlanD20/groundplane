@@ -24,21 +24,38 @@ func NewDecisionWork(records *servicelifecyclework.Repository) (*DecisionWork, e
 	return &DecisionWork{records: records}, nil
 }
 
-func (owner *DecisionWork) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *DecisionWork) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if err := ctx.Err(); err != nil {
 		return workqueue.Change{}, err
 	}
-	if task.Task.Stop == nil || item.Item.Operation != workexecution.ServiceLifecycle || item.Item.TaskID != task.Task.ID ||
-		item.Item.Placement.Executor != workexecution.Controller || item.Item.AttemptNumber != 0 {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service lifecycle decision has no matching stop request")
+	if task.Task.Stop == nil || item.Item.Operation != workexecution.ServiceLifecycle ||
+		item.Item.TaskID != task.Task.ID ||
+		item.Item.Placement.Executor != workexecution.Controller ||
+		item.Item.AttemptNumber != 0 {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle decision has no matching stop request",
+		)
 	}
 	return workqueue.PrepareRevocation(task, item, task.Task.Stop.Outcome, at)
 }
 
-func (owner *DecisionWork) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *DecisionWork) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	if !request.DecisionOnly || request.Direction != workexecution.Forward ||
 		request.Item.Item.Placement.Executor != workexecution.Controller {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Service lifecycle decision cannot authorize host execution")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle decision cannot authorize host execution",
+		)
 	}
 	view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
 	captured, _, err := owner.records.Load(ctx, view)
@@ -46,7 +63,10 @@ func (owner *DecisionWork) Admit(ctx context.Context, request workqueue.Assignme
 		return workdispatch.Decision{}, err
 	}
 	if captured.Runtime != nil {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Service lifecycle decision has captured host effects")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle decision has captured host effects",
+		)
 	}
 	change, err := owner.records.PrepareUnstarted(ctx, view, at)
 	return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err

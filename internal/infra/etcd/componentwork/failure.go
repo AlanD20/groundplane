@@ -24,7 +24,9 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 		attempt.FinishedAt != nil ||
 		item.Operation != workexecution.Component || !task.PublicationComplete || task.CollectionStartedAt != nil ||
 		interrupted && reason != componentexecution.ExecutionInterrupted {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Component failure no longer owns the active execution")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Component failure no longer owns the active execution",
+		)
 	}
 	input, capture, guards, err := repository.Load(ctx, view.Work)
 	if err != nil {
@@ -34,7 +36,9 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 	settled := checkpoint == nil
 	if attempt.Direction == workexecution.Recovery {
 		if checkpoint != nil {
-			return workqueue.Change{}, workexecution.Completion{}, conflict("Component inspection failure cannot contain a forward checkpoint")
+			return workqueue.Change{}, workexecution.Completion{}, conflict(
+				"Component inspection failure cannot contain a forward checkpoint",
+			)
 		}
 		captured, err := repository.LoadRecoveryInput(ctx, view.Work, attempt)
 		if err != nil {
@@ -51,7 +55,9 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 		}
 		defer keyvalue.ClearValues(read.Values)
 		if read.Values[0] == nil {
-			return workqueue.Change{}, workexecution.Completion{}, conflict("Component failure is missing its acknowledged progress")
+			return workqueue.Change{}, workexecution.Completion{}, conflict(
+				"Component failure is missing its acknowledged progress",
+			)
 		}
 		progress, err := componentexecution.DecodeProgress(attempt, input, read.Values[0].Value)
 		if err != nil {
@@ -59,7 +65,9 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 		}
 		expected, err := progress.Checkpoint(attempt, input)
 		if err != nil || expected != *checkpoint || progress.Stage == componentexecution.Complete {
-			return workqueue.Change{}, workexecution.Completion{}, conflict("Component failure differs from acknowledged progress; completed work must report completion")
+			return workqueue.Change{}, workexecution.Completion{}, conflict(
+				"Component failure differs from acknowledged progress; completed work must report completion",
+			)
 		}
 		settled = false
 		guards = append(guards, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})

@@ -45,13 +45,18 @@ func (repository *BackupRuntimeRepository) loadConfigRestorePublication(ctx cont
 	if err != nil {
 		return zero, err
 	}
-	keys := []string{backupruntime.BackupRestoreKey(taskID), memberKey, backupwork.InputKey(owner.Transfer.Binding.Attempt.WorkItemID),
+	keys := []string{
+		backupruntime.BackupRestoreKey(taskID),
+		memberKey,
+		backupwork.InputKey(owner.Transfer.Binding.Attempt.WorkItemID),
 		backupconfiguration.ConfigRestoreGenerationKey(
 			owner,
-		), blueprints.EnvironmentBlueprintRootKey(owner.EnvironmentID, taskID),
+		),
+		blueprints.EnvironmentBlueprintRootKey(owner.EnvironmentID, taskID),
 		blueprints.EnvironmentBlueprintHeadKey(owner.EnvironmentID),
 		blueprints.EnvironmentBlueprintEffectiveProjectionKey(owner.EnvironmentID, taskID),
-		blueprints.EnvironmentBlueprintOwnedIdentitiesKey(owner.EnvironmentID, taskID)}
+		blueprints.EnvironmentBlueprintOwnedIdentitiesKey(owner.EnvironmentID, taskID),
+	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return zero, err

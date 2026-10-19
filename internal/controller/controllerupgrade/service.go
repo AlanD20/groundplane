@@ -117,7 +117,13 @@ func (service *Service) UpdateController(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	now := service.now().UTC()
-	capture := controllersoftware.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan), Input: input, CreatedAt: now}
+	capture := controllersoftware.Capture{
+		TaskID:     ids.New(ids.KindTask),
+		WorkItemID: ids.New(ids.KindWorkItem),
+		PlanID:     ids.New(ids.KindPlan),
+		Input:      input,
+		CreatedAt:  now,
+	}
 	raw, err := json.Marshal(apiTypes.TaskAccepted{TaskID: capture.TaskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)

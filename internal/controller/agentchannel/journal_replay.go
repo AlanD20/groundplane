@@ -15,7 +15,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (server *Server) replayWorkJournal(ctx context.Context, session *Session, generation uint64, request *agentpb.WorkJournalReplayRequest) (*agentpb.WorkJournalReplayAck, error) {
+func (server *Server) replayWorkJournal(
+	ctx context.Context,
+	session *Session,
+	generation uint64,
+	request *agentpb.WorkJournalReplayRequest,
+) (*agentpb.WorkJournalReplayAck, error) {
 	if request == nil || executionplan.RejectUnknown(request) != nil || proto.Size(request) > workreceipt.MaximumBytes {
 		return nil, errs.New(errs.KindValidationFailed, "startup result replay is malformed or oversized")
 	}
@@ -26,7 +31,10 @@ func (server *Server) replayWorkJournal(ctx context.Context, session *Session, g
 		}
 	}
 	if forms != 1 {
-		return nil, errs.New(errs.KindValidationFailed, "startup journal request requires exactly one replay, inventory or completion form")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"startup journal request requires exactly one replay, inventory or completion form",
+		)
 	}
 	authorization, err := server.authenticatedWorkIdentity(ctx, session, generation)
 	if err != nil {
@@ -58,7 +66,12 @@ func (server *Server) replayWorkJournal(ctx context.Context, session *Session, g
 	if !supported {
 		return nil, errs.New(errs.KindValidationFailed, "startup replay cannot authorize execution or deliver inputs")
 	}
-	previous := workexecution.Identity{Executor: workexecution.Agent, HostID: identity.HostId, AgentID: identity.AgentId, Generation: identity.ExecutorGeneration}
+	previous := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     identity.HostId,
+		AgentID:    identity.AgentId,
+		Generation: identity.ExecutorGeneration,
+	}
 	retained, err := authorization.ForReceipt(previous)
 	if err != nil {
 		return nil, err
@@ -69,7 +82,18 @@ func (server *Server) replayWorkJournal(ctx context.Context, session *Session, g
 	defer cancel()
 	reply, err := server.terminalReport(bounded, retained, message)
 	if err != nil {
-		slog.WarnContext(ctx, "retained Agent result requires reconciliation", "task_id", identity.TaskId, "work_id", identity.WorkItemId, "attempt_id", identity.AttemptId, "error", err)
+		slog.WarnContext(
+			ctx,
+			"retained Agent result requires reconciliation",
+			"task_id",
+			identity.TaskId,
+			"work_id",
+			identity.WorkItemId,
+			"attempt_id",
+			identity.AttemptId,
+			"error",
+			err,
+		)
 		problem := errs.New(errs.KindInternal, "").ToProblem()
 		var productError *errs.Error
 		if errors.As(err, &productError) {

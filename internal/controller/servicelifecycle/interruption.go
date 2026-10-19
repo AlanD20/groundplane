@@ -15,7 +15,11 @@ import (
 // ReconcileInterrupted records only durable evidence from the replaced executor.
 // A new Agent on the same host does not impersonate the old process or receive
 // permission to rerun an ambiguous effect.
-func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (owner *AgentWork) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
@@ -23,7 +27,10 @@ func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue
 	actor, previous := authorization.Identity(), view.Attempt.Attempt.Executor
 	if actor.Executor != workexecution.Agent || actor.HostID != previous.HostID || actor == previous ||
 		view.CurrentExecutor || !view.ActiveAttempt || view.Work.Task.Task.CollectionStartedAt != nil {
-		return errs.New(errs.KindStateConflict, "Service lifecycle interruption requires the replacement Agent on the same host")
+		return errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle interruption requires the replacement Agent on the same host",
+		)
 	}
 	captured, _, err := owner.inputs.Load(ctx, view.Work)
 	if err != nil {

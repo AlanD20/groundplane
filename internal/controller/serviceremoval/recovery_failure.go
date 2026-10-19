@@ -41,7 +41,14 @@ func (service *WorkReports) FailRemovalRecovery(ctx context.Context, authorizati
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
 		at := time.Now().UTC()
-		proof, result, err := service.inputs.PrepareRecoveryFailure(ctx, view, input, lifecycleexecution.FailureReason(request.Reason), at, false)
+		proof, result, err := service.inputs.PrepareRecoveryFailure(
+			ctx,
+			view,
+			input,
+			lifecycleexecution.FailureReason(request.Reason),
+			at,
+			false,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -62,7 +69,10 @@ func (service *WorkReports) FailRemovalRecovery(ctx context.Context, authorizati
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Service removal recovery ownership changed; resend the saved failure")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Service removal recovery ownership changed; resend the saved failure",
+			)
 		}
 		view, err = service.recoveryView(ctx, authorization, request.Attempt)
 		if err != nil {
@@ -75,7 +85,10 @@ func (service *WorkReports) FailRemovalRecovery(ctx context.Context, authorizati
 	}
 	if string(failure.Reason) != request.Reason {
 		clear(raw)
-		return nil, errs.New(errs.KindStateConflict, "Service removal recovery failure replay differs from its stored reason")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Service removal recovery failure replay differs from its stored reason",
+		)
 	}
 	attempt := view.Attempt.Attempt
 	digest, err := hex.DecodeString(attempt.Result.SHA256)

@@ -43,7 +43,8 @@ func (proof RecoveryProof) Validate(input RecoveryInput) error {
 		return errs.New(errs.KindStateConflict, "Script recovery proof has no captured container receipt")
 	}
 	if body := input.Artifacts.BodyPrepared; body != nil {
-		if proof.Cleanup.BodyDevice != body.Device || proof.Cleanup.BodyInode != body.Inode || proof.Cleanup.BodyLeaf != body.Leaf {
+		if proof.Cleanup.BodyDevice != body.Device || proof.Cleanup.BodyInode != body.Inode ||
+			proof.Cleanup.BodyLeaf != body.Leaf {
 			return errs.New(errs.KindStateConflict, "Script recovery proof identifies a different body file")
 		}
 	} else if proof.Cleanup.BodyDevice != 0 || proof.Cleanup.BodyInode != 0 || proof.Cleanup.BodyLeaf != "" {
@@ -65,11 +66,16 @@ func EncodeRecoveryProof(input RecoveryInput, proof RecoveryProof) ([]byte, work
 		return nil, workexecution.Input{}, err
 	}
 	if len(raw) > 16<<10 {
-		return nil, workexecution.Input{}, errs.New(errs.KindValidationFailed, "Script cleanup proof exceeds its size limit")
+		return nil, workexecution.Input{}, errs.New(
+			errs.KindValidationFailed,
+			"Script cleanup proof exceeds its size limit",
+		)
 	}
 	digest := sha256.Sum256(raw)
-	reference := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, input.Attempt.AssignedAt, input.Attempt.ID, "script-cleanup"),
-		SHA256: hex.EncodeToString(digest[:])}
+	reference := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, input.Attempt.AssignedAt, input.Attempt.ID, "script-cleanup"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	return raw, reference, nil
 }
 
@@ -86,7 +92,10 @@ func DecodeRecoveryProof(input RecoveryInput, raw []byte, reference workexecutio
 		return RecoveryProof{}, err
 	}
 	if expected != reference || !bytes.Equal(raw, canonical) {
-		return RecoveryProof{}, errs.New(errs.KindStateConflict, "Script cleanup proof differs from its captured evidence")
+		return RecoveryProof{}, errs.New(
+			errs.KindStateConflict,
+			"Script cleanup proof differs from its captured evidence",
+		)
 	}
 	return proof, nil
 }

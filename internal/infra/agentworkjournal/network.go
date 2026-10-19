@@ -24,10 +24,21 @@ type NetworkFailureDelivery struct {
 }
 
 func (record attemptRecord) validateNetwork() error {
-	if record.Network == nil || record.Volume != nil || record.VolumeRecovery != nil || record.NetworkRecovery != nil || record.AttachRecovery != nil || record.AttachFailure != nil || record.AttachRemoval != nil ||
-		record.EnvironmentFailure != nil || record.EnvironmentRemoval != nil || record.ScriptFailure != nil ||
-		record.ScriptRecovery != nil || record.ScriptCompletion != nil || record.Release != nil || record.Effect != nil ||
-		record.Completion != nil || record.Failure != nil || record.Recovery != nil || len(record.Script) != 0 {
+	if record.Network == nil || record.Volume != nil || record.VolumeRecovery != nil || record.NetworkRecovery != nil ||
+		record.AttachRecovery != nil ||
+		record.AttachFailure != nil ||
+		record.AttachRemoval != nil ||
+		record.EnvironmentFailure != nil ||
+		record.EnvironmentRemoval != nil ||
+		record.ScriptFailure != nil ||
+		record.ScriptRecovery != nil ||
+		record.ScriptCompletion != nil ||
+		record.Release != nil ||
+		record.Effect != nil ||
+		record.Completion != nil ||
+		record.Failure != nil ||
+		record.Recovery != nil ||
+		len(record.Script) != 0 {
 		return invalid()
 	}
 	network := record.Network
@@ -45,9 +56,12 @@ func (record attemptRecord) validateNetwork() error {
 			return invalid()
 		}
 		if terminal := failure.Receipt; terminal != nil {
-			if terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil || terminal.Outcome == workexecution.Succeeded ||
-				!workexecution.SameAssignment(record.Attempt, *terminal) || terminal.StartedAt == nil ||
-				!terminal.StartedAt.Equal(*record.Attempt.StartedAt) || terminal.FinishedAt.Before(record.UpdatedAt) {
+			if terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil ||
+				terminal.Outcome == workexecution.Succeeded ||
+				!workexecution.SameAssignment(record.Attempt, *terminal) ||
+				terminal.StartedAt == nil ||
+				!terminal.StartedAt.Equal(*record.Attempt.StartedAt) ||
+				terminal.FinishedAt.Before(record.UpdatedAt) {
 				return invalid()
 			}
 			captured, err := networkexecution.DecodeFailure(*terminal, failure.Evidence, *terminal.Result)
@@ -66,7 +80,9 @@ func (record attemptRecord) validateNetwork() error {
 		if !network.Acknowledged || network.Progress.Stage != networkexecution.Complete || terminal.Validate() != nil ||
 			!workexecution.SameAssignment(record.Attempt, *terminal) || terminal.StartedAt == nil ||
 			!terminal.StartedAt.Equal(*record.Attempt.StartedAt) || terminal.FinishedAt == nil ||
-			terminal.FinishedAt.Before(record.UpdatedAt) || (terminal.Outcome != workexecution.Succeeded && terminal.Outcome != workexecution.Cancelled && terminal.Outcome != workexecution.Superseded) ||
+			terminal.FinishedAt.Before(
+				record.UpdatedAt,
+			) || (terminal.Outcome != workexecution.Succeeded && terminal.Outcome != workexecution.Cancelled && terminal.Outcome != workexecution.Superseded) ||
 			terminal.Result == nil || *terminal.Result != checkpoint.Evidence {
 			return invalid()
 		}

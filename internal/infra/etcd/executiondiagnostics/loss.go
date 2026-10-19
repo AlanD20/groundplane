@@ -14,7 +14,11 @@ func LossKey(attemptID string) string { return "/v1/diagnostics/execution-loss/"
 // MarkIncomplete records diagnostic loss without touching execution outcome.
 // It remains best effort when storage itself is unavailable; absent diagnostics
 // must never be interpreted as successful or untouched execution.
-func (repository *Repository) MarkIncomplete(ctx context.Context, taskID, workID, attemptID string, identity workexecution.Identity) error {
+func (repository *Repository) MarkIncomplete(
+	ctx context.Context,
+	taskID, workID, attemptID string,
+	identity workexecution.Identity,
+) error {
 	view, err := repository.queue.ReadResume(ctx, taskID, workID, attemptID, identity)
 	if err != nil {
 		return err

@@ -44,8 +44,17 @@ func capturedInputDigest(record ScriptExecutionRecord) (string, error) {
 }
 
 func validateCapturedInput(record ScriptExecutionRecord) error {
-	if len(record.Snapshot) == 0 || len(record.RunnerProjection) == 0 || len(record.Run) == 0 || len(record.BodyMetadata) == 0 ||
-		len(record.Snapshot)+len(record.RunnerProjection)+len(record.Run)+len(record.BodyMetadata) > keyvalue.MaximumBytes {
+	if len(record.Snapshot) == 0 || len(record.RunnerProjection) == 0 || len(record.Run) == 0 ||
+		len(record.BodyMetadata) == 0 ||
+		len(
+			record.Snapshot,
+		)+len(
+			record.RunnerProjection,
+		)+len(
+			record.Run,
+		)+len(
+			record.BodyMetadata,
+		) > keyvalue.MaximumBytes {
 		return errs.New(errs.KindValidationFailed, "Script captured input is missing or too large")
 	}
 	var snapshot agentpb.ResolvedRunnerSnapshot
@@ -53,8 +62,10 @@ func validateCapturedInput(record ScriptExecutionRecord) error {
 	var run agentpb.RunScript
 	var body agentpb.ScriptBodyArtifactMetadata
 	decode := proto.UnmarshalOptions{DiscardUnknown: false}
-	if decode.Unmarshal(record.Snapshot, &snapshot) != nil || decode.Unmarshal(record.RunnerProjection, &projection) != nil ||
-		decode.Unmarshal(record.Run, &run) != nil || decode.Unmarshal(record.BodyMetadata, &body) != nil {
+	if decode.Unmarshal(record.Snapshot, &snapshot) != nil ||
+		decode.Unmarshal(record.RunnerProjection, &projection) != nil ||
+		decode.Unmarshal(record.Run, &run) != nil ||
+		decode.Unmarshal(record.BodyMetadata, &body) != nil {
 		return errs.New(errs.KindValidationFailed, "Script captured input is invalid")
 	}
 	snapshotDigest := sha256.Sum256(record.Snapshot)
@@ -71,7 +82,10 @@ func validateCapturedInput(record ScriptExecutionRecord) error {
 		body.Uid != projection.Uid || body.Gid != projection.Gid ||
 		!bytes.Equal(run.BodySha256, body.Sha256) || hex.EncodeToString(body.Sha256) != record.BodySHA256 ||
 		!bytes.Equal(run.ServiceDefinitionSha256, snapshot.ServiceDefinitionSha256) ||
-		!bytes.Equal(run.RunnerSnapshotSha256, snapshotDigest[:]) || hex.EncodeToString(snapshotDigest[:]) != record.SnapshotSHA256 ||
+		!bytes.Equal(
+			run.RunnerSnapshotSha256,
+			snapshotDigest[:],
+		) || hex.EncodeToString(snapshotDigest[:]) != record.SnapshotSHA256 ||
 		!bytes.Equal(snapshot.RunnerProjectionSha256, projectionDigest[:]) ||
 		hex.EncodeToString(projectionDigest[:]) != record.RunnerProjectionSHA256 {
 		return errs.New(errs.KindValidationFailed, "Script captured input identities or digests disagree")

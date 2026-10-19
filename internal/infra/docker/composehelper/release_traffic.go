@@ -16,7 +16,12 @@ import (
 // ExecuteReleaseTraffic switches only the captured stable proxy. Completion
 // proves live routing AND its restart source. It never retires the old workload;
 // that has a separate acknowledged boundary.
-func ExecuteReleaseTraffic(ctx context.Context, taskRunner runner.Runner, input releaseexecution.Input, report releaseexecution.CheckpointReport) (*agentpb.ReleaseHelperResponse, error) {
+func ExecuteReleaseTraffic(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+) (*agentpb.ReleaseHelperResponse, error) {
 	if ctx == nil || taskRunner == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil {
 		return nil, invalidReleaseHelper()
 	}
@@ -82,7 +87,15 @@ func ExecuteReleaseTraffic(ctx context.Context, taskRunner runner.Runner, input 
 			expectedProxy = artifacts.Prior.Proxy
 		}
 	}
-	inventory, err := inspectServingInventory(bounded, taskRunner, prior, artifacts.Candidate, input.Release.ServiceId, input.Release.ReleaseId, expectedProxy)
+	inventory, err := inspectServingInventory(
+		bounded,
+		taskRunner,
+		prior,
+		artifacts.Candidate,
+		input.Release.ServiceId,
+		input.Release.ReleaseId,
+		expectedProxy,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +118,10 @@ func ExecuteReleaseTraffic(ctx context.Context, taskRunner runner.Runner, input 
 			return nil, err
 		}
 		if !before {
-			return nil, errs.New(errs.KindStateConflict, "proxy routing differs from both captured states; reconcile before cutover")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"proxy routing differs from both captured states; reconcile before cutover",
+			)
 		}
 		if input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE {
 			for _, args := range [][]string{{"container", "stop", "--time", "30", "--", id}, {"container", "rm", "--", id}} {
@@ -148,20 +164,37 @@ func ExecuteReleaseTraffic(ctx context.Context, taskRunner runner.Runner, input 
 	if failure != nil {
 		return nil, errs.New(errs.KindRequestFailed, "captured proxy routing could not be activated")
 	}
-	proven, err := awaitRestorationProxy(bounded, taskRunner, id, artifacts.Proxy.ProxyImplementation, traffic.AfterSHA256[:])
+	proven, err := awaitRestorationProxy(
+		bounded,
+		taskRunner,
+		id,
+		artifacts.Proxy.ProxyImplementation,
+		traffic.AfterSHA256[:],
+	)
 	if err != nil {
 		return nil, err
 	}
 	if !proven {
-		return nil, errs.New(errs.KindStateConflict, "proxy live and restart configuration do not match the requested cutover")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"proxy live and restart configuration do not match the requested cutover",
+		)
 	}
 	return releaseTrafficResponse(input, traffic, response.MutationAttempted), nil
 }
 
-func releaseTrafficResponse(input releaseexecution.Input, traffic releaseexecution.TrafficChange, mutated bool) *agentpb.ReleaseHelperResponse {
-	return &agentpb.ReleaseHelperResponse{Succeeded: true, MutationAttempted: mutated, ProxyEvidence: &agentpb.ServiceProxyEvidence{
-		ServiceId: input.Release.ServiceId, ReleaseId: input.Release.ReleaseId, Target: traffic.Target, ProxyGeneration: traffic.Generation, ConfigSha256: slices.Clone(traffic.AfterSHA256[:]),
-	}}
+func releaseTrafficResponse(
+	input releaseexecution.Input,
+	traffic releaseexecution.TrafficChange,
+	mutated bool,
+) *agentpb.ReleaseHelperResponse {
+	return &agentpb.ReleaseHelperResponse{
+		Succeeded:         true,
+		MutationAttempted: mutated,
+		ProxyEvidence: &agentpb.ServiceProxyEvidence{
+			ServiceId: input.Release.ServiceId, ReleaseId: input.Release.ReleaseId, Target: traffic.Target, ProxyGeneration: traffic.Generation, ConfigSha256: slices.Clone(traffic.AfterSHA256[:]),
+		},
+	}
 }
 
 func runReleaseProxyCommand(ctx context.Context, taskRunner runner.Runner, command runner.RunCmdOpts) error {

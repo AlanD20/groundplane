@@ -45,7 +45,8 @@ func (owner *routeCompletion) PrepareFinish(
 		)
 	}
 	item := finished.Items[0]
-	if item.Item.Operation != workexecution.Component || item.Item.TaskID != task.ID || item.Item.Phase != workexecution.Settled ||
+	if item.Item.Operation != workexecution.Component || item.Item.TaskID != task.ID ||
+		item.Item.Phase != workexecution.Settled ||
 		item.Item.ActiveAttemptID != "" ||
 		item.Item.Result == nil ||
 		(item.Item.Cleanup != workexecution.CleanupNone && item.Item.Cleanup != workexecution.CleanupComplete) {

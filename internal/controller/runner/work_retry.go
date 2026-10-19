@@ -21,7 +21,10 @@ func (executor *Executor) PrepareWorkRetry(ctx context.Context, task workqueue.T
 		(work.Cleanup != workexecution.CleanupRequired && work.Cleanup != workexecution.CleanupStopped) ||
 		work.ActiveAttemptID != "" || task.Task.CollectionStartedAt != nil ||
 		previous.Revision <= 0 || previous.Attempt.Number != work.AttemptNumber || previous.Attempt.FinishedAt == nil || previous.Attempt.Result == nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Use Runner Retry with a fresh registration token; Task Retry is for stopped cleanup only")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Use Runner Retry with a fresh registration token; Task Retry is for stopped cleanup only",
+		)
 	}
 	input, err := executor.inputs.Load(ctx, work.ID, revision)
 	if err != nil {
@@ -36,7 +39,10 @@ func (executor *Executor) PrepareWorkRetry(ctx context.Context, task workqueue.T
 	}
 	completion, err := result.Record.Completion(input.Record)
 	if err != nil || completion.EffectsSettled || completion.Evidence != *previous.Attempt.Result {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Runner cleanup lacks the preceding unresolved result")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Runner cleanup lacks the preceding unresolved result",
+		)
 	}
 	change, err := workqueue.PrepareRetry(task, item, previous, workexecution.RetryDecision{
 		Direction: workexecution.Recovery, Result: completion.Evidence, NotBefore: at, Deadline: at.Add(5 * time.Minute),

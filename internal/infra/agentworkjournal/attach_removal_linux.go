@@ -65,7 +65,8 @@ func (journal *Journal) PrepareAttachRemoval(ctx context.Context, input attachex
 			// Do not discard process identities until the successful command result
 			// has been saved. A caller-supplied Confirm cannot erase unknown effects.
 			result := saved.CommandResult
-			if result == nil || next.LastResult == nil || !attachexecution.SameRemovalCommandResult(*result, *next.LastResult) {
+			if result == nil || next.LastResult == nil ||
+				!attachexecution.SameRemovalCommandResult(*result, *next.LastResult) {
 				return nil, conflict()
 			}
 		}
@@ -79,7 +80,10 @@ func (journal *Journal) PrepareAttachRemoval(ctx context.Context, input attachex
 	if err != nil {
 		return nil, err
 	}
-	state.AttachRemoval = &AttachRemovalRecord{Authority: authority, Report: attachexecution.RemovalReport{Progress: next}}
+	state.AttachRemoval = &AttachRemovalRecord{
+		Authority: authority,
+		Report:    attachexecution.RemovalReport{Progress: next},
+	}
 	state.Sequence, state.UpdatedAt = next.Sequence, next.UpdatedAt
 	if err := journal.writeRecord(ctx, *state); err != nil {
 		return nil, err
@@ -109,7 +113,10 @@ func (journal *Journal) AcknowledgeAttachRemoval(ctx context.Context, input atta
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) AttachRemoval(ctx context.Context, input attachexecution.RemovalInput) (*AttachRemovalRecord, error) {
+func (journal *Journal) AttachRemoval(
+	ctx context.Context,
+	input attachexecution.RemovalInput,
+) (*AttachRemovalRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err

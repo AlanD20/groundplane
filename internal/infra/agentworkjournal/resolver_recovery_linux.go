@@ -94,7 +94,8 @@ func (journal *Journal) AcknowledgeResolverRecovery(ctx context.Context, attempt
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if state == nil || state.Resolver.Source == nil || state.Resolver.Recovery == nil || ack == nil || len(ack.Failure) != 0 {
+	if state == nil || state.Resolver.Source == nil || state.Resolver.Recovery == nil || ack == nil ||
+		len(ack.Failure) != 0 {
 		return workexecution.Attempt{}, conflict()
 	}
 	entry := state.Resolver

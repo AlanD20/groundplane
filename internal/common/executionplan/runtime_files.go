@@ -26,7 +26,9 @@ type RuntimeFileUse struct {
 func RuntimeConfigurationFiles(ctx context.Context, artifact *agentpb.ComposeArtifact) ([]RuntimeFileUse, error) {
 	if ctx == nil || artifact == nil || RejectUnknown(artifact) != nil ||
 		artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-		!path.IsAbs(artifact.AuthorizedVolumeDir) || path.Clean(artifact.AuthorizedVolumeDir) != artifact.AuthorizedVolumeDir {
+		!path.IsAbs(
+			artifact.AuthorizedVolumeDir,
+		) || path.Clean(artifact.AuthorizedVolumeDir) != artifact.AuthorizedVolumeDir {
 		return nil, invalidRuntimeFiles()
 	}
 	digest := sha256.Sum256(artifact.CanonicalYaml)

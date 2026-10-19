@@ -46,7 +46,10 @@ func BuildWorkInput(input servicelifecyclework.Input) (*agentpb.ServiceLifecycle
 		return nil, errs.New(errs.KindValidationFailed, "Service lifecycle action is invalid")
 	}
 	for _, member := range procedure.Members {
-		result.Members = append(result.Members, &agentpb.ServiceLifecycleMember{Artifact: member.Artifact, Ownership: member.Source})
+		result.Members = append(
+			result.Members,
+			&agentpb.ServiceLifecycleMember{Artifact: member.Artifact, Ownership: member.Source},
+		)
 	}
 	if procedure.Hook != nil {
 		hook := procedure.Hook

@@ -13,8 +13,19 @@ import (
 // BackupConsumers operates only on workload facts captured in the native input.
 // The implementation authenticates the attempt and source before host access.
 type BackupConsumers interface {
-	Observe(context.Context, *agentpb.BackupWorkAssignment, uint32, string) (*agentpb.ObservedProject, [sha256.Size]byte, error)
-	Execute(context.Context, *agentpb.BackupWorkAssignment, uint32, string, agentpb.BackupConsumerOperation) (*agentpb.ObservedProject, [sha256.Size]byte, error)
+	Observe(
+		context.Context,
+		*agentpb.BackupWorkAssignment,
+		uint32,
+		string,
+	) (*agentpb.ObservedProject, [sha256.Size]byte, error)
+	Execute(
+		context.Context,
+		*agentpb.BackupWorkAssignment,
+		uint32,
+		string,
+		agentpb.BackupConsumerOperation,
+	) (*agentpb.ObservedProject, [sha256.Size]byte, error)
 }
 
 func stopVolumeConsumers(ctx context.Context, consumers BackupConsumers,
@@ -22,7 +33,9 @@ func stopVolumeConsumers(ctx context.Context, consumers BackupConsumers,
 	resume *agentpb.BackupRestoreResume, publisher *checkpointdelivery.BackupSource,
 ) (uint32, [sha256.Size]byte, error) {
 	var zero [sha256.Size]byte
-	if consumers == nil || assignment == nil || assignment.Input == nil || uint64(ordinal) >= uint64(len(assignment.Input.Steps)) || publisher == nil {
+	if consumers == nil || assignment == nil || assignment.Input == nil ||
+		uint64(ordinal) >= uint64(len(assignment.Input.Steps)) ||
+		publisher == nil {
 		return 0, zero, errs.New(errs.KindInternal, "Backup Volume consumer runtime is unavailable")
 	}
 	return stopVolumeConsumerSet(ctx, assignment.Input, ordinal, resume, publisher, volumeStopCommands{
@@ -30,7 +43,13 @@ func stopVolumeConsumers(ctx context.Context, consumers BackupConsumers,
 			return consumers.Observe(ctx, assignment, ordinal, serviceID)
 		},
 		stop: func(ctx context.Context, serviceID string) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
-			return consumers.Execute(ctx, assignment, ordinal, serviceID, agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_STOP)
+			return consumers.Execute(
+				ctx,
+				assignment,
+				ordinal,
+				serviceID,
+				agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_STOP,
+			)
 		},
 	})
 }
@@ -45,7 +64,8 @@ func stopVolumeConsumerSet(ctx context.Context, input *agentpb.BackupWorkInput, 
 	resume *agentpb.BackupRestoreResume, publisher *checkpointdelivery.BackupSource, commands volumeStopCommands,
 ) (uint32, [sha256.Size]byte, error) {
 	var zero [sha256.Size]byte
-	if input == nil || uint64(ordinal) >= uint64(len(input.Steps)) || publisher == nil || commands.observe == nil || commands.stop == nil {
+	if input == nil || uint64(ordinal) >= uint64(len(input.Steps)) || publisher == nil || commands.observe == nil ||
+		commands.stop == nil {
 		return 0, zero, errs.New(errs.KindInternal, "Volume stop commands are unavailable")
 	}
 	hasher := sha256.New()
@@ -67,7 +87,10 @@ func stopVolumeConsumerSet(ctx context.Context, input *agentpb.BackupWorkInput, 
 					resume.GetVolumeProgress().GetServiceCursor() == uint32(index)
 				if !pendingStop {
 					if !volumeAllRunning(observed, serviceID) {
-						return 0, zero, errs.New(errs.KindStateConflict, "Volume consumer state differs from captured execution")
+						return 0, zero, errs.New(
+							errs.KindStateConflict,
+							"Volume consumer state differs from captured execution",
+						)
 					}
 					if err := publishVolumeServiceProgress(ctx, publisher, uint32(index), serviceID,
 						agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_STOP_INTENT, digest); err != nil {
@@ -113,7 +136,9 @@ func recoverVolumeConsumers(ctx context.Context, consumers BackupConsumers,
 	assignment *agentpb.BackupWorkAssignment, ordinal uint32,
 	resume *agentpb.BackupRestoreResume, publisher *checkpointdelivery.BackupSource,
 ) error {
-	if consumers == nil || assignment == nil || assignment.Input == nil || uint64(ordinal) >= uint64(len(assignment.Input.Steps)) || publisher == nil {
+	if consumers == nil || assignment == nil || assignment.Input == nil ||
+		uint64(ordinal) >= uint64(len(assignment.Input.Steps)) ||
+		publisher == nil {
 		return errs.New(errs.KindInternal, "Backup Volume consumer runtime is unavailable")
 	}
 	return recoverVolumeConsumerSet(ctx, assignment.Input, ordinal, resume, publisher, volumeRecoveryCommands{
@@ -121,7 +146,13 @@ func recoverVolumeConsumers(ctx context.Context, consumers BackupConsumers,
 			return consumers.Observe(ctx, assignment, ordinal, serviceID)
 		},
 		recover: func(ctx context.Context, serviceID string) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
-			return consumers.Execute(ctx, assignment, ordinal, serviceID, agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_RECOVER)
+			return consumers.Execute(
+				ctx,
+				assignment,
+				ordinal,
+				serviceID,
+				agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_RECOVER,
+			)
 		},
 	})
 }
@@ -135,7 +166,8 @@ type volumeRecoveryCommands struct {
 func recoverVolumeConsumerSet(ctx context.Context, input *agentpb.BackupWorkInput, ordinal uint32,
 	resume *agentpb.BackupRestoreResume, publisher *checkpointdelivery.BackupSource, commands volumeRecoveryCommands,
 ) error {
-	if input == nil || uint64(ordinal) >= uint64(len(input.Steps)) || publisher == nil || commands.observe == nil || commands.recover == nil {
+	if input == nil || uint64(ordinal) >= uint64(len(input.Steps)) || publisher == nil || commands.observe == nil ||
+		commands.recover == nil {
 		return errs.New(errs.KindInternal, "Volume recovery consumer commands are unavailable")
 	}
 	for index, serviceID := range input.Steps[ordinal].ConsumerServiceIds {
@@ -204,9 +236,12 @@ func recoverVolumeConsumerSet(ctx context.Context, input *agentpb.BackupWorkInpu
 func publishVolumeServiceProgress(ctx context.Context, publisher *checkpointdelivery.BackupSource,
 	cursor uint32, serviceID string, phase agentpb.BackupServicePhase, digest [sha256.Size]byte,
 ) error {
-	return publisher.Volume(ctx, &agentpb.BackupVolumeCheckpoint{Checkpoint: &agentpb.BackupVolumeCheckpoint_ServiceProgress{
-		ServiceProgress: &agentpb.BackupVolumeServiceProgress{ServiceCursor: cursor,
-			ServiceId: serviceID, Phase: phase, ObservationSha256: append([]byte(nil), digest[:]...)}}})
+	return publisher.Volume(
+		ctx,
+		&agentpb.BackupVolumeCheckpoint{Checkpoint: &agentpb.BackupVolumeCheckpoint_ServiceProgress{
+			ServiceProgress: &agentpb.BackupVolumeServiceProgress{ServiceCursor: cursor,
+				ServiceId: serviceID, Phase: phase, ObservationSha256: append([]byte(nil), digest[:]...)}}},
+	)
 }
 
 func writeVolumeServiceDigest(hasher hash.Hash, digest [sha256.Size]byte) {

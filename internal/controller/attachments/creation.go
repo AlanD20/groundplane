@@ -102,7 +102,16 @@ func (service *MutationService) createAttachOnce(
 	now := service.now().UTC()
 	attachID := ids.New(ids.KindAttach)
 	taskID := ids.New(ids.KindTask)
-	draft, err := service.captureCreateInput(ctx, scope, adapter, attachID, name, taskID, ids.New(ids.KindOperation), now)
+	draft, err := service.captureCreateInput(
+		ctx,
+		scope,
+		adapter,
+		attachID,
+		name,
+		taskID,
+		ids.New(ids.KindOperation),
+		now,
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -112,9 +121,16 @@ func (service *MutationService) createAttachOnce(
 		timeout = max(timeout, int64(draft.Hook.Attach.TimeoutSeconds)+15)
 	}
 	task := workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor,
-		Scope:  workexecution.Scope{TenantID: scope.Tenant.Record.ID, ProjectID: scope.Project.Record.ID, EnvironmentID: environmentID},
+		Scope: workexecution.Scope{
+			TenantID:      scope.Tenant.Record.ID,
+			ProjectID:     scope.Project.Record.ID,
+			EnvironmentID: environmentID,
+		},
 		Action: workexecution.ActionAttach, TargetID: attachID, TargetName: name,
-		Intent:        workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, now, taskID, "request-intent"), SHA256: evidence.durable.CiphertextDigest},
+		Intent: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, now, taskID, "request-intent"),
+			SHA256: evidence.durable.CiphertextDigest,
+		},
 		ExpectedItems: 1, CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(timeout) * time.Second)}
 	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task.ID, task.CreatedAt, nil)
 	if err != nil {

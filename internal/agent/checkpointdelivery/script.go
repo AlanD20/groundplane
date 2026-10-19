@@ -23,7 +23,11 @@ type Script struct {
 	exchange ScriptExchange
 }
 
-func NewScript(attempt workexecution.Attempt, journal *agentworkjournal.Journal, exchange ScriptExchange) (*Script, error) {
+func NewScript(
+	attempt workexecution.Attempt,
+	journal *agentworkjournal.Journal,
+	exchange ScriptExchange,
+) (*Script, error) {
 	if attempt.Validate() != nil || attempt.Executor.Executor != workexecution.Agent ||
 		attempt.FinishedAt != nil || journal == nil || exchange == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Script checkpoint delivery requires an active Agent attempt")

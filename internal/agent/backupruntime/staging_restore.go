@@ -38,7 +38,8 @@ func (state *Staging) RestoreRecovery(ctx context.Context, assignment *agentpb.B
 	if err != nil {
 		return CaptureStage{}, err
 	}
-	if state == nil || owned.RestoreMode != agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION ||
+	if state == nil ||
+		owned.RestoreMode != agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION ||
 		uint64(ordinal) >= uint64(len(owned.Input.Steps)) {
 		return CaptureStage{}, errs.New(errs.KindStateConflict, "Restore recovery staging authority is unavailable")
 	}
@@ -50,18 +51,27 @@ func (state *Staging) RestoreRecovery(ctx context.Context, assignment *agentpb.B
 	return state.prepareRestore(ctx, attempt.TaskID, step)
 }
 
-func (state *Staging) prepareRestore(ctx context.Context, taskID string, step *agentpb.BackupStepAuthority) (CaptureStage, error) {
+func (state *Staging) prepareRestore(
+	ctx context.Context,
+	taskID string,
+	step *agentpb.BackupStepAuthority,
+) (CaptureStage, error) {
 	var err error
 	restore := step.GetRestore()
-	if restore.GetVolume() == nil && restore.GetConfig() == nil && restore.GetPostgres() == nil && restore.GetMysql() == nil {
+	if restore.GetVolume() == nil && restore.GetConfig() == nil && restore.GetPostgres() == nil &&
+		restore.GetMysql() == nil {
 		return CaptureStage{}, errs.New(errs.KindStateConflict, "Backup source is not a supported Restore")
 	}
 	evidence := restore.GetExpectedEvidence()
-	if evidence == nil || evidence.SourceSizeBytes == 0 || evidence.StoredSizeBytes == 0 || evidence.SourceSizeBytes > backupformat.MaxStoredBytes || evidence.StoredSizeBytes > backupformat.MaxStoredBytes || evidence.SourceSizeBytes > math.MaxUint64-evidence.StoredSizeBytes {
+	if evidence == nil || evidence.SourceSizeBytes == 0 || evidence.StoredSizeBytes == 0 ||
+		evidence.SourceSizeBytes > backupformat.MaxStoredBytes ||
+		evidence.StoredSizeBytes > backupformat.MaxStoredBytes ||
+		evidence.SourceSizeBytes > math.MaxUint64-evidence.StoredSizeBytes {
 		return CaptureStage{}, errs.New(errs.KindStateConflict, "Restore size evidence is invalid")
 	}
 	bound := evidence.SourceSizeBytes + evidence.StoredSizeBytes
-	sharedObject := restore.GetConfig() == nil && restore.Encryption.Kind == agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE
+	sharedObject := restore.GetConfig() == nil &&
+		restore.Encryption.Kind == agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE
 	if sharedObject {
 		bound = evidence.SourceSizeBytes
 	}
@@ -105,27 +115,44 @@ func (state *Staging) prepareRestore(ctx context.Context, taskID string, step *a
 			}
 			switch file.Evidence.Name {
 			case executionplan.BackupSourceStagingFinal:
-				if result.Source != nil || file.Evidence.Size != evidence.SourceSizeBytes || !bytes.Equal(file.Evidence.SHA256[:], evidence.SourceSha256) {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Restore source differs from the selected Point")
+				if result.Source != nil || file.Evidence.Size != evidence.SourceSizeBytes ||
+					!bytes.Equal(file.Evidence.SHA256[:], evidence.SourceSha256) {
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Recovered Restore source differs from the selected Point",
+					)
 				}
 				result.Source, result.SourceEvidence = file.Artifact, file.Evidence
 			case executionplan.BackupStoredStagingFinal:
-				if result.Stored != nil || file.Evidence.Size != evidence.StoredSizeBytes || !bytes.Equal(file.Evidence.SHA256[:], evidence.StoredSha256) {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Restore object differs from the selected Point")
+				if result.Stored != nil || file.Evidence.Size != evidence.StoredSizeBytes ||
+					!bytes.Equal(file.Evidence.SHA256[:], evidence.StoredSha256) {
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Recovered Restore object differs from the selected Point",
+					)
 				}
 				result.Stored = file.Artifact
 			default:
-				return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Restore stage has an unexpected file")
+				return CaptureStage{}, errs.New(
+					errs.KindStateConflict,
+					"Recovered Restore stage has an unexpected file",
+				)
 			}
 		}
 		if sharedObject {
 			if result.Stored != nil {
-				return CaptureStage{}, errs.New(errs.KindStateConflict, "Unencrypted Restore has an extra stored object")
+				return CaptureStage{}, errs.New(
+					errs.KindStateConflict,
+					"Unencrypted Restore has an extra stored object",
+				)
 			}
 			result.Stored = result.Source
 		}
 		if result.Source == nil || result.Stored == nil {
-			return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered Restore is missing a required source or stored object")
+			return CaptureStage{}, errs.New(
+				errs.KindStateConflict,
+				"Recovered Restore is missing a required source or stored object",
+			)
 		}
 		result.Stage = retained.Stage
 		state.active[ids] = retained.Stage

@@ -21,7 +21,10 @@ func DecodeBackupWorkCompletion(attempt workexecution.Attempt, evidence workexec
 		hex.EncodeToString(ack.Evidence.Sha256) != evidence.SHA256 || ack.StartedAt == nil || ack.FinishedAt == nil ||
 		ack.StartedAt.CheckValid() != nil || ack.FinishedAt.CheckValid() != nil ||
 		!ack.StartedAt.AsTime().Equal(*attempt.StartedAt) {
-		return workexecution.Attempt{}, errs.New(errs.KindStateConflict, "Backup completion does not acknowledge this started attempt and checkpoint")
+		return workexecution.Attempt{}, errs.New(
+			errs.KindStateConflict,
+			"Backup completion does not acknowledge this started attempt and checkpoint",
+		)
 	}
 	outcome := workexecution.Outcome(ack.Outcome)
 	if outcome != workexecution.Succeeded && outcome != workexecution.Cancelled && outcome != workexecution.Superseded {

@@ -18,7 +18,10 @@ func (repository *Repository) ReadInterruptedBackupRemovalAt(ctx context.Context
 		view.Attempt.Attempt.FinishedAt != nil ||
 		view.Checkpoint.Record != nil || view.Checkpoint.Revision != 0 ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "backup removal reconciliation requires its replaced Controller attempt")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"backup removal reconciliation requires its replaced Controller attempt",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }

@@ -54,7 +54,10 @@ func (ledger *ReleaseLedger) PrepareReleaseWorkInput(ctx context.Context,
 	if !secrets.IsZero() {
 		binding, err := secrets.Binding()
 		if err != nil || binding != *input.Secrets {
-			return empty, errs.New(errs.KindStateConflict, "Release input Secret activation differs from its captured binding")
+			return empty, errs.New(
+				errs.KindStateConflict,
+				"Release input Secret activation differs from its captured binding",
+			)
 		}
 	}
 	// Immutable sources were staged after the planning snapshot. Refresh only
@@ -70,7 +73,9 @@ func (ledger *ReleaseLedger) PrepareReleaseWorkInput(ctx context.Context,
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.Values[0] == nil || read.Values[1] == nil ||
-		read.Values[0].Key != workqueue.TaskKey(work.Task.Task.ID) || read.Values[0].ModRevision != work.Task.Revision ||
+		read.Values[0].Key != workqueue.TaskKey(
+			work.Task.Task.ID,
+		) || read.Values[0].ModRevision != work.Task.Revision ||
 		read.Values[1].Key != workqueue.ItemKey(work.Item.Item.ID) || read.Values[1].ModRevision != work.Item.Revision {
 		return empty, errs.New(errs.KindStateConflict, "Release work changed during input preparation")
 	}

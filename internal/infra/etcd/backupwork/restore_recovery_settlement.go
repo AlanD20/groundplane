@@ -57,5 +57,12 @@ func (repository *InputRepository) prepareRestoreRecoverySettlement(ctx context.
 		}
 	}
 	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}
-	return repository.prepareRestoreRelease(ctx, view, record, next, change, next.State == backupruntime.BackupRestoreCompleted)
+	return repository.prepareRestoreRelease(
+		ctx,
+		view,
+		record,
+		next,
+		change,
+		next.State == backupruntime.BackupRestoreCompleted,
+	)
 }

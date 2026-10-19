@@ -17,9 +17,16 @@ func UnstartedKey(workID string) string { return "/v1/execution/release-unstarte
 
 // PrepareQueuedStop closes a stopped or expired Release before its next
 // assignment. Captured sources and previous attempts remain retained.
-func PrepareQueuedStop(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
-	if item.Item.Operation != workexecution.Release && item.Item.Operation != workexecution.ReleaseRestoration || item.Item.Placement.Executor != workexecution.Agent ||
-		item.Item.TaskID != task.Task.ID || at.IsZero() || at.Location() != time.UTC {
+func PrepareQueuedStop(
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
+	if item.Item.Operation != workexecution.Release && item.Item.Operation != workexecution.ReleaseRestoration ||
+		item.Item.Placement.Executor != workexecution.Agent ||
+		item.Item.TaskID != task.Task.ID ||
+		at.IsZero() ||
+		at.Location() != time.UTC {
 		return workqueue.Change{}, invalid()
 	}
 	if item.Item.Input == nil {
@@ -44,7 +51,11 @@ func PrepareQueuedStop(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot,
 // PrepareUnstartedSupersession requires a fresh owner-side comparison proving
 // that the captured source was superseded. It cannot settle an assigned or
 // started attempt; the first Start race is fenced by the native item revision.
-func PrepareUnstartedSupersession(view workqueue.View, source []keyvalue.Condition, at time.Time) (workqueue.Change, error) {
+func PrepareUnstartedSupersession(
+	view workqueue.View,
+	source []keyvalue.Condition,
+	at time.Time,
+) (workqueue.Change, error) {
 	item := view.Item
 	if len(source) == 0 || item.Item.Operation != workexecution.Release || item.Item.AttemptNumber != 0 ||
 		item.Item.ActiveAttemptID != "" || item.Item.Phase != workexecution.Waiting && item.Item.Phase != workexecution.Ready {
@@ -62,7 +73,12 @@ func PrepareUnstartedSupersession(view workqueue.View, source []keyvalue.Conditi
 	return change, nil
 }
 
-func prepareUnstartedOutcome(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func prepareUnstartedOutcome(
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	value, err := recordcodec.Encode("release-unstarted", struct {
 		TaskID  string                `json:"task_id"`
 		WorkID  string                `json:"work_id"`
@@ -74,7 +90,10 @@ func prepareUnstartedOutcome(task workqueue.TaskSnapshot, item workqueue.ItemSna
 	}
 	digest := sha256.Sum256(value)
 	number := strconv.FormatUint(uint64(item.Item.AttemptNumber), 10)
-	evidence := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, item.Item.CreatedAt, item.Item.ID, "release-unstarted/"+number), SHA256: hex.EncodeToString(digest[:])}
+	evidence := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, item.Item.CreatedAt, item.Item.ID, "release-unstarted/"+number),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	result := workexecution.Completion{
 		Outcome: outcome, Evidence: evidence, EffectsSettled: true,
 	}

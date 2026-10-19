@@ -7,7 +7,15 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (server *Server) dispatchWork(stream agentpb.AgentChannel_ConnectServer, session *Session, generation uint64, capacity, configuredCapacity int32, stagingReady bool, delivered map[string]string, payloads *assignmentPayloadDelivery) error {
+func (server *Server) dispatchWork(
+	stream agentpb.AgentChannel_ConnectServer,
+	session *Session,
+	generation uint64,
+	capacity, configuredCapacity int32,
+	stagingReady bool,
+	delivered map[string]string,
+	payloads *assignmentPayloadDelivery,
+) error {
 	if server.workDispatch == nil {
 		return errs.New(errs.KindInternal, "native Agent dispatch is not configured")
 	}
@@ -23,42 +31,81 @@ func (server *Server) dispatchWork(stream agentpb.AgentChannel_ConnectServer, se
 	if err != nil {
 		return err
 	}
-	readinessIssues, err := server.workDispatch.Ready(stream.Context(), authorization, uint16(configuredCapacity), stagingReady)
+	readinessIssues, err := server.workDispatch.Ready(
+		stream.Context(),
+		authorization,
+		uint16(configuredCapacity),
+		stagingReady,
+	)
 	for _, issue := range readinessIssues {
-		slog.ErrorContext(stream.Context(), "Agent work retains unresolved effects", "task_id", issue.TaskID, "work_id", issue.WorkID, "error", issue.Err)
+		slog.ErrorContext(
+			stream.Context(),
+			"Agent work retains unresolved effects",
+			"task_id",
+			issue.TaskID,
+			"work_id",
+			issue.WorkID,
+			"error",
+			issue.Err,
+		)
 	}
 	if err != nil {
 		return err
 	}
 	remaining := capacity
-	issues, err := server.workDispatch.Dispatch(stream.Context(), authorization, capacity, delivered, func(message *agentpb.ControllerMessage) (bool, error) {
-		cancel := func() {}
-		if assignment := message.GetBackupWorkAssignment(); assignment != nil {
-			var err error
-			cancel, err = payloads.prepareBackupPayloads(stream, assignment, authorization, server.sendBackupPayloads)
-			if err != nil {
-				return false, err
+	issues, err := server.workDispatch.Dispatch(
+		stream.Context(),
+		authorization,
+		capacity,
+		delivered,
+		func(message *agentpb.ControllerMessage) (bool, error) {
+			cancel := func() {}
+			if assignment := message.GetBackupWorkAssignment(); assignment != nil {
+				var err error
+				cancel, err = payloads.prepareBackupPayloads(
+					stream,
+					assignment,
+					authorization,
+					server.sendBackupPayloads,
+				)
+				if err != nil {
+					return false, err
+				}
 			}
-		}
-		if assignment := message.GetBackupRecoveryAssignment(); assignment != nil {
-			var err error
-			cancel, err = payloads.prepareBackupRecoveryPayloads(stream, assignment, authorization, server.receiveRecoveryVolumeManifest)
-			if err != nil {
-				return false, err
+			if assignment := message.GetBackupRecoveryAssignment(); assignment != nil {
+				var err error
+				cancel, err = payloads.prepareBackupRecoveryPayloads(
+					stream,
+					assignment,
+					authorization,
+					server.receiveRecoveryVolumeManifest,
+				)
+				if err != nil {
+					return false, err
+				}
 			}
-		}
-		sent, err := session.sendAssignment(func() error { return stream.Send(message) })
-		if !sent || err != nil {
-			cancel()
-		}
-		if sent && message.GetWorkCancel() == nil {
-			remaining--
-			session.recordDispatchCapacity(remaining)
-		}
-		return sent, err
-	})
+			sent, err := session.sendAssignment(func() error { return stream.Send(message) })
+			if !sent || err != nil {
+				cancel()
+			}
+			if sent && message.GetWorkCancel() == nil {
+				remaining--
+				session.recordDispatchCapacity(remaining)
+			}
+			return sent, err
+		},
+	)
 	for _, issue := range issues {
-		slog.ErrorContext(stream.Context(), "Agent work requires attention", "task_id", issue.TaskID, "work_id", issue.WorkID, "error", issue.Err)
+		slog.ErrorContext(
+			stream.Context(),
+			"Agent work requires attention",
+			"task_id",
+			issue.TaskID,
+			"work_id",
+			issue.WorkID,
+			"error",
+			issue.Err,
+		)
 	}
 	return err
 }

@@ -8,7 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) AcknowledgeEntryConfiguration(ctx context.Context, attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, checkpoint workexecution.Checkpoint) error {
+func (journal *Journal) AcknowledgeEntryConfiguration(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	checkpoint workexecution.Checkpoint,
+) error {
 	layout, err := entryexecution.CaptureLayout(attempt, input)
 	if err != nil {
 		return err
@@ -37,7 +42,12 @@ func (journal *Journal) AcknowledgeEntryConfiguration(ctx context.Context, attem
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) CompleteEntryConfiguration(ctx context.Context, attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, terminal workexecution.Attempt) error {
+func (journal *Journal) CompleteEntryConfiguration(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	terminal workexecution.Attempt,
+) error {
 	layout, err := entryexecution.CaptureLayout(attempt, input)
 	if err != nil {
 		return err
@@ -57,7 +67,9 @@ func (journal *Journal) CompleteEntryConfiguration(ctx context.Context, attempt 
 	if saved := state.EntryConfiguration.Completion; saved != nil {
 		if terminal.FinishedAt == nil || terminal.Result == nil || !workexecution.SameAssignment(*saved, terminal) ||
 			terminal.StartedAt == nil || !saved.StartedAt.Equal(*terminal.StartedAt) ||
-			!saved.FinishedAt.Equal(*terminal.FinishedAt) || saved.Outcome != terminal.Outcome || *saved.Result != *terminal.Result {
+			!saved.FinishedAt.Equal(
+				*terminal.FinishedAt,
+			) || saved.Outcome != terminal.Outcome || *saved.Result != *terminal.Result {
 			return conflict()
 		}
 		return nil

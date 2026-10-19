@@ -17,7 +17,8 @@ const (
 func Validate(procedure *agentpb.AdapterProcedure) error {
 	if procedure == nil || len(procedure.ProtoReflect().GetUnknown()) != 0 || !validKey(procedure.AdapterKey) ||
 		ids.Validate(ids.KindAttach, procedure.AttachId) != nil ||
-		ids.Validate(ids.KindService, procedure.BackingServiceId) != nil && ids.Validate(ids.KindComponent, procedure.BackingServiceId) != nil ||
+		ids.Validate(ids.KindService, procedure.BackingServiceId) != nil &&
+			ids.Validate(ids.KindComponent, procedure.BackingServiceId) != nil ||
 		!validIdentity(procedure.Role, true) || !validSecret(procedure.Password) {
 		return invalid("adapter procedure identity is invalid")
 	}
@@ -38,13 +39,15 @@ func Validate(procedure *agentpb.AdapterProcedure) error {
 		if len(procedure.Password) == 0 || !validIdentity(procedure.Database, false) || procedure.GrantOn != "" {
 			return invalid("adapter provision procedure is invalid")
 		}
-	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_GRANT, agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_REVOKE:
+	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_GRANT,
+		agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_REVOKE:
 		if len(procedure.Password) != 0 || procedure.Database != "" || !validIdentity(procedure.GrantOn, true) {
 			return invalid("adapter grant or revoke procedure is invalid")
 		}
 	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH:
 		passwordRequired := procedure.Authentication == agentpb.BackingAuthentication_BACKING_AUTHENTICATION_PASSWORD
-		if passwordRequired != (len(procedure.Password) != 0) || !validIdentity(procedure.Database, false) || procedure.GrantOn != "" {
+		if passwordRequired != (len(procedure.Password) != 0) || !validIdentity(procedure.Database, false) ||
+			procedure.GrantOn != "" {
 			return invalid("adapter detach procedure is invalid")
 		}
 	default:
@@ -97,7 +100,8 @@ func validIdentity(value string, required bool) bool {
 }
 
 func alphaNumeric(character byte) bool {
-	return character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9'
+	return character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
+		character >= '0' && character <= '9'
 }
 
 func invalid(detail string) error { return errs.New(errs.KindValidationFailed, detail) }

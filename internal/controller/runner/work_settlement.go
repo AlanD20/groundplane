@@ -19,7 +19,13 @@ func (executor *Executor) Settle(ctx context.Context, queue *workqueue.Repositor
 		return errs.New(errs.KindInternal, "Runner settlement requires execution storage")
 	}
 	attempt := delivery.Attempt.Attempt
-	request, recorded, err := queue.ReadCompletion(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+	request, recorded, err := queue.ReadCompletion(
+		ctx,
+		attempt.TaskID,
+		attempt.WorkItemID,
+		attempt.ID,
+		attempt.Executor,
+	)
 	if err != nil || recorded {
 		return err
 	}
@@ -56,7 +62,9 @@ func (executor *Executor) Settle(ctx context.Context, queue *workqueue.Repositor
 		return err
 	}
 	defer keyvalue.ClearMutationValues(resource.Mutations)
-	proof := workqueue.Change{Conditions: []keyvalue.Condition{{Key: runnerwork.ResultKey(attempt.ID), ModRevision: result.Revision}}}
+	proof := workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: runnerwork.ResultKey(attempt.ID), ModRevision: result.Revision}},
+	}
 	committed, err := queue.Commit(ctx, settled, resource, proof)
 	if err != nil {
 		return err

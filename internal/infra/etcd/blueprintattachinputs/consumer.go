@@ -23,17 +23,30 @@ func (generation Generation) Consumer() (*agentpb.AttachConsumerTransition, erro
 		}
 		return nil, nil
 	}
-	if generation.ConsumerRuntime == nil || generation.ConsumerRuntimeRevision <= 0 || serviceruntimerecord.Validate(*generation.ConsumerRuntime) != nil || generation.ConsumerRuntime.EnvironmentID != generation.EnvironmentID || generation.ConsumerRuntime.Runtime.ServiceID != generation.ConsumerServiceID {
-		return nil, errs.New(errs.KindValidationFailed, "Attach consumer transition requires its captured applied runtime")
+	if generation.ConsumerRuntime == nil || generation.ConsumerRuntimeRevision <= 0 ||
+		serviceruntimerecord.Validate(*generation.ConsumerRuntime) != nil ||
+		generation.ConsumerRuntime.EnvironmentID != generation.EnvironmentID ||
+		generation.ConsumerRuntime.Runtime.ServiceID != generation.ConsumerServiceID {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Attach consumer transition requires its captured applied runtime",
+		)
 	}
 	if len(generation.ConsumerTransition) > executionplan.MaximumPlanBytes {
 		return nil, errs.New(errs.KindValidationFailed, "Attach consumer capture is oversized")
 	}
 	consumer := &agentpb.AttachConsumerTransition{}
-	if proto.Unmarshal(generation.ConsumerTransition, consumer) != nil || executionplan.ValidateAttachConsumerTransition(context.Background(), consumer) != nil ||
-		consumer.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT || consumer.EnvironmentId != generation.EnvironmentID ||
-		consumer.BackingEnvironmentId != generation.BackingEnvironmentID || consumer.ServiceId != generation.ConsumerServiceID || consumer.NetworkId != generation.BackingNetworkID {
-		return nil, errs.New(errs.KindValidationFailed, "Attach consumer capture does not describe its owned backing-network edge")
+	if proto.Unmarshal(generation.ConsumerTransition, consumer) != nil ||
+		executionplan.ValidateAttachConsumerTransition(context.Background(), consumer) != nil ||
+		consumer.Action != agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT ||
+		consumer.EnvironmentId != generation.EnvironmentID ||
+		consumer.BackingEnvironmentId != generation.BackingEnvironmentID ||
+		consumer.ServiceId != generation.ConsumerServiceID ||
+		consumer.NetworkId != generation.BackingNetworkID {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Attach consumer capture does not describe its owned backing-network edge",
+		)
 	}
 	canonical, err := (proto.MarshalOptions{Deterministic: true}).Marshal(consumer)
 	if err != nil {
@@ -44,8 +57,12 @@ func (generation Generation) Consumer() (*agentpb.AttachConsumerTransition, erro
 		return nil, errs.New(errs.KindValidationFailed, "Attach consumer capture is not canonical")
 	}
 	baseline := &agentpb.ComposeArtifact{}
-	if proto.Unmarshal(generation.ConsumerRuntime.Runtime.CurrentArtifact, baseline) != nil || !proto.Equal(baseline, consumer.Baseline) {
-		return nil, errs.New(errs.KindValidationFailed, "Attach consumer baseline differs from its applied runtime capture")
+	if proto.Unmarshal(generation.ConsumerRuntime.Runtime.CurrentArtifact, baseline) != nil ||
+		!proto.Equal(baseline, consumer.Baseline) {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Attach consumer baseline differs from its applied runtime capture",
+		)
 	}
 	return consumer, nil
 }
@@ -56,8 +73,12 @@ func (generation Generation) ProvisionAuthority() (attachexecution.ProvisionAuth
 	if err != nil {
 		return attachexecution.ProvisionAuthority{}, err
 	}
-	authority := attachexecution.ProvisionAuthority{Source: reference, AttachID: generation.AttachID, BackingServiceID: generation.BackingServiceID,
-		Custom: generation.Provision == nil && generation.Binding == nil && generation.Hook.Attach != nil}
+	authority := attachexecution.ProvisionAuthority{
+		Source:           reference,
+		AttachID:         generation.AttachID,
+		BackingServiceID: generation.BackingServiceID,
+		Custom:           generation.Provision == nil && generation.Binding == nil && generation.Hook.Attach != nil,
+	}
 	if authority.Custom {
 		authority.Commands = 1
 	}

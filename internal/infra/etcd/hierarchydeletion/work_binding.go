@@ -28,7 +28,9 @@ func EnvironmentFailureKey(attemptID string) string {
 }
 
 func EncodeWorkBinding(binding WorkBinding) ([]byte, error) {
-	if ids.Validate(ids.KindTask, binding.TaskID) != nil || !ValidHierarchyDeletionPrivateID(binding.OperationID, "del") || binding.Ordinal < 0 {
+	if ids.Validate(ids.KindTask, binding.TaskID) != nil ||
+		!ValidHierarchyDeletionPrivateID(binding.OperationID, "del") ||
+		binding.Ordinal < 0 {
 		return nil, CorruptHierarchyDeletion()
 	}
 	return recordcodec.Encode("hierarchy-work-binding", binding)

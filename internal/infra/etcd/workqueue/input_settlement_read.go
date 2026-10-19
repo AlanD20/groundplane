@@ -40,11 +40,15 @@ func (repository *Repository) ReadInputSettlement(ctx context.Context, view View
 		result.Reason == "" || len(result.Reason) > 512 || strings.TrimSpace(result.Reason) != result.Reason ||
 		result.DependencyID != "" && !slices.Contains(item.Dependencies, result.DependencyID) ||
 		result.Outcome == workexecution.Succeeded && result.Authority == nil ||
-		result.Authority != nil && (result.Authority.Validate() != nil || *result.Authority != task.Intent || result.DependencyID != "") {
+		result.Authority != nil &&
+			(result.Authority.Validate() != nil || *result.Authority != task.Intent || result.DependencyID != "") {
 		return nil, corrupt()
 	}
 	digest := sha256.Sum256(value.Value)
-	expected := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "input-settlement"), SHA256: hex.EncodeToString(digest[:])}
+	expected := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "input-settlement"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	if *item.Result != expected {
 		return nil, corrupt()
 	}

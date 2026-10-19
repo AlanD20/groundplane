@@ -73,7 +73,12 @@ func (executor *Executor) recoverVolumeFilesystem(ctx context.Context, assignmen
 	if err != nil {
 		return nil, err
 	}
-	volume, err := backupvolumefs.Open(ctx, executor.volumeRoot, projection.AuthorizedVolumeDir, projection.ComposeVolumeKey)
+	volume, err := backupvolumefs.Open(
+		ctx,
+		executor.volumeRoot,
+		projection.AuthorizedVolumeDir,
+		projection.ComposeVolumeKey,
+	)
 	if err != nil {
 		return nil, err
 	}

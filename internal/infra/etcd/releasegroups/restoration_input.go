@@ -47,7 +47,10 @@ func EncodeRestorationInput(input RestorationInput) ([]byte, workexecution.Input
 	}
 	if len(value) > keyvalue.MaximumBytes {
 		clear(value)
-		return nil, workexecution.Input{}, errs.New(errs.KindReleasePlanTooLarge, "Group restoration input exceeds its bounded storage format")
+		return nil, workexecution.Input{}, errs.New(
+			errs.KindReleasePlanTooLarge,
+			"Group restoration input exceeds its bounded storage format",
+		)
 	}
 	digest := sha256.Sum256(value)
 	// Existing runtime ownership labels retain the successful source's Plan id;
@@ -68,7 +71,10 @@ func DecodeRestorationInput(value []byte, reference workexecution.Input) (Restor
 		return RestorationInput{}, err
 	}
 	if input.Validate() != nil || input.Source.Input.ID != reference.ID {
-		return RestorationInput{}, errs.New(errs.KindStateConflict, "Group restoration input differs from its captured source identity")
+		return RestorationInput{}, errs.New(
+			errs.KindStateConflict,
+			"Group restoration input differs from its captured source identity",
+		)
 	}
 	return input, nil
 }

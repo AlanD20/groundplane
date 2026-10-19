@@ -73,7 +73,10 @@ func validateProxyRolloutPublication(ctx context.Context, store planningStore,
 				root.MembershipCount != preflight.SourceHold.MembershipCount ||
 				root.MembershipSHA256 != preflight.SourceHold.MembershipSHA256 ||
 				root.Phase != scriptsourceevidence.ScriptOperationSourceActive {
-				return errs.New(errs.KindStateConflict, "Proxy hook source publication differs from captured membership")
+				return errs.New(
+					errs.KindStateConflict,
+					"Proxy hook source publication differs from captured membership",
+				)
 			}
 			return nil
 		}
@@ -87,7 +90,11 @@ func validateProxyRolloutPublicationValues(preflight *ProxyServicePreflight, sou
 	reference := source.Rollout
 	if values[0] == nil || values[1] == nil || values[0].ModRevision != reference.Revision ||
 		values[1].ModRevision != reference.NativeRevision ||
-		values[0].Key != ProxyServiceRolloutKey(preflight.EnvironmentID, preflight.ParentTaskID, reference.WorkItemID) ||
+		values[0].Key != ProxyServiceRolloutKey(
+			preflight.EnvironmentID,
+			preflight.ParentTaskID,
+			reference.WorkItemID,
+		) ||
 		values[1].Key != releaserender.ServiceRolloutKey(
 			preflight.EnvironmentID,
 			preflight.ParentTaskID,
@@ -107,8 +114,10 @@ func validateProxyRolloutPublicationValues(preflight *ProxyServicePreflight, sou
 	if err != nil {
 		return 0, err
 	}
-	if capture.Action != workexecution.ActionApply || capture.WorkItemID != reference.WorkItemID || capture.Scope.EnvironmentID != preflight.EnvironmentID ||
-		capture.TaskID != preflight.ParentTaskID || render.ServiceID != reference.ServiceID {
+	if capture.Action != workexecution.ActionApply || capture.WorkItemID != reference.WorkItemID ||
+		capture.Scope.EnvironmentID != preflight.EnvironmentID ||
+		capture.TaskID != preflight.ParentTaskID ||
+		render.ServiceID != reference.ServiceID {
 		return 0, errs.New(errs.KindStateConflict, "pending proxy native rollout belongs to another Service or Apply")
 	}
 	return uint64(len(render.Hooks)), nil

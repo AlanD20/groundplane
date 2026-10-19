@@ -31,11 +31,17 @@ type HookQuiescenceProof struct {
 }
 
 func (proof QuiescenceProof) Validate(input RecoveryInput, report RecoveryReport) error {
-	if report.Validate(input) != nil || report.Ack == nil || !report.Progress.InFlight || report.Progress.Phase != QuiesceForward ||
-		proof.ForwardAttemptID != input.Forward.ID || proof.RecoveryAttemptID != input.Input.Attempt.ID ||
-		proof.Executor != input.Input.Attempt.Executor || proof.HelperAbsentAt.IsZero() || proof.OwnerCheckedAt.IsZero() ||
-		proof.HelperAbsentAt.Location() != time.UTC || proof.OwnerCheckedAt.Location() != time.UTC ||
-		proof.HelperAbsentAt.Before(report.Progress.UpdatedAt) || proof.OwnerCheckedAt.Before(proof.HelperAbsentAt) ||
+	if report.Validate(input) != nil || report.Ack == nil || !report.Progress.InFlight ||
+		report.Progress.Phase != QuiesceForward ||
+		proof.ForwardAttemptID != input.Forward.ID ||
+		proof.RecoveryAttemptID != input.Input.Attempt.ID ||
+		proof.Executor != input.Input.Attempt.Executor ||
+		proof.HelperAbsentAt.IsZero() ||
+		proof.OwnerCheckedAt.IsZero() ||
+		proof.HelperAbsentAt.Location() != time.UTC ||
+		proof.OwnerCheckedAt.Location() != time.UTC ||
+		proof.HelperAbsentAt.Before(report.Progress.UpdatedAt) ||
+		proof.OwnerCheckedAt.Before(proof.HelperAbsentAt) ||
 		!proof.OwnerCheckedAt.Before(input.Input.Attempt.Deadline) {
 		return invalidProgress()
 	}
@@ -53,7 +59,8 @@ func (proof QuiescenceProof) Validate(input RecoveryInput, report RecoveryReport
 		observed := proof.Hooks[index]
 		if observed.ExecutionID != hook.ExecutionId || observed.Input.ID != hook.Input.InputId ||
 			!observed.Cleanup.ContainerAbsent || !observed.Cleanup.BodyAbsent || !observed.Cleanup.ExecutionDirectoryAbsent ||
-			observed.Cleanup.ContainerID != "" && observed.ContainerID != "" && observed.Cleanup.ContainerID != observed.ContainerID ||
+			observed.Cleanup.ContainerID != "" && observed.ContainerID != "" &&
+				observed.Cleanup.ContainerID != observed.ContainerID ||
 			observed.Input.SHA256 != hex.EncodeToString(hook.Input.Sha256) ||
 			observed.ObservedAt.IsZero() || observed.ObservedAt.Location() != time.UTC ||
 			observed.ObservedAt.Before(report.Progress.UpdatedAt) || observed.ObservedAt.After(proof.OwnerCheckedAt) ||

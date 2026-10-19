@@ -30,7 +30,10 @@ func resourceWorkPublicationConflict(conditions []keyvalue.Condition) idempotenc
 		}
 		for index, condition := range conditions {
 			if !keyvalue.ConditionMatchesRead(condition, values[index]) {
-				return errs.New(errs.KindStateConflict, "resource desired state or captured publication ownership changed")
+				return errs.New(
+					errs.KindStateConflict,
+					"resource desired state or captured publication ownership changed",
+				)
 			}
 		}
 		return nil

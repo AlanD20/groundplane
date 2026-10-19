@@ -23,7 +23,8 @@ func (repository *ServiceRepository) SettleRecoveredServiceRemoval(ctx context.C
 	authorization []keyvalue.Condition, at time.Time,
 ) error {
 	if repository == nil || repository.store == nil || len(authorization) == 0 ||
-		view.Work.Task.Task.Action != workexecution.ActionRemove && view.Work.Task.Task.Action != workexecution.ActionApply {
+		view.Work.Task.Task.Action != workexecution.ActionRemove &&
+			view.Work.Task.Task.Action != workexecution.ActionApply {
 		return errs.New(errs.KindStateConflict, "service removal restoration requires authenticated removal settlement")
 	}
 	proof, result, err := repository.PrepareRecoveredServiceRemoval(ctx, view, delivery, at)
@@ -63,8 +64,12 @@ func (repository *ServiceRepository) SettleRecoveredServiceRemoval(ctx context.C
 func (repository *ServiceRepository) PrepareRecoveredServiceRemoval(ctx context.Context, view workqueue.ResumeView,
 	delivery *agentpb.ServiceLifecycleWorkInput, at time.Time,
 ) (workqueue.Change, workexecution.Completion, error) {
-	if view.Work.Task.Task.Action != workexecution.ActionRemove && view.Work.Task.Task.Action != workexecution.ActionApply {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "service removal restoration requires removal settlement")
+	if view.Work.Task.Task.Action != workexecution.ActionRemove &&
+		view.Work.Task.Task.Action != workexecution.ActionApply {
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"service removal restoration requires removal settlement",
+		)
 	}
 	inputs, err := serviceremovalwork.NewRepository(repository.store)
 	if err != nil {
@@ -76,5 +81,9 @@ func (repository *ServiceRepository) PrepareRecoveredServiceRemoval(ctx context.
 	}
 	proof.Mutations = append(proof.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete,
 		Key: deletions.TombstoneKey(string(deletions.DeletionTargetService), input.ServiceID)})
-	return proof, workexecution.Completion{Outcome: workexecution.Succeeded, EffectsSettled: true, Evidence: checkpoint.Evidence}, nil
+	return proof, workexecution.Completion{
+		Outcome:        workexecution.Succeeded,
+		EffectsSettled: true,
+		Evidence:       checkpoint.Evidence,
+	}, nil
 }

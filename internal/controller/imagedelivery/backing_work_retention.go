@@ -10,13 +10,21 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) retainBackingWorkImages(ctx context.Context, retention *imageRetention, value keyvalue.KeyValue, revision int64) error {
+func (service *Service) retainBackingWorkImages(
+	ctx context.Context,
+	retention *imageRetention,
+	value keyvalue.KeyValue,
+	revision int64,
+) error {
 	item, err := workqueue.DecodeItem(value.Value)
 	if err != nil {
 		return err
 	}
 	if value.Key != workqueue.ItemKey(item.ID) {
-		return errs.New(errs.KindStateConflict, "backing creation image protection has a different stored work identity")
+		return errs.New(
+			errs.KindStateConflict,
+			"backing creation image protection has a different stored work identity",
+		)
 	}
 	if item.Operation != workexecution.BackingProvision || item.Phase == workexecution.Settled {
 		return nil

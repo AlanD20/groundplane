@@ -10,8 +10,11 @@ func validateServiceRemovalSources(graph CapturedGraph) error {
 	sources := make(map[string]ServiceRemovalSource, len(graph.ServiceRemovals))
 	previous := ""
 	for _, source := range graph.ServiceRemovals {
-		if ids.Validate(ids.KindWorkItem, source.WorkItemID) != nil || ids.Validate(ids.KindService, source.ServiceID) != nil ||
-			source.RuntimeRevision < 0 || source.ClaimRevision < 0 || source.WorkItemID <= previous ||
+		if ids.Validate(ids.KindWorkItem, source.WorkItemID) != nil ||
+			ids.Validate(ids.KindService, source.ServiceID) != nil ||
+			source.RuntimeRevision < 0 ||
+			source.ClaimRevision < 0 ||
+			source.WorkItemID <= previous ||
 			(source.Predecessor == nil) != (source.ClaimRevision == 0) {
 			return invalidRecord()
 		}
@@ -36,7 +39,8 @@ func validateServiceRemovalSources(graph CapturedGraph) error {
 		}
 		unit := graph.Units[index]
 		if !found || source.ServiceID != item.TargetID || unit.Target.Kind != ids.KindService || !unit.Removal ||
-			source.Predecessor == nil && (source.RuntimeRevision == 0) != (item.Placement.Executor == workexecution.Controller) {
+			source.Predecessor == nil &&
+				(source.RuntimeRevision == 0) != (item.Placement.Executor == workexecution.Controller) {
 			return invalidRecord()
 		}
 		delete(sources, item.ID)

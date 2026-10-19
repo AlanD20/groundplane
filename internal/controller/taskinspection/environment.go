@@ -70,8 +70,14 @@ func (service *Service) environmentOutcome(ctx context.Context, attempt workexec
 	if err := appendComponentOutcome(result, directory); err != nil {
 		return err
 	}
-	helpers := workexecution.Stage{Key: "environment_helpers", Name: "Settle provisioning helper", Expected: "Prove the captured helper is stopped and removed",
-		StartedAt: attempt.StartedAt, FinishedAt: attempt.FinishedAt, State: workexecution.StageFailed}
+	helpers := workexecution.Stage{
+		Key:        "environment_helpers",
+		Name:       "Settle provisioning helper",
+		Expected:   "Prove the captured helper is stopped and removed",
+		StartedAt:  attempt.StartedAt,
+		FinishedAt: attempt.FinishedAt,
+		State:      workexecution.StageFailed,
+	}
 	if report.HelpersAbsent || attempt.StartedAt == nil {
 		helpers.State, helpers.Observed = workexecution.StageSucceeded, "No captured provisioning helper remains. Unrelated workloads and Volume data were not removed."
 		if attempt.StartedAt == nil {

@@ -32,7 +32,8 @@ func (manager *Manager) RecoverEnrollment(ctx context.Context, request EnrollReq
 	if record.ID != request.AgentID {
 		return false, nil
 	}
-	if record.EnrollmentTaskID != request.EnrollmentTaskID || record.Image != request.Image || record.Generation != initialGeneration ||
+	if record.EnrollmentTaskID != request.EnrollmentTaskID || record.Image != request.Image ||
+		record.Generation != initialGeneration ||
 		record.Phase == PhaseProvisioning && (record.Config.PullIntervalSeconds != request.Config.PullIntervalSeconds ||
 			record.Config.MaxConcurrentTasks != request.Config.MaxConcurrentTasks || !maps.Equal(record.Config.Labels, request.Config.Labels)) {
 		return false, errs.New(errs.KindStateConflict, "Agent enrollment recovery differs from its captured input")

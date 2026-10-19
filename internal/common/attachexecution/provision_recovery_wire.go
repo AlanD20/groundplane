@@ -9,7 +9,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func EncodeProvisionRecoveryAssignment(input ProvisionRecoveryInput) (*agentpb.AttachProvisionRecoveryAssignment, error) {
+func EncodeProvisionRecoveryAssignment(
+	input ProvisionRecoveryInput,
+) (*agentpb.AttachProvisionRecoveryAssignment, error) {
 	if err := input.Validate(); err != nil {
 		return nil, err
 	}
@@ -24,10 +26,17 @@ func EncodeProvisionRecoveryAssignment(input ProvisionRecoveryInput) (*agentpb.A
 	if err != nil {
 		return nil, err
 	}
-	return &agentpb.AttachProvisionRecoveryAssignment{Attempt: attempt, Recovery: source, Consumer: proto.CloneOf(input.Consumer)}, nil
+	return &agentpb.AttachProvisionRecoveryAssignment{
+		Attempt:  attempt,
+		Recovery: source,
+		Consumer: proto.CloneOf(input.Consumer),
+	}, nil
 }
 
-func DecodeProvisionRecoveryAssignment(message *agentpb.AttachProvisionRecoveryAssignment, identity workexecution.Identity) (ProvisionRecoveryInput, error) {
+func DecodeProvisionRecoveryAssignment(
+	message *agentpb.AttachProvisionRecoveryAssignment,
+	identity workexecution.Identity,
+) (ProvisionRecoveryInput, error) {
 	if message == nil || executionplan.RejectUnknown(message) != nil {
 		return ProvisionRecoveryInput{}, invalid("Attach provisioning recovery assignment is malformed")
 	}
@@ -46,7 +55,10 @@ func DecodeProvisionRecoveryAssignment(message *agentpb.AttachProvisionRecoveryA
 	return input, input.Validate()
 }
 
-func EncodeProvisionInspectionRequest(input ProvisionRecoveryInput, report ProvisionInspection) (*agentpb.AttachProvisionRecoveryReportRequest, error) {
+func EncodeProvisionInspectionRequest(
+	input ProvisionRecoveryInput,
+	report ProvisionInspection,
+) (*agentpb.AttachProvisionRecoveryReportRequest, error) {
 	raw, reference, err := EncodeProvisionInspection(input, report)
 	if err != nil {
 		return nil, err
@@ -63,13 +75,20 @@ func EncodeProvisionInspectionRequest(input ProvisionRecoveryInput, report Provi
 		Evidence: &agentpb.WorkInputReference{InputId: reference.ID, Sha256: digest}}, nil
 }
 
-func DecodeProvisionInspectionAck(input ProvisionRecoveryInput, report ProvisionInspection, ack *agentpb.AttachProvisionRecoveryReportAck) (workexecution.Attempt, error) {
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil {
+func DecodeProvisionInspectionAck(
+	input ProvisionRecoveryInput,
+	report ProvisionInspection,
+	ack *agentpb.AttachProvisionRecoveryReportAck,
+) (workexecution.Attempt, error) {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil {
 		return workexecution.Attempt{}, invalid("Attach provisioning inspection acknowledgement is malformed")
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, input.Attempt.Executor)
 	if err != nil || !workexecution.SameAssignment(claimed, input.Attempt) {
-		return workexecution.Attempt{}, invalid("Attach provisioning inspection acknowledgement belongs to another attempt")
+		return workexecution.Attempt{}, invalid(
+			"Attach provisioning inspection acknowledgement belongs to another attempt",
+		)
 	}
 	_, reference, err := EncodeProvisionInspection(input, report)
 	if err != nil {
@@ -82,7 +101,9 @@ func DecodeProvisionInspectionAck(input ProvisionRecoveryInput, report Provision
 	}
 	finished := ack.FinishedAt.AsTime()
 	if reference != provided || ack.Outcome != string(outcome) || finished.Before(report.ObservedAt) {
-		return workexecution.Attempt{}, invalid("Attach provisioning inspection acknowledgement differs from the saved report")
+		return workexecution.Attempt{}, invalid(
+			"Attach provisioning inspection acknowledgement differs from the saved report",
+		)
 	}
 	terminal := input.Attempt
 	if ack.StartedAt != nil {
@@ -91,7 +112,9 @@ func DecodeProvisionInspectionAck(input ProvisionRecoveryInput, report Provision
 		}
 		started := ack.StartedAt.AsTime()
 		if terminal.StartedAt != nil && !terminal.StartedAt.Equal(started) || started.After(report.ObservedAt) {
-			return workexecution.Attempt{}, invalid("Attach provisioning inspection acknowledgement changed its Start time")
+			return workexecution.Attempt{}, invalid(
+				"Attach provisioning inspection acknowledgement changed its Start time",
+			)
 		}
 		terminal.StartedAt = &started
 	} else if terminal.StartedAt != nil {

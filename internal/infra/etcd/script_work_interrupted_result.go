@@ -29,8 +29,15 @@ func (repository *ScriptRepository) ReconcileInterruptedScript(ctx context.Conte
 	return repository.settleInterruptedScript(ctx, view, guards, at)
 }
 
-func (repository *ScriptRepository) settleInterruptedScript(ctx context.Context, view workqueue.ResumeView, guards []keyvalue.Condition, at time.Time) error {
-	if view.Work.Item.Item.Operation != workexecution.Script || view.Attempt.Attempt.Direction != workexecution.Forward || len(guards) == 0 {
+func (repository *ScriptRepository) settleInterruptedScript(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	guards []keyvalue.Condition,
+	at time.Time,
+) error {
+	if view.Work.Item.Item.Operation != workexecution.Script ||
+		view.Attempt.Attempt.Direction != workexecution.Forward ||
+		len(guards) == 0 {
 		return errs.New(errs.KindStateConflict, "Script failure requires its captured forward assignment")
 	}
 	loaded, err := repository.LoadRetainedScriptWork(ctx, view.Work)
@@ -88,7 +95,11 @@ func (repository *ScriptRepository) settleInterruptedScript(ctx context.Context,
 			outcome = workexecution.Superseded
 		}
 	}
-	request.At, request.Result = at, workexecution.Completion{Outcome: outcome, Evidence: reference, EffectsSettled: noEffects}
+	request.At, request.Result = at, workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       reference,
+		EffectsSettled: noEffects,
+	}
 	change, err := workqueue.PrepareCompletion(request)
 	if err != nil {
 		return err
@@ -96,8 +107,14 @@ func (repository *ScriptRepository) settleInterruptedScript(ctx context.Context,
 	defer keyvalue.ClearMutationValues(change.Mutations)
 	key := scriptexecutions.ScriptExecutionKey(execution.ID) + "/interruptions/" + view.Attempt.Attempt.ID
 	conditions := append(loaded.Conditions, guards...)
-	conditions = append(conditions, keyvalue.Condition{Key: key},
-		keyvalue.Condition{Key: workqueue.CheckpointKey(view.Attempt.Attempt.ID), ModRevision: view.Checkpoint.Revision})
+	conditions = append(
+		conditions,
+		keyvalue.Condition{Key: key},
+		keyvalue.Condition{
+			Key:         workqueue.CheckpointKey(view.Attempt.Attempt.ID),
+			ModRevision: view.Checkpoint.Revision,
+		},
+	)
 	result, err := queue.Commit(ctx, workqueue.Change{Conditions: conditions,
 		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}}}, change)
 	keyvalue.ClearValues(result.FailureReads)

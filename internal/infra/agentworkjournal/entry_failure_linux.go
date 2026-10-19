@@ -50,7 +50,12 @@ func (journal *Journal) AcknowledgeEntryConfigurationFailure(ctx context.Context
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) PrepareEntryConfigurationFailure(ctx context.Context, attempt workexecution.Attempt, input *agentpb.EntryConfigurationWorkInput, reason entryexecution.FailureReason) (*EntryConfigurationFailureDelivery, error) {
+func (journal *Journal) PrepareEntryConfigurationFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.EntryConfigurationWorkInput,
+	reason entryexecution.FailureReason,
+) (*EntryConfigurationFailureDelivery, error) {
 	layout, err := entryexecution.CaptureLayout(attempt, input)
 	if err != nil || attempt.StartedAt == nil || attempt.FinishedAt != nil || !reason.Valid() {
 		return nil, invalid()
@@ -79,7 +84,8 @@ func (journal *Journal) PrepareEntryConfigurationFailure(ctx context.Context, at
 		state = &attemptRecord{Attempt: attempt, UpdatedAt: progress.UpdatedAt,
 			EntryConfiguration: &EntryConfigurationRecord{Layout: layout, Progress: progress}}
 	}
-	if !matchesEntryConfiguration(state, attempt, layout) || state.EntryConfiguration.Completion != nil || state.EntryConfiguration.Progress.Stage == entryexecution.Complete {
+	if !matchesEntryConfiguration(state, attempt, layout) || state.EntryConfiguration.Completion != nil ||
+		state.EntryConfiguration.Progress.Stage == entryexecution.Complete {
 		return nil, conflict()
 	}
 	if state.EntryConfiguration.Failure != nil {

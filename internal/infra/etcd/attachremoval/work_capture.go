@@ -67,9 +67,14 @@ func (capture WorkCapture) Validate() error {
 
 func (capture WorkCapture) validate(active bool) error {
 	if capture.Schema != 1 || ids.Validate(ids.KindTask, capture.TaskID) != nil ||
-		ids.Validate(ids.KindWorkItem, capture.WorkItemID) != nil || ids.Validate(ids.KindOperation, capture.OperationID) != nil ||
+		ids.Validate(
+			ids.KindWorkItem,
+			capture.WorkItemID,
+		) != nil || ids.Validate(ids.KindOperation, capture.OperationID) != nil ||
 		ids.Validate(ids.KindPlan, capture.Action.ID) != nil || !recordcodec.ValidSHA256(capture.Action.SHA256) ||
-		!recordcodec.ValidSHA256(capture.FrozenSHA256) || ids.Validate(ids.KindProject, capture.BackingProjectID) != nil {
+		!recordcodec.ValidSHA256(
+			capture.FrozenSHA256,
+		) || ids.Validate(ids.KindProject, capture.BackingProjectID) != nil {
 		return recordcodec.CorruptRecord()
 	}
 	if capture.Hook == nil {
@@ -78,12 +83,14 @@ func (capture WorkCapture) validate(active bool) error {
 		}
 		return nil
 	}
-	if taskconfiguration.ValidateBackingHookEncryptedInputs(*capture.Hook) != nil || capture.Hook.OperationID != capture.OperationID {
+	if taskconfiguration.ValidateBackingHookEncryptedInputs(*capture.Hook) != nil ||
+		capture.Hook.OperationID != capture.OperationID {
 		return recordcodec.CorruptRecord()
 	}
 	previous := ""
 	for _, source := range capture.Sources {
-		if tasksecretpinrecord.Validate(source) != nil || source.OperationID != capture.OperationID || source.SecretID <= previous {
+		if tasksecretpinrecord.Validate(source) != nil || source.OperationID != capture.OperationID ||
+			source.SecretID <= previous {
 			return recordcodec.CorruptRecord()
 		}
 		previous = source.SecretID

@@ -46,12 +46,23 @@ func ReadDeclaredResources(
 
 // ReadDeclaredResourcesRevision reads the selected immutable declaration. It
 // does not substitute the current head when a retained omission needs its source.
-func ReadDeclaredResourcesRevision(ctx context.Context, store snapshotReader, environmentID, revisionID string, revision int64) (keyvalue.Versioned[DeclaredResources], bool, error) {
+func ReadDeclaredResourcesRevision(
+	ctx context.Context,
+	store snapshotReader,
+	environmentID, revisionID string,
+	revision int64,
+) (keyvalue.Versioned[DeclaredResources], bool, error) {
 	input, found, err := blueprints.ReadDesiredInputRevision(ctx, store, environmentID, revisionID, revision)
 	if err != nil || !found {
 		return keyvalue.Versioned[DeclaredResources]{ReadRevision: input.ReadRevision}, found, err
 	}
-	owned, found, err := blueprints.ReadOwnedIdentitiesRevision(ctx, store, environmentID, revisionID, input.ReadRevision)
+	owned, found, err := blueprints.ReadOwnedIdentitiesRevision(
+		ctx,
+		store,
+		environmentID,
+		revisionID,
+		input.ReadRevision,
+	)
 	if err != nil {
 		return keyvalue.Versioned[DeclaredResources]{}, false, err
 	}

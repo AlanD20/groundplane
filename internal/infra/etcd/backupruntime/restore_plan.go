@@ -41,7 +41,11 @@ func ValidateConfigRestoreExecutionPlan(record BackupRestoreRecord, plan *agentp
 	return validateConfigRestoreInput(record, validated.BackupScope, validated.Steps[0].GetBackupStep())
 }
 
-func validateConfigRestoreInput(record BackupRestoreRecord, scope *agentpb.BackupPlanScope, step *agentpb.BackupStepAuthority) error {
+func validateConfigRestoreInput(
+	record BackupRestoreRecord,
+	scope *agentpb.BackupPlanScope,
+	step *agentpb.BackupStepAuthority,
+) error {
 	target := record.CurrentTarget.Config
 	restore := step.GetRestore()
 	config := restore.GetConfig()

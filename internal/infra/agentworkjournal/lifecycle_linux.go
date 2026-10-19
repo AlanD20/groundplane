@@ -9,7 +9,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareLifecycle(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, next lifecycleexecution.Progress) (*LifecycleRecord, error) {
+func (journal *Journal) PrepareLifecycle(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	next lifecycleexecution.Progress,
+) (*LifecycleRecord, error) {
 	if next.Validate(attempt, input) != nil || next.Sequence == 0 {
 		return nil, invalid()
 	}
@@ -66,7 +71,11 @@ func (journal *Journal) PrepareLifecycle(ctx context.Context, attempt workexecut
 	return state.Lifecycle, nil
 }
 
-func (journal *Journal) Lifecycle(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput) (*LifecycleRecord, error) {
+func (journal *Journal) Lifecycle(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+) (*LifecycleRecord, error) {
 	if attempt.Validate() != nil {
 		return nil, invalid()
 	}
@@ -85,7 +94,12 @@ func (journal *Journal) Lifecycle(ctx context.Context, attempt workexecution.Att
 	return state.Lifecycle, nil
 }
 
-func (journal *Journal) AcknowledgeLifecycle(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, checkpoint workexecution.Checkpoint) error {
+func (journal *Journal) AcknowledgeLifecycle(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	checkpoint workexecution.Checkpoint,
+) error {
 	if attempt.Validate() != nil {
 		return invalid()
 	}
@@ -113,14 +127,27 @@ func (journal *Journal) AcknowledgeLifecycle(ctx context.Context, attempt workex
 	return journal.writeRecord(ctx, *state)
 }
 
-func matchesLifecycle(state *attemptRecord, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput) bool {
+func matchesLifecycle(
+	state *attemptRecord,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+) bool {
 	stages, err := lifecycleexecution.Stages(input)
-	return err == nil && state != nil && state.Lifecycle != nil && state.Lifecycle.Progress.Validate(attempt, input) == nil && workexecution.SameAssignment(state.Attempt, attempt) &&
-		state.Attempt.StartedAt != nil && attempt.StartedAt != nil && state.Attempt.StartedAt.Equal(*attempt.StartedAt) &&
+	return err == nil && state != nil && state.Lifecycle != nil &&
+		state.Lifecycle.Progress.Validate(attempt, input) == nil &&
+		workexecution.SameAssignment(state.Attempt, attempt) &&
+		state.Attempt.StartedAt != nil &&
+		attempt.StartedAt != nil &&
+		state.Attempt.StartedAt.Equal(*attempt.StartedAt) &&
 		slices.Equal(state.Lifecycle.Stages, stages)
 }
 
-func (journal *Journal) AcknowledgeLifecycleCompletion(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, terminal workexecution.Attempt) error {
+func (journal *Journal) AcknowledgeLifecycleCompletion(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	terminal workexecution.Attempt,
+) error {
 	if attempt.Validate() != nil || terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil {
 		return invalid()
 	}

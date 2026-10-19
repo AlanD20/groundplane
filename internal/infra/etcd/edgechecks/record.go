@@ -24,11 +24,13 @@ type Owner struct {
 }
 
 func (owner Owner) Validate() error {
-	if ids.Validate(ids.KindTask, owner.TaskID) != nil || ids.Validate(ids.KindWorkItem, owner.WorkItemID) != nil || ids.Validate(ids.KindPlan, owner.PlanID) != nil ||
+	if ids.Validate(ids.KindTask, owner.TaskID) != nil || ids.Validate(ids.KindWorkItem, owner.WorkItemID) != nil ||
+		ids.Validate(ids.KindPlan, owner.PlanID) != nil ||
 		ids.Validate(
 			ids.KindOperation,
 			owner.OperationID,
-		) != nil || ids.Validate(ids.KindEnvironment, owner.EnvironmentID) != nil {
+		) != nil ||
+		ids.Validate(ids.KindEnvironment, owner.EnvironmentID) != nil {
 		return invalidRecord()
 	}
 	return nil

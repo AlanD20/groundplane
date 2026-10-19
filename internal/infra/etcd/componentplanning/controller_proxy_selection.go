@@ -33,7 +33,10 @@ func ControllerProxySelectionKey(environmentID, parentID, componentID string) st
 
 func (selection ControllerProxySelection) validate() error {
 	if ids.Validate(ids.KindComponent, selection.ComponentID) != nil ||
-		ids.Validate(ids.KindOperation, selection.OperationID) != nil || ids.Validate(ids.KindWorkItem, selection.WorkItemID) != nil {
+		ids.Validate(
+			ids.KindOperation,
+			selection.OperationID,
+		) != nil || ids.Validate(ids.KindWorkItem, selection.WorkItemID) != nil {
 		return errs.New(errs.KindStateConflict, "Controller proxy selection identity is invalid")
 	}
 	if input := selection.Preflight.CandidateInput; input != nil &&
@@ -85,10 +88,16 @@ func PrepareControllerProxySelection(ctx context.Context, store planningStore,
 		(item.Phase != workexecution.Waiting && item.Phase != workexecution.Ready) ||
 		headRevision <= 0 || runtimeCondition.Key != RuntimeKey(item.TargetID) || runtimeCondition.ModRevision < 0 ||
 		preflight.ParentTaskID != task.ID || preflight.EnvironmentID != task.Scope.EnvironmentID {
-		return ControllerProxyPublication{}, errs.New(errs.KindStateConflict, "Disabled proxy publication differs from captured work")
+		return ControllerProxyPublication{}, errs.New(
+			errs.KindStateConflict,
+			"Disabled proxy publication differs from captured work",
+		)
 	}
 	if hold := preflight.SourceHold; hold != nil && hold.OperationID != parentOperationID {
-		return ControllerProxyPublication{}, errs.New(errs.KindStateConflict, "Disabled proxy hook inputs belong to another Apply")
+		return ControllerProxyPublication{}, errs.New(
+			errs.KindStateConflict,
+			"Disabled proxy hook inputs belong to another Apply",
+		)
 	}
 	publicationRevision, err := proxyPublicationRevision(preflight, sourceChange, work.ReadRevision)
 	if err != nil {
@@ -103,16 +112,23 @@ func PrepareControllerProxySelection(ctx context.Context, store planningStore,
 		return ControllerProxyPublication{}, err
 	}
 	if preflight.CandidateInput == nil {
-		return ControllerProxyPublication{}, errs.New(errs.KindStateConflict, "Disabled proxy publication has no captured input")
+		return ControllerProxyPublication{}, errs.New(
+			errs.KindStateConflict,
+			"Disabled proxy publication has no captured input",
+		)
 	}
 	inputCompared := false
 	for _, condition := range sourceChange.Conditions {
-		if condition.Key == ProxyCandidateInputKey(*preflight.CandidateInput) && condition.ModRevision > 0 && condition.ModRevision <= publicationRevision {
+		if condition.Key == ProxyCandidateInputKey(*preflight.CandidateInput) && condition.ModRevision > 0 &&
+			condition.ModRevision <= publicationRevision {
 			inputCompared = true
 		}
 	}
 	if !inputCompared {
-		return ControllerProxyPublication{}, errs.New(errs.KindStateConflict, "Disabled proxy publication must compare its captured input")
+		return ControllerProxyPublication{}, errs.New(
+			errs.KindStateConflict,
+			"Disabled proxy publication must compare its captured input",
+		)
 	}
 	var rollouts []ProxyServiceRolloutReference
 	for _, source := range preflight.Services {
@@ -131,11 +147,17 @@ func PrepareControllerProxySelection(ctx context.Context, store planningStore,
 	key := ControllerProxySelectionKey(preflight.EnvironmentID, task.ID, item.TargetID)
 	conditions := append([]keyvalue.Condition(nil), sourceChange.Conditions...)
 	conditions = append(conditions, comparisons...)
-	conditions = append(conditions, runtimeCondition,
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(preflight.EnvironmentID), ModRevision: headRevision},
+	conditions = append(
+		conditions,
+		runtimeCondition,
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(preflight.EnvironmentID),
+			ModRevision: headRevision,
+		},
 		keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: work.Task.Revision},
 		keyvalue.Condition{Key: workqueue.ItemKey(item.ID), ModRevision: work.Item.Revision},
-		keyvalue.Condition{Key: key})
+		keyvalue.Condition{Key: key},
+	)
 	mutations := append(cloneProxySourceMutations(sourceChange.Mutations),
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
 	return ControllerProxyPublication{record: record, value: value, conditions: conditions, mutations: mutations}, nil

@@ -11,7 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (service *Service) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	snapshot, err := service.records.LoadWork(ctx, request.Item.Item, request.ReadRevision)
 	if err != nil {
 		return workdispatch.Decision{}, err
@@ -25,10 +29,19 @@ func (service *Service) Admit(ctx context.Context, request workqueue.Assignment,
 		change, err := settleUnstarted(request.Task, request.Item, snapshot, workexecution.Failed, at)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
-	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: request.Item.Item.Deadline, Change: snapshot.Guard()}, nil
+	return workdispatch.Decision{
+		Disposition: workdispatch.Dispatch,
+		Deadline:    request.Item.Item.Deadline,
+		Change:      snapshot.Guard(),
+	}, nil
 }
 
-func (service *Service) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (service *Service) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "software preparation has no stop request")
 	}
@@ -49,7 +62,12 @@ func settleUnstarted(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, s
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change, err := workqueue.PrepareUnstartedSettlement(task, item, workexecution.Completion{Outcome: outcome, EffectsSettled: true, Evidence: reference}, at)
+	change, err := workqueue.PrepareUnstartedSettlement(
+		task,
+		item,
+		workexecution.Completion{Outcome: outcome, EffectsSettled: true, Evidence: reference},
+		at,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -63,7 +81,10 @@ func (service *Service) PrepareWorkRetry(ctx context.Context, task workqueue.Tas
 	previous workqueue.AttemptSnapshot, revision int64, at time.Time,
 ) (workqueue.Change, error) {
 	if item.Item.Phase != workexecution.Attention || previous.Attempt.Result == nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "submit a new software preparation; Retry is available only for captured build cleanup")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"submit a new software preparation; Retry is available only for captured build cleanup",
+		)
 	}
 	snapshot, err := service.records.LoadWork(ctx, item.Item, revision)
 	if err != nil {

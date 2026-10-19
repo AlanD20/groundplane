@@ -17,7 +17,11 @@ type RecoveryInput struct {
 	Conditions []keyvalue.Condition
 }
 
-func (repository *InputRepository) LoadRecoveryInput(ctx context.Context, view workqueue.View, attempt workexecution.Attempt) (RecoveryInput, error) {
+func (repository *InputRepository) LoadRecoveryInput(
+	ctx context.Context,
+	view workqueue.View,
+	attempt workexecution.Attempt,
+) (RecoveryInput, error) {
 	input, _, guards, err := repository.Load(ctx, view)
 	if err != nil {
 		return RecoveryInput{}, err

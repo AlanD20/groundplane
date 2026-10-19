@@ -15,10 +15,18 @@ import (
 
 type RecoveryExchange interface {
 	Start(context.Context, *agentpb.WorkStartRequest) (*agentpb.WorkStartAck, error)
-	CompleteScriptRecovery(context.Context, *agentpb.ScriptRecoveryCompletionRequest) (*agentpb.ScriptRecoveryCompletionAck, error)
+	CompleteScriptRecovery(
+		context.Context,
+		*agentpb.ScriptRecoveryCompletionRequest,
+	) (*agentpb.ScriptRecoveryCompletionAck, error)
 }
 
-func (executor *Executor) ExecuteRecovery(ctx context.Context, input scriptexecution.RecoveryInput, exchange RecoveryExchange, ownership *agentownership.Lease) (*agentpb.ScriptRecoveryCompletionAck, error) {
+func (executor *Executor) ExecuteRecovery(
+	ctx context.Context,
+	input scriptexecution.RecoveryInput,
+	exchange RecoveryExchange,
+	ownership *agentownership.Lease,
+) (*agentpb.ScriptRecoveryCompletionAck, error) {
 	if executor == nil || ctx == nil || exchange == nil || input.Validate() != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Script recovery requires a captured assignment")
 	}
@@ -82,7 +90,12 @@ func (executor *Executor) ExecuteRecovery(ctx context.Context, input scriptexecu
 	return executor.completeRecovery(ctx, input, proof, exchange)
 }
 
-func (executor *Executor) completeRecovery(ctx context.Context, input scriptexecution.RecoveryInput, proof scriptexecution.RecoveryProof, exchange RecoveryExchange) (*agentpb.ScriptRecoveryCompletionAck, error) {
+func (executor *Executor) completeRecovery(
+	ctx context.Context,
+	input scriptexecution.RecoveryInput,
+	proof scriptexecution.RecoveryProof,
+	exchange RecoveryExchange,
+) (*agentpb.ScriptRecoveryCompletionAck, error) {
 	request, err := scriptexecution.EncodeRecoveryCompletion(input, proof)
 	if err != nil {
 		return nil, err

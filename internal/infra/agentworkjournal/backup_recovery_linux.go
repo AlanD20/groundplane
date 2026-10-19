@@ -179,7 +179,11 @@ func (journal *Journal) AcknowledgeBackupRecovery(ctx context.Context, attempt w
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	report, evidence, err := executionplan.DecodeBackupRecoveryReport(attempt, state.Backup.Recovery.Source, state.Backup.Recovery.Report)
+	report, evidence, err := executionplan.DecodeBackupRecoveryReport(
+		attempt,
+		state.Backup.Recovery.Source,
+		state.Backup.Recovery.Report,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

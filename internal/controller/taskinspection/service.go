@@ -39,11 +39,47 @@ type Service struct {
 	hierarchy          *etcd.HierarchyDeletionRepository
 }
 
-func New(queue *workqueue.Repository, images *imageoperations.Repository, diagnostics *executiondiagnostics.Repository, retries *workdispatch.Retries, hierarchy *etcd.HierarchyDeletionRepository, components *componentwork.InputRepository, runners *runnerwork.Repository, etcdConfig *etcdconfiguration.Repository, preparations *preparationrecord.Repository, controllerSoftware *controllersoftware.Repository, agentLifecycle *agentoperations.Repository, activations *activationrecord.Repository, environments *environmentprovision.Repository) (*Service, error) {
-	if environments == nil || queue == nil || images == nil || diagnostics == nil || retries == nil || hierarchy == nil || components == nil || runners == nil || etcdConfig == nil || preparations == nil || controllerSoftware == nil || agentLifecycle == nil || activations == nil {
+func New(
+	queue *workqueue.Repository,
+	images *imageoperations.Repository,
+	diagnostics *executiondiagnostics.Repository,
+	retries *workdispatch.Retries,
+	hierarchy *etcd.HierarchyDeletionRepository,
+	components *componentwork.InputRepository,
+	runners *runnerwork.Repository,
+	etcdConfig *etcdconfiguration.Repository,
+	preparations *preparationrecord.Repository,
+	controllerSoftware *controllersoftware.Repository,
+	agentLifecycle *agentoperations.Repository,
+	activations *activationrecord.Repository,
+	environments *environmentprovision.Repository,
+) (*Service, error) {
+	if environments == nil || queue == nil || images == nil || diagnostics == nil || retries == nil ||
+		hierarchy == nil ||
+		components == nil ||
+		runners == nil ||
+		etcdConfig == nil ||
+		preparations == nil ||
+		controllerSoftware == nil ||
+		agentLifecycle == nil ||
+		activations == nil {
 		return nil, errs.New(errs.KindInternal, "Task inspection requires execution storage")
 	}
-	return &Service{environments: environments, queue: queue, images: images, diagnostics: diagnostics, retries: retries, hierarchy: hierarchy, components: components, runners: runners, etcd: etcdConfig, preparations: preparations, controllerSoftware: controllerSoftware, agentLifecycle: agentLifecycle, activations: activations}, nil
+	return &Service{
+		environments:       environments,
+		queue:              queue,
+		images:             images,
+		diagnostics:        diagnostics,
+		retries:            retries,
+		hierarchy:          hierarchy,
+		components:         components,
+		runners:            runners,
+		etcd:               etcdConfig,
+		preparations:       preparations,
+		controllerSoftware: controllerSoftware,
+		agentLifecycle:     agentLifecycle,
+		activations:        activations,
+	}, nil
 }
 
 type Summary struct {
@@ -117,13 +153,20 @@ func (service *Service) WorkPage(ctx context.Context, taskID, after string, limi
 	}
 	for _, snapshot := range page.Items {
 		item := workexecution.Clone(snapshot.Item)
-		settlement, err := service.queue.ReadInputSettlement(ctx, workqueue.View{Task: task, Item: snapshot, ReadRevision: readRevision})
+		settlement, err := service.queue.ReadInputSettlement(
+			ctx,
+			workqueue.View{Task: task, Item: snapshot, ReadRevision: readRevision},
+		)
 		if err != nil {
 			return Page{}, err
 		}
 		var preparation *WorkPreparation
 		if settlement != nil {
-			preparation = &WorkPreparation{Summary: settlement.Reason, DependencyID: settlement.DependencyID, FinishedAt: settlement.At}
+			preparation = &WorkPreparation{
+				Summary:      settlement.Reason,
+				DependencyID: settlement.DependencyID,
+				FinishedAt:   settlement.At,
+			}
 		}
 		retry := ActionAvailability{Reason: "This work has no retryable failure"}
 		if preparation != nil {
@@ -142,10 +185,28 @@ func (service *Service) WorkPage(ctx context.Context, taskID, after string, limi
 		if err != nil {
 			return Page{}, err
 		}
-		result.Work = append(result.Work, Work{ID: item.ID, TargetID: item.TargetID, TargetName: item.TargetName, Operation: item.Operation, Preparation: preparation, OriginalFailure: originalFailure,
-			Placement: item.Placement, Phase: item.Phase, Outcome: item.Outcome, Wait: item.Wait, Cleanup: item.Cleanup,
-			AttemptCount: item.AttemptNumber, ActiveAttemptID: item.ActiveAttemptID, Retry: retry,
-			CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt, Deadline: item.Deadline})
+		result.Work = append(
+			result.Work,
+			Work{
+				ID:              item.ID,
+				TargetID:        item.TargetID,
+				TargetName:      item.TargetName,
+				Operation:       item.Operation,
+				Preparation:     preparation,
+				OriginalFailure: originalFailure,
+				Placement:       item.Placement,
+				Phase:           item.Phase,
+				Outcome:         item.Outcome,
+				Wait:            item.Wait,
+				Cleanup:         item.Cleanup,
+				AttemptCount:    item.AttemptNumber,
+				ActiveAttemptID: item.ActiveAttemptID,
+				Retry:           retry,
+				CreatedAt:       item.CreatedAt,
+				UpdatedAt:       item.UpdatedAt,
+				Deadline:        item.Deadline,
+			},
+		)
 	}
 	result.More, result.After = page.More, page.LastID
 	return result, nil

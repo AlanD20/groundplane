@@ -83,8 +83,17 @@ type PublishAuthoredInput struct {
 }
 
 type AuthoredPublicationIdempotency interface {
-	ResolveExisting(context.Context, idempotency.IdempotencyLocator, Evidence) (requestidempotency.Resolution, bool, error)
-	ResolveUnknown(context.Context, idempotency.IdempotencyLocator, Evidence, error) (requestidempotency.Resolution, error)
+	ResolveExisting(
+		context.Context,
+		idempotency.IdempotencyLocator,
+		Evidence,
+	) (requestidempotency.Resolution, bool, error)
+	ResolveUnknown(
+		context.Context,
+		idempotency.IdempotencyLocator,
+		Evidence,
+		error,
+	) (requestidempotency.Resolution, error)
 }
 
 func PublishAuthored(

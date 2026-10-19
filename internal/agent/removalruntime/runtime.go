@@ -27,8 +27,15 @@ type Runtime struct {
 	ownership    *agentownership.Lease
 }
 
-func NewRuntime(root string, journal *agentworkjournal.Journal, helper Helper, materializer *materialization.Runtime, ownership *agentownership.Lease) (*Runtime, error) {
-	if environmentpath.ValidateRoot(root) != nil || journal == nil || helper == nil || materializer == nil || ownership == nil {
+func NewRuntime(
+	root string,
+	journal *agentworkjournal.Journal,
+	helper Helper,
+	materializer *materialization.Runtime,
+	ownership *agentownership.Lease,
+) (*Runtime, error) {
+	if environmentpath.ValidateRoot(root) != nil || journal == nil || helper == nil || materializer == nil ||
+		ownership == nil {
 		return nil, errs.New(errs.KindInternal, "service removal recovery requires host dependencies and ownership")
 	}
 	if err := ownership.Check(); err != nil {
@@ -37,7 +44,11 @@ func NewRuntime(root string, journal *agentworkjournal.Journal, helper Helper, m
 	return &Runtime{root: root, journal: journal, helper: helper, materializer: materializer, ownership: ownership}, nil
 }
 
-func (runtime *Runtime) Run(ctx context.Context, input Input, exchange RecoveryExchange) (workexecution.Attempt, error) {
+func (runtime *Runtime) Run(
+	ctx context.Context,
+	input Input,
+	exchange RecoveryExchange,
+) (workexecution.Attempt, error) {
 	configuration, err := NewRecoveryConfiguration(runtime.materializer, exchange, runtime.ownership)
 	if err != nil {
 		return workexecution.Attempt{}, err

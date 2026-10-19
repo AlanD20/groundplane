@@ -15,7 +15,12 @@ type RecoveryResult struct {
 	Failure *releaseexecution.FailureReceipt
 }
 
-func (executor *RecoveryExecutor) Execute(ctx context.Context, assignment *agentpb.ReleaseRecoveryAssignment, identity workexecution.Identity, exchange RecoveryExchange) (RecoveryResult, error) {
+func (executor *RecoveryExecutor) Execute(
+	ctx context.Context,
+	assignment *agentpb.ReleaseRecoveryAssignment,
+	identity workexecution.Identity,
+	exchange RecoveryExchange,
+) (RecoveryResult, error) {
 	if executor == nil || ctx == nil || exchange == nil {
 		return RecoveryResult{}, errs.New(errs.KindInternal, "Release recovery execution is not configured")
 	}

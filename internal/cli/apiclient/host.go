@@ -112,7 +112,9 @@ func maintenanceFromGenerated(source *generated.Status) *storagemaintenance.Stat
 	if source.Cleanup != nil {
 		result.Cleanup = &storagemaintenance.CleanupStatus{
 			ObservedAt: source.Cleanup.ObservedAt, State: source.Cleanup.State,
-			IdempotencyRecords: int(source.Cleanup.IdempotencyRecords), FailureCode: valueOrEmpty(source.Cleanup.FailureCode),
+			IdempotencyRecords: int(
+				source.Cleanup.IdempotencyRecords,
+			), FailureCode: valueOrEmpty(source.Cleanup.FailureCode),
 		}
 	}
 	return result

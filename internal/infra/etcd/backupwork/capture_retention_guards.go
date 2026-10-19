@@ -33,7 +33,13 @@ func (repository *InputRepository) captureRetentionGuards(ctx context.Context, v
 	if err != nil {
 		return false, zero, nil, err
 	}
-	ready, backingGuards, err := repository.retentionBackingGuards(ctx, view, environments, run.OperationID, backupruntime.BackupOperationBackup)
+	ready, backingGuards, err := repository.retentionBackingGuards(
+		ctx,
+		view,
+		environments,
+		run.OperationID,
+		backupruntime.BackupOperationBackup,
+	)
 	if err != nil || !ready {
 		return false, zero, nil, err
 	}

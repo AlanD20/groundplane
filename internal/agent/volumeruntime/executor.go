@@ -17,7 +17,10 @@ type Exchange interface {
 	VolumeCheckpoint(context.Context, *agentpb.VolumeWorkCheckpointRequest) (*agentpb.VolumeWorkCheckpointAck, error)
 	CompleteVolume(context.Context, *agentpb.VolumeWorkCompletionRequest) (*agentpb.VolumeWorkCompletionAck, error)
 	FailVolume(context.Context, *agentpb.VolumeWorkFailureRequest) (*agentpb.VolumeWorkFailureAck, error)
-	RecoverVolume(context.Context, *agentpb.VolumeWorkRecoveryReportRequest) (*agentpb.VolumeWorkRecoveryReportAck, error)
+	RecoverVolume(
+		context.Context,
+		*agentpb.VolumeWorkRecoveryReportRequest,
+	) (*agentpb.VolumeWorkRecoveryReportAck, error)
 }
 
 // Host owns exact container/directory authority and joins any helper before
@@ -72,7 +75,15 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 		return executor.deliverFailure(ctx, input, exchange, saved.Failure)
 	}
 	if saved == nil && reconcile {
-		return executor.fail(ctx, input, exchange, errs.New(errs.KindStateConflict, "Volume execution started previously but its local checkpoint is unavailable; inspection is required"))
+		return executor.fail(
+			ctx,
+			input,
+			exchange,
+			errs.New(
+				errs.KindStateConflict,
+				"Volume execution started previously but its local checkpoint is unavailable; inspection is required",
+			),
+		)
 	}
 	var progress volumeexecution.Progress
 	if saved != nil {
@@ -97,7 +108,12 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 		}
 		fresh := !progress.InFlight
 		if fresh {
-			progress, err = progress.Begin(input.attempt, input.procedure.Action, input.procedure.VolumeId, time.Now().UTC())
+			progress, err = progress.Begin(
+				input.attempt,
+				input.procedure.Action,
+				input.procedure.VolumeId,
+				time.Now().UTC(),
+			)
 			if err != nil {
 				return executor.fail(ctx, input, exchange, err)
 			}
@@ -130,7 +146,13 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 				return executor.fail(ctx, input, exchange, inspectErr)
 			}
 		}
-		progress, err = progress.Confirm(input.attempt, input.procedure.Action, input.procedure.VolumeId, observation, time.Now().UTC())
+		progress, err = progress.Confirm(
+			input.attempt,
+			input.procedure.Action,
+			input.procedure.VolumeId,
+			observation,
+			time.Now().UTC(),
+		)
 		if err != nil {
 			return executor.fail(ctx, input, exchange, err)
 		}
@@ -156,14 +178,24 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 	return terminal, nil
 }
 
-func (executor *Executor) save(ctx context.Context, input Input, exchange Exchange, progress volumeexecution.Progress) error {
+func (executor *Executor) save(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress volumeexecution.Progress,
+) error {
 	if _, err := executor.journal.PrepareVolume(ctx, input.attempt, input.procedure.Action, input.procedure.VolumeId, progress); err != nil {
 		return err
 	}
 	return executor.acknowledge(ctx, input, exchange, progress)
 }
 
-func (executor *Executor) acknowledge(ctx context.Context, input Input, exchange Exchange, progress volumeexecution.Progress) error {
+func (executor *Executor) acknowledge(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress volumeexecution.Progress,
+) error {
 	request, err := input.checkpointRequest(progress)
 	if err != nil {
 		return err
@@ -176,5 +208,11 @@ func (executor *Executor) acknowledge(ctx context.Context, input Input, exchange
 	if err != nil {
 		return err
 	}
-	return executor.journal.AcknowledgeVolume(ctx, input.attempt, input.procedure.Action, input.procedure.VolumeId, checkpoint)
+	return executor.journal.AcknowledgeVolume(
+		ctx,
+		input.attempt,
+		input.procedure.Action,
+		input.procedure.VolumeId,
+		checkpoint,
+	)
 }

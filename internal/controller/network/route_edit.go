@@ -85,7 +85,17 @@ func (service *routeMutationService) editRouteOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.acceptRouteWork(ctx, environment, project, target, &current, replacement, workexecution.ActionUpdate, locator, evidence)
+	return service.acceptRouteWork(
+		ctx,
+		environment,
+		project,
+		target,
+		&current,
+		replacement,
+		workexecution.ActionUpdate,
+		locator,
+		evidence,
+	)
 }
 
 func routeEditMutationIntent(

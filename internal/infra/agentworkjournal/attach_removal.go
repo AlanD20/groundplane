@@ -20,10 +20,17 @@ func (record AttachRemovalRecord) matches(input attachexecution.RemovalInput) bo
 }
 
 func (record attemptRecord) validateAttachRemoval() error {
-	if record.AttachRemoval == nil || record.AttachFailure != nil || record.EnvironmentFailure != nil || record.EnvironmentRemoval != nil ||
-		record.ScriptFailure != nil || record.ScriptRecovery != nil || record.ScriptCompletion != nil ||
-		record.Release != nil || record.Effect != nil || record.Completion != nil || record.Failure != nil ||
-		record.Recovery != nil || len(record.Script) != 0 {
+	if record.AttachRemoval == nil || record.AttachFailure != nil || record.EnvironmentFailure != nil ||
+		record.EnvironmentRemoval != nil ||
+		record.ScriptFailure != nil ||
+		record.ScriptRecovery != nil ||
+		record.ScriptCompletion != nil ||
+		record.Release != nil ||
+		record.Effect != nil ||
+		record.Completion != nil ||
+		record.Failure != nil ||
+		record.Recovery != nil ||
+		len(record.Script) != 0 {
 		return invalid()
 	}
 	removal := record.AttachRemoval
@@ -34,7 +41,8 @@ func (record attemptRecord) validateAttachRemoval() error {
 	if err != nil {
 		return err
 	}
-	if removal.Report.Progress.Sequence != record.Sequence || !removal.Report.Progress.UpdatedAt.Equal(record.UpdatedAt) {
+	if removal.Report.Progress.Sequence != record.Sequence ||
+		!removal.Report.Progress.UpdatedAt.Equal(record.UpdatedAt) {
 		return invalid()
 	}
 	if result := removal.CommandResult; result != nil {
@@ -47,11 +55,18 @@ func (record attemptRecord) validateAttachRemoval() error {
 		}
 	}
 	if terminal := removal.Completion; terminal != nil {
-		if !removal.Acknowledged || removal.Report.Progress.InFlight || removal.Report.Progress.Completed != removal.Authority.Commands ||
-			terminal.Validate() != nil || !workexecution.SameAssignment(*terminal, record.Attempt) ||
-			terminal.StartedAt == nil || record.Attempt.StartedAt == nil || !terminal.StartedAt.Equal(*record.Attempt.StartedAt) ||
-			terminal.FinishedAt == nil || terminal.FinishedAt.Before(record.UpdatedAt) || terminal.Outcome != workexecution.Succeeded ||
-			terminal.Result == nil || *terminal.Result != checkpoint.Evidence {
+		if !removal.Acknowledged || removal.Report.Progress.InFlight ||
+			removal.Report.Progress.Completed != removal.Authority.Commands ||
+			terminal.Validate() != nil ||
+			!workexecution.SameAssignment(*terminal, record.Attempt) ||
+			terminal.StartedAt == nil ||
+			record.Attempt.StartedAt == nil ||
+			!terminal.StartedAt.Equal(*record.Attempt.StartedAt) ||
+			terminal.FinishedAt == nil ||
+			terminal.FinishedAt.Before(record.UpdatedAt) ||
+			terminal.Outcome != workexecution.Succeeded ||
+			terminal.Result == nil ||
+			*terminal.Result != checkpoint.Evidence {
 			return invalid()
 		}
 	}

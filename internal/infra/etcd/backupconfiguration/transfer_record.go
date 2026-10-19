@@ -152,7 +152,8 @@ func ValidateConfigTransferPruneEntry(taskID, key string, value []byte) error {
 	}
 	if strings.HasSuffix(key, "/cursor") {
 		cursor, err := DecodeConfigTransferCursor(value)
-		if err != nil || cursor.Owner.Binding.Attempt.TaskID != taskID || ConfigTransferCursorKey(cursor.Owner.Binding) != key {
+		if err != nil || cursor.Owner.Binding.Attempt.TaskID != taskID ||
+			ConfigTransferCursorKey(cursor.Owner.Binding) != key {
 			return captureSnapshotConflict()
 		}
 		return nil

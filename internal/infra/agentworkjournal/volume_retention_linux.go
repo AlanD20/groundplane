@@ -26,7 +26,8 @@ func (journal *Journal) retireRecoveredVolume(ctx context.Context, recovery Volu
 		return conflict()
 	}
 	if failure := forward.Volume.Failure; failure != nil && failure.Receipt != nil {
-		if *failure.Receipt.Result != recovery.Source.Evidence || !failure.Receipt.FinishedAt.Equal(*recovery.Source.Forward.FinishedAt) {
+		if *failure.Receipt.Result != recovery.Source.Evidence ||
+			!failure.Receipt.FinishedAt.Equal(*recovery.Source.Forward.FinishedAt) {
 			return conflict()
 		}
 	}

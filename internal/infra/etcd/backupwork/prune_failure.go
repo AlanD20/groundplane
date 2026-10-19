@@ -59,7 +59,10 @@ func (repository *InputRepository) preparePruneReleasedResources(ctx context.Con
 		len(dispatch.RecoveryPointIDs) != len(sources) || !at.After(dispatch.CreatedAt) {
 		return workqueue.Change{}, conflict("Backup prune failure differs from captured ownership")
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: dispatchKey, ModRevision: read.Values[0].ModRevision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: dispatchKey, ModRevision: read.Values[0].ModRevision},
+	)
 	prepared := false
 	defer func() {
 		if !prepared {
@@ -119,8 +122,17 @@ func (repository *InputRepository) preparePruneReleasedResources(ctx context.Con
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete,
 			Key: credentialGrantKey(view.Item.Item.ID, uint32(ordinal))})
 	}
-	fence, err := environmentfence.LoadOwned(ctx, repository.store, dispatch.EnvironmentID, view.ReadRevision,
-		environmentfence.Owner{Kind: backupruntime.BackupOperationPrune, OperationID: dispatch.OperationID, TaskID: dispatch.TaskID})
+	fence, err := environmentfence.LoadOwned(
+		ctx,
+		repository.store,
+		dispatch.EnvironmentID,
+		view.ReadRevision,
+		environmentfence.Owner{
+			Kind:        backupruntime.BackupOperationPrune,
+			OperationID: dispatch.OperationID,
+			TaskID:      dispatch.TaskID,
+		},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -129,9 +141,15 @@ func (repository *InputRepository) preparePruneReleasedResources(ctx context.Con
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, fence.TransactionConditions()...)
-	change.Mutations = append(change.Mutations, epoch,
+	change.Mutations = append(
+		change.Mutations,
+		epoch,
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: dispatchKey},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: hierarchy.EnvironmentOperationLockKey(dispatch.EnvironmentID)})
+		keyvalue.Mutation{
+			Type: keyvalue.MutationDelete,
+			Key:  hierarchy.EnvironmentOperationLockKey(dispatch.EnvironmentID),
+		},
+	)
 	prepared = true
 	return change, nil
 }
@@ -143,12 +161,23 @@ func validateStoppedPruneSource(values []*keyvalue.KeyValue, prune backupruntime
 		if resume.CheckpointSequence != 0 || resume.GetObjectDeleted() != nil {
 			return conflict("Backup prune progress claims absence without resource settlement")
 		}
-		return backupruntime.ValidatePendingBackupPruneAuthority(values,
-			keyvalue.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{Record: prune, Revision: revision, ReadRevision: readRevision})
+		return backupruntime.ValidatePendingBackupPruneAuthority(
+			values,
+			keyvalue.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{
+				Record:       prune,
+				Revision:     revision,
+				ReadRevision: readRevision,
+			},
+		)
 	}
 	if prune.State != backupruntime.BackupPruneVerifiedAbsent || resume.CheckpointSequence != 1 ||
 		resume.PrecedingCheckpoint == nil || resume.PrecedingCheckpoint.DedupeKeyModRevision != revision ||
-		!backupruntime.BackupPruneDeletedMatchesObject(resume.GetObjectDeleted(), ordinal, prune.Point.ID, prune.Point.Object) {
+		!backupruntime.BackupPruneDeletedMatchesObject(
+			resume.GetObjectDeleted(),
+			ordinal,
+			prune.Point.ID,
+			prune.Point.Object,
+		) {
 		return conflict("Backup prune absence has no matching durable checkpoint")
 	}
 	if len(values) != 5 || values[0] == nil || values[0].ModRevision != revision {

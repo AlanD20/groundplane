@@ -76,7 +76,10 @@ func (service *ScriptCheckpointService) CheckpointScript(
 		TaskID: request.GetTaskId(), OperationID: request.GetOperationId(),
 		WorkItemID: request.GetWorkItemId(), AttemptID: request.GetAttemptId(), Executor: identity,
 		Sequence: request.GetSequence(), StageID: request.GetStageId(), ExecutionID: request.GetScriptExecutionId(),
-		Input:         workexecution.Input{ID: request.GetInputId(), SHA256: hex.EncodeToString(request.GetInputSha256())},
+		Input: workexecution.Input{
+			ID:     request.GetInputId(),
+			SHA256: hex.EncodeToString(request.GetInputSha256()),
+		},
 		ExpectedState: expected, State: state, Evidence: evidence, At: request.GetRecordedAt().AsTime().UTC(),
 	}
 	encoded, digest, err := scriptexecutions.EncodeCheckpointEvidence(input)
@@ -86,7 +89,12 @@ func (service *ScriptCheckpointService) CheckpointScript(
 		return nil, err
 	}
 	input.PayloadSHA256 = digest
-	evidenceID, err := scriptexecutions.CheckpointEvidenceID(input.TaskID, input.ExecutionID, input.AttemptID, input.Sequence)
+	evidenceID, err := scriptexecutions.CheckpointEvidenceID(
+		input.TaskID,
+		input.ExecutionID,
+		input.AttemptID,
+		input.Sequence,
+	)
 	if err != nil {
 		return nil, err
 	}

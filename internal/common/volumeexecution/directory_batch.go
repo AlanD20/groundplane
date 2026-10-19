@@ -92,7 +92,12 @@ func (result DirectoryResult) Validate(attempt workexecution.Attempt, boundary P
 	return nil
 }
 
-func EncodeDirectoryResult(attempt workexecution.Attempt, boundary Progress, batch DirectoryBatch, result DirectoryResult) ([]byte, error) {
+func EncodeDirectoryResult(
+	attempt workexecution.Attempt,
+	boundary Progress,
+	batch DirectoryBatch,
+	result DirectoryResult,
+) ([]byte, error) {
 	if err := result.Validate(attempt, boundary, batch); err != nil {
 		return nil, err
 	}
@@ -103,7 +108,12 @@ func EncodeDirectoryResult(attempt workexecution.Attempt, boundary Progress, bat
 	return jcs.Canonicalize(raw)
 }
 
-func DecodeDirectoryResult(attempt workexecution.Attempt, boundary Progress, batch DirectoryBatch, raw []byte) (DirectoryResult, error) {
+func DecodeDirectoryResult(
+	attempt workexecution.Attempt,
+	boundary Progress,
+	batch DirectoryBatch,
+	raw []byte,
+) (DirectoryResult, error) {
 	if len(raw) == 0 || len(raw) > MaximumDirectoryBatchBytes {
 		return DirectoryResult{}, invalidProgress()
 	}

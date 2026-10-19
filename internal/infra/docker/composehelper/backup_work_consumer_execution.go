@@ -13,7 +13,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func ExecuteBackupConsumer(ctx context.Context, taskRunner runner.Runner, request *agentpb.BackupConsumerHelperRequest) (_ *agentpb.BackupConsumerHelperResponse, resultErr error) {
+func ExecuteBackupConsumer(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	request *agentpb.BackupConsumerHelperRequest,
+) (_ *agentpb.BackupConsumerHelperResponse, resultErr error) {
 	input, err := executionplan.OpenBackupConsumerHelper(ctx, request)
 	if err != nil {
 		return nil, err
@@ -47,8 +51,23 @@ func ExecuteBackupConsumer(ctx context.Context, taskRunner runner.Runner, reques
 			return nil, err
 		}
 		defer clear(stdin)
-		prefix := []string{"compose", "--project-name", artifact.ProjectName, "--project-directory", composeProjectDirectory(artifact), "--file", "-"}
-		base := runner.RunCmdOpts{Name: DockerExecutable, Dir: WorkDirectory, Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: stdin, CaptureLimitBytes: 32 * 1024}
+		prefix := []string{
+			"compose",
+			"--project-name",
+			artifact.ProjectName,
+			"--project-directory",
+			composeProjectDirectory(artifact),
+			"--file",
+			"-",
+		}
+		base := runner.RunCmdOpts{
+			Name:              DockerExecutable,
+			Dir:               WorkDirectory,
+			Env:               slices.Clone(fixedEnvironment),
+			ReplaceEnv:        true,
+			Stdin:             stdin,
+			CaptureLimitBytes: 32 * 1024,
+		}
 		validation := base
 		validation.Args = append(slices.Clone(prefix), "config", "--quiet", "--no-interpolate")
 		mutation := base
@@ -79,7 +98,15 @@ func ExecuteBackupConsumer(ctx context.Context, taskRunner runner.Runner, reques
 	if err != nil {
 		return nil, err
 	}
-	response := &agentpb.BackupConsumerHelperResponse{Attempt: wire, SourceOrdinal: input.SourceOrdinal, ServiceId: input.Consumer.Fact.ServiceId, Inspection: input.Inspection, Observed: observed, ObservationSha256: digest, ObservedAt: observed.ObservedAt}
+	response := &agentpb.BackupConsumerHelperResponse{
+		Attempt:           wire,
+		SourceOrdinal:     input.SourceOrdinal,
+		ServiceId:         input.Consumer.Fact.ServiceId,
+		Inspection:        input.Inspection,
+		Observed:          observed,
+		ObservationSha256: digest,
+		ObservedAt:        observed.ObservedAt,
+	}
 	if err := executionplan.ValidateBackupConsumerHelperResponse(input, response); err != nil {
 		return nil, err
 	}

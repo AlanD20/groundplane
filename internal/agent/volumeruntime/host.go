@@ -17,7 +17,11 @@ import (
 )
 
 type Helper interface {
-	ExecuteVolumeWork(context.Context, string, *agentpb.VolumeWorkHelperRequest) (*agentpb.VolumeWorkHelperResponse, error)
+	ExecuteVolumeWork(
+		context.Context,
+		string,
+		*agentpb.VolumeWorkHelperRequest,
+	) (*agentpb.VolumeWorkHelperResponse, error)
 }
 
 type RuntimeHost struct {
@@ -27,7 +31,12 @@ type RuntimeHost struct {
 	ownership *agentownership.Lease
 }
 
-func NewHost(root string, journal *agentworkjournal.Journal, helper Helper, ownership *agentownership.Lease) (*RuntimeHost, error) {
+func NewHost(
+	root string,
+	journal *agentworkjournal.Journal,
+	helper Helper,
+	ownership *agentownership.Lease,
+) (*RuntimeHost, error) {
 	if environmentpath.ValidateRoot(root) != nil || journal == nil || helper == nil {
 		return nil, errs.New(errs.KindInternal, "Volume host requires its root, journal and helper")
 	}
@@ -42,11 +51,20 @@ func (host *RuntimeHost) Apply(ctx context.Context, input Input, stage volumeexe
 	return err
 }
 
-func (host *RuntimeHost) Inspect(ctx context.Context, input Input, stage volumeexecution.Stage) (volumeexecution.Observation, error) {
+func (host *RuntimeHost) Inspect(
+	ctx context.Context,
+	input Input,
+	stage volumeexecution.Stage,
+) (volumeexecution.Observation, error) {
 	return host.execute(ctx, input, stage, true)
 }
 
-func (host *RuntimeHost) execute(ctx context.Context, input Input, stage volumeexecution.Stage, inspectOnly bool) (volumeexecution.Observation, error) {
+func (host *RuntimeHost) execute(
+	ctx context.Context,
+	input Input,
+	stage volumeexecution.Stage,
+	inspectOnly bool,
+) (volumeexecution.Observation, error) {
 	if input.procedure == nil || input.attempt.StartedAt == nil {
 		return volumeexecution.Observation{}, invalidInput()
 	}
@@ -57,8 +75,13 @@ func (host *RuntimeHost) execute(ctx context.Context, input Input, stage volumee
 	if err != nil {
 		return volumeexecution.Observation{}, err
 	}
-	if saved == nil || !saved.Acknowledged || saved.Completion != nil || saved.Failure != nil || !saved.Progress.InFlight || saved.Progress.Stage != stage {
-		return volumeexecution.Observation{}, errs.New(errs.KindStateConflict, "Volume host operation has no matching acknowledged checkpoint")
+	if saved == nil || !saved.Acknowledged || saved.Completion != nil || saved.Failure != nil ||
+		!saved.Progress.InFlight ||
+		saved.Progress.Stage != stage {
+		return volumeexecution.Observation{}, errs.New(
+			errs.KindStateConflict,
+			"Volume host operation has no matching acknowledged checkpoint",
+		)
 	}
 	report, err := input.checkpointRequest(saved.Progress)
 	if err != nil {

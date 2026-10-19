@@ -16,7 +16,12 @@ import (
 const Timeout = 120 * time.Second
 
 func TargetID() string {
-	return ids.DeriveAt(ids.KindComponent, time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), "groundplane-platform", "etcd-configuration")
+	return ids.DeriveAt(
+		ids.KindComponent,
+		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		"groundplane-platform",
+		"etcd-configuration",
+	)
 }
 
 type Input struct {
@@ -38,7 +43,9 @@ func (input Input) Validate() error {
 	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil ||
 		ids.Validate(ids.KindPlan, input.PlanID) != nil || !recordcodec.IsCanonicalUTC(input.CreatedAt) ||
 		len(input.SelectedRevision) == 0 || len(input.SelectedRevision) > 256 ||
-		len(input.Candidate) == 0 || len(input.Candidate) > 8192 || len(input.Previous) == 0 || len(input.Previous) > 8192 {
+		len(
+			input.Candidate,
+		) == 0 || len(input.Candidate) > 8192 || len(input.Previous) == 0 || len(input.Previous) > 8192 {
 		return errs.New(errs.KindValidationFailed, "etcd configuration capture is invalid")
 	}
 	return nil
@@ -74,10 +81,15 @@ func (input Input) Match(item workexecution.Item) error {
 	if err != nil {
 		return err
 	}
-	if item.Operation != workexecution.EtcdConfiguration || item.TaskID != input.TaskID || item.ID != input.WorkItemID ||
-		item.TargetID != TargetID() || item.Placement != (workexecution.Placement{Executor: workexecution.Controller}) ||
-		item.Input == nil || *item.Input != reference || !item.CreatedAt.Equal(input.CreatedAt) ||
-		len(item.Claims) != 1 || item.Claims[0] != (workexecution.Claim{ScopeID: TargetID()}) {
+	if item.Operation != workexecution.EtcdConfiguration || item.TaskID != input.TaskID ||
+		item.ID != input.WorkItemID ||
+		item.TargetID != TargetID() ||
+		item.Placement != (workexecution.Placement{Executor: workexecution.Controller}) ||
+		item.Input == nil ||
+		*item.Input != reference ||
+		!item.CreatedAt.Equal(input.CreatedAt) ||
+		len(item.Claims) != 1 ||
+		item.Claims[0] != (workexecution.Claim{ScopeID: TargetID()}) {
 		return errs.New(errs.KindStateConflict, "etcd activation differs from its captured work")
 	}
 	return nil
@@ -101,7 +113,9 @@ func (input Input) Work() (workexecution.Task, workexecution.Item, error) {
 	return task, item, nil
 }
 
-func PreparePublication(input Input) (workexecution.Task, workexecution.Item, []keyvalue.Condition, []keyvalue.Mutation, error) {
+func PreparePublication(
+	input Input,
+) (workexecution.Task, workexecution.Item, []keyvalue.Condition, []keyvalue.Mutation, error) {
 	task, item, err := input.Work()
 	if err != nil {
 		return task, item, nil, nil, err

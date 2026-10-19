@@ -61,7 +61,9 @@ func (repository *InputRepository) Stage(ctx context.Context, taskID, workID, in
 	input *agentpb.NetworkWorkInput, guards []keyvalue.Condition,
 ) (workexecution.Input, workqueue.Change, error) {
 	if ids.Validate(ids.KindTask, taskID) != nil || ids.Validate(ids.KindWorkItem, workID) != nil || len(guards) == 0 {
-		return workexecution.Input{}, workqueue.Change{}, conflict("Network input requires its captured admission owner")
+		return workexecution.Input{}, workqueue.Change{}, conflict(
+			"Network input requires its captured admission owner",
+		)
 	}
 	_, raw, reference, err := executionplan.CaptureNetworkWorkInput(inputID, input)
 	if err != nil {
@@ -87,7 +89,9 @@ func (repository *InputRepository) Stage(ctx context.Context, taskID, workID, in
 			revision = value.ModRevision
 			keyvalue.ClearValues(read.Values)
 			if !matches {
-				return workexecution.Input{}, workqueue.Change{}, conflict("Network input chunk already contains different captured content")
+				return workexecution.Input{}, workqueue.Change{}, conflict(
+					"Network input chunk already contains different captured content",
+				)
 			}
 		} else {
 			conditions := append([]keyvalue.Condition(nil), guards...)
@@ -117,9 +121,13 @@ func (repository *InputRepository) Stage(ctx context.Context, taskID, workID, in
 	return reference, publication, nil
 }
 
-func (repository *InputRepository) Load(ctx context.Context, view workqueue.View) (*agentpb.NetworkWorkInput, []keyvalue.Condition, error) {
+func (repository *InputRepository) Load(
+	ctx context.Context,
+	view workqueue.View,
+) (*agentpb.NetworkWorkInput, []keyvalue.Condition, error) {
 	item := view.Item.Item
-	if item.Operation != workexecution.Network || item.Input == nil || item.TaskID != view.Task.Task.ID || view.ReadRevision <= 0 {
+	if item.Operation != workexecution.Network || item.Input == nil || item.TaskID != view.Task.Task.ID ||
+		view.ReadRevision <= 0 {
 		return nil, nil, conflict("Network work has no captured input")
 	}
 	key := InputKey(item.ID)
@@ -175,19 +183,25 @@ func (repository *InputRepository) Load(ctx context.Context, view workqueue.View
 	return owned, conditions, nil
 }
 
-func (repository *InputRepository) read(ctx context.Context, keys []string, revision int64) (*keyvalue.GetManyResult, error) {
+func (repository *InputRepository) read(
+	ctx context.Context,
+	keys []string,
+	revision int64,
+) (*keyvalue.GetManyResult, error) {
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != len(keys) {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		len(read.Values) != len(keys) {
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
 		return nil, conflict("Network input read is incomplete")
 	}
 	for index, value := range read.Values {
-		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
+		if value != nil &&
+			(value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
 			keyvalue.ClearValues(read.Values)
 			return nil, conflict("Network input read has inconsistent ownership")
 		}

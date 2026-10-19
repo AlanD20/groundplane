@@ -98,7 +98,8 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 	if read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil || read.Values[3] == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry parent authority is unavailable")
 	}
-	if read.Values[0].ModRevision != input.Work.Task.Revision || read.Values[1].ModRevision != input.Work.Item.Revision {
+	if read.Values[0].ModRevision != input.Work.Task.Revision ||
+		read.Values[1].ModRevision != input.Work.Item.Revision {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry work changed")
 	}
 	desiredInput, desiredFound, desiredErr := blueprints.ReadDesiredInputRevision(
@@ -136,7 +137,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 			identity.ValueGenerationID,
 		)
 		if err != nil || !entries.EqualRecord(expected, record) {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry metadata differs from authored input")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Entry metadata differs from authored input",
+			)
 		}
 		matched = true
 		break
@@ -156,27 +160,39 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 		adopted.BlueprintKey = record.BlueprintKey
 		if current.CurrentValueGenerationID == record.CurrentValueGenerationID &&
 			!entries.EqualRecord(adopted, record) {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry reused generation changed its desired metadata")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Entry reused generation changed its desired metadata",
+			)
 		}
 		entryRevision, ownerRevision = read.Values[4].ModRevision, read.Values[5].ModRevision
 	} else if read.Values[5] != nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry owner index is occupied")
 	}
 	if read.Values[7] != nil && string(read.Values[7].Value) != record.EnvironmentID {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry lookup belongs to another Environment")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Entry lookup belongs to another Environment",
+		)
 	}
 	if read.Values[4] != nil {
 		current, err := entries.DecodeRecord(read.Values[4].Value)
 		if err != nil || (read.Values[6] == nil) ==
 			(current.CurrentValueGenerationID == record.CurrentValueGenerationID) {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry value generation lineage changed")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Entry value generation lineage changed",
+			)
 		}
 	}
 	var generationValue []byte
 	if read.Values[6] == nil {
 		preparedKey, value, err := entries.PrepareEntryGeneration(record, input.Generation)
 		if err != nil || preparedKey != generationKey {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry new value generation is invalid")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Entry new value generation is invalid",
+			)
 		}
 		generationValue = value
 	} else {

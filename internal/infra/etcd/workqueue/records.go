@@ -139,7 +139,8 @@ func (record ExecutorRecord) Validate() error {
 	if (record.Identity.Executor == workexecution.Agent) != (record.ProcessGeneration != [16]byte{}) {
 		return invalid("Agent executor requires a process identity; Controller executor must not carry one")
 	}
-	if record.Capacity == 0 || record.Capacity > maximumExecutorCapacity || len(record.Operations) == 0 || len(record.Operations) > 64 {
+	if record.Capacity == 0 || record.Capacity > maximumExecutorCapacity || len(record.Operations) == 0 ||
+		len(record.Operations) > 64 {
 		return invalid("executor capacity or operation catalog is invalid")
 	}
 	seen := make(map[workexecution.Operation]struct{}, len(record.Operations))
@@ -168,7 +169,8 @@ func (record ExecutorRecord) Validate() error {
 // Allows gates fresh assignment and Start, not receipt settlement or checkpoint
 // persistence for effects that have already been authorized.
 func (record ExecutorRecord) Allows(operation workexecution.Operation) bool {
-	return record.Ready && slices.Contains(record.Operations, operation) && !slices.Contains(record.UnavailableOperations, operation)
+	return record.Ready && slices.Contains(record.Operations, operation) &&
+		!slices.Contains(record.UnavailableOperations, operation)
 }
 
 func validateOwner(owner ClaimOwner) error {

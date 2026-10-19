@@ -40,18 +40,27 @@ func PrepareResult(snapshot keyvalue.Versioned[Record], task workqueue.TaskSnaps
 	if snapshot.Revision <= 0 || record.Validate() != nil || task.Revision <= 0 || task.Task.Validate() != nil ||
 		attempt.Validate() != nil || attempt.FinishedAt != nil || attempt.Executor.Executor != workexecution.Controller ||
 		record.Owner.TaskID != task.Task.ID || attempt.TaskID != task.Task.ID || record.Owner.WorkItemID != attempt.WorkItemID ||
-		record.Phase != Finished && record.Phase != CleanupRequired || !recordcodec.IsCanonicalUTC(at) || at.Before(record.CreatedAt) {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "edge check has no settled operation result")
+		record.Phase != Finished &&
+			record.Phase != CleanupRequired || !recordcodec.IsCanonicalUTC(at) || at.Before(record.CreatedAt) {
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"edge check has no settled operation result",
+		)
 	}
 	digest, err := PlanHash(record)
 	if err != nil || record.Owner.PlanID != attempt.Input.ID || digest != attempt.Input.SHA256 {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "edge result differs from captured input")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"edge result differs from captured input",
+		)
 	}
 	outcome := workexecution.Failed
-	if record.Phase == Finished && (record.Outcome == "passed" || record.Outcome == "protected" || attempt.Direction == workexecution.Recovery) {
+	if record.Phase == Finished &&
+		(record.Outcome == "passed" || record.Outcome == "protected" || attempt.Direction == workexecution.Recovery) {
 		outcome = workexecution.Succeeded
 	}
-	if record.Phase == Finished && attempt.StartedAt == nil && attempt.Direction == workexecution.Forward && task.Task.Stop != nil {
+	if record.Phase == Finished && attempt.StartedAt == nil && attempt.Direction == workexecution.Forward &&
+		task.Task.Stop != nil {
 		outcome = task.Task.Stop.Outcome
 	}
 	result := ExecutionResult{Owner: record.Owner, AttemptID: attempt.ID, WorkOutcome: outcome,
@@ -68,7 +77,10 @@ func PrepareResult(snapshot keyvalue.Versioned[Record], task workqueue.TaskSnaps
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	hash := sha256.Sum256(value)
-	evidence := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, record.CreatedAt, attempt.ID, "edge-check-result"), SHA256: hex.EncodeToString(hash[:])}
+	evidence := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, record.CreatedAt, attempt.ID, "edge-check-result"),
+		SHA256: hex.EncodeToString(hash[:]),
+	}
 	return workqueue.Change{
 		Conditions: []keyvalue.Condition{{Key: Key(record.Owner.TaskID), ModRevision: snapshot.Revision},
 			{Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision}, {Key: ResultKey(attempt.ID)}},

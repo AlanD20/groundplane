@@ -79,13 +79,16 @@ func (repository *Repository) PrepareRecoveryCheckpoint(ctx context.Context, vie
 		}
 		checkpoint, err := decoded.Checkpoint(attempt, delivery, saved.Capture)
 		if err != nil || checkpoint != *view.Checkpoint.Record {
-			return workqueue.Change{}, conflict("Service removal recovery report differs from its acknowledged checkpoint")
+			return workqueue.Change{}, conflict(
+				"Service removal recovery report differs from its acknowledged checkpoint",
+			)
 		}
 		previous = &decoded
 		conditions = append(conditions, keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision})
 	}
 	if existing := read.Values[0]; existing != nil {
-		if !bytes.Equal(existing.Value, raw) || view.Checkpoint.Record == nil || next.Sequence > view.Checkpoint.Record.Sequence {
+		if !bytes.Equal(existing.Value, raw) || view.Checkpoint.Record == nil ||
+			next.Sequence > view.Checkpoint.Record.Sequence {
 			return workqueue.Change{}, conflict("Service removal recovery sequence already contains different evidence")
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: existing.ModRevision},
@@ -99,14 +102,19 @@ func (repository *Repository) PrepareRecoveryCheckpoint(ctx context.Context, vie
 	}
 	if progress.InFlight {
 		if !view.CurrentExecutor || !at.Before(attempt.Deadline) || item.Cleanup != workexecution.CleanupRunning {
-			return workqueue.Change{}, conflict("Service removal recovery cannot authorize another effect on this executor")
+			return workqueue.Change{}, conflict(
+				"Service removal recovery cannot authorize another effect on this executor",
+			)
 		}
 		runtime, err := repository.RuntimeGuards(ctx, input, view.Work.ReadRevision)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
 		conditions = append(conditions, runtime...)
-		conditions = append(conditions, keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision},
+		)
 	}
 	if err := removalexecution.ValidateTransition(attempt, delivery, saved.Capture, previous, progress); err != nil {
 		return workqueue.Change{}, err
@@ -117,6 +125,9 @@ func (repository *Repository) PrepareRecoveryCheckpoint(ctx context.Context, vie
 	}
 	change.Conditions = append(change.Conditions, conditions...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)},
+	)
 	return change, nil
 }

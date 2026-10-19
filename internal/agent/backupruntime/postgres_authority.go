@@ -35,7 +35,11 @@ type postgresStepAuthority struct {
 	role          string
 }
 
-func postgresAuthority(assignment *agentpb.BackupWorkAssignment, identity workexecution.Identity, ordinal uint32) (postgresStepAuthority, error) {
+func postgresAuthority(
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+	ordinal uint32,
+) (postgresStepAuthority, error) {
 	owned, _, err := executionplan.OpenBackupWorkAssignment(assignment, identity)
 	if err != nil {
 		return postgresStepAuthority{}, err

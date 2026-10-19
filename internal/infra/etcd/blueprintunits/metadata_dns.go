@@ -56,7 +56,8 @@ func PrepareMetadataDNSAbsence(snapshot Snapshot, target ResourceKey, proof Meta
 		return MutationPlan{}, invalidRecord()
 	}
 	for _, execution := range snapshot.Executions {
-		if slices.Contains(execution.Record.Unit.Reads, target) || slices.Contains(execution.Record.Unit.Writes, target) {
+		if slices.Contains(execution.Record.Unit.Reads, target) ||
+			slices.Contains(execution.Record.Unit.Writes, target) {
 			return MutationPlan{}, errs.New(errs.KindStateConflict, "DNS declaration still has active Blueprint work")
 		}
 	}

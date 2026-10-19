@@ -15,7 +15,11 @@ import (
 // ReconcileInterrupted records only durable evidence from the replaced executor.
 // A new Agent on the same host does not impersonate the old process or receive
 // permission to rerun an ambiguous effect.
-func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (owner *AgentWork) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
@@ -23,7 +27,10 @@ func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue
 	actor, previous := authorization.Identity(), view.Attempt.Attempt.Executor
 	if actor.Executor != workexecution.Agent || actor.HostID != previous.HostID || actor == previous ||
 		view.CurrentExecutor || !view.ActiveAttempt || view.Work.Task.Task.CollectionStartedAt != nil {
-		return errs.New(errs.KindStateConflict, "Component interruption requires the replacement Agent on the same host")
+		return errs.New(
+			errs.KindStateConflict,
+			"Component interruption requires the replacement Agent on the same host",
+		)
 	}
 	input, _, _, err := owner.inputs.Load(ctx, view.Work)
 	if err != nil {
@@ -39,7 +46,9 @@ func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue
 		return err
 	}
 	var proof workqueue.Change
-	if checkpoint := view.Checkpoint.Record; view.Attempt.Attempt.Direction == workexecution.Forward && checkpoint != nil && checkpoint.Sequence == finalSequence {
+	if checkpoint := view.Checkpoint.Record; view.Attempt.Attempt.Direction == workexecution.Forward &&
+		checkpoint != nil &&
+		checkpoint.Sequence == finalSequence {
 		capture, applied, applyErr := owner.inputs.PrepareAppliedState(ctx, view, input, at)
 		if applyErr != nil {
 			return applyErr
@@ -52,7 +61,11 @@ func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue
 		}
 		proof.Conditions = append(proof.Conditions, receipt.Conditions...)
 		proof.Mutations = append(proof.Mutations, receipt.Mutations...)
-		completion.Result = workexecution.Completion{Outcome: completedComponentOutcome(view.Work), Evidence: checkpoint.Evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        completedComponentOutcome(view.Work),
+			Evidence:       checkpoint.Evidence,
+			EffectsSettled: true,
+		}
 	} else {
 		proof, completion.Result, err = owner.inputs.PrepareFailure(ctx, view, componentexecution.ExecutionInterrupted, at, true)
 	}

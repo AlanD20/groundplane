@@ -4,7 +4,11 @@ import "github.com/AlanD20/groundplane/internal/common/workexecution"
 
 // DiagnosticStage describes a durable boundary without exposing configuration,
 // commands, credentials or provider output. Confirm retains its actual Begin.
-func DiagnosticStage(attempt workexecution.Attempt, layout Layout, begin, progress Progress) (workexecution.Stage, error) {
+func DiagnosticStage(
+	attempt workexecution.Attempt,
+	layout Layout,
+	begin, progress Progress,
+) (workexecution.Stage, error) {
 	if begin.Validate(attempt, layout) != nil || !begin.InFlight ||
 		progress.InFlight && !EqualProgress(begin, progress) ||
 		!progress.InFlight && ValidateTransition(attempt, layout, &begin, progress) != nil {

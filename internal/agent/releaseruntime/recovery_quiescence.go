@@ -25,7 +25,13 @@ type RecoveryQuiescence struct {
 	hooks     *ChannelHookLoader
 }
 
-func NewRecoveryQuiescence(ownership *agentownership.Lease, helper InterruptedReleaseHelper, files *materialization.Runtime, scripts *scriptruntime.Runtime, hooks *ChannelHookLoader) (*RecoveryQuiescence, error) {
+func NewRecoveryQuiescence(
+	ownership *agentownership.Lease,
+	helper InterruptedReleaseHelper,
+	files *materialization.Runtime,
+	scripts *scriptruntime.Runtime,
+	hooks *ChannelHookLoader,
+) (*RecoveryQuiescence, error) {
 	if err := ownership.Check(); err != nil {
 		return nil, err
 	}
@@ -38,10 +44,17 @@ func NewRecoveryQuiescence(ownership *agentownership.Lease, helper InterruptedRe
 // Observe can resume an interrupted quiescence boundary: stopping an exactly
 // identified helper is safe to repeat, whereas a workload mutation is not.
 // Inspection of accepted Docker effects remains a separate recovery action.
-func (quiescence *RecoveryQuiescence) Observe(ctx context.Context, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport) (releaseexecution.QuiescenceProof, error) {
+func (quiescence *RecoveryQuiescence) Observe(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+) (releaseexecution.QuiescenceProof, error) {
 	if quiescence == nil || ctx == nil || report.Validate(input) != nil || report.Ack == nil ||
 		!report.Progress.InFlight || report.Progress.Phase != releaseexecution.QuiesceForward {
-		return releaseexecution.QuiescenceProof{}, errs.New(errs.KindStateConflict, "Release quiescence requires an acknowledged recovery boundary")
+		return releaseexecution.QuiescenceProof{}, errs.New(
+			errs.KindStateConflict,
+			"Release quiescence requires an acknowledged recovery boundary",
+		)
 	}
 	bounded, cancel := context.WithDeadline(ctx, input.Input.Attempt.Deadline)
 	defer cancel()
@@ -60,8 +73,12 @@ func (quiescence *RecoveryQuiescence) Observe(ctx context.Context, input release
 	if err := quiescence.files.StopInterruptedRestorationFiles(bounded, input, report); err != nil {
 		return releaseexecution.QuiescenceProof{}, err
 	}
-	proof := releaseexecution.QuiescenceProof{ForwardAttemptID: input.Forward.ID, RecoveryAttemptID: input.Input.Attempt.ID,
-		Executor: input.Input.Attempt.Executor, HelperAbsentAt: time.Now().UTC()}
+	proof := releaseexecution.QuiescenceProof{
+		ForwardAttemptID:  input.Forward.ID,
+		RecoveryAttemptID: input.Input.Attempt.ID,
+		Executor:          input.Input.Attempt.Executor,
+		HelperAbsentAt:    time.Now().UTC(),
+	}
 	if input.Interruption != nil {
 		proof.InterruptedAttemptID = input.Interruption.Attempt.ID
 	}
@@ -77,7 +94,14 @@ func (quiescence *RecoveryQuiescence) Observe(ctx context.Context, input release
 		if err := quiescence.ownership.CheckRestoration(input); err != nil {
 			return releaseexecution.QuiescenceProof{}, err
 		}
-		cleanup, err := quiescence.scripts.CleanupHook(bounded, input, report, hook, captured.Projection, captured.Artifacts)
+		cleanup, err := quiescence.scripts.CleanupHook(
+			bounded,
+			input,
+			report,
+			hook,
+			captured.Projection,
+			captured.Artifacts,
+		)
 		if err != nil {
 			return releaseexecution.QuiescenceProof{}, err
 		}

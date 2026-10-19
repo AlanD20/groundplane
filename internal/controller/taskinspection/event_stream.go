@@ -21,7 +21,10 @@ func (service *Service) OpenTaskEventStream(ctx context.Context, taskID string, 
 		return nil, err
 	}
 	if page.Expired {
-		return nil, errs.New(errs.KindCursorExpired, "Task events before the retained interval have expired; reload Task details before resuming")
+		return nil, errs.New(
+			errs.KindCursorExpired,
+			"Task events before the retained interval have expired; reload Task details before resuming",
+		)
 	}
 	return &EventStream{repository: service.diagnostics, taskID: taskID, after: after, initial: page}, nil
 }

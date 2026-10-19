@@ -13,7 +13,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Work) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	input, err := owner.inputs.Load(ctx, request.Item.Item, request.ReadRevision)
 	if err != nil {
 		return workdispatch.Decision{}, err
@@ -38,7 +42,12 @@ func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at t
 	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: deadline, Change: inputGuard(input)}, nil
 }
 
-func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *Work) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Agent lifecycle has no stop request")
 	}
@@ -58,26 +67,53 @@ func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item w
 	return workqueue.PrepareRevocation(task, item, task.Task.Stop.Outcome, at)
 }
 
-func (owner *Work) settleUnstarted(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, input keyvalue.Versioned[agentoperations.Capture], outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func (owner *Work) settleUnstarted(
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	input keyvalue.Versioned[agentoperations.Capture],
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	reference, err := input.Record.Reference()
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change, err := workqueue.PrepareUnstartedSettlement(task, item, workexecution.Completion{Outcome: outcome, Evidence: reference, EffectsSettled: true}, at)
+	change, err := workqueue.PrepareUnstartedSettlement(
+		task,
+		item,
+		workexecution.Completion{Outcome: outcome, Evidence: reference, EffectsSettled: true},
+		at,
+	)
 	change.Conditions = append(change.Conditions, inputGuard(input).Conditions...)
 	return change, err
 }
 
-func (owner *Work) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, previous workqueue.AttemptSnapshot, revision int64, at time.Time) (workqueue.Change, error) {
+func (owner *Work) PrepareWorkRetry(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	previous workqueue.AttemptSnapshot,
+	revision int64,
+	at time.Time,
+) (workqueue.Change, error) {
 	if item.Item.Phase != workexecution.Attention || previous.Attempt.Result == nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Agent lifecycle Retry only reconciles retained effects; a new action is required after settlement")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Agent lifecycle Retry only reconciles retained effects; a new action is required after settlement",
+		)
 	}
 	input, err := owner.inputs.Load(ctx, item.Item, revision)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change, err := workqueue.PrepareRetry(task, item, previous, workexecution.RetryDecision{Direction: workexecution.Recovery,
-		Result: *previous.Attempt.Result, NotBefore: at, Deadline: at.Add(localagent.RemovalRecoveryTimeout)}, at)
+	change, err := workqueue.PrepareRetry(
+		task,
+		item,
+		previous,
+		workexecution.RetryDecision{Direction: workexecution.Recovery,
+			Result: *previous.Attempt.Result, NotBefore: at, Deadline: at.Add(localagent.RemovalRecoveryTimeout)},
+		at,
+	)
 	change.Conditions = append(change.Conditions, inputGuard(input).Conditions...)
 	return change, err
 }

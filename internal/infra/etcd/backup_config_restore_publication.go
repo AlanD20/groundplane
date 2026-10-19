@@ -28,9 +28,11 @@ func (repository *BackupRuntimeRepository) PublishConfigRestore(
 	return repository.publishConfigRestore(ctx, generation, projection, identities, nil)
 }
 
-func (repository *BackupRuntimeRepository) ResumeConfigRestorePublication(ctx context.Context,
+func (repository *BackupRuntimeRepository) ResumeConfigRestorePublication(
+	ctx context.Context,
 	generation etcdstore.Versioned[backupconfiguration.ConfigRestoreGenerationRecord],
-	projection environmentprojection.EnvironmentComposeProjection, identities environmentprojection.EnvironmentOwnedIdentities,
+	projection environmentprojection.EnvironmentComposeProjection,
+	identities environmentprojection.EnvironmentOwnedIdentities,
 	recovery workexecution.Attempt,
 ) error {
 	if recovery.Direction != workexecution.Recovery {
@@ -39,9 +41,11 @@ func (repository *BackupRuntimeRepository) ResumeConfigRestorePublication(ctx co
 	return repository.publishConfigRestore(ctx, generation, projection, identities, &recovery)
 }
 
-func (repository *BackupRuntimeRepository) publishConfigRestore(ctx context.Context,
+func (repository *BackupRuntimeRepository) publishConfigRestore(
+	ctx context.Context,
 	generation etcdstore.Versioned[backupconfiguration.ConfigRestoreGenerationRecord],
-	projection environmentprojection.EnvironmentComposeProjection, identities environmentprojection.EnvironmentOwnedIdentities,
+	projection environmentprojection.EnvironmentComposeProjection,
+	identities environmentprojection.EnvironmentOwnedIdentities,
 	recovery *workexecution.Attempt,
 ) error {
 	authority, err := repository.loadConfigRestorePublication(ctx, generation, recovery)

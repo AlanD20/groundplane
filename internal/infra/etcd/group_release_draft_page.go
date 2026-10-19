@@ -13,11 +13,18 @@ import (
 // CollectAbandonedGroupReleaseDraftPage scans at most eight stored leaves. It
 // selects only headers and delegates deletion to the exact absent-Task/root CAS;
 // encountering an accepted capture never authorizes its collection.
-func (ledger *ReleaseLedger) CollectAbandonedGroupReleaseDraftPage(ctx context.Context, after string, at time.Time) (string, error) {
+func (ledger *ReleaseLedger) CollectAbandonedGroupReleaseDraftPage(
+	ctx context.Context,
+	after string,
+	at time.Time,
+) (string, error) {
 	if after != "" && !strings.HasPrefix(after, groupReleaseDraftPrefix) {
 		return "", errs.New(errs.KindValidationFailed, "Group draft collection cursor is outside its namespace")
 	}
-	page, err := ledger.store.Range(ctx, keyvalue.RangeRequest{Prefix: groupReleaseDraftPrefix, StartExclusive: after, Limit: 8})
+	page, err := ledger.store.Range(
+		ctx,
+		keyvalue.RangeRequest{Prefix: groupReleaseDraftPrefix, StartExclusive: after, Limit: 8},
+	)
 	if err != nil {
 		return after, err
 	}

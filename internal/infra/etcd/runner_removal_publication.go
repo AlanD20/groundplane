@@ -30,15 +30,24 @@ func (repository *RunnerRepository) PublishRunnerRemoval(ctx context.Context,
 		task.TargetID != desired.ID || task.ExpectedItems != 1 || task.Intent != ref ||
 		task.Scope != (workexecution.Scope{TenantID: desired.TenantID, ProjectID: desired.ProjectID(), EnvironmentID: desired.EnvironmentID()}) ||
 		!task.CreatedAt.Equal(input.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Runner removal Task differs from its captured runtime")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Runner removal Task differs from its captured runtime",
+		)
 	}
 	target := idempotency.IdempotencyReplayTarget{Kind: idempotency.IdempotencyReplayTargetRunner, ID: desired.ID}
 	if idempotency.ValidateIdempotencyMarker(marker) != nil || validateRunnerMarkerScope(desired, marker) != nil ||
 		marker.Kind != idempotency.IdempotencyMarkerTask || marker.State != idempotency.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.Method != "DELETE" || marker.Locator.Route != "/runners/{id}" ||
-		!runnerReplayTargetsEqual(marker.ReplayTarget, &target) || !idempotency.ValidTaskResponse(marker.Response, task.ID) ||
+		!runnerReplayTargetsEqual(
+			marker.ReplayTarget,
+			&target,
+		) || !idempotency.ValidTaskResponse(marker.Response, task.ID) ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(task.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Runner removal replay marker is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Runner removal replay marker is invalid",
+		)
 	}
 	item := workexecution.Item{ID: input.WorkItemID, TaskID: task.ID, Operation: workexecution.Runner,
 		TargetID: desired.ID, Placement: workexecution.Placement{Executor: workexecution.Controller},
@@ -72,7 +81,10 @@ func (repository *RunnerRepository) PublishRunnerRemoval(ctx context.Context,
 		if len(values) != len(publicationConditions) {
 			return errs.New(errs.KindInternal, "Runner removal publication evidence is incomplete")
 		}
-		return errs.New(errs.KindStateConflict, "Runner runtime, allocation or another operation changed before removal; refresh and submit again")
+		return errs.New(
+			errs.KindStateConflict,
+			"Runner runtime, allocation or another operation changed before removal; refresh and submit again",
+		)
 	}
 	initiation, err := newRunnerTaskInitiation(desired, source.parents, taskjournal.TaskActorOperator)
 	if err != nil {
@@ -82,7 +94,12 @@ func (repository *RunnerRepository) PublishRunnerRemoval(ctx context.Context,
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	publication, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, classify)
+	publication, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

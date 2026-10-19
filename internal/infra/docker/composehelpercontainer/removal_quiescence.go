@@ -17,7 +17,10 @@ import (
 // It stops only the captured failed removal helper and this work/input's stable
 // cleanup helper. Docker absence is checked after non-force removal. Inspection
 // of accepted Docker workload effects remains the next separate recovery phase.
-func (executor *Executor) QuiesceRemovalRecovery(ctx context.Context, request *agentpb.ServiceRemovalRecoveryHelperRequest) (*agentpb.ServiceRemovalRecoveryHelperResponse, error) {
+func (executor *Executor) QuiesceRemovalRecovery(
+	ctx context.Context,
+	request *agentpb.ServiceRemovalRecoveryHelperRequest,
+) (*agentpb.ServiceRemovalRecoveryHelperResponse, error) {
 	if executor == nil || executor.engine == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Service removal recovery helper is not configured")
 	}
@@ -26,7 +29,10 @@ func (executor *Executor) QuiesceRemovalRecovery(ctx context.Context, request *a
 		return nil, err
 	}
 	if input.Progress.Phase != removalexecution.QuiesceExecutors {
-		return nil, errs.New(errs.KindValidationFailed, "Stopping removal executors requires its acknowledged quiescence step")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Stopping removal executors requires its acknowledged quiescence step",
+		)
 	}
 	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

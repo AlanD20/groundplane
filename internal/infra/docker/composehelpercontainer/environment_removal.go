@@ -91,10 +91,16 @@ func environmentRemovalHelperLabels(attempt workexecution.Attempt) map[string]st
 // stable helper for this captured cleanup. The caller holds the process lease
 // and excludes any current execution of that work item before invoking it.
 func (executor *Executor) StopEnvironmentHelpers(ctx context.Context, forward, recovery workexecution.Attempt) error {
-	if executor == nil || executor.engine == nil || ctx == nil || forward.Validate() != nil || recovery.Validate() != nil ||
-		forward.Direction != workexecution.Forward || forward.FinishedAt == nil || forward.Outcome == workexecution.Succeeded ||
-		recovery.Direction != workexecution.Recovery || recovery.FinishedAt != nil || forward.TaskID != recovery.TaskID ||
-		forward.WorkItemID != recovery.WorkItemID || forward.Input != recovery.Input ||
+	if executor == nil || executor.engine == nil || ctx == nil || forward.Validate() != nil ||
+		recovery.Validate() != nil ||
+		forward.Direction != workexecution.Forward ||
+		forward.FinishedAt == nil ||
+		forward.Outcome == workexecution.Succeeded ||
+		recovery.Direction != workexecution.Recovery ||
+		recovery.FinishedAt != nil ||
+		forward.TaskID != recovery.TaskID ||
+		forward.WorkItemID != recovery.WorkItemID ||
+		forward.Input != recovery.Input ||
 		forward.Number >= recovery.Number ||
 		forward.Executor.HostID != recovery.Executor.HostID {
 		return errs.New(

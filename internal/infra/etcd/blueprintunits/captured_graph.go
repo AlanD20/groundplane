@@ -55,8 +55,17 @@ func PrepareCapturedGraph(task workexecution.Task, graph CapturedGraph) (workque
 	key := CapturedGraphKey(graph.EnvironmentID, graph.TaskID)
 	conditions := []keyvalue.Condition{{Key: key}}
 	for _, source := range graph.ServiceRemovals {
-		conditions = append(conditions, keyvalue.Condition{Key: serviceruntimerecord.Key(source.ServiceID), ModRevision: source.RuntimeRevision})
-		conditions = append(conditions, keyvalue.Condition{Key: workqueue.ClaimKey(workexecution.Claim{ScopeID: source.ServiceID}), ModRevision: source.ClaimRevision})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: serviceruntimerecord.Key(source.ServiceID), ModRevision: source.RuntimeRevision},
+		)
+		conditions = append(
+			conditions,
+			keyvalue.Condition{
+				Key:         workqueue.ClaimKey(workexecution.Claim{ScopeID: source.ServiceID}),
+				ModRevision: source.ClaimRevision,
+			},
+		)
 	}
 	return workqueue.Change{
 		Conditions: conditions,
@@ -64,7 +73,11 @@ func PrepareCapturedGraph(task workexecution.Task, graph CapturedGraph) (workque
 	}, nil
 }
 
-func (repository *Repository) LoadCapturedGraph(ctx context.Context, task workexecution.Task, revision int64) (keyvalue.Versioned[CapturedGraph], error) {
+func (repository *Repository) LoadCapturedGraph(
+	ctx context.Context,
+	task workexecution.Task,
+	revision int64,
+) (keyvalue.Versioned[CapturedGraph], error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return keyvalue.Versioned[CapturedGraph]{}, err
 	}
@@ -82,7 +95,8 @@ func (repository *Repository) LoadCapturedGraph(ctx context.Context, task workex
 	}
 	defer keyvalue.ClearValues(read.Values)
 	value := read.Values[0]
-	if value == nil || value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision || len(value.Value) > maximumDesiredPlanBytes {
+	if value == nil || value.Key != key || value.ModRevision <= 0 || value.ModRevision > revision ||
+		len(value.Value) > maximumDesiredPlanBytes {
 		return keyvalue.Versioned[CapturedGraph]{}, corruptRecord()
 	}
 	graph, err := recordcodec.Decode[CapturedGraph](value.Value, "blueprint-captured-work")
@@ -108,7 +122,12 @@ func validateCapturedGraph(task workexecution.Task, graph CapturedGraph) error {
 	for index, item := range graph.Items {
 		unit := graph.Units[index]
 		if !validUnit(unit) || item.TargetID != unit.Target.ID || targets[unit.Target] != "" ||
-			item.ID != ids.DeriveAt(ids.KindWorkItem, task.CreatedAt, task.ID, "blueprint-resource/"+string(unit.Target.Kind)+"/"+unit.Target.ID) {
+			item.ID != ids.DeriveAt(
+				ids.KindWorkItem,
+				task.CreatedAt,
+				task.ID,
+				"blueprint-resource/"+string(unit.Target.Kind)+"/"+unit.Target.ID,
+			) {
 			return invalidRecord()
 		}
 		targets[unit.Target] = item.ID

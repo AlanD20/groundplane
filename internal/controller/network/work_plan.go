@@ -22,7 +22,10 @@ func buildZoneRemovalWork(scope workexecution.Scope, placement workexecution.Pla
 ) (workexecution.Task, workexecution.Item, *agentpb.NetworkWorkInput, error) {
 	if scope.EnvironmentID != claim.EnvironmentID || claim.TaskID != claim.RevisionID ||
 		placement.Executor != workexecution.Agent {
-		return workexecution.Task{}, workexecution.Item{}, nil, errs.New(errs.KindValidationFailed, "Zone removal requires its captured Environment and host")
+		return workexecution.Task{}, workexecution.Item{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"Zone removal requires its captured Environment and host",
+		)
 	}
 	dockerName, err := networkname.New(zoneID)
 	if err != nil {
@@ -30,7 +33,10 @@ func buildZoneRemovalWork(scope workexecution.Scope, placement workexecution.Pla
 	}
 	intent, err := hex.DecodeString(claim.Intent.CiphertextDigest)
 	if err != nil {
-		return workexecution.Task{}, workexecution.Item{}, nil, errs.New(errs.KindValidationFailed, "Zone removal intent digest is invalid")
+		return workexecution.Task{}, workexecution.Item{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"Zone removal intent digest is invalid",
+		)
 	}
 	consumerIDs := slices.Clone(consumers)
 	slices.Sort(consumerIDs)

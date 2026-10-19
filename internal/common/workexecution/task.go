@@ -103,7 +103,8 @@ type StopRequest struct {
 func (scope Scope) Validate() error {
 	if scope.TenantID != "" && ids.Validate(ids.KindTenant, scope.TenantID) != nil ||
 		scope.ProjectID != "" && ids.Validate(ids.KindProject, scope.ProjectID) != nil ||
-		scope.EnvironmentID != "" && (scope.ProjectID == "" || ids.Validate(ids.KindEnvironment, scope.EnvironmentID) != nil) {
+		scope.EnvironmentID != "" &&
+			(scope.ProjectID == "" || ids.Validate(ids.KindEnvironment, scope.EnvironmentID) != nil) {
 		return invalid("task scope is invalid")
 	}
 	return nil
@@ -154,7 +155,8 @@ func (task Task) Validate() error {
 		if err := task.Activation.Validate(); err != nil {
 			return err
 		}
-		if task.Stop != nil || task.Activation.GrantedAt.Before(task.CreatedAt) || task.Activation.GrantedAt.After(task.UpdatedAt) {
+		if task.Stop != nil || task.Activation.GrantedAt.Before(task.CreatedAt) ||
+			task.Activation.GrantedAt.After(task.UpdatedAt) {
 			return invalid("software activation conflicts with task cancellation or timing")
 		}
 	}
@@ -171,7 +173,8 @@ func (task Task) Validate() error {
 		!validTime(*task.RetainUntil) || !task.RetainUntil.After(*task.FinishedAt) {
 		return invalid("finished task must retain a settled outcome")
 	}
-	if task.Outcome == Succeeded && (task.Stop != nil || !task.PublicationComplete || task.Progress.Succeeded != task.ExpectedItems) {
+	if task.Outcome == Succeeded &&
+		(task.Stop != nil || !task.PublicationComplete || task.Progress.Succeeded != task.ExpectedItems) {
 		return invalid("task success requires every captured work item to succeed")
 	}
 	if task.CollectionStartedAt != nil && (task.FinishedAt == nil || task.RetainUntil == nil ||

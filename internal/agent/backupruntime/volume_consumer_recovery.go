@@ -25,10 +25,24 @@ func (executor *Executor) recoverVolumeServiceSet(ctx context.Context, assignmen
 	}
 	commands := volumeRecoveryCommands{
 		observe: func(ctx context.Context, serviceID string) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
-			return host.RunRecovery(ctx, assignment, 0, serviceID, agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_UNSPECIFIED, true)
+			return host.RunRecovery(
+				ctx,
+				assignment,
+				0,
+				serviceID,
+				agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_UNSPECIFIED,
+				true,
+			)
 		},
 		recover: func(ctx context.Context, serviceID string) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
-			return host.RunRecovery(ctx, assignment, 0, serviceID, agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_RECOVER, false)
+			return host.RunRecovery(
+				ctx,
+				assignment,
+				0,
+				serviceID,
+				agentpb.BackupConsumerOperation_BACKUP_CONSUMER_OPERATION_RECOVER,
+				false,
+			)
 		},
 		resumeIntent: func(ctx context.Context, cursor uint32, serviceID string, digest [sha256.Size]byte) error {
 			return publishVolumeServiceProgress(ctx, publisher, cursor, serviceID,

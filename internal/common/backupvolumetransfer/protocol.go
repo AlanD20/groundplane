@@ -217,7 +217,9 @@ func ValidateCredit(binding Binding, credit *agentpb.BackupVolumeManifestAckCred
 		return err
 	}
 	if credit == nil || credit.ProtoReflect().GetUnknown() != nil ||
-		!binding.matchesAttempt(credit.Attempt) || credit.SourceOrdinal != binding.SourceOrdinal || credit.TransferId != binding.TransferID ||
+		!binding.matchesAttempt(
+			credit.Attempt,
+		) || credit.SourceOrdinal != binding.SourceOrdinal || credit.TransferId != binding.TransferID ||
 		!bytes.Equal(credit.AuthorityDigest, binding.AuthorityDigest[:]) ||
 		credit.AckSequence == 0 || credit.NextOrdinal == 0 || credit.NextOrdinal > backupvolume.MaxEntries+1 ||
 		len(credit.TransferChainSha256) != sha256.Size || credit.RecordCredit == 0 ||

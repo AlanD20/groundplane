@@ -24,10 +24,17 @@ func NewCompletion(ledger *blueprintunits.Repository) (*Completion, error) {
 	return &Completion{ledger: ledger}, nil
 }
 
-func (completion *Completion) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, at time.Time) (workqueue.Change, error) {
+func (completion *Completion) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	at time.Time,
+) (workqueue.Change, error) {
 	task := finished.Task.Task
-	if task.Action != workexecution.ActionApply || task.Scope.EnvironmentID == "" || task.TargetID != task.Scope.EnvironmentID ||
-		!task.PublicationComplete || task.Progress.Unsettled() != 0 || len(finished.Items) != int(task.ExpectedItems) {
+	if task.Action != workexecution.ActionApply || task.Scope.EnvironmentID == "" ||
+		task.TargetID != task.Scope.EnvironmentID ||
+		!task.PublicationComplete ||
+		task.Progress.Unsettled() != 0 ||
+		len(finished.Items) != int(task.ExpectedItems) {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "blueprint apply has unfinished or mismatched work")
 	}
 	// CompletionOutcome is the sole outcome policy. Cleanup does not erase an original
@@ -45,15 +52,22 @@ func (completion *Completion) PrepareFinish(ctx context.Context, finished workqu
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if snapshot.HeadTaskID != task.ID || snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != task.ID || !snapshot.Desired.Record.Complete {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "blueprint apply no longer owns the complete desired plan")
+	if snapshot.HeadTaskID != task.ID || snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != task.ID ||
+		!snapshot.Desired.Record.Complete {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"blueprint apply no longer owns the complete desired plan",
+		)
 	}
 	if len(snapshot.Executions) != 0 {
 		return workqueue.Change{}, errs.New(errs.KindResourceInUse, "blueprint resources still have unsettled effects")
 	}
 	for _, applied := range snapshot.Applied {
 		if applied.Record.State == blueprintunits.Uncertain || applied.Record.State == blueprintunits.Diverged {
-			return workqueue.Change{}, errs.New(errs.KindResourceInUse, "blueprint resource outcome requires reconciliation")
+			return workqueue.Change{}, errs.New(
+				errs.KindResourceInUse,
+				"blueprint resource outcome requires reconciliation",
+			)
 		}
 	}
 	selection, err := blueprintunits.Select(snapshot)
@@ -63,7 +77,10 @@ func (completion *Completion) PrepareFinish(ctx context.Context, finished workqu
 	if len(selection.Satisfied) != len(snapshot.Desired.Record.Units) ||
 		len(selection.Ready)+len(selection.Waiting)+len(selection.ResolveEffects)+len(selection.CancelPending)+
 			len(selection.CancelRunning)+len(selection.ContinuePending)+len(selection.ContinueRunning) != 0 {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "blueprint desired resources are not fully acknowledged")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"blueprint desired resources are not fully acknowledged",
+		)
 	}
 	// Resource-ledger writes advance its epoch, fencing the full resource read
 	// without adding one transaction comparison per resource in a large Apply.

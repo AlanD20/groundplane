@@ -25,7 +25,11 @@ type AttachConsumerObservation struct {
 // ApplyAttachConsumerDocker changes existing endpoints only. It never starts,
 // recreates or stops a workload, and never removes the shared Backing network.
 // The caller owns the acknowledged work boundary and separate file publication.
-func ApplyAttachConsumerDocker(ctx context.Context, taskRunner runner.Runner, input *agentpb.AttachConsumerTransition) (AttachConsumerObservation, error) {
+func ApplyAttachConsumerDocker(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input *agentpb.AttachConsumerTransition,
+) (AttachConsumerObservation, error) {
 	if err := validateAttachConsumerExecution(ctx, taskRunner, input); err != nil {
 		return AttachConsumerObservation{}, err
 	}
@@ -52,13 +56,18 @@ func ApplyAttachConsumerDocker(ctx context.Context, taskRunner runner.Runner, in
 		}
 	}
 	observation, err := ObserveAttachConsumerDocker(ctx, taskRunner, input)
-	if err == nil && ((input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT && !observation.Connected) || (input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT && !observation.Detached)) {
+	if err == nil &&
+		((input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT && !observation.Connected) || (input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_DISCONNECT && !observation.Detached)) {
 		err = errs.New(errs.KindStateConflict, "Service backing-network membership does not match the requested action")
 	}
 	return observation, err
 }
 
-func ObserveAttachConsumerDocker(ctx context.Context, taskRunner runner.Runner, input *agentpb.AttachConsumerTransition) (AttachConsumerObservation, error) {
+func ObserveAttachConsumerDocker(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input *agentpb.AttachConsumerTransition,
+) (AttachConsumerObservation, error) {
 	if err := validateAttachConsumerExecution(ctx, taskRunner, input); err != nil {
 		return AttachConsumerObservation{}, err
 	}
@@ -82,7 +91,11 @@ func ObserveAttachConsumerDocker(ctx context.Context, taskRunner runner.Runner, 
 		Detached: detached, Connected: fullyConnected, At: time.Now().UTC()}, nil
 }
 
-func validateAttachConsumerExecution(ctx context.Context, taskRunner runner.Runner, input *agentpb.AttachConsumerTransition) error {
+func validateAttachConsumerExecution(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input *agentpb.AttachConsumerTransition,
+) error {
 	if taskRunner == nil {
 		return errs.New(errs.KindInternal, "Detach consumer executor is not configured")
 	}
@@ -95,7 +108,11 @@ func validateAttachConsumerExecution(ctx context.Context, taskRunner runner.Runn
 	return nil
 }
 
-func inspectAttachConsumers(ctx context.Context, taskRunner runner.Runner, input *agentpb.AttachConsumerTransition) ([]string, error) {
+func inspectAttachConsumers(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input *agentpb.AttachConsumerTransition,
+) ([]string, error) {
 	names, err := executionplan.AttachConsumerNames(input)
 	if err != nil {
 		return nil, err
@@ -137,7 +154,12 @@ func inspectAttachConsumers(ctx context.Context, taskRunner runner.Runner, input
 	return containers, nil
 }
 
-func inspectAttachProxy(ctx context.Context, taskRunner runner.Runner, input *agentpb.AttachConsumerTransition, id string) error {
+func inspectAttachProxy(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input *agentpb.AttachConsumerTransition,
+	id string,
+) error {
 	inspected, err := runNetworkWork(ctx, taskRunner, "container", "inspect", "--format", "{{json .Config.Labels}}", id)
 	if err != nil {
 		return err
@@ -157,15 +179,32 @@ func inspectAttachProxy(ctx context.Context, taskRunner runner.Runner, input *ag
 			return inspectRestorationImage(ctx, taskRunner, id, service)
 		}
 	}
-	return errs.New(errs.KindStateConflict, "Service containers changed after Detach was accepted; inspect the current deployment")
+	return errs.New(
+		errs.KindStateConflict,
+		"Service containers changed after Detach was accepted; inspect the current deployment",
+	)
 }
 
-func inspectAttachBackingNetwork(ctx context.Context, taskRunner runner.Runner, input *agentpb.AttachConsumerTransition) (string, map[string]struct{}, error) {
+func inspectAttachBackingNetwork(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input *agentpb.AttachConsumerTransition,
+) (string, map[string]struct{}, error) {
 	name, err := networkname.New(input.NetworkId)
 	if err != nil {
 		return "", nil, err
 	}
-	listed, err := runNetworkWork(ctx, taskRunner, "network", "ls", "--filter", "name=^"+name+"$", "--format", "{{.ID}} {{.Name}}", "--no-trunc")
+	listed, err := runNetworkWork(
+		ctx,
+		taskRunner,
+		"network",
+		"ls",
+		"--filter",
+		"name=^"+name+"$",
+		"--format",
+		"{{.ID}} {{.Name}}",
+		"--no-trunc",
+	)
 	if err != nil {
 		return "", nil, err
 	}

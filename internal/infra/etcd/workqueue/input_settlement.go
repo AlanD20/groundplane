@@ -30,13 +30,20 @@ type InputSettlement struct {
 // never-executable item unnecessary. The accepted Task intent authorizes the
 // decision; callers join the exact policy/source comparisons before committing.
 // This is not success inferred from a missing input or a skipped host command.
-func PrepareInputDecision(view View, authority workexecution.Input, outcome workexecution.Outcome, reason string, at time.Time) (Change, error) {
+func PrepareInputDecision(
+	view View,
+	authority workexecution.Input,
+	outcome workexecution.Outcome,
+	reason string,
+	at time.Time,
+) (Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if !waitingInput(item) || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
 		item.Cleanup != workexecution.CleanupNone || item.Result != nil || item.FirstFailure != nil ||
 		!task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
 		authority.Validate() != nil || authority != task.Intent ||
-		outcome != workexecution.Succeeded && outcome != workexecution.Failed && outcome != workexecution.Cancelled && outcome != workexecution.Superseded ||
+		outcome != workexecution.Succeeded && outcome != workexecution.Failed && outcome != workexecution.Cancelled &&
+			outcome != workexecution.Superseded ||
 		at.IsZero() || at.Location() != time.UTC || at.Before(task.UpdatedAt) || at.Before(item.UpdatedAt) ||
 		reason == "" || len(reason) > 512 || strings.TrimSpace(reason) != reason ||
 		task.Stop != nil && outcome != task.Stop.Outcome {
@@ -55,7 +62,9 @@ func PrepareInputSupersession(view View, source []keyvalue.Condition, at time.Ti
 	if !waitingInput(item) || item.AttemptNumber != 0 || item.ActiveAttemptID != "" ||
 		item.Cleanup != workexecution.CleanupNone || item.Result != nil || item.FirstFailure != nil ||
 		task.Stop != nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
-		len(source) == 0 || at.IsZero() || at.Location() != time.UTC || at.Before(task.UpdatedAt) || at.Before(item.UpdatedAt) {
+		len(
+			source,
+		) == 0 || at.IsZero() || at.Location() != time.UTC || at.Before(task.UpdatedAt) || at.Before(item.UpdatedAt) {
 		return Change{}, invalid("input supersession requires unstarted preparation and current resource evidence")
 	}
 	change, err := prepareInputSettlement(view, InputSettlement{
@@ -78,7 +87,9 @@ func PrepareInputRejection(view View, reason string, at time.Time) (Change, erro
 		item.Cleanup != workexecution.CleanupNone || item.Result != nil || item.FirstFailure != nil ||
 		task.Stop != nil || !task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
 		at.IsZero() || at.Location() != time.UTC || at.Before(task.UpdatedAt) || at.Before(item.UpdatedAt) ||
-		!at.Before(task.Deadline) || !at.Before(item.Deadline) || reason == "" || len(reason) > 512 || strings.TrimSpace(reason) != reason {
+		!at.Before(
+			task.Deadline,
+		) || !at.Before(item.Deadline) || reason == "" || len(reason) > 512 || strings.TrimSpace(reason) != reason {
 		return Change{}, invalid("input rejection requires current unstarted work and an operation-owned reason")
 	}
 	return prepareInputSettlement(view, InputSettlement{
@@ -128,7 +139,10 @@ func PrepareInputDependencyFailure(view View, dependency ItemSnapshot, at time.T
 	if err != nil {
 		return Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ItemKey(prerequisite.ID), ModRevision: dependency.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: ItemKey(prerequisite.ID), ModRevision: dependency.Revision},
+	)
 	return change, nil
 }
 
@@ -140,7 +154,12 @@ func prepareInputSettlement(view View, result InputSettlement) (Change, error) {
 	}
 	digest := sha256.Sum256(value)
 	evidence := workexecution.Input{
-		ID: ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "input-settlement"), SHA256: hex.EncodeToString(digest[:]),
+		ID: ids.DeriveAt(
+			ids.KindPlan,
+			item.CreatedAt,
+			item.ID,
+			"input-settlement",
+		), SHA256: hex.EncodeToString(digest[:]),
 	}
 	change, err := PrepareUnstartedSettlement(view.Task, view.Item, workexecution.Completion{
 		Outcome: result.Outcome, Evidence: evidence, EffectsSettled: true,

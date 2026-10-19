@@ -28,7 +28,10 @@ func (input ProvisionInput) Authority() (ProvisionAuthority, error) {
 	return authority, nil
 }
 
-func DecodeProvisionAssignment(message *agentpb.AttachProvisionAssignment, identity workexecution.Identity) (ProvisionInput, error) {
+func DecodeProvisionAssignment(
+	message *agentpb.AttachProvisionAssignment,
+	identity workexecution.Identity,
+) (ProvisionInput, error) {
 	if message == nil || executionplan.RejectUnknown(message) != nil {
 		return ProvisionInput{}, invalid("Attach provisioning assignment is malformed")
 	}

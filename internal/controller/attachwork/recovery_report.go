@@ -36,7 +36,14 @@ func (service *Reports) ReportProvisionRecovery(ctx context.Context, authorizati
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
 		at := time.Now().UTC()
-		proof, result, err := service.inputs.repository.PrepareRecoveryResult(ctx, view, request.Report, evidence, at, false)
+		proof, result, err := service.inputs.repository.PrepareRecoveryResult(
+			ctx,
+			view,
+			request.Report,
+			evidence,
+			at,
+			false,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +95,10 @@ func (service *Reports) ReportProvisionRecovery(ctx context.Context, authorizati
 		return nil, err
 	}
 	ack := &agentpb.AttachProvisionRecoveryReportAck{Attempt: proto.CloneOf(request.Attempt),
-		Evidence: &agentpb.WorkInputReference{InputId: attempt.Result.ID, Sha256: digest}, Outcome: string(attempt.Outcome),
+		Evidence: &agentpb.WorkInputReference{
+			InputId: attempt.Result.ID,
+			Sha256:  digest,
+		}, Outcome: string(attempt.Outcome),
 		FinishedAt: timestamppb.New(*attempt.FinishedAt)}
 	if attempt.StartedAt != nil {
 		ack.StartedAt = timestamppb.New(*attempt.StartedAt)

@@ -62,10 +62,14 @@ func (owner *ServiceWorkPreparation) Prepare(ctx context.Context, taskID, workID
 		if captured.ID != item.ID {
 			continue
 		}
-		if captured.TaskID != item.TaskID || captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
-			captured.Placement != item.Placement || !slices.Equal(captured.Dependencies, item.Dependencies) ||
-			!slices.Equal(captured.Claims, item.Claims) || captured.Input != nil ||
-			!captured.CreatedAt.Equal(item.CreatedAt) || !captured.Deadline.Equal(item.Deadline) {
+		if captured.TaskID != item.TaskID || captured.Operation != item.Operation ||
+			captured.TargetID != item.TargetID ||
+			captured.Placement != item.Placement ||
+			!slices.Equal(captured.Dependencies, item.Dependencies) ||
+			!slices.Equal(captured.Claims, item.Claims) ||
+			captured.Input != nil ||
+			!captured.CreatedAt.Equal(item.CreatedAt) ||
+			!captured.Deadline.Equal(item.Deadline) {
 			return errs.New(errs.KindStateConflict, "Blueprint Service work differs from its accepted graph")
 		}
 		unit = &graph.Record.Units[index]
@@ -104,14 +108,27 @@ func (owner *ServiceWorkPreparation) Prepare(ctx context.Context, taskID, workID
 		return errors.Join(err, prepared.Abandon(ctx))
 	}
 	defer keyvalue.ZeroMutationBytes(change.Mutations)
-	change.Conditions = append(change.Conditions,
-		keyvalue.Condition{Key: blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID), ModRevision: graph.Revision},
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID), ModRevision: snapshot.HeadRevision},
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{
+			Key:         blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID),
+			ModRevision: graph.Revision,
+		},
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(task.Scope.EnvironmentID),
+			ModRevision: snapshot.HeadRevision,
+		},
 		keyvalue.Condition{Key: blueprintunits.EpochKey(task.Scope.EnvironmentID), ModRevision: snapshot.EpochRevision},
-		keyvalue.Condition{Key: blueprintunits.DesiredPlanKey(task.Scope.EnvironmentID), ModRevision: snapshot.Desired.Revision},
+		keyvalue.Condition{
+			Key:         blueprintunits.DesiredPlanKey(task.Scope.EnvironmentID),
+			ModRevision: snapshot.Desired.Revision,
+		},
 	)
 	if !time.Now().Before(task.Deadline) || !time.Now().Before(item.Deadline) {
-		return errors.Join(errs.New(errs.KindStateConflict, "Blueprint Service preparation exceeded its deadline"), prepared.Abandon(ctx))
+		return errors.Join(
+			errs.New(errs.KindStateConflict, "Blueprint Service preparation exceeded its deadline"),
+			prepared.Abandon(ctx),
+		)
 	}
 	result, err := owner.queue.Commit(ctx, change)
 	if err != nil {
@@ -121,7 +138,10 @@ func (owner *ServiceWorkPreparation) Prepare(ctx context.Context, taskID, workID
 	}
 	keyvalue.ClearValues(result.FailureReads)
 	if !result.Succeeded {
-		return errors.Join(errs.New(errs.KindStateConflict, "Blueprint Service inputs changed during preparation"), prepared.Abandon(ctx))
+		return errors.Join(
+			errs.New(errs.KindStateConflict, "Blueprint Service inputs changed during preparation"),
+			prepared.Abandon(ctx),
+		)
 	}
 	return nil
 }

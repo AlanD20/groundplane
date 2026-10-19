@@ -15,7 +15,10 @@ import (
 // PendingBindingConditions protects the captured binding and its references at
 // every new effect grant. Hook output is stored separately until completion, so
 // the binding's generated-input envelope must still match byte for byte.
-func (repository *InputRepository) PendingBindingConditions(ctx context.Context, work workqueue.View) ([]keyvalue.Condition, error) {
+func (repository *InputRepository) PendingBindingConditions(
+	ctx context.Context,
+	work workqueue.View,
+) ([]keyvalue.Condition, error) {
 	source, err := repository.LoadCaptured(ctx, work)
 	if err != nil {
 		return nil, err
@@ -30,8 +33,14 @@ func (repository *InputRepository) PendingBindingConditions(ctx context.Context,
 		return nil, err
 	}
 	keys := []string{attachments.AttachKey(record.ID), attachments.AttachFactsKey(record.ID),
-		attachments.AttachNameKey(record.EnvironmentID, record.Name), attachments.AttachOwnerKey(record.EnvironmentID, record.ID),
-		attachments.AttachServiceKey(record.ServiceID, record.ID), attachments.AttachBackingServiceKey(record.BackingServiceID, record.ID),
+		attachments.AttachNameKey(
+			record.EnvironmentID,
+			record.Name,
+		), attachments.AttachOwnerKey(record.EnvironmentID, record.ID),
+		attachments.AttachServiceKey(
+			record.ServiceID,
+			record.ID,
+		), attachments.AttachBackingServiceKey(record.BackingServiceID, record.ID),
 		attachments.AttachBackingProjectKey(record.BackingProjectID, record.ID)}
 	for _, id := range record.GrantAttachIDs {
 		keys = append(keys, attachments.AttachGrantedByKey(id, record.ID))

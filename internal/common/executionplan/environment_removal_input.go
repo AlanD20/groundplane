@@ -13,7 +13,10 @@ import (
 // enforce its configured root and compare observed ownership before removal.
 func ValidateEnvironmentRemovalInput(input *agentpb.EnvironmentRemovalInput) error {
 	if input == nil || ids.Validate(ids.KindEnvironment, input.EnvironmentId) != nil || input.CapturedSource == nil ||
-		ids.Validate(ids.KindPlan, input.CapturedSource.InputId) != nil || len(input.CapturedSource.Sha256) != sha256.Size {
+		ids.Validate(
+			ids.KindPlan,
+			input.CapturedSource.InputId,
+		) != nil || len(input.CapturedSource.Sha256) != sha256.Size {
 		return errs.New(errs.KindValidationFailed, "Environment removal input identity is invalid")
 	}
 	if err := RejectUnknown(input); err != nil {
@@ -25,7 +28,8 @@ func ValidateEnvironmentRemovalInput(input *agentpb.EnvironmentRemovalInput) err
 	if input.Compose == nil {
 		return nil
 	}
-	if input.Compose.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT || input.Compose.OwnerId != input.EnvironmentId ||
+	if input.Compose.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+		input.Compose.OwnerId != input.EnvironmentId ||
 		input.Compose.AuthorizedVolumeDir != input.ExpectedVolumeDir {
 		return errs.New(errs.KindValidationFailed, "Environment removal artifact belongs to another owner or directory")
 	}

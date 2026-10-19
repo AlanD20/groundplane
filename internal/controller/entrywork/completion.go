@@ -52,7 +52,11 @@ func (service *WorkReports) CompleteEntry(ctx context.Context, authorization age
 		if err != nil {
 			return nil, err
 		}
-		completion.Result = workexecution.Completion{Outcome: completedEntryOutcome(view.Work), Evidence: evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        completedEntryOutcome(view.Work),
+			Evidence:       evidence,
+			EffectsSettled: true,
+		}
 		completion.At = at
 		change, err := workqueue.PrepareCompletion(completion)
 		if err != nil {
@@ -77,8 +81,15 @@ func (service *WorkReports) CompleteEntry(ctx context.Context, authorization age
 		(attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled && attempt.Outcome != workexecution.Superseded) {
 		return nil, errs.New(errs.KindStateConflict, "saved Entry result does not acknowledge successful completion")
 	}
-	return &agentpb.EntryConfigurationWorkCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: proto.CloneOf(request.Evidence),
-		StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt), Outcome: string(attempt.Outcome)}, nil
+	return &agentpb.EntryConfigurationWorkCompletionAck{
+		Attempt:  proto.CloneOf(request.Attempt),
+		Evidence: proto.CloneOf(request.Evidence),
+		StartedAt: timestamppb.New(
+			*attempt.StartedAt,
+		),
+		FinishedAt: timestamppb.New(*attempt.FinishedAt),
+		Outcome:    string(attempt.Outcome),
+	}, nil
 }
 
 // A proven host effect remains applied, but cannot turn cancelled or superseded

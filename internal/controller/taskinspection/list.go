@@ -40,7 +40,13 @@ func (filter Filter) Validate() error {
 // List fills a filtered page without unbounded history scans. The cursor always
 // identifies the last inspected Task, including non-matches, at one fixed
 // revision. A scan-limited page can be empty while More remains true.
-func (service *Service) List(ctx context.Context, scope, after string, limit int64, revision int64, filter Filter) (TaskPage, error) {
+func (service *Service) List(
+	ctx context.Context,
+	scope, after string,
+	limit int64,
+	revision int64,
+	filter Filter,
+) (TaskPage, error) {
 	if err := filter.Validate(); err != nil {
 		return TaskPage{}, err
 	}
@@ -59,7 +65,9 @@ func (service *Service) List(ctx context.Context, scope, after string, limit int
 			scanned++
 			result.After = snapshot.Task.ID
 			summary := summarize(snapshot.Task)
-			if (filter.Action == "" || filter.Action == summary.Action) && (filter.Status == "" || filter.Status == summary.Status) && (filter.ResourceKind == "" || filter.ResourceKind == summary.ResourceKind) {
+			if (filter.Action == "" || filter.Action == summary.Action) &&
+				(filter.Status == "" || filter.Status == summary.Status) &&
+				(filter.ResourceKind == "" || filter.ResourceKind == summary.ResourceKind) {
 				result.Tasks = append(result.Tasks, summary)
 			}
 			if int64(len(result.Tasks)) == limit {

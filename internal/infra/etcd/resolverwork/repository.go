@@ -36,7 +36,11 @@ func IntentKey(hostID, componentID string) string {
 	return "/v1/desired/resolver/" + hostID + "/" + componentID
 }
 
-func (repository *Repository) ReadIntent(ctx context.Context, hostID, componentID string, revision int64) (int64, error) {
+func (repository *Repository) ReadIntent(
+	ctx context.Context,
+	hostID, componentID string,
+	revision int64,
+) (int64, error) {
 	if ids.Validate(ids.KindHost, hostID) != nil || ids.Validate(ids.KindComponent, componentID) != nil {
 		return 0, invalid("DNS resolver intent requires its selected host and Component")
 	}
@@ -73,15 +77,17 @@ func PreparePublication(input resolverexecution.Input, capture Capture) (workque
 	if len(raw)+len(authority) > keyvalue.MaximumBytes-64*1024 {
 		return workqueue.Change{}, invalid("DNS resolver publication exceeds the atomic transaction input budget")
 	}
-	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: InputKey(input.WorkID)}, {Key: CaptureKey(input.WorkID)},
-		{Key: componentrecord.RecordKey(input.ComponentID), ModRevision: capture.ComponentRevision},
-		{Key: AppliedKey(input.HostID, input.ComponentID), ModRevision: capture.AppliedRevision},
-		{Key: IntentKey(input.HostID, input.ComponentID), ModRevision: capture.IntentRevision},
-		{Key: resolverbaseline.StorageKey, ModRevision: capture.BaselineRevision},
-		{Key: hostresolution.StorageKey, ModRevision: capture.ProjectionRevision}},
+	change := workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: InputKey(input.WorkID)}, {Key: CaptureKey(input.WorkID)},
+			{Key: componentrecord.RecordKey(input.ComponentID), ModRevision: capture.ComponentRevision},
+			{Key: AppliedKey(input.HostID, input.ComponentID), ModRevision: capture.AppliedRevision},
+			{Key: IntentKey(input.HostID, input.ComponentID), ModRevision: capture.IntentRevision},
+			{Key: resolverbaseline.StorageKey, ModRevision: capture.BaselineRevision},
+			{Key: hostresolution.StorageKey, ModRevision: capture.ProjectionRevision}},
 		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: InputKey(input.WorkID), Value: raw},
 			{Type: keyvalue.MutationPut, Key: CaptureKey(input.WorkID), Value: authority},
-			{Type: keyvalue.MutationPut, Key: IntentKey(input.HostID, input.ComponentID), Value: []byte(input.WorkID)}}}
+			{Type: keyvalue.MutationPut, Key: IntentKey(input.HostID, input.ComponentID), Value: []byte(input.WorkID)}},
+	}
 	change.Conditions = append(change.Conditions, capture.References...)
 	request, err := prepareRequest(input, capture)
 	if err != nil {
@@ -91,7 +97,9 @@ func PreparePublication(input resolverexecution.Input, capture Capture) (workque
 	if len(raw)+len(authority)+len(request.Mutations[0].Value) > keyvalue.MaximumBytes-64*1024 {
 		keyvalue.ClearMutationValues(change.Mutations)
 		keyvalue.ClearMutationValues(request.Mutations)
-		return workqueue.Change{}, invalid("DNS resolver publication exceeds the atomic input and retained-request budget")
+		return workqueue.Change{}, invalid(
+			"DNS resolver publication exceeds the atomic input and retained-request budget",
+		)
 	}
 	change.Conditions = append(change.Conditions, request.Conditions...)
 	change.Mutations = append(change.Mutations, request.Mutations...)
@@ -106,29 +114,56 @@ func NewWork(input resolverexecution.Input, capture Capture) (workexecution.Task
 	if err != nil {
 		return workexecution.Task{}, workexecution.Item{}, err
 	}
-	task := workexecution.Task{ID: input.TaskID, Action: capture.Action, Actor: capture.Actor, TargetID: input.ComponentID,
-		TargetName: capture.TargetName, Intent: reference, CreatedAt: input.CreatedAt, UpdatedAt: input.CreatedAt, Deadline: input.Deadline,
-		ExpectedItems: 1}
-	item := workexecution.Item{ID: input.WorkID, TaskID: input.TaskID, Operation: workexecution.Resolver, TargetID: input.ComponentID,
-		Placement: workexecution.Placement{Executor: workexecution.Agent, HostID: input.HostID}, Input: &reference,
-		Claims: []workexecution.Claim{{HostID: input.HostID, ScopeID: input.ComponentID}}, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
-		CreatedAt: input.CreatedAt, UpdatedAt: input.CreatedAt, Deadline: input.Deadline}
+	task := workexecution.Task{
+		ID:            input.TaskID,
+		Action:        capture.Action,
+		Actor:         capture.Actor,
+		TargetID:      input.ComponentID,
+		TargetName:    capture.TargetName,
+		Intent:        reference,
+		CreatedAt:     input.CreatedAt,
+		UpdatedAt:     input.CreatedAt,
+		Deadline:      input.Deadline,
+		ExpectedItems: 1,
+	}
+	item := workexecution.Item{
+		ID:        input.WorkID,
+		TaskID:    input.TaskID,
+		Operation: workexecution.Resolver,
+		TargetID:  input.ComponentID,
+		Placement: workexecution.Placement{Executor: workexecution.Agent, HostID: input.HostID},
+		Input:     &reference,
+		Claims: []workexecution.Claim{
+			{HostID: input.HostID, ScopeID: input.ComponentID},
+		},
+		Phase:     workexecution.Ready,
+		Cleanup:   workexecution.CleanupNone,
+		CreatedAt: input.CreatedAt,
+		UpdatedAt: input.CreatedAt,
+		Deadline:  input.Deadline,
+	}
 	if err := task.Validate(); err != nil {
 		return workexecution.Task{}, workexecution.Item{}, err
 	}
 	return task, item, item.Validate()
 }
 
-func (repository *Repository) read(ctx context.Context, keys []string, revision int64) (*keyvalue.GetManyResult, error) {
+func (repository *Repository) read(
+	ctx context.Context,
+	keys []string,
+	revision int64,
+) (*keyvalue.GetManyResult, error) {
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != len(keys) {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		len(read.Values) != len(keys) {
 		return nil, invalid("DNS resolver execution snapshot read is incomplete")
 	}
 	for index, value := range read.Values {
-		if value != nil && (value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
+		if value != nil &&
+			(value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision) {
 			keyvalue.ClearValues(read.Values)
 			return nil, invalid("DNS resolver execution snapshot has invalid record ownership")
 		}
@@ -137,7 +172,8 @@ func (repository *Repository) read(ctx context.Context, keys []string, revision 
 }
 
 func (repository *Repository) Load(ctx context.Context, view workqueue.View) (StoredInput, error) {
-	if view.Task.Revision <= 0 || view.Item.Revision <= 0 || view.ReadRevision < view.Task.Revision || view.ReadRevision < view.Item.Revision {
+	if view.Task.Revision <= 0 || view.Item.Revision <= 0 || view.ReadRevision < view.Task.Revision ||
+		view.ReadRevision < view.Item.Revision {
 		return StoredInput{}, invalid("DNS resolver input requires retained native execution membership")
 	}
 	keys := []string{InputKey(view.Item.Item.ID), CaptureKey(view.Item.Item.ID)}
@@ -157,14 +193,18 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (St
 	if err != nil {
 		return StoredInput{}, err
 	}
-	if view.Task.Task.Actor != capture.Actor || view.Task.Task.Action != capture.Action || view.Task.Task.TargetName != capture.TargetName {
+	if view.Task.Task.Actor != capture.Actor || view.Task.Task.Action != capture.Action ||
+		view.Task.Task.TargetName != capture.TargetName {
 		return StoredInput{}, invalid("DNS resolver accepted action differs from its immutable capture")
 	}
 	if !view.Task.Task.CreatedAt.Equal(input.CreatedAt) || capture.ReadRevision > view.ReadRevision {
 		return StoredInput{}, invalid("DNS resolver source snapshot is newer than its native publication")
 	}
 	return StoredInput{Input: input, Capture: capture, Reference: reference, Guards: []keyvalue.Condition{
-		{Key: keys[0], ModRevision: read.Values[0].ModRevision}, {Key: keys[1], ModRevision: read.Values[1].ModRevision}}}, nil
+		{
+			Key:         keys[0],
+			ModRevision: read.Values[0].ModRevision,
+		}, {Key: keys[1], ModRevision: read.Values[1].ModRevision}}}, nil
 }
 
 // CleanupDeadline renews only a bounded cleanup budget; captured input is fixed.

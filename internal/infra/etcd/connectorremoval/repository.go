@@ -37,7 +37,10 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 		return Input{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Connector removal work is invalid")
 	}
 	key := InputKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}
@@ -56,17 +59,27 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 	if err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}
-	if input.TaskID != task.ID || input.WorkItemID != item.ID || input.ConnectorID != item.TargetID || ref != *item.Input ||
-		task.Action != workexecution.ActionRemove || task.TargetID != input.ConnectorID ||
+	if input.TaskID != task.ID || input.WorkItemID != item.ID || input.ConnectorID != item.TargetID ||
+		ref != *item.Input ||
+		task.Action != workexecution.ActionRemove ||
+		task.TargetID != input.ConnectorID ||
 		task.Scope != (workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID}) {
-		return Input{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Connector removal differs from its captured resource")
+		return Input{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Connector removal differs from its captured resource",
+		)
 	}
 	return input, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
 }
 
 // PrepareDecision joins definition/credential removal and visible completion in
 // one transaction. Cancellation only releases the tombstone; no bucket I/O occurs.
-func (repository *Repository) PrepareDecision(ctx context.Context, view workqueue.View, outcome workexecution.Outcome, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareDecision(
+	ctx context.Context,
+	view workqueue.View,
+	outcome workexecution.Outcome,
+	at time.Time,
+) (workqueue.Change, error) {
 	input, capture, err := repository.Load(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -82,9 +95,15 @@ func (repository *Repository) PrepareDecision(ctx context.Context, view workqueu
 		return workqueue.Change{}, errs.New(errs.KindInternal, "Connector removal resource read is missing")
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if read.ReadRevision != view.ReadRevision || len(read.Values) != len(keys) || read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil ||
-		read.Values[0].ModRevision != input.ConnectorRevision || read.Values[1].ModRevision != input.CredentialRevision {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Connector or credentials changed after removal was accepted")
+	if read.ReadRevision != view.ReadRevision || len(read.Values) != len(keys) || read.Values[0] == nil ||
+		read.Values[1] == nil ||
+		read.Values[2] == nil ||
+		read.Values[0].ModRevision != input.ConnectorRevision ||
+		read.Values[1].ModRevision != input.CredentialRevision {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Connector or credentials changed after removal was accepted",
+		)
 	}
 	record, err := connectors.DecodeRecord(read.Values[0].Value)
 	if err != nil {
@@ -94,8 +113,12 @@ func (repository *Repository) PrepareDecision(ctx context.Context, view workqueu
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if record.Connector.ID != id || record.Connector.EnvironmentID != input.EnvironmentID || fence.TaskID != input.TaskID ||
-		fence.TargetID != id || fence.TargetKind != deletions.DeletionTargetConnector || fence.TargetRevision != input.ConnectorRevision || fence.Phase != deletions.DeletionPhaseFinalizing {
+	if record.Connector.ID != id || record.Connector.EnvironmentID != input.EnvironmentID ||
+		fence.TaskID != input.TaskID ||
+		fence.TargetID != id ||
+		fence.TargetKind != deletions.DeletionTargetConnector ||
+		fence.TargetRevision != input.ConnectorRevision ||
+		fence.Phase != deletions.DeletionPhaseFinalizing {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Connector removal lost its deletion fence")
 	}
 	change, err := workqueue.PrepareUnstartedSettlement(view.Task, view.Item, workexecution.Completion{
@@ -105,7 +128,10 @@ func (repository *Repository) PrepareDecision(ctx context.Context, view workqueu
 	}
 	change.Conditions = append(change.Conditions, capture)
 	for index, key := range keys {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision},
+		)
 	}
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: tombstoneKey})
 	if outcome != workexecution.Succeeded {
@@ -123,13 +149,22 @@ func (repository *Repository) PrepareDecision(ctx context.Context, view workqueu
 	}
 	change.Conditions = append(change.Conditions, environment.TransactionConditions()...)
 	change.Mutations = append(change.Mutations, epoch)
-	references, err := connectormutations.RequireConnectorReferencesUnused(ctx, repository.store, id, input.EnvironmentID, view.ReadRevision)
+	references, err := connectormutations.RequireConnectorReferencesUnused(
+		ctx,
+		repository.store,
+		id,
+		input.EnvironmentID,
+		view.ReadRevision,
+	)
 	if err != nil {
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, references...)
-	indexes := []string{connectors.ConnectorEnvironmentKey(input.EnvironmentID, id), connectors.ConnectorNameKey(input.EnvironmentID, record.Connector.Name)}
+	indexes := []string{
+		connectors.ConnectorEnvironmentKey(input.EnvironmentID, id),
+		connectors.ConnectorNameKey(input.EnvironmentID, record.Connector.Name),
+	}
 	indexed, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: indexes, Revision: view.ReadRevision})
 	if err != nil {
 		keyvalue.ClearMutationValues(change.Mutations)
@@ -153,6 +188,10 @@ func (repository *Repository) PrepareDecision(ctx context.Context, view workqueu
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: value.ModRevision})
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[0]}, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[1]})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[0]},
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[1]},
+	)
 	return change, nil
 }

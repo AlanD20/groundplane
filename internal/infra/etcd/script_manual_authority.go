@@ -13,7 +13,10 @@ import (
 
 // Source membership is captured with the Script input. Delivery and retries may
 // change attempts, but cannot substitute a newer source set.
-func manualScriptRootMatches(execution scriptexecutions.ScriptExecutionRecord, root sourceref.OperationSourceRoot) bool {
+func manualScriptRootMatches(
+	execution scriptexecutions.ScriptExecutionRecord,
+	root sourceref.OperationSourceRoot,
+) bool {
 	return execution.SourceMembershipCount > 0 && execution.OperationID == root.OperationID &&
 		execution.SourceMembershipCount == root.MembershipCount &&
 		execution.SourceMembershipSHA256 == root.MembershipSHA256
@@ -22,7 +25,10 @@ func manualScriptRootMatches(execution scriptexecutions.ScriptExecutionRecord, r
 // LoadRetainedScriptWork adds the source ownership comparison to native work
 // input. Assignment/start must commit these conditions with their own attempt,
 // host, claims and stop/deadline conditions; this read alone grants no effects.
-func (repository *ScriptRepository) LoadRetainedScriptWork(ctx context.Context, view workqueue.View) (ScriptWorkInput, error) {
+func (repository *ScriptRepository) LoadRetainedScriptWork(
+	ctx context.Context,
+	view workqueue.View,
+) (ScriptWorkInput, error) {
 	input, err := repository.LoadScriptWork(ctx, view)
 	if err != nil {
 		return ScriptWorkInput{}, err
@@ -30,13 +36,18 @@ func (repository *ScriptRepository) LoadRetainedScriptWork(ctx context.Context, 
 	return repository.requireScriptWorkSources(ctx, view, input)
 }
 
-func (repository *ScriptRepository) requireScriptWorkSources(ctx context.Context, view workqueue.View, input ScriptWorkInput) (ScriptWorkInput, error) {
+func (repository *ScriptRepository) requireScriptWorkSources(
+	ctx context.Context,
+	view workqueue.View,
+	input ScriptWorkInput,
+) (ScriptWorkInput, error) {
 	fail := func(err error) (ScriptWorkInput, error) {
 		input.Execution.Clear()
 		return ScriptWorkInput{}, err
 	}
 	execution := input.Execution
-	if execution.Recovery != nil || !execution.ActiveReference || view.Task.Task.FinishedAt != nil || !view.Task.Task.PublicationComplete {
+	if execution.Recovery != nil || !execution.ActiveReference || view.Task.Task.FinishedAt != nil ||
+		!view.Task.Task.PublicationComplete {
 		return fail(errs.New(errs.KindStateConflict, "Script work no longer holds executable inputs"))
 	}
 	key := scriptsourceevidence.ScriptSourceRootKey(execution.OperationID)
@@ -51,7 +62,8 @@ func (repository *ScriptRepository) requireScriptWorkSources(ctx context.Context
 	}
 	if root.Phase != scriptsourceevidence.ScriptOperationSourceActive ||
 		root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
-		root.RetryDisposition != sourceref.RetryDispositionUndecided && root.RetryDisposition != sourceref.RetryDispositionTransferred {
+		root.RetryDisposition != sourceref.RetryDispositionUndecided &&
+			root.RetryDisposition != sourceref.RetryDispositionTransferred {
 		return fail(errs.New(errs.KindStateConflict, "Script source retention is closed to execution"))
 	}
 	input.Conditions = append(input.Conditions, keyvalue.Condition{Key: key, ModRevision: value.ModRevision})

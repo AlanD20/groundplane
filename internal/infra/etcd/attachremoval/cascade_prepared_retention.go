@@ -20,7 +20,9 @@ func (repository *InputRepository) prepareUnactivatedCascadeRetention(ctx contex
 	if task.Action != workexecution.ActionRemove || task.Scope.TenantID != "" || item.AttemptNumber != 0 ||
 		item.Cleanup != workexecution.CleanupNone || item.Outcome == workexecution.Succeeded || item.Result == nil ||
 		item.Result.ID != ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "cascade-publication-rejection") {
-		return false, workqueue.Change{}, checkpointConflict("Detach without an active capture is not a rejected cascade publication")
+		return false, workqueue.Change{}, checkpointConflict(
+			"Detach without an active capture is not a rejected cascade publication",
+		)
 	}
 	capture, err := repository.LoadPreparedCascadeCapture(ctx, view)
 	if err != nil {
@@ -40,7 +42,9 @@ func (repository *InputRepository) prepareUnactivatedCascadeRetention(ctx contex
 		keyvalue.Condition{Key: tasksecretpins.PreparationKey(operationID)},
 		keyvalue.Condition{Key: tasksecretpins.ReversePrefix(operationID), Prefix: true})}
 	if final {
-		change.Mutations = []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: DetachInputPrefix(item.ID), Prefix: true}}
+		change.Mutations = []keyvalue.Mutation{
+			{Type: keyvalue.MutationDelete, Key: DetachInputPrefix(item.ID), Prefix: true},
+		}
 	}
 	return true, change, nil
 }

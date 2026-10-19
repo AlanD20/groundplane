@@ -59,10 +59,15 @@ type ConsumerInspection struct {
 }
 
 func (report RemovalInspection) Validate(input RecoveryInput) error {
-	if input.Validate() != nil || input.Attempt.StartedAt == nil && report.State != InspectionInterrupted || report.AttemptID != input.Attempt.ID ||
-		report.ForwardID != input.Source.Forward.ID || report.Failure != input.Source.Evidence ||
-		report.CommandOrdinal != uint32(input.Source.Failure.Checkpoint.Sequence/2) || report.PreparedCommands > 16 ||
-		report.ObservedAt.IsZero() || report.ObservedAt.Location() != time.UTC || report.ObservedAt.Before(input.Attempt.AssignedAt) ||
+	if input.Validate() != nil || input.Attempt.StartedAt == nil && report.State != InspectionInterrupted ||
+		report.AttemptID != input.Attempt.ID ||
+		report.ForwardID != input.Source.Forward.ID ||
+		report.Failure != input.Source.Evidence ||
+		report.CommandOrdinal != uint32(input.Source.Failure.Checkpoint.Sequence/2) ||
+		report.PreparedCommands > 16 ||
+		report.ObservedAt.IsZero() ||
+		report.ObservedAt.Location() != time.UTC ||
+		report.ObservedAt.Before(input.Attempt.AssignedAt) ||
 		input.Attempt.StartedAt != nil && report.ObservedAt.Before(*input.Attempt.StartedAt) {
 		return invalid("Attach inspection does not match its captured command")
 	}
@@ -120,11 +125,18 @@ func EncodeRemovalInspection(input RecoveryInput, report RemovalInspection) ([]b
 		return nil, workexecution.Input{}, err
 	}
 	digest := sha256.Sum256(raw)
-	reference := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, at, input.Attempt.ID, "attach-removal/inspection"), SHA256: hex.EncodeToString(digest[:])}
+	reference := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, at, input.Attempt.ID, "attach-removal/inspection"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	return raw, reference, nil
 }
 
-func DecodeRemovalInspection(input RecoveryInput, raw []byte, reference workexecution.Input) (RemovalInspection, error) {
+func DecodeRemovalInspection(
+	input RecoveryInput,
+	raw []byte,
+	reference workexecution.Input,
+) (RemovalInspection, error) {
 	if len(raw) == 0 || len(raw) > MaximumRemovalRecoveryBytes {
 		return RemovalInspection{}, invalid("Attach inspection is missing or oversized")
 	}

@@ -18,7 +18,8 @@ import (
 func (state *Staging) AuthorizeRecovery(ctx context.Context, assignment *agentpb.BackupRecoveryAssignment,
 	attempt workexecution.Attempt, ownership *agentownership.Lease,
 ) error {
-	if state == nil || ctx == nil || ownership == nil || attempt.StartedAt == nil || !time.Now().Before(attempt.Deadline) {
+	if state == nil || ctx == nil || ownership == nil || attempt.StartedAt == nil ||
+		!time.Now().Before(attempt.Deadline) {
 		return errs.New(errs.KindStateConflict, "Staging recovery requires its started assignment")
 	}
 	if err := ctx.Err(); err != nil {

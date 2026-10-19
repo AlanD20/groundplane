@@ -36,7 +36,11 @@ func lifecycleMember(input executionplan.LifecycleHelperInput) (*agentpb.Service
 	return nil, errs.New(errs.KindValidationFailed, "Service lifecycle stage has no captured runtime member")
 }
 
-func inspectLifecycleMember(ctx context.Context, taskRunner runner.Runner, input executionplan.LifecycleHelperInput) (*agentpb.ServiceLifecycleHelperResponse, error) {
+func inspectLifecycleMember(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input executionplan.LifecycleHelperInput,
+) (*agentpb.ServiceLifecycleHelperResponse, error) {
 	member, err := lifecycleMember(input)
 	if err != nil {
 		return nil, err
@@ -66,13 +70,20 @@ func inspectLifecycleMember(ctx context.Context, taskRunner runner.Runner, input
 		state.ID = id
 		states = append(states, state)
 		if input.Stage.Expected == lifecycleexecution.Running {
-			satisfied = satisfied && state.Running && !state.Paused && !state.Restarting && !state.Dead && (!service.HasHealthcheck || state.Health != nil && state.Health.Status == "healthy")
+			satisfied = satisfied && state.Running && !state.Paused && !state.Restarting && !state.Dead &&
+				(!service.HasHealthcheck || state.Health != nil && state.Health.Status == "healthy")
 		} else if input.Stage.Expected == lifecycleexecution.Stopped {
 			satisfied = satisfied && !state.Running && !state.Restarting
 		}
 	}
 	at := time.Now().UTC()
-	response := &agentpb.ServiceLifecycleHelperResponse{StageId: input.Stage.ID, Member: input.Stage.Member, ObservedAt: timestamppb.New(at), Inspection: input.InspectOnly, Satisfied: satisfied}
+	response := &agentpb.ServiceLifecycleHelperResponse{
+		StageId:    input.Stage.ID,
+		Member:     input.Stage.Member,
+		ObservedAt: timestamppb.New(at),
+		Inspection: input.InspectOnly,
+		Satisfied:  satisfied,
+	}
 	if satisfied {
 		raw, err := json.Marshal(struct {
 			Attempt    string                    `json:"attempt"`
@@ -85,12 +96,21 @@ func inspectLifecycleMember(ctx context.Context, taskRunner runner.Runner, input
 			return nil, errs.Wrap(errs.KindInternal, err)
 		}
 		digest := sha256.Sum256(raw)
-		response.State, response.Evidence = string(input.Stage.Expected), &agentpb.WorkInputReference{InputId: input.Attempt.Input.ID, Sha256: digest[:]}
+		response.State, response.Evidence = string(
+			input.Stage.Expected,
+		), &agentpb.WorkInputReference{
+			InputId: input.Attempt.Input.ID,
+			Sha256:  digest[:],
+		}
 	}
 	return response, nil
 }
 
-func mutateLifecycleMember(ctx context.Context, taskRunner runner.Runner, input executionplan.LifecycleHelperInput) error {
+func mutateLifecycleMember(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input executionplan.LifecycleHelperInput,
+) error {
 	member, err := lifecycleMember(input)
 	if err != nil {
 		return err
@@ -152,7 +172,10 @@ func lifecycleDocker(ctx context.Context, taskRunner runner.Runner, args ...stri
 		return runner.Result{}, err
 	}
 	if result.ExitCode != 0 || len(result.Stdout) >= 32*1024 {
-		return runner.Result{}, errs.New(errs.KindRequestFailed, "Docker could not complete the captured Service lifecycle operation")
+		return runner.Result{}, errs.New(
+			errs.KindRequestFailed,
+			"Docker could not complete the captured Service lifecycle operation",
+		)
 	}
 	return result, nil
 }

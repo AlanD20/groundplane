@@ -32,8 +32,12 @@ const (
 
 func (stage Stage) Validate() error {
 	if len(stage.Key) < 1 || len(stage.Key) > 64 || len(stage.Name) < 1 || len(stage.Name) > 160 ||
-		len(stage.Expected) < 1 || len(stage.Expected) > 1024 || len(stage.Observed) > 2048 || len(stage.FailureCode) > 128 ||
-		!utf8.ValidString(stage.Name) || !utf8.ValidString(stage.Expected) || !utf8.ValidString(stage.Observed) || !utf8.ValidString(stage.FailureCode) {
+		len(
+			stage.Expected,
+		) < 1 || len(stage.Expected) > 1024 || len(stage.Observed) > 2048 || len(stage.FailureCode) > 128 ||
+		!utf8.ValidString(
+			stage.Name,
+		) || !utf8.ValidString(stage.Expected) || !utf8.ValidString(stage.Observed) || !utf8.ValidString(stage.FailureCode) {
 		return invalid("execution stage text exceeds its diagnostic bounds")
 	}
 	for _, ch := range stage.Key {
@@ -41,7 +45,8 @@ func (stage Stage) Validate() error {
 			return invalid("execution stage key is invalid")
 		}
 	}
-	if stage.StartedAt != nil && !validTime(*stage.StartedAt) || stage.FinishedAt != nil && !validTime(*stage.FinishedAt) ||
+	if stage.StartedAt != nil && !validTime(*stage.StartedAt) ||
+		stage.FinishedAt != nil && !validTime(*stage.FinishedAt) ||
 		stage.StartedAt != nil && stage.FinishedAt != nil && stage.FinishedAt.Before(*stage.StartedAt) {
 		return invalid("execution stage timing is invalid")
 	}

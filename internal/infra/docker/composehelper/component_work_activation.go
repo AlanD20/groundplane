@@ -14,7 +14,13 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func observeComponentActivation(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact, action *agentpb.ComponentApply, catalog ComponentActionCatalog) (bool, error) {
+func observeComponentActivation(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	artifact *agentpb.ComposeArtifact,
+	action *agentpb.ComponentApply,
+	catalog ComponentActionCatalog,
+) (bool, error) {
 	if action == nil {
 		return true, nil
 	}
@@ -39,20 +45,56 @@ func observeComponentActivation(ctx context.Context, taskRunner runner.Runner, a
 	}
 	switch recipe.activation {
 	case registeredcatalog.ContainerConfigActivationHTTPDiscovery:
-		observed, err := runComponentWork(ctx, taskRunner, "container", "exec", "--user", "envoy", id, "sh", "-ec", envoyrouter.ObservationCommand)
+		observed, err := runComponentWork(
+			ctx,
+			taskRunner,
+			"container",
+			"exec",
+			"--user",
+			"envoy",
+			id,
+			"sh",
+			"-ec",
+			envoyrouter.ObservationCommand,
+		)
 		if err != nil {
 			return false, err
 		}
 		return envoyrouter.VerifyObservation(observed.Stdout, action.ArtifactDigest)
 	case registeredcatalog.ContainerConfigActivationCommand:
 		if len(recipe.activateArgs) == 0 || recipe.activateArgs[0] != "caddy" {
-			return false, errs.New(errs.KindValidationFailed, "Component command activation has no registered active-configuration observation")
+			return false, errs.New(
+				errs.KindValidationFailed,
+				"Component command activation has no registered active-configuration observation",
+			)
 		}
-		expected, err := runComponentWork(ctx, taskRunner, "container", "exec", id, "caddy", "adapt", "--config", recipe.containerPath, "--adapter", "caddyfile")
+		expected, err := runComponentWork(
+			ctx,
+			taskRunner,
+			"container",
+			"exec",
+			id,
+			"caddy",
+			"adapt",
+			"--config",
+			recipe.containerPath,
+			"--adapter",
+			"caddyfile",
+		)
 		if err != nil {
 			return false, err
 		}
-		actual, err := runComponentWork(ctx, taskRunner, "container", "exec", id, "wget", "--quiet", "--output-document=-", "http://127.0.0.1:2019/config/")
+		actual, err := runComponentWork(
+			ctx,
+			taskRunner,
+			"container",
+			"exec",
+			id,
+			"wget",
+			"--quiet",
+			"--output-document=-",
+			"http://127.0.0.1:2019/config/",
+		)
 		if err != nil {
 			return false, err
 		}
@@ -70,7 +112,13 @@ func observeComponentActivation(ctx context.Context, taskRunner runner.Runner, a
 	}
 }
 
-func activateComponentWork(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact, action *agentpb.ComponentApply, catalog ComponentActionCatalog) error {
+func activateComponentWork(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	artifact *agentpb.ComposeArtifact,
+	action *agentpb.ComponentApply,
+	catalog ComponentActionCatalog,
+) error {
 	if action == nil || catalog == nil {
 		return errs.New(errs.KindValidationFailed, "Component activation input is missing")
 	}

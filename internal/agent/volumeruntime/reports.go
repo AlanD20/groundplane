@@ -13,7 +13,12 @@ func (input Input) checkpointRequest(progress volumeexecution.Progress) (*agentp
 	if input.procedure == nil {
 		return nil, invalidInput()
 	}
-	raw, err := volumeexecution.EncodeProgress(input.attempt, input.procedure.Action, input.procedure.VolumeId, progress)
+	raw, err := volumeexecution.EncodeProgress(
+		input.attempt,
+		input.procedure.Action,
+		input.procedure.VolumeId,
+		progress,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +29,10 @@ func (input Input) checkpointRequest(progress volumeexecution.Progress) (*agentp
 	return &agentpb.VolumeWorkCheckpointRequest{Attempt: attempt, Progress: raw}, nil
 }
 
-func (input Input) checkpointAck(progress volumeexecution.Progress, ack *agentpb.VolumeWorkCheckpointAck) (workexecution.Checkpoint, error) {
+func (input Input) checkpointAck(
+	progress volumeexecution.Progress,
+	ack *agentpb.VolumeWorkCheckpointAck,
+) (workexecution.Checkpoint, error) {
 	if input.procedure == nil || ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil ||
 		ack.RecordedAt == nil || ack.RecordedAt.CheckValid() != nil {
 		return workexecution.Checkpoint{}, invalidInput()
@@ -66,7 +74,10 @@ func (input Input) completionRequest(progress volumeexecution.Progress) (*agentp
 	}}, nil
 }
 
-func (input Input) completionAck(progress volumeexecution.Progress, ack *agentpb.VolumeWorkCompletionAck) (workexecution.Attempt, error) {
+func (input Input) completionAck(
+	progress volumeexecution.Progress,
+	ack *agentpb.VolumeWorkCompletionAck,
+) (workexecution.Attempt, error) {
 	if input.procedure == nil || ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil ||
 		ack.StartedAt == nil || ack.StartedAt.CheckValid() != nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil ||
 		input.attempt.StartedAt == nil || !input.attempt.StartedAt.Equal(ack.StartedAt.AsTime()) || progress.Stage != volumeexecution.Complete {

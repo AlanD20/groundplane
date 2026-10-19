@@ -8,7 +8,13 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareNetwork(ctx context.Context, attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string, next networkexecution.Progress) (*NetworkRecord, error) {
+func (journal *Journal) PrepareNetwork(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	next networkexecution.Progress,
+) (*NetworkRecord, error) {
 	if next.Validate(attempt, action, networkID) != nil || next.Sequence == 0 {
 		return nil, invalid()
 	}
@@ -57,7 +63,12 @@ func (journal *Journal) PrepareNetwork(ctx context.Context, attempt workexecutio
 	return state.Network, nil
 }
 
-func (journal *Journal) Network(ctx context.Context, attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string) (*NetworkRecord, error) {
+func (journal *Journal) Network(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+) (*NetworkRecord, error) {
 	if attempt.Validate() != nil {
 		return nil, invalid()
 	}
@@ -76,7 +87,13 @@ func (journal *Journal) Network(ctx context.Context, attempt workexecution.Attem
 	return state.Network, nil
 }
 
-func (journal *Journal) AcknowledgeNetwork(ctx context.Context, attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string, checkpoint workexecution.Checkpoint) error {
+func (journal *Journal) AcknowledgeNetwork(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	checkpoint workexecution.Checkpoint,
+) error {
 	if attempt.Validate() != nil {
 		return invalid()
 	}
@@ -104,13 +121,24 @@ func (journal *Journal) AcknowledgeNetwork(ctx context.Context, attempt workexec
 	return journal.writeRecord(ctx, *state)
 }
 
-func matchesNetwork(state *attemptRecord, attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string) bool {
+func matchesNetwork(
+	state *attemptRecord,
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+) bool {
 	return state != nil && state.Network != nil && workexecution.SameAssignment(state.Attempt, attempt) &&
 		state.Attempt.StartedAt != nil && attempt.StartedAt != nil && state.Attempt.StartedAt.Equal(*attempt.StartedAt) &&
 		state.Network.Action == action && state.Network.NetworkID == networkID
 }
 
-func (journal *Journal) AcknowledgeNetworkCompletion(ctx context.Context, attempt workexecution.Attempt, action agentpb.NetworkWorkAction, networkID string, terminal workexecution.Attempt) error {
+func (journal *Journal) AcknowledgeNetworkCompletion(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	action agentpb.NetworkWorkAction,
+	networkID string,
+	terminal workexecution.Attempt,
+) error {
 	if attempt.Validate() != nil || terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil {
 		return invalid()
 	}

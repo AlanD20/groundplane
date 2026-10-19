@@ -37,7 +37,12 @@ type CapturedState struct {
 
 // Presentation reads only resource heads and claim identity. It does not load
 // a Task or executable input merely to display the last applied DNS answers.
-func ReadLocalResourceState(ctx context.Context, store hostbindings.Reader, componentID string, revision int64) (State, error) {
+func ReadLocalResourceState(
+	ctx context.Context,
+	store hostbindings.Reader,
+	componentID string,
+	revision int64,
+) (State, error) {
 	if ids.Validate(ids.KindComponent, componentID) != nil {
 		return State{}, invalid("DNS resource read requires its Component")
 	}
@@ -62,7 +67,12 @@ func ReadLocalState(ctx context.Context, store hostbindings.Reader, componentID 
 	return readExecutionState(ctx, store, componentID, state)
 }
 
-func ReadState(ctx context.Context, store hostbindings.Reader, hostID, componentID string, revision int64) (State, error) {
+func ReadState(
+	ctx context.Context,
+	store hostbindings.Reader,
+	hostID, componentID string,
+	revision int64,
+) (State, error) {
 	state, err := ReadResourceState(ctx, store, hostID, componentID, revision)
 	if err != nil {
 		return State{}, err
@@ -70,8 +80,15 @@ func ReadState(ctx context.Context, store hostbindings.Reader, hostID, component
 	return readExecutionState(ctx, store, componentID, state)
 }
 
-func ReadResourceState(ctx context.Context, store hostbindings.Reader, hostID, componentID string, revision int64) (State, error) {
-	if ctx == nil || store == nil || ids.Validate(ids.KindHost, hostID) != nil || ids.Validate(ids.KindComponent, componentID) != nil || revision < 0 {
+func ReadResourceState(
+	ctx context.Context,
+	store hostbindings.Reader,
+	hostID, componentID string,
+	revision int64,
+) (State, error) {
+	if ctx == nil || store == nil || ids.Validate(ids.KindHost, hostID) != nil ||
+		ids.Validate(ids.KindComponent, componentID) != nil ||
+		revision < 0 {
 		return State{}, invalid("DNS resource snapshot requires its host and Component")
 	}
 	keys := []string{AppliedKey(hostID, componentID), IntentKey(hostID, componentID), RequestKey(hostID, componentID),
@@ -81,10 +98,18 @@ func ReadResourceState(ctx context.Context, store hostbindings.Reader, hostID, c
 		return State{}, err
 	}
 	defer keyvalue.ClearValues(read.Values)
-	state := State{HostID: hostID, ReadRevision: read.ReadRevision, AppliedRevision: keyvalue.RevisionOf(read.Values[0]),
-		IntentRevision: keyvalue.RevisionOf(read.Values[1]), RequestRevision: keyvalue.RevisionOf(read.Values[2])}
+	state := State{
+		HostID:          hostID,
+		ReadRevision:    read.ReadRevision,
+		AppliedRevision: keyvalue.RevisionOf(read.Values[0]),
+		IntentRevision:  keyvalue.RevisionOf(read.Values[1]),
+		RequestRevision: keyvalue.RevisionOf(read.Values[2]),
+	}
 	for i, key := range keys {
-		state.Conditions = append(state.Conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[i])})
+		state.Conditions = append(
+			state.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[i])},
+		)
 	}
 	if value := read.Values[0]; value != nil {
 		applied, err := DecodeApplied(value.Value)
@@ -123,9 +148,21 @@ func ReadResourceState(ctx context.Context, store hostbindings.Reader, hostID, c
 
 // Actions additionally inspect both the latest input and the older execution
 // still holding the resource. These comparisons are not presentation fallbacks.
-func readExecutionState(ctx context.Context, store hostbindings.Reader, componentID string, state State) (State, error) {
+func readExecutionState(
+	ctx context.Context,
+	store hostbindings.Reader,
+	componentID string,
+	state State,
+) (State, error) {
 	if state.ClaimOwner != nil {
-		active, captured, guards, err := readActiveState(ctx, store, state.HostID, componentID, *state.ClaimOwner, state.ReadRevision)
+		active, captured, guards, err := readActiveState(
+			ctx,
+			store,
+			state.HostID,
+			componentID,
+			*state.ClaimOwner,
+			state.ReadRevision,
+		)
 		if err != nil {
 			return State{}, err
 		}
@@ -141,7 +178,10 @@ func readExecutionState(ctx context.Context, store hostbindings.Reader, componen
 		return State{}, err
 	}
 	defer keyvalue.ClearValues(work.Values)
-	state.Conditions = append(state.Conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(work.Values[0])})
+	state.Conditions = append(
+		state.Conditions,
+		keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(work.Values[0])},
+	)
 	if work.Values[0] == nil {
 		return state, nil
 	} // settled history was collected
@@ -170,7 +210,12 @@ func readExecutionState(ctx context.Context, store hostbindings.Reader, componen
 	return state, nil
 }
 
-func readCapturedState(ctx context.Context, store hostbindings.Reader, item workexecution.Item, revision int64) (CapturedState, []keyvalue.Condition, error) {
+func readCapturedState(
+	ctx context.Context,
+	store hostbindings.Reader,
+	item workexecution.Item,
+	revision int64,
+) (CapturedState, []keyvalue.Condition, error) {
 	if item.Input == nil {
 		return CapturedState{}, nil, invalid("pending DNS work has no immutable input")
 	}
@@ -210,12 +255,18 @@ func readCapturedState(ctx context.Context, store hostbindings.Reader, item work
 	return CapturedState{Input: input, Capture: capture}, guards, nil
 }
 
-func readStateKeys(ctx context.Context, store hostbindings.Reader, keys []string, revision int64) (*keyvalue.GetManyResult, error) {
+func readStateKeys(
+	ctx context.Context,
+	store hostbindings.Reader,
+	keys []string,
+	revision int64,
+) (*keyvalue.GetManyResult, error) {
 	read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != len(keys) {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		len(read.Values) != len(keys) {
 		return nil, invalid("DNS resource snapshot is incomplete")
 	}
 	for i, value := range read.Values {

@@ -11,18 +11,42 @@ import (
 )
 
 type AttachProvisionReporter interface {
-	ReportProvisionRecovery(context.Context, agentregistration.WorkAuthorization, *agentpb.AttachProvisionRecoveryReportRequest) (*agentpb.AttachProvisionRecoveryReportAck, error)
-	FailAttachProvision(context.Context, agentregistration.WorkAuthorization, *agentpb.AttachProvisionFailureRequest) (*agentpb.AttachProvisionFailureAck, error)
-	CompleteAttachProvision(context.Context, agentregistration.WorkAuthorization, *agentpb.AttachProvisionCompletionRequest) (*agentpb.AttachProvisionCompletionAck, error)
-	CheckpointAttachProvision(context.Context, agentregistration.WorkAuthorization, *agentpb.AttachProvisionCheckpointRequest) (*agentpb.AttachProvisionCheckpointAck, error)
-	StoreAttachProvisionFacts(context.Context, agentregistration.WorkAuthorization, *agentpb.AttachProvisionFactsRequest) (*agentpb.AttachProvisionFactsAck, error)
+	ReportProvisionRecovery(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.AttachProvisionRecoveryReportRequest,
+	) (*agentpb.AttachProvisionRecoveryReportAck, error)
+	FailAttachProvision(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.AttachProvisionFailureRequest,
+	) (*agentpb.AttachProvisionFailureAck, error)
+	CompleteAttachProvision(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.AttachProvisionCompletionRequest,
+	) (*agentpb.AttachProvisionCompletionAck, error)
+	CheckpointAttachProvision(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.AttachProvisionCheckpointRequest,
+	) (*agentpb.AttachProvisionCheckpointAck, error)
+	StoreAttachProvisionFacts(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.AttachProvisionFactsRequest,
+	) (*agentpb.AttachProvisionFactsAck, error)
 }
 
 func (server *Server) ConfigureAttachProvision(reports AttachProvisionReporter) {
 	server.attachProvisionReports = reports
 }
 
-func (server *Server) attachProvisionReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
+func (server *Server) attachProvisionReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
 	if message.GetAttachProvisionCheckpointRequest() == nil && message.GetAttachProvisionFactsRequest() == nil {
 		return false, nil, nil
 	}

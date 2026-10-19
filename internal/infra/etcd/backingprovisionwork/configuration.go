@@ -14,7 +14,10 @@ import (
 // LoadConfiguration follows the immutable file-source snapshot, never desired
 // Entries or latest Secret values. The caller must first authorize this exact
 // attempt's acknowledged WriteConfiguration boundary before delivering content.
-func (repository *Repository) LoadConfiguration(ctx context.Context, view workqueue.View) ([]taskmaterialization.Record, error) {
+func (repository *Repository) LoadConfiguration(
+	ctx context.Context,
+	view workqueue.View,
+) ([]taskmaterialization.Record, error) {
 	input, _, err := repository.Load(ctx, view)
 	if err != nil {
 		return nil, err
@@ -25,8 +28,12 @@ func (repository *Repository) LoadConfiguration(ctx context.Context, view workqu
 		return nil, err
 	}
 	configuration := procedure.Configuration
-	reference := runtimeconfiguration.Reference{ID: configuration.ConfigurationId, EnvironmentID: configuration.EnvironmentId,
-		Generation: configuration.Generation, SHA256: hex.EncodeToString(configuration.Sha256)}
+	reference := runtimeconfiguration.Reference{
+		ID:            configuration.ConfigurationId,
+		EnvironmentID: configuration.EnvironmentId,
+		Generation:    configuration.Generation,
+		SHA256:        hex.EncodeToString(configuration.Sha256),
+	}
 	sources, err := runtimeconfiguration.New(repository.store)
 	if err != nil {
 		return nil, err
@@ -51,12 +58,20 @@ func validateConfigurationSources(procedure *agentpb.BackingProvisionInput, file
 	}
 	for index, file := range files {
 		metadata := procedure.Files[index]
-		if metadata == nil || taskmaterialization.ValidateRecord(file, procedure.RenderGeneration) != nil || file.StepID != stageID ||
-			file.MaterializationID != metadata.MaterializationId || file.EnvironmentID != metadata.EnvironmentId ||
-			file.ServiceID != metadata.ServiceId || file.ServiceName != metadata.ServiceName || file.Destination != metadata.Destination ||
-			file.UID != metadata.Uid || file.GID != metadata.Gid || file.Mode != metadata.Mode ||
-			file.Length != metadata.Length || file.SHA256 != hex.EncodeToString(metadata.Sha256) ||
-			file.OutputKind != taskmaterialization.OutputGeneratedEnvironment || file.Source.Kind != taskmaterialization.SourceGeneratedEnvironment {
+		if metadata == nil || taskmaterialization.ValidateRecord(file, procedure.RenderGeneration) != nil ||
+			file.StepID != stageID ||
+			file.MaterializationID != metadata.MaterializationId ||
+			file.EnvironmentID != metadata.EnvironmentId ||
+			file.ServiceID != metadata.ServiceId ||
+			file.ServiceName != metadata.ServiceName ||
+			file.Destination != metadata.Destination ||
+			file.UID != metadata.Uid ||
+			file.GID != metadata.Gid ||
+			file.Mode != metadata.Mode ||
+			file.Length != metadata.Length ||
+			file.SHA256 != hex.EncodeToString(metadata.Sha256) ||
+			file.OutputKind != taskmaterialization.OutputGeneratedEnvironment ||
+			file.Source.Kind != taskmaterialization.SourceGeneratedEnvironment {
 			return invalid("backing creation file source does not match its acknowledged output metadata")
 		}
 	}

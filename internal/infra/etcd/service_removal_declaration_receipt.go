@@ -16,8 +16,12 @@ import (
 // A never-deployed omission records positive declaration retirement, not an
 // invented Agent receipt. The caller joins this with runtime absence, reference
 // cleanup and native work settlement in the same transaction.
-func (repository *ServiceRepository) prepareServiceDeclarationReceipt(ctx context.Context, ledger *blueprintunits.Repository,
-	snapshot blueprintunits.Snapshot, view workqueue.View, input serviceremovalwork.Input,
+func (repository *ServiceRepository) prepareServiceDeclarationReceipt(
+	ctx context.Context,
+	ledger *blueprintunits.Repository,
+	snapshot blueprintunits.Snapshot,
+	view workqueue.View,
+	input serviceremovalwork.Input,
 ) (workqueue.Change, error) {
 	graph, err := ledger.LoadCapturedGraph(ctx, view.Task.Task, view.ReadRevision)
 	if err != nil {
@@ -29,9 +33,14 @@ func (repository *ServiceRepository) prepareServiceDeclarationReceipt(ctx contex
 		if captured.ID != item.ID {
 			continue
 		}
-		if captured.Operation != item.Operation || captured.TargetID != item.TargetID || captured.Placement != item.Placement ||
-			!slices.Equal(captured.Claims, item.Claims) || !slices.Equal(captured.Dependencies, item.Dependencies) {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service declaration removal differs from its captured work")
+		if captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
+			captured.Placement != item.Placement ||
+			!slices.Equal(captured.Claims, item.Claims) ||
+			!slices.Equal(captured.Dependencies, item.Dependencies) {
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Service declaration removal differs from its captured work",
+			)
 		}
 		unit = &graph.Record.Units[index]
 	}
@@ -44,7 +53,10 @@ func (repository *ServiceRepository) prepareServiceDeclarationReceipt(ctx contex
 		return workqueue.Change{}, err
 	}
 	if !found {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Removed Service declaration identities are unavailable")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Removed Service declaration identities are unavailable",
+		)
 	}
 	birthID := ""
 	for _, service := range owned.Record.Services {
@@ -52,19 +64,38 @@ func (repository *ServiceRepository) prepareServiceDeclarationReceipt(ctx contex
 			birthID = service.BirthRevisionID
 		}
 	}
-	operationID := ids.DeriveAt(ids.KindOperation, view.Task.Task.CreatedAt, view.Item.Item.ID, "service-declaration-removal")
+	operationID := ids.DeriveAt(
+		ids.KindOperation,
+		view.Task.Task.CreatedAt,
+		view.Item.Item.ID,
+		"service-declaration-removal",
+	)
 	receipt, eligible, err := blueprintunits.TryPrepareControllerServiceDeclarationRemoval(snapshot, *unit,
 		operationID, input.BaseRevisionID, input.ServiceRevision, birthID)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	if !eligible {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service declaration has runtime effects that require Agent removal")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Service declaration has runtime effects that require Agent removal",
+		)
 	}
 	return workqueue.Change{
-		Conditions: append(receipt.Conditions(),
-			keyvalue.Condition{Key: blueprintunits.CapturedGraphKey(input.Scope.EnvironmentID, input.TaskID), ModRevision: graph.Revision},
-			keyvalue.Condition{Key: blueprints.EnvironmentBlueprintOwnedIdentitiesKey(input.Scope.EnvironmentID, input.BaseRevisionID), ModRevision: owned.Revision}),
+		Conditions: append(
+			receipt.Conditions(),
+			keyvalue.Condition{
+				Key:         blueprintunits.CapturedGraphKey(input.Scope.EnvironmentID, input.TaskID),
+				ModRevision: graph.Revision,
+			},
+			keyvalue.Condition{
+				Key: blueprints.EnvironmentBlueprintOwnedIdentitiesKey(
+					input.Scope.EnvironmentID,
+					input.BaseRevisionID,
+				),
+				ModRevision: owned.Revision,
+			},
+		),
 		Mutations: receipt.Mutations(),
 	}, nil
 }

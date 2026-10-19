@@ -4,7 +4,12 @@ import "context"
 
 // PrepareOwned fences every preparation write with its owner's captured state.
 // A delayed preparer cannot recreate references after stopped work is cleaned up.
-func (repository *Repository) PrepareOwned(ctx context.Context, operationID string, members []Member, guards []Condition) (Prepared, error) {
+func (repository *Repository) PrepareOwned(
+	ctx context.Context,
+	operationID string,
+	members []Member,
+	guards []Condition,
+) (Prepared, error) {
 	if len(guards) == 0 {
 		return Prepared{}, validation("owned source preparation requires publication guards")
 	}
@@ -13,7 +18,11 @@ func (repository *Repository) PrepareOwned(ctx context.Context, operationID stri
 			return Prepared{}, validation("source preparation owner guards require exact existing records")
 		}
 	}
-	owned := Repository{store: repository.store, script: repository.script, preparationGuards: append([]Condition(nil), guards...)}
+	owned := Repository{
+		store:             repository.store,
+		script:            repository.script,
+		preparationGuards: append([]Condition(nil), guards...),
+	}
 	return owned.Prepare(ctx, operationID, members)
 }
 

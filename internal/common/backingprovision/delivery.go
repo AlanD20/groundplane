@@ -52,11 +52,19 @@ func EncodeAssignment(assignment Assignment) (*agentpb.BackingProvisionAssignmen
 			return nil, err
 		}
 	}
-	return &agentpb.BackingProvisionAssignment{Attempt: attempt, Input: proto.CloneOf(assignment.Procedure), RecoverySource: recovery}, nil
+	return &agentpb.BackingProvisionAssignment{
+		Attempt:        attempt,
+		Input:          proto.CloneOf(assignment.Procedure),
+		RecoverySource: recovery,
+	}, nil
 }
 
-func DecodeAssignment(message *agentpb.BackingProvisionAssignment, identity workexecution.Identity) (Assignment, error) {
-	if message == nil || proto.Size(message) > MaximumInputBytes+2*MaximumProgressBytes+4096 || executionplan.RejectUnknown(message) != nil {
+func DecodeAssignment(
+	message *agentpb.BackingProvisionAssignment,
+	identity workexecution.Identity,
+) (Assignment, error) {
+	if message == nil || proto.Size(message) > MaximumInputBytes+2*MaximumProgressBytes+4096 ||
+		executionplan.RejectUnknown(message) != nil {
 		return Assignment{}, invalid("backing creation assignment is missing or oversized")
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(message.Attempt, identity)

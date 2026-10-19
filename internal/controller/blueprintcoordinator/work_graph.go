@@ -33,7 +33,10 @@ func BuildWorkGraph(task workexecution.Task, prepared []PreparedUnit) (blueprint
 	if task.Action != workexecution.ActionApply || task.PublicationComplete ||
 		task.Scope.EnvironmentID == "" || task.TargetID != task.Scope.EnvironmentID ||
 		len(prepared) != int(task.ExpectedItems) {
-		return blueprintunits.CapturedGraph{}, errs.New(errs.KindValidationFailed, "blueprint work graph does not match its captured apply")
+		return blueprintunits.CapturedGraph{}, errs.New(
+			errs.KindValidationFailed,
+			"blueprint work graph does not match its captured apply",
+		)
 	}
 	byTarget := make(map[blueprintunits.ResourceKey]string, len(prepared))
 	used := make(map[string]struct{}, len(prepared))
@@ -42,14 +45,28 @@ func BuildWorkGraph(task workexecution.Task, prepared []PreparedUnit) (blueprint
 			return blueprintunits.CapturedGraph{}, err
 		}
 		if !workexecution.ValidOperation(plan.Operation) {
-			return blueprintunits.CapturedGraph{}, errs.New(errs.KindValidationFailed, "blueprint work requires a stable identity and operation owner")
+			return blueprintunits.CapturedGraph{}, errs.New(
+				errs.KindValidationFailed,
+				"blueprint work requires a stable identity and operation owner",
+			)
 		}
 		if _, exists := byTarget[plan.Unit.Target]; exists {
-			return blueprintunits.CapturedGraph{}, errs.New(errs.KindValidationFailed, "blueprint work contains a duplicate resource target")
+			return blueprintunits.CapturedGraph{}, errs.New(
+				errs.KindValidationFailed,
+				"blueprint work contains a duplicate resource target",
+			)
 		}
-		workID := ids.DeriveAt(ids.KindWorkItem, task.CreatedAt, task.ID, "blueprint-resource/"+string(plan.Unit.Target.Kind)+"/"+plan.Unit.Target.ID)
+		workID := ids.DeriveAt(
+			ids.KindWorkItem,
+			task.CreatedAt,
+			task.ID,
+			"blueprint-resource/"+string(plan.Unit.Target.Kind)+"/"+plan.Unit.Target.ID,
+		)
 		if _, exists := used[workID]; exists {
-			return blueprintunits.CapturedGraph{}, errs.New(errs.KindValidationFailed, "blueprint work identity is duplicated")
+			return blueprintunits.CapturedGraph{}, errs.New(
+				errs.KindValidationFailed,
+				"blueprint work identity is duplicated",
+			)
 		}
 		byTarget[plan.Unit.Target], used[workID] = workID, struct{}{}
 	}
@@ -66,7 +83,10 @@ func BuildWorkGraph(task workexecution.Task, prepared []PreparedUnit) (blueprint
 				return blueprintunits.CapturedGraph{}, err
 			}
 			if plan.Placement.Executor != workexecution.Controller || plan.Input != nil && *plan.Input != captured {
-				return blueprintunits.CapturedGraph{}, errs.New(errs.KindValidationFailed, "Entry work placement or captured input is inconsistent")
+				return blueprintunits.CapturedGraph{}, errs.New(
+					errs.KindValidationFailed,
+					"Entry work placement or captured input is inconsistent",
+				)
 			}
 			item.Input = &captured
 		} else if plan.Input == nil {
@@ -78,7 +98,10 @@ func BuildWorkGraph(task workexecution.Task, prepared []PreparedUnit) (blueprint
 		for _, target := range plan.Unit.After {
 			dependency, exists := byTarget[target]
 			if !exists {
-				return blueprintunits.CapturedGraph{}, errs.New(errs.KindValidationFailed, "blueprint dependency has no captured work item")
+				return blueprintunits.CapturedGraph{}, errs.New(
+					errs.KindValidationFailed,
+					"blueprint dependency has no captured work item",
+				)
 			}
 			item.Dependencies = append(item.Dependencies, dependency)
 		}

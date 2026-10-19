@@ -43,7 +43,10 @@ func (input RecoveryInput) Validate() error {
 		return errs.New(errs.KindStateConflict, "Script cleanup metadata differs from its captured container")
 	}
 	if body := input.Artifacts.BodyPrepared; body != nil {
-		if !bytes.Equal(body.BodySha256, metadata.Sha256) || body.Uid != metadata.Uid || body.Gid != metadata.Gid || body.Device == 0 || body.Inode == 0 || body.Leaf != "body" {
+		if !bytes.Equal(body.BodySha256, metadata.Sha256) || body.Uid != metadata.Uid || body.Gid != metadata.Gid ||
+			body.Device == 0 ||
+			body.Inode == 0 ||
+			body.Leaf != "body" {
 			return errs.New(errs.KindStateConflict, "Script cleanup body receipt differs from its captured metadata")
 		}
 	}

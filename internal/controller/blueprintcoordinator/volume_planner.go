@@ -32,10 +32,16 @@ func (planner *VolumePlanner) PrepareBlueprintWork(ctx context.Context, task wor
 		task.Scope.EnvironmentID != baseline.EnvironmentID || baseline.ReadRevision <= 0 ||
 		blueprintunits.ValidateUnit(unit) != nil || unit.Target.Kind != ids.KindVolume ||
 		len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
-		return PreparedUnit{}, errs.New(errs.KindValidationFailed, "Blueprint Volume admission requires captured storage intent")
+		return PreparedUnit{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Volume admission requires captured storage intent",
+		)
 	}
 	if unit.Removal {
-		return PreparedUnit{}, errs.New(errs.KindResourceInUse, "remove the persistent Volume separately before applying its omission")
+		return PreparedUnit{}, errs.New(
+			errs.KindResourceInUse,
+			"remove the persistent Volume separately before applying its omission",
+		)
 	}
 	host, err := hostbindings.ReadLocal(ctx, planner.hosts, baseline.ReadRevision)
 	if err != nil {

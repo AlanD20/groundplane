@@ -38,17 +38,22 @@ func validRolloutAction(input Input, action RolloutAction) bool {
 		return false
 	}
 	if input.Artifacts.Rolling != nil {
-		return action == VerifyServing && input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_ROLLING
+		return action == VerifyServing &&
+			input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_ROLLING
 	}
 	switch action {
 	case RemovePrevious:
-		return input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE && input.Artifacts.Prior != nil
+		return input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE &&
+			input.Artifacts.Prior != nil
 	case StartCandidate, WaitCandidate, VerifyServing:
-		return input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE || input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_BLUE_GREEN
+		return input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE ||
+			input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_BLUE_GREEN
 	case SwitchTraffic:
-		return input.Artifacts.Proxy != nil && (input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE || input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_BLUE_GREEN)
+		return input.Artifacts.Proxy != nil &&
+			(input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE || input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_BLUE_GREEN)
 	case RetireSwitchedPrevious:
-		return input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_BLUE_GREEN && input.Artifacts.Prior != nil &&
+		return input.Release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_BLUE_GREEN &&
+			input.Artifacts.Prior != nil &&
 			(input.Artifacts.Prior.Target == "singleton" || input.Artifacts.Prior.Target == "rolling")
 	default:
 		return false

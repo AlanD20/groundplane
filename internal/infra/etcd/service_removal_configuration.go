@@ -24,7 +24,10 @@ func (repository *ServiceRepository) LoadServiceRemovalRecoveryConfiguration(ctx
 	if repository == nil || repository.store == nil || !view.ActiveAttempt || !view.CurrentExecutor ||
 		view.Attempt.Attempt.Direction != workexecution.Recovery || view.Attempt.Attempt.StartedAt == nil ||
 		view.Attempt.Attempt.FinishedAt != nil || view.Work.Task.Task.CollectionStartedAt != nil {
-		return nil, nil, nil, errs.New(errs.KindStateConflict, "Removal recovery file delivery requires the active started executor")
+		return nil, nil, nil, errs.New(
+			errs.KindStateConflict,
+			"Removal recovery file delivery requires the active started executor",
+		)
 	}
 	inputs, err := serviceremovalwork.NewRepository(repository.store)
 	if err != nil {
@@ -46,19 +49,32 @@ func (repository *ServiceRepository) LoadServiceRemovalRecoveryConfiguration(ctx
 		return nil, nil, nil, err
 	}
 	if !progress.InFlight || progress.Phase != removalexecution.RestoreConfiguration {
-		return nil, nil, nil, errs.New(errs.KindStateConflict, "Removal recovery is not at its acknowledged configuration step")
+		return nil, nil, nil, errs.New(
+			errs.KindStateConflict,
+			"Removal recovery is not at its acknowledged configuration step",
+		)
 	}
 	guards, err := inputs.RuntimeGuards(ctx, input, view.Work.ReadRevision)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	guards = append(guards, inputGuard, progressGuard,
+	guards = append(
+		guards,
+		inputGuard,
+		progressGuard,
 		keyvalue.Condition{Key: serviceremovalwork.RecoveryKey(input.WorkItemID), ModRevision: capture.Revision},
 		keyvalue.Condition{Key: workqueue.TaskKey(input.TaskID), ModRevision: view.Work.Task.Revision},
 		keyvalue.Condition{Key: workqueue.ItemKey(input.WorkItemID), ModRevision: view.Work.Item.Revision},
 		keyvalue.Condition{Key: workqueue.AttemptKey(view.Attempt.Attempt.ID), ModRevision: view.Attempt.Revision},
-		keyvalue.Condition{Key: workqueue.CheckpointKey(view.Attempt.Attempt.ID), ModRevision: view.Checkpoint.Revision},
-		keyvalue.Condition{Key: workqueue.ExecutorKey(view.Attempt.Attempt.Executor), ModRevision: view.ExecutorRevision})
+		keyvalue.Condition{
+			Key:         workqueue.CheckpointKey(view.Attempt.Attempt.ID),
+			ModRevision: view.Checkpoint.Revision,
+		},
+		keyvalue.Condition{
+			Key:         workqueue.ExecutorKey(view.Attempt.Attempt.Executor),
+			ModRevision: view.ExecutorRevision,
+		},
+	)
 	if input.Configuration == nil {
 		return nil, nil, guards, nil
 	}

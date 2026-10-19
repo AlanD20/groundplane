@@ -15,8 +15,13 @@ import (
 // CollectAbandonedGroupReleaseDraft removes only an expired, unaccepted draft.
 // Deadline does not release active effects: Task/root absence is required in the
 // same deletion transaction. Accepted captures belong to native Task retention.
-func (ledger *ReleaseLedger) CollectAbandonedGroupReleaseDraft(ctx context.Context, taskID string, at time.Time) (bool, error) {
-	if ledger == nil || ledger.store == nil || ids.Validate(ids.KindTask, taskID) != nil || !recordcodec.IsCanonicalUTC(at) {
+func (ledger *ReleaseLedger) CollectAbandonedGroupReleaseDraft(
+	ctx context.Context,
+	taskID string,
+	at time.Time,
+) (bool, error) {
+	if ledger == nil || ledger.store == nil || ids.Validate(ids.KindTask, taskID) != nil ||
+		!recordcodec.IsCanonicalUTC(at) {
 		return false, errs.New(errs.KindValidationFailed, "Group draft cleanup requires its exact identity and time")
 	}
 	key := groupReleaseDraftHeaderKey(taskID)

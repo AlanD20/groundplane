@@ -26,11 +26,20 @@ func NewWork(records *resolverwork.Repository, queue *workqueue.Repository) (*Wo
 	return &Work{records: records, queue: queue}, nil
 }
 
-func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Work) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item, task := request.Item.Item, request.Task.Task
-	if request.DecisionOnly || item.Operation != workexecution.Resolver || item.Placement.Executor != workexecution.Agent ||
-		request.Executor.Record.Identity.HostID != item.Placement.HostID || item.Input == nil {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "CoreDNS work cannot obtain this host assignment")
+	if request.DecisionOnly || item.Operation != workexecution.Resolver ||
+		item.Placement.Executor != workexecution.Agent ||
+		request.Executor.Record.Identity.HostID != item.Placement.HostID ||
+		item.Input == nil {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"CoreDNS work cannot obtain this host assignment",
+		)
 	}
 	view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
 	if request.Direction == workexecution.Recovery {
@@ -39,7 +48,11 @@ func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at t
 			return workdispatch.Decision{Disposition: workdispatch.NeedsAttention, Change: change}, err
 		}
 		source, err := owner.records.LoadRecovery(ctx, view)
-		return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: item.Deadline, Change: workqueue.Change{Conditions: source.Guards}}, err
+		return workdispatch.Decision{
+			Disposition: workdispatch.Dispatch,
+			Deadline:    item.Deadline,
+			Change:      workqueue.Change{Conditions: source.Guards},
+		}, err
 	}
 	if request.Direction != workexecution.Forward {
 		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "CoreDNS assignment direction is invalid")
@@ -73,12 +86,18 @@ func (owner *Work) AuthorizeAgentStart(ctx context.Context, view workqueue.Resum
 	}
 	_, change, current, err := owner.records.ReadAdmission(ctx, view.Work)
 	if err == nil && !current {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "CoreDNS input was superseded before Start; submit a new action")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"CoreDNS input was superseded before Start; submit a new action",
+		)
 	}
 	return change, err
 }
 
-func (owner *Work) LoadWorkAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ResolverWorkAssignment, error) {
+func (owner *Work) LoadWorkAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ResolverWorkAssignment, error) {
 	if !view.ActiveAttempt || view.Work.Item.Item.Operation != workexecution.Resolver ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
 		return nil, errs.New(errs.KindStateConflict, "CoreDNS delivery has no retained active assignment")
@@ -109,7 +128,12 @@ func (owner *Work) LoadWorkAssignment(ctx context.Context, view workqueue.Resume
 	return delivery, nil
 }
 
-func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *Work) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil || item.Item.Operation != workexecution.Resolver || item.Item.TaskID != task.Task.ID {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "CoreDNS work has no matching stop request")
 	}
@@ -122,8 +146,12 @@ func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item w
 func (owner *Work) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot,
 	previous workqueue.AttemptSnapshot, revision int64, at time.Time,
 ) (workqueue.Change, error) {
-	if item.Item.Operation != workexecution.Resolver || item.Item.ActiveAttemptID != "" || task.Task.CollectionStartedAt != nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "CoreDNS still has active execution or expired input")
+	if item.Item.Operation != workexecution.Resolver || item.Item.ActiveAttemptID != "" ||
+		task.Task.CollectionStartedAt != nil {
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"CoreDNS still has active execution or expired input",
+		)
 	}
 	view := workqueue.View{Task: task, Item: item, ReadRevision: revision}
 	stored, err := owner.records.Load(ctx, view)
@@ -139,15 +167,24 @@ func (owner *Work) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnap
 	var retry workqueue.Change
 	if item.Item.Phase == workexecution.Attention {
 		if previous.Attempt.Result == nil {
-			return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "CoreDNS cleanup has no preceding attempt result")
+			return workqueue.Change{}, errs.New(
+				errs.KindTaskNotRetryable,
+				"CoreDNS cleanup has no preceding attempt result",
+			)
 		}
 		source, sourceErr := owner.records.LoadRecovery(ctx, view)
 		if sourceErr != nil {
 			return workqueue.Change{}, sourceErr
 		}
 		change.Conditions = append(change.Conditions, source.Guards...)
-		retry, err = workqueue.PrepareRetry(task, item, previous, workexecution.RetryDecision{Direction: workexecution.Recovery,
-			Result: *previous.Attempt.Result, NotBefore: at, Deadline: resolverwork.CleanupDeadline(at)}, at)
+		retry, err = workqueue.PrepareRetry(
+			task,
+			item,
+			previous,
+			workexecution.RetryDecision{Direction: workexecution.Recovery,
+				Result: *previous.Attempt.Result, NotBefore: at, Deadline: resolverwork.CleanupDeadline(at)},
+			at,
+		)
 	} else {
 		if task.Task.Stop != nil || item.Item.ForwardRevoked || item.Item.Phase != workexecution.Settled || item.Item.Outcome != workexecution.Failed {
 			return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "CoreDNS effects must settle before another forward attempt")

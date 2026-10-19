@@ -47,7 +47,8 @@ func (resolver *ComponentConfigurationCapture) PrepareComponentWorkAction(ctx co
 		if file.MaterializationID != action.ArtifactId {
 			continue
 		}
-		if forward != nil || !componentWorkFileOwner(*file, capture.Current.EnvironmentID, action.ComponentId, destination) {
+		if forward != nil ||
+			!componentWorkFileOwner(*file, capture.Current.EnvironmentID, action.ComponentId, destination) {
 			return nil, errs.New(errs.KindStateConflict, "Component activation file ownership is ambiguous")
 		}
 		forward = file
@@ -72,7 +73,8 @@ func (resolver *ComponentConfigurationCapture) PrepareComponentWorkAction(ctx co
 		action.ContainerConfigTransition = transition
 		return action, nil
 	}
-	if capture.Prior == nil || prior.ID != capture.Prior.ID || prior.EnvironmentID != capture.Prior.EnvironmentID || prior.Generation != capture.Prior.Generation {
+	if capture.Prior == nil || prior.ID != capture.Prior.ID || prior.EnvironmentID != capture.Prior.EnvironmentID ||
+		prior.Generation != capture.Prior.Generation {
 		return nil, errs.New(errs.KindStateConflict, "Serving Component has no captured previous configuration")
 	}
 	for _, file := range prior.Files {
@@ -94,7 +96,11 @@ func (resolver *ComponentConfigurationCapture) PrepareComponentWorkAction(ctx co
 		if _, err := envoyrouter.PrepareActivation(content, desired); err != nil {
 			return nil, err
 		}
-		transition.PreviousSource, transition.PreviousSourceSha256 = append([]byte(nil), content...), append([]byte(nil), digest[:]...)
+		transition.PreviousSource, transition.PreviousSourceSha256 = append(
+			[]byte(nil),
+			content...), append(
+			[]byte(nil),
+			digest[:]...)
 		action.ContainerConfigTransition = transition
 		return action, nil
 	}

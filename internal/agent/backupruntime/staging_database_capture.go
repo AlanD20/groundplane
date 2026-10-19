@@ -45,7 +45,10 @@ func (state *Staging) DatabaseCapture(ctx context.Context, assignment *agentpb.B
 			switch file.Evidence.Name {
 			case executionplan.BackupSourceStagingFinal:
 				if result.Source != nil || file.Evidence.Size > maximum {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered database source exceeds its captured limit")
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Recovered database source exceeds its captured limit",
+					)
 				}
 				result.Source, result.SourceEvidence = file.Artifact, file.Evidence
 			case executionplan.BackupStoredStagingFinal:
@@ -54,19 +57,28 @@ func (state *Staging) DatabaseCapture(ctx context.Context, assignment *agentpb.B
 				}
 				result.Stored = file.Artifact
 			default:
-				return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered database stage contains an unexpected file")
+				return CaptureStage{}, errs.New(
+					errs.KindStateConflict,
+					"Recovered database stage contains an unexpected file",
+				)
 			}
 			if prepared := resume.GetPreparedArtifact(); prepared != nil {
 				evidence := prepared.GetEvidence()
 				if evidence == nil || prepared.PointId != ids.Point {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Database capture lacks acknowledged artifact evidence")
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Database capture lacks acknowledged artifact evidence",
+					)
 				}
 				size, digest := evidence.SourceSizeBytes, evidence.SourceSha256
 				if file.Evidence.Name == executionplan.BackupStoredStagingFinal {
 					size, digest = evidence.StoredSizeBytes, evidence.StoredSha256
 				}
 				if file.Evidence.Size != size || !bytes.Equal(file.Evidence.SHA256[:], digest) {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Recovered database bytes differ from acknowledged evidence")
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Recovered database bytes differ from acknowledged evidence",
+					)
 				}
 			}
 		}
@@ -76,7 +88,10 @@ func (state *Staging) DatabaseCapture(ctx context.Context, assignment *agentpb.B
 		if prepared := resume.GetPreparedArtifact(); prepared != nil {
 			if prepared.GetFinals().GetSameInode() {
 				if result.Stored != nil {
-					return CaptureStage{}, errs.New(errs.KindStateConflict, "Unencrypted database capture contains an extra object")
+					return CaptureStage{}, errs.New(
+						errs.KindStateConflict,
+						"Unencrypted database capture contains an extra object",
+					)
 				}
 				result.Stored = result.Source
 			} else if result.Stored == nil {
@@ -88,7 +103,10 @@ func (state *Staging) DatabaseCapture(ctx context.Context, assignment *agentpb.B
 		return result, nil
 	}
 	if resume.GetDumpStart() != nil || resume.GetMysqlDumpStart() != nil || resume.GetPreparedArtifact() != nil {
-		return CaptureStage{}, errs.New(errs.KindStateConflict, "Started database capture has no retained source; refusing to repeat the dump")
+		return CaptureStage{}, errs.New(
+			errs.KindStateConflict,
+			"Started database capture has no retained source; refusing to repeat the dump",
+		)
 	}
 	// A format limit is not a size estimate. Reserve writes as the dump grows.
 	stage, err := state.stager.Prepare(ctx, ids, backupstage.ExclusiveUnknown())

@@ -43,11 +43,23 @@ func (repository *SecretRepository) PublishSecretRemoval(
 	if owner.Project != nil {
 		scope = workexecution.Scope{TenantID: owner.Project.Record.TenantID, ProjectID: owner.Project.Record.ID}
 	}
-	if task.Validate() != nil || task.Action != workexecution.ActionRemove || task.Actor != workexecution.OperatorActor ||
-		task.TargetID != secretID || task.TargetName != current.Record.Secret.Key || task.Scope != scope || task.ExpectedItems != 1 ||
-		input.TaskID != task.ID || input.SecretID != secretID || input.SecretRevision != current.Revision ||
-		input.ProjectID != scope.ProjectID || input.TenantID != scope.TenantID || task.Intent != ref || !input.CreatedAt.Equal(task.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Secret removal differs from its captured input")
+	if task.Validate() != nil || task.Action != workexecution.ActionRemove ||
+		task.Actor != workexecution.OperatorActor ||
+		task.TargetID != secretID ||
+		task.TargetName != current.Record.Secret.Key ||
+		task.Scope != scope ||
+		task.ExpectedItems != 1 ||
+		input.TaskID != task.ID ||
+		input.SecretID != secretID ||
+		input.SecretRevision != current.Revision ||
+		input.ProjectID != scope.ProjectID ||
+		input.TenantID != scope.TenantID ||
+		task.Intent != ref ||
+		!input.CreatedAt.Equal(task.CreatedAt) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Secret removal differs from its captured input",
+		)
 	}
 	tombstone := deletionrecord.DeletionTombstoneRecord{
 		TargetKind: deletionrecord.DeletionTargetSecret, TargetID: secretID, TargetRevision: current.Revision,
@@ -90,11 +102,15 @@ func (repository *SecretRepository) PublishSecretRemoval(
 	if dependencies != nil {
 		defer etcdstore.ClearValues(dependencies.Values)
 	}
-	if dependencies == nil || dependencies.ReadRevision != current.ReadRevision || len(dependencies.Values) != 3 || dependencies.Values[0] == nil ||
-		dependencies.Values[1] == nil || dependencies.Values[2] == nil || dependencies.Values[2].ModRevision != input.ValueRevision ||
+	if dependencies == nil || dependencies.ReadRevision != current.ReadRevision || len(dependencies.Values) != 3 ||
+		dependencies.Values[0] == nil ||
+		dependencies.Values[1] == nil ||
+		dependencies.Values[2] == nil ||
+		dependencies.Values[2].ModRevision != input.ValueRevision ||
 		string(
 			dependencies.Values[0].Value,
-		) != secretID || string(dependencies.Values[1].Value) != secretID {
+		) != secretID ||
+		string(dependencies.Values[1].Value) != secretID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
 			"Secret deletion indexes or encrypted value are corrupt",
@@ -188,13 +204,21 @@ func (repository *SecretRepository) PublishSecretRemoval(
 	mutations = append(mutations, work.Mutations...)
 	mutations = append(mutations, captureWrites...)
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*etcdstore.KeyValue) error {
-		return errs.New(errs.KindStateConflict, "Secret removal references or ownership changed; refresh before removing")
+		return errs.New(
+			errs.KindStateConflict,
+			"Secret removal references or ownership changed; refresh before removing",
+		)
 	})
 	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotencyrecord.IdempotencyMarkerTask, conditions, mutations, classify)
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotencyrecord.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

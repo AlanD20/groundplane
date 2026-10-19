@@ -51,7 +51,10 @@ func (ledger *ReleaseLedger) StageBlueprintProxyServiceRollout(ctx context.Conte
 		preparation.Manifest.Revision <= 0 || preparation.Manifest.Record.OperationID != preparation.OperationID ||
 		preparation.Members[0].Intent.ServiceID != capture.Render.ServiceID ||
 		preparation.Manifest.Record.Members[0].ServiceID != capture.Render.ServiceID {
-		return componentplanning.ProxyServiceRolloutReference{}, errs.New(errs.KindValidationFailed, "Pre-switch Service rollout preparation is invalid")
+		return componentplanning.ProxyServiceRolloutReference{}, errs.New(
+			errs.KindValidationFailed,
+			"Pre-switch Service rollout preparation is invalid",
+		)
 	}
 	input, err := componentplanning.ReadProxyCandidateInput(ctx, ledger.store, preparation.Input, 0)
 	if err != nil {
@@ -152,8 +155,10 @@ func (ledger *ReleaseLedger) ReadBlueprintProxyServiceRollout(ctx context.Contex
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
-	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 1 || read.Values[0] == nil || read.Values[0].Key != key ||
-		read.Values[0].ModRevision != reference.Revision || len(read.Values[0].Value) > keyvalue.MaximumBytes {
+	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 1 || read.Values[0] == nil ||
+		read.Values[0].Key != key ||
+		read.Values[0].ModRevision != reference.Revision ||
+		len(read.Values[0].Value) > keyvalue.MaximumBytes {
 		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, errs.New(
 			errs.KindStateConflict,
 			"pre-switch Service rollout preparation is missing or changed",
@@ -173,10 +178,14 @@ func (ledger *ReleaseLedger) ReadBlueprintProxyServiceRollout(ctx context.Contex
 	if err != nil {
 		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, err
 	}
-	if preparation.Input.Validate() != nil || preparation.Input.EnvironmentID != environmentID || preparation.Input.ParentTaskID != parentID ||
-		preparation.WorkItemID != reference.WorkItemID || ids.Validate(ids.KindOperation, preparation.OperationID) != nil ||
-		len(preparation.Members) != 1 || preparation.Members[0].Intent.ServiceID != reference.ServiceID ||
-		len(preparation.Manifest.Record.Members) != 1 || preparation.Manifest.Revision <= 0 ||
+	if preparation.Input.Validate() != nil || preparation.Input.EnvironmentID != environmentID ||
+		preparation.Input.ParentTaskID != parentID ||
+		preparation.WorkItemID != reference.WorkItemID ||
+		ids.Validate(ids.KindOperation, preparation.OperationID) != nil ||
+		len(preparation.Members) != 1 ||
+		preparation.Members[0].Intent.ServiceID != reference.ServiceID ||
+		len(preparation.Manifest.Record.Members) != 1 ||
+		preparation.Manifest.Revision <= 0 ||
 		preparation.Manifest.Record.Members[0].ServiceID != reference.ServiceID ||
 		preparation.Manifest.Record.OperationID != preparation.OperationID {
 		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{},
@@ -195,7 +204,10 @@ func (ledger *ReleaseLedger) ReadBlueprintProxyServiceRollout(ctx context.Contex
 		preparation.Hooks[executionID] = sources
 	}
 	captureKey := releaserender.ServiceRolloutKey(environmentID, parentID, reference.WorkItemID)
-	native, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{captureKey}, Revision: read.ReadRevision})
+	native, err := ledger.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{captureKey}, Revision: read.ReadRevision},
+	)
 	if err != nil {
 		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.ServiceRolloutCapture]{}, err
 	}

@@ -246,7 +246,8 @@ func validateBackupRestoreDatabaseProgress(record BackupRestoreRecord, consumerC
 		}
 	case BackupRestoreFailedSafe:
 		if progress.ConsumersOnly {
-			if progress.ApplyStarted || !progress.SourceCleanupCompleted || progress.RecoveryCursor != record.ServiceCount {
+			if progress.ApplyStarted || !progress.SourceCleanupCompleted ||
+				progress.RecoveryCursor != record.ServiceCount {
 				return invalidBackupRuntimeRecord("failed-safe Restore has unfinished consumer recovery")
 			}
 		} else if record.MutationStarted || progress.ApplyStarted ||

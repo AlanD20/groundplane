@@ -28,7 +28,10 @@ func ValidateScriptCheckpointRequest(
 			owned.AttemptId,
 		) != nil || ids.Validate(ids.KindWorkItem, owned.WorkItemId) != nil ||
 		!validScriptCheckpointExecutionID(owned.ScriptExecutionId) || len(owned.InputSha256) != sha256.Size ||
-		ids.Validate(ids.KindPlan, owned.InputId) != nil || owned.Sequence == 0 || ids.Validate(ids.KindStep, owned.StageId) != nil ||
+		ids.Validate(
+			ids.KindPlan,
+			owned.InputId,
+		) != nil || owned.Sequence == 0 || ids.Validate(ids.KindStep, owned.StageId) != nil ||
 		owned.RecordedAt == nil || owned.RecordedAt.CheckValid() != nil || owned.RecordedAt.AsTime().IsZero() {
 		return nil, errs.New(errs.KindValidationFailed, "Script checkpoint delivery identity is invalid")
 	}

@@ -20,7 +20,8 @@ func DecodeAgentStartAck(ack *agentpb.WorkStartAck, expected Attempt) (time.Time
 		return time.Time{}, false, err
 	}
 	started := ack.StartedAt.AsTime().UTC()
-	if !SameAssignment(assigned, expected) || started.Before(expected.AssignedAt) || !started.Before(expected.Deadline) ||
+	if !SameAssignment(assigned, expected) || started.Before(expected.AssignedAt) ||
+		!started.Before(expected.Deadline) ||
 		expected.StartedAt != nil && (!expected.StartedAt.Equal(started) || !ack.Reconcile) {
 		return time.Time{}, false, conflict("Agent start acknowledgement differs from the saved assignment")
 	}

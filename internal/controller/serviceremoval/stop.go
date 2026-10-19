@@ -10,7 +10,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *AgentWork) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *AgentWork) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	return prepareStop(ctx, owner.queue, owner.inputs, task, item, at)
 }
 
@@ -20,7 +25,8 @@ func prepareStop(ctx context.Context, queue *workqueue.Repository, inputs *servi
 	if err := ctx.Err(); err != nil {
 		return workqueue.Change{}, err
 	}
-	if task.Task.Stop == nil || item.Item.Operation != workexecution.ServiceRemoval || item.Item.TaskID != task.Task.ID {
+	if task.Task.Stop == nil || item.Item.Operation != workexecution.ServiceRemoval ||
+		item.Item.TaskID != task.Task.ID {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Service removal has no matching stop request")
 	}
 	if item.Item.ActiveAttemptID != "" || item.Item.Cleanup != workexecution.CleanupNone {

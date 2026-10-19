@@ -16,7 +16,10 @@ import (
 
 // Reports can account for a previously authorized effect after revocation.
 // Reading its captured input does not grant the next stage permission.
-func (owner *AgentWork) capturedEnvironmentAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.EnvironmentRemovalAssignment, error) {
+func (owner *AgentWork) capturedEnvironmentAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.EnvironmentRemovalAssignment, error) {
 	item, attempt := view.Work.Item.Item, view.Attempt.Attempt
 	captured, err := owner.records.LoadHierarchyEnvironmentInput(ctx, view.Work)
 	if err != nil {
@@ -30,8 +33,11 @@ func (owner *AgentWork) capturedEnvironmentAssignment(ctx context.Context, view 
 	digest := sha256.Sum256(raw)
 	clear(raw)
 	removal := &agentpb.EnvironmentRemovalInput{
-		CapturedSource: &agentpb.WorkInputReference{InputId: ids.DeriveAt(ids.KindPlan, view.Work.Task.Task.CreatedAt, item.ID, "environment-removal-source"), Sha256: digest[:]},
-		EnvironmentId:  captured.Input.EnvironmentID, ExpectedVolumeDir: captured.Input.VolumeDirectory,
+		CapturedSource: &agentpb.WorkInputReference{
+			InputId: ids.DeriveAt(ids.KindPlan, view.Work.Task.Task.CreatedAt, item.ID, "environment-removal-source"),
+			Sha256:  digest[:],
+		},
+		EnvironmentId: captured.Input.EnvironmentID, ExpectedVolumeDir: captured.Input.VolumeDirectory,
 	}
 	if len(captured.Input.ComposeArtifact) != 0 {
 		removal.Compose = &agentpb.ComposeArtifact{}

@@ -35,7 +35,11 @@ func (platform *Platform) newConnectionWork() (*connectionWork, error) {
 	if err != nil {
 		return nil, err
 	}
-	backing, err := backingchecks.NewExecutor(backingRecords, platform.dependencies.Channel.Registry, platform.dependencies.Protector)
+	backing, err := backingchecks.NewExecutor(
+		backingRecords,
+		platform.dependencies.Channel.Registry,
+		platform.dependencies.Protector,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +59,14 @@ func (platform *Platform) newConnectionWork() (*connectionWork, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &connectionWork{connectorRecords: checkRecords, backingRecords: backingRecords, dnsRecords: dnsRecords, edgeRecords: edgeRecords,
-		connectors: checks, backings: backing, dns: dns, edges: edge}, nil
+	return &connectionWork{
+		connectorRecords: checkRecords,
+		backingRecords:   backingRecords,
+		dnsRecords:       dnsRecords,
+		edgeRecords:      edgeRecords,
+		connectors:       checks,
+		backings:         backing,
+		dns:              dns,
+		edges:            edge,
+	}, nil
 }

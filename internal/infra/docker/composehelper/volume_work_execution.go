@@ -100,7 +100,10 @@ func ExecuteVolumeWork(ctx context.Context, taskRunner runner.Runner, volumeRoot
 	return response, nil
 }
 
-func volumeObservationResponse(observation volumeexecution.Observation, inspection bool) (*agentpb.VolumeWorkHelperResponse, error) {
+func volumeObservationResponse(
+	observation volumeexecution.Observation,
+	inspection bool,
+) (*agentpb.VolumeWorkHelperResponse, error) {
 	digest, err := hex.DecodeString(observation.Input.SHA256)
 	if err != nil {
 		return nil, err

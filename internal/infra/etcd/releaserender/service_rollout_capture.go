@@ -49,13 +49,19 @@ func OpenServiceRolloutCapture(capture ServiceRolloutCapture) (ReleaseRenderInpu
 		capture.Render.Projection.EnvironmentID != capture.Scope.EnvironmentID ||
 		!IsReleaseAction(capture.Action) ||
 		capture.Action == workexecution.ActionApply && capture.Render.Projection.RevisionID != capture.TaskID {
-		return ReleaseRenderInput{}, errs.New(errs.KindValidationFailed, "Service rollout capture identity, action or deadline is invalid")
+		return ReleaseRenderInput{}, errs.New(
+			errs.KindValidationFailed,
+			"Service rollout capture identity, action or deadline is invalid",
+		)
 	}
 	if err := ValidateReleaseRenderInput(capture.Render); err != nil {
 		return ReleaseRenderInput{}, err
 	}
 	if capture.Group != nil && (capture.Group.Validate() != nil || capture.Action == workexecution.ActionApply) {
-		return ReleaseRenderInput{}, errs.New(errs.KindValidationFailed, "Service rollout Group binding is invalid for this action")
+		return ReleaseRenderInput{}, errs.New(
+			errs.KindValidationFailed,
+			"Service rollout Group binding is invalid for this action",
+		)
 	}
 	operation, err := ReleaseOperationKind(capture.Action)
 	if err != nil {

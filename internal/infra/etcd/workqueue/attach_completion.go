@@ -15,7 +15,10 @@ func (repository *Repository) ReadInterruptedAttachAt(ctx context.Context, view 
 		view.Work.Item.Item.Operation != workexecution.Attach || view.Attempt.Attempt.FinishedAt != nil ||
 		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
 		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
-		return Completion{}, errs.New(errs.KindStateConflict, "Attach reconciliation requires its replaced attempt and retained claims")
+		return Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Attach reconciliation requires its replaced attempt and retained claims",
+		)
 	}
 	return repository.readCompletionOwnership(ctx, view)
 }

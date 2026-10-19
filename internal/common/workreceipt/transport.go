@@ -107,7 +107,12 @@ func Describe(message *agentpb.AgentMessage) (*agentpb.WorkAttemptIdentity, stri
 	if identity == nil || executionplan.RejectUnknown(message) != nil || proto.Size(message) > MaximumBytes {
 		return nil, "", true, invalid()
 	}
-	executor := workexecution.Identity{Executor: workexecution.Agent, HostID: identity.HostId, AgentID: identity.AgentId, Generation: identity.ExecutorGeneration}
+	executor := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     identity.HostId,
+		AgentID:    identity.AgentId,
+		Generation: identity.ExecutorGeneration,
+	}
 	if _, err := workexecution.DecodeAgentAttempt(identity, executor); err != nil {
 		return nil, "", true, err
 	}
@@ -223,5 +228,8 @@ func Match(request *agentpb.AgentMessage, reply *agentpb.ControllerMessage) erro
 }
 
 func invalid() error {
-	return errs.New(errs.KindStateConflict, "terminal report replay differs from its captured assignment or result family")
+	return errs.New(
+		errs.KindStateConflict,
+		"terminal report replay differs from its captured assignment or result family",
+	)
 }

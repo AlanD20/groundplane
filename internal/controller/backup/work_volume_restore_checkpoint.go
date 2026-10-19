@@ -41,8 +41,12 @@ func (owner *AgentWork) prepareVolumeRestoreProgress(ctx context.Context,
 		checkpoint.GetVolumeReplacedPathCleaned() != nil {
 		var binding backupvolumetransfer.Binding
 		if admitted.Recovery != nil {
-			binding, err = backupvolumetransfer.BindRecoverySource(admitted.Recovery, view.Attempt.Attempt.Executor, ordinal,
-				agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_OLD)
+			binding, err = backupvolumetransfer.BindRecoverySource(
+				admitted.Recovery,
+				view.Attempt.Attempt.Executor,
+				ordinal,
+				agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_OLD,
+			)
 		} else {
 			binding, err = backupvolumetransfer.Bind(admitted.Assignment, view.Attempt.Attempt.Executor, ordinal,
 				agentpb.BackupVolumeManifestDirection_BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_OLD)
@@ -50,7 +54,11 @@ func (owner *AgentWork) prepareVolumeRestoreProgress(ctx context.Context,
 		if err != nil {
 			return workqueue.Change{}, err
 		}
-		old, err := owner.manifests.ReadComplete(ctx, backupvolumemanifest.Owner{Binding: binding}, view.Work.ReadRevision)
+		old, err := owner.manifests.ReadComplete(
+			ctx,
+			backupvolumemanifest.Owner{Binding: binding},
+			view.Work.ReadRevision,
+		)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
@@ -60,7 +68,10 @@ func (owner *AgentWork) prepareVolumeRestoreProgress(ctx context.Context,
 			return workqueue.Change{}, invalidVolumeManifestAuthority()
 		}
 		oldManifest = &old
-		conditions = append(conditions, keyvalue.Condition{Key: backupvolumemanifest.CursorKey(binding), ModRevision: old.Revision})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: backupvolumemanifest.CursorKey(binding), ModRevision: old.Revision},
+		)
 	}
 	if err := validateVolumeRestoreCheckpointEntries(checkpoint, newManifest, oldManifest); err != nil {
 		return workqueue.Change{}, err
@@ -73,9 +84,18 @@ func (owner *AgentWork) prepareVolumeRestoreProgress(ctx context.Context,
 	if !at.After(current.UpdatedAt) {
 		at = current.UpdatedAt.Add(time.Nanosecond)
 	}
-	change, err := owner.configRuntime.PrepareVolumeRestoreProgress(ctx, view, admitted,
-		keyvalue.Versioned[backupruntime.BackupRestoreRecord]{Record: current, Revision: guard.ModRevision, ReadRevision: view.Work.ReadRevision},
-		proof, at)
+	change, err := owner.configRuntime.PrepareVolumeRestoreProgress(
+		ctx,
+		view,
+		admitted,
+		keyvalue.Versioned[backupruntime.BackupRestoreRecord]{
+			Record:       current,
+			Revision:     guard.ModRevision,
+			ReadRevision: view.Work.ReadRevision,
+		},
+		proof,
+		at,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

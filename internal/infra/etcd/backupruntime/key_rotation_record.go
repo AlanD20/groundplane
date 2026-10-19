@@ -32,7 +32,10 @@ type BackupKeyRotationRecord struct {
 func validateBackupKeyRotationRecord(record BackupKeyRotationRecord) error {
 	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindWorkItem, record.WorkItemID) != nil ||
-		recordcodec.ValidateID(ids.KindPlan, record.InputID) != nil || !recordcodec.ValidSHA256(record.NextIdentitySHA256) ||
+		recordcodec.ValidateID(
+			ids.KindPlan,
+			record.InputID,
+		) != nil || !recordcodec.ValidSHA256(record.NextIdentitySHA256) ||
 		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
 		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		record.ExpectedCurrentRecordRevision <= 0 || record.ExpectedCurrentValueRevision <= 0 ||

@@ -35,14 +35,26 @@ type RouteWorkPublisher struct {
 	contents      *materializationcontent.Repository
 }
 
-func NewRouteWorkPublisher(repository *etcd.HierarchyRepository, desired *desiredrevisionstore.Repository, providers *taskplanning.RouteProviderCapture,
-	configuration *taskplanning.ComponentConfigurationCapture, snapshots *runtimeconfiguration.Repository,
+func NewRouteWorkPublisher(
+	repository *etcd.HierarchyRepository,
+	desired *desiredrevisionstore.Repository,
+	providers *taskplanning.RouteProviderCapture,
+	configuration *taskplanning.ComponentConfigurationCapture,
+	snapshots *runtimeconfiguration.Repository,
 	contents *materializationcontent.Repository,
 ) (*RouteWorkPublisher, error) {
-	if repository == nil || desired == nil || providers == nil || configuration == nil || snapshots == nil || contents == nil {
+	if repository == nil || desired == nil || providers == nil || configuration == nil || snapshots == nil ||
+		contents == nil {
 		return nil, errs.New(errs.KindInternal, "Route native publication is not configured")
 	}
-	return &RouteWorkPublisher{repository: repository, desired: desired, providers: providers, configuration: configuration, snapshots: snapshots, contents: contents}, nil
+	return &RouteWorkPublisher{
+		repository:    repository,
+		desired:       desired,
+		providers:     providers,
+		configuration: configuration,
+		snapshots:     snapshots,
+		contents:      contents,
+	}, nil
 }
 
 type routeWorkRequest struct {
@@ -58,7 +70,10 @@ type routeWorkRequest struct {
 	Action        workexecution.Action
 }
 
-func (publisher *RouteWorkPublisher) publish(ctx context.Context, request routeWorkRequest) (etcd.IdempotencyTransactionResult, error) {
+func (publisher *RouteWorkPublisher) publish(
+	ctx context.Context,
+	request routeWorkRequest,
+) (etcd.IdempotencyTransactionResult, error) {
 	marker, err := routeWorkResponse(request.Claim, request.Route)
 	if err != nil {
 		return etcd.IdempotencyTransactionResult{}, err
@@ -128,10 +143,13 @@ func (publisher *RouteWorkPublisher) publish(ctx context.Context, request routeW
 	}
 	capture := componentwork.Capture{Current: component.Record, CurrentRevision: component.Revision,
 		Candidate: component.Record, RuntimeRevision: runtime.Revision, Configuration: prepared.Capture,
-		Route: &componentwork.RouteSettlement{Record: request.Route, Remove: request.Action == workexecution.ActionRemove,
+		Route: &componentwork.RouteSettlement{
+			Record: request.Route,
+			Remove: request.Action == workexecution.ActionRemove,
 			Provider: routes.ProviderObservation{ComponentID: request.Provider.ComponentID,
 				DefinitionDigest: request.Provider.DefinitionDigest, CatalogDigest: request.Provider.CatalogDigest,
-				InputRevision: request.Provider.InputRevision, InputGeneration: request.Provider.InputGeneration}},
+				InputRevision: request.Provider.InputRevision, InputGeneration: request.Provider.InputGeneration},
+		},
 	}
 	if present {
 		predecessor, err := componentwork.CaptureRuntimePredecessor(runtime.Record)
@@ -148,9 +166,15 @@ func (publisher *RouteWorkPublisher) publish(ctx context.Context, request routeW
 		capture.Secrets = &binding
 	}
 	for _, zone := range request.Candidate.DesiredZones {
-		capture.Zones = append(capture.Zones, zonerecord.Record{EnvironmentID: zone.EnvironmentID, Desired: zone.Desired})
+		capture.Zones = append(
+			capture.Zones,
+			zonerecord.Record{EnvironmentID: zone.EnvironmentID, Desired: zone.Desired},
+		)
 	}
-	slices.SortFunc(capture.Zones, func(left, right zonerecord.Record) int { return strings.Compare(left.Desired.ID, right.Desired.ID) })
+	slices.SortFunc(
+		capture.Zones,
+		func(left, right zonerecord.Record) int { return strings.Compare(left.Desired.ID, right.Desired.ID) },
+	)
 	return publisher.repository.PublishRouteWork(ctx, etcd.RouteWorkPublication{
 		Project: request.Project, Environment: request.Environment, Target: request.Target, Current: request.Current,
 		Claim: request.Claim, Projection: request.Candidate, EpochRevision: request.EpochRevision,

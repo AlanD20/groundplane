@@ -12,7 +12,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *AgentWork) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *AgentWork) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	if request.Direction == workexecution.Recovery {
 		return owner.admitRecovery(ctx, request, at)
 	}
@@ -21,7 +25,10 @@ func (owner *AgentWork) Admit(ctx context.Context, request workqueue.Assignment,
 		(item.Operation != workexecution.BackupPrune && item.Operation != workexecution.Backup && item.Operation != workexecution.Restore) ||
 		item.Placement.Executor != workexecution.Agent || item.Phase != workexecution.Ready || item.ActiveAttemptID != "" ||
 		at.IsZero() || at.Before(item.UpdatedAt) || request.Executor.Record.Identity.HostID != item.Placement.HostID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Backup work is not ready for this host assignment")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Backup work is not ready for this host assignment",
+		)
 	}
 	view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
 	if task.Stop != nil || item.ForwardRevoked || !at.Before(item.Deadline) || !at.Before(task.Deadline) {
@@ -39,13 +46,25 @@ func (owner *AgentWork) Admit(ctx context.Context, request workqueue.Assignment,
 	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: deadline, Change: change}, nil
 }
 
-func (owner *AgentWork) admitRecovery(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *AgentWork) admitRecovery(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
-	if request.DecisionOnly || (item.Operation != workexecution.BackupPrune && item.Operation != workexecution.Backup && item.Operation != workexecution.Restore) || item.Placement.Executor != workexecution.Agent ||
-		item.Phase != workexecution.Ready || item.ActiveAttemptID != "" || at.IsZero() || at.Before(item.UpdatedAt) ||
+	if request.DecisionOnly ||
+		(item.Operation != workexecution.BackupPrune && item.Operation != workexecution.Backup && item.Operation != workexecution.Restore) ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Ready ||
+		item.ActiveAttemptID != "" ||
+		at.IsZero() ||
+		at.Before(item.UpdatedAt) ||
 		(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped) ||
 		request.Executor.Record.Identity.HostID != item.Placement.HostID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Backup recovery is not ready for this host assignment")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Backup recovery is not ready for this host assignment",
+		)
 	}
 	if !at.Before(item.Deadline) {
 		change, err := workqueue.PrepareCleanupRetryExpiry(request.Task, request.Item, at)
@@ -60,12 +79,22 @@ func (owner *AgentWork) admitRecovery(ctx context.Context, request workqueue.Ass
 	if err != nil {
 		return workdispatch.Decision{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: backupwork.RecoveryKey(item.ID), ModRevision: source.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: backupwork.RecoveryKey(item.ID), ModRevision: source.Revision},
+	)
 	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: item.Deadline, Change: change}, nil
 }
 
-func (owner *AgentWork) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
-	if task.Task.Stop == nil || (item.Item.Operation != workexecution.BackupPrune && item.Item.Operation != workexecution.Backup && item.Item.Operation != workexecution.Restore) || item.Item.TaskID != task.Task.ID {
+func (owner *AgentWork) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
+	if task.Task.Stop == nil ||
+		(item.Item.Operation != workexecution.BackupPrune && item.Item.Operation != workexecution.Backup && item.Item.Operation != workexecution.Restore) ||
+		item.Item.TaskID != task.Task.ID {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Backup work has no matching stop request")
 	}
 	if item.Item.ActiveAttemptID != "" || item.Item.Cleanup != workexecution.CleanupNone {

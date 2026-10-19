@@ -52,7 +52,11 @@ func (service *Service) PrepareServiceUnit(
 	if err != nil {
 		return Prepared{}, err
 	}
-	prerequisites, err := service.ledger.BlueprintWorkPrerequisiteConditions(ctx, input.Work, input.Projection.BlueprintRequirements)
+	prerequisites, err := service.ledger.BlueprintWorkPrerequisiteConditions(
+		ctx,
+		input.Work,
+		input.Projection.BlueprintRequirements,
+	)
 	if err != nil {
 		return Prepared{}, err
 	}

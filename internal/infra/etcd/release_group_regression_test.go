@@ -131,7 +131,8 @@ func TestReleaseGroupMaximumRemovalFitsRealTaskPublicationEnvelope(t *testing.T)
 		}
 	}
 	settled, err := queue.ReadWork(t.Context(), input.TaskID, input.WorkItemID, 0)
-	if err != nil || settled.Item.Item.Phase != workexecution.Settled || settled.Item.Item.Outcome != workexecution.Succeeded ||
+	if err != nil || settled.Item.Item.Phase != workexecution.Settled ||
+		settled.Item.Item.Outcome != workexecution.Succeeded ||
 		settled.Item.Revision != committed.Revision ||
 		settled.Task.Revision != committed.Revision {
 		t.Fatalf("Group removal did not join native progress: %#v, %v", settled, err)

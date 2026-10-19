@@ -24,7 +24,9 @@ const maximumAttachExecs = 16
 
 func (execution AttachExec) validate() error {
 	if len(execution.ContainerID) != 64 || len(execution.ExecID) != 64 ||
-		!ids.ValidContainerID(execution.ContainerID) || !ids.ValidContainerID(execution.ExecID) || execution.CreatedAt.IsZero() ||
+		!ids.ValidContainerID(
+			execution.ContainerID,
+		) || !ids.ValidContainerID(execution.ExecID) || execution.CreatedAt.IsZero() ||
 		(execution.ExitedAt == nil) != (execution.ExitCode == nil) {
 		return invalid()
 	}

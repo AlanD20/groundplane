@@ -77,7 +77,10 @@ func (repository *TaskRepository) PublishReleaseGroupRemoval(
 	}
 	if environment.Record.ID != input.Scope.EnvironmentID || project.Record.ID != environment.Record.ProjectID ||
 		project.Record.ID != input.Scope.ProjectID || project.Record.TenantID != input.Scope.TenantID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindScopeUnauthorized, "Release Group removal hierarchy changed")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindScopeUnauthorized,
+			"Release Group removal hierarchy changed",
+		)
 	}
 	task, item, err := input.Work()
 	if err != nil {
@@ -105,7 +108,13 @@ func (repository *TaskRepository) PublishReleaseGroupRemoval(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	desired, err := prepareDirectDesiredProjectionPublication(ctx, repository.store, input.Scope.EnvironmentID, marker, authoring.Apply)
+	desired, err := prepareDirectDesiredProjectionPublication(
+		ctx,
+		repository.store,
+		input.Scope.EnvironmentID,
+		marker,
+		authoring.Apply,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -114,9 +123,19 @@ func (repository *TaskRepository) PublishReleaseGroupRemoval(
 	mutations := append(work.Mutations, prepared.Mutations()...)
 	defer etcdstore.ClearMutationValues(mutations)
 	conditions = append(conditions, etcdstore.Condition{Key: groupstore.RemovalInputKey(input.WorkItemID)})
-	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: groupstore.RemovalInputKey(input.WorkItemID), Value: value},
+	mutations = append(
+		mutations,
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   groupstore.RemovalInputKey(input.WorkItemID),
+			Value: value,
+		},
 		etcdstore.Mutation{Type: etcdstore.MutationPut,
-			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), input.GroupID), Value: tombstoneValue})
+			Key: deletionrecord.TombstoneKey(
+				string(deletionrecord.DeletionTargetReleaseGroup),
+				input.GroupID,
+			), Value: tombstoneValue},
+	)
 	tenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -136,7 +155,12 @@ func (repository *TaskRepository) PublishReleaseGroupRemoval(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotencyrecord.IdempotencyMarkerTask, conditions, mutations, classify)
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotencyrecord.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

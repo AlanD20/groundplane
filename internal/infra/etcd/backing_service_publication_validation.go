@@ -180,14 +180,25 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if err != nil {
 		return err
 	}
-	if creation.Task.Validate() != nil || creation.Work.Input.Environment != creation.Environment || procedure.VolumeRoot != creation.VolumeRoot ||
-		procedure.ServiceId != creation.Service.Desired.ID || procedure.Runtime.Networks[0].NetworkId != creation.Zone.Desired.ID ||
-		creation.Task.ID != task.ID || creation.Task.Intent != task.Intent || creation.Task.Scope != task.Scope ||
-		creation.Task.Action != workexecution.ActionCreate || creation.Task.Actor != workexecution.OperatorActor ||
-		creation.Task.TargetID != task.TargetID || creation.Task.TargetName != task.TargetName ||
-		!creation.Task.CreatedAt.Equal(task.CreatedAt) || !creation.Task.UpdatedAt.Equal(task.CreatedAt) ||
-		!creation.Task.Deadline.Equal(task.Deadline) || creation.Task.ExpectedItems != 1 || creation.Task.PublicationComplete ||
-		creation.Task.Stop != nil || creation.Task.FinishedAt != nil || creation.Task.Progress.Total() != 0 ||
+	if creation.Task.Validate() != nil || creation.Work.Input.Environment != creation.Environment ||
+		procedure.VolumeRoot != creation.VolumeRoot ||
+		procedure.ServiceId != creation.Service.Desired.ID ||
+		procedure.Runtime.Networks[0].NetworkId != creation.Zone.Desired.ID ||
+		creation.Task.ID != task.ID ||
+		creation.Task.Intent != task.Intent ||
+		creation.Task.Scope != task.Scope ||
+		creation.Task.Action != workexecution.ActionCreate ||
+		creation.Task.Actor != workexecution.OperatorActor ||
+		creation.Task.TargetID != task.TargetID ||
+		creation.Task.TargetName != task.TargetName ||
+		!creation.Task.CreatedAt.Equal(task.CreatedAt) ||
+		!creation.Task.UpdatedAt.Equal(task.CreatedAt) ||
+		!creation.Task.Deadline.Equal(task.Deadline) ||
+		creation.Task.ExpectedItems != 1 ||
+		creation.Task.PublicationComplete ||
+		creation.Task.Stop != nil ||
+		creation.Task.FinishedAt != nil ||
+		creation.Task.Progress.Total() != 0 ||
 		item.Operation != workexecution.BackingProvision ||
 		(procedure.AfterStart != nil) != (creation.Service.Desired.Hooks != nil && creation.Service.Desired.Hooks.AfterStart != nil) {
 		return errs.New(errs.KindValidationFailed, "backing creation native work differs from its facade")

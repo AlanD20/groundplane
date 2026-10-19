@@ -14,7 +14,11 @@ import (
 
 // PrepareEntryWorkRetention retires disposable evidence only. Value generations
 // and applied receipts belong to resources, never to Task history collection.
-func (repository *Repository) PrepareEntryWorkRetention(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareEntryWorkRetention(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return workqueue.Change{}, err
@@ -27,7 +31,10 @@ func (repository *Repository) PrepareEntryWorkRetention(ctx context.Context, vie
 		return workqueue.Change{}, invalidRecord()
 	}
 	key := EntryWorkResultKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -36,11 +43,13 @@ func (repository *Repository) PrepareEntryWorkRetention(ctx context.Context, vie
 	}
 	defer keyvalue.ClearValues(read.Values)
 	value := read.Values[0]
-	if value == nil || value.Key != key || value.ModRevision <= 0 || value.ModRevision > view.ReadRevision || len(value.Value) > 4096 {
+	if value == nil || value.Key != key || value.ModRevision <= 0 || value.ModRevision > view.ReadRevision ||
+		len(value.Value) > 4096 {
 		return workqueue.Change{}, corruptRecord()
 	}
 	digest := sha256.Sum256(value.Value)
-	if item.Result.ID != ids.DeriveAt(ids.KindPlan, task.CreatedAt, item.ID, "entry-result") || item.Result.SHA256 != hex.EncodeToString(digest[:]) {
+	if item.Result.ID != ids.DeriveAt(ids.KindPlan, task.CreatedAt, item.ID, "entry-result") ||
+		item.Result.SHA256 != hex.EncodeToString(digest[:]) {
 		return workqueue.Change{}, corruptRecord()
 	}
 	return workqueue.Change{

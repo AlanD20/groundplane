@@ -37,7 +37,10 @@ func (owner *GroupPreflightPreparation) Prepare(ctx context.Context, taskID, wor
 	if err != nil {
 		return err
 	}
-	index := slices.IndexFunc(root.Record.Preflight, func(hook releasegroups.PreflightHook) bool { return hook.WorkItemID == workID })
+	index := slices.IndexFunc(
+		root.Record.Preflight,
+		func(hook releasegroups.PreflightHook) bool { return hook.WorkItemID == workID },
+	)
 	if index < 0 {
 		return errs.New(errs.KindStateConflict, "Script has no captured Group preflight membership")
 	}

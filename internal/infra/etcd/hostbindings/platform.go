@@ -37,7 +37,12 @@ func EncodePlatform(platform Platform) ([]byte, error) {
 	return recordcodec.Encode("host-platform", platform)
 }
 
-func ReadPlatform(ctx context.Context, store Reader, hostID string, revision int64) (keyvalue.Versioned[Platform], error) {
+func ReadPlatform(
+	ctx context.Context,
+	store Reader,
+	hostID string,
+	revision int64,
+) (keyvalue.Versioned[Platform], error) {
 	if ctx == nil || store == nil || ids.Validate(ids.KindHost, hostID) != nil || revision < 0 {
 		return keyvalue.Versioned[Platform]{}, errs.New(errs.KindValidationFailed, "host platform read is invalid")
 	}
@@ -64,5 +69,9 @@ func ReadPlatform(ctx context.Context, store Reader, hostID string, revision int
 	if platform.Validate() != nil || platform.HostID != hostID {
 		return keyvalue.Versioned[Platform]{}, errs.New(errs.KindInternal, "host platform identity is corrupt")
 	}
-	return keyvalue.Versioned[Platform]{Record: platform, Revision: value.ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[Platform]{
+		Record:       platform,
+		Revision:     value.ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }

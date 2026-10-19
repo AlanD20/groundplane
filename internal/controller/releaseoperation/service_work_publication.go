@@ -26,12 +26,24 @@ func (service *Service) publishServiceWork(ctx context.Context, scope releaseque
 	}
 	proxy := candidate.planning.Service.Record.Desired
 	proxy.Expose = proxy.ProxyExposures()
-	addresses, err := taskplanning.PrepareServiceProxyAddresses(ctx, service.ledger.Planner, projection, []core.Service{proxy})
+	addresses, err := taskplanning.PrepareServiceProxyAddresses(
+		ctx,
+		service.ledger.Planner,
+		projection,
+		[]core.Service{proxy},
+	)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
 	defer addresses.Clear()
-	task, item, request, rollout, err := service.captureServiceWork(ctx, scope, projection, candidate, addresses, durable.CiphertextDigest)
+	task, item, request, rollout, err := service.captureServiceWork(
+		ctx,
+		scope,
+		projection,
+		candidate,
+		addresses,
+		durable.CiphertextDigest,
+	)
 	defer clear(rollout.CandidateArtifact)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err

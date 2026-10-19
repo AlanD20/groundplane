@@ -10,7 +10,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (owner *Work) report(ctx context.Context, delivery workqueue.Delivery, key, name, expected string, running bool, effectErr error) {
+func (owner *Work) report(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+	key, name, expected string,
+	running bool,
+	effectErr error,
+) {
 	attempt := delivery.Attempt.Attempt
 	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
@@ -20,13 +26,25 @@ func (owner *Work) report(ctx context.Context, delivery workqueue.Delivery, key,
 		// accepted typed receipt supplies the terminal inspection instead.
 		return
 	}
-	snapshot, err := owner.diagnostics.Read(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, view.Work.ReadRevision)
+	snapshot, err := owner.diagnostics.Read(
+		bounded,
+		attempt.TaskID,
+		attempt.WorkItemID,
+		attempt.ID,
+		view.Work.ReadRevision,
+	)
 	if err != nil {
 		slog.WarnContext(ctx, "Agent lifecycle diagnostics unavailable", "attempt_id", attempt.ID, "error", err)
 		return
 	}
 	at := time.Now().UTC()
-	stage := workexecution.Stage{Key: key, Name: name, Expected: expected, State: workexecution.StageRunning, StartedAt: &at}
+	stage := workexecution.Stage{
+		Key:       key,
+		Name:      name,
+		Expected:  expected,
+		State:     workexecution.StageRunning,
+		StartedAt: &at,
+	}
 	sequence := uint64(1)
 	if snapshot.Record != nil {
 		sequence = snapshot.Record.Sequence + 1

@@ -27,18 +27,37 @@ type Work struct {
 
 // A nil coordinator explicitly represents a foreground process without native
 // bootstrap. Such a process cannot admit or reconcile host software activation.
-func NewWork(queue *workqueue.Repository, inputs *controllersoftware.Repository, coordinator *Coordinator, diagnostics *executiondiagnostics.Repository) (*Work, error) {
+func NewWork(
+	queue *workqueue.Repository,
+	inputs *controllersoftware.Repository,
+	coordinator *Coordinator,
+	diagnostics *executiondiagnostics.Repository,
+) (*Work, error) {
 	if queue == nil || inputs == nil || diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "Controller software work dependencies are incomplete")
 	}
-	return &Work{queue: queue, inputs: inputs, coordinator: coordinator, diagnostics: diagnostics, observations: make(map[string][]workexecution.Stage)}, nil
+	return &Work{
+		queue:        queue,
+		inputs:       inputs,
+		coordinator:  coordinator,
+		diagnostics:  diagnostics,
+		observations: make(map[string][]workexecution.Stage),
+	}, nil
 }
 
 func captureGuard(capture keyvalue.Versioned[controllersoftware.Capture]) workqueue.Change {
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: controllersoftware.InputKey(capture.Record.WorkItemID), ModRevision: capture.Revision}}}
+	return workqueue.Change{
+		Conditions: []keyvalue.Condition{
+			{Key: controllersoftware.InputKey(capture.Record.WorkItemID), ModRevision: capture.Revision},
+		},
+	}
 }
 
-func (owner *Work) origin(ctx context.Context, item workexecution.Item, revision int64) (keyvalue.Versioned[controllersoftware.Capture], upgrade.Journal, error) {
+func (owner *Work) origin(
+	ctx context.Context,
+	item workexecution.Item,
+	revision int64,
+) (keyvalue.Versioned[controllersoftware.Capture], upgrade.Journal, error) {
 	capture, err := owner.inputs.Load(ctx, item, revision)
 	if err != nil {
 		return capture, upgrade.Journal{}, err
@@ -47,25 +66,39 @@ func (owner *Work) origin(ctx context.Context, item workexecution.Item, revision
 	if err != nil {
 		return capture, upgrade.Journal{}, err
 	}
-	if first.Attempt.Direction != workexecution.Forward || first.Attempt.Input != *item.Input || first.Attempt.Executor.Executor != workexecution.Controller {
-		return capture, upgrade.Journal{}, errs.New(errs.KindStateConflict, "Controller activation has no original forward assignment")
+	if first.Attempt.Direction != workexecution.Forward || first.Attempt.Input != *item.Input ||
+		first.Attempt.Executor.Executor != workexecution.Controller {
+		return capture, upgrade.Journal{}, errs.New(
+			errs.KindStateConflict,
+			"Controller activation has no original forward assignment",
+		)
 	}
 	expected, err := capture.Record.Journal(first.Attempt.AssignedAt, first.Attempt.Deadline)
 	return capture, expected, err
 }
 
-func (owner *Work) loadDelivery(ctx context.Context, delivery workqueue.Delivery) (keyvalue.Versioned[controllersoftware.Capture], upgrade.Journal, error) {
+func (owner *Work) loadDelivery(
+	ctx context.Context,
+	delivery workqueue.Delivery,
+) (keyvalue.Versioned[controllersoftware.Capture], upgrade.Journal, error) {
 	item, attempt := delivery.Item.Item, delivery.Attempt.Attempt
 	if workexecution.ValidateDelivery(item, attempt) != nil || attempt.Executor.Executor != workexecution.Controller ||
 		item.ActiveAttemptID != attempt.ID || attempt.FinishedAt != nil {
-		return keyvalue.Versioned[controllersoftware.Capture]{}, upgrade.Journal{}, errs.New(errs.KindStateConflict, "Controller activation delivery is not its active attempt")
+		return keyvalue.Versioned[controllersoftware.Capture]{}, upgrade.Journal{}, errs.New(
+			errs.KindStateConflict,
+			"Controller activation delivery is not its active attempt",
+		)
 	}
 	view, err := owner.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 	if err != nil {
 		return keyvalue.Versioned[controllersoftware.Capture]{}, upgrade.Journal{}, err
 	}
-	if !view.ActiveAttempt || view.Attempt.Attempt.FinishedAt != nil || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
-		return keyvalue.Versioned[controllersoftware.Capture]{}, upgrade.Journal{}, errs.New(errs.KindStateConflict, "Controller activation ownership changed")
+	if !view.ActiveAttempt || view.Attempt.Attempt.FinishedAt != nil ||
+		!workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
+		return keyvalue.Versioned[controllersoftware.Capture]{}, upgrade.Journal{}, errs.New(
+			errs.KindStateConflict,
+			"Controller activation ownership changed",
+		)
 	}
 	if err := owner.inputs.VerifyRecoveryClaim(ctx, view.Work.Item.Item, view.Work.ReadRevision); err != nil {
 		return keyvalue.Versioned[controllersoftware.Capture]{}, upgrade.Journal{}, err
@@ -103,8 +136,13 @@ func (owner *Work) RejectUnstarted(ctx context.Context, delivery workqueue.Deliv
 	if attempt.StartedAt != nil {
 		return errs.New(errs.KindStateConflict, "started Controller activation requires handoff reconciliation")
 	}
-	result := upgrade.ExecutionResult{Outcome: workexecution.Failed, Settled: attempt.Direction == workexecution.Forward,
-		Failure: taskprogress.CaptureControllerFailure(errs.New(errs.KindRequestFailed, "Controller activation stopped before execution"))}
+	result := upgrade.ExecutionResult{
+		Outcome: workexecution.Failed,
+		Settled: attempt.Direction == workexecution.Forward,
+		Failure: taskprogress.CaptureControllerFailure(
+			errs.New(errs.KindRequestFailed, "Controller activation stopped before execution"),
+		),
+	}
 	return owner.inputs.SaveResult(ctx, owner.queue, attempt, expected, result, time.Now().UTC())
 }
 
@@ -147,7 +185,12 @@ func (owner *Work) run(ctx context.Context, delivery workqueue.Delivery, forward
 			return err
 		}
 	}
-	observer := &workObserver{repository: owner.diagnostics, attempt: attempt, ctx: ctx, terminalOnly: !view.CurrentExecutor}
+	observer := &workObserver{
+		repository:   owner.diagnostics,
+		attempt:      attempt,
+		ctx:          ctx,
+		terminalOnly: !view.CurrentExecutor,
+	}
 	result, executionErr := owner.coordinator.Execute(ctx, expected, forward, observer)
 	if executionErr != nil {
 		// Daemon replacement/shutdown leaves the original attempt alive. The
@@ -176,7 +219,8 @@ func (owner *Work) ControllerRecovery(ctx context.Context, taskID string) (upgra
 	if err != nil {
 		return upgrade.Journal{}, err
 	}
-	if task.Task.ExpectedItems < 1 || task.Task.ExpectedItems > 3 || task.Task.CollectionStartedAt != nil || task.Task.FinishedAt != nil {
+	if task.Task.ExpectedItems < 1 || task.Task.ExpectedItems > 3 || task.Task.CollectionStartedAt != nil ||
+		task.Task.FinishedAt != nil {
 		return upgrade.Journal{}, errs.New(errs.KindStateConflict, "native handoff has no unfinished Controller work")
 	}
 	page, err := owner.queue.ListWork(ctx, taskID, "", 3, revision)
@@ -192,7 +236,10 @@ func (owner *Work) ControllerRecovery(ctx context.Context, taskID string) (upgra
 			continue
 		}
 		if item.ID != "" || candidate.Item.Phase == workexecution.Settled {
-			return upgrade.Journal{}, errs.New(errs.KindStateConflict, "native handoff Controller membership is ambiguous or settled")
+			return upgrade.Journal{}, errs.New(
+				errs.KindStateConflict,
+				"native handoff Controller membership is ambiguous or settled",
+			)
 		}
 		item = candidate.Item
 	}
@@ -204,7 +251,10 @@ func (owner *Work) ControllerRecovery(ctx context.Context, taskID string) (upgra
 		return upgrade.Journal{}, err
 	}
 	if first.Attempt.StartedAt == nil {
-		return upgrade.Journal{}, errs.New(errs.KindStateConflict, "native handoff journal has no durable execution start")
+		return upgrade.Journal{}, errs.New(
+			errs.KindStateConflict,
+			"native handoff journal has no durable execution start",
+		)
 	}
 	_, expected, err := owner.origin(ctx, item, revision)
 	if err != nil {

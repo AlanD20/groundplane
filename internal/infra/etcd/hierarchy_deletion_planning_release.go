@@ -7,7 +7,11 @@ import (
 
 // Release only the initiating marker; all other fields come from the current
 // CAS-protected resource. No historical resource definition is restored.
-func releaseHierarchyPlanningRoot(kind hierarchydeletion.HierarchyDeletionTargetKind, id, taskID string, raw []byte) ([]byte, error) {
+func releaseHierarchyPlanningRoot(
+	kind hierarchydeletion.HierarchyDeletionTargetKind,
+	id, taskID string,
+	raw []byte,
+) ([]byte, error) {
 	switch kind {
 	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		value, err := hierarchy.DecodeTenant(raw)

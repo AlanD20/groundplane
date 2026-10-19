@@ -19,7 +19,10 @@ func (executor *CheckExecutor) PrepareWorkRetry(ctx context.Context, task workqu
 ) (workqueue.Change, error) {
 	if previous.Attempt.Result == nil || item.Item.Operation != workexecution.ConnectorCheck ||
 		item.Item.TaskID != task.Task.ID || item.Item.Input == nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "connector cleanup has no recorded execution to retry")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"connector cleanup has no recorded execution to retry",
+		)
 	}
 	loaded, err := executor.repository.LoadAt(ctx, task.Task.ID, revision)
 	if err != nil {
@@ -31,7 +34,10 @@ func (executor *CheckExecutor) PrepareWorkRetry(ctx context.Context, task workqu
 	if err != nil || record.Phase != connectorchecks.CleanupRequired || record.Owner.TaskID != task.Task.ID ||
 		record.Owner.WorkItemID != item.Item.ID || record.Owner.PlanID != item.Item.Input.ID ||
 		digest != item.Item.Input.SHA256 || record.Connector.Connector.ID != item.Item.TargetID {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "only captured pending Connector cleanup can be retried")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"only captured pending Connector cleanup can be retried",
+		)
 	}
 	change, err := workqueue.PrepareRetry(task, item, previous, workexecution.RetryDecision{
 		Direction: workexecution.Recovery, Result: *previous.Attempt.Result,
@@ -40,6 +46,9 @@ func (executor *CheckExecutor) PrepareWorkRetry(ctx context.Context, task workqu
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: connectorchecks.Key(task.Task.ID), ModRevision: loaded.Revision})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: connectorchecks.Key(task.Task.ID), ModRevision: loaded.Revision},
+	)
 	return change, nil
 }

@@ -16,8 +16,18 @@ import (
 
 type SourceExchange interface {
 	RequestBackupSecrets(context.Context, *agentpb.WorkAttemptIdentity, uint32) error
-	BackupCheckpoint(context.Context, *agentpb.BackupWorkInput, *agentpb.BackupWorkCheckpointRequest) (*agentpb.BackupWorkCheckpointAck, error)
-	ConsumeBackupSecret(context.Context, *agentpb.WorkAttemptIdentity, uint32, agentpb.BackupSecretSlotPurpose, func([]byte) error) error
+	BackupCheckpoint(
+		context.Context,
+		*agentpb.BackupWorkInput,
+		*agentpb.BackupWorkCheckpointRequest,
+	) (*agentpb.BackupWorkCheckpointAck, error)
+	ConsumeBackupSecret(
+		context.Context,
+		*agentpb.WorkAttemptIdentity,
+		uint32,
+		agentpb.BackupSecretSlotPurpose,
+		func([]byte) error,
+	) error
 }
 
 // Prune executes captured sources under an already acknowledged start grant.
@@ -48,7 +58,11 @@ func Prune(ctx context.Context, assignment *agentpb.BackupWorkAssignment, attemp
 			return errs.New(errs.KindValidationFailed, "Backup prune source must identify one captured object")
 		}
 		object := prune.Objects[0]
-		expected := &agentpb.BackupPruneObjectDeleted{Ordinal: object.Ordinal, PointId: object.PointId, Object: proto.CloneOf(object.Object)}
+		expected := &agentpb.BackupPruneObjectDeleted{
+			Ordinal: object.Ordinal,
+			PointId: object.PointId,
+			Object:  proto.CloneOf(object.Object),
+		}
 		if resume.CheckpointSequence == 1 {
 			if !proto.Equal(resume.GetObjectDeleted(), expected) {
 				return errs.New(errs.KindStateConflict, "Backup prune resume identifies another object")
@@ -75,8 +89,12 @@ func Prune(ctx context.Context, assignment *agentpb.BackupWorkAssignment, attemp
 		if err != nil {
 			return err
 		}
-		request := &agentpb.BackupWorkCheckpointRequest{Attempt: proto.CloneOf(owned.Attempt), SourceOrdinal: uint32(ordinal),
-			CheckpointSequence: 1, Checkpoint: &agentpb.BackupWorkCheckpointRequest_PruneObjectDeleted{PruneObjectDeleted: expected}}
+		request := &agentpb.BackupWorkCheckpointRequest{
+			Attempt:            proto.CloneOf(owned.Attempt),
+			SourceOrdinal:      uint32(ordinal),
+			CheckpointSequence: 1,
+			Checkpoint:         &agentpb.BackupWorkCheckpointRequest_PruneObjectDeleted{PruneObjectDeleted: expected},
+		}
 		// Save/report an observed effect even if its execution deadline just
 		// expired. The Controller decides settlement; never delete it again.
 		reportCtx, reportCancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)

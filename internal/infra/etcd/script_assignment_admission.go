@@ -34,7 +34,10 @@ func (artifacts *ScriptWorkArtifacts) Clear() {
 
 // ResolveScriptWorkArtifacts reads only captured generations at the native work
 // revision. It never reconstructs a generic plan or chooses current desired input.
-func (repository *ScriptRepository) ResolveScriptWorkArtifacts(ctx context.Context, view workqueue.View) (*ScriptWorkArtifacts, error) {
+func (repository *ScriptRepository) ResolveScriptWorkArtifacts(
+	ctx context.Context,
+	view workqueue.View,
+) (*ScriptWorkArtifacts, error) {
 	input, err := repository.LoadRetainedScriptWork(ctx, view)
 	if err != nil {
 		return nil, err
@@ -42,7 +45,11 @@ func (repository *ScriptRepository) ResolveScriptWorkArtifacts(ctx context.Conte
 	return repository.resolveScriptWorkArtifacts(ctx, view, input)
 }
 
-func (repository *ScriptRepository) resolveScriptWorkArtifacts(ctx context.Context, view workqueue.View, input ScriptWorkInput) (*ScriptWorkArtifacts, error) {
+func (repository *ScriptRepository) resolveScriptWorkArtifacts(
+	ctx context.Context,
+	view workqueue.View,
+	input ScriptWorkInput,
+) (*ScriptWorkArtifacts, error) {
 	artifacts := &ScriptWorkArtifacts{
 		Input: input, Snapshot: &agentpb.ResolvedRunnerSnapshot{},
 		Projection: &agentpb.ScriptRunnerProjection{}, Run: &agentpb.RunScript{},
@@ -59,7 +66,10 @@ func (repository *ScriptRepository) resolveScriptWorkArtifacts(ctx context.Conte
 	metadata := artifacts.Body.Metadata
 	key := scriptrecord.ScriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration,
 		metadata.ScriptId, metadata.Generation)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return fail(err)
 	}
@@ -81,6 +91,9 @@ func (repository *ScriptRepository) resolveScriptWorkArtifacts(ctx context.Conte
 	if len(artifacts.Body.Body) != int(metadata.Size) || hex.EncodeToString(digest[:]) != body.BodySHA256 {
 		return fail(errs.New(errs.KindInternal, "Script body content does not match captured digest"))
 	}
-	artifacts.Input.Conditions = append(artifacts.Input.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
+	artifacts.Input.Conditions = append(
+		artifacts.Input.Conditions,
+		keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision},
+	)
 	return artifacts, nil
 }

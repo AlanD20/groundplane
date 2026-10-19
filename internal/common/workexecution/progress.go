@@ -135,10 +135,13 @@ func CountRetry(task Task, before, after Item, at time.Time) (Task, error) {
 	if err := after.Validate(); err != nil {
 		return Task{}, err
 	}
-	if !task.PublicationComplete || task.CollectionStartedAt != nil || before.TaskID != task.ID || after.TaskID != task.ID ||
-		before.ID != after.ID || before.AttemptNumber != after.AttemptNumber ||
+	if !task.PublicationComplete || task.CollectionStartedAt != nil || before.TaskID != task.ID ||
+		after.TaskID != task.ID ||
+		before.ID != after.ID ||
+		before.AttemptNumber != after.AttemptNumber ||
 		before.Phase != Settled && before.Phase != Attention ||
-		after.Phase != Ready && after.Phase != Waiting || at.Before(task.UpdatedAt) {
+		after.Phase != Ready && after.Phase != Waiting ||
+		at.Before(task.UpdatedAt) {
 		return Task{}, conflict("task cannot resume this captured work")
 	}
 	if task.Stop != nil && after.Cleanup == CleanupNone {

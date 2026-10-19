@@ -47,7 +47,10 @@ func (repository *InputRepository) PrepareCompletion(ctx context.Context, view w
 			keyvalue.ZeroMutationBytes(change.Mutations)
 		}
 	}()
-	record, err := completed.Source.Generation.Record.PendingRecord(view.Work.Task.Task.ID, view.Work.Task.Task.CreatedAt)
+	record, err := completed.Source.Generation.Record.PendingRecord(
+		view.Work.Task.Task.ID,
+		view.Work.Task.Task.CreatedAt,
+	)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
@@ -56,13 +59,19 @@ func (repository *InputRepository) PrepareCompletion(ctx context.Context, view w
 	if err != nil {
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: attachments.AttachKey(record.ID), Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: attachments.AttachKey(record.ID), Value: value},
+	)
 	if record.OwnsCredential() && len(completed.Facts.Ciphertext) != 0 {
 		facts, err := attachments.EncodeAttachEncryptedFacts(completed.Facts)
 		if err != nil {
 			return workqueue.Change{}, workexecution.Input{}, err
 		}
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: attachments.AttachFactsKey(record.ID), Value: facts})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: attachments.AttachFactsKey(record.ID), Value: facts},
+		)
 	}
 	result := Result{Attempt: view.Attempt.Attempt, Checkpoint: *view.Checkpoint.Record, AttachID: record.ID,
 		FactsSHA256: completed.Facts.CiphertextSHA256, CompletedAt: at}
@@ -77,7 +86,13 @@ func (repository *InputRepository) PrepareCompletion(ctx context.Context, view w
 	if record.OwnsCredential() && len(completed.Facts.Ciphertext) != 0 {
 		ownFacts = &completed.Facts
 	}
-	applied, err := repository.prepareAppliedBinding(ctx, view.Work, completed.Source.Generation.Record, record, ownFacts)
+	applied, err := repository.prepareAppliedBinding(
+		ctx,
+		view.Work,
+		completed.Source.Generation.Record,
+		record,
+		ownFacts,
+	)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
@@ -88,13 +103,21 @@ func (repository *InputRepository) PrepareCompletion(ctx context.Context, view w
 
 func encodeResult(result Result) ([]byte, workexecution.Input, error) {
 	attempt := result.Attempt
-	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward || attempt.Executor.Executor != workexecution.Agent ||
-		attempt.StartedAt == nil || attempt.FinishedAt != nil || attempt.Result != nil ||
-		ids.Validate(ids.KindAttach, result.AttachID) != nil || result.FactsSHA256 != "" && !recordcodec.ValidSHA256(result.FactsSHA256) ||
-		result.Checkpoint.AttemptID != attempt.ID || result.Checkpoint.Sequence == 0 ||
-		result.Checkpoint.Evidence.Validate() != nil || ids.Validate(ids.KindStep, result.Checkpoint.StageID) != nil ||
-		result.Checkpoint.RecordedAt.Before(*attempt.StartedAt) || result.CompletedAt.Before(result.Checkpoint.RecordedAt) ||
-		result.CompletedAt.IsZero() || result.CompletedAt.Location() != time.UTC {
+	if attempt.Validate() != nil || attempt.Direction != workexecution.Forward ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		attempt.StartedAt == nil ||
+		attempt.FinishedAt != nil ||
+		attempt.Result != nil ||
+		ids.Validate(ids.KindAttach, result.AttachID) != nil ||
+		result.FactsSHA256 != "" && !recordcodec.ValidSHA256(result.FactsSHA256) ||
+		result.Checkpoint.AttemptID != attempt.ID ||
+		result.Checkpoint.Sequence == 0 ||
+		result.Checkpoint.Evidence.Validate() != nil ||
+		ids.Validate(ids.KindStep, result.Checkpoint.StageID) != nil ||
+		result.Checkpoint.RecordedAt.Before(*attempt.StartedAt) ||
+		result.CompletedAt.Before(result.Checkpoint.RecordedAt) ||
+		result.CompletedAt.IsZero() ||
+		result.CompletedAt.Location() != time.UTC {
 		return nil, workexecution.Input{}, checkpointConflict("Attach completion result has invalid execution evidence")
 	}
 	raw, err := recordcodec.Encode("attach-provision-result", result)
@@ -102,16 +125,23 @@ func encodeResult(result Result) ([]byte, workexecution.Input, error) {
 		return nil, workexecution.Input{}, err
 	}
 	digest := sha256.Sum256(raw)
-	return raw, workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, attempt.AssignedAt, attempt.ID, "attach-binding-result"), SHA256: hex.EncodeToString(digest[:])}, nil
+	return raw, workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, attempt.AssignedAt, attempt.ID, "attach-binding-result"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }
 
 func (repository *InputRepository) LoadResult(ctx context.Context, view workqueue.ResumeView) (Result, error) {
 	attempt := view.Attempt.Attempt
-	if attempt.FinishedAt == nil || attempt.Result == nil || view.Work.Item.Item.Operation != workexecution.Attach || view.Work.ReadRevision <= 0 {
+	if attempt.FinishedAt == nil || attempt.Result == nil || view.Work.Item.Item.Operation != workexecution.Attach ||
+		view.Work.ReadRevision <= 0 {
 		return Result{}, checkpointConflict("Attach has no retained binding settlement")
 	}
 	key := ResultKey(attempt.WorkItemID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}

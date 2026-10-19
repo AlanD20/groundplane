@@ -19,7 +19,10 @@ func (repository *Repository) PruneInput(ctx context.Context, taskID string, at 
 	if ids.Validate(ids.KindTask, taskID) != nil || !recordcodec.IsCanonicalUTC(at) {
 		return false, invalid()
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{Key(taskID), workqueue.TaskKey(taskID)}})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{Key(taskID), workqueue.TaskKey(taskID)}},
+	)
 	if err != nil {
 		return false, err
 	}
@@ -94,7 +97,10 @@ func (repository *Repository) PruneInput(ctx context.Context, taskID string, at 
 	conditions := []keyvalue.Condition{{Key: Key(taskID), ModRevision: read.Values[0].ModRevision},
 		{Key: workqueue.TaskKey(taskID), ModRevision: read.Values[1].ModRevision}}
 	for index, key := range keys {
-		conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(owned.Values[index])})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(owned.Values[index])},
+		)
 	}
 	mutations := []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: Key(taskID)}}
 	if selectionKey != "" {

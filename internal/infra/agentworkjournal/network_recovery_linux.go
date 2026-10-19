@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 )
 
-func (journal *Journal) PrepareNetworkRecovery(ctx context.Context, attempt workexecution.Attempt, captured NetworkRecoveryRecord) (*NetworkRecoveryRecord, error) {
+func (journal *Journal) PrepareNetworkRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	captured NetworkRecoveryRecord,
+) (*NetworkRecoveryRecord, error) {
 	if attempt.StartedAt == nil || captured.Report != nil || captured.Receipt != nil || captured.Failure != nil {
 		return nil, invalid()
 	}
@@ -27,8 +31,12 @@ func (journal *Journal) PrepareNetworkRecovery(ctx context.Context, attempt work
 	}
 	if previous != nil {
 		old := previous.NetworkRecovery
-		if old == nil || !workexecution.SameAssignment(previous.Attempt, attempt) || previous.Attempt.StartedAt == nil || !previous.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
-			old.Action != captured.Action || old.NetworkID != captured.NetworkID || !networkexecution.EqualProgress(old.Boundary, captured.Boundary) {
+		if old == nil || !workexecution.SameAssignment(previous.Attempt, attempt) ||
+			previous.Attempt.StartedAt == nil ||
+			!previous.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
+			old.Action != captured.Action ||
+			old.NetworkID != captured.NetworkID ||
+			!networkexecution.EqualProgress(old.Boundary, captured.Boundary) {
 			return nil, conflict()
 		}
 		left, err := networkexecution.EncodeRecovery(old.Source)
@@ -54,7 +62,11 @@ func (journal *Journal) PrepareNetworkRecovery(ctx context.Context, attempt work
 	return state.NetworkRecovery, nil
 }
 
-func (journal *Journal) SaveNetworkRecoveryReport(ctx context.Context, attempt workexecution.Attempt, report networkexecution.RecoveryReport) error {
+func (journal *Journal) SaveNetworkRecoveryReport(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	report networkexecution.RecoveryReport,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -71,12 +83,26 @@ func (journal *Journal) SaveNetworkRecoveryReport(ctx context.Context, attempt w
 	if recovery.Failure != nil {
 		return conflict()
 	}
-	raw, _, err := networkexecution.EncodeRecoveryReport(state.Attempt, recovery.Source, recovery.Action, recovery.NetworkID, recovery.Boundary, report)
+	raw, _, err := networkexecution.EncodeRecoveryReport(
+		state.Attempt,
+		recovery.Source,
+		recovery.Action,
+		recovery.NetworkID,
+		recovery.Boundary,
+		report,
+	)
 	if err != nil {
 		return err
 	}
 	if recovery.Report != nil {
-		previous, _, err := networkexecution.EncodeRecoveryReport(state.Attempt, recovery.Source, recovery.Action, recovery.NetworkID, recovery.Boundary, *recovery.Report)
+		previous, _, err := networkexecution.EncodeRecoveryReport(
+			state.Attempt,
+			recovery.Source,
+			recovery.Action,
+			recovery.NetworkID,
+			recovery.Boundary,
+			*recovery.Report,
+		)
 		if err != nil || !bytes.Equal(previous, raw) {
 			return conflict()
 		}
@@ -96,11 +122,15 @@ func (journal *Journal) AcknowledgeNetworkRecovery(ctx context.Context, attempt,
 	if err != nil {
 		return err
 	}
-	if state == nil || state.NetworkRecovery == nil || state.NetworkRecovery.Report == nil || !workexecution.SameAssignment(state.Attempt, attempt) || terminal.FinishedAt == nil || terminal.Result == nil {
+	if state == nil || state.NetworkRecovery == nil || state.NetworkRecovery.Report == nil ||
+		!workexecution.SameAssignment(state.Attempt, attempt) ||
+		terminal.FinishedAt == nil ||
+		terminal.Result == nil {
 		return conflict()
 	}
 	if previous := state.NetworkRecovery.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) || *previous.Result != *terminal.Result {
+		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*previous.Result != *terminal.Result {
 			return conflict()
 		}
 		return nil

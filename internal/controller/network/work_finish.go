@@ -12,13 +12,20 @@ import (
 
 // PrepareFinish closes a direct resource action only after its work owner has
 // atomically settled the host result and resource state.
-func (owner *AgentWork) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
+func (owner *AgentWork) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	_ time.Time,
+) (workqueue.Change, error) {
 	task := finished.Task.Task
 	if task.Action == workexecution.ActionRemove && task.Scope.TenantID == "" {
 		return owner.inputs.PrepareCascadeFinish(ctx, finished)
 	}
 	if task.ExpectedItems != 1 || len(finished.Items) != 1 || task.Action != workexecution.ActionRemove {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Network action requires one settled resource operation")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Network action requires one settled resource operation",
+		)
 	}
 	item := finished.Items[0]
 	if item.Item.Operation != workexecution.Network || item.Item.TaskID != task.ID ||

@@ -10,15 +10,35 @@ import (
 )
 
 type VolumeReporter interface {
-	CheckpointVolume(context.Context, agentregistration.WorkAuthorization, *agentpb.VolumeWorkCheckpointRequest) (*agentpb.VolumeWorkCheckpointAck, error)
-	CompleteVolume(context.Context, agentregistration.WorkAuthorization, *agentpb.VolumeWorkCompletionRequest) (*agentpb.VolumeWorkCompletionAck, error)
-	FailVolume(context.Context, agentregistration.WorkAuthorization, *agentpb.VolumeWorkFailureRequest) (*agentpb.VolumeWorkFailureAck, error)
-	RecoverVolume(context.Context, agentregistration.WorkAuthorization, *agentpb.VolumeWorkRecoveryReportRequest) (*agentpb.VolumeWorkRecoveryReportAck, error)
+	CheckpointVolume(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.VolumeWorkCheckpointRequest,
+	) (*agentpb.VolumeWorkCheckpointAck, error)
+	CompleteVolume(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.VolumeWorkCompletionRequest,
+	) (*agentpb.VolumeWorkCompletionAck, error)
+	FailVolume(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.VolumeWorkFailureRequest,
+	) (*agentpb.VolumeWorkFailureAck, error)
+	RecoverVolume(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		*agentpb.VolumeWorkRecoveryReportRequest,
+	) (*agentpb.VolumeWorkRecoveryReportAck, error)
 }
 
 func (server *Server) ConfigureVolumeWork(reports VolumeReporter) { server.volumeReports = reports }
 
-func (server *Server) volumeReport(session *Session, generation uint64, message *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error) {
+func (server *Server) volumeReport(
+	session *Session,
+	generation uint64,
+	message *agentpb.AgentMessage,
+) (bool, *agentpb.ControllerMessage, error) {
 	if message.GetVolumeWorkCheckpointRequest() == nil {
 		return false, nil, nil
 	}

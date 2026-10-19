@@ -13,7 +13,9 @@ func SettlePublication(task Task, item Item, published bool, result Completion, 
 		item.TaskID != task.ID || item.CreatedAt.Before(task.CreatedAt) || item.Deadline.After(task.Deadline) ||
 		result.Outcome != Failed && result.Outcome != Cancelled && result.Outcome != Superseded ||
 		result.Outcome != Failed && (task.Stop == nil || task.Stop.Outcome != result.Outcome) {
-		return Task{}, Item{}, conflict("publication settlement requires unexecuted captured work and a rejection or stop")
+		return Task{}, Item{}, conflict(
+			"publication settlement requires unexecuted captured work and a rejection or stop",
+		)
 	}
 	nextItem, err := SettleUnstarted(item, result, at)
 	if err != nil {

@@ -12,7 +12,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (s *Service) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (s *Service) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	input, err := s.inputs.Load(ctx, request.Item.Item.ID, request.ReadRevision)
 	if err != nil {
 		return workdispatch.Decision{}, err
@@ -30,10 +34,19 @@ func (s *Service) Admit(ctx context.Context, request workqueue.Assignment, at ti
 		change, err := s.settleUnstarted(request.Task, request.Item, input, workexecution.Failed, at)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
-	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: request.Item.Item.Deadline, Change: guard}, nil
+	return workdispatch.Decision{
+		Disposition: workdispatch.Dispatch,
+		Deadline:    request.Item.Item.Deadline,
+		Change:      guard,
+	}, nil
 }
 
-func (s *Service) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (s *Service) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "etcd configuration has no stop request")
 	}
@@ -64,7 +77,11 @@ func (s *Service) settleUnstarted(task workqueue.TaskSnapshot, item workqueue.It
 }
 
 func inputGuard(input keyvalue.Versioned[etcdconfiguration.Input]) workqueue.Change {
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: etcdconfiguration.InputKey(input.Record.WorkItemID), ModRevision: input.Revision}}}
+	return workqueue.Change{
+		Conditions: []keyvalue.Condition{
+			{Key: etcdconfiguration.InputKey(input.Record.WorkItemID), ModRevision: input.Revision},
+		},
+	}
 }
 
 // Retry is cleanup-only. A failed or restored Apply requires a new operator
@@ -73,7 +90,10 @@ func (s *Service) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnaps
 	previous workqueue.AttemptSnapshot, revision int64, at time.Time,
 ) (workqueue.Change, error) {
 	if item.Item.Phase != workexecution.Attention || previous.Attempt.Result == nil || item.Item.Input == nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "etcd Apply is not retried; submit a new Apply after its effects are settled")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"etcd Apply is not retried; submit a new Apply after its effects are settled",
+		)
 	}
 	input, err := s.inputs.Load(ctx, item.Item.ID, revision)
 	if err != nil {

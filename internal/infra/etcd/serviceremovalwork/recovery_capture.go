@@ -6,7 +6,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func EncodeRecoveryCapture(input *agentpb.ServiceLifecycleWorkInput, capture removalexecution.RecoveryCapture) ([]byte, error) {
+func EncodeRecoveryCapture(
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture removalexecution.RecoveryCapture,
+) ([]byte, error) {
 	if err := capture.Validate(input); err != nil {
 		return nil, err
 	}
@@ -21,7 +24,10 @@ func EncodeRecoveryCapture(input *agentpb.ServiceLifecycleWorkInput, capture rem
 	return value, nil
 }
 
-func DecodeRecoveryCapture(input *agentpb.ServiceLifecycleWorkInput, value []byte) (removalexecution.RecoveryCapture, error) {
+func DecodeRecoveryCapture(
+	input *agentpb.ServiceLifecycleWorkInput,
+	value []byte,
+) (removalexecution.RecoveryCapture, error) {
 	if len(value) > maximumInputBytes {
 		return removalexecution.RecoveryCapture{}, conflict("Service removal recovery exceeds its bounded capture size")
 	}

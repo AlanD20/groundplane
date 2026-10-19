@@ -71,10 +71,15 @@ func checkpointReceiptAcknowledgement(raw []byte, request *agentpb.BackupWorkChe
 	if err != nil {
 		return nil, err
 	}
-	ack := &agentpb.BackupWorkCheckpointAck{Attempt: proto.CloneOf(request.Attempt), SourceOrdinal: request.SourceOrdinal,
-		CheckpointSequence: request.CheckpointSequence, RequestSha256: digest,
+	ack := &agentpb.BackupWorkCheckpointAck{
+		Attempt:            proto.CloneOf(request.Attempt),
+		SourceOrdinal:      request.SourceOrdinal,
+		CheckpointSequence: request.CheckpointSequence,
+		RequestSha256:      digest,
 		Committed: &agentpb.CheckpointFence{DedupeKeyModRevision: revision,
-			AuthorityDigest: append([]byte(nil), input.Steps[request.SourceOrdinal].StepDigest...)}, Source: source}
+			AuthorityDigest: append([]byte(nil), input.Steps[request.SourceOrdinal].StepDigest...)},
+		Source: source,
+	}
 	setSourceFence(source, proto.CloneOf(ack.Committed))
 	return ack, nil
 }

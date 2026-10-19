@@ -37,10 +37,16 @@ func (service *Service) planAuthoredAdmission(ctx context.Context, baseline auth
 		generation := draft.Generation
 		if attachinputs.ValidateDraft(generation) != nil || generation.EnvironmentID != desired.EnvironmentID ||
 			generation.ParentTaskID != desired.RevisionID {
-			return authoredAdmissionPlan{}, errs.New(errs.KindValidationFailed, "Blueprint Attach admission inputs are inconsistent")
+			return authoredAdmissionPlan{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Attach admission inputs are inconsistent",
+			)
 		}
 		if _, duplicate := inputs[generation.AttachID]; duplicate {
-			return authoredAdmissionPlan{}, errs.New(errs.KindValidationFailed, "Blueprint Attach admission input is duplicated")
+			return authoredAdmissionPlan{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Attach admission input is duplicated",
+			)
 		}
 		authority := generation
 		authority.WorkItemID = ""
@@ -49,10 +55,18 @@ func (service *Service) planAuthoredAdmission(ctx context.Context, baseline auth
 		if err != nil {
 			return authoredAdmissionPlan{}, err
 		}
-		selected := authoredAttachPlanInput{Name: generation.AttachName, ConsumerServiceID: generation.ConsumerServiceID, AuthoredSpecSHA256: generation.AuthoredSpecSHA256, Fingerprint: fingerprint}
+		selected := authoredAttachPlanInput{
+			Name:               generation.AttachName,
+			ConsumerServiceID:  generation.ConsumerServiceID,
+			AuthoredSpecSHA256: generation.AuthoredSpecSHA256,
+			Fingerprint:        fingerprint,
+		}
 		if generation.Provision != nil {
 			if generation.CredentialOwnerID != generation.AttachID {
-				selected.Reads = append(selected.Reads, blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: generation.CredentialOwnerID})
+				selected.Reads = append(
+					selected.Reads,
+					blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: generation.CredentialOwnerID},
+				)
 			} else {
 				for _, grant := range generation.Provision.Grants {
 					selected.Reads = append(selected.Reads, blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: grant.Record.ID})
@@ -80,13 +94,26 @@ func (service *Service) planAuthoredAdmission(ctx context.Context, baseline auth
 		if !found {
 			continue
 		}
-		binding, guards, err := reader.ReadAppliedAttachBinding(ctx, desired.EnvironmentID, identity.ID, baseline.ledger.ReadRevision)
+		binding, guards, err := reader.ReadAppliedAttachBinding(
+			ctx,
+			desired.EnvironmentID,
+			identity.ID,
+			baseline.ledger.ReadRevision,
+		)
 		if err != nil {
 			return authoredAdmissionPlan{}, err
 		}
-		selected := authoredAttachPlanInput{Name: binding.Consumer.Name, ConsumerServiceID: binding.Consumer.ServiceID, AuthoredSpecSHA256: binding.AuthoredSpecSHA256, Fingerprint: receipt.Fingerprint}
+		selected := authoredAttachPlanInput{
+			Name:               binding.Consumer.Name,
+			ConsumerServiceID:  binding.Consumer.ServiceID,
+			AuthoredSpecSHA256: binding.AuthoredSpecSHA256,
+			Fingerprint:        receipt.Fingerprint,
+		}
 		if binding.Consumer.CredentialAttachID != binding.Consumer.ID {
-			selected.Reads = append(selected.Reads, blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: binding.Consumer.CredentialAttachID})
+			selected.Reads = append(
+				selected.Reads,
+				blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: binding.Consumer.CredentialAttachID},
+			)
 		} else {
 			for _, grant := range binding.Grants {
 				selected.Reads = append(selected.Reads, blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: grant.ID})
@@ -101,7 +128,10 @@ func (service *Service) planAuthoredAdmission(ctx context.Context, baseline auth
 		return authoredAdmissionPlan{}, err
 	}
 	if !plan.Complete {
-		return authoredAdmissionPlan{}, errs.New(errs.KindStateConflict, "Blueprint resource plan is missing Attach authority")
+		return authoredAdmissionPlan{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint resource plan is missing Attach authority",
+		)
 	}
 	return authoredAdmissionPlan{Plan: plan, Conditions: conditions}, nil
 }

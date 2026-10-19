@@ -11,7 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *TaskRepository) CreateControllerSoftwareWork(ctx context.Context, capture controllersoftware.Capture, marker idempotency.IdempotencyMarker) (IdempotencyTransactionResult, error) {
+func (repository *TaskRepository) CreateControllerSoftwareWork(
+	ctx context.Context,
+	capture controllersoftware.Capture,
+	marker idempotency.IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
 	task, item, err := capture.Work()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -31,7 +35,10 @@ func (repository *TaskRepository) CreateControllerSoftwareWork(ctx context.Conte
 		return IdempotencyTransactionResult{}, err
 	}
 	if read == nil || len(read.Values) != 1 || read.ReadRevision <= 0 {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStorageUnavailable, "Controller software admission snapshot is unavailable")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStorageUnavailable,
+			"Controller software admission snapshot is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	var latestRevision int64
@@ -46,12 +53,20 @@ func (repository *TaskRepository) CreateControllerSoftwareWork(ctx context.Conte
 	work.Conditions = append(work.Conditions, keyvalue.Condition{Key: controllersoftware.InputKey(item.ID)},
 		keyvalue.Condition{Key: imagefence.Key},
 		keyvalue.Condition{Key: controllersoftware.LatestKey, ModRevision: latestRevision})
-	work.Mutations = append(work.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: controllersoftware.InputKey(item.ID), Value: input},
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: controllersoftware.LatestKey, Value: current})
+	work.Mutations = append(
+		work.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: controllersoftware.InputKey(item.ID), Value: input},
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: controllersoftware.LatestKey, Value: current},
+	)
 	classify := func(_ int64, _ []*keyvalue.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "Controller software admission changed")
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, work.Conditions, work.Mutations, classify)
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerTask,
+		work.Conditions,
+		work.Mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

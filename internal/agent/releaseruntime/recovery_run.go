@@ -16,16 +16,33 @@ type RecoveryCheckpoints interface {
 }
 
 type RecoveryEffects interface {
-	ExecuteRecovery(context.Context, releaseexecution.RecoveryInput, releaseexecution.RecoveryReport) (workexecution.Input, error)
-	InspectRecovery(context.Context, releaseexecution.RecoveryInput, releaseexecution.RecoveryReport) (workexecution.Input, error)
+	ExecuteRecovery(
+		context.Context,
+		releaseexecution.RecoveryInput,
+		releaseexecution.RecoveryReport,
+	) (workexecution.Input, error)
+	InspectRecovery(
+		context.Context,
+		releaseexecution.RecoveryInput,
+		releaseexecution.RecoveryReport,
+	) (workexecution.Input, error)
 }
 
 // RunRecovery has no retry loop for failed actions. It advances only after each
 // exact checkpoint and effect proof is durably acknowledged. A resumed in-flight
 // action is inspection-only; failure retains its cursor for explicit resolution.
-func RunRecovery(ctx context.Context, input releaseexecution.RecoveryInput, checkpoints RecoveryCheckpoints, effects RecoveryEffects) (*releaseexecution.RecoveryReport, error) {
-	if ctx == nil || input.Validate() != nil || input.Input.Attempt.StartedAt == nil || checkpoints == nil || effects == nil {
-		return nil, errs.New(errs.KindInternal, "Release recovery requires captured input, a started attempt, checkpoints and effects")
+func RunRecovery(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	checkpoints RecoveryCheckpoints,
+	effects RecoveryEffects,
+) (*releaseexecution.RecoveryReport, error) {
+	if ctx == nil || input.Validate() != nil || input.Input.Attempt.StartedAt == nil || checkpoints == nil ||
+		effects == nil {
+		return nil, errs.New(
+			errs.KindInternal,
+			"Release recovery requires captured input, a started attempt, checkpoints and effects",
+		)
 	}
 	deliveryContext, finishDelivery := context.WithTimeout(ctx, 15*time.Second)
 	if err := checkpoints.Resume(deliveryContext); err != nil {
@@ -98,12 +115,18 @@ func RunRecovery(ctx context.Context, input releaseexecution.RecoveryInput, chec
 	}
 }
 
-func acknowledgedRecovery(ctx context.Context, input releaseexecution.RecoveryInput, checkpoints RecoveryCheckpoints, expected releaseexecution.RecoveryProgress) (*releaseexecution.RecoveryReport, error) {
+func acknowledgedRecovery(
+	ctx context.Context,
+	input releaseexecution.RecoveryInput,
+	checkpoints RecoveryCheckpoints,
+	expected releaseexecution.RecoveryProgress,
+) (*releaseexecution.RecoveryReport, error) {
 	report, err := checkpoints.Current(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if report == nil || report.Ack == nil || report.Validate(input) != nil || !releaseexecution.EqualRecoveryProgress(report.Progress, expected) {
+	if report == nil || report.Ack == nil || report.Validate(input) != nil ||
+		!releaseexecution.EqualRecoveryProgress(report.Progress, expected) {
 		return nil, errs.New(errs.KindStateConflict, "Recovery checkpoint did not acknowledge the requested action")
 	}
 	return report, nil

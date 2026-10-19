@@ -16,7 +16,10 @@ import (
 // DetachConsumerAdmission permits the original captured runtime or this work's
 // already-acknowledged consumer change. It cannot overwrite a newer Deploy or
 // reinterpret a missing runtime as proof that a captured effect succeeded.
-func (repository *InputRepository) DetachConsumerAdmission(ctx context.Context, view workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) DetachConsumerAdmission(
+	ctx context.Context,
+	view workqueue.View,
+) (workqueue.Change, error) {
 	input, conditions, err := repository.LoadDetach(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -30,7 +33,11 @@ func (repository *InputRepository) DetachConsumerAdmission(ctx context.Context, 
 		return workqueue.Change{}, err
 	}
 	defer clearConsumer(consumer)
-	key, runtimeKey := ConsumerSettlementKey(input.WorkItemID), serviceruntimerecord.Key(input.Snapshot.Source.Attach.ServiceID)
+	key, runtimeKey := ConsumerSettlementKey(
+		input.WorkItemID,
+	), serviceruntimerecord.Key(
+		input.Snapshot.Source.Attach.ServiceID,
+	)
 	read, err := repository.read(ctx, []string{key, runtimeKey}, view.ReadRevision)
 	if err != nil {
 		return workqueue.Change{}, err

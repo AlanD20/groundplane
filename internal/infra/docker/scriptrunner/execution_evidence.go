@@ -15,7 +15,10 @@ func containerEvidence(request scriptexecution.Request, containerID string) scri
 	return containerEvidenceForProjection(request.Projection, containerID)
 }
 
-func containerEvidenceForProjection(projection *agentpb.ScriptRunnerProjection, containerID string) scriptexecution.ContainerEvidence {
+func containerEvidenceForProjection(
+	projection *agentpb.ScriptRunnerProjection,
+	containerID string,
+) scriptexecution.ContainerEvidence {
 	labels := environmentList(projection.Labels)
 	sort.Strings(labels)
 	digest := sha256.Sum256([]byte(strings.Join(labels, "\x00")))

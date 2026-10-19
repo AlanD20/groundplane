@@ -11,9 +11,17 @@ import (
 
 // RecoverStandalone is cleanup only. Its caller holds the recovery execution
 // lease and supplies the Controller's acknowledged Start, never a forward grant.
-func (runtime *Runtime) RecoverStandalone(ctx context.Context, input scriptexecution.RecoveryInput, ownership *agentownership.Lease) (scriptexecution.RecoveryProof, error) {
-	if runtime == nil || runtime.engine == nil || ctx == nil || input.Validate() != nil || input.Attempt.StartedAt == nil {
-		return scriptexecution.RecoveryProof{}, errs.New(errs.KindStateConflict, "Script cleanup requires a started captured recovery attempt")
+func (runtime *Runtime) RecoverStandalone(
+	ctx context.Context,
+	input scriptexecution.RecoveryInput,
+	ownership *agentownership.Lease,
+) (scriptexecution.RecoveryProof, error) {
+	if runtime == nil || runtime.engine == nil || ctx == nil || input.Validate() != nil ||
+		input.Attempt.StartedAt == nil {
+		return scriptexecution.RecoveryProof{}, errs.New(
+			errs.KindStateConflict,
+			"Script cleanup requires a started captured recovery attempt",
+		)
 	}
 	if err := ownership.CheckRecovery(input.Forward, input.Attempt); err != nil {
 		return scriptexecution.RecoveryProof{}, err
@@ -54,7 +62,10 @@ func (runtime *Runtime) RecoverStandalone(ctx context.Context, input scriptexecu
 		return scriptexecution.RecoveryProof{}, err
 	}
 	if !quiescence.Absent || !cleanup.ContainerAbsent || !cleanup.BodyAbsent || !cleanup.ExecutionDirectoryAbsent {
-		return scriptexecution.RecoveryProof{}, errs.New(errs.KindStateConflict, "Script recovery has not proven complete cleanup")
+		return scriptexecution.RecoveryProof{}, errs.New(
+			errs.KindStateConflict,
+			"Script recovery has not proven complete cleanup",
+		)
 	}
 	proof := scriptexecution.RecoveryProof{AttemptID: input.Attempt.ID, ForwardAttemptID: input.Forward.ID,
 		ExecutionID: input.ExecutionID, Input: input.Attempt.Input,

@@ -34,7 +34,8 @@ func (reader *Reader) references(ctx context.Context, revision int64) (reference
 	if err != nil {
 		return referenceSnapshot{}, err
 	}
-	if index == nil || index.ReadRevision <= 0 || revision > 0 && index.ReadRevision != revision || len(index.Values) != 1 {
+	if index == nil || index.ReadRevision <= 0 || revision > 0 && index.ReadRevision != revision ||
+		len(index.Values) != 1 {
 		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS reference index read is incomplete")
 	}
 	defer keyvalue.ClearValues(index.Values)
@@ -59,7 +60,9 @@ func (reader *Reader) references(ctx context.Context, revision int64) (reference
 	if err != nil {
 		return referenceSnapshot{}, err
 	}
-	if component.Desired.ID != id || component.Desired.Kind != core.ComponentKindCoreDNS || component.Desired.Owner != core.ComponentOwnerPlatform || component.Desired.Config.CoreDNS == nil {
+	if component.Desired.ID != id || component.Desired.Kind != core.ComponentKindCoreDNS ||
+		component.Desired.Owner != core.ComponentOwnerPlatform ||
+		component.Desired.Config.CoreDNS == nil {
 		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS reference configuration identity is invalid")
 	}
 	conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})

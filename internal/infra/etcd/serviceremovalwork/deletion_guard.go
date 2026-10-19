@@ -10,7 +10,11 @@ import (
 // DeletionGuard can release an unexecuted removal even when newer desired state
 // exists. It never permits host effects: those additionally require runtime and
 // execution ownership guards.
-func (repository *Repository) DeletionGuard(ctx context.Context, input Input, revision int64) (keyvalue.Condition, error) {
+func (repository *Repository) DeletionGuard(
+	ctx context.Context,
+	input Input,
+	revision int64,
+) (keyvalue.Condition, error) {
 	if err := input.Validate(); err != nil {
 		return keyvalue.Condition{}, err
 	}

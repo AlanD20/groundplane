@@ -170,8 +170,13 @@ func (service *CheckService) admitConnectionCheck(ctx context.Context, environme
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	checkOwner := connectorchecks.Owner{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
-		OperationID: ids.New(ids.KindOperation), EnvironmentID: environmentID}
+	checkOwner := connectorchecks.Owner{
+		TaskID:        ids.New(ids.KindTask),
+		WorkItemID:    ids.New(ids.KindWorkItem),
+		PlanID:        ids.New(ids.KindPlan),
+		OperationID:   ids.New(ids.KindOperation),
+		EnvironmentID: environmentID,
+	}
 	credentials, sources, err := service.captureCredentials(ctx, source, checkOwner.OperationID, replacements)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -197,8 +202,12 @@ func (service *CheckService) admitConnectionCheck(ctx context.Context, environme
 	}
 	task := workexecution.Task{ID: checkOwner.TaskID,
 		Intent: workexecution.Input{ID: checkOwner.PlanID, SHA256: planHash},
-		Scope:  workexecution.Scope{TenantID: owner.TenantID, ProjectID: owner.ProjectID, EnvironmentID: owner.EnvironmentID},
-		Actor:  workexecution.OperatorActor, Action: workexecution.ActionCheck,
+		Scope: workexecution.Scope{
+			TenantID:      owner.TenantID,
+			ProjectID:     owner.ProjectID,
+			EnvironmentID: owner.EnvironmentID,
+		},
+		Actor: workexecution.OperatorActor, Action: workexecution.ActionCheck,
 		TargetID: candidate.Connector.ID, TargetName: candidate.Connector.Name,
 		ExpectedItems: 1, Deadline: now.Add(time.Minute), CreatedAt: now, UpdatedAt: now}
 	return service.publishConnectionCheck(ctx, source, check, task, locator, evidence)

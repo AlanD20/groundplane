@@ -16,7 +16,13 @@ func (host *RuntimeHost) Restore(ctx context.Context, input Input) (componentexe
 	if err := host.ownership.Check(); err != nil {
 		return componentexecution.RecoveryReport{}, err
 	}
-	saved, err := host.journal.PrepareComponentRecovery(ctx, input.attempt, input.procedure, *input.recovery, input.boundary)
+	saved, err := host.journal.PrepareComponentRecovery(
+		ctx,
+		input.attempt,
+		input.procedure,
+		*input.recovery,
+		input.boundary,
+	)
 	if err != nil {
 		return componentexecution.RecoveryReport{}, err
 	}
@@ -36,8 +42,13 @@ func (host *RuntimeHost) Restore(ctx context.Context, input Input) (componentexe
 		return componentexecution.RecoveryReport{}, err
 	}
 	request := &agentpb.ComponentWorkHelperRequest{
-		Assignment: &agentpb.ComponentWorkAssignment{Attempt: identity, Input: input.procedure, RecoverySource: source, RecoveryBoundary: boundary},
-		Start:      &agentpb.WorkStartAck{Attempt: identity, StartedAt: timestamppb.New(*input.attempt.StartedAt)},
+		Assignment: &agentpb.ComponentWorkAssignment{
+			Attempt:          identity,
+			Input:            input.procedure,
+			RecoverySource:   source,
+			RecoveryBoundary: boundary,
+		},
+		Start: &agentpb.WorkStartAck{Attempt: identity, StartedAt: timestamppb.New(*input.attempt.StartedAt)},
 	}
 	captured, err := componentexecution.OpenHelperRequest(request)
 	if err != nil {

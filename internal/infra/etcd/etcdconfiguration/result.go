@@ -35,16 +35,30 @@ func encodeResult(result Result) ([]byte, error) {
 	return recordcodec.Encode("etcd_configuration_result", result)
 }
 
-func (repository *Repository) ReadResult(ctx context.Context, attempt workexecution.Attempt, revision int64) (keyvalue.Versioned[Result], bool, error) {
+func (repository *Repository) ReadResult(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	revision int64,
+) (keyvalue.Versioned[Result], bool, error) {
 	if attempt.Validate() != nil || attempt.Executor.Executor != workexecution.Controller {
-		return keyvalue.Versioned[Result]{}, false, errs.New(errs.KindValidationFailed, "etcd activation result requires a Controller attempt")
+		return keyvalue.Versioned[Result]{}, false, errs.New(
+			errs.KindValidationFailed,
+			"etcd activation result requires a Controller attempt",
+		)
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{ResultKey(attempt.ID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{ResultKey(attempt.ID)}, Revision: revision},
+	)
 	if err != nil {
 		return keyvalue.Versioned[Result]{}, false, err
 	}
-	if read == nil || read.ReadRevision <= 0 || (revision > 0 && read.ReadRevision != revision) || len(read.Values) != 1 {
-		return keyvalue.Versioned[Result]{}, false, errs.New(errs.KindStateConflict, "etcd activation result read is unavailable")
+	if read == nil || read.ReadRevision <= 0 || (revision > 0 && read.ReadRevision != revision) ||
+		len(read.Values) != 1 {
+		return keyvalue.Versioned[Result]{}, false, errs.New(
+			errs.KindStateConflict,
+			"etcd activation result read is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.Values[0] == nil {
@@ -56,22 +70,36 @@ func (repository *Repository) ReadResult(ctx context.Context, attempt workexecut
 	}
 	raw, err := encodeResult(result)
 	clear(raw)
-	if err != nil || result.TaskID != attempt.TaskID || result.WorkItemID != attempt.WorkItemID || result.AttemptID != attempt.ID || result.Input != attempt.Input {
-		return keyvalue.Versioned[Result]{}, false, errs.New(errs.KindInternal, "etcd activation result owner is corrupt")
+	if err != nil || result.TaskID != attempt.TaskID || result.WorkItemID != attempt.WorkItemID ||
+		result.AttemptID != attempt.ID ||
+		result.Input != attempt.Input {
+		return keyvalue.Versioned[Result]{}, false, errs.New(
+			errs.KindInternal,
+			"etcd activation result owner is corrupt",
+		)
 	}
-	return keyvalue.Versioned[Result]{Record: result, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, true, nil
+	return keyvalue.Versioned[Result]{
+		Record:       result,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, true, nil
 }
 
 // SaveResult records an observation under the exact active attempt. Replaced
 // process reconciliation may account for effects, but cannot grant new Apply.
-func (repository *Repository) SaveResult(ctx context.Context, queue *workqueue.Repository, attempt workexecution.Attempt,
-	observed etcdactivation.Outcome, failed bool,
+func (repository *Repository) SaveResult(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	attempt workexecution.Attempt,
+	observed etcdactivation.Outcome,
+	failed bool,
 ) error {
 	view, err := queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 	if err != nil {
 		return err
 	}
-	if !view.ActiveAttempt || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) || view.Attempt.Attempt.FinishedAt != nil {
+	if !view.ActiveAttempt || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) ||
+		view.Attempt.Attempt.FinishedAt != nil {
 		return errs.New(errs.KindStateConflict, "etcd activation result no longer owns execution")
 	}
 	input, err := repository.Load(ctx, attempt.WorkItemID, view.Work.ReadRevision)
@@ -104,7 +132,11 @@ func (repository *Repository) SaveResult(ctx context.Context, queue *workqueue.R
 		{Key: workqueue.ItemKey(attempt.WorkItemID), ModRevision: view.Work.Item.Revision},
 		{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision},
 		{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision}}
-	committed, err := repository.store.Transact(ctx, conditions, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: ResultKey(attempt.ID), Value: raw}})
+	committed, err := repository.store.Transact(
+		ctx,
+		conditions,
+		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: ResultKey(attempt.ID), Value: raw}},
+	)
 	keyvalue.ClearValues(committed.FailureReads)
 	if err != nil {
 		return err
@@ -115,7 +147,11 @@ func (repository *Repository) SaveResult(ctx context.Context, queue *workqueue.R
 	return nil
 }
 
-func PrepareResult(input keyvalue.Versioned[Input], saved keyvalue.Versioned[Result], attempt workexecution.Attempt) (workqueue.Change, workexecution.Completion, error) {
+func PrepareResult(
+	input keyvalue.Versioned[Input],
+	saved keyvalue.Versioned[Result],
+	attempt workexecution.Attempt,
+) (workqueue.Change, workexecution.Completion, error) {
 	result := saved.Record
 	reference, err := input.Record.Reference()
 	if err != nil {
@@ -123,7 +159,10 @@ func PrepareResult(input keyvalue.Versioned[Input], saved keyvalue.Versioned[Res
 	}
 	if input.Revision <= 0 || saved.Revision <= 0 || reference != attempt.Input || result.Input != reference ||
 		result.AttemptID != attempt.ID || result.TaskID != attempt.TaskID || result.WorkItemID != attempt.WorkItemID {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "etcd activation has no captured result")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"etcd activation has no captured result",
+		)
 	}
 	raw, err := encodeResult(result)
 	if err != nil {
@@ -131,13 +170,22 @@ func PrepareResult(input keyvalue.Versioned[Input], saved keyvalue.Versioned[Res
 	}
 	defer clear(raw)
 	digest := sha256.Sum256(raw)
-	evidence := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, input.Record.CreatedAt, attempt.ID, "etcd-configuration-result"), SHA256: hex.EncodeToString(digest[:])}
+	evidence := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, input.Record.CreatedAt, attempt.ID, "etcd-configuration-result"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	settled := result.Observed != etcdactivation.Unresolved
 	outcome := workexecution.Failed
 	if settled && (!result.Failed || attempt.Direction == workexecution.Recovery) {
 		outcome = workexecution.Succeeded
 	}
-	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: InputKey(attempt.WorkItemID), ModRevision: input.Revision},
-			{Key: ResultKey(attempt.ID), ModRevision: saved.Revision}}},
-		workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: settled}, nil
+	return workqueue.Change{
+			Conditions: []keyvalue.Condition{{Key: InputKey(attempt.WorkItemID), ModRevision: input.Revision},
+				{Key: ResultKey(attempt.ID), ModRevision: saved.Revision}},
+		},
+		workexecution.Completion{
+			Outcome:        outcome,
+			Evidence:       evidence,
+			EffectsSettled: settled,
+		}, nil
 }

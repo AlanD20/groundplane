@@ -120,7 +120,8 @@ func ValidateBackupInput(input BackupInput) error {
 			}
 			if config := restore.GetConfig(); config != nil {
 				scope, err := environmentpath.Parse(config.Files.VolumeRoot, config.Files.VolumeDir)
-				if err != nil || scope.ProjectID != input.Scope.ProjectId || scope.EnvironmentID != input.EnvironmentID {
+				if err != nil || scope.ProjectID != input.Scope.ProjectId ||
+					scope.EnvironmentID != input.EnvironmentID {
 					return errs.New(errs.KindValidationFailed, "Config restore file directory belongs to another scope")
 				}
 			}

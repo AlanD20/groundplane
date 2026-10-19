@@ -50,7 +50,10 @@ func (ledger *ReleaseLedger) BlueprintWorkPrerequisiteConditions(ctx context.Con
 	}
 	if authority.EnvironmentID != task.Scope.EnvironmentID || authority.RevisionID != task.ID ||
 		!bytes.Equal(want, got) {
-		return nil, errs.New(errs.KindStateConflict, "Blueprint prerequisite resolution differs from the captured runtime input")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Blueprint prerequisite resolution differs from the captured runtime input",
+		)
 	}
 	conditions := []keyvalue.Condition{{Key: key, ModRevision: value.ModRevision}}
 	dependencies := make([]workqueue.ItemSnapshot, len(item.Dependencies))
@@ -104,7 +107,10 @@ func (ledger *ReleaseLedger) BlueprintWorkPrerequisiteConditions(ctx context.Con
 				return dependency.Item.Operation == workexecution.Attach && dependency.Item.TargetID == attach.ID
 			})
 			if !found {
-				return nil, errs.New(errs.KindStateConflict, "Blueprint prerequisite Attach has no completed dependency work")
+				return nil, errs.New(
+					errs.KindStateConflict,
+					"Blueprint prerequisite Attach has no completed dependency work",
+				)
 			}
 			continue
 		}
@@ -138,7 +144,10 @@ func (ledger *ReleaseLedger) blueprintWorkPrerequisiteValue(ctx context.Context,
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
-		return nil, errs.New(errs.KindStateConflict, "Blueprint prerequisite evidence is unavailable at the work snapshot")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Blueprint prerequisite evidence is unavailable at the work snapshot",
+		)
 	}
 	return read.Values[0], nil
 }

@@ -14,9 +14,14 @@ import (
 
 // Both placements retain the same Service rollout inputs before the proxy
 // selection becomes executable or is settled as disabled metadata.
-func (service *Service) prepareComponentProxyRollouts(ctx context.Context,
-	work workqueue.View, services []workqueue.View, snapshot blueprintunits.Snapshot, source authoredRuntimeProjectionSource,
-	candidate componentrecord.Record, authority componentplanning.FrozenProjectionAuthority,
+func (service *Service) prepareComponentProxyRollouts(
+	ctx context.Context,
+	work workqueue.View,
+	services []workqueue.View,
+	snapshot blueprintunits.Snapshot,
+	source authoredRuntimeProjectionSource,
+	candidate componentrecord.Record,
+	authority componentplanning.FrozenProjectionAuthority,
 ) (*componentplanning.ProxyServicePreflight, workqueue.Change, error) {
 	parent := work.Task.Task
 	projection, err := service.compileAuthoredProxyCandidateInput(ctx, parent, source, snapshot,
@@ -53,7 +58,10 @@ func (service *Service) prepareComponentProxyRollouts(ctx context.Context,
 			}
 		}
 		if !found {
-			return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "Proxy replacement is absent from captured Service work")
+			return nil, workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Proxy replacement is absent from captured Service work",
+			)
 		}
 	}
 	rollouts, err := service.prepareAuthoredProxyServiceRollouts(ctx, work, selected,

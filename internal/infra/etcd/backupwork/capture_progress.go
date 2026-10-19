@@ -104,8 +104,12 @@ func projectCaptureProgress(source *backupruntime.BackupRunSourceAttemptRecord,
 	}
 	switch {
 	case cursor.GetSourceCleanupCompleted() != nil:
-		if source.State != backupruntime.BackupSourceAttemptStaged || source.Phase != backupruntime.BackupSourcePhasePointCommit ||
-			!backupruntime.BackupArtifactEvidenceMatchesWire(source.Evidence, cursor.GetSourceCleanupCompleted().Evidence) {
+		if source.State != backupruntime.BackupSourceAttemptStaged ||
+			source.Phase != backupruntime.BackupSourcePhasePointCommit ||
+			!backupruntime.BackupArtifactEvidenceMatchesWire(
+				source.Evidence,
+				cursor.GetSourceCleanupCompleted().Evidence,
+			) {
 			return conflict("Backup source cleanup differs from its verified upload")
 		}
 		source.State, source.Phase = backupruntime.BackupSourceAttemptPointCommitted, backupruntime.BackupSourcePhaseRetention

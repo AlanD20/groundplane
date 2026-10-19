@@ -35,13 +35,22 @@ func recoverRestore(ctx context.Context, assignment *agentpb.BackupRecoveryAssig
 	completed := restoreRecoveryHasCompletion(step, resume)
 	mutation := assignment.RestoreMode == agentpb.BackupRestoreRecoveryMode_BACKUP_RESTORE_RECOVERY_MODE_LIVE_MUTATION
 	if completed && !mutation {
-		return zero, errs.New(errs.KindStateConflict, "Restore completion conflicts with the Controller's no-mutation disposition")
+		return zero, errs.New(
+			errs.KindStateConflict,
+			"Restore completion conflicts with the Controller's no-mutation disposition",
+		)
 	}
 	if !completed && mutation {
-		return zero, errs.New(errs.KindStateConflict, "Restore has unfinished live changes; staging cleanup cannot settle it")
+		return zero, errs.New(
+			errs.KindStateConflict,
+			"Restore has unfinished live changes; staging cleanup cannot settle it",
+		)
 	}
 	if !completed && !restoreSourceAllowsUnmutatedCleanup(step, resume) {
-		return zero, errs.New(errs.KindStateConflict, "Restore passed artifact validation; retain its live-state recovery evidence")
+		return zero, errs.New(
+			errs.KindStateConflict,
+			"Restore passed artifact validation; retain its live-state recovery evidence",
+		)
 	}
 	// Archive validation can leave probe/list helpers behind even though no
 	// database mutation was authorized. Inspect those before claiming cleanup.
@@ -54,7 +63,10 @@ func recoverRestore(ctx context.Context, assignment *agentpb.BackupRecoveryAssig
 			return zero, err
 		}
 		if found {
-			return zero, errs.New(errs.KindStateConflict, "Restore has a retained Volume journal; source cleanup is insufficient")
+			return zero, errs.New(
+				errs.KindStateConflict,
+				"Restore has a retained Volume journal; source cleanup is insufficient",
+			)
 		}
 	}
 	ids := backupstage.IDs{Task: attempt.TaskID, Step: step.ExecutionId, Point: step.GetRestore().GetPointId()}
@@ -87,7 +99,9 @@ func recoverRestore(ctx context.Context, assignment *agentpb.BackupRecoveryAssig
 	}
 	report := executionplan.BackupRecoveryReport{AttemptID: attempt.ID, ForwardID: source.Forward.ID,
 		Failure: source.Evidence, ExecutorStopped: true, Operation: workexecution.Restore, ObservedAt: time.Now().UTC(),
-		Sources: []executionplan.BackupSourceRecoveryProof{{Ordinal: 0, PointID: ids.Point, StagingAbsent: true, HelperRetired: true}}}
+		Sources: []executionplan.BackupSourceRecoveryProof{
+			{Ordinal: 0, PointID: ids.Point, StagingAbsent: true, HelperRetired: true},
+		}}
 	if err := report.ValidateInput(assignment.Input); err != nil {
 		return zero, err
 	}

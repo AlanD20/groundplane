@@ -10,11 +10,22 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (executor *Executor) deliverRecovery(ctx context.Context, input Input, exchange Exchange, report entryexecution.RecoveryReport) (workexecution.Attempt, error) {
+func (executor *Executor) deliverRecovery(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	report entryexecution.RecoveryReport,
+) (workexecution.Attempt, error) {
 	if input.recovery == nil || input.procedure == nil {
 		return workexecution.Attempt{}, invalidInput()
 	}
-	raw, evidence, err := entryexecution.EncodeRecoveryReport(input.attempt, *input.recovery, input.procedure, input.boundary, report)
+	raw, evidence, err := entryexecution.EncodeRecoveryReport(
+		input.attempt,
+		*input.recovery,
+		input.procedure,
+		input.boundary,
+		report,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -22,12 +33,18 @@ func (executor *Executor) deliverRecovery(ctx context.Context, input Input, exch
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	ack, err := exchange.RecoverEntryConfiguration(ctx, &agentpb.EntryConfigurationWorkRecoveryReportRequest{Attempt: identity, Report: raw})
+	ack, err := exchange.RecoverEntryConfiguration(
+		ctx,
+		&agentpb.EntryConfigurationWorkRecoveryReportRequest{Attempt: identity, Report: raw},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.StartedAt == nil || ack.FinishedAt == nil ||
-		ack.StartedAt.CheckValid() != nil || ack.FinishedAt.CheckValid() != nil || input.attempt.StartedAt == nil ||
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.StartedAt == nil ||
+		ack.FinishedAt == nil ||
+		ack.StartedAt.CheckValid() != nil ||
+		ack.FinishedAt.CheckValid() != nil ||
+		input.attempt.StartedAt == nil ||
 		!input.attempt.StartedAt.Equal(ack.StartedAt.AsTime()) {
 		return workexecution.Attempt{}, invalidInput()
 	}
@@ -42,7 +59,8 @@ func (executor *Executor) deliverRecovery(ctx context.Context, input Input, exch
 		outcome = workexecution.Succeeded
 	}
 	finished := ack.FinishedAt.AsTime().UTC()
-	if ackEvidence != evidence || ack.PredecessorRestored != settled || ack.Outcome != string(outcome) || finished.Before(report.ObservedAt) {
+	if ackEvidence != evidence || ack.PredecessorRestored != settled || ack.Outcome != string(outcome) ||
+		finished.Before(report.ObservedAt) {
 		return workexecution.Attempt{}, invalidInput()
 	}
 	terminal := input.attempt

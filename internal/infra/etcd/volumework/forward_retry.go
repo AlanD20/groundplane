@@ -11,13 +11,28 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *InputRepository) PrepareForwardRetry(ctx context.Context, view workqueue.View, previous workqueue.AttemptSnapshot, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareForwardRetry(
+	ctx context.Context,
+	view workqueue.View,
+	previous workqueue.AttemptSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item, attempt := view.Task.Task, view.Item.Item, previous.Attempt
-	if item.Operation != workexecution.Volume || task.Stop != nil || task.CollectionStartedAt != nil || item.ForwardRevoked ||
-		item.Phase != workexecution.Settled || item.Outcome != workexecution.Failed || item.Input == nil || item.Result == nil ||
-		attempt.Result == nil || attempt.FinishedAt == nil || attempt.Input != *item.Input || attempt.Number != item.AttemptNumber ||
+	if item.Operation != workexecution.Volume || task.Stop != nil || task.CollectionStartedAt != nil ||
+		item.ForwardRevoked ||
+		item.Phase != workexecution.Settled ||
+		item.Outcome != workexecution.Failed ||
+		item.Input == nil ||
+		item.Result == nil ||
+		attempt.Result == nil ||
+		attempt.FinishedAt == nil ||
+		attempt.Input != *item.Input ||
+		attempt.Number != item.AttemptNumber ||
 		attempt.Executor.HostID != item.Placement.HostID {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Volume Retry requires a failed action with settled effects")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Volume Retry requires a failed action with settled effects",
+		)
 	}
 	input, guards, err := repository.Load(ctx, view)
 	if err != nil {
@@ -29,8 +44,12 @@ func (repository *InputRepository) PrepareForwardRetry(ctx context.Context, view
 	}
 	guards = append(guards, desired...)
 	if attempt.Direction == workexecution.Recovery {
-		if item.Cleanup != workexecution.CleanupComplete || item.CleanupResult == nil || *item.CleanupResult != *attempt.Result {
-			return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Volume Retry requires completed inspection of its interrupted effect")
+		if item.Cleanup != workexecution.CleanupComplete || item.CleanupResult == nil ||
+			*item.CleanupResult != *attempt.Result {
+			return workqueue.Change{}, errs.New(
+				errs.KindTaskNotRetryable,
+				"Volume Retry requires completed inspection of its interrupted effect",
+			)
 		}
 		resume := workqueue.ResumeView{Work: view, Attempt: previous}
 		_, completed, err := repository.LoadRecoveryResult(ctx, resume)
@@ -38,7 +57,10 @@ func (repository *InputRepository) PrepareForwardRetry(ctx context.Context, view
 			return workqueue.Change{}, err
 		}
 		if !completed {
-			return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Volume recovery has not proved the interrupted stage")
+			return workqueue.Change{}, errs.New(
+				errs.KindTaskNotRetryable,
+				"Volume recovery has not proved the interrupted stage",
+			)
 		}
 		source, err := repository.LoadRecoveryInput(ctx, view, attempt)
 		if err != nil {

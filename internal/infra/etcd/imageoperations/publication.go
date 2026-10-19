@@ -63,7 +63,10 @@ func PreparePublication(input Input, marker idempotency.IdempotencyMarker) (work
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: Key(task.ID)})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: Key(task.ID), Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: Key(task.ID), Value: value},
+	)
 	selectionKey, writeKey, err := tagKeys(input)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -75,7 +78,10 @@ func PreparePublication(input Input, marker idempotency.IdempotencyMarker) (work
 			return workqueue.Change{}, err
 		}
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: writeKey})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: selectionKey, Value: selection})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: selectionKey, Value: selection},
+		)
 	}
 	return change, nil
 }

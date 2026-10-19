@@ -11,10 +11,17 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (s *Service) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
+func (s *Service) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	_ time.Time,
+) (workqueue.Change, error) {
 	if len(finished.Items) != 1 || finished.Task.Task.Action != workexecution.ActionApply ||
 		finished.Task.Task.TargetID != etcdconfiguration.TargetID() {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "etcd Apply completion does not match its single captured operation")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"etcd Apply completion does not match its single captured operation",
+		)
 	}
 	item := finished.Items[0].Item
 	input, err := s.inputs.Load(ctx, item.ID, finished.ReadRevision)
@@ -31,7 +38,10 @@ func (s *Service) PrepareFinish(ctx context.Context, finished workqueue.Finished
 			return workqueue.Change{}, err
 		}
 		if item.Result == nil || *item.Result != reference || item.Outcome == workexecution.Succeeded {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "unstarted etcd Apply has no matching rejection")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"unstarted etcd Apply has no matching rejection",
+			)
 		}
 		return change, nil
 	}
@@ -44,7 +54,10 @@ func (s *Service) PrepareFinish(ctx context.Context, finished workqueue.Finished
 		return workqueue.Change{}, err
 	}
 	if !found || previous.Attempt.FinishedAt == nil || previous.Attempt.Result == nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "etcd Apply completion has no accepted activation result")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"etcd Apply completion has no accepted activation result",
+		)
 	}
 	proof, result, err := etcdconfiguration.PrepareResult(input, saved, previous.Attempt)
 	if err != nil {
@@ -54,18 +67,33 @@ func (s *Service) PrepareFinish(ctx context.Context, finished workqueue.Finished
 	if previous.Attempt.Direction == workexecution.Recovery {
 		accepted = item.CleanupResult
 	}
-	if !result.EffectsSettled || *previous.Attempt.Result != result.Evidence || accepted == nil || *accepted != result.Evidence {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "etcd Apply still has unresolved activation effects")
+	if !result.EffectsSettled || *previous.Attempt.Result != result.Evidence || accepted == nil ||
+		*accepted != result.Evidence {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"etcd Apply still has unresolved activation effects",
+		)
 	}
 	return proof, nil
 }
 
-func (s *Service) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (s *Service) RetireWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
-	if task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil || at.Before(*task.RetainUntil) ||
-		item.Phase != workexecution.Settled || item.ActiveAttemptID != "" || item.Result == nil ||
+	if task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil ||
+		at.Before(*task.RetainUntil) ||
+		item.Phase != workexecution.Settled ||
+		item.ActiveAttemptID != "" ||
+		item.Result == nil ||
 		item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "etcd history collection requires expired, settled work")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"etcd history collection requires expired, settled work",
+		)
 	}
 	input, err := s.inputs.Load(ctx, item.ID, view.ReadRevision)
 	if err != nil {
@@ -78,16 +106,25 @@ func (s *Service) RetireWork(ctx context.Context, view workqueue.View, at time.T
 	if final {
 		// Only history is retired. Applied configuration and the independent
 		// local activation receipt are not owned by diagnostic retention.
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: etcdconfiguration.InputKey(item.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: etcdconfiguration.InputKey(item.ID)},
+		)
 	}
 	return true, change, nil
 }
 
-func (s *Service) PrepareAttemptRetirement(view workqueue.View, snapshot workqueue.AttemptSnapshot) (workqueue.Change, error) {
+func (s *Service) PrepareAttemptRetirement(
+	view workqueue.View,
+	snapshot workqueue.AttemptSnapshot,
+) (workqueue.Change, error) {
 	attempt := snapshot.Attempt
 	if view.Item.Item.Operation != workexecution.EtcdConfiguration || view.Item.Item.Input == nil ||
 		attempt.Input != *view.Item.Item.Input || attempt.Executor.Executor != workexecution.Controller {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "etcd attempt history differs from its captured activation")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"etcd attempt history differs from its captured activation",
+		)
 	}
 	prepared, err := workqueue.PrepareAttemptCollection(view.Task, view.Item, snapshot)
 	if err != nil {

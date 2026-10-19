@@ -14,7 +14,12 @@ import (
 // binding union. Pending command/image/Entry edits never leak into Detach.
 // Nil means that no applied consumer exists, or another binding retains the
 // same edge; credential/hook cleanup remains independently required.
-func ConsumerTransition(ctx context.Context, snapshot attachremoval.DetachSnapshot, cascade *attachremoval.CascadeStep, artifactID string) (*agentpb.AttachConsumerTransition, error) {
+func ConsumerTransition(
+	ctx context.Context,
+	snapshot attachremoval.DetachSnapshot,
+	cascade *attachremoval.CascadeStep,
+	artifactID string,
+) (*agentpb.AttachConsumerTransition, error) {
 	if ctx == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Detach consumer planning requires a context")
 	}
@@ -28,7 +33,8 @@ func ConsumerTransition(ctx context.Context, snapshot attachremoval.DetachSnapsh
 	if cascade != nil {
 		removed = cascade.RemovedBefore
 	}
-	if snapshot.Runtime == nil || snapshot.Source.Attach.Status == "detached" || snapshot.KeepsConsumerNetworkAfter(removed) {
+	if snapshot.Runtime == nil || snapshot.Source.Attach.Status == "detached" ||
+		snapshot.KeepsConsumerNetworkAfter(removed) {
 		return nil, nil
 	}
 	baseline := &agentpb.ComposeArtifact{}

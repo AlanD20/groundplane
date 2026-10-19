@@ -26,7 +26,8 @@ func (attempt Attempt) Validate() error {
 		return invalid("execution attempt direction or deadline is invalid")
 	}
 	if attempt.StartedAt != nil && (!validTime(*attempt.StartedAt) || attempt.StartedAt.Before(attempt.AssignedAt)) ||
-		attempt.FinishedAt != nil && (!validTime(*attempt.FinishedAt) || attempt.FinishedAt.Before(attempt.AssignedAt)) ||
+		attempt.FinishedAt != nil &&
+			(!validTime(*attempt.FinishedAt) || attempt.FinishedAt.Before(attempt.AssignedAt)) ||
 		attempt.StartedAt != nil && attempt.FinishedAt != nil && attempt.FinishedAt.Before(*attempt.StartedAt) {
 		return invalid("execution attempt timestamps are inconsistent")
 	}

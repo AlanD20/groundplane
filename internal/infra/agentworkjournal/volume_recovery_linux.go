@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 )
 
-func (journal *Journal) PrepareVolumeRecovery(ctx context.Context, attempt workexecution.Attempt, captured VolumeRecoveryRecord) (*VolumeRecoveryRecord, error) {
+func (journal *Journal) PrepareVolumeRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	captured VolumeRecoveryRecord,
+) (*VolumeRecoveryRecord, error) {
 	if attempt.StartedAt == nil || captured.Report != nil || captured.Receipt != nil || captured.Failure != nil {
 		return nil, invalid()
 	}
@@ -27,8 +31,12 @@ func (journal *Journal) PrepareVolumeRecovery(ctx context.Context, attempt worke
 	}
 	if previous != nil {
 		old := previous.VolumeRecovery
-		if old == nil || !workexecution.SameAssignment(previous.Attempt, attempt) || previous.Attempt.StartedAt == nil || !previous.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
-			old.Action != captured.Action || old.VolumeID != captured.VolumeID || !volumeexecution.EqualProgress(old.Boundary, captured.Boundary) {
+		if old == nil || !workexecution.SameAssignment(previous.Attempt, attempt) ||
+			previous.Attempt.StartedAt == nil ||
+			!previous.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
+			old.Action != captured.Action ||
+			old.VolumeID != captured.VolumeID ||
+			!volumeexecution.EqualProgress(old.Boundary, captured.Boundary) {
 			return nil, conflict()
 		}
 		left, err := volumeexecution.EncodeRecovery(old.Source)
@@ -54,7 +62,11 @@ func (journal *Journal) PrepareVolumeRecovery(ctx context.Context, attempt worke
 	return state.VolumeRecovery, nil
 }
 
-func (journal *Journal) SaveVolumeRecoveryReport(ctx context.Context, attempt workexecution.Attempt, report volumeexecution.RecoveryReport) error {
+func (journal *Journal) SaveVolumeRecoveryReport(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	report volumeexecution.RecoveryReport,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -71,12 +83,26 @@ func (journal *Journal) SaveVolumeRecoveryReport(ctx context.Context, attempt wo
 	if recovery.Failure != nil {
 		return conflict()
 	}
-	raw, _, err := volumeexecution.EncodeRecoveryReport(state.Attempt, recovery.Source, recovery.Action, recovery.VolumeID, recovery.Boundary, report)
+	raw, _, err := volumeexecution.EncodeRecoveryReport(
+		state.Attempt,
+		recovery.Source,
+		recovery.Action,
+		recovery.VolumeID,
+		recovery.Boundary,
+		report,
+	)
 	if err != nil {
 		return err
 	}
 	if recovery.Report != nil {
-		previous, _, err := volumeexecution.EncodeRecoveryReport(state.Attempt, recovery.Source, recovery.Action, recovery.VolumeID, recovery.Boundary, *recovery.Report)
+		previous, _, err := volumeexecution.EncodeRecoveryReport(
+			state.Attempt,
+			recovery.Source,
+			recovery.Action,
+			recovery.VolumeID,
+			recovery.Boundary,
+			*recovery.Report,
+		)
 		if err != nil || !bytes.Equal(previous, raw) {
 			return conflict()
 		}
@@ -96,11 +122,15 @@ func (journal *Journal) AcknowledgeVolumeRecovery(ctx context.Context, attempt, 
 	if err != nil {
 		return err
 	}
-	if state == nil || state.VolumeRecovery == nil || state.VolumeRecovery.Report == nil || !workexecution.SameAssignment(state.Attempt, attempt) || terminal.FinishedAt == nil || terminal.Result == nil {
+	if state == nil || state.VolumeRecovery == nil || state.VolumeRecovery.Report == nil ||
+		!workexecution.SameAssignment(state.Attempt, attempt) ||
+		terminal.FinishedAt == nil ||
+		terminal.Result == nil {
 		return conflict()
 	}
 	if previous := state.VolumeRecovery.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) || *previous.Result != *terminal.Result {
+		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*previous.Result != *terminal.Result {
 			return conflict()
 		}
 		return nil

@@ -8,7 +8,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 )
 
-func (journal *Journal) PrepareEffect(ctx context.Context, input releaseexecution.Input, boundary releaseexecution.CheckpointReport, result releaseexecution.EffectResult, at time.Time) (*EffectRecord, error) {
+func (journal *Journal) PrepareEffect(
+	ctx context.Context,
+	input releaseexecution.Input,
+	boundary releaseexecution.CheckpointReport,
+	result releaseexecution.EffectResult,
+	at time.Time,
+) (*EffectRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -19,7 +25,10 @@ func (journal *Journal) PrepareEffect(ctx context.Context, input releaseexecutio
 		return nil, err
 	}
 	if state == nil || state.Release == nil || state.Release.Ack == nil || state.Sequence != boundary.Sequence ||
-		!workexecution.SameAssignment(state.Attempt, input.Attempt) || !releaseexecution.EqualProgress(state.Release.Progress, boundary.Progress) ||
+		!workexecution.SameAssignment(
+			state.Attempt,
+			input.Attempt,
+		) || !releaseexecution.EqualProgress(state.Release.Progress, boundary.Progress) ||
 		state.Release.StageID != boundary.StageID {
 		return nil, conflict()
 	}
@@ -43,7 +52,11 @@ func (journal *Journal) PrepareEffect(ctx context.Context, input releaseexecutio
 	return state.Effect, nil
 }
 
-func (journal *Journal) Effect(ctx context.Context, input releaseexecution.Input, boundary releaseexecution.CheckpointReport) (*EffectRecord, error) {
+func (journal *Journal) Effect(
+	ctx context.Context,
+	input releaseexecution.Input,
+	boundary releaseexecution.CheckpointReport,
+) (*EffectRecord, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -65,7 +78,12 @@ func (journal *Journal) Effect(ctx context.Context, input releaseexecution.Input
 	return state.Effect, nil
 }
 
-func (journal *Journal) AcknowledgeEffect(ctx context.Context, input releaseexecution.Input, boundary releaseexecution.CheckpointReport, reference workexecution.Input) error {
+func (journal *Journal) AcknowledgeEffect(
+	ctx context.Context,
+	input releaseexecution.Input,
+	boundary releaseexecution.CheckpointReport,
+	reference workexecution.Input,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -75,7 +93,8 @@ func (journal *Journal) AcknowledgeEffect(ctx context.Context, input releaseexec
 	if err != nil {
 		return err
 	}
-	if state == nil || state.Effect == nil || !workexecution.SameAssignment(state.Attempt, input.Attempt) || state.Effect.Reference != reference {
+	if state == nil || state.Effect == nil || !workexecution.SameAssignment(state.Attempt, input.Attempt) ||
+		state.Effect.Reference != reference {
 		return conflict()
 	}
 	if _, err := releaseexecution.DecodeEffectEvidence(input, boundary, state.Effect.Raw, reference); err != nil {

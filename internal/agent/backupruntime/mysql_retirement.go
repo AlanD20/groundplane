@@ -56,15 +56,21 @@ func mysqlOriginalRequest(step *agentpb.BackupStepAuthority, dump *agentpb.Backu
 	return request, containerID, execID, request.Validate()
 }
 
-func retireMySQLExecution(ctx context.Context, assignment *agentpb.BackupWorkAssignment,
-	identity workexecution.Identity, ordinal uint32, publisher *checkpointdelivery.BackupSource, dump *agentpb.BackupMySQLDumpStart,
+func retireMySQLExecution(
+	ctx context.Context,
+	assignment *agentpb.BackupWorkAssignment,
+	identity workexecution.Identity,
+	ordinal uint32,
+	publisher *checkpointdelivery.BackupSource,
+	dump *agentpb.BackupMySQLDumpStart,
 	apply *agentpb.BackupMySQLRestoreApplyStartCheckpoint,
 ) (resultErr error) {
 	cursor, err := publisher.Current(ctx)
 	if err != nil {
 		return err
 	}
-	if cursor.GetCapture().GetSourceCleanupCompleted() == nil && cursor.GetRestore().GetSourceCleanupCompleted() == nil {
+	if cursor.GetCapture().GetSourceCleanupCompleted() == nil &&
+		cursor.GetRestore().GetSourceCleanupCompleted() == nil {
 		return errs.New(errs.KindStateConflict, "Database helper retirement requires acknowledged source cleanup")
 	}
 	if uint64(ordinal) >= uint64(len(assignment.Input.Steps)) {

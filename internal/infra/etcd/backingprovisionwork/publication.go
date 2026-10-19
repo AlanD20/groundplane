@@ -35,9 +35,13 @@ type Publication struct {
 	pins   *tasksecretpins.Repository
 }
 
-func (repository *Repository) PrepareCreation(ctx context.Context, capture CreationCapture) (_ Publication, resultErr error) {
-	if ctx == nil || capture.Procedure == nil || capture.Procedure.Configuration != nil || capture.Procedure.AfterStart != nil &&
-		capture.Procedure.AfterStart.EncryptedInputs != nil {
+func (repository *Repository) PrepareCreation(
+	ctx context.Context,
+	capture CreationCapture,
+) (_ Publication, resultErr error) {
+	if ctx == nil || capture.Procedure == nil || capture.Procedure.Configuration != nil ||
+		capture.Procedure.AfterStart != nil &&
+			capture.Procedure.AfterStart.EncryptedInputs != nil {
 		return Publication{}, invalid("backing creation capture must select configuration and encrypted inputs once")
 	}
 	procedure := proto.CloneOf(capture.Procedure)
@@ -59,7 +63,10 @@ func (repository *Repository) PrepareCreation(ctx context.Context, capture Creat
 	}
 	procedure.Configuration = &agentpb.WorkConfigurationReference{ConfigurationId: reference.ID,
 		EnvironmentId: reference.EnvironmentID, Generation: reference.Generation, Sha256: digest}
-	publication := Publication{Input: Input{PlanID: capture.PlanID, TargetName: capture.TargetName, Environment: capture.Environment}, store: repository.store}
+	publication := Publication{
+		Input: Input{PlanID: capture.PlanID, TargetName: capture.TargetName, Environment: capture.Environment},
+		store: repository.store,
+	}
 	defer func() {
 		if resultErr != nil {
 			keyvalue.ClearMutationValues(publication.Change.Mutations)
@@ -70,14 +77,18 @@ func (repository *Repository) PrepareCreation(ctx context.Context, capture Creat
 		}
 	}()
 	if envelope := capture.Hook; envelope != nil {
-		if procedure.AfterStart == nil || taskconfiguration.ValidateBackingHookEncryptedInputs(*envelope) != nil || envelope.OperationID != procedure.OperationId {
+		if procedure.AfterStart == nil || taskconfiguration.ValidateBackingHookEncryptedInputs(*envelope) != nil ||
+			envelope.OperationID != procedure.OperationId {
 			return Publication{}, invalid("backing creation hook envelope has no matching after-start command")
 		}
 		digest, err := hex.DecodeString(envelope.CiphertextSHA256)
 		if err != nil {
 			return Publication{}, err
 		}
-		procedure.AfterStart.EncryptedInputs = &agentpb.WorkInputReference{InputId: procedure.OperationId, Sha256: digest}
+		procedure.AfterStart.EncryptedInputs = &agentpb.WorkInputReference{
+			InputId: procedure.OperationId,
+			Sha256:  digest,
+		}
 		publication.Input.Hook = &HookSources{Secrets: slices.Clone(envelope.SecretSources)}
 		if len(envelope.SecretSources) != 0 {
 			pins, err := tasksecretpins.NewEtcdRepository(repository.store, procedure.ProjectId)
@@ -85,8 +96,18 @@ func (repository *Repository) PrepareCreation(ctx context.Context, capture Creat
 				return Publication{}, err
 			}
 			publication.pins = pins
-			prepared, err := pins.PrepareOwned(ctx, procedure.OperationId, procedure.TaskId, procedure.WorkItemId, envelope.SecretSources,
-				[]tasksecretpins.Condition{{Key: workqueue.TaskKey(procedure.TaskId)}, {Key: workqueue.ItemKey(procedure.WorkItemId)}, {Key: InputKey(procedure.WorkItemId)}})
+			prepared, err := pins.PrepareOwned(
+				ctx,
+				procedure.OperationId,
+				procedure.TaskId,
+				procedure.WorkItemId,
+				envelope.SecretSources,
+				[]tasksecretpins.Condition{
+					{Key: workqueue.TaskKey(procedure.TaskId)},
+					{Key: workqueue.ItemKey(procedure.WorkItemId)},
+					{Key: InputKey(procedure.WorkItemId)},
+				},
+			)
 			if err != nil {
 				return Publication{}, err
 			}
@@ -113,7 +134,10 @@ func (repository *Repository) PrepareCreation(ctx context.Context, capture Creat
 		}
 		key := taskconfiguration.BackingHookTaskInputKey(procedure.OperationId)
 		publication.Change.Conditions = append(publication.Change.Conditions, keyvalue.Condition{Key: key})
-		publication.Change.Mutations = append(publication.Change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
+		publication.Change.Mutations = append(
+			publication.Change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value},
+		)
 	}
 	publication.Input.Wire, err = (proto.MarshalOptions{Deterministic: true}).Marshal(procedure)
 	if err != nil {
@@ -143,7 +167,11 @@ func (publication Publication) AbandonUnpublished(ctx context.Context) error {
 		}
 		return publication.pins.Abandon(ctx, publication.Input.Hook.Secrets[0].OperationID)
 	}
-	keys := []string{workqueue.TaskKey(binding.TaskID), workqueue.ItemKey(binding.WorkItemID), InputKey(binding.WorkItemID)}
+	keys := []string{
+		workqueue.TaskKey(binding.TaskID),
+		workqueue.ItemKey(binding.WorkItemID),
+		InputKey(binding.WorkItemID),
+	}
 	read, err := publication.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		return err
@@ -170,7 +198,10 @@ func (publication Publication) Clear() {
 
 // ConfigurationConditions keeps staged sources exact and proves initial head
 // absence. It does not acknowledge file application during acceptance.
-func (publication Publication) ConfigurationConditions(ctx context.Context, revision int64) ([]keyvalue.Condition, error) {
+func (publication Publication) ConfigurationConditions(
+	ctx context.Context,
+	revision int64,
+) ([]keyvalue.Condition, error) {
 	procedure, err := publication.Input.Procedure()
 	if err != nil {
 		return nil, err

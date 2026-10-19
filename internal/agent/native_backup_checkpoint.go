@@ -27,7 +27,10 @@ func (exchange *nativeExchange) BackupCheckpoint(ctx context.Context, input *age
 	return executionplan.ValidateBackupWorkCheckpointAck(response.GetBackupWorkCheckpointAck(), owned, input, identity)
 }
 
-func (exchange *nativeExchange) CompleteBackup(ctx context.Context, request *agentpb.BackupWorkCompletionRequest) (*agentpb.BackupWorkCompletionAck, error) {
+func (exchange *nativeExchange) CompleteBackup(
+	ctx context.Context,
+	request *agentpb.BackupWorkCompletionRequest,
+) (*agentpb.BackupWorkCompletionAck, error) {
 	response, err := exchange.request(ctx, &agentpb.AgentMessage{
 		Payload: &agentpb.AgentMessage_BackupWorkCompletionRequest{BackupWorkCompletionRequest: request},
 	}, request.GetAttempt(), "backup_completion", "")
@@ -37,7 +40,9 @@ func (exchange *nativeExchange) CompleteBackup(ctx context.Context, request *age
 	return response.GetBackupWorkCompletionAck(), nil
 }
 
-func (exchange *nativeExchange) BackupRecoveryCheckpoint(ctx context.Context, assignment *agentpb.BackupRecoveryAssignment,
+func (exchange *nativeExchange) BackupRecoveryCheckpoint(
+	ctx context.Context,
+	assignment *agentpb.BackupRecoveryAssignment,
 	request *agentpb.BackupWorkCheckpointRequest,
 ) (*agentpb.BackupWorkCheckpointAck, error) {
 	exchange.mu.Lock()
@@ -53,10 +58,18 @@ func (exchange *nativeExchange) BackupRecoveryCheckpoint(ctx context.Context, as
 	if err != nil {
 		return nil, err
 	}
-	return executionplan.ValidateBackupRestoreRecoveryCheckpointAck(response.GetBackupWorkCheckpointAck(), owned, assignment, identity)
+	return executionplan.ValidateBackupRestoreRecoveryCheckpointAck(
+		response.GetBackupWorkCheckpointAck(),
+		owned,
+		assignment,
+		identity,
+	)
 }
 
-func (exchange *nativeExchange) FailBackup(ctx context.Context, request *agentpb.BackupWorkFailureRequest) (*agentpb.BackupWorkFailureAck, error) {
+func (exchange *nativeExchange) FailBackup(
+	ctx context.Context,
+	request *agentpb.BackupWorkFailureRequest,
+) (*agentpb.BackupWorkFailureAck, error) {
 	response, err := exchange.request(ctx, &agentpb.AgentMessage{
 		Payload: &agentpb.AgentMessage_BackupWorkFailureRequest{BackupWorkFailureRequest: request},
 	}, request.GetAttempt(), "backup_failure", "")
@@ -66,7 +79,10 @@ func (exchange *nativeExchange) FailBackup(ctx context.Context, request *agentpb
 	return response.GetBackupWorkFailureAck(), nil
 }
 
-func (exchange *nativeExchange) RecoverBackup(ctx context.Context, request *agentpb.BackupRecoveryRequest) (*agentpb.BackupRecoveryAck, error) {
+func (exchange *nativeExchange) RecoverBackup(
+	ctx context.Context,
+	request *agentpb.BackupRecoveryRequest,
+) (*agentpb.BackupRecoveryAck, error) {
 	response, err := exchange.request(ctx, &agentpb.AgentMessage{
 		Payload: &agentpb.AgentMessage_BackupRecoveryRequest{BackupRecoveryRequest: request},
 	}, request.GetAttempt(), "backup_prune_recovery", "")

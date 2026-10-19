@@ -12,7 +12,12 @@ import (
 func (executor *Executor) runRecovery(ctx context.Context, assignment resolverexecution.Assignment, exchange Exchange,
 	start *agentpb.WorkStartAck,
 ) (workexecution.Attempt, error) {
-	saved, err := executor.journal.PrepareResolverRecovery(ctx, assignment.Attempt, assignment.Input, *assignment.Recovery)
+	saved, err := executor.journal.PrepareResolverRecovery(
+		ctx,
+		assignment.Attempt,
+		assignment.Input,
+		*assignment.Recovery,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -47,17 +52,30 @@ func (executor *Executor) runRecovery(ctx context.Context, assignment resolverex
 	if err != nil {
 		return executor.recoveryFailure(ctx, assignment, exchange)
 	}
-	report := resolverexecution.RecoveryReport{AttemptID: assignment.Attempt.ID, ForwardID: assignment.Recovery.Forward.ID,
-		Input: assignment.Attempt.Input, Failure: assignment.Recovery.Evidence, Status: resolverexecution.RecoveryComplete,
-		HelpersStopped: true, ConfigurationRestored: observation.ConfigurationRestored, RuntimeRestored: observation.RuntimeRestored,
-		HostResolverRestored: observation.HostResolverRestored, ServingProof: observation.ServingProof, ObservedAt: observation.ObservedAt}
+	report := resolverexecution.RecoveryReport{
+		AttemptID:             assignment.Attempt.ID,
+		ForwardID:             assignment.Recovery.Forward.ID,
+		Input:                 assignment.Attempt.Input,
+		Failure:               assignment.Recovery.Evidence,
+		Status:                resolverexecution.RecoveryComplete,
+		HelpersStopped:        true,
+		ConfigurationRestored: observation.ConfigurationRestored,
+		RuntimeRestored:       observation.RuntimeRestored,
+		HostResolverRestored:  observation.HostResolverRestored,
+		ServingProof:          observation.ServingProof,
+		ObservedAt:            observation.ObservedAt,
+	}
 	if err := executor.journal.SaveResolverRecovery(ctx, assignment.Attempt, assignment.Input, report); err != nil {
 		return workexecution.Attempt{}, err
 	}
 	return executor.deliverRecovery(ctx, assignment, exchange, report)
 }
 
-func (executor *Executor) recoveryFailure(ctx context.Context, assignment resolverexecution.Assignment, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) recoveryFailure(
+	ctx context.Context,
+	assignment resolverexecution.Assignment,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	at := time.Now().UTC()
 	status := resolverexecution.RecoveryFailed
 	if !at.Before(assignment.Attempt.Deadline) {
@@ -65,8 +83,14 @@ func (executor *Executor) recoveryFailure(ctx context.Context, assignment resolv
 	} else if ctx.Err() != nil {
 		status = resolverexecution.RecoveryInterrupted
 	}
-	report := resolverexecution.RecoveryReport{AttemptID: assignment.Attempt.ID, ForwardID: assignment.Recovery.Forward.ID,
-		Input: assignment.Attempt.Input, Failure: assignment.Recovery.Evidence, Status: status, ObservedAt: at}
+	report := resolverexecution.RecoveryReport{
+		AttemptID:  assignment.Attempt.ID,
+		ForwardID:  assignment.Recovery.Forward.ID,
+		Input:      assignment.Attempt.Input,
+		Failure:    assignment.Recovery.Evidence,
+		Status:     status,
+		ObservedAt: at,
+	}
 	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
 	if err := executor.journal.SaveResolverRecovery(bounded, assignment.Attempt, assignment.Input, report); err != nil {
@@ -75,10 +99,18 @@ func (executor *Executor) recoveryFailure(ctx context.Context, assignment resolv
 	return executor.deliverRecovery(bounded, assignment, exchange, report)
 }
 
-func (executor *Executor) deliverRecovery(ctx context.Context, assignment resolverexecution.Assignment, exchange Exchange,
+func (executor *Executor) deliverRecovery(
+	ctx context.Context,
+	assignment resolverexecution.Assignment,
+	exchange Exchange,
 	report resolverexecution.RecoveryReport,
 ) (workexecution.Attempt, error) {
-	raw, _, err := resolverexecution.EncodeRecoveryReport(assignment.Attempt, assignment.Input, *assignment.Recovery, report)
+	raw, _, err := resolverexecution.EncodeRecoveryReport(
+		assignment.Attempt,
+		assignment.Input,
+		*assignment.Recovery,
+		report,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

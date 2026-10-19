@@ -15,10 +15,22 @@ import (
 type Exchange interface {
 	ConfigurationExchange
 	StartAttempt(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
-	EntryConfigurationCheckpoint(context.Context, *agentpb.EntryConfigurationWorkCheckpointRequest) (*agentpb.EntryConfigurationWorkCheckpointAck, error)
-	CompleteEntryConfiguration(context.Context, *agentpb.EntryConfigurationWorkCompletionRequest) (*agentpb.EntryConfigurationWorkCompletionAck, error)
-	FailEntryConfiguration(context.Context, *agentpb.EntryConfigurationWorkFailureRequest) (*agentpb.EntryConfigurationWorkFailureAck, error)
-	RecoverEntryConfiguration(context.Context, *agentpb.EntryConfigurationWorkRecoveryReportRequest) (*agentpb.EntryConfigurationWorkRecoveryReportAck, error)
+	EntryConfigurationCheckpoint(
+		context.Context,
+		*agentpb.EntryConfigurationWorkCheckpointRequest,
+	) (*agentpb.EntryConfigurationWorkCheckpointAck, error)
+	CompleteEntryConfiguration(
+		context.Context,
+		*agentpb.EntryConfigurationWorkCompletionRequest,
+	) (*agentpb.EntryConfigurationWorkCompletionAck, error)
+	FailEntryConfiguration(
+		context.Context,
+		*agentpb.EntryConfigurationWorkFailureRequest,
+	) (*agentpb.EntryConfigurationWorkFailureAck, error)
+	RecoverEntryConfiguration(
+		context.Context,
+		*agentpb.EntryConfigurationWorkRecoveryReportRequest,
+	) (*agentpb.EntryConfigurationWorkRecoveryReportAck, error)
 }
 
 // Host must join started effects before returning. Inspect accounts for the
@@ -37,9 +49,17 @@ type Executor struct {
 	ownership    *agentownership.Lease
 }
 
-func NewExecutor(journal *agentworkjournal.Journal, materializer *materialization.Runtime, helper Helper, ownership *agentownership.Lease) (*Executor, error) {
+func NewExecutor(
+	journal *agentworkjournal.Journal,
+	materializer *materialization.Runtime,
+	helper Helper,
+	ownership *agentownership.Lease,
+) (*Executor, error) {
 	if journal == nil || materializer == nil || helper == nil {
-		return nil, errs.New(errs.KindInternal, "Entry execution requires its durable journal, materializer and host helper")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Entry execution requires its durable journal, materializer and host helper",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
@@ -99,7 +119,15 @@ func (executor *Executor) run(ctx context.Context, input Input, exchange Exchang
 		return executor.deliverFailure(ctx, input, exchange, saved.Failure)
 	}
 	if saved == nil && reconcile {
-		return executor.fail(ctx, input, exchange, errs.New(errs.KindStateConflict, "Entry configuration execution started previously but its local checkpoint is unavailable; inspection is required"))
+		return executor.fail(
+			ctx,
+			input,
+			exchange,
+			errs.New(
+				errs.KindStateConflict,
+				"Entry configuration execution started previously but its local checkpoint is unavailable; inspection is required",
+			),
+		)
 	}
 	var progress entryexecution.Progress
 	if saved != nil {
@@ -183,14 +211,24 @@ func (executor *Executor) run(ctx context.Context, input Input, exchange Exchang
 	return terminal, nil
 }
 
-func (executor *Executor) save(ctx context.Context, input Input, exchange Exchange, progress entryexecution.Progress) error {
+func (executor *Executor) save(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress entryexecution.Progress,
+) error {
 	if _, err := executor.journal.PrepareEntryConfiguration(ctx, input.attempt, input.procedure, progress); err != nil {
 		return err
 	}
 	return executor.acknowledge(ctx, input, exchange, progress)
 }
 
-func (executor *Executor) acknowledge(ctx context.Context, input Input, exchange Exchange, progress entryexecution.Progress) error {
+func (executor *Executor) acknowledge(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress entryexecution.Progress,
+) error {
 	request, err := input.checkpointRequest(progress)
 	if err != nil {
 		return err

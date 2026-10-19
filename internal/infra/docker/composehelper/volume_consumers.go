@@ -43,7 +43,9 @@ func detachVolumeConsumers(ctx context.Context, taskRunner runner.Runner, input 
 			"--project-directory", composeProjectDirectory(input.Candidate), "--file", "-"}
 		commands := [][]string{
 			append(slices.Clone(prefix), "config", "--quiet", "--no-interpolate"),
-			append(append(slices.Clone(prefix), "up", "--detach", "--no-deps", "--no-build", "--pull", "never"), selected...),
+			append(
+				append(slices.Clone(prefix), "up", "--detach", "--no-deps", "--no-build", "--pull", "never"),
+				selected...),
 		}
 		for _, args := range commands {
 			if err := ctx.Err(); err != nil {
@@ -56,7 +58,10 @@ func detachVolumeConsumers(ctx context.Context, taskRunner runner.Runner, input 
 			clear(result.Stdout)
 			clear(result.Stderr)
 			if err != nil || result.ExitCode != 0 {
-				return errs.New(errs.KindRequestFailed, "Volume consumer configuration could not be applied; inspect the captured workloads before retrying")
+				return errs.New(
+					errs.KindRequestFailed,
+					"Volume consumer configuration could not be applied; inspect the captured workloads before retrying",
+				)
 			}
 		}
 	}

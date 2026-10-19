@@ -20,8 +20,10 @@ type HelperInput struct {
 }
 
 func OpenHelperRequest(request *agentpb.ComponentWorkHelperRequest) (HelperInput, error) {
-	if request == nil || proto.Size(request) > executionplan.MaximumPlanBytes || executionplan.RejectUnknown(request) != nil ||
-		request.Assignment == nil || request.Assignment.Attempt == nil {
+	if request == nil || proto.Size(request) > executionplan.MaximumPlanBytes ||
+		executionplan.RejectUnknown(request) != nil ||
+		request.Assignment == nil ||
+		request.Assignment.Attempt == nil {
 		return HelperInput{}, invalidProgress()
 	}
 	claimed := request.Assignment.Attempt
@@ -60,7 +62,9 @@ func OpenHelperRequest(request *agentpb.ComponentWorkHelperRequest) (HelperInput
 		result.Recovery, result.Progress = &source, boundary
 		return result, nil
 	}
-	if len(request.Assignment.RecoverySource) != 0 || len(request.Assignment.RecoveryBoundary) != 0 || request.Report == nil || request.Acknowledgement == nil {
+	if len(request.Assignment.RecoverySource) != 0 || len(request.Assignment.RecoveryBoundary) != 0 ||
+		request.Report == nil ||
+		request.Acknowledgement == nil {
 		return HelperInput{}, invalidProgress()
 	}
 	reported, err := workexecution.DecodeAgentAttempt(request.Report.Attempt, identity)
@@ -73,7 +77,9 @@ func OpenHelperRequest(request *agentpb.ComponentWorkHelperRequest) (HelperInput
 	}
 	ack := request.Acknowledgement
 	acknowledged, err := workexecution.DecodeAgentAttempt(ack.Attempt, identity)
-	if err != nil || !workexecution.SameAssignment(attempt, acknowledged) || ack.Evidence == nil || ack.RecordedAt == nil || ack.RecordedAt.CheckValid() != nil {
+	if err != nil || !workexecution.SameAssignment(attempt, acknowledged) || ack.Evidence == nil ||
+		ack.RecordedAt == nil ||
+		ack.RecordedAt.CheckValid() != nil {
 		return HelperInput{}, invalidProgress()
 	}
 	checkpoint, err := progress.Checkpoint(attempt, procedure)
@@ -81,7 +87,8 @@ func OpenHelperRequest(request *agentpb.ComponentWorkHelperRequest) (HelperInput
 		return HelperInput{}, err
 	}
 	evidence := workexecution.Input{ID: ack.Evidence.InputId, SHA256: hex.EncodeToString(ack.Evidence.Sha256)}
-	if checkpoint.Sequence != ack.Sequence || checkpoint.StageID != ack.StageId || checkpoint.Evidence != evidence || !checkpoint.RecordedAt.Equal(ack.RecordedAt.AsTime()) {
+	if checkpoint.Sequence != ack.Sequence || checkpoint.StageID != ack.StageId || checkpoint.Evidence != evidence ||
+		!checkpoint.RecordedAt.Equal(ack.RecordedAt.AsTime()) {
 		return HelperInput{}, invalidProgress()
 	}
 	result.Progress = progress

@@ -13,7 +13,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) runRecovery(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	saved, err := executor.journal.PrepareVolumeRecovery(ctx, input.attempt, agentworkjournal.VolumeRecoveryRecord{
 		Action: input.procedure.Action, VolumeID: input.procedure.VolumeId, Source: *input.recovery, Boundary: input.boundary,
 	})
@@ -40,7 +44,14 @@ func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange
 		}
 		saved.Report = &report
 	}
-	raw, evidence, err := volumeexecution.EncodeRecoveryReport(input.attempt, *input.recovery, input.procedure.Action, input.procedure.VolumeId, input.boundary, *saved.Report)
+	raw, evidence, err := volumeexecution.EncodeRecoveryReport(
+		input.attempt,
+		*input.recovery,
+		input.procedure.Action,
+		input.procedure.VolumeId,
+		input.boundary,
+		*saved.Report,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -52,12 +63,15 @@ func (executor *Executor) runRecovery(ctx context.Context, input Input, exchange
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil ||
-		ack.FinishedAt.AsTime().Before(saved.Report.Observation.At) || ack.BoundaryCompleted != saved.Report.BoundaryCompleted(input.boundary) {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil ||
+		ack.FinishedAt.AsTime().Before(saved.Report.Observation.At) ||
+		ack.BoundaryCompleted != saved.Report.BoundaryCompleted(input.boundary) {
 		return workexecution.Attempt{}, invalidInput()
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, input.attempt.Executor)
-	if err != nil || !workexecution.SameAssignment(claimed, input.attempt) || ack.Evidence.InputId != evidence.ID || hex.EncodeToString(ack.Evidence.Sha256) != evidence.SHA256 {
+	if err != nil || !workexecution.SameAssignment(claimed, input.attempt) || ack.Evidence.InputId != evidence.ID ||
+		hex.EncodeToString(ack.Evidence.Sha256) != evidence.SHA256 {
 		return workexecution.Attempt{}, invalidInput()
 	}
 	terminal := input.attempt
@@ -83,7 +97,12 @@ func (host *RuntimeHost) InspectRecovery(ctx context.Context, input Input) (volu
 	if err != nil {
 		return volumeexecution.Observation{}, err
 	}
-	boundary, err := volumeexecution.EncodeProgress(input.recovery.Forward, input.procedure.Action, input.procedure.VolumeId, input.boundary)
+	boundary, err := volumeexecution.EncodeProgress(
+		input.recovery.Forward,
+		input.procedure.Action,
+		input.procedure.VolumeId,
+		input.boundary,
+	)
 	if err != nil {
 		return volumeexecution.Observation{}, err
 	}
@@ -92,8 +111,16 @@ func (host *RuntimeHost) InspectRecovery(ctx context.Context, input Input) (volu
 		return volumeexecution.Observation{}, err
 	}
 	request := &agentpb.VolumeWorkHelperRequest{
-		Assignment: &agentpb.VolumeWorkAssignment{Attempt: identity, Input: input.procedure, RecoverySource: source, RecoveryBoundary: boundary},
-		Start:      &agentpb.WorkStartAck{Attempt: identity, StartedAt: timestamppb.New(*input.attempt.StartedAt)}, InspectOnly: true,
+		Assignment: &agentpb.VolumeWorkAssignment{
+			Attempt:          identity,
+			Input:            input.procedure,
+			RecoverySource:   source,
+			RecoveryBoundary: boundary,
+		},
+		Start: &agentpb.WorkStartAck{
+			Attempt:   identity,
+			StartedAt: timestamppb.New(*input.attempt.StartedAt),
+		}, InspectOnly: true,
 	}
 	captured, err := executionplan.OpenVolumeHelperRequest(request)
 	if err != nil {

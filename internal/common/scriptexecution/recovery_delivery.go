@@ -29,8 +29,12 @@ func EncodeRecoveryAssignment(input RecoveryInput) (*agentpb.ScriptRecoveryAssig
 		Projection: proto.CloneOf(input.Projection), Artifacts: proto.CloneOf(input.Artifacts)}, nil
 }
 
-func DecodeRecoveryAssignment(message *agentpb.ScriptRecoveryAssignment, identity workexecution.Identity) (RecoveryInput, error) {
-	if message == nil || executionplan.RejectUnknown(message) != nil || len(message.ForwardAttempt) == 0 || len(message.ForwardAttempt) > 16<<10 {
+func DecodeRecoveryAssignment(
+	message *agentpb.ScriptRecoveryAssignment,
+	identity workexecution.Identity,
+) (RecoveryInput, error) {
+	if message == nil || executionplan.RejectUnknown(message) != nil || len(message.ForwardAttempt) == 0 ||
+		len(message.ForwardAttempt) > 16<<10 {
 		return RecoveryInput{}, errs.New(errs.KindValidationFailed, "Script recovery assignment is invalid")
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(message.Attempt, identity)

@@ -9,7 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareBackingRecovery(ctx context.Context, assignment backingprovision.Assignment) (*BackingRecoveryRecord, error) {
+func (journal *Journal) PrepareBackingRecovery(
+	ctx context.Context,
+	assignment backingprovision.Assignment,
+) (*BackingRecoveryRecord, error) {
 	if assignment.Validate() != nil || assignment.Recovery == nil || assignment.Attempt.StartedAt == nil {
 		return nil, invalid()
 	}
@@ -18,7 +21,11 @@ func (journal *Journal) PrepareBackingRecovery(ctx context.Context, assignment b
 		return nil, err
 	}
 	captured := BackingRecoveryRecord{Layout: layout, Source: *assignment.Recovery}
-	state := attemptRecord{Attempt: assignment.Attempt, UpdatedAt: *assignment.Attempt.StartedAt, BackingRecovery: &captured}
+	state := attemptRecord{
+		Attempt:         assignment.Attempt,
+		UpdatedAt:       *assignment.Attempt.StartedAt,
+		BackingRecovery: &captured,
+	}
 	if err := state.validate(); err != nil {
 		return nil, err
 	}
@@ -50,10 +57,17 @@ func (journal *Journal) PrepareBackingRecovery(ctx context.Context, assignment b
 	return state.BackingRecovery, nil
 }
 
-func matchesBackingRecovery(state *attemptRecord, assignment backingprovision.Assignment, layout backingprovision.Layout) bool {
-	if state == nil || state.BackingRecovery == nil || assignment.Recovery == nil || assignment.Attempt.StartedAt == nil ||
-		state.Attempt.StartedAt == nil || !state.Attempt.StartedAt.Equal(*assignment.Attempt.StartedAt) ||
-		!workexecution.SameAssignment(state.Attempt, assignment.Attempt) || state.BackingRecovery.Layout != layout {
+func matchesBackingRecovery(
+	state *attemptRecord,
+	assignment backingprovision.Assignment,
+	layout backingprovision.Layout,
+) bool {
+	if state == nil || state.BackingRecovery == nil || assignment.Recovery == nil ||
+		assignment.Attempt.StartedAt == nil ||
+		state.Attempt.StartedAt == nil ||
+		!state.Attempt.StartedAt.Equal(*assignment.Attempt.StartedAt) ||
+		!workexecution.SameAssignment(state.Attempt, assignment.Attempt) ||
+		state.BackingRecovery.Layout != layout {
 		return false
 	}
 	left, err := backingprovision.EncodeRecovery(state.BackingRecovery.Source, layout)
@@ -64,7 +78,11 @@ func matchesBackingRecovery(state *attemptRecord, assignment backingprovision.As
 	return err == nil && bytes.Equal(left, right)
 }
 
-func (journal *Journal) SaveBackingRecoveryReport(ctx context.Context, assignment backingprovision.Assignment, report backingprovision.RecoveryReport) error {
+func (journal *Journal) SaveBackingRecoveryReport(
+	ctx context.Context,
+	assignment backingprovision.Assignment,
+	report backingprovision.RecoveryReport,
+) error {
 	layout, err := backingprovision.CaptureLayout(assignment.Attempt, assignment.Procedure)
 	if err != nil || assignment.Recovery == nil {
 		return invalid()
@@ -120,7 +138,13 @@ func (journal *Journal) AcknowledgeBackingRecovery(ctx context.Context, assignme
 		return workexecution.Attempt{}, conflict()
 	}
 	recovery := state.BackingRecovery
-	terminal, err := backingprovision.DecodeRecoveryAck(assignment.Attempt, recovery.Source, layout, *recovery.Report, ack)
+	terminal, err := backingprovision.DecodeRecoveryAck(
+		assignment.Attempt,
+		recovery.Source,
+		layout,
+		*recovery.Report,
+		ack,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

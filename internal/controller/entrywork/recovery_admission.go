@@ -12,10 +12,18 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *AgentWork) admitRecovery(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *AgentWork) admitRecovery(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
-	if request.DecisionOnly || item.Operation != workexecution.EntryConfiguration || item.Placement.Executor != workexecution.Agent ||
-		item.Phase != workexecution.Ready || item.ActiveAttemptID != "" || at.IsZero() || at.Before(item.UpdatedAt) ||
+	if request.DecisionOnly || item.Operation != workexecution.EntryConfiguration ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Ready ||
+		item.ActiveAttemptID != "" ||
+		at.IsZero() ||
+		at.Before(item.UpdatedAt) ||
 		item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped {
 		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Entry recovery cannot obtain this assignment")
 	}
@@ -36,5 +44,9 @@ func (owner *AgentWork) admitRecovery(ctx context.Context, request workqueue.Ass
 		return workdispatch.Decision{}, err
 	}
 	guards = append(guards, keyvalue.Condition{Key: entryrecord.RecoveryKey(item.ID), ModRevision: source.Revision})
-	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: item.Deadline, Change: workqueue.Change{Conditions: guards}}, nil
+	return workdispatch.Decision{
+		Disposition: workdispatch.Dispatch,
+		Deadline:    item.Deadline,
+		Change:      workqueue.Change{Conditions: guards},
+	}, nil
 }

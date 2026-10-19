@@ -69,18 +69,28 @@ func (service *Service) prepareAuthoredServiceWorkInput(ctx context.Context,
 	if err != nil {
 		return empty, err
 	}
-	projection, found, err := service.repository.GetEnvironmentComposeProjectionRevision(ctx, task.Scope.EnvironmentID, task.ID)
+	projection, found, err := service.repository.GetEnvironmentComposeProjectionRevision(
+		ctx,
+		task.Scope.EnvironmentID,
+		task.ID,
+	)
 	if err != nil {
 		return empty, err
 	}
 	if !found || projection.Revision <= 0 || projection.Revision > work.ReadRevision ||
 		projection.Record.EnvironmentID != task.Scope.EnvironmentID || projection.Record.RevisionID != task.ID ||
 		projection.Record.RenderGeneration != input.desired.RenderGeneration {
-		return empty, errs.New(errs.KindStateConflict, "Blueprint Service runtime projection is not available at its work snapshot")
+		return empty, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Service runtime projection is not available at its work snapshot",
+		)
 	}
 	artifact := &agentpb.ComposeArtifact{}
 	if proto.Unmarshal(projection.Record.ComposeArtifact, artifact) != nil ||
-		ids.Validate(ids.KindConfig, artifact.GetArtifactId()) != nil || artifact.GetOwnerId() != task.Scope.EnvironmentID {
+		ids.Validate(
+			ids.KindConfig,
+			artifact.GetArtifactId(),
+		) != nil || artifact.GetOwnerId() != task.Scope.EnvironmentID {
 		return empty, errs.New(errs.KindStateConflict, "Blueprint Service runtime artifact is invalid")
 	}
 	allScripts, _, err := service.listBlueprintScripts(ctx, task.Scope.EnvironmentID, service.repository)

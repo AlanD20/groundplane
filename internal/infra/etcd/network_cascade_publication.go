@@ -20,7 +20,10 @@ func (repository *EnvironmentBlueprintRepository) prepareNetworkCascadePublicati
 	cascade, task := request.Cascade, request.Task
 	if cascade == nil || cascade.SnapshotRevision <= 0 || len(cascade.Items) != len(cascade.Inputs)+1 ||
 		len(cascade.Inputs) != len(cascade.Captures) || task.ExpectedItems != uint32(len(cascade.Items)) {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Backing Zone removal requires all captured consumer inputs")
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Backing Zone removal requires all captured consumer inputs",
+		)
 	}
 	if err := workexecution.ValidateGraph(task, cascade.Items); err != nil {
 		return workqueue.Change{}, err
@@ -36,7 +39,10 @@ func (repository *EnvironmentBlueprintRepository) prepareNetworkCascadePublicati
 	}
 	defer clear(expectedBridge)
 	if !bytes.Equal(bridge, expectedBridge) {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Backing Zone graph differs from its final bridge operation")
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Backing Zone graph differs from its final bridge operation",
+		)
 	}
 	members, err := attachments.NewReader(repository.store).ListAttachesByBackingNetworkAtRevision(ctx,
 		task.Scope.ProjectID, task.TargetID, cascade.SnapshotRevision)
@@ -50,7 +56,12 @@ func (repository *EnvironmentBlueprintRepository) prepareNetworkCascadePublicati
 	for _, member := range members {
 		byID[member.Record.ID] = member.Revision
 	}
-	creation, err := attachments.BackingZoneCreationCondition(ctx, repository.store, task.TargetID, cascade.SnapshotRevision)
+	creation, err := attachments.BackingZoneCreationCondition(
+		ctx,
+		repository.store,
+		task.TargetID,
+		cascade.SnapshotRevision,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -70,19 +81,28 @@ func (repository *EnvironmentBlueprintRepository) prepareNetworkCascadePublicati
 		before := slices.Clone(removed[source.Attach.ServiceID])
 		slices.Sort(before)
 		if input.Validate(ctx) != nil || step == nil || step.ZoneID != task.TargetID ||
-			step.Ordinal != uint32(ordinal) || step.Count != uint32(len(cascade.Inputs)) || !slices.Equal(step.RemovedBefore, before) ||
+			step.Ordinal != uint32(
+				ordinal,
+			) || step.Count != uint32(len(cascade.Inputs)) || !slices.Equal(step.RemovedBefore, before) ||
 			input.TaskID != task.ID || input.WorkItemID != item.ID || item.TargetID != source.Attach.ID ||
 			source.SnapshotRevision != cascade.SnapshotRevision || byID[source.Attach.ID] != source.AttachRevision ||
 			source.Attach.BackingProjectID != task.Scope.ProjectID || source.Attach.BackingEnvironmentID != task.Scope.EnvironmentID ||
 			item.Placement.HostID != request.Item.Placement.HostID ||
 			previous == "" && len(item.Dependencies) != 0 ||
 			previous != "" && (len(item.Dependencies) != 1 || item.Dependencies[0] != previous) {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Backing Zone consumer graph differs from its complete captured membership")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Backing Zone consumer graph differs from its complete captured membership",
+			)
 		}
 		delete(byID, source.Attach.ID)
-		guards, err := resourcePublicationConditions(admission, input.Snapshot.ConsumerConditions(), []keyvalue.Condition{
-			{Key: attachments.AttachKey(source.Attach.ID), ModRevision: source.AttachRevision},
-			{Key: attachments.AttachFactsKey(source.Attach.ID), ModRevision: source.FactsRevision}})
+		guards, err := resourcePublicationConditions(
+			admission,
+			input.Snapshot.ConsumerConditions(),
+			[]keyvalue.Condition{
+				{Key: attachments.AttachKey(source.Attach.ID), ModRevision: source.AttachRevision},
+				{Key: attachments.AttachFactsKey(source.Attach.ID), ModRevision: source.FactsRevision}},
+		)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
@@ -96,7 +116,10 @@ func (repository *EnvironmentBlueprintRepository) prepareNetworkCascadePublicati
 	}
 	if previous != "" && (len(request.Item.Dependencies) != 1 || request.Item.Dependencies[0] != previous) ||
 		previous == "" && len(request.Item.Dependencies) != 0 {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Backing Zone bridge must follow the last captured consumer")
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Backing Zone bridge must follow the last captured consumer",
+		)
 	}
 	return networks.PrepareCascadePublication(ctx, task, cascade.Items, request.Input, request.Marker,
 		admission, request.Claim.RevisionID, cascade.SnapshotRevision)

@@ -24,12 +24,21 @@ type CompletionRecord struct {
 
 func (record CompletionRecord) Validate(input resolverexecution.Input) error {
 	attempt := record.Attempt
-	if attempt.Validate() != nil || attempt.FinishedAt == nil || attempt.Result == nil || attempt.Direction != workexecution.Forward ||
-		attempt.StartedAt == nil || attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled && attempt.Outcome != workexecution.Superseded ||
+	if attempt.Validate() != nil || attempt.FinishedAt == nil || attempt.Result == nil ||
+		attempt.Direction != workexecution.Forward ||
+		attempt.StartedAt == nil ||
+		attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled &&
+			attempt.Outcome != workexecution.Superseded ||
 		record.Final.UpdatedAt.After(*attempt.FinishedAt) {
 		return invalid("DNS resolver completion receipt has no matching applied forward result")
 	}
-	evidence, err := resolverexecution.CompletionEvidence(attempt, input, record.Final, record.Verification, record.Proof)
+	evidence, err := resolverexecution.CompletionEvidence(
+		attempt,
+		input,
+		record.Final,
+		record.Verification,
+		record.Proof,
+	)
 	if err != nil || evidence != *attempt.Result {
 		return invalid("DNS resolver completion receipt differs from its accepted proof")
 	}
@@ -42,9 +51,12 @@ func (record CompletionRecord) Validate(input resolverexecution.Input) error {
 func (repository *Repository) PrepareCompleted(ctx context.Context, view workqueue.ResumeView,
 	proof *agentpb.DNSResolverObservationEvidence, at time.Time,
 ) (workqueue.Change, workexecution.Input, error) {
-	if !view.ActiveAttempt || !view.CanSettleResult() || view.Attempt.Attempt.FinishedAt != nil || view.Checkpoint.Record == nil ||
+	if !view.ActiveAttempt || !view.CanSettleResult() || view.Attempt.Attempt.FinishedAt != nil ||
+		view.Checkpoint.Record == nil ||
 		view.Attempt.Attempt.Direction != workexecution.Forward {
-		return workqueue.Change{}, workexecution.Input{}, invalid("DNS resolver completion requires its active final forward checkpoint")
+		return workqueue.Change{}, workexecution.Input{}, invalid(
+			"DNS resolver completion requires its active final forward checkpoint",
+		)
 	}
 	stored, err := repository.Load(ctx, view.Work)
 	if err != nil {
@@ -57,7 +69,9 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 	var verification *resolverexecution.Progress
 	if stored.Input.Enabled {
 		if final.Sequence < 2 {
-			return workqueue.Change{}, workexecution.Input{}, invalid("DNS resolver completion has no serving observation")
+			return workqueue.Change{}, workexecution.Input{}, invalid(
+				"DNS resolver completion has no serving observation",
+			)
 		}
 		progress, err := repository.ReadProgress(ctx, view, stored.Input, final.Sequence-2)
 		if err != nil {
@@ -65,12 +79,20 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 		}
 		verification = &progress
 	}
-	evidence, err := resolverexecution.CompletionEvidence(view.Attempt.Attempt, stored.Input, final, verification, proof)
+	evidence, err := resolverexecution.CompletionEvidence(
+		view.Attempt.Attempt,
+		stored.Input,
+		final,
+		verification,
+		proof,
+	)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
 	if final.UpdatedAt.After(at) {
-		return workqueue.Change{}, workexecution.Input{}, invalid("DNS resolver observation is ahead of completion time")
+		return workqueue.Change{}, workexecution.Input{}, invalid(
+			"DNS resolver observation is ahead of completion time",
+		)
 	}
 	queue, err := workqueue.NewRepository(repository.store)
 	if err != nil {
@@ -81,7 +103,11 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 		return workqueue.Change{}, workexecution.Input{}, err
 	}
 	outcome := forwardOutcome(view)
-	completion.At, completion.Result = at, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: true}
+	completion.At, completion.Result = at, workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       evidence,
+		EffectsSettled: true,
+	}
 	change, err := workqueue.PrepareCompletion(completion)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Input{}, err
@@ -101,9 +127,17 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 	if len(raw) > resolverexecution.MaximumReportBytes {
 		return workqueue.Change{}, workexecution.Input{}, invalid("DNS resolver completion receipt exceeds its bound")
 	}
-	applied := Applied{HostID: stored.Input.HostID, ComponentID: stored.Input.ComponentID, Generation: stored.Input.Generation,
-		Desired: stored.Capture.Desired, Configuration: stored.Input.Candidate, ServingProof: proof,
-		BaselineSHA256: stored.Capture.BaselineSHA256, ProjectionSHA256: stored.Capture.Projection.InputSHA256, ObservedAt: at.UTC()}
+	applied := Applied{
+		HostID:           stored.Input.HostID,
+		ComponentID:      stored.Input.ComponentID,
+		Generation:       stored.Input.Generation,
+		Desired:          stored.Capture.Desired,
+		Configuration:    stored.Input.Candidate,
+		ServingProof:     proof,
+		BaselineSHA256:   stored.Capture.BaselineSHA256,
+		ProjectionSHA256: stored.Capture.Projection.InputSHA256,
+		ObservedAt:       at.UTC(),
+	}
 	if stored.Input.Enabled {
 		applied.FileOwner, err = resolverexecution.FileTransactionID(view.Attempt.Attempt, *stored.Input.Candidate)
 		if err != nil {
@@ -124,7 +158,10 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: ResultKey(terminal.ID)},
 		keyvalue.Condition{Key: workqueue.CheckpointKey(terminal.ID), ModRevision: view.Checkpoint.Revision},
 		keyvalue.Condition{Key: workqueue.ExecutorKey(terminal.Executor), ModRevision: view.ExecutorRevision})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ResultKey(terminal.ID), Value: raw})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ResultKey(terminal.ID), Value: raw},
+	)
 	request, err := repository.prepareRequestResult(ctx, view.Work, outcome)
 	if err != nil {
 		keyvalue.ClearMutationValues(change.Mutations)
@@ -145,9 +182,18 @@ func forwardOutcome(view workqueue.ResumeView) workexecution.Outcome {
 	return workexecution.Succeeded
 }
 
-func (repository *Repository) prepareApplied(ctx context.Context, view workqueue.ResumeView, stored StoredInput, applied Applied) (workqueue.Change, error) {
+func (repository *Repository) prepareApplied(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	stored StoredInput,
+	applied Applied,
+) (workqueue.Change, error) {
 	key := componentrecord.RecordKey(stored.Input.ComponentID)
-	read, err := repository.read(ctx, []string{key, AppliedKey(stored.Input.HostID, stored.Input.ComponentID)}, view.Work.ReadRevision)
+	read, err := repository.read(
+		ctx,
+		[]string{key, AppliedKey(stored.Input.HostID, stored.Input.ComponentID)},
+		view.Work.ReadRevision,
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -177,13 +223,23 @@ func (repository *Repository) prepareApplied(ctx context.Context, view workqueue
 	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision},
 		{Key: AppliedKey(stored.Input.HostID, stored.Input.ComponentID), ModRevision: stored.Capture.AppliedRevision}},
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: component}, componentrecord.WriteFenceMutation(stored.Input.ComponentID),
-			{Type: keyvalue.MutationPut, Key: AppliedKey(stored.Input.HostID, stored.Input.ComponentID), Value: value}}}, nil
+		Mutations: []keyvalue.Mutation{
+			{Type: keyvalue.MutationPut, Key: key, Value: component},
+			componentrecord.WriteFenceMutation(stored.Input.ComponentID),
+			{
+				Type:  keyvalue.MutationPut,
+				Key:   AppliedKey(stored.Input.HostID, stored.Input.ComponentID),
+				Value: value,
+			},
+		}}, nil
 }
 
 // ReadCompleted reads only retained execution evidence, not the current applied
 // head. A later successful change cannot invalidate a lost terminal ACK replay.
-func (repository *Repository) ReadCompleted(ctx context.Context, view workqueue.ResumeView) (CompletionRecord, keyvalue.Condition, error) {
+func (repository *Repository) ReadCompleted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (CompletionRecord, keyvalue.Condition, error) {
 	attempt := view.Attempt.Attempt
 	if attempt.FinishedAt == nil || attempt.Result == nil {
 		return CompletionRecord{}, keyvalue.Condition{}, invalid("DNS resolver has no terminal completion receipt")
@@ -205,7 +261,9 @@ func (repository *Repository) ReadCompleted(ctx context.Context, view workqueue.
 	if err != nil || record.Validate(stored.Input) != nil || !workexecution.SameAssignment(record.Attempt, attempt) ||
 		record.Attempt.Outcome != attempt.Outcome || record.Attempt.Result == nil || *record.Attempt.Result != *attempt.Result ||
 		record.Attempt.FinishedAt == nil || !record.Attempt.FinishedAt.Equal(*attempt.FinishedAt) {
-		return CompletionRecord{}, keyvalue.Condition{}, invalid("DNS resolver completion receipt differs from its accepted terminal result")
+		return CompletionRecord{}, keyvalue.Condition{}, invalid(
+			"DNS resolver completion receipt differs from its accepted terminal result",
+		)
 	}
 	return record, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
 }

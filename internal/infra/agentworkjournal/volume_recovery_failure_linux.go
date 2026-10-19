@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareVolumeRecoveryFailure(ctx context.Context, attempt workexecution.Attempt, reason volumeexecution.FailureReason) (*VolumeFailureDelivery, error) {
+func (journal *Journal) PrepareVolumeRecoveryFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	reason volumeexecution.FailureReason,
+) (*VolumeFailureDelivery, error) {
 	if !reason.Valid() {
 		return nil, invalid()
 	}
@@ -21,7 +25,8 @@ func (journal *Journal) PrepareVolumeRecoveryFailure(ctx context.Context, attemp
 	if err != nil {
 		return nil, err
 	}
-	if state == nil || state.VolumeRecovery == nil || state.VolumeRecovery.Report != nil || !workexecution.SameAssignment(state.Attempt, attempt) {
+	if state == nil || state.VolumeRecovery == nil || state.VolumeRecovery.Report != nil ||
+		!workexecution.SameAssignment(state.Attempt, attempt) {
 		return nil, conflict()
 	}
 	if state.VolumeRecovery.Failure != nil {
@@ -34,7 +39,11 @@ func (journal *Journal) PrepareVolumeRecoveryFailure(ctx context.Context, attemp
 	return state.VolumeRecovery.Failure, nil
 }
 
-func (journal *Journal) AcknowledgeVolumeRecoveryFailure(ctx context.Context, attempt workexecution.Attempt, ack *agentpb.VolumeWorkFailureAck) (workexecution.Attempt, error) {
+func (journal *Journal) AcknowledgeVolumeRecoveryFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	ack *agentpb.VolumeWorkFailureAck,
+) (workexecution.Attempt, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return workexecution.Attempt{}, err
@@ -44,7 +53,8 @@ func (journal *Journal) AcknowledgeVolumeRecoveryFailure(ctx context.Context, at
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if state == nil || state.VolumeRecovery == nil || state.VolumeRecovery.Failure == nil || !workexecution.SameAssignment(state.Attempt, attempt) {
+	if state == nil || state.VolumeRecovery == nil || state.VolumeRecovery.Failure == nil ||
+		!workexecution.SameAssignment(state.Attempt, attempt) {
 		return workexecution.Attempt{}, conflict()
 	}
 	failure := state.VolumeRecovery.Failure
@@ -53,7 +63,8 @@ func (journal *Journal) AcknowledgeVolumeRecoveryFailure(ctx context.Context, at
 		return workexecution.Attempt{}, err
 	}
 	if previous := failure.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result || !previous.FinishedAt.Equal(*terminal.FinishedAt) {
+		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result ||
+			!previous.FinishedAt.Equal(*terminal.FinishedAt) {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *previous, nil

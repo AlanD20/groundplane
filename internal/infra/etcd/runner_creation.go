@@ -107,8 +107,16 @@ func (repository *RunnerRepository) PrepareRunnerCreation(
 	source.mutations = []keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: runners.RunnerKey(desired.ID), Value: desiredValue},
 		{Type: keyvalue.MutationPut, Key: runners.RunnerLifecycleKey(desired.ID), Value: lifecycleValue},
-		{Type: keyvalue.MutationPut, Key: runners.RunnerTenantSlugKey(desired.TenantID, desired.Slug), Value: []byte(desired.ID)},
-		{Type: keyvalue.MutationPut, Key: runners.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID), Value: []byte(desired.ID)},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   runners.RunnerTenantSlugKey(desired.TenantID, desired.Slug),
+			Value: []byte(desired.ID),
+		},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   runners.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID),
+			Value: []byte(desired.ID),
+		},
 		{Type: keyvalue.MutationPut, Key: runners.RunnerTenantQuotaKey(desired.TenantID), Value: quotaValue},
 		{Type: keyvalue.MutationPut, Key: runners.RunnerHostSlotKey(state.host.slot), Value: hostValue},
 		{Type: keyvalue.MutationPut, Key: runners.SystemPoolRegistryKey, Value: systemValue},
@@ -135,14 +143,20 @@ func (repository *RunnerRepository) PublishRunnerCreation(
 		input.Plan.AllocationConfig != source.config || input.Plan.RuntimeEpoch != record.RuntimeEpoch+1 ||
 		!input.CreatedAt.Equal(record.CreatedAt) || !task.CreatedAt.Equal(record.CreatedAt) ||
 		!runnerCreationDesiredEqual(input.Desired, desired) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Runner creation differs from its captured allocation or input")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Runner creation differs from its captured allocation or input",
+		)
 	}
 	if idempotency.ValidateIdempotencyMarker(marker) != nil || validateRunnerMarkerScope(desired, marker) != nil ||
 		marker.Kind != idempotency.IdempotencyMarkerTask || marker.State != idempotency.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.Method != "POST" || marker.Locator.Route != "/runners" ||
 		!idempotency.ValidTaskResponse(marker.Response, task.ID) ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(task.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Runner creation replay marker is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Runner creation replay marker is invalid",
+		)
 	}
 	item := workexecution.Item{ID: input.WorkItemID, TaskID: task.ID, Operation: workexecution.Runner,
 		TargetID: desired.ID, Placement: workexecution.Placement{Executor: workexecution.Controller},
@@ -168,7 +182,14 @@ func (repository *RunnerRepository) PublishRunnerCreation(
 		return IdempotencyTransactionResult{}, err
 	}
 	conditions = append(conditions, keyvalue.Condition{Key: runnerwork.AllocationPlanKey(desired.ID)})
-	mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: runnerwork.AllocationPlanKey(desired.ID), Value: allocationPlan})
+	mutations = append(
+		mutations,
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   runnerwork.AllocationPlanKey(desired.ID),
+			Value: allocationPlan,
+		},
+	)
 	publicationConditions := conditions
 	classify := func(_ int64, values []*keyvalue.KeyValue) error {
 		if len(values) != len(publicationConditions) {
@@ -189,7 +210,12 @@ func (repository *RunnerRepository) PublishRunnerCreation(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	publication, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, classify)
+	publication, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

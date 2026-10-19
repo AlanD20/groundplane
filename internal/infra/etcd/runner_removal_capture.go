@@ -32,7 +32,10 @@ func (repository *RunnerRepository) PrepareRunnerRemoval(ctx context.Context,
 	}
 	id := record.Desired.ID
 	keys := []string{runnerwork.AllocationPlanKey(id), runners.RunnerRuntimeOwnershipKey(id), runnerwork.AppliedKey(id),
-		deletions.TombstoneKey(string(deletions.DeletionTargetRunner), id), workqueue.ClaimKey(workexecution.Claim{ScopeID: id})}
+		deletions.TombstoneKey(
+			string(deletions.DeletionTargetRunner),
+			id,
+		), workqueue.ClaimKey(workexecution.Claim{ScopeID: id})}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: current.ReadRevision})
 	if err != nil {
 		return RunnerRemovalSource{}, err
@@ -45,7 +48,10 @@ func (repository *RunnerRepository) PrepareRunnerRemoval(ctx context.Context,
 		return RunnerRemovalSource{}, errs.New(errs.KindStateConflict, "Runner captured allocation plan is unavailable")
 	}
 	if read.Values[3] != nil || read.Values[4] != nil {
-		return RunnerRemovalSource{}, errs.New(errs.KindResourceInUse, "Runner still has active work or unresolved effects; finish its cleanup before removal")
+		return RunnerRemovalSource{}, errs.New(
+			errs.KindResourceInUse,
+			"Runner still has active work or unresolved effects; finish its cleanup before removal",
+		)
 	}
 	plan, err := runnerwork.DecodeAllocationPlan(read.Values[0].Value)
 	if err != nil {
@@ -53,8 +59,11 @@ func (repository *RunnerRepository) PrepareRunnerRemoval(ctx context.Context,
 	}
 	input := runnerwork.Input{TaskID: taskID, WorkItemID: workID, PlanID: planID,
 		Operation: runnerallocation.RuntimeOperationRemove, Desired: record.Desired, Plan: plan, CreatedAt: at,
-		Removal: &runnerwork.RemovalSource{DesiredRevision: current.Revision, LifecycleRevision: record.LifecycleRevision,
-			Lifecycle: record.RunnerLifecycleRecord}}
+		Removal: &runnerwork.RemovalSource{
+			DesiredRevision:   current.Revision,
+			LifecycleRevision: record.LifecycleRevision,
+			Lifecycle:         record.RunnerLifecycleRecord,
+		}}
 	if read.Values[1] != nil {
 		ownership, err := runners.DecodeRunnerRuntimeOwnership(read.Values[1].Value)
 		if err != nil {
@@ -67,8 +76,12 @@ func (repository *RunnerRepository) PrepareRunnerRemoval(ctx context.Context,
 			return RunnerRemovalSource{}, errs.New(errs.KindStateConflict, "Runner applied runtime is unavailable")
 		}
 		applied, err := runnerwork.DecodeApplied(read.Values[2].Value)
-		if err != nil || applied.Plan.Digest() != plan.Digest() || applied.Evidence.ContainerID != record.ContainerID || applied.Evidence.Software != record.Software {
-			return RunnerRemovalSource{}, errs.New(errs.KindStateConflict, "Runner applied runtime no longer matches its allocation")
+		if err != nil || applied.Plan.Digest() != plan.Digest() || applied.Evidence.ContainerID != record.ContainerID ||
+			applied.Evidence.Software != record.Software {
+			return RunnerRemovalSource{}, errs.New(
+				errs.KindStateConflict,
+				"Runner applied runtime no longer matches its allocation",
+			)
 		}
 	} else if read.Values[1] != nil || read.Values[2] != nil {
 		return RunnerRemovalSource{}, errs.New(errs.KindStateConflict, "Failed Runner has unresolved applied ownership")
@@ -90,7 +103,10 @@ func (repository *RunnerRepository) PrepareRunnerRemoval(ctx context.Context,
 		{Key: runners.RunnerLifecycleKey(id), ModRevision: record.LifecycleRevision},
 	}
 	for index, key := range keys {
-		conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])},
+		)
 	}
 	for _, value := range []*keyvalue.KeyValue{allocation.Owner, allocation.Slug, allocation.Quota, allocation.Host, allocation.System} {
 		conditions = append(conditions, keyvalue.Condition{Key: value.Key, ModRevision: value.ModRevision})

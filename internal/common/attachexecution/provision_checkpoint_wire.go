@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func EncodeProvisionCheckpointRequest(input ProvisionInput, report ProvisionReport) (*agentpb.AttachProvisionCheckpointRequest, error) {
+func EncodeProvisionCheckpointRequest(
+	input ProvisionInput,
+	report ProvisionReport,
+) (*agentpb.AttachProvisionCheckpointRequest, error) {
 	raw, err := EncodeProvisionReport(input, report)
 	if err != nil {
 		return nil, err
@@ -20,7 +23,10 @@ func EncodeProvisionCheckpointRequest(input ProvisionInput, report ProvisionRepo
 	return &agentpb.AttachProvisionCheckpointRequest{Attempt: attempt, Report: raw}, nil
 }
 
-func DecodeProvisionCheckpointRequest(input ProvisionInput, request *agentpb.AttachProvisionCheckpointRequest) (ProvisionReport, error) {
+func DecodeProvisionCheckpointRequest(
+	input ProvisionInput,
+	request *agentpb.AttachProvisionCheckpointRequest,
+) (ProvisionReport, error) {
 	if request == nil || executionplan.RejectUnknown(request) != nil {
 		return ProvisionReport{}, invalid("Attach provisioning checkpoint request is malformed")
 	}
@@ -31,7 +37,10 @@ func DecodeProvisionCheckpointRequest(input ProvisionInput, request *agentpb.Att
 	return DecodeProvisionReport(input, request.Report)
 }
 
-func EncodeProvisionCheckpointAck(input ProvisionInput, report ProvisionReport) (*agentpb.AttachProvisionCheckpointAck, error) {
+func EncodeProvisionCheckpointAck(
+	input ProvisionInput,
+	report ProvisionReport,
+) (*agentpb.AttachProvisionCheckpointAck, error) {
 	request, err := EncodeProvisionCheckpointRequest(input, report)
 	if err != nil {
 		return nil, err
@@ -39,7 +48,11 @@ func EncodeProvisionCheckpointAck(input ProvisionInput, report ProvisionReport) 
 	return &agentpb.AttachProvisionCheckpointAck{Attempt: request.Attempt, Report: request.Report}, nil
 }
 
-func ValidateProvisionCheckpointAck(input ProvisionInput, report ProvisionReport, ack *agentpb.AttachProvisionCheckpointAck) error {
+func ValidateProvisionCheckpointAck(
+	input ProvisionInput,
+	report ProvisionReport,
+	ack *agentpb.AttachProvisionCheckpointAck,
+) error {
 	if ack == nil || executionplan.RejectUnknown(ack) != nil {
 		return invalid("Attach provisioning acknowledgement is malformed")
 	}

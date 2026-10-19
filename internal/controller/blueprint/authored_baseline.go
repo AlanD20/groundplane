@@ -47,7 +47,11 @@ func (service *Service) loadAuthoredApplyBaseline(
 	if err != nil {
 		return authoredApplyBaseline{}, err
 	}
-	scope := workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID}
+	scope := workexecution.Scope{
+		TenantID:      project.Record.TenantID,
+		ProjectID:     project.Record.ID,
+		EnvironmentID: environment.Record.ID,
+	}
 	if err := scope.Validate(); err != nil {
 		return authoredApplyBaseline{}, err
 	}
@@ -73,7 +77,10 @@ func (service *Service) loadAuthoredApplyBaseline(
 	}
 	if baseline.ledger.HeadRevision != head.Revision ||
 		(hasHead && baseline.ledger.HeadTaskID != head.Record.RevisionID) {
-		return authoredApplyBaseline{}, errs.New(errs.KindStateConflict, "Blueprint resource ledger does not match the authoring head")
+		return authoredApplyBaseline{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint resource ledger does not match the authoring head",
+		)
 	}
 	if !hasHead {
 		return baseline, nil

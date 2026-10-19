@@ -22,21 +22,34 @@ func backingServiceCreationConditions(creation BackingServiceCreation,
 ) []keyvalue.Condition {
 	conditions := []keyvalue.Condition{
 		{Key: creationStageKey, ModRevision: creation.Stage.Revision},
-		{Key: blueprints.EnvironmentBlueprintRootKey(creation.Environment.ID, creation.Task.ID), ModRevision: publication.rootRevision},
+		{
+			Key:         blueprints.EnvironmentBlueprintRootKey(creation.Environment.ID, creation.Task.ID),
+			ModRevision: publication.rootRevision,
+		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(creation.Environment.ID)},
 		{Key: hierarchyrecord.ProjectKey(creation.Project.ID)},
 		{Key: hierarchyrecord.ProjectSlugKey(creation.Project)},
 		{Key: hierarchyrecord.ProjectOwnerKey(creation.Project)},
-		{Key: hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), creation.Project.ID)},
+		{
+			Key: hierarchydeletion.HierarchyCoordinationKey(
+				string(hierarchydeletion.HierarchyDeletionTargetProject),
+				creation.Project.ID,
+			),
+		},
 		{Key: deletions.TombstoneKey("project", creation.Project.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(creation.Environment.ID)},
 		{Key: hierarchyrecord.EnvironmentNameKey(creation.Project.ID, creation.Environment.Name)},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(creation.Project.ID, creation.Environment.ID)},
 		{Key: deletions.TombstoneKey("environment", creation.Environment.ID)},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID)},
-		{Key: hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
+		{
+			Key: hierarchydeletion.HierarchyCoordinationKey(
+				string(hierarchydeletion.HierarchyDeletionTargetEnvironment),
+				creation.Environment.ID,
+			),
+		},
 		{Key: scripts.ScriptSetActiveKey(creation.Environment.ID)},
 		{Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
 		{Key: deletions.TombstoneKey("zone", creation.Zone.Desired.ID)},
@@ -54,21 +67,42 @@ func backingServiceCreationConditions(creation BackingServiceCreation,
 		if creation.EntryValues[index].Plain != nil {
 			generationKey = entryvalues.PlainKey(entry.Entry.ID, entry.CurrentValueGenerationID)
 		}
-		conditions = append(conditions, keyvalue.Condition{Key: entryrecord.RecordKey(entry.Entry.ID)},
-			keyvalue.Condition{Key: entryrecord.EntryOwnerKey(creation.Environment.ID, entry.Entry.ID)}, keyvalue.Condition{Key: generationKey})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: entryrecord.RecordKey(entry.Entry.ID)},
+			keyvalue.Condition{
+				Key: entryrecord.EntryOwnerKey(creation.Environment.ID, entry.Entry.ID),
+			},
+			keyvalue.Condition{Key: generationKey},
+		)
 	}
 	for _, secret := range creation.Secrets {
-		conditions = append(conditions, keyvalue.Condition{Key: secretrecord.RecordKey(secret.Secret.ID)},
-			keyvalue.Condition{Key: secretrecord.SecretOwnerKey(secret.Secret)}, keyvalue.Condition{Key: secretrecord.SecretScopedKey(secret.Secret)},
-			keyvalue.Condition{Key: secretrecord.ValueKey(secret.Secret.ID)}, keyvalue.Condition{Key: deletions.TombstoneKey("secret", secret.Secret.ID)})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: secretrecord.RecordKey(secret.Secret.ID)},
+			keyvalue.Condition{
+				Key: secretrecord.SecretOwnerKey(secret.Secret),
+			},
+			keyvalue.Condition{Key: secretrecord.SecretScopedKey(secret.Secret)},
+			keyvalue.Condition{
+				Key: secretrecord.ValueKey(secret.Secret.ID),
+			},
+			keyvalue.Condition{Key: deletions.TombstoneKey("secret", secret.Secret.ID)},
+		)
 	}
 	if creation.PostgresRelease != nil {
-		conditions = append(conditions, keyvalue.Condition{Key: backingpostgresrelease.Key(creation.Environment.ID, creation.Service.Desired.ID)})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: backingpostgresrelease.Key(creation.Environment.ID, creation.Service.Desired.ID)},
+		)
 	}
 	return conditions
 }
 
-func classifyBackingServiceCreation(creation BackingServiceCreation, conditions []keyvalue.Condition) idempotencyPlanClassifier {
+func classifyBackingServiceCreation(
+	creation BackingServiceCreation,
+	conditions []keyvalue.Condition,
+) idempotencyPlanClassifier {
 	classify := resourceWorkPublicationConflict(conditions)
 	return func(revision int64, values []*keyvalue.KeyValue) error {
 		if len(values) != len(conditions) {

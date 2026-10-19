@@ -12,22 +12,36 @@ import (
 
 // LoadRecoverySource reads the failed forward attempt's immutable evidence at
 // the caller's snapshot. The returned comparisons must join recovery publication.
-func (repository *Repository) LoadRecoverySource(ctx context.Context, view workqueue.View, previous workqueue.AttemptSnapshot,
+func (repository *Repository) LoadRecoverySource(
+	ctx context.Context,
+	view workqueue.View,
+	previous workqueue.AttemptSnapshot,
 	input *agentpb.ServiceLifecycleWorkInput,
 ) (lifecycleexecution.Recovery, []keyvalue.Condition, error) {
 	item, attempt := view.Item.Item, previous.Attempt
-	if item.Operation != workexecution.ServiceLifecycle || previous.Revision <= 0 || item.Input == nil || item.Result == nil ||
-		attempt.TaskID != view.Task.Task.ID || attempt.WorkItemID != item.ID || attempt.Direction != workexecution.Forward ||
-		attempt.FinishedAt == nil || attempt.Result == nil || *attempt.Result != *item.Result || attempt.Input != *item.Input ||
-		attempt.Executor.HostID != item.Placement.HostID || attempt.Number != item.AttemptNumber {
-		return lifecycleexecution.Recovery{}, nil, conflict("Service lifecycle recovery lacks its failed forward execution")
+	if item.Operation != workexecution.ServiceLifecycle || previous.Revision <= 0 || item.Input == nil ||
+		item.Result == nil ||
+		attempt.TaskID != view.Task.Task.ID ||
+		attempt.WorkItemID != item.ID ||
+		attempt.Direction != workexecution.Forward ||
+		attempt.FinishedAt == nil ||
+		attempt.Result == nil ||
+		*attempt.Result != *item.Result ||
+		attempt.Input != *item.Input ||
+		attempt.Executor.HostID != item.Placement.HostID ||
+		attempt.Number != item.AttemptNumber {
+		return lifecycleexecution.Recovery{}, nil, conflict(
+			"Service lifecycle recovery lacks its failed forward execution",
+		)
 	}
 	captured, guard, err := repository.Load(ctx, view)
 	if err != nil {
 		return lifecycleexecution.Recovery{}, nil, err
 	}
 	if !sameCapture(captured, captured, input) {
-		return lifecycleexecution.Recovery{}, nil, conflict("Service lifecycle recovery differs from its captured input")
+		return lifecycleexecution.Recovery{}, nil, conflict(
+			"Service lifecycle recovery differs from its captured input",
+		)
 	}
 	failureKey := FailureKey(attempt.ID)
 	read, err := repository.read(ctx, []string{failureKey}, view.ReadRevision)
@@ -55,7 +69,9 @@ func (repository *Repository) LoadRecoverySource(ctx context.Context, view workq
 		}
 		defer keyvalue.ClearValues(progressRead.Values)
 		if progressRead.Values[0] == nil {
-			return lifecycleexecution.Recovery{}, nil, conflict("Service lifecycle recovery checkpoint report is missing")
+			return lifecycleexecution.Recovery{}, nil, conflict(
+				"Service lifecycle recovery checkpoint report is missing",
+			)
 		}
 		progress, err := lifecycleexecution.DecodeProgress(attempt, input, progressRead.Values[0].Value)
 		if err != nil {

@@ -21,11 +21,17 @@ func Result(snapshot keyvalue.Versioned[Record], task workqueue.TaskSnapshot,
 		task.Revision <= 0 || task.Task.Validate() != nil || attempt.Validate() != nil ||
 		record.Owner.TaskID != task.Task.ID || attempt.TaskID != task.Task.ID || record.Owner.WorkItemID != attempt.WorkItemID ||
 		attempt.FinishedAt != nil || attempt.Direction != workexecution.Forward || attempt.Executor.Executor != workexecution.Controller {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "Runner check result is not settled for this attempt")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Runner check result is not settled for this attempt",
+		)
 	}
 	digest, err := PlanHash(record)
 	if err != nil || record.Owner.PlanID != attempt.Input.ID || digest != attempt.Input.SHA256 {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "Runner check result changed captured input")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"Runner check result changed captured input",
+		)
 	}
 	value, err := Encode(record)
 	if err != nil {
@@ -43,5 +49,8 @@ func Result(snapshot keyvalue.Versioned[Record], task workqueue.TaskSnapshot,
 		{Key: RecordKey(task.Task.ID), ModRevision: snapshot.Revision},
 		{Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision},
 	}}, workexecution.Completion{Outcome: outcome, EffectsSettled: true,
-		Evidence: workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, record.CreatedAt, attempt.ID, "runner-check-result"), SHA256: hex.EncodeToString(hash[:])}}, nil
+		Evidence: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, record.CreatedAt, attempt.ID, "runner-check-result"),
+			SHA256: hex.EncodeToString(hash[:]),
+		}}, nil
 }

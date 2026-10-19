@@ -9,12 +9,18 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (ledger *ReleaseLedger) PrepareDirectReleasePreparationRetirement(ctx context.Context, view workqueue.View) (workqueue.Change, error) {
+func (ledger *ReleaseLedger) PrepareDirectReleasePreparationRetirement(
+	ctx context.Context,
+	view workqueue.View,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if ctx == nil || task.CollectionStartedAt == nil || task.FinishedAt == nil || task.Progress.Unsettled() != 0 ||
 		item.Phase != workexecution.Settled || item.ActiveAttemptID != "" ||
 		task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Direct Release preparation retirement requires settled collecting work")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Direct Release preparation retirement requires settled collecting work",
+		)
 	}
 	_, guard, err := ledger.ReadDirectReleasePreparation(ctx, view)
 	if err != nil {

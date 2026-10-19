@@ -46,7 +46,11 @@ type Snapshot struct {
 
 // Read fixes membership, attempt and diagnostics to one snapshot. Absent
 // diagnostics are explicit and do not imply that execution did not happen.
-func (repository *Repository) Read(ctx context.Context, taskID, workID, attemptID string, revision int64) (Snapshot, error) {
+func (repository *Repository) Read(
+	ctx context.Context,
+	taskID, workID, attemptID string,
+	revision int64,
+) (Snapshot, error) {
 	view, err := repository.queue.ReadWork(ctx, taskID, workID, revision)
 	if err != nil {
 		return Snapshot{}, err
@@ -58,7 +62,13 @@ func (repository *Repository) read(ctx context.Context, view workqueue.View, att
 	if ids.Validate(ids.KindAttempt, attemptID) != nil {
 		return Snapshot{}, invalid()
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{workqueue.AttemptKey(attemptID), Key(attemptID), LossKey(attemptID)}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{
+			Keys:     []string{workqueue.AttemptKey(attemptID), Key(attemptID), LossKey(attemptID)},
+			Revision: view.ReadRevision,
+		},
+	)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -76,7 +86,12 @@ func (repository *Repository) read(ctx context.Context, view workqueue.View, att
 	if attempt.ID != attemptID || attempt.TaskID != view.Task.Task.ID || attempt.WorkItemID != view.Item.Item.ID {
 		return Snapshot{}, invalid()
 	}
-	result := Snapshot{Attempt: attempt, ReadRevision: read.ReadRevision, FinishedAt: attempt.FinishedAt, Outcome: attempt.Outcome}
+	result := Snapshot{
+		Attempt:      attempt,
+		ReadRevision: read.ReadRevision,
+		FinishedAt:   attempt.FinishedAt,
+		Outcome:      attempt.Outcome,
+	}
 	if read.Values[2] != nil {
 		if string(read.Values[2].Value) != "incomplete" && string(read.Values[2].Value) != "expired" {
 			return Snapshot{}, invalid()
@@ -115,8 +130,14 @@ func (repository *Repository) Report(ctx context.Context, taskID, workID, attemp
 	return err
 }
 
-func (repository *Repository) report(ctx context.Context, taskID, workID, attemptID string,
-	identity workexecution.Identity, sequence uint64, stage workexecution.Stage, at time.Time, resultEvidence *workexecution.Input,
+func (repository *Repository) report(
+	ctx context.Context,
+	taskID, workID, attemptID string,
+	identity workexecution.Identity,
+	sequence uint64,
+	stage workexecution.Stage,
+	at time.Time,
+	resultEvidence *workexecution.Input,
 ) error {
 	if stage.Validate() != nil || sequence == 0 {
 		return invalid()
@@ -126,7 +147,9 @@ func (repository *Repository) report(ctx context.Context, taskID, workID, attemp
 		return err
 	}
 	if resultEvidence == nil {
-		if !view.CurrentExecutor || !view.ActiveAttempt || view.Attempt.Attempt.StartedAt == nil || view.Attempt.Attempt.FinishedAt != nil || at.Before(*view.Attempt.Attempt.StartedAt) {
+		if !view.CurrentExecutor || !view.ActiveAttempt || view.Attempt.Attempt.StartedAt == nil ||
+			view.Attempt.Attempt.FinishedAt != nil ||
+			at.Before(*view.Attempt.Attempt.StartedAt) {
 			return errs.New(errs.KindStateConflict, "diagnostic report does not belong to the active executor")
 		}
 	} else {
@@ -147,7 +170,14 @@ func (repository *Repository) report(ctx context.Context, taskID, workID, attemp
 	if previous.Expired {
 		return nil // Retention already owns these disposable diagnostics.
 	}
-	next := Record{TaskID: taskID, WorkItemID: workID, AttemptID: attemptID, Sequence: sequence, UpdatedAt: at, Stages: []workexecution.Stage{stage}}
+	next := Record{
+		TaskID:     taskID,
+		WorkItemID: workID,
+		AttemptID:  attemptID,
+		Sequence:   sequence,
+		UpdatedAt:  at,
+		Stages:     []workexecution.Stage{stage},
+	}
 	if previous.Record == nil {
 		if sequence != 1 {
 			return invalid()
@@ -226,9 +256,16 @@ func (repository *Repository) report(ctx context.Context, taskID, workID, attemp
 		return err
 	}
 	defer clear(taskEventMutation.Value)
-	mutations := []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: Key(attemptID), Value: value}, eventMutation, taskEventMutation}
+	mutations := []keyvalue.Mutation{
+		{Type: keyvalue.MutationPut, Key: Key(attemptID), Value: value},
+		eventMutation,
+		taskEventMutation,
+	}
 	if trimmed {
-		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: LossKey(attemptID), Value: []byte("incomplete")})
+		mutations = append(
+			mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: LossKey(attemptID), Value: []byte("incomplete")},
+		)
 	}
 	result, err := repository.store.Transact(ctx, []keyvalue.Condition{
 		eventCondition,

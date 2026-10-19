@@ -12,7 +12,12 @@ import (
 
 // Failure delivery has a bounded cleanup context so a cancelled effect can save
 // its failure. It never executes another host action or claims effects undone.
-func (executor *Executor) fail(ctx context.Context, input Input, exchange Exchange, _ error) (workexecution.Attempt, error) {
+func (executor *Executor) fail(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	_ error,
+) (workexecution.Attempt, error) {
 	reason := volumeexecution.ExecutionFailed
 	if !time.Now().Before(input.attempt.Deadline) {
 		reason = volumeexecution.DeadlineExpired
@@ -38,7 +43,12 @@ func (executor *Executor) fail(ctx context.Context, input Input, exchange Exchan
 	return terminal, nil
 }
 
-func (executor *Executor) deliverFailure(ctx context.Context, input Input, exchange Exchange, failure *agentworkjournal.VolumeFailureDelivery) (workexecution.Attempt, error) {
+func (executor *Executor) deliverFailure(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	failure *agentworkjournal.VolumeFailureDelivery,
+) (workexecution.Attempt, error) {
 	if failure.Receipt != nil {
 		return *failure.Receipt, nil
 	}
@@ -46,12 +56,21 @@ func (executor *Executor) deliverFailure(ctx context.Context, input Input, excha
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	ack, err := exchange.FailVolume(ctx, &agentpb.VolumeWorkFailureRequest{Attempt: identity, Reason: string(failure.Reason)})
+	ack, err := exchange.FailVolume(
+		ctx,
+		&agentpb.VolumeWorkFailureRequest{Attempt: identity, Reason: string(failure.Reason)},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
 	if input.recovery != nil {
 		return executor.journal.AcknowledgeVolumeRecoveryFailure(ctx, input.attempt, ack)
 	}
-	return executor.journal.AcknowledgeVolumeFailure(ctx, input.attempt, input.procedure.Action, input.procedure.VolumeId, ack)
+	return executor.journal.AcknowledgeVolumeFailure(
+		ctx,
+		input.attempt,
+		input.procedure.Action,
+		input.procedure.VolumeId,
+		ack,
+	)
 }

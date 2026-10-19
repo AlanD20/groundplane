@@ -94,13 +94,15 @@ func (executor *Executor) stopNamedHelper(ctx context.Context, name string, labe
 	// Use the inspected ID, never the reusable name, for mutations.
 	if observed.State.Running || observed.State.Restarting || observed.State.Paused {
 		timeout := 0
-		if _, err := executor.engine.ContainerStop(bounded, observed.ID, client.ContainerStopOptions{Timeout: &timeout}); err != nil && !containerderrdefs.IsNotFound(err) {
+		if _, err := executor.engine.ContainerStop(bounded, observed.ID, client.ContainerStopOptions{Timeout: &timeout}); err != nil &&
+			!containerderrdefs.IsNotFound(err) {
 			return operationError(bounded, "stop interrupted Release helper", err)
 		}
 	}
 	// Non-force removal refuses a still-running executor rather than treating a
 	// requested stop as proof that it has ended. No volumes or workloads removed.
-	if _, err := executor.engine.ContainerRemove(bounded, observed.ID, client.ContainerRemoveOptions{}); err != nil && !containerderrdefs.IsNotFound(err) {
+	if _, err := executor.engine.ContainerRemove(bounded, observed.ID, client.ContainerRemoveOptions{}); err != nil &&
+		!containerderrdefs.IsNotFound(err) {
 		return operationError(bounded, "remove interrupted Release helper", err)
 	}
 	remaining, err := executor.engine.ContainerInspect(bounded, name, client.ContainerInspectOptions{})

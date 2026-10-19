@@ -39,18 +39,26 @@ func FailureID(attemptID string) (string, error) {
 }
 
 func EncodeFailure(attempt workexecution.Attempt, layout Layout, failure Failure) ([]byte, workexecution.Input, error) {
-	if layout.Validate(attempt) != nil || attempt.Direction != workexecution.Forward || failure.AttemptID != attempt.ID || failure.Input != attempt.Input ||
+	if layout.Validate(attempt) != nil || attempt.Direction != workexecution.Forward ||
+		failure.AttemptID != attempt.ID ||
+		failure.Input != attempt.Input ||
 		failure.Reason != ExecutionFailed && failure.Reason != DeadlineExpired && failure.Reason != Interrupted ||
-		failure.RecordedAt.IsZero() || failure.RecordedAt.Location() != time.UTC || failure.RecordedAt.Before(attempt.AssignedAt) ||
+		failure.RecordedAt.IsZero() ||
+		failure.RecordedAt.Location() != time.UTC ||
+		failure.RecordedAt.Before(attempt.AssignedAt) ||
 		attempt.StartedAt != nil && failure.RecordedAt.Before(*attempt.StartedAt) ||
 		failure.Reason == DeadlineExpired && failure.RecordedAt.Before(attempt.Deadline) {
 		return nil, workexecution.Input{}, invalid("backing creation failure does not match its forward attempt")
 	}
 	if cursor := failure.Checkpoint; cursor != nil {
-		if attempt.StartedAt == nil || cursor.AttemptID != attempt.ID || cursor.Sequence == 0 || cursor.Sequence > uint64(len(layout.stages())*2) ||
-			cursor.Evidence.Validate() != nil || cursor.Evidence.ID != attempt.Input.ID ||
-			cursor.RecordedAt.IsZero() || cursor.RecordedAt.Location() != time.UTC ||
-			cursor.RecordedAt.Before(*attempt.StartedAt) || cursor.RecordedAt.After(failure.RecordedAt) {
+		if attempt.StartedAt == nil || cursor.AttemptID != attempt.ID || cursor.Sequence == 0 ||
+			cursor.Sequence > uint64(len(layout.stages())*2) ||
+			cursor.Evidence.Validate() != nil ||
+			cursor.Evidence.ID != attempt.Input.ID ||
+			cursor.RecordedAt.IsZero() ||
+			cursor.RecordedAt.Location() != time.UTC ||
+			cursor.RecordedAt.Before(*attempt.StartedAt) ||
+			cursor.RecordedAt.After(failure.RecordedAt) {
 			return nil, workexecution.Input{}, invalid("backing creation failure has an invalid checkpoint")
 		}
 		stageID, err := StageID(attempt.WorkItemID, layout.stages()[(cursor.Sequence-1)/2])
@@ -74,7 +82,12 @@ func EncodeFailure(attempt workexecution.Attempt, layout Layout, failure Failure
 	return canonical, workexecution.Input{ID: id, SHA256: hex.EncodeToString(digest[:])}, nil
 }
 
-func DecodeFailure(attempt workexecution.Attempt, layout Layout, raw []byte, evidence workexecution.Input) (Failure, error) {
+func DecodeFailure(
+	attempt workexecution.Attempt,
+	layout Layout,
+	raw []byte,
+	evidence workexecution.Input,
+) (Failure, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return Failure{}, invalid("backing creation failure receipt is missing or oversized")
 	}

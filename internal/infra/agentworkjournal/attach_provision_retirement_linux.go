@@ -10,7 +10,8 @@ import (
 // inspection receipt permits collecting its exact original command evidence;
 // the recovery receipt is removed last so interrupted collection can resume.
 func (journal *Journal) RetireProvisionInspection(ctx context.Context, terminal workexecution.Attempt) error {
-	if terminal.Validate() != nil || terminal.Direction != workexecution.Recovery || terminal.FinishedAt == nil || terminal.Result == nil {
+	if terminal.Validate() != nil || terminal.Direction != workexecution.Recovery || terminal.FinishedAt == nil ||
+		terminal.Result == nil {
 		return invalid()
 	}
 	if err := journal.retireProvisionSource(ctx, terminal); err != nil {
@@ -56,15 +57,19 @@ func (journal *Journal) retireProvisionSource(ctx context.Context, terminal work
 		if err != nil {
 			return err
 		}
-		if previous == nil || previous.Attempt.TaskID != terminal.TaskID || previous.Attempt.WorkItemID != terminal.WorkItemID {
+		if previous == nil || previous.Attempt.TaskID != terminal.TaskID ||
+			previous.Attempt.WorkItemID != terminal.WorkItemID {
 			continue
 		}
-		if previous.Attempt.Input != terminal.Input || previous.Attempt.Executor.HostID != terminal.Executor.HostID || previous.Attempt.Number >= terminal.Number {
+		if previous.Attempt.Input != terminal.Input || previous.Attempt.Executor.HostID != terminal.Executor.HostID ||
+			previous.Attempt.Number >= terminal.Number {
 			return conflict()
 		}
 		if attemptID == recovery.Source.Forward.ID {
-			if !workexecution.SameAssignment(previous.Attempt, recovery.Source.Forward) || previous.AttachProvision == nil ||
-				previous.AttachProvision.Authority != recovery.Source.Failure.Authority || previous.AttachProvision.Completion != nil {
+			if !workexecution.SameAssignment(previous.Attempt, recovery.Source.Forward) ||
+				previous.AttachProvision == nil ||
+				previous.AttachProvision.Authority != recovery.Source.Failure.Authority ||
+				previous.AttachProvision.Completion != nil {
 				return conflict()
 			}
 		} else {

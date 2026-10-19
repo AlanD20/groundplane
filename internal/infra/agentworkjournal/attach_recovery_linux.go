@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 )
 
-func (journal *Journal) SaveAttachInspection(ctx context.Context, input attachexecution.RecoveryInput, report attachexecution.RemovalInspection) error {
+func (journal *Journal) SaveAttachInspection(
+	ctx context.Context,
+	input attachexecution.RecoveryInput,
+	report attachexecution.RemovalInspection,
+) error {
 	if report.Validate(input) != nil {
 		return invalid()
 	}
@@ -43,7 +47,10 @@ func (journal *Journal) SaveAttachInspection(ctx context.Context, input attachex
 		AttachRecovery: &AttachRecoveryRecord{Source: input.Source, Report: report}})
 }
 
-func (journal *Journal) LoadAttachInspection(ctx context.Context, input attachexecution.RecoveryInput) (*workexecution.Attempt, *AttachRecoveryRecord, error) {
+func (journal *Journal) LoadAttachInspection(
+	ctx context.Context,
+	input attachexecution.RecoveryInput,
+) (*workexecution.Attempt, *AttachRecoveryRecord, error) {
 	if input.Validate() != nil {
 		return nil, nil, invalid()
 	}
@@ -62,7 +69,11 @@ func (journal *Journal) LoadAttachInspection(ctx context.Context, input attachex
 	return &state.Attempt, state.AttachRecovery, nil
 }
 
-func (journal *Journal) AcknowledgeAttachInspection(ctx context.Context, input attachexecution.RecoveryInput, terminal workexecution.Attempt) error {
+func (journal *Journal) AcknowledgeAttachInspection(
+	ctx context.Context,
+	input attachexecution.RecoveryInput,
+	terminal workexecution.Attempt,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err

@@ -63,8 +63,17 @@ func (repository *InputRepository) PrepareRestoreFailure(ctx context.Context,
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, guards...)
-	fence, err := environmentfence.LoadOwned(ctx, repository.store, record.EnvironmentID, view.Work.ReadRevision,
-		environmentfence.Owner{Kind: backupruntime.BackupOperationRestore, OperationID: record.OperationID, TaskID: record.TaskID})
+	fence, err := environmentfence.LoadOwned(
+		ctx,
+		repository.store,
+		record.EnvironmentID,
+		view.Work.ReadRevision,
+		environmentfence.Owner{
+			Kind:        backupruntime.BackupOperationRestore,
+			OperationID: record.OperationID,
+			TaskID:      record.TaskID,
+		},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -77,15 +86,33 @@ func (repository *InputRepository) PrepareRestoreFailure(ctx context.Context,
 		if !found {
 			return workqueue.Change{}, conflict("Restore backing ownership is missing")
 		}
-		backing, err := postgresbackingguard.PrepareOwnership(ctx, repository.store, []string{environment}, record.EnvironmentID,
-			postgresbackingguard.Owner(backupruntime.BackupOperationRestore, record.OperationID, record.TaskID), view.Work.ReadRevision, false)
+		backing, err := postgresbackingguard.PrepareOwnership(
+			ctx,
+			repository.store,
+			[]string{environment},
+			record.EnvironmentID,
+			postgresbackingguard.Owner(
+				backupruntime.BackupOperationRestore,
+				record.OperationID,
+				record.TaskID,
+			),
+			view.Work.ReadRevision,
+			false,
+		)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
 		defer backing.Clear()
 		change.Conditions = append(change.Conditions, backing.Conditions...)
 		for _, mutation := range backing.Mutations {
-			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...)})
+			change.Mutations = append(
+				change.Mutations,
+				keyvalue.Mutation{
+					Type:  mutation.Type,
+					Key:   mutation.Key,
+					Value: append([]byte(nil), mutation.Value...),
+				},
+			)
 		}
 	}
 	encoded, err := backupruntime.EncodeBackupRestoreRecord(next)

@@ -21,7 +21,8 @@ func (journal *Journal) SaveAttachProvisionCommandResult(ctx context.Context, in
 	if err != nil {
 		return err
 	}
-	if !matchesAttachProvisionState(state, input) || !state.AttachProvision.Acknowledged || state.AttachProvision.Completion != nil {
+	if !matchesAttachProvisionState(state, input) || !state.AttachProvision.Acknowledged ||
+		state.AttachProvision.Completion != nil {
 		return conflict()
 	}
 	progress := state.AttachProvision.Report.Progress

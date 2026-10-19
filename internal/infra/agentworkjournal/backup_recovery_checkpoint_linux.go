@@ -11,8 +11,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (journal *Journal) PrepareBackupRecoveryCheckpoint(ctx context.Context, assignment *agentpb.BackupRecoveryAssignment,
-	attempt workexecution.Attempt, request *agentpb.BackupWorkCheckpointRequest, at time.Time,
+func (journal *Journal) PrepareBackupRecoveryCheckpoint(
+	ctx context.Context,
+	assignment *agentpb.BackupRecoveryAssignment,
+	attempt workexecution.Attempt,
+	request *agentpb.BackupWorkCheckpointRequest,
+	at time.Time,
 ) (*BackupRecord, error) {
 	report, err := executionplan.ValidateBackupRestoreRecoveryCheckpoint(request, assignment, attempt.Executor)
 	if err != nil {
@@ -53,7 +57,8 @@ func (journal *Journal) PrepareBackupRecoveryCheckpoint(ctx context.Context, ass
 		}
 		sequence, fence = ack.CheckpointSequence, ack.Committed
 	}
-	if sequence == ^uint64(0) || report.CheckpointSequence != sequence+1 || !proto.Equal(report.PrecedingCheckpoint, fence) {
+	if sequence == ^uint64(0) || report.CheckpointSequence != sequence+1 ||
+		!proto.Equal(report.PrecedingCheckpoint, fence) {
 		return nil, conflict()
 	}
 	state.Backup.Recovery.Checkpoint = BackupSourceReport{Request: raw}
@@ -66,8 +71,11 @@ func (journal *Journal) PrepareBackupRecoveryCheckpoint(ctx context.Context, ass
 	return state.Backup, nil
 }
 
-func (journal *Journal) AcknowledgeBackupRecoveryCheckpoint(ctx context.Context, assignment *agentpb.BackupRecoveryAssignment,
-	attempt workexecution.Attempt, ack *agentpb.BackupWorkCheckpointAck,
+func (journal *Journal) AcknowledgeBackupRecoveryCheckpoint(
+	ctx context.Context,
+	assignment *agentpb.BackupRecoveryAssignment,
+	attempt workexecution.Attempt,
+	ack *agentpb.BackupWorkCheckpointAck,
 ) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
@@ -86,7 +94,12 @@ func (journal *Journal) AcknowledgeBackupRecoveryCheckpoint(ctx context.Context,
 	if err != nil || request == nil {
 		return conflict()
 	}
-	validated, err := executionplan.ValidateBackupRestoreRecoveryCheckpointAck(ack, request, assignment, attempt.Executor)
+	validated, err := executionplan.ValidateBackupRestoreRecoveryCheckpointAck(
+		ack,
+		request,
+		assignment,
+		attempt.Executor,
+	)
 	if err != nil {
 		return err
 	}

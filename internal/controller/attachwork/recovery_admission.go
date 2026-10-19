@@ -10,12 +10,23 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *Reports) admitRecovery(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *Reports) admitRecovery(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
-	if request.DecisionOnly || item.Operation != workexecution.Attach || item.Placement.Executor != workexecution.Agent ||
-		item.Phase != workexecution.Ready || item.ActiveAttemptID != "" || at.IsZero() || at.Before(item.UpdatedAt) ||
+	if request.DecisionOnly || item.Operation != workexecution.Attach ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Ready ||
+		item.ActiveAttemptID != "" ||
+		at.IsZero() ||
+		at.Before(item.UpdatedAt) ||
 		item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Attach inspection cannot obtain this assignment")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Attach inspection cannot obtain this assignment",
+		)
 	}
 	if !at.Before(item.Deadline) {
 		change, err := workqueue.PrepareCleanupRetryExpiry(request.Task, request.Item, at)
@@ -24,7 +35,14 @@ func (owner *Reports) admitRecovery(ctx context.Context, request workqueue.Assig
 	if request.Executor.Record.Identity.HostID != item.Placement.HostID {
 		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Attach inspection belongs to another host")
 	}
-	_, attempt, err := workexecution.Assign(item, request.Executor.Record.Identity, request.AttemptID, workexecution.Recovery, at, item.Deadline)
+	_, attempt, err := workexecution.Assign(
+		item,
+		request.Executor.Record.Identity,
+		request.AttemptID,
+		workexecution.Recovery,
+		at,
+		item.Deadline,
+	)
 	if err != nil {
 		return workdispatch.Decision{}, err
 	}
@@ -33,5 +51,9 @@ func (owner *Reports) admitRecovery(ctx context.Context, request workqueue.Assig
 	if err != nil {
 		return workdispatch.Decision{}, err
 	}
-	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: item.Deadline, Change: workqueue.Change{Conditions: guards}}, nil
+	return workdispatch.Decision{
+		Disposition: workdispatch.Dispatch,
+		Deadline:    item.Deadline,
+		Change:      workqueue.Change{Conditions: guards},
+	}, nil
 }

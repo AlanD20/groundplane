@@ -30,7 +30,11 @@ type ExecutionResult struct {
 	Failure    *agentpb.ScriptWorkFailureAck
 }
 
-func (executor *Executor) Run(ctx context.Context, invocation Invocation, exchange WorkerExchange) (ExecutionResult, error) {
+func (executor *Executor) Run(
+	ctx context.Context,
+	invocation Invocation,
+	exchange WorkerExchange,
+) (ExecutionResult, error) {
 	defer invocation.Clear()
 	if receipt, exists, err := executor.replayFailure(ctx, invocation.Attempt, exchange); exists || err != nil {
 		return ExecutionResult{Failure: receipt}, err
@@ -46,7 +50,12 @@ func (executor *Executor) Run(ctx context.Context, invocation Invocation, exchan
 	return ExecutionResult{Failure: failure}, nil
 }
 
-func (executor *Executor) RunRecovery(ctx context.Context, input scriptexecution.RecoveryInput, exchange WorkerExchange, ownership *agentownership.Lease) (ExecutionResult, error) {
+func (executor *Executor) RunRecovery(
+	ctx context.Context,
+	input scriptexecution.RecoveryInput,
+	exchange WorkerExchange,
+	ownership *agentownership.Lease,
+) (ExecutionResult, error) {
 	if receipt, exists, err := executor.replayFailure(ctx, input.Attempt, exchange); exists || err != nil {
 		return ExecutionResult{Failure: receipt}, err
 	}
@@ -61,7 +70,11 @@ func (executor *Executor) RunRecovery(ctx context.Context, input scriptexecution
 	return ExecutionResult{Failure: failure}, nil
 }
 
-func (executor *Executor) replayFailure(ctx context.Context, attempt workexecution.Attempt, exchange FailureExchange) (*agentpb.ScriptWorkFailureAck, bool, error) {
+func (executor *Executor) replayFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	exchange FailureExchange,
+) (*agentpb.ScriptWorkFailureAck, bool, error) {
 	if executor == nil || ctx == nil || exchange == nil {
 		return nil, false, errs.New(errs.KindInternal, "Script failure delivery is not configured")
 	}
@@ -81,11 +94,19 @@ func (executor *Executor) replayFailure(ctx context.Context, attempt workexecuti
 	if err != nil {
 		return nil, true, errs.Wrap(errs.KindInternal, err)
 	}
-	return &agentpb.ScriptWorkFailureAck{Attempt: identity, Evidence: &agentpb.WorkInputReference{InputId: saved.Receipt.Result.ID, Sha256: digest},
-		Outcome: string(saved.Receipt.Outcome), FinishedAt: timestamppb.New(*saved.Receipt.FinishedAt)}, true, nil
+	return &agentpb.ScriptWorkFailureAck{
+		Attempt:    identity,
+		Evidence:   &agentpb.WorkInputReference{InputId: saved.Receipt.Result.ID, Sha256: digest},
+		Outcome:    string(saved.Receipt.Outcome),
+		FinishedAt: timestamppb.New(*saved.Receipt.FinishedAt),
+	}, true, nil
 }
 
-func (executor *Executor) reportFailure(ctx context.Context, attempt workexecution.Attempt, exchange FailureExchange) (*agentpb.ScriptWorkFailureAck, error) {
+func (executor *Executor) reportFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	exchange FailureExchange,
+) (*agentpb.ScriptWorkFailureAck, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

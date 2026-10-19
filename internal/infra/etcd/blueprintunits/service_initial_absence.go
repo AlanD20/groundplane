@@ -25,15 +25,22 @@ func RequireInitialServiceAbsence(snapshot Snapshot, serviceID string) ([]keyval
 			continue
 		}
 		if found || applied.Revision != 0 || applied.Record.State != Absent || applied.Record.HasEffectSource() {
-			return nil, errs.New(errs.KindStateConflict, "Service has applied effects; removal requires captured runtime proof")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Service has applied effects; removal requires captured runtime proof",
+			)
 		}
 		found = true
 	}
 	if !found {
-		return nil, errs.New(errs.KindStateConflict, "Service has no positive evidence that its workload was never created")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Service has no positive evidence that its workload was never created",
+		)
 	}
 	for _, execution := range snapshot.Executions {
-		if slices.Contains(execution.Record.Unit.Writes, target) || slices.Contains(execution.Record.Unit.Reads, target) {
+		if slices.Contains(execution.Record.Unit.Writes, target) ||
+			slices.Contains(execution.Record.Unit.Reads, target) {
 			return nil, errs.New(errs.KindStateConflict, "Service still has unsettled Blueprint execution")
 		}
 	}

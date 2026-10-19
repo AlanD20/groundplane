@@ -29,7 +29,9 @@ type deliveryResult struct {
 func (executor *ControllerExecutor) Run(ctx context.Context, identity workexecution.Identity,
 	interval time.Duration, report func(Issue),
 ) error {
-	if ctx == nil || identity.Validate() != nil || identity.Executor != workexecution.Controller || interval < 100*time.Millisecond || report == nil {
+	if ctx == nil || identity.Validate() != nil || identity.Executor != workexecution.Controller ||
+		interval < 100*time.Millisecond ||
+		report == nil {
 		return errs.New(errs.KindInternal, "controller execution loop configuration is invalid")
 	}
 	workerContext, cancel := context.WithCancel(ctx)
@@ -92,7 +94,13 @@ func (executor *ControllerExecutor) Run(ctx context.Context, identity workexecut
 			local.running = false
 			active[id] = local
 			if result.err != nil {
-				report(Issue{TaskID: result.delivery.Item.Item.TaskID, WorkID: result.delivery.Item.Item.ID, Err: result.err})
+				report(
+					Issue{
+						TaskID: result.delivery.Item.Item.TaskID,
+						WorkID: result.delivery.Item.Item.ID,
+						Err:    result.err,
+					},
+				)
 			}
 		case <-ticker.C:
 			if err := sweep(); err != nil {

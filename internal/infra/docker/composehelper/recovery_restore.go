@@ -15,7 +15,13 @@ import (
 // RestoreRecoveryServing restores the captured serving workload before routing
 // traffic back to it. It does not run deployment hooks or restore application
 // data. Captured configuration restoration must already have been acknowledged.
-func RestoreRecoveryServing(ctx context.Context, taskRunner runner.Runner, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport, inspectOnly bool) error {
+func RestoreRecoveryServing(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+	inspectOnly bool,
+) error {
 	if ctx == nil || taskRunner == nil || report.Validate(input) != nil || report.Ack == nil ||
 		!report.Progress.InFlight || report.Progress.Phase != releaseexecution.RestoreServingRuntime {
 		return invalidReleaseHelper()
@@ -85,7 +91,13 @@ func RestoreRecoveryServing(ctx context.Context, taskRunner runner.Runner, input
 	return recoveryPredecessorServing(bounded, taskRunner, artifacts, inventory)
 }
 
-func ensureRecoveryService(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact, service *agentpb.ComposeService, inspectOnly bool) error {
+func ensureRecoveryService(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	artifact *agentpb.ComposeArtifact,
+	service *agentpb.ComposeService,
+	inspectOnly bool,
+) error {
 	ready, err := servingPredecessorProven(ctx, taskRunner, artifact, service)
 	if err != nil || ready {
 		return err
@@ -97,10 +109,23 @@ func ensureRecoveryService(ctx context.Context, taskRunner runner.Runner, artifa
 	if err != nil {
 		return err
 	}
-	base := []string{"compose", "--project-name", artifact.ProjectName, "--project-directory", composeProjectDirectory(artifact), "--file", "-"}
+	base := []string{
+		"compose",
+		"--project-name",
+		artifact.ProjectName,
+		"--project-directory",
+		composeProjectDirectory(artifact),
+		"--file",
+		"-",
+	}
 	for _, suffix := range [][]string{{"config", "--quiet"}, {"up", "--detach", "--no-deps", "--pull", "never", "--", service.ComposeName}} {
-		result, err := taskRunner.Run(ctx, runner.RunCmdOpts{Name: DockerExecutable, Args: append(slices.Clone(base), suffix...),
-			Dir: composeProjectDirectory(artifact), Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: input, CaptureLimitBytes: 32 * 1024})
+		result, err := taskRunner.Run(
+			ctx,
+			runner.RunCmdOpts{Name: DockerExecutable, Args: append(slices.Clone(base), suffix...),
+				Dir: composeProjectDirectory(
+					artifact,
+				), Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: input, CaptureLimitBytes: 32 * 1024},
+		)
 		clear(result.Stdout)
 		clear(result.Stderr)
 		if err != nil {
@@ -139,7 +164,13 @@ func stopRecoveryContainer(ctx context.Context, taskRunner runner.Runner, id str
 	return nil
 }
 
-func recoveryRetained(ctx context.Context, taskRunner runner.Runner, artifacts executionplan.ReleaseWorkArtifacts, serviceID string, inspectOnly bool) error {
+func recoveryRetained(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	artifacts executionplan.ReleaseWorkArtifacts,
+	serviceID string,
+	inspectOnly bool,
+) error {
 	if artifacts.Prior == nil || artifacts.Prior.Retained == nil {
 		return nil
 	}

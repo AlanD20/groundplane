@@ -27,11 +27,20 @@ type forwardFence struct {
 
 // MaintenanceBinding resolves the credential generation separately from the
 // executor process generation. Restarting an Agent never changes host identity.
-func (repository *Repository) MaintenanceBinding(ctx context.Context, agentID string, generation uint64) (MaintenanceBinding, error) {
+func (repository *Repository) MaintenanceBinding(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+) (MaintenanceBinding, error) {
 	return repository.maintenanceBindingAt(ctx, agentID, generation, 0)
 }
 
-func (repository *Repository) maintenanceBindingAt(ctx context.Context, agentID string, generation uint64, revision int64) (MaintenanceBinding, error) {
+func (repository *Repository) maintenanceBindingAt(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	revision int64,
+) (MaintenanceBinding, error) {
 	if ids.Validate(ids.KindAgent, agentID) != nil || generation == 0 {
 		return MaintenanceBinding{}, errs.New(errs.KindValidationFailed, "Agent maintenance identity is invalid")
 	}
@@ -40,12 +49,18 @@ func (repository *Repository) maintenanceBindingAt(ctx context.Context, agentID 
 		return MaintenanceBinding{}, err
 	}
 	key := localagents.LocalAgentPrimaryKey(agentID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: binding.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: binding.ReadRevision},
+	)
 	if err != nil {
 		return MaintenanceBinding{}, err
 	}
 	if read == nil {
-		return MaintenanceBinding{}, errs.New(errs.KindStorageUnavailable, "Agent maintenance identity read is unavailable")
+		return MaintenanceBinding{}, errs.New(
+			errs.KindStorageUnavailable,
+			"Agent maintenance identity read is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.ReadRevision != binding.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
@@ -60,7 +75,13 @@ func (repository *Repository) maintenanceBindingAt(ctx context.Context, agentID 
 	}
 	conditions := append([]keyvalue.Condition(nil), binding.Conditions...)
 	conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
-	return MaintenanceBinding{HostID: binding.Binding.HostID, AgentID: agentID, Generation: generation, Conditions: conditions, ReadRevision: read.ReadRevision}, nil
+	return MaintenanceBinding{
+		HostID:       binding.Binding.HostID,
+		AgentID:      agentID,
+		Generation:   generation,
+		Conditions:   conditions,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }
 
 // PauseForward durably closes assignment/start for forward work only. Recovery
@@ -70,14 +91,21 @@ func (repository *Repository) PauseForward(ctx context.Context, binding Maintena
 	if err != nil || found {
 		return err
 	}
-	raw, err := recordcodec.Encode("agent_forward_fence", forwardFence{AgentID: binding.AgentID, CredentialGeneration: binding.Generation})
+	raw, err := recordcodec.Encode(
+		"agent_forward_fence",
+		forwardFence{AgentID: binding.AgentID, CredentialGeneration: binding.Generation},
+	)
 	if err != nil {
 		return err
 	}
 	defer clear(raw)
 	conditions := append([]keyvalue.Condition(nil), binding.Conditions...)
 	conditions = append(conditions, guard)
-	result, err := repository.store.Transact(ctx, conditions, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: guard.Key, Value: raw}})
+	result, err := repository.store.Transact(
+		ctx,
+		conditions,
+		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: guard.Key, Value: raw}},
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return err
@@ -88,10 +116,16 @@ func (repository *Repository) PauseForward(ctx context.Context, binding Maintena
 	return nil
 }
 
-func (repository *Repository) readForwardFence(ctx context.Context, binding MaintenanceBinding) (keyvalue.Condition, bool, error) {
+func (repository *Repository) readForwardFence(
+	ctx context.Context,
+	binding MaintenanceBinding,
+) (keyvalue.Condition, bool, error) {
 	key := workqueue.HostForwardFenceKey(binding.HostID)
 	guard := keyvalue.Condition{Key: key}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: binding.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: binding.ReadRevision},
+	)
 	if err != nil {
 		return guard, false, err
 	}
@@ -107,7 +141,10 @@ func (repository *Repository) readForwardFence(ctx context.Context, binding Main
 		return guard, false, err
 	}
 	if fence.AgentID != binding.AgentID || fence.CredentialGeneration != binding.Generation {
-		return guard, false, errs.New(errs.KindStateConflict, "Agent forward fence belongs to another lifecycle generation")
+		return guard, false, errs.New(
+			errs.KindStateConflict,
+			"Agent forward fence belongs to another lifecycle generation",
+		)
 	}
 	guard.ModRevision = read.Values[0].ModRevision
 	return guard, true, nil

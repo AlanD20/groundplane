@@ -45,7 +45,10 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 		return Input{}, keyvalue.Condition{}, conflict("Service removal work has no captured input")
 	}
 	key := InputKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return Input{}, keyvalue.Condition{}, err
 	}
@@ -76,7 +79,9 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (In
 	}
 	for _, claim := range removalClaims(input) {
 		if !slices.Contains(item.Claims, claim) {
-			return Input{}, keyvalue.Condition{}, conflict("Service removal is missing its captured resource or configuration claim")
+			return Input{}, keyvalue.Condition{}, conflict(
+				"Service removal is missing its captured resource or configuration claim",
+			)
 		}
 	}
 	switch task.Action {

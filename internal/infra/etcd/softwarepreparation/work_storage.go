@@ -25,11 +25,18 @@ func (snapshot WorkSnapshot) Guard() workqueue.Change {
 	}}
 }
 
-func (repository *Repository) LoadWork(ctx context.Context, item workexecution.Item, revision int64) (WorkSnapshot, error) {
+func (repository *Repository) LoadWork(
+	ctx context.Context,
+	item workexecution.Item,
+	revision int64,
+) (WorkSnapshot, error) {
 	if item.Validate() != nil || item.Operation != workexecution.SoftwarePreparation || revision < 0 {
 		return WorkSnapshot{}, errs.New(errs.KindValidationFailed, "software preparation work is invalid")
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{InputKey(item.ID), Key(item.TaskID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{InputKey(item.ID), Key(item.TaskID)}, Revision: revision},
+	)
 	if err != nil {
 		return WorkSnapshot{}, err
 	}
@@ -37,7 +44,9 @@ func (repository *Repository) LoadWork(ctx context.Context, item workexecution.I
 		return WorkSnapshot{}, errs.New(errs.KindStorageUnavailable, "software preparation input read is unavailable")
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
+	if read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 2 ||
+		read.Values[0] == nil ||
+		read.Values[1] == nil {
 		return WorkSnapshot{}, errs.New(errs.KindStateConflict, "software preparation input or progress is missing")
 	}
 	capture, err := recordcodec.Decode[Capture](read.Values[0].Value, "software_preparation_capture")
@@ -52,7 +61,11 @@ func (repository *Repository) LoadWork(ctx context.Context, item workexecution.I
 		return WorkSnapshot{}, err
 	}
 	return WorkSnapshot{Capture: capture, InputRevision: read.Values[0].ModRevision,
-		Record: keyvalue.Versioned[Record]{Record: record, Revision: read.Values[1].ModRevision, ReadRevision: read.ReadRevision}}, nil
+		Record: keyvalue.Versioned[Record]{
+			Record:       record,
+			Revision:     read.Values[1].ModRevision,
+			ReadRevision: read.ReadRevision,
+		}}, nil
 }
 
 // CheckpointWork can publish forward build outputs only for the current,
@@ -75,19 +88,31 @@ func (repository *Repository) CheckpointWork(ctx context.Context, queue *workque
 	return repository.commitWork(ctx, view, change)
 }
 
-func (repository *Repository) activeWork(ctx context.Context, queue *workqueue.Repository, attempt workexecution.Attempt) (workqueue.ResumeView, WorkSnapshot, error) {
+func (repository *Repository) activeWork(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	attempt workexecution.Attempt,
+) (workqueue.ResumeView, WorkSnapshot, error) {
 	view, err := queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 	if err != nil {
 		return view, WorkSnapshot{}, err
 	}
-	if !view.ActiveAttempt || view.Attempt.Attempt.FinishedAt != nil || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
-		return view, WorkSnapshot{}, errs.New(errs.KindStateConflict, "software preparation attempt no longer owns execution")
+	if !view.ActiveAttempt || view.Attempt.Attempt.FinishedAt != nil ||
+		!workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
+		return view, WorkSnapshot{}, errs.New(
+			errs.KindStateConflict,
+			"software preparation attempt no longer owns execution",
+		)
 	}
 	snapshot, err := repository.LoadWork(ctx, view.Work.Item.Item, view.Work.ReadRevision)
 	return view, snapshot, err
 }
 
-func prepareProgress(snapshot WorkSnapshot, progress preparation.Progress, at time.Time) (workqueue.Change, Record, error) {
+func prepareProgress(
+	snapshot WorkSnapshot,
+	progress preparation.Progress,
+	at time.Time,
+) (workqueue.Change, Record, error) {
 	current := snapshot.Record.Record
 	if err := validateTransition(current.Progress, progress, current.Source); err != nil {
 		return workqueue.Change{}, Record{}, err
@@ -104,11 +129,18 @@ func prepareProgress(snapshot WorkSnapshot, progress preparation.Progress, at ti
 	if err != nil {
 		return workqueue.Change{}, Record{}, err
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: Key(current.TaskID), Value: raw})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: Key(current.TaskID), Value: raw},
+	)
 	return change, current, nil
 }
 
-func (repository *Repository) commitWork(ctx context.Context, view workqueue.ResumeView, change workqueue.Change) error {
+func (repository *Repository) commitWork(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	change workqueue.Change,
+) error {
 	defer keyvalue.ClearMutationValues(change.Mutations)
 	attempt := view.Attempt.Attempt
 	change.Conditions = append(change.Conditions,

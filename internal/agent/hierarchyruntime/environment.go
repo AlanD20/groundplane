@@ -20,13 +20,26 @@ type EnvironmentCheckpoints interface {
 // before mutation. inspectOnly never repeats an effect after a lost result.
 // Success returns independently observed absence, not a subprocess exit code.
 type EnvironmentHost interface {
-	RemoveRuntime(context.Context, hierarchyexecution.EnvironmentInput, hierarchyexecution.EnvironmentProgress, bool) (hierarchyexecution.EnvironmentObservation, error)
-	RemoveDirectory(context.Context, hierarchyexecution.EnvironmentInput, hierarchyexecution.EnvironmentProgress, bool) (hierarchyexecution.EnvironmentObservation, error)
+	RemoveRuntime(
+		context.Context,
+		hierarchyexecution.EnvironmentInput,
+		hierarchyexecution.EnvironmentProgress,
+		bool,
+	) (hierarchyexecution.EnvironmentObservation, error)
+	RemoveDirectory(
+		context.Context,
+		hierarchyexecution.EnvironmentInput,
+		hierarchyexecution.EnvironmentProgress,
+		bool,
+	) (hierarchyexecution.EnvironmentObservation, error)
 }
 
 // RunEnvironmentRemoval preserves the last acknowledged progress on errors.
 // It does not settle the Task or assume that timeout stopped a host mutation.
-func RunEnvironmentRemoval(ctx context.Context, input hierarchyexecution.EnvironmentInput, checkpoints EnvironmentCheckpoints,
+func RunEnvironmentRemoval(
+	ctx context.Context,
+	input hierarchyexecution.EnvironmentInput,
+	checkpoints EnvironmentCheckpoints,
 	host EnvironmentHost,
 ) (*hierarchyexecution.EnvironmentProgress, error) {
 	if ctx == nil || checkpoints == nil || host == nil || input.Attempt.StartedAt == nil {
@@ -104,12 +117,18 @@ func RunEnvironmentRemoval(ctx context.Context, input hierarchyexecution.Environ
 		}
 	}
 	if progress.Phase != hierarchyexecution.EnvironmentRemoved {
-		return progress, errs.New(errs.KindStateConflict, "Environment removal ended before both absence checks completed")
+		return progress, errs.New(
+			errs.KindStateConflict,
+			"Environment removal ended before both absence checks completed",
+		)
 	}
 	return progress, nil
 }
 
-func acknowledgedEnvironmentProgress(ctx context.Context, checkpoints EnvironmentCheckpoints, input hierarchyexecution.EnvironmentInput,
+func acknowledgedEnvironmentProgress(
+	ctx context.Context,
+	checkpoints EnvironmentCheckpoints,
+	input hierarchyexecution.EnvironmentInput,
 	expected hierarchyexecution.EnvironmentProgress,
 ) (*hierarchyexecution.EnvironmentProgress, error) {
 	saved, err := checkpoints.Current(ctx)

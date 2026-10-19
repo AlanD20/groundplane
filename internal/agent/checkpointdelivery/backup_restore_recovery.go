@@ -72,7 +72,10 @@ func (delivery *BackupRestoreRecovery) current(ctx context.Context) (*agentpb.Ba
 		return nil, err
 	}
 	if ack == nil {
-		return nil, errs.New(errs.KindStateConflict, "Restore recovery has an unacknowledged report; resume delivery first")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Restore recovery has an unacknowledged report; resume delivery first",
+		)
 	}
 	return proto.CloneOf(ack.Source), nil
 }
@@ -83,7 +86,10 @@ func (delivery *BackupRestoreRecovery) Current(ctx context.Context) (*agentpb.Ba
 	return delivery.current(ctx)
 }
 
-func (delivery *BackupRestoreRecovery) publish(ctx context.Context, payload *agentpb.BackupWorkCheckpointRequest) error {
+func (delivery *BackupRestoreRecovery) publish(
+	ctx context.Context,
+	payload *agentpb.BackupWorkCheckpointRequest,
+) error {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
 	cursor, err := delivery.current(ctx)
@@ -96,8 +102,16 @@ func (delivery *BackupRestoreRecovery) publish(ctx context.Context, payload *age
 	}
 	request := proto.CloneOf(payload)
 	request.Attempt, request.SourceOrdinal = proto.CloneOf(delivery.assignment.Attempt), 0
-	request.CheckpointSequence, request.PrecedingCheckpoint = progress.CheckpointSequence+1, proto.CloneOf(progress.PrecedingCheckpoint)
-	record, err := delivery.journal.PrepareBackupRecoveryCheckpoint(ctx, delivery.assignment, delivery.attempt, request, time.Now().UTC())
+	request.CheckpointSequence, request.PrecedingCheckpoint = progress.CheckpointSequence+1, proto.CloneOf(
+		progress.PrecedingCheckpoint,
+	)
+	record, err := delivery.journal.PrepareBackupRecoveryCheckpoint(
+		ctx,
+		delivery.assignment,
+		delivery.attempt,
+		request,
+		time.Now().UTC(),
+	)
 	if err != nil {
 		return err
 	}

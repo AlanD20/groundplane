@@ -5,17 +5,30 @@ import "context"
 // AbandonOwnedPreparation performs one batch for a stopped owner's exact
 // operation. Guards must fence the owner and its preparation descriptor; they
 // join every write. No active source root can be abandoned through this path.
-func (repository *Repository) AbandonOwnedPreparation(ctx context.Context, operationID string, guards []Condition) (bool, error) {
+func (repository *Repository) AbandonOwnedPreparation(
+	ctx context.Context,
+	operationID string,
+	guards []Condition,
+) (bool, error) {
 	return repository.abandonOwnedPreparation(ctx, operationID, guards, false)
 }
 
 // DiscardUnpublishedPreparation leaves published membership to its release owner.
 // The caller must have stopped every producer sharing this operation identity.
-func (repository *Repository) DiscardUnpublishedPreparation(ctx context.Context, operationID string, guards []Condition) (bool, error) {
+func (repository *Repository) DiscardUnpublishedPreparation(
+	ctx context.Context,
+	operationID string,
+	guards []Condition,
+) (bool, error) {
 	return repository.abandonOwnedPreparation(ctx, operationID, guards, true)
 }
 
-func (repository *Repository) abandonOwnedPreparation(ctx context.Context, operationID string, guards []Condition, retainPublished bool) (bool, error) {
+func (repository *Repository) abandonOwnedPreparation(
+	ctx context.Context,
+	operationID string,
+	guards []Condition,
+	retainPublished bool,
+) (bool, error) {
 	if ctx == nil || operationID == "" || len(guards) == 0 {
 		return false, validation("owned source abandonment requires a fenced owner")
 	}
@@ -46,7 +59,11 @@ func (repository *Repository) abandonOwnedPreparation(ctx context.Context, opera
 		return false, corruption("owned source preparation is invalid")
 	}
 	conditions := append([]Condition(nil), guards...)
-	conditions = append(conditions, Condition{Key: value.Key, ModRevision: value.ModRevision}, Condition{Key: RootKey(operationID)})
+	conditions = append(
+		conditions,
+		Condition{Key: value.Key, ModRevision: value.ModRevision},
+		Condition{Key: RootKey(operationID)},
+	)
 	if descriptor.Phase != PreparationAbandoning {
 		descriptor.Phase = PreparationAbandoning
 		raw, err := encodePreparation(descriptor)

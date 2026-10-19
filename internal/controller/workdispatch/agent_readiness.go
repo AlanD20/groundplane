@@ -15,7 +15,12 @@ import (
 // reservations before enabling admission. Unresolved older attempts retain both
 // their slots and claims; readiness never asserts their effects have stopped.
 // Free slots can serve unrelated work without adopting any older assignment.
-func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentregistration.WorkAuthorization, capacity uint16, stagingReady bool) ([]Issue, error) {
+func (delivery *AgentDeliveries) Ready(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	capacity uint16,
+	stagingReady bool,
+) ([]Issue, error) {
 	if delivery == nil || ctx == nil || capacity == 0 || capacity > 256 {
 		return nil, errs.New(errs.KindInternal, "Agent readiness requires configured capacity")
 	}
@@ -27,7 +32,10 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 	if identity.Executor != workexecution.Agent {
 		return nil, errs.New(errs.KindStateConflict, "Agent readiness requires an Agent identity")
 	}
-	current, err := delivery.queue.ReadExecutor(ctx, workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID})
+	current, err := delivery.queue.ReadExecutor(
+		ctx,
+		workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +51,8 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 			}
 		}
 	}
-	if current.Record.Ready && current.Record.Capacity == capacity && slices.Equal(current.Record.UnavailableOperations, unavailable) {
+	if current.Record.Ready && current.Record.Capacity == capacity &&
+		slices.Equal(current.Record.UnavailableOperations, unavailable) {
 		return nil, nil
 	}
 	// Registration and reconnect disable admission. A capacity change on an
@@ -58,7 +67,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 		for _, prior := range interrupted {
 			attempt := prior.Attempt.Attempt
 			if prior.Item.Item.Operation == workexecution.Resolver {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -71,7 +86,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.BackingProvision {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -83,9 +104,16 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				}
 				continue
 			}
-			if prior.Item.Item.Operation == workexecution.BackupPrune || prior.Item.Item.Operation == workexecution.Backup ||
+			if prior.Item.Item.Operation == workexecution.BackupPrune ||
+				prior.Item.Item.Operation == workexecution.Backup ||
 				prior.Item.Item.Operation == workexecution.Restore {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -99,7 +127,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 			}
 
 			if prior.Item.Item.Operation == workexecution.Environment {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -112,7 +146,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.Attach {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -125,7 +165,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.EntryConfiguration {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -138,7 +184,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.Component {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -151,7 +203,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.Network {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -164,7 +222,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.ServiceRemoval {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -177,7 +241,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.ServiceLifecycle {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -190,7 +260,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.Volume {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -203,7 +279,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.Detach {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -216,7 +298,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.Hierarchy {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -229,7 +317,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.Script {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -242,7 +336,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.ReleaseRestoration {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -255,7 +355,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.Release && attempt.Direction == workexecution.Recovery {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -268,7 +374,13 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			if prior.Item.Item.Operation == workexecution.Release && attempt.Direction == workexecution.Forward {
-				view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
+				view, err := delivery.queue.ReadResume(
+					ctx,
+					attempt.TaskID,
+					attempt.WorkItemID,
+					attempt.ID,
+					attempt.Executor,
+				)
 				if err != nil {
 					return issues, err
 				}
@@ -287,7 +399,10 @@ func (delivery *AgentDeliveries) Ready(ctx context.Context, authorization agentr
 				continue
 			}
 			issues = append(issues, Issue{TaskID: prior.Item.Item.TaskID, WorkID: prior.Item.Item.ID,
-				Err: errs.New(errs.KindStateConflict, "previous Agent process has unresolved work; its execution slot and resource claims remain reserved")})
+				Err: errs.New(
+					errs.KindStateConflict,
+					"previous Agent process has unresolved work; its execution slot and resource claims remain reserved",
+				)})
 		}
 		if _, err := delivery.queue.Deliveries(ctx, identity); err != nil {
 			return issues, err

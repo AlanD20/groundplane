@@ -22,7 +22,12 @@ type GraphPublication struct {
 	groups   *releasegroups.ExecutionRepository
 }
 
-func NewGraphPublication(ledger *etcd.ReleaseLedger, queue *workqueue.Repository, networks *networkwork.InputRepository, groups *releasegroups.ExecutionRepository) (*GraphPublication, error) {
+func NewGraphPublication(
+	ledger *etcd.ReleaseLedger,
+	queue *workqueue.Repository,
+	networks *networkwork.InputRepository,
+	groups *releasegroups.ExecutionRepository,
+) (*GraphPublication, error) {
 	if ledger == nil || queue == nil || networks == nil || groups == nil {
 		return nil, errs.New(errs.KindInternal, "Direct Release graph publication dependencies are not configured")
 	}
@@ -34,7 +39,10 @@ func (owner *GraphPublication) PreparePublication(ctx context.Context, task work
 ) (workdispatch.PublicationBatch, error) {
 	if ctx == nil || task.Revision <= 0 || revision < task.Revision || task.Task.PublicationComplete ||
 		task.Task.FinishedAt != nil || at.Before(task.Task.UpdatedAt) {
-		return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "Direct Release graph publication is no longer open")
+		return workdispatch.PublicationBatch{}, errs.New(
+			errs.KindStateConflict,
+			"Direct Release graph publication is no longer open",
+		)
 	}
 	if ids.Validate(ids.KindReleaseGroup, task.Task.TargetID) == nil {
 		return owner.prepareGroupPublication(ctx, task, revision, at)
@@ -55,8 +63,12 @@ func (owner *GraphPublication) PreparePublication(ctx context.Context, task work
 	if err := request.Matches(task.Task, work.Item.Item, rollout.Record); err != nil {
 		return workdispatch.PublicationBatch{}, err
 	}
-	if work.Item.Item.Input != nil || work.Item.Item.Phase != workexecution.Waiting || work.Item.Item.AttemptNumber != 0 {
-		return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "Unpublished Release graph contains executable or executed Service work")
+	if work.Item.Item.Input != nil || work.Item.Item.Phase != workexecution.Waiting ||
+		work.Item.Item.AttemptNumber != 0 {
+		return workdispatch.PublicationBatch{}, errs.New(
+			errs.KindStateConflict,
+			"Unpublished Release graph contains executable or executed Service work",
+		)
 	}
 	graph, err := request.WorkGraph(task.Task, work.Item.Item)
 	if err != nil {
@@ -106,7 +118,10 @@ func (owner *GraphPublication) PreparePublication(ctx context.Context, task work
 			return workdispatch.PublicationBatch{}, err
 		}
 		if !result.Succeeded {
-			return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "Direct Release graph preparation ownership changed")
+			return workdispatch.PublicationBatch{}, errs.New(
+				errs.KindStateConflict,
+				"Direct Release graph preparation ownership changed",
+			)
 		}
 		return workdispatch.PublicationBatch{Planning: true}, nil
 	}

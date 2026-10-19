@@ -60,7 +60,11 @@ func (service *WorkReports) CompleteComponent(ctx context.Context, authorization
 		if err != nil {
 			return nil, err
 		}
-		completion.Result = workexecution.Completion{Outcome: completedComponentOutcome(view.Work), Evidence: evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        completedComponentOutcome(view.Work),
+			Evidence:       evidence,
+			EffectsSettled: true,
+		}
 		completion.At = at
 		change, err := workqueue.PrepareCompletion(completion)
 		if err != nil {
@@ -73,7 +77,10 @@ func (service *WorkReports) CompleteComponent(ctx context.Context, authorization
 			return nil, err
 		}
 		if !result.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Component completion ownership changed; resend the saved result")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Component completion ownership changed; resend the saved result",
+			)
 		}
 		view, err = service.reportView(ctx, authorization, request.Attempt)
 		if err != nil {
@@ -83,10 +90,20 @@ func (service *WorkReports) CompleteComponent(ctx context.Context, authorization
 	attempt := view.Attempt.Attempt
 	if attempt.FinishedAt == nil || attempt.Result == nil || *attempt.Result != evidence ||
 		(attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled && attempt.Outcome != workexecution.Superseded) {
-		return nil, errs.New(errs.KindStateConflict, "saved Component result does not acknowledge successful completion")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"saved Component result does not acknowledge successful completion",
+		)
 	}
-	return &agentpb.ComponentWorkCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: proto.CloneOf(request.Evidence),
-		StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt), Outcome: string(attempt.Outcome)}, nil
+	return &agentpb.ComponentWorkCompletionAck{
+		Attempt:  proto.CloneOf(request.Attempt),
+		Evidence: proto.CloneOf(request.Evidence),
+		StartedAt: timestamppb.New(
+			*attempt.StartedAt,
+		),
+		FinishedAt: timestamppb.New(*attempt.FinishedAt),
+		Outcome:    string(attempt.Outcome),
+	}, nil
 }
 
 // A proven host effect remains applied, but cannot turn cancelled or superseded

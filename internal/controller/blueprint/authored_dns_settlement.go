@@ -11,7 +11,13 @@ import (
 )
 
 type authoredDNSSettlementRepository interface {
-	PrepareBlueprintDNS(context.Context, workqueue.View, blueprintunits.Unit, blueprintunits.Snapshot, time.Time) (etcd.BlueprintDNSPreparation, error)
+	PrepareBlueprintDNS(
+		context.Context,
+		workqueue.View,
+		blueprintunits.Unit,
+		blueprintunits.Snapshot,
+		time.Time,
+	) (etcd.BlueprintDNSPreparation, error)
 }
 
 // DNS settlement joins the scheduler transaction only after the shared resolver
@@ -28,7 +34,10 @@ func (service *Service) PrepareDNSSettlement(
 	}
 	settler, ok := service.repository.(authoredDNSSettlementRepository)
 	if !ok {
-		return etcd.BlueprintDNSPreparation{}, errs.New(errs.KindInternal, "Blueprint DNS settlement repository is not configured")
+		return etcd.BlueprintDNSPreparation{}, errs.New(
+			errs.KindInternal,
+			"Blueprint DNS settlement repository is not configured",
+		)
 	}
 	return settler.PrepareBlueprintDNS(ctx, work, unit, snapshot, at)
 }

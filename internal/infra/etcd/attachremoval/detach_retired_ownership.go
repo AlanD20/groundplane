@@ -31,7 +31,9 @@ func decodeRetiredDetach(raw []byte) (retiredDetach, error) {
 	if err != nil || ids.Validate(ids.KindAttach, record.AttachID) != nil ||
 		ids.Validate(ids.KindTask, record.TaskID) != nil || ids.Validate(ids.KindWorkItem, record.WorkItemID) != nil ||
 		ids.Validate(ids.KindHost, record.HostID) != nil || ids.Validate(ids.KindPlan, record.Input.ID) != nil ||
-		!recordcodec.ValidSHA256(record.Input.SHA256) || record.RetiredAt.IsZero() || record.RetiredAt.Location() != time.UTC {
+		!recordcodec.ValidSHA256(
+			record.Input.SHA256,
+		) || record.RetiredAt.IsZero() || record.RetiredAt.Location() != time.UTC {
 		return retiredDetach{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
@@ -40,7 +42,12 @@ func decodeRetiredDetach(raw []byte) (retiredDetach, error) {
 // PrepareDetachClaim must join source-revision comparisons and native Task
 // publication. Failed Detach ownership cannot be replaced merely because its
 // Task is finished, expired or missing.
-func PrepareDetachClaim(ctx context.Context, reader Reader, source Input, taskID, hostID string) (attachrecord.Record, workqueue.Change, error) {
+func PrepareDetachClaim(
+	ctx context.Context,
+	reader Reader,
+	source Input,
+	taskID, hostID string,
+) (attachrecord.Record, workqueue.Change, error) {
 	key := attachrecord.RetiredDetachKey(source.Attach.ID)
 	read, err := reader.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: source.SnapshotRevision})
 	if read != nil {
@@ -62,11 +69,19 @@ func PrepareDetachClaim(ctx context.Context, reader Reader, source Input, taskID
 		return next, change, err
 	}
 	if value == nil {
-		return attachrecord.Record{}, workqueue.Change{}, errs.New(errs.KindResourceInUse, "retry the original Detach Task; its captured execution has not been retired")
+		return attachrecord.Record{}, workqueue.Change{}, errs.New(
+			errs.KindResourceInUse,
+			"retry the original Detach Task; its captured execution has not been retired",
+		)
 	}
 	proof, err := decodeRetiredDetach(value.Value)
-	if err != nil || proof.AttachID != source.Attach.ID || proof.TaskID != source.Attach.TaskID || proof.HostID != hostID || proof.TaskID == taskID {
-		return attachrecord.Record{}, workqueue.Change{}, errs.New(errs.KindStateConflict, "failed Detach has no matching retired execution authority on this host")
+	if err != nil || proof.AttachID != source.Attach.ID || proof.TaskID != source.Attach.TaskID ||
+		proof.HostID != hostID ||
+		proof.TaskID == taskID {
+		return attachrecord.Record{}, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"failed Detach has no matching retired execution authority on this host",
+		)
 	}
 	next, err := attachrecord.RetryAttachOperation(source.Attach, taskID)
 	if err != nil {
@@ -79,7 +94,12 @@ func PrepareDetachClaim(ctx context.Context, reader Reader, source Input, taskID
 // prepareRetiredDetach runs under the collecting Task and fully settled item
 // comparisons. Native settlement, not elapsed time, proves no command remains
 // in flight. It leaves a bounded receipt only while the failed binding exists.
-func (repository *InputRepository) prepareRetiredDetach(ctx context.Context, view workqueue.View, input DetachInput, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) prepareRetiredDetach(
+	ctx context.Context,
+	view workqueue.View,
+	input DetachInput,
+	at time.Time,
+) (workqueue.Change, error) {
 	attachID := input.Snapshot.Source.Attach.ID
 	keys := []string{attachrecord.AttachKey(attachID), attachrecord.RetiredDetachKey(attachID)}
 	read, err := repository.read(ctx, keys, view.ReadRevision)
@@ -109,7 +129,10 @@ func (repository *InputRepository) prepareRetiredDetach(ctx context.Context, vie
 	}
 	if !attachrecord.AttachImmutableEqual(binding, input.Snapshot.Source.Attach) || binding.Status != "failed" ||
 		binding.Operation != attachrecord.AttachOperationDetach || view.Item.Item.Outcome == workexecution.Succeeded {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach history cannot release an unsettled or inconsistent binding")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Detach history cannot release an unsettled or inconsistent binding",
+		)
 	}
 	if receipt != nil {
 		proof, err := decodeRetiredDetach(receipt.Value)

@@ -108,7 +108,11 @@ func (service *ReadService) projectAgent(
 	if err != nil {
 		return apiTypes.Agent{}, err
 	}
-	inFlight, err := service.queue.OccupiedSlots(ctx, workexecution.Placement{Executor: workexecution.Agent, HostID: binding.Binding.HostID}, binding.ReadRevision)
+	inFlight, err := service.queue.OccupiedSlots(
+		ctx,
+		workexecution.Placement{Executor: workexecution.Agent, HostID: binding.Binding.HostID},
+		binding.ReadRevision,
+	)
 	if err != nil {
 		return apiTypes.Agent{}, err
 	}

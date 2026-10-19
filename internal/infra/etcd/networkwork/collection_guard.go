@@ -38,7 +38,9 @@ func (repository *InputRepository) CollectionGuard(ctx context.Context, task wor
 func PrepareZoneTaskCollection(task workqueue.TaskSnapshot, guard workqueue.Change) (workqueue.Change, error) {
 	key := deletions.TombstoneKey(string(deletions.DeletionTargetZone), task.Task.TargetID)
 	if task.Task.Action != workexecution.ActionRemove || ids.Validate(ids.KindNetwork, task.Task.TargetID) != nil ||
-		len(guard.Conditions) != 1 || guard.Conditions[0] != (keyvalue.Condition{Key: key}) || len(guard.Mutations) != 0 {
+		len(
+			guard.Conditions,
+		) != 1 || guard.Conditions[0] != (keyvalue.Condition{Key: key}) || len(guard.Mutations) != 0 {
 		return workqueue.Change{}, conflict("Zone collection requires the deletion fence absence guard")
 	}
 	change, err := workqueue.PrepareTaskCollection(task)

@@ -8,7 +8,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (owner *AgentWork) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, previous workqueue.AttemptSnapshot, revision int64, at time.Time) (workqueue.Change, error) {
+func (owner *AgentWork) PrepareWorkRetry(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	previous workqueue.AttemptSnapshot,
+	revision int64,
+	at time.Time,
+) (workqueue.Change, error) {
 	view := workqueue.View{Task: task, Item: item, ReadRevision: revision}
 	if item.Item.AttemptNumber == 0 {
 		return owner.inputs.PrepareUnstartedRetry(ctx, view, at)

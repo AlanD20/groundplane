@@ -26,7 +26,12 @@ type WorkReports struct {
 	records     *entryrecord.InputRepository
 }
 
-func NewWorkReports(queue *workqueue.Repository, records *entryrecord.InputRepository, files CapturedFileReader, diagnostics *executiondiagnostics.Repository) (*WorkReports, error) {
+func NewWorkReports(
+	queue *workqueue.Repository,
+	records *entryrecord.InputRepository,
+	files CapturedFileReader,
+	diagnostics *executiondiagnostics.Repository,
+) (*WorkReports, error) {
 	if queue == nil || records == nil || files == nil || diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "Entry reporting requires execution storage and its publication owner")
 	}
@@ -81,9 +86,13 @@ func (service *WorkReports) CheckpointEntry(ctx context.Context, authorization a
 	if err != nil {
 		return nil, err
 	}
-	return &agentpb.EntryConfigurationWorkCheckpointAck{Attempt: proto.CloneOf(request.Attempt), Sequence: checkpoint.Sequence,
-		StageId: checkpoint.StageID, Evidence: &agentpb.WorkInputReference{InputId: checkpoint.Evidence.ID, Sha256: digest},
-		RecordedAt: timestamppb.New(checkpoint.RecordedAt)}, nil
+	return &agentpb.EntryConfigurationWorkCheckpointAck{
+		Attempt:    proto.CloneOf(request.Attempt),
+		Sequence:   checkpoint.Sequence,
+		StageId:    checkpoint.StageID,
+		Evidence:   &agentpb.WorkInputReference{InputId: checkpoint.Evidence.ID, Sha256: digest},
+		RecordedAt: timestamppb.New(checkpoint.RecordedAt),
+	}, nil
 }
 
 func (service *WorkReports) reportView(ctx context.Context, authorization agentregistration.WorkAuthorization,
@@ -100,7 +109,10 @@ func (service *WorkReports) reportView(ctx context.Context, authorization agentr
 	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Attempt.Attempt.StartedAt == nil ||
 		view.Work.Item.Item.Operation != workexecution.EntryConfiguration || !view.Work.Task.Task.PublicationComplete ||
 		view.Work.Task.Task.CollectionStartedAt != nil {
-		return workqueue.ResumeView{}, errs.New(errs.KindStateConflict, "Entry report has no retained started execution")
+		return workqueue.ResumeView{}, errs.New(
+			errs.KindStateConflict,
+			"Entry report has no retained started execution",
+		)
 	}
 	return view, nil
 }

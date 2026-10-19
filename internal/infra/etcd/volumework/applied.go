@@ -61,7 +61,11 @@ func (repository *InputRepository) PrepareVolumeWorkCompletion(ctx context.Conte
 	return proof, nil
 }
 
-func (repository *InputRepository) prepareApplied(ctx context.Context, view workqueue.ResumeView, input *agentpb.VolumeWorkInput) (workqueue.Change, error) {
+func (repository *InputRepository) prepareApplied(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	input *agentpb.VolumeWorkInput,
+) (workqueue.Change, error) {
 	key := AppliedKey(input.VolumeId)
 	read, err := repository.read(ctx, []string{key}, view.Work.ReadRevision)
 	if err != nil {
@@ -108,8 +112,13 @@ func decodeApplied(raw []byte) (AppliedVolume, error) {
 	}
 	state, err := jcs.Decode[AppliedVolume](raw)
 	if err != nil || ids.Validate(ids.KindVolume, state.VolumeID) != nil ||
-		ids.Validate(ids.KindEnvironment, state.EnvironmentID) != nil || ids.Validate(ids.KindHost, state.HostID) != nil ||
-		volumeidentity.ValidateKey(state.ComposeKey) != nil || state.Input.Validate() != nil || state.ObservedAt.IsZero() || len(state.IntentSHA256) != 64 {
+		ids.Validate(
+			ids.KindEnvironment,
+			state.EnvironmentID,
+		) != nil || ids.Validate(ids.KindHost, state.HostID) != nil ||
+		volumeidentity.ValidateKey(
+			state.ComposeKey,
+		) != nil || state.Input.Validate() != nil || state.ObservedAt.IsZero() || len(state.IntentSHA256) != 64 {
 		return AppliedVolume{}, conflict("applied Volume state is invalid")
 	}
 	if _, err := hex.DecodeString(state.IntentSHA256); err != nil {
@@ -118,7 +127,11 @@ func decodeApplied(raw []byte) (AppliedVolume, error) {
 	return state, nil
 }
 
-func (repository *InputRepository) ReadApplied(ctx context.Context, volumeID string, revision int64) (*AppliedVolume, error) {
+func (repository *InputRepository) ReadApplied(
+	ctx context.Context,
+	volumeID string,
+	revision int64,
+) (*AppliedVolume, error) {
 	if ids.Validate(ids.KindVolume, volumeID) != nil || revision < 0 {
 		return nil, conflict("applied Volume read identity is invalid")
 	}

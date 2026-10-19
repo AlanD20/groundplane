@@ -22,7 +22,10 @@ func (service *MutationService) captureCreateInput(ctx context.Context, scope et
 	adapter adapters.Adapter, attachID, name, taskID, operationID string, at time.Time,
 ) (_ blueprintattachinputs.Generation, resultErr error) {
 	if len(scope.Services) != 1 || adapter == nil {
-		return blueprintattachinputs.Generation{}, errs.New(errs.KindValidationFailed, "Attach input requires one consumer and its backing adapter")
+		return blueprintattachinputs.Generation{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach input requires one consumer and its backing adapter",
+		)
 	}
 	consumer := scope.Services[0]
 	generation := blueprintattachinputs.Generation{ID: operationID, OperationID: operationID,
@@ -79,17 +82,24 @@ func (service *MutationService) captureCreateInput(ctx context.Context, scope et
 		return blueprintattachinputs.Generation{}, err
 	}
 	hooks := scope.BackingService.Record.Desired.Hooks
-	if scope.CredentialOwner == nil && adapter.Custom() && hooks != nil && (hooks.Attach != nil || hooks.Detach != nil) {
+	if scope.CredentialOwner == nil && adapter.Custom() && hooks != nil &&
+		(hooks.Attach != nil || hooks.Detach != nil) {
 		configuration := backinghook.CloneConfiguration(hooks)
 		generation.Hook = blueprintattachinputs.HookPlan{Attach: configuration.Attach, Detach: configuration.Detach,
 			Facts: configuration.Facts}
-		sort.Slice(generation.Hook.Facts, func(left, right int) bool { return generation.Hook.Facts[left].Key < generation.Hook.Facts[right].Key })
+		sort.Slice(
+			generation.Hook.Facts,
+			func(left, right int) bool { return generation.Hook.Facts[left].Key < generation.Hook.Facts[right].Key },
+		)
 		for _, input := range configuration.Inputs {
 			source := blueprintattachinputs.HookInputResolved
 			if input.Generate == backinghook.GeneratePassword {
 				source = blueprintattachinputs.HookInputGenerated
 			}
-			generation.Hook.Inputs = append(generation.Hook.Inputs, blueprintattachinputs.HookInput{Key: input.Key, Source: source})
+			generation.Hook.Inputs = append(
+				generation.Hook.Inputs,
+				blueprintattachinputs.HookInput{Key: input.Key, Source: source},
+			)
 		}
 		sort.Slice(generation.Hook.Inputs, func(left, right int) bool {
 			return generation.Hook.Inputs[left].Key < generation.Hook.Inputs[right].Key

@@ -13,7 +13,12 @@ func openLifecycleRecoveryHelper(request *agentpb.ServiceLifecycleHelperRequest)
 		return LifecycleHelperInput{}, invalidLifecycleWork()
 	}
 	claimed := request.Assignment.Attempt
-	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: claimed.HostId, AgentID: claimed.AgentId, Generation: claimed.ExecutorGeneration}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     claimed.HostId,
+		AgentID:    claimed.AgentId,
+		Generation: claimed.ExecutorGeneration,
+	}
 	attempt, err := workexecution.DecodeAgentAttempt(claimed, identity)
 	if err != nil {
 		return LifecycleHelperInput{}, err
@@ -25,7 +30,8 @@ func openLifecycleRecoveryHelper(request *agentpb.ServiceLifecycleHelperRequest)
 	attempt.StartedAt = &started
 	input := request.Assignment.Input
 	source, err := lifecycleexecution.DecodeRecovery(input, request.Assignment.RecoverySource)
-	if err != nil || source.ValidateFor(attempt, input) != nil || source.Progress == nil || source.Progress.BeganAt == nil {
+	if err != nil || source.ValidateFor(attempt, input) != nil || source.Progress == nil ||
+		source.Progress.BeganAt == nil {
 		return LifecycleHelperInput{}, invalidLifecycleWork()
 	}
 	stages, err := lifecycleexecution.Stages(input)
@@ -36,5 +42,12 @@ func openLifecycleRecoveryHelper(request *agentpb.ServiceLifecycleHelperRequest)
 	if stage.Expected == lifecycleexecution.HookSucceeded {
 		return LifecycleHelperInput{}, invalidLifecycleWork()
 	}
-	return LifecycleHelperInput{Attempt: attempt, Procedure: input, Progress: *source.Progress, Stage: stage, InspectOnly: true, Recovery: &source}, nil
+	return LifecycleHelperInput{
+		Attempt:     attempt,
+		Procedure:   input,
+		Progress:    *source.Progress,
+		Stage:       stage,
+		InspectOnly: true,
+		Recovery:    &source,
+	}, nil
 }

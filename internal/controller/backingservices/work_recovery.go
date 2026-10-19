@@ -16,10 +16,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (service *WorkReports) RecoverBackingProvision(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *WorkReports) RecoverBackingProvision(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.BackingProvisionRecoveryRequest,
 ) (*agentpb.BackingProvisionRecoveryAck, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 || len(request.Report) > backingprovision.MaximumProgressBytes {
+	if request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 ||
+		len(request.Report) > backingprovision.MaximumProgressBytes {
 		return nil, errs.New(errs.KindValidationFailed, "backing creation cleanup report is missing or oversized")
 	}
 	guards, err := authorization.Conditions()
@@ -46,7 +49,10 @@ func (service *WorkReports) RecoverBackingProvision(ctx context.Context, authori
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "backing creation cleanup ownership changed; resend the saved report")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"backing creation cleanup ownership changed; resend the saved report",
+			)
 		}
 		view, err = service.reportView(ctx, authorization, request.Attempt, true)
 		if err != nil {
@@ -67,5 +73,7 @@ func (service *WorkReports) RecoverBackingProvision(ctx context.Context, authori
 	}
 	service.reportTerminal(ctx, view, true)
 	return &agentpb.BackingProvisionRecoveryAck{Attempt: proto.CloneOf(request.Attempt), Evidence: evidence,
-		Outcome: string(attempt.Outcome), StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
+		Outcome: string(
+			attempt.Outcome,
+		), StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
 }

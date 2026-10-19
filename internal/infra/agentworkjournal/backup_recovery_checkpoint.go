@@ -20,7 +20,8 @@ func (record attemptRecord) validateBackupRecoveryCheckpoint() error {
 		}
 		return nil
 	}
-	if recovery.CheckpointWrites == 0 || request.SourceOrdinal != 0 || request.CheckpointSequence < recovery.CheckpointWrites {
+	if recovery.CheckpointWrites == 0 || request.SourceOrdinal != 0 ||
+		request.CheckpointSequence < recovery.CheckpointWrites {
 		return invalid()
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(request.Attempt, record.Attempt.Executor)

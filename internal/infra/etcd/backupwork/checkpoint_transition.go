@@ -51,7 +51,8 @@ func advanceCheckpoint(admitted CheckpointAdmission, executor workexecution.Iden
 		}
 		matched := false
 		for _, guard := range evidence.Conditions {
-			matched = matched || guard.Key == backupvolumemanifest.CursorKey(ref.Binding) && guard.ModRevision == ref.CursorRevision
+			matched = matched ||
+				guard.Key == backupvolumemanifest.CursorKey(ref.Binding) && guard.ModRevision == ref.CursorRevision
 		}
 		if !matched {
 			return nil, conflict("Volume manifest cursor is not fenced")
@@ -84,10 +85,14 @@ func advanceCheckpoint(admitted CheckpointAdmission, executor workexecution.Iden
 
 func checkpointGrantsEffect(report *agentpb.BackupWorkCheckpointRequest) bool {
 	volume := report.GetVolume()
-	return report.GetPostgresDumpStart() != nil || report.GetMysqlDumpStart() != nil || report.GetArtifactPrepared() != nil ||
-		report.GetPostgresRestoreApplyStart() != nil || report.GetMysqlRestoreApplyStart() != nil ||
+	return report.GetPostgresDumpStart() != nil || report.GetMysqlDumpStart() != nil ||
+		report.GetArtifactPrepared() != nil ||
+		report.GetPostgresRestoreApplyStart() != nil ||
+		report.GetMysqlRestoreApplyStart() != nil ||
 		report.GetPostgresServiceProgress().GetPhase() == agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_STOP_INTENT ||
 		report.GetMysqlServiceProgress().GetPhase() == agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_STOP_INTENT ||
 		volume.GetServiceProgress().GetPhase() == agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_STOP_INTENT ||
-		volume.GetConstructionIntent() != nil || volume.GetFinalizationIntent() != nil || volume.GetExchangeIntent() != nil
+		volume.GetConstructionIntent() != nil ||
+		volume.GetFinalizationIntent() != nil ||
+		volume.GetExchangeIntent() != nil
 }

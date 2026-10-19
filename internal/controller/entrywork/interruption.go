@@ -15,7 +15,11 @@ import (
 // ReconcileInterrupted records only durable evidence from the replaced executor.
 // A new Agent on the same host does not impersonate the old process or receive
 // permission to rerun an ambiguous effect.
-func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (owner *AgentWork) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err

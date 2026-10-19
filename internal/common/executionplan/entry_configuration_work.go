@@ -131,5 +131,8 @@ func OpenEntryConfigurationWorkInput(attempt workexecution.Attempt, input *agent
 }
 
 func invalidEntryConfigurationWork() error {
-	return errs.New(errs.KindValidationFailed, "Entry configuration requires captured files and exact running consumers; removal cannot restart workloads")
+	return errs.New(
+		errs.KindValidationFailed,
+		"Entry configuration requires captured files and exact running consumers; removal cannot restart workloads",
+	)
 }

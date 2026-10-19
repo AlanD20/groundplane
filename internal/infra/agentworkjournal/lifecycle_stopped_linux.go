@@ -15,11 +15,18 @@ import (
 func (journal *Journal) AcknowledgeStoppedLifecycle(ctx context.Context, attempt workexecution.Attempt,
 	input *agentpb.ServiceLifecycleWorkInput, ack *agentpb.ServiceLifecycleFailureAck,
 ) (workexecution.Attempt, error) {
-	if input == nil || input.Action != agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_DESTROY || input.Hook != nil ||
-		ack == nil || executionplan.RejectUnknown(ack) != nil {
+	if input == nil || input.Action != agentpb.ServiceLifecycleAction_SERVICE_LIFECYCLE_ACTION_DESTROY ||
+		input.Hook != nil ||
+		ack == nil ||
+		executionplan.RejectUnknown(ack) != nil {
 		return workexecution.Attempt{}, invalid()
 	}
-	terminal, failure, err := lifecycleexecution.DecodeFailureAck(attempt, input, lifecycleexecution.ExecutionInterrupted, ack)
+	terminal, failure, err := lifecycleexecution.DecodeFailureAck(
+		attempt,
+		input,
+		lifecycleexecution.ExecutionInterrupted,
+		ack,
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
@@ -40,7 +47,8 @@ func (journal *Journal) AcknowledgeStoppedLifecycle(ctx context.Context, attempt
 		return workexecution.Attempt{}, conflict()
 	}
 	checkpoint, err := state.Lifecycle.Progress.Checkpoint(attempt, input)
-	if err != nil || failure.Checkpoint == nil || *failure.Checkpoint != checkpoint || terminal.FinishedAt.Before(state.UpdatedAt) {
+	if err != nil || failure.Checkpoint == nil || *failure.Checkpoint != checkpoint ||
+		terminal.FinishedAt.Before(state.UpdatedAt) {
 		return workexecution.Attempt{}, conflict()
 	}
 	if previous := state.Lifecycle.Failure; previous != nil {
@@ -51,7 +59,11 @@ func (journal *Journal) AcknowledgeStoppedLifecycle(ctx context.Context, attempt
 		}
 		return *previous.Receipt, nil
 	}
-	state.Lifecycle.Failure = &LifecycleFailureDelivery{Reason: failure.Reason, Receipt: &terminal, Evidence: append([]byte(nil), ack.Failure...)}
+	state.Lifecycle.Failure = &LifecycleFailureDelivery{
+		Reason:   failure.Reason,
+		Receipt:  &terminal,
+		Evidence: append([]byte(nil), ack.Failure...),
+	}
 	if err := journal.writeRecord(ctx, *state); err != nil {
 		return workexecution.Attempt{}, err
 	}

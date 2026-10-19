@@ -20,7 +20,10 @@ func (repository *Repository) DiagnosticBegin(ctx context.Context, view workqueu
 		return progress, nil
 	}
 	key := ReportKey(view.Attempt.Attempt.ID, progress.Sequence-1)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if err != nil {
 		return backingprovision.Progress{}, err
 	}

@@ -25,7 +25,10 @@ type ExecutionInput struct {
 func NewExecution(input ExecutionInput, at time.Time) (ScriptExecutionRecord, error) {
 	if input.Snapshot == nil || input.Projection == nil || input.Run == nil || input.Body == nil ||
 		at.IsZero() {
-		return ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "Script execution requires captured source inputs")
+		return ScriptExecutionRecord{}, errs.New(
+			errs.KindValidationFailed,
+			"Script execution requires captured source inputs",
+		)
 	}
 	if err := scriptrecord.ValidateScriptSetGeneration(scriptrecord.SetGenerationRecord{
 		EnvironmentID: input.Run.EnvironmentId, GenerationID: input.ScriptSetGeneration,

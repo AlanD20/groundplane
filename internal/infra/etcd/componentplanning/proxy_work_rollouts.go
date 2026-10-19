@@ -45,7 +45,10 @@ func BindProxyWorkRollouts(work workqueue.View, captured ProxyServicePreflight,
 		input.Record.ParentTaskID != task.ID || input.Record.EnvironmentID != task.Scope.EnvironmentID ||
 		input.Record.ComponentID != item.TargetID || captured.validate() != nil ||
 		captured.ParentTaskID != task.ID || captured.EnvironmentID != task.Scope.EnvironmentID {
-		return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "Proxy input differs from captured Component work")
+		return nil, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Proxy input differs from captured Component work",
+		)
 	}
 	if captured.CandidateInput != nil && *captured.CandidateInput != input.Record {
 		return nil, workqueue.Change{}, errs.New(errs.KindStateConflict, "Proxy work already captured different input")

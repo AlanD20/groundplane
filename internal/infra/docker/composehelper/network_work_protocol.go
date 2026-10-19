@@ -38,7 +38,11 @@ func ReadNetworkWorkRequest(ctx context.Context, input io.Reader) (*agentpb.Netw
 	return request, nil
 }
 
-func ReadNetworkWorkResponse(ctx context.Context, input io.Reader, captured executionplan.NetworkHelperInput) (*agentpb.NetworkWorkHelperResponse, error) {
+func ReadNetworkWorkResponse(
+	ctx context.Context,
+	input io.Reader,
+	captured executionplan.NetworkHelperInput,
+) (*agentpb.NetworkWorkHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
@@ -57,7 +61,12 @@ func ReadNetworkWorkResponse(ctx context.Context, input io.Reader, captured exec
 	return response, nil
 }
 
-func WriteNetworkWorkResponse(ctx context.Context, output io.Writer, captured executionplan.NetworkHelperInput, response *agentpb.NetworkWorkHelperResponse) error {
+func WriteNetworkWorkResponse(
+	ctx context.Context,
+	output io.Writer,
+	captured executionplan.NetworkHelperInput,
+	response *agentpb.NetworkWorkHelperResponse,
+) error {
 	if _, err := executionplan.ReadNetworkHelperObservation(captured, response); err != nil {
 		return err
 	}

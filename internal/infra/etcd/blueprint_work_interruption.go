@@ -17,7 +17,12 @@ import (
 // absence of observed containers, as proof that this attempt had no effects.
 // Start alone cannot authorize a Release effect. The replaced generation cannot
 // obtain another grant after the joined executor/checkpoint comparisons.
-func (ledger *ReleaseLedger) RejectBlueprintReleaseBeforeEffects(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization, at time.Time) error {
+func (ledger *ReleaseLedger) RejectBlueprintReleaseBeforeEffects(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+	at time.Time,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
@@ -43,7 +48,12 @@ func (ledger *ReleaseLedger) RejectBlueprintReleaseBeforeEffects(ctx context.Con
 	if err != nil {
 		return err
 	}
-	failure := releaseexecution.Failure{AttemptID: attempt.ID, Input: attempt.Input, Reason: releaseexecution.ExecutionInterrupted, RecordedAt: at}
+	failure := releaseexecution.Failure{
+		AttemptID:  attempt.ID,
+		Input:      attempt.Input,
+		Reason:     releaseexecution.ExecutionInterrupted,
+		RecordedAt: at,
+	}
 	raw, reference, err := releaseexecution.EncodeFailure(attempt, failure)
 	if err != nil {
 		return err
@@ -55,7 +65,11 @@ func (ledger *ReleaseLedger) RejectBlueprintReleaseBeforeEffects(ctx context.Con
 	} else if view.Work.Item.Item.ForwardRevoked {
 		outcome = workexecution.Superseded
 	}
-	completion.At, completion.Result = at, workexecution.Completion{Outcome: outcome, Evidence: reference, EffectsSettled: true}
+	completion.At, completion.Result = at, workexecution.Completion{
+		Outcome:        outcome,
+		Evidence:       reference,
+		EffectsSettled: true,
+	}
 	change, err := workqueue.PrepareCompletion(completion)
 	if err != nil {
 		return err

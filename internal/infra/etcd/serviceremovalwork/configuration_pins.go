@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 )
 
-func (repository *Repository) configurationPinGuard(ctx context.Context, input Input, revision int64) ([]keyvalue.Condition, error) {
+func (repository *Repository) configurationPinGuard(
+	ctx context.Context,
+	input Input,
+	revision int64,
+) ([]keyvalue.Condition, error) {
 	if input.ConfigurationPins == nil {
 		return nil, nil
 	}
@@ -37,7 +41,9 @@ func (repository *Repository) retireConfigurationPins(ctx context.Context, input
 ) (bool, []keyvalue.Condition, error) {
 	operationID := input.ConfigurationOperationID()
 	absence := []keyvalue.Condition{{Key: tasksecretpins.RootKey(operationID)},
-		{Key: tasksecretpins.PreparationKey(operationID)}, {Key: tasksecretpins.ReversePrefix(operationID), Prefix: true}}
+		{
+			Key: tasksecretpins.PreparationKey(operationID),
+		}, {Key: tasksecretpins.ReversePrefix(operationID), Prefix: true}}
 	if input.ConfigurationPins == nil {
 		return true, absence, nil
 	}

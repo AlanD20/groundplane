@@ -12,7 +12,10 @@ import (
 
 // Refresh ownership only, never captured desired configuration. Every staging
 // write joins these guards so cancelled/collected work cannot recreate captures.
-func (ledger *ReleaseLedger) rolloutPreparationGuards(ctx context.Context, capture releaserender.ServiceRolloutCapture) ([]keyvalue.Condition, error) {
+func (ledger *ReleaseLedger) rolloutPreparationGuards(
+	ctx context.Context,
+	capture releaserender.ServiceRolloutCapture,
+) ([]keyvalue.Condition, error) {
 	queue, err := workqueue.NewRepository(ledger.store)
 	if err != nil {
 		return nil, err

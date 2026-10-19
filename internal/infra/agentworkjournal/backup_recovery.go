@@ -65,9 +65,14 @@ func (record attemptRecord) validateBackupRecovery() error {
 		return invalid()
 	}
 	if terminal := backup.Completion; terminal != nil {
-		if terminal.Validate() != nil || !workexecution.SameAssignment(*terminal, attempt) || terminal.StartedAt == nil ||
-			!terminal.StartedAt.Equal(*attempt.StartedAt) || terminal.FinishedAt == nil ||
-			terminal.FinishedAt.Before(record.UpdatedAt) || terminal.Result == nil || *terminal.Result != evidence || terminal.Outcome != workexecution.Succeeded {
+		if terminal.Validate() != nil || !workexecution.SameAssignment(*terminal, attempt) ||
+			terminal.StartedAt == nil ||
+			!terminal.StartedAt.Equal(*attempt.StartedAt) ||
+			terminal.FinishedAt == nil ||
+			terminal.FinishedAt.Before(record.UpdatedAt) ||
+			terminal.Result == nil ||
+			*terminal.Result != evidence ||
+			terminal.Outcome != workexecution.Succeeded {
 			return invalid()
 		}
 	}

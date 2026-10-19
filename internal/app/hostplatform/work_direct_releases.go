@@ -85,7 +85,16 @@ func (platform *Platform) newReleaseCheckpoints(queue *workqueue.Repository, dep
 ) (*taskcheckpoint.ReleaseCheckpointService, error) {
 	return taskcheckpoint.NewReleaseCheckpointService(queue, platform.dependencies.Store, dependencies.CapturedFiles,
 		diagnostics, platform.dependencies.Logger, []taskcheckpoint.ReleaseCheckpointRegistration{
-			{Operation: workexecution.Release, Forward: dependencies.Releases, Restoration: dependencies.Releases, Outcome: dependencies.Releases},
-			{Operation: workexecution.ReleaseRestoration, Restoration: execution.restoration, Outcome: execution.restoration},
+			{
+				Operation:   workexecution.Release,
+				Forward:     dependencies.Releases,
+				Restoration: dependencies.Releases,
+				Outcome:     dependencies.Releases,
+			},
+			{
+				Operation:   workexecution.ReleaseRestoration,
+				Restoration: execution.restoration,
+				Outcome:     execution.restoration,
+			},
 		})
 }

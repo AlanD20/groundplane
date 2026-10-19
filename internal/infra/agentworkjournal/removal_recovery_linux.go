@@ -12,7 +12,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func removalCaptureDigest(input *agentpb.ServiceLifecycleWorkInput, capture removalexecution.RecoveryCapture) (string, error) {
+func removalCaptureDigest(
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture removalexecution.RecoveryCapture,
+) (string, error) {
 	raw, err := removalexecution.EncodeCapture(input, capture)
 	if err != nil {
 		return "", err
@@ -21,18 +24,32 @@ func removalCaptureDigest(input *agentpb.ServiceLifecycleWorkInput, capture remo
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func matchesRemovalRecovery(state *attemptRecord, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture removalexecution.RecoveryCapture) bool {
+func matchesRemovalRecovery(
+	state *attemptRecord,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture removalexecution.RecoveryCapture,
+) bool {
 	digest, err := removalCaptureDigest(input, capture)
-	if err != nil || state == nil || state.RemovalRecovery == nil || !workexecution.SameAssignment(state.Attempt, attempt) ||
-		state.Attempt.StartedAt == nil || attempt.StartedAt == nil || !state.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
-		state.RemovalRecovery.CaptureSHA256 != digest || state.RemovalRecovery.Progress.Validate(attempt, input, capture) != nil {
+	if err != nil || state == nil || state.RemovalRecovery == nil ||
+		!workexecution.SameAssignment(state.Attempt, attempt) ||
+		state.Attempt.StartedAt == nil ||
+		attempt.StartedAt == nil ||
+		!state.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
+		state.RemovalRecovery.CaptureSHA256 != digest ||
+		state.RemovalRecovery.Progress.Validate(attempt, input, capture) != nil {
 		return false
 	}
 	stages, err := lifecycleexecution.Stages(input)
 	return err == nil && slices.Equal(stages, state.RemovalRecovery.Stages)
 }
 
-func (journal *Journal) RemovalRecovery(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture removalexecution.RecoveryCapture) (*RemovalRecoveryRecord, error) {
+func (journal *Journal) RemovalRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture removalexecution.RecoveryCapture,
+) (*RemovalRecoveryRecord, error) {
 	if capture.ValidateFor(attempt, input) != nil {
 		return nil, invalid()
 	}
@@ -99,7 +116,12 @@ func (journal *Journal) PrepareRemovalRecovery(ctx context.Context, attempt work
 	if err != nil {
 		return nil, err
 	}
-	state.RemovalRecovery = &RemovalRecoveryRecord{Source: capture.Source, Stages: stages, CaptureSHA256: digest, Progress: next}
+	state.RemovalRecovery = &RemovalRecoveryRecord{
+		Source:        capture.Source,
+		Stages:        stages,
+		CaptureSHA256: digest,
+		Progress:      next,
+	}
 	state.Sequence, state.UpdatedAt = next.Sequence, next.UpdatedAt
 	if err := journal.writeRecord(ctx, *state); err != nil {
 		return nil, err
@@ -107,8 +129,12 @@ func (journal *Journal) PrepareRemovalRecovery(ctx context.Context, attempt work
 	return state.RemovalRecovery, nil
 }
 
-func (journal *Journal) AcknowledgeRemovalRecovery(ctx context.Context, attempt workexecution.Attempt,
-	input *agentpb.ServiceLifecycleWorkInput, capture removalexecution.RecoveryCapture, checkpoint workexecution.Checkpoint,
+func (journal *Journal) AcknowledgeRemovalRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	capture removalexecution.RecoveryCapture,
+	checkpoint workexecution.Checkpoint,
 ) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {

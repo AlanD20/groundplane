@@ -23,7 +23,12 @@ type Journal struct {
 	identity   workexecution.Identity
 }
 
-func NewJournal(repository *Repository, owner Owner, attemptID string, identity workexecution.Identity) (*Journal, error) {
+func NewJournal(
+	repository *Repository,
+	owner Owner,
+	attemptID string,
+	identity workexecution.Identity,
+) (*Journal, error) {
 	if repository == nil || ids.Validate(ids.KindTask, owner.TaskID) != nil ||
 		ids.Validate(ids.KindPlan, owner.PlanID) != nil || ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
 		ids.Validate(ids.KindEnvironment, owner.EnvironmentID) != nil ||
@@ -119,7 +124,11 @@ func (journal *Journal) WriteConnectionCheckStage(ctx context.Context, stage s3c
 
 // RejectAssigned settles only an assignment with no start receipt. Its CAS
 // races the start transaction, so exactly one can retain authority to proceed.
-func (journal *Journal) RejectAssigned(ctx context.Context, failure s3connector.ConnectionCheckFailure, at time.Time) error {
+func (journal *Journal) RejectAssigned(
+	ctx context.Context,
+	failure s3connector.ConnectionCheckFailure,
+	at time.Time,
+) error {
 	return journal.mutateState(ctx, false, true, func(record *Record, attempt workexecution.Attempt) error {
 		if attempt.StartedAt != nil || attempt.Direction != workexecution.Forward || record.Phase != Ready {
 			return errs.New(errs.KindStateConflict, "connector check already started; reconcile its effects")

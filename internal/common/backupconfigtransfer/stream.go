@@ -156,9 +156,15 @@ func Stream(ctx context.Context, input StreamInput) (StreamResult, error) {
 }
 
 func (sender *streamSender) frame() *agentpb.BackupConfigTransfer {
-	return &agentpb.BackupConfigTransfer{Attempt: sender.binding.wireAttempt(), SourceOrdinal: sender.binding.SourceOrdinal,
-		AuthorityDigest: append([]byte(nil), sender.binding.AuthorityDigest[:]...), TransferId: sender.binding.TransferID,
-		RecordSequence: sender.window.Status().LastSentRecordSequence + 1}
+	return &agentpb.BackupConfigTransfer{
+		Attempt:       sender.binding.wireAttempt(),
+		SourceOrdinal: sender.binding.SourceOrdinal,
+		AuthorityDigest: append(
+			[]byte(nil),
+			sender.binding.AuthorityDigest[:]...),
+		TransferId:     sender.binding.TransferID,
+		RecordSequence: sender.window.Status().LastSentRecordSequence + 1,
+	}
 }
 
 func (sender *streamSender) sendMetadata(ctx context.Context, frame *agentpb.BackupConfigTransfer) error {

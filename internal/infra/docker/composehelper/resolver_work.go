@@ -80,7 +80,11 @@ func ExecuteResolverWork(ctx context.Context, taskRunner runner.Runner, request 
 func observeResolverWork(ctx context.Context, taskRunner runner.Runner, input resolverexecution.HelperInput,
 	catalog ResolverCatalog,
 ) (resolverexecution.Observation, *agentpb.DNSResolverObservationEvidence, error) {
-	observation := resolverexecution.Observation{Input: input.Layout.Input, ComponentID: input.Layout.ComponentID, Stage: input.Progress.Stage}
+	observation := resolverexecution.Observation{
+		Input:       input.Layout.Input,
+		ComponentID: input.Layout.ComponentID,
+		Stage:       input.Progress.Stage,
+	}
 	configuration := input.Assignment.Input
 	inventory, err := inspectResolverRuntime(ctx, taskRunner, input)
 	if err != nil {
@@ -88,7 +92,11 @@ func observeResolverWork(ctx context.Context, taskRunner runner.Runner, input re
 	}
 	switch input.Progress.Stage {
 	case resolverexecution.WriteConfiguration:
-		request, _, err := resolverFileRequest(input, catalog, agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_PUBLISH)
+		request, _, err := resolverFileRequest(
+			input,
+			catalog,
+			agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_PUBLISH,
+		)
 		if err != nil {
 			return observation, nil, err
 		}
@@ -96,7 +104,8 @@ func observeResolverWork(ctx context.Context, taskRunner runner.Runner, input re
 		if err != nil {
 			return observation, nil, err
 		}
-		if state.Present && state.Owner == request.TransactionId && hex.EncodeToString(state.SHA256[:]) == input.Layout.ConfigurationSHA256 {
+		if state.Present && state.Owner == request.TransactionId &&
+			hex.EncodeToString(state.SHA256[:]) == input.Layout.ConfigurationSHA256 {
 			observation.ConfigurationSHA256 = input.Layout.ConfigurationSHA256
 		}
 	case resolverexecution.ReconcileRuntime:
@@ -141,7 +150,11 @@ func observeResolverWork(ctx context.Context, taskRunner runner.Runner, input re
 	return observation, nil, nil
 }
 
-func observeResolverDNS(ctx context.Context, configuration resolverexecution.Configuration, catalog ResolverCatalog) (*agentpb.DNSResolverObservationEvidence, error) {
+func observeResolverDNS(
+	ctx context.Context,
+	configuration resolverexecution.Configuration,
+	catalog ResolverCatalog,
+) (*agentpb.DNSResolverObservationEvidence, error) {
 	recipe, err := catalog.ResolveResolverObservation(configuration.Observe)
 	if err != nil {
 		return nil, err
@@ -193,9 +206,15 @@ func restoreResolverWork(ctx context.Context, taskRunner runner.Runner, input re
 		return nil, err
 	}
 	if configuration.PreviousEnabled && !state.Managed || !configuration.PreviousEnabled && !state.Baseline {
-		return nil, errs.New(errs.KindStateConflict, "DNS resolver restoration did not restore its captured host DNS state")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"DNS resolver restoration did not restore its captured host DNS state",
+		)
 	}
-	return resolverexecution.HelperRestoration(input, resolverexecution.RestorationObservation{Input: input.Layout.Input,
-		ComponentID: input.Layout.ComponentID, ForwardID: input.Assignment.Recovery.Forward.ID,
-		ConfigurationRestored: true, RuntimeRestored: true, HostResolverRestored: true, ServingProof: proof, ObservedAt: time.Now().UTC()})
+	return resolverexecution.HelperRestoration(
+		input,
+		resolverexecution.RestorationObservation{Input: input.Layout.Input,
+			ComponentID: input.Layout.ComponentID, ForwardID: input.Assignment.Recovery.Forward.ID,
+			ConfigurationRestored: true, RuntimeRestored: true, HostResolverRestored: true, ServingProof: proof, ObservedAt: time.Now().UTC()},
+	)
 }

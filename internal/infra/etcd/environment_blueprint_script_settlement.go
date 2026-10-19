@@ -28,7 +28,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintScriptSettleme
 	}
 	if repository == nil || parent.Validate() != nil || parent.Action != workexecution.ActionApply ||
 		work.ReadRevision <= 0 || unit.Target.Kind != ids.KindScript {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Blueprint Script settlement identity is invalid")
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Script settlement identity is invalid",
+		)
 	}
 	ledger, err := blueprintunits.NewRepository(repository.store)
 	if err != nil {
@@ -60,7 +63,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintScriptSettleme
 	conditions := make([]keyvalue.Condition, 0, len(keys)+2)
 	for index, value := range read.Values {
 		if (index < 5 && value == nil) || (value != nil && value.Key != keys[index]) {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Script settlement authority is unavailable")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Script settlement authority is unavailable",
+			)
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: keys[index], ModRevision: keyvalue.RevisionOf(value)})
 	}
@@ -85,7 +91,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintScriptSettleme
 	digest := sha256.Sum256(encoded)
 	clear(encoded)
 	if hex.EncodeToString(digest[:]) != parent.Intent.SHA256 {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Script desired input differs from captured intent")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Script desired input differs from captured intent",
+		)
 	}
 	name := ""
 	for _, identity := range identities.Scripts {

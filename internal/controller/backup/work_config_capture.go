@@ -95,8 +95,11 @@ func (owner *AgentWork) StreamConfigCapture(ctx context.Context, authorization a
 	return err
 }
 
-func (owner *AgentWork) CommitConfigCaptureCredit(ctx context.Context, authorization agentregistration.WorkAuthorization,
-	binding backupconfigtransfer.Binding, credit *agentpb.BackupConfigCredit,
+func (owner *AgentWork) CommitConfigCaptureCredit(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	binding backupconfigtransfer.Binding,
+	credit *agentpb.BackupConfigCredit,
 ) error {
 	if _, err := authorization.Conditions(); err != nil {
 		return err
@@ -105,6 +108,10 @@ func (owner *AgentWork) CommitConfigCaptureCredit(ctx context.Context, authoriza
 		binding.Direction != agentpb.BackupConfigDirection_BACKUP_CONFIG_DIRECTION_CAPTURE {
 		return configSnapshotGuardConflict()
 	}
-	_, err := owner.configTransfers.CommitConfigTransferCredit(ctx, backupconfiguration.ConfigTransferOwner{Binding: binding}, credit)
+	_, err := owner.configTransfers.CommitConfigTransferCredit(
+		ctx,
+		backupconfiguration.ConfigTransferOwner{Binding: binding},
+		credit,
+	)
 	return err
 }

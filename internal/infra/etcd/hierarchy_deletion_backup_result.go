@@ -31,14 +31,21 @@ func HierarchyBackupResultKey(attemptID string) string {
 // PrepareHierarchyBackupResult joins exact remote absence, metadata retirement
 // and completion. Without absence a delete grant retains claims, independently
 // of cancellation, deadline or loss of the provider response.
-func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupResult(ctx context.Context, view workqueue.ResumeView, at time.Time) (workqueue.Change, workexecution.Completion, error) {
+func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupResult(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	at time.Time,
+) (workqueue.Change, workexecution.Completion, error) {
 	item, attempt := view.Work.Item.Item, view.Attempt.Attempt
 	if !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
 		attempt.Executor.Executor != workexecution.Controller ||
 		item.Operation != workexecution.RemovalBackupObject || attempt.FinishedAt != nil ||
 		(attempt.Direction != workexecution.Forward && attempt.Direction != workexecution.Recovery) || workexecution.ValidateDelivery(item, attempt) != nil ||
 		at.IsZero() || at.Before(item.UpdatedAt) {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "backup removal no longer owns its result")
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"backup removal no longer owns its result",
+		)
 	}
 	captured, err := repository.LoadHierarchyWork(ctx, view.Work)
 	if err != nil {
@@ -56,7 +63,8 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupResult(ctx 
 		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision},
 		keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
 	if observed.Absent && attempt.StartedAt != nil && attempt.Direction == workexecution.Forward {
-		effects, err := hierarchydeletionfinalization.NewPreparer(repository.store).PrepareCaptured(ctx, captured.Operation, captured.Action)
+		effects, err := hierarchydeletionfinalization.NewPreparer(repository.store).
+			PrepareCaptured(ctx, captured.Operation, captured.Action)
 		if err != nil {
 			return workqueue.Change{}, workexecution.Completion{}, err
 		}
@@ -65,7 +73,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupResult(ctx 
 			keyvalue.ClearByteSlices(effects.Values())
 			return workqueue.Change{}, workexecution.Completion{}, err
 		}
-		key, err := hierarchydeletion.HierarchyDeletionCompletionKey(captured.Action.ParentOperationID, captured.Action.Ordinal)
+		key, err := hierarchydeletion.HierarchyDeletionCompletionKey(
+			captured.Action.ParentOperationID,
+			captured.Action.Ordinal,
+		)
 		if err != nil {
 			clear(value)
 			keyvalue.ClearByteSlices(effects.Values())
@@ -74,8 +85,15 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupResult(ctx 
 		change.Conditions = append(change.Conditions, effects.Conditions()...)
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
 		change.Mutations = append(change.Mutations, effects.Mutations()...)
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
-		return change, workexecution.Completion{Outcome: workexecution.Succeeded, Evidence: result, EffectsSettled: true}, nil
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value},
+		)
+		return change, workexecution.Completion{
+			Outcome:        workexecution.Succeeded,
+			Evidence:       result,
+			EffectsSettled: true,
+		}, nil
 	}
 	reason := "object_absence_unconfirmed"
 	if attempt.StartedAt == nil {
@@ -103,7 +121,12 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyBackupResult(ctx 
 	} else if item.ForwardRevoked {
 		outcome = workexecution.Superseded
 	}
-	return change, workexecution.Completion{Outcome: outcome, EffectsSettled: observed.Absent || !observed.DeleteGranted,
-		Evidence: workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, view.Work.Task.Task.CreatedAt, attempt.ID, "backup-removal-result"),
-			SHA256: hierarchydeletion.HierarchyDeletionBytesDigest(value)}}, nil
+	return change, workexecution.Completion{
+		Outcome:        outcome,
+		EffectsSettled: observed.Absent || !observed.DeleteGranted,
+		Evidence: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, view.Work.Task.Task.CreatedAt, attempt.ID, "backup-removal-result"),
+			SHA256: hierarchydeletion.HierarchyDeletionBytesDigest(value),
+		},
+	}, nil
 }

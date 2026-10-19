@@ -73,7 +73,8 @@ func (repository *InputRepository) prepareUnexecutedResources(ctx context.Contex
 		if err != nil {
 			return workqueue.Change{}, err
 		}
-		if record.State != backupruntime.BackupRestoreQueued || record.MutationStarted || record.TaskID != view.Task.Task.ID {
+		if record.State != backupruntime.BackupRestoreQueued || record.MutationStarted ||
+			record.TaskID != view.Task.Task.ID {
 			return workqueue.Change{}, conflict("Unstarted Restore already has execution progress")
 		}
 		if err := backupruntime.ValidateRestoreWorkInput(record, input); err != nil {
@@ -107,7 +108,10 @@ func (repository *InputRepository) prepareUnexecutedResources(ctx context.Contex
 			return workqueue.Change{}, err
 		}
 		kind, operationID = backupruntime.BackupOperationRestore, record.OperationID
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: recordKey, ModRevision: read.Values[0].ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: recordKey, ModRevision: read.Values[0].ModRevision},
+		)
 	default:
 		return workqueue.Change{}, conflict("Unstarted Backup operation is unsupported")
 	}
@@ -130,16 +134,35 @@ func (repository *InputRepository) prepareUnexecutedResources(ctx context.Contex
 	change.Conditions = append(change.Conditions, exclusions...)
 	change.Conditions = append(change.Conditions, fence.TransactionConditions()...)
 	change.Conditions = append(change.Conditions, backings.Conditions...)
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: recordKey, Value: append([]byte(nil), encoded...)},
-		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: hierarchy.EnvironmentOperationLockKey(input.EnvironmentId)}, epoch)
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: recordKey, Value: append([]byte(nil), encoded...)},
+		keyvalue.Mutation{
+			Type: keyvalue.MutationDelete,
+			Key:  hierarchy.EnvironmentOperationLockKey(input.EnvironmentId),
+		},
+		epoch,
+	)
 	for _, exclusion := range exclusions {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: exclusion.Key})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: exclusion.Key},
+		)
 	}
 	for ordinal := range input.Steps {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: credentialGrantKey(view.Item.Item.ID, uint32(ordinal))})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{
+				Type: keyvalue.MutationDelete,
+				Key:  credentialGrantKey(view.Item.Item.ID, uint32(ordinal)),
+			},
+		)
 	}
 	for _, mutation := range backings.Mutations {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...)},
+		)
 	}
 	return change, nil
 }

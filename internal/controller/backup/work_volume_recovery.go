@@ -35,7 +35,9 @@ func (owner *AgentWork) ResolveVolumeRecovery(ctx context.Context, identity work
 	if err != nil {
 		return nil, nil, err
 	}
-	result := &agentpb.BackupVolumeRestoreRecoveryDisposition{RecoveryKeySha256: append([]byte(nil), entry.RecoveryKeySha256...)}
+	result := &agentpb.BackupVolumeRestoreRecoveryDisposition{
+		RecoveryKeySha256: append([]byte(nil), entry.RecoveryKeySha256...),
+	}
 	view := source.View
 	attempt, item, task := view.Attempt.Attempt, view.Work.Item.Item, view.Work.Task.Task
 	settled := attempt.FinishedAt != nil && item.Phase == workexecution.Settled &&
@@ -43,11 +45,14 @@ func (owner *AgentWork) ResolveVolumeRecovery(ctx context.Context, identity work
 	verifiedFiles := native.State == backupruntime.BackupRestoreVerified &&
 		(!entry.JournalPresent || entry.JournalRootDeleted || entry.JournalRetiring) &&
 		(!entry.ReceiverPresent || entry.ReceiverComplete || entry.ReceiverRetiring)
-	if settled && (native.State == backupruntime.BackupRestoreCompleted || native.State == backupruntime.BackupRestoreFailedSafe) ||
+	if settled &&
+		(native.State == backupruntime.BackupRestoreCompleted || native.State == backupruntime.BackupRestoreFailedSafe) ||
 		verifiedFiles && view.ActiveAttempt && attempt.Executor == identity {
-		result.Disposition = &agentpb.BackupVolumeRestoreRecoveryDisposition_Cleanup{Cleanup: &agentpb.BackupVolumeRestoreCleanup{
-			NativeRestoreModRevision: source.Revision, NativeRestoreSha256: digest,
-		}}
+		result.Disposition = &agentpb.BackupVolumeRestoreRecoveryDisposition_Cleanup{
+			Cleanup: &agentpb.BackupVolumeRestoreCleanup{
+				NativeRestoreModRevision: source.Revision, NativeRestoreSha256: digest,
+			},
+		}
 		return result, source.Conditions, nil
 	}
 	now := time.Now().UTC()
@@ -62,9 +67,11 @@ func (owner *AgentWork) ResolveVolumeRecovery(ctx context.Context, identity work
 		if entry.JournalRetiring || entry.ReceiverRetiring {
 			return nil, nil, invalidRecoveredVolume()
 		}
-		result.Disposition = &agentpb.BackupVolumeRestoreRecoveryDisposition_Hold{Hold: &agentpb.BackupVolumeRestoreHold{
-			NativeRestoreModRevision: source.Revision, NativeRestoreSha256: digest,
-		}}
+		result.Disposition = &agentpb.BackupVolumeRestoreRecoveryDisposition_Hold{
+			Hold: &agentpb.BackupVolumeRestoreHold{
+				NativeRestoreModRevision: source.Revision, NativeRestoreSha256: digest,
+			},
+		}
 		return result, source.Conditions, nil
 	}
 	assignment, guarded, err := owner.inputs.LoadAssignment(ctx, view)
@@ -75,9 +82,11 @@ func (owner *AgentWork) ResolveVolumeRecovery(ctx context.Context, identity work
 	if err != nil {
 		return nil, nil, err
 	}
-	result.Disposition = &agentpb.BackupVolumeRestoreRecoveryDisposition_Resume{Resume: &agentpb.BackupVolumeRestoreResume{
-		AssignmentResumeSha256: resumeDigest, NativeRestoreModRevision: source.Revision, NativeRestoreSha256: digest,
-	}}
+	result.Disposition = &agentpb.BackupVolumeRestoreRecoveryDisposition_Resume{
+		Resume: &agentpb.BackupVolumeRestoreResume{
+			AssignmentResumeSha256: resumeDigest, NativeRestoreModRevision: source.Revision, NativeRestoreSha256: digest,
+		},
+	}
 	return result, append(source.Conditions, guarded.Conditions...), nil
 }
 

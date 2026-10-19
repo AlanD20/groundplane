@@ -20,7 +20,8 @@ func (journal *Journal) CompleteDigestFetch(ctx context.Context, imageID string,
 		return err
 	}
 	record := owned.record
-	if record.Input.Fetch == nil || record.Phase != Fetching && !(record.Phase == Uncertain && record.UncertainPhase == Fetching) ||
+	if record.Input.Fetch == nil ||
+		record.Phase != Fetching && !(record.Phase == Uncertain && record.UncertainPhase == Fetching) ||
 		imageID != record.Input.Fetch.ConfigDigest {
 		return conflict()
 	}
@@ -42,12 +43,21 @@ func ResultKey(attemptID string) string { return "/v1/evidence/image-attempts/" 
 // Result releases worker capacity independently of unresolved effects. Unknown
 // writes produce failed attempt evidence with EffectsSettled=false, retaining
 // resource claims and operation guards. Evidence is immutable per attempt.
-func Result(snapshot keyvalue.Versioned[Record], task workqueue.TaskSnapshot, attempt workexecution.Attempt) (workqueue.Change, workexecution.Completion, error) {
+func Result(
+	snapshot keyvalue.Versioned[Record],
+	task workqueue.TaskSnapshot,
+	attempt workexecution.Attempt,
+) (workqueue.Change, workexecution.Completion, error) {
 	record := snapshot.Record
-	if snapshot.Revision <= 0 || task.Revision <= 0 || record.Validate() != nil || record.Phase != Finished && record.Phase != Uncertain ||
-		task.Task.Validate() != nil || attempt.Validate() != nil || attempt.FinishedAt != nil ||
-		record.Input.TaskID != task.Task.ID || attempt.TaskID != task.Task.ID ||
-		record.Input.WorkItemID != attempt.WorkItemID || record.AttemptID != attempt.ID ||
+	if snapshot.Revision <= 0 || task.Revision <= 0 || record.Validate() != nil ||
+		record.Phase != Finished && record.Phase != Uncertain ||
+		task.Task.Validate() != nil ||
+		attempt.Validate() != nil ||
+		attempt.FinishedAt != nil ||
+		record.Input.TaskID != task.Task.ID ||
+		attempt.TaskID != task.Task.ID ||
+		record.Input.WorkItemID != attempt.WorkItemID ||
+		record.AttemptID != attempt.ID ||
 		record.Input.Placement != (workexecution.Placement{Executor: attempt.Executor.Executor, HostID: attempt.Executor.HostID}) {
 		return workqueue.Change{}, workexecution.Completion{}, conflict()
 	}
@@ -72,5 +82,8 @@ func Result(snapshot keyvalue.Versioned[Record], task workqueue.TaskSnapshot, at
 		{Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision},
 		{Key: ResultKey(attempt.ID)},
 	}, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: ResultKey(attempt.ID), Value: value}}}, workexecution.Completion{Outcome: outcome, EffectsSettled: settled,
-		Evidence: workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, record.Input.CreatedAt, attempt.ID, "image-result"), SHA256: hex.EncodeToString(digest[:])}}, nil
+		Evidence: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, record.Input.CreatedAt, attempt.ID, "image-result"),
+			SHA256: hex.EncodeToString(digest[:]),
+		}}, nil
 }

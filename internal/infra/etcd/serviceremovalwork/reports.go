@@ -44,7 +44,8 @@ func (repository *Repository) PrepareCheckpoint(ctx context.Context, view workqu
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, guard, continuationGuard)
-	if progress.BeganAt != nil && (view.Checkpoint.Record == nil || progress.Sequence > view.Checkpoint.Record.Sequence) {
+	if progress.BeganAt != nil &&
+		(view.Checkpoint.Record == nil || progress.Sequence > view.Checkpoint.Record.Sequence) {
 		boundary, err := repository.PrepareForwardBoundary(ctx, view.Work, input)
 		if err != nil {
 			keyvalue.ClearMutationValues(change.Mutations)

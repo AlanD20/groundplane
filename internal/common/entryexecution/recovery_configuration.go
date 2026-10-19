@@ -22,7 +22,9 @@ func RecoveryConfigurationStage(attempt workexecution.Attempt) (string, error) {
 }
 
 func recoveryConfigurationSelection(input FileInput) (*agentpb.WorkConfigurationReference, string, uint64, error) {
-	if input.Procedure == nil || input.Recovery == nil || input.Recovery.ValidateFor(input.Attempt, input.Procedure) != nil || input.Recovery.Failure.Checkpoint == nil {
+	if input.Procedure == nil || input.Recovery == nil ||
+		input.Recovery.ValidateFor(input.Attempt, input.Procedure) != nil ||
+		input.Recovery.Failure.Checkpoint == nil {
 		return nil, "", 0, invalidLayout()
 	}
 	checkpoint, err := input.Progress.Checkpoint(input.Recovery.Forward, input.Procedure)

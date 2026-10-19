@@ -8,7 +8,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func EncodeEnvironmentCompletion(input EnvironmentInput, progress EnvironmentProgress) (*agentpb.EnvironmentRemovalCompletionRequest, error) {
+func EncodeEnvironmentCompletion(
+	input EnvironmentInput,
+	progress EnvironmentProgress,
+) (*agentpb.EnvironmentRemovalCompletionRequest, error) {
 	if progress.Phase != EnvironmentRemoved {
 		return nil, invalidEnvironmentProgress()
 	}
@@ -28,9 +31,16 @@ func EncodeEnvironmentCompletion(input EnvironmentInput, progress EnvironmentPro
 		CheckpointEvidence: &agentpb.WorkInputReference{InputId: checkpoint.Evidence.ID, Sha256: digest}}, nil
 }
 
-func DecodeEnvironmentCompletion(input EnvironmentInput, progress EnvironmentProgress, ack *agentpb.EnvironmentRemovalCompletionAck) (workexecution.Attempt, error) {
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.CheckpointSequence != 4 || ack.CheckpointEvidence == nil ||
-		ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil || progress.Phase != EnvironmentRemoved {
+func DecodeEnvironmentCompletion(
+	input EnvironmentInput,
+	progress EnvironmentProgress,
+	ack *agentpb.EnvironmentRemovalCompletionAck,
+) (workexecution.Attempt, error) {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.CheckpointSequence != 4 ||
+		ack.CheckpointEvidence == nil ||
+		ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil ||
+		progress.Phase != EnvironmentRemoved {
 		return workexecution.Attempt{}, invalidEnvironmentProgress()
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, input.Attempt.Executor)
@@ -41,7 +51,10 @@ func DecodeEnvironmentCompletion(input EnvironmentInput, progress EnvironmentPro
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	evidence := workexecution.Input{ID: ack.CheckpointEvidence.InputId, SHA256: hex.EncodeToString(ack.CheckpointEvidence.Sha256)}
+	evidence := workexecution.Input{
+		ID:     ack.CheckpointEvidence.InputId,
+		SHA256: hex.EncodeToString(ack.CheckpointEvidence.Sha256),
+	}
 	finished := ack.FinishedAt.AsTime()
 	if evidence != checkpoint.Evidence || finished.Before(progress.UpdatedAt) {
 		return workexecution.Attempt{}, invalidEnvironmentProgress()

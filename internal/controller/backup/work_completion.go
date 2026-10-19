@@ -38,8 +38,11 @@ func (owner *AgentWork) Complete(ctx context.Context, authorization agentregistr
 	if err != nil {
 		return nil, err
 	}
-	if !workexecution.SameAssignment(view.Attempt.Attempt, attempt) || (view.Work.Item.Item.Operation != workexecution.BackupPrune && view.Work.Item.Item.Operation != workexecution.Backup && view.Work.Item.Item.Operation != workexecution.Restore) ||
-		view.Attempt.Attempt.StartedAt == nil || view.Checkpoint.Record == nil || view.Checkpoint.Record.Evidence != evidence {
+	if !workexecution.SameAssignment(view.Attempt.Attempt, attempt) ||
+		(view.Work.Item.Item.Operation != workexecution.BackupPrune && view.Work.Item.Item.Operation != workexecution.Backup && view.Work.Item.Item.Operation != workexecution.Restore) ||
+		view.Attempt.Attempt.StartedAt == nil ||
+		view.Checkpoint.Record == nil ||
+		view.Checkpoint.Record.Evidence != evidence {
 		return nil, errs.New(errs.KindStateConflict, "Backup completion differs from its saved checkpoint")
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
@@ -92,6 +95,13 @@ func (owner *AgentWork) Complete(ctx context.Context, authorization agentregistr
 		(saved.Outcome != workexecution.Succeeded && saved.Outcome != workexecution.Cancelled && saved.Outcome != workexecution.Superseded) {
 		return nil, errs.New(errs.KindStateConflict, "Backup has no matching settled completion")
 	}
-	return &agentpb.BackupWorkCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: proto.CloneOf(request.Evidence),
-		StartedAt: timestamppb.New(*saved.StartedAt), FinishedAt: timestamppb.New(*saved.FinishedAt), Outcome: string(saved.Outcome)}, nil
+	return &agentpb.BackupWorkCompletionAck{
+		Attempt:  proto.CloneOf(request.Attempt),
+		Evidence: proto.CloneOf(request.Evidence),
+		StartedAt: timestamppb.New(
+			*saved.StartedAt,
+		),
+		FinishedAt: timestamppb.New(*saved.FinishedAt),
+		Outcome:    string(saved.Outcome),
+	}, nil
 }

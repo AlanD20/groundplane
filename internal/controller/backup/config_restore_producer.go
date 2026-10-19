@@ -147,7 +147,8 @@ func (producer *ConfigRestoreProducer) prepareCandidate(ctx context.Context,
 	}
 	step := sealed.Steps[0]
 	config := step.GetRestore().GetConfig()
-	if config == nil || step.ExecutionId != binding.TransferID || !bytes.Equal(step.StepDigest, binding.AuthorityDigest[:]) ||
+	if config == nil || step.ExecutionId != binding.TransferID ||
+		!bytes.Equal(step.StepDigest, binding.AuthorityDigest[:]) ||
 		config.DestinationEnvironmentId != owner.EnvironmentID ||
 		config.RestoreGenerationId != owner.GenerationID ||
 		config.RenderGeneration != owner.RenderGeneration ||

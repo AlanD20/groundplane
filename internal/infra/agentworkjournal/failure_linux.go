@@ -13,7 +13,11 @@ type ReleaseFailureDelivery struct {
 	Receipt *releaseexecution.FailureReceipt `json:"receipt,omitempty"`
 }
 
-func (journal *Journal) AcknowledgeReleaseFailure(ctx context.Context, attempt workexecution.Attempt, ack *agentpb.ReleaseWorkFailureAck) (releaseexecution.FailureReceipt, error) {
+func (journal *Journal) AcknowledgeReleaseFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	ack *agentpb.ReleaseWorkFailureAck,
+) (releaseexecution.FailureReceipt, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return releaseexecution.FailureReceipt{}, err
@@ -46,7 +50,11 @@ func (journal *Journal) AcknowledgeReleaseFailure(ctx context.Context, attempt w
 // PrepareReleaseFailure freezes the first failure reason before transport.
 // A later reconnect error must not replace the original execution failure.
 // Existing operation/hook evidence remains intact for Controller recovery.
-func (journal *Journal) PrepareReleaseFailure(ctx context.Context, attempt workexecution.Attempt, reason releaseexecution.FailureReason) (ReleaseFailureDelivery, error) {
+func (journal *Journal) PrepareReleaseFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	reason releaseexecution.FailureReason,
+) (ReleaseFailureDelivery, error) {
 	if attempt.Validate() != nil || attempt.FinishedAt != nil {
 		return ReleaseFailureDelivery{}, invalid()
 	}
@@ -82,7 +90,10 @@ func (journal *Journal) PrepareReleaseFailure(ctx context.Context, attempt worke
 	return *state.Failure, nil
 }
 
-func (journal *Journal) LoadReleaseFailure(ctx context.Context, attempt workexecution.Attempt) (*ReleaseFailureDelivery, error) {
+func (journal *Journal) LoadReleaseFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (*ReleaseFailureDelivery, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err

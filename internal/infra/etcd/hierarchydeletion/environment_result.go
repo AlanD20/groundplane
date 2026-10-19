@@ -62,10 +62,14 @@ func (result EnvironmentResult) Input(source EnvironmentInput) (hierarchyexecuti
 	if observation.Source.SHA256 != hex.EncodeToString(digest[:]) {
 		return hierarchyexecution.EnvironmentInput{}, CorruptHierarchyDeletion()
 	}
-	input := hierarchyexecution.EnvironmentInput{Attempt: result.Attempt, Recovery: result.Recovery, Removal: &agentpb.EnvironmentRemovalInput{
-		EnvironmentId: source.EnvironmentID, ExpectedVolumeDir: source.VolumeDirectory,
-		CapturedSource: &agentpb.WorkInputReference{InputId: observation.Source.ID, Sha256: digest[:]},
-	}}
+	input := hierarchyexecution.EnvironmentInput{
+		Attempt:  result.Attempt,
+		Recovery: result.Recovery,
+		Removal: &agentpb.EnvironmentRemovalInput{
+			EnvironmentId: source.EnvironmentID, ExpectedVolumeDir: source.VolumeDirectory,
+			CapturedSource: &agentpb.WorkInputReference{InputId: observation.Source.ID, Sha256: digest[:]},
+		},
+	}
 	if _, err := result.Report.Checkpoint(input); err != nil {
 		return hierarchyexecution.EnvironmentInput{}, err
 	}

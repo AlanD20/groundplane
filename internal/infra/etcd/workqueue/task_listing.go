@@ -27,7 +27,10 @@ func taskListKeys(task workexecution.Task) []string {
 func publishTaskList(change *Change, task workexecution.Task) {
 	for _, key := range taskListKeys(task) {
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: []byte(task.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: []byte(task.ID)},
+		)
 	}
 }
 
@@ -40,10 +43,16 @@ type TaskPage struct {
 
 // ListTasks returns newest-first Task identities at a fixed snapshot. Scope is
 // all, platform, or one stable Tenant/Project/Environment ID, never a slug.
-func (repository *Repository) ListTasks(ctx context.Context, scope, after string, limit int64, revision int64) (TaskPage, error) {
+func (repository *Repository) ListTasks(
+	ctx context.Context,
+	scope, after string,
+	limit int64,
+	revision int64,
+) (TaskPage, error) {
 	validScope := scope == "all" || scope == "platform" || ids.Validate(ids.KindTenant, scope) == nil ||
 		ids.Validate(ids.KindProject, scope) == nil || ids.Validate(ids.KindEnvironment, scope) == nil
-	if !validScope || after != "" && ids.Validate(ids.KindTask, after) != nil || limit < 1 || limit > 100 || revision < 0 {
+	if !validScope || after != "" && ids.Validate(ids.KindTask, after) != nil || limit < 1 || limit > 100 ||
+		revision < 0 {
 		return TaskPage{}, invalid("Task list scope, cursor or page size is invalid")
 	}
 	prefix := taskListRoot + scope + "/"
@@ -55,7 +64,9 @@ func (repository *Repository) ListTasks(ctx context.Context, scope, after string
 	if err != nil {
 		return TaskPage{}, err
 	}
-	if page == nil || page.ReadRevision <= 0 || revision > 0 && revision != page.ReadRevision || int64(len(page.Values)) > limit || page.More && len(page.Values) == 0 {
+	if page == nil || page.ReadRevision <= 0 || revision > 0 && revision != page.ReadRevision ||
+		int64(len(page.Values)) > limit ||
+		page.More && len(page.Values) == 0 {
 		return TaskPage{}, corrupt()
 	}
 	result := TaskPage{Tasks: []TaskSnapshot{}, More: page.More, ReadRevision: page.ReadRevision}
@@ -63,7 +74,8 @@ func (repository *Repository) ListTasks(ctx context.Context, scope, after string
 	previous := after
 	for _, value := range page.Values {
 		id := string(value.Value)
-		if ids.Validate(ids.KindTask, id) != nil || value.Key != prefix+id || previous != "" && strings.Compare(id, previous) >= 0 {
+		if ids.Validate(ids.KindTask, id) != nil || value.Key != prefix+id ||
+			previous != "" && strings.Compare(id, previous) >= 0 {
 			return TaskPage{}, corrupt()
 		}
 		keys = append(keys, TaskKey(id))

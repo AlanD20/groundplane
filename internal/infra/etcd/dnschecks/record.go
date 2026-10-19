@@ -104,7 +104,8 @@ func (record Record) Observation() (*agentpb.DNSConnectionResult, error) {
 }
 
 func (record Record) Validate() error {
-	if ids.Validate(ids.KindTask, record.Owner.TaskID) != nil || ids.Validate(ids.KindWorkItem, record.Owner.WorkItemID) != nil ||
+	if ids.Validate(ids.KindTask, record.Owner.TaskID) != nil ||
+		ids.Validate(ids.KindWorkItem, record.Owner.WorkItemID) != nil ||
 		ids.Validate(ids.KindPlan, record.Owner.PlanID) != nil ||
 		ids.Validate(ids.KindOperation, record.Owner.OperationID) != nil ||
 		record.Source.Validate() != nil ||

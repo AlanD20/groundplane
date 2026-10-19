@@ -15,7 +15,11 @@ func FileTransactionID(attempt workexecution.Attempt, configuration Configuratio
 		configuration.Apply == nil {
 		return "", invalid("DNS resolver file ownership requires its actual captured forward attempt")
 	}
-	digest := sha256.Sum256([]byte(attempt.TaskID + "\x00" + attempt.WorkItemID + "\x00" + attempt.ID + "\x00" + configuration.Apply.ArtifactId))
+	digest := sha256.Sum256(
+		[]byte(
+			attempt.TaskID + "\x00" + attempt.WorkItemID + "\x00" + attempt.ID + "\x00" + configuration.Apply.ArtifactId,
+		),
+	)
 	return "mct_" + hex.EncodeToString(digest[:]), nil
 }
 

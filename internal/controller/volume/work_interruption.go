@@ -16,7 +16,11 @@ import (
 // ReconcileInterrupted records only durable evidence from the replaced executor.
 // A new Agent on the same host does not impersonate the old process or receive
 // permission to rerun an ambiguous effect.
-func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue.ResumeView, authorization agentregistration.WorkAuthorization) error {
+func (owner *AgentWork) ReconcileInterrupted(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	authorization agentregistration.WorkAuthorization,
+) error {
 	guards, err := authorization.Conditions()
 	if err != nil {
 		return err
@@ -45,9 +49,15 @@ func (owner *AgentWork) ReconcileInterrupted(ctx context.Context, view workqueue
 		finalSequence = 6
 	}
 	var proof workqueue.Change
-	if checkpoint := view.Checkpoint.Record; view.Attempt.Attempt.Direction == workexecution.Forward && checkpoint != nil && checkpoint.Sequence == finalSequence {
+	if checkpoint := view.Checkpoint.Record; view.Attempt.Attempt.Direction == workexecution.Forward &&
+		checkpoint != nil &&
+		checkpoint.Sequence == finalSequence {
 		proof, err = owner.inputs.PrepareVolumeWorkCompletion(ctx, view, input, at)
-		completion.Result = workexecution.Completion{Outcome: completedVolumeOutcome(view.Work), Evidence: checkpoint.Evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        completedVolumeOutcome(view.Work),
+			Evidence:       checkpoint.Evidence,
+			EffectsSettled: true,
+		}
 	} else {
 		proof, completion.Result, err = owner.inputs.PrepareFailure(ctx, view, volumeexecution.ExecutionInterrupted, at, true)
 	}

@@ -14,22 +14,38 @@ func RecoveryResultKey(attemptID string) string {
 	return "/v1/volume-work-recovery-result/" + attemptID
 }
 
-func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, view workqueue.ResumeView, raw []byte, at time.Time) (workqueue.Change, workexecution.Completion, error) {
+func (repository *InputRepository) PrepareRecoveryResult(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	raw []byte,
+	at time.Time,
+) (workqueue.Change, workexecution.Completion, error) {
 	attempt := view.Attempt.Attempt
 	if !view.CanSettleResult() || !view.ActiveAttempt || attempt.FinishedAt != nil || attempt.StartedAt == nil ||
 		view.Work.Task.Task.CollectionStartedAt != nil || at.Before(view.Work.Item.Item.UpdatedAt) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Volume recovery no longer owns active inspection")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Volume recovery no longer owns active inspection",
+		)
 	}
 	captured, err := repository.LoadRecoveryInput(ctx, view.Work, attempt)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
-	report, evidence, err := volumeexecution.DecodeRecoveryReport(attempt, captured.Source, captured.Input.Action, captured.Input.VolumeId, captured.Boundary, raw)
+	report, evidence, err := volumeexecution.DecodeRecoveryReport(
+		attempt,
+		captured.Source,
+		captured.Input.Action,
+		captured.Input.VolumeId,
+		captured.Boundary,
+		raw,
+	)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	if report.Observation.At.After(at) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Volume recovery observation is newer than settlement")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Volume recovery observation is newer than settlement",
+		)
 	}
 	completed := report.BoundaryCompleted(captured.Boundary)
 	outcome := workexecution.Failed
@@ -47,7 +63,10 @@ func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, vi
 	}}, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: completed}, nil
 }
 
-func (repository *InputRepository) LoadRecoveryResult(ctx context.Context, view workqueue.ResumeView) ([]byte, bool, error) {
+func (repository *InputRepository) LoadRecoveryResult(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) ([]byte, bool, error) {
 	attempt := view.Attempt.Attempt
 	if attempt.FinishedAt == nil || attempt.Result == nil {
 		return nil, false, conflict("Volume recovery has no saved terminal result")
@@ -65,12 +84,20 @@ func (repository *InputRepository) LoadRecoveryResult(ctx context.Context, view 
 		return nil, false, conflict("Volume recovery result is unavailable")
 	}
 	raw := read.Values[0].Value
-	report, evidence, err := volumeexecution.DecodeRecoveryReport(attempt, captured.Source, captured.Input.Action, captured.Input.VolumeId, captured.Boundary, raw)
+	report, evidence, err := volumeexecution.DecodeRecoveryReport(
+		attempt,
+		captured.Source,
+		captured.Input.Action,
+		captured.Input.VolumeId,
+		captured.Boundary,
+		raw,
+	)
 	if err != nil {
 		return nil, false, err
 	}
 	completed := report.BoundaryCompleted(captured.Boundary)
-	if evidence != *attempt.Result || completed != (attempt.Outcome == workexecution.Succeeded) || report.Observation.At.After(*attempt.FinishedAt) {
+	if evidence != *attempt.Result || completed != (attempt.Outcome == workexecution.Succeeded) ||
+		report.Observation.At.After(*attempt.FinishedAt) {
 		return nil, false, conflict("Volume recovery result differs from its terminal evidence")
 	}
 	return append([]byte(nil), raw...), completed, nil

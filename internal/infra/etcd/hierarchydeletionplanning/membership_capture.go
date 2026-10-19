@@ -27,7 +27,10 @@ func MembershipCapturePrefix(operationID string) string {
 	return "/v1/private/hierarchy-membership/" + operationID + "/"
 }
 
-func (repository *Planner) loadMembership(ctx context.Context, operation hierarchydeletion.HierarchyDeletionTombstone) (HierarchyDeletionFrozenMembership, bool, error) {
+func (repository *Planner) loadMembership(
+	ctx context.Context,
+	operation hierarchydeletion.HierarchyDeletionTombstone,
+) (HierarchyDeletionFrozenMembership, bool, error) {
 	prefix := MembershipCapturePrefix(operation.OperationID)
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{prefix + "root"}})
 	if read != nil {
@@ -52,7 +55,10 @@ func (repository *Planner) loadMembership(ctx context.Context, operation hierarc
 	defer func() { clear(raw) }()
 	for offset := 0; offset < root.Bytes; offset += membershipChunkBytes {
 		key := prefix + "chunks/" + strconv.Itoa(offset/membershipChunkBytes)
-		part, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: read.ReadRevision})
+		part, err := repository.store.GetMany(
+			ctx,
+			keyvalue.GetManyRequest{Keys: []string{key}, Revision: read.ReadRevision},
+		)
 		if err != nil {
 			return HierarchyDeletionFrozenMembership{}, false, err
 		}
@@ -71,8 +77,10 @@ func (repository *Planner) loadMembership(ctx context.Context, operation hierarc
 		return HierarchyDeletionFrozenMembership{}, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	frozen, err := recordcodec.Decode[HierarchyDeletionFrozenMembership](raw, "hierarchy-frozen-membership")
-	if err != nil || frozen.Revision != operation.SnapshotRevision || frozen.CoordinationEpoch != operation.DeletionEpoch ||
-		frozen.RootRevision != operation.TargetRevision || len(frozen.Nodes) >= int(workexecution.MaximumTaskItems) {
+	if err != nil || frozen.Revision != operation.SnapshotRevision ||
+		frozen.CoordinationEpoch != operation.DeletionEpoch ||
+		frozen.RootRevision != operation.TargetRevision ||
+		len(frozen.Nodes) >= int(workexecution.MaximumTaskItems) {
 		return HierarchyDeletionFrozenMembership{}, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return frozen, true, nil
@@ -92,7 +100,13 @@ func (repository *Planner) saveMembership(ctx context.Context, operation hierarc
 		return err
 	}
 	defer clear(raw)
-	if int64(len(raw)) > int64(workexecution.MaximumTaskItems)*int64(hierarchydeletion.HierarchyDeletionLargeRecordBytes) {
+	if int64(
+		len(raw),
+	) > int64(
+		workexecution.MaximumTaskItems,
+	)*int64(
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+	) {
 		return errs.New(errs.KindValidationFailed, "removal membership exceeds the captured record limit")
 	}
 	prefix := MembershipCapturePrefix(operation.OperationID)
@@ -113,7 +127,12 @@ func (repository *Planner) saveMembership(ctx context.Context, operation hierarc
 	return repository.saveMembershipPart(ctx, operation, prefix+"root", root)
 }
 
-func (repository *Planner) saveMembershipPart(ctx context.Context, operation hierarchydeletion.HierarchyDeletionTombstone, key string, raw []byte) error {
+func (repository *Planner) saveMembershipPart(
+	ctx context.Context,
+	operation hierarchydeletion.HierarchyDeletionTombstone,
+	key string,
+	raw []byte,
+) error {
 	rootKey := MembershipCapturePrefix(operation.OperationID) + "root"
 	fenceKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.TargetKind), operation.TargetID)
 	keys := []string{key, fenceKey}
@@ -138,16 +157,26 @@ func (repository *Planner) saveMembershipPart(ctx context.Context, operation hie
 	}
 	rootPresent := key != rootKey && read.Values[2] != nil
 	var current hierarchydeletion.HierarchyDeletionTombstone
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(read.Values[1].Value, hierarchydeletion.HierarchyDeletionLargeRecordBytes, &current) != nil ||
-		current.OperationID != operation.OperationID || current.SnapshotRevision != operation.SnapshotRevision ||
-		current.Phase != hierarchydeletion.HierarchyDeletionPlanning || rootPresent {
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		read.Values[1].Value,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+		&current,
+	) != nil ||
+		current.OperationID != operation.OperationID ||
+		current.SnapshotRevision != operation.SnapshotRevision ||
+		current.Phase != hierarchydeletion.HierarchyDeletionPlanning ||
+		rootPresent {
 		return errs.New(errs.KindStateConflict, "removal membership publication lost its planning fence")
 	}
 	conditions := []keyvalue.Condition{{Key: key}, {Key: fenceKey, ModRevision: read.Values[1].ModRevision}}
 	if key != rootKey {
 		conditions = append(conditions, keyvalue.Condition{Key: rootKey})
 	}
-	result, err := repository.store.Transact(ctx, conditions, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}})
+	result, err := repository.store.Transact(
+		ctx,
+		conditions,
+		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}},
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return err

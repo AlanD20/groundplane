@@ -19,12 +19,24 @@ type Journal struct {
 	identity   workexecution.Identity
 }
 
-func NewJournal(repository *Repository, input Input, attemptID string, identity workexecution.Identity) (*Journal, error) {
-	if repository == nil || input.Validate() != nil || ids.Validate(ids.KindAttempt, attemptID) != nil || identity.Validate() != nil ||
+func NewJournal(
+	repository *Repository,
+	input Input,
+	attemptID string,
+	identity workexecution.Identity,
+) (*Journal, error) {
+	if repository == nil || input.Validate() != nil || ids.Validate(ids.KindAttempt, attemptID) != nil ||
+		identity.Validate() != nil ||
 		input.Placement != (workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID}) {
 		return nil, invalid()
 	}
-	return &Journal{repository: repository, taskID: input.TaskID, workID: input.WorkItemID, attemptID: attemptID, identity: identity}, nil
+	return &Journal{
+		repository: repository,
+		taskID:     input.TaskID,
+		workID:     input.WorkItemID,
+		attemptID:  attemptID,
+		identity:   identity,
+	}, nil
 }
 
 type ownedRecord struct {
@@ -97,14 +109,16 @@ func (journal *Journal) readState(ctx context.Context, forward, assignedOnly boo
 		record.AttemptID != "" && record.AttemptID != attempt.ID {
 		return ownedRecord{}, conflict()
 	}
-	if forward && (attempt.Direction != workexecution.Forward || task.Stop != nil || item.ForwardRevoked || !time.Now().UTC().Before(attempt.Deadline)) {
+	if forward &&
+		(attempt.Direction != workexecution.Forward || task.Stop != nil || item.ForwardRevoked || !time.Now().UTC().Before(attempt.Deadline)) {
 		return ownedRecord{}, conflict()
 	}
 	return ownedRecord{record: record, attempt: attempt, conditions: conditions, revision: read.ReadRevision}, nil
 }
 
 func (journal *Journal) commit(ctx context.Context, owned ownedRecord, record Record, extra workqueue.Change) error {
-	if record.UpdatedAt.Before(owned.record.UpdatedAt) || owned.attempt.StartedAt != nil && record.UpdatedAt.Before(*owned.attempt.StartedAt) {
+	if record.UpdatedAt.Before(owned.record.UpdatedAt) ||
+		owned.attempt.StartedAt != nil && record.UpdatedAt.Before(*owned.attempt.StartedAt) {
 		return conflict()
 	}
 	value, err := Encode(record)
@@ -113,7 +127,9 @@ func (journal *Journal) commit(ctx context.Context, owned ownedRecord, record Re
 	}
 	defer clear(value)
 	conditions := append(owned.conditions, extra.Conditions...)
-	mutations := append([]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: Key(journal.taskID), Value: value}}, extra.Mutations...)
+	mutations := append(
+		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: Key(journal.taskID), Value: value}},
+		extra.Mutations...)
 	result, err := journal.repository.store.Transact(ctx, conditions, mutations)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {

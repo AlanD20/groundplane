@@ -27,8 +27,11 @@ type BackupStagingDeliveryRecord struct {
 // unfinished plan forward. Publication independently checks every stage against
 // native Task authority; a later generation may reconcile only terminal Tasks.
 func (record BackupStagingDeliveryRecord) AllowsGenerationReplacement(next BackupStagingDeliveryRecord) bool {
-	if record.HostID != next.HostID || record.AgentID != next.AgentID || next.AgentGeneration <= record.AgentGeneration ||
-		next.Ack != nil || record.Inventory == nil || next.Inventory == nil {
+	if record.HostID != next.HostID || record.AgentID != next.AgentID ||
+		next.AgentGeneration <= record.AgentGeneration ||
+		next.Ack != nil ||
+		record.Inventory == nil ||
+		next.Inventory == nil {
 		return false
 	}
 	return record.Ack != nil || record.Plan != nil &&
@@ -51,12 +54,14 @@ func BackupStagingDeliveryKey(agentID string) string {
 }
 
 func EncodeBackupStagingDelivery(record BackupStagingDeliveryRecord) ([]byte, error) {
-	if ids.Validate(ids.KindHost, record.HostID) != nil || ids.Validate(ids.KindAgent, record.AgentID) != nil || record.AgentGeneration == 0 ||
+	if ids.Validate(ids.KindHost, record.HostID) != nil || ids.Validate(ids.KindAgent, record.AgentID) != nil ||
+		record.AgentGeneration == 0 ||
 		record.ProcessGeneration == ([16]byte{}) ||
 		executionplan.ValidateBackupStagingRecoveryPlan(record.Inventory, record.Plan) != nil {
 		return nil, CorruptBackupRuntimeRecord()
 	}
-	if (len(record.Guards) == 0) != (len(record.Inventory.Entries)+len(record.Inventory.VolumeRestores) == 0) || len(record.Guards) > 256 {
+	if (len(record.Guards) == 0) != (len(record.Inventory.Entries)+len(record.Inventory.VolumeRestores) == 0) ||
+		len(record.Guards) > 256 {
 		return nil, CorruptBackupRuntimeRecord()
 	}
 	previous := ""
@@ -66,8 +71,13 @@ func EncodeBackupStagingDelivery(record BackupStagingDeliveryRecord) ([]byte, er
 		}
 		previous = guard.Key
 	}
-	data := backupStagingDeliveryData{HostID: record.HostID, AgentID: record.AgentID, AgentGeneration: record.AgentGeneration,
-		ProcessGeneration: hex.EncodeToString(record.ProcessGeneration[:]), Guards: record.Guards}
+	data := backupStagingDeliveryData{
+		HostID:            record.HostID,
+		AgentID:           record.AgentID,
+		AgentGeneration:   record.AgentGeneration,
+		ProcessGeneration: hex.EncodeToString(record.ProcessGeneration[:]),
+		Guards:            record.Guards,
+	}
 	marshal := proto.MarshalOptions{Deterministic: true}
 	var err error
 	if data.Inventory, err = marshal.Marshal(record.Inventory); err != nil {

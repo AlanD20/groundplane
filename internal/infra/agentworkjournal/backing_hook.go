@@ -21,19 +21,34 @@ type BackingHookRecord struct {
 	Result      *backingprovision.Observation `json:"result,omitempty"`
 }
 
-func (hook BackingHookRecord) validate(attempt workexecution.Attempt, layout backingprovision.Layout, progress *backingprovision.Progress) error {
+func (hook BackingHookRecord) validate(
+	attempt workexecution.Attempt,
+	layout backingprovision.Layout,
+	progress *backingprovision.Progress,
+) error {
 	boundary := hook.Boundary
-	if progress == nil || boundary.Validate(attempt, layout) != nil || boundary.Stage != backingprovision.AfterStart || !boundary.InFlight ||
-		!layout.Hook || boundary.Sequence > progress.Sequence || boundary.Last == nil || boundary.Last.ContainerID != hook.ContainerID ||
-		len(hook.ContainerID) != 64 || !ids.ValidContainerID(hook.ContainerID) || len(hook.ExecID) != 64 || !ids.ValidContainerID(hook.ExecID) ||
-		hook.CreatedAt.Location() != time.UTC || hook.CreatedAt.Before(*boundary.BeganAt) || !hook.CreatedAt.Before(attempt.Deadline) ||
+	if progress == nil || boundary.Validate(attempt, layout) != nil || boundary.Stage != backingprovision.AfterStart ||
+		!boundary.InFlight ||
+		!layout.Hook ||
+		boundary.Sequence > progress.Sequence ||
+		boundary.Last == nil ||
+		boundary.Last.ContainerID != hook.ContainerID ||
+		len(hook.ContainerID) != 64 ||
+		!ids.ValidContainerID(hook.ContainerID) ||
+		len(hook.ExecID) != 64 ||
+		!ids.ValidContainerID(hook.ExecID) ||
+		hook.CreatedAt.Location() != time.UTC ||
+		hook.CreatedAt.Before(*boundary.BeganAt) ||
+		!hook.CreatedAt.Before(attempt.Deadline) ||
 		(hook.ExitedAt == nil) != (hook.ExitCode == nil) {
 		return invalid()
 	}
-	if hook.ReadyAt != nil && (hook.ReadyAt.Location() != time.UTC || hook.ReadyAt.Before(hook.CreatedAt) || !hook.ReadyAt.Before(attempt.Deadline)) {
+	if hook.ReadyAt != nil &&
+		(hook.ReadyAt.Location() != time.UTC || hook.ReadyAt.Before(hook.CreatedAt) || !hook.ReadyAt.Before(attempt.Deadline)) {
 		return invalid()
 	}
-	if hook.ExitedAt != nil && (hook.ReadyAt == nil || hook.ExitedAt.Location() != time.UTC || hook.ExitedAt.Before(*hook.ReadyAt)) {
+	if hook.ExitedAt != nil &&
+		(hook.ReadyAt == nil || hook.ExitedAt.Location() != time.UTC || hook.ExitedAt.Before(*hook.ReadyAt)) {
 		return invalid()
 	}
 	if boundary.Sequence == progress.Sequence && !backingprovision.EqualProgress(boundary, *progress) {
@@ -41,9 +56,13 @@ func (hook BackingHookRecord) validate(attempt workexecution.Attempt, layout bac
 	}
 	if result := hook.Result; result != nil {
 		evidence, err := backingprovision.HookSuccessEvidence(attempt, layout, hook.ContainerID)
-		if err != nil || hook.ExitedAt == nil || *hook.ExitCode != 0 || !result.Satisfies(backingprovision.AfterStart, layout) ||
-			result.ContainerID != hook.ContainerID || result.HookResult != evidence || result.At.Location() != time.UTC ||
-			result.At.Before(*hook.ExitedAt) || !result.At.Before(attempt.Deadline) {
+		if err != nil || hook.ExitedAt == nil || *hook.ExitCode != 0 ||
+			!result.Satisfies(backingprovision.AfterStart, layout) ||
+			result.ContainerID != hook.ContainerID ||
+			result.HookResult != evidence ||
+			result.At.Location() != time.UTC ||
+			result.At.Before(*hook.ExitedAt) ||
+			!result.At.Before(attempt.Deadline) {
 			return invalid()
 		}
 	}

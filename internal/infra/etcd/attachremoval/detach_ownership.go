@@ -21,32 +21,52 @@ func (repository *InputRepository) readOwnedDetach(ctx context.Context, view wor
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.Values[0] == nil {
-		return keyvalue.Versioned[attachrecord.Record]{}, nil, errs.New(errs.KindStateConflict, "Detach no longer owns an existing Attach")
+		return keyvalue.Versioned[attachrecord.Record]{}, nil, errs.New(
+			errs.KindStateConflict,
+			"Detach no longer owns an existing Attach",
+		)
 	}
 	current, err := attachrecord.DecodeAttachRecord(read.Values[0].Value)
 	if err != nil || current.Operation != attachrecord.AttachOperationDetach || current.TaskID != view.Task.Task.ID ||
 		!attachrecord.AttachImmutableEqual(current, source.Attach) ||
 		(current.Status != "detaching" && current.Status != "failed") {
-		return keyvalue.Versioned[attachrecord.Record]{}, nil, errs.New(errs.KindStateConflict, "Detach resource ownership changed")
+		return keyvalue.Versioned[attachrecord.Record]{}, nil, errs.New(
+			errs.KindStateConflict,
+			"Detach resource ownership changed",
+		)
 	}
 	if keyvalue.RevisionOf(read.Values[1]) != source.FactsRevision {
-		return keyvalue.Versioned[attachrecord.Record]{}, nil, errs.New(errs.KindStateConflict, "Detach facts changed after their encrypted capture")
+		return keyvalue.Versioned[attachrecord.Record]{}, nil, errs.New(
+			errs.KindStateConflict,
+			"Detach facts changed after their encrypted capture",
+		)
 	}
 	if read.Values[1] != nil {
 		facts, err := attachrecord.DecodeAttachEncryptedFacts(read.Values[1].Value)
-		if err != nil || facts.AttachID != current.ID || source.Facts == nil || facts.CiphertextSHA256 != source.Facts.CiphertextSHA256 {
+		if err != nil || facts.AttachID != current.ID || source.Facts == nil ||
+			facts.CiphertextSHA256 != source.Facts.CiphertextSHA256 {
 			clear(facts.Ciphertext)
 			return keyvalue.Versioned[attachrecord.Record]{}, nil, recordcodec.CorruptRecord()
 		}
 		clear(facts.Ciphertext)
 	}
-	return keyvalue.Versioned[attachrecord.Record]{Record: current, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision},
-		[]keyvalue.Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision}, {Key: keys[1], ModRevision: source.FactsRevision}}, nil
+	return keyvalue.Versioned[attachrecord.Record]{
+			Record:       current,
+			Revision:     read.Values[0].ModRevision,
+			ReadRevision: read.ReadRevision,
+		},
+		[]keyvalue.Condition{
+			{Key: keys[0], ModRevision: read.Values[0].ModRevision},
+			{Key: keys[1], ModRevision: source.FactsRevision},
+		}, nil
 }
 
 // DetachResourceAdmission proves that this visible Task still owns the binding
 // and captured facts. It cannot authorize commands by Task labels alone.
-func (repository *InputRepository) DetachResourceAdmission(ctx context.Context, view workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) DetachResourceAdmission(
+	ctx context.Context,
+	view workqueue.View,
+) (workqueue.Change, error) {
 	input, conditions, err := repository.LoadDetach(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -57,7 +77,10 @@ func (repository *InputRepository) DetachResourceAdmission(ctx context.Context, 
 		return workqueue.Change{}, err
 	}
 	if current.Record.Status != "detaching" {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach must be explicitly retried before new forward execution")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Detach must be explicitly retried before new forward execution",
+		)
 	}
 	if input.Cascade != nil {
 		_, progress, err := repository.cascadeStepAdmission(ctx, view, input)
@@ -72,7 +95,10 @@ func (repository *InputRepository) DetachResourceAdmission(ctx context.Context, 
 // PrepareDetachFailed retains the binding and encrypted facts after failure.
 // Whether external effects are settled remains the separate execution result;
 // this metadata change is never evidence that a command was undone.
-func (repository *InputRepository) PrepareDetachFailed(ctx context.Context, view workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareDetachFailed(
+	ctx context.Context,
+	view workqueue.View,
+) (workqueue.Change, error) {
 	input, conditions, err := repository.LoadDetach(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -94,6 +120,8 @@ func (repository *InputRepository) PrepareDetachFailed(ctx context.Context, view
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change.Mutations = []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: attachrecord.AttachKey(failed.ID), Value: raw}}
+	change.Mutations = []keyvalue.Mutation{
+		{Type: keyvalue.MutationPut, Key: attachrecord.AttachKey(failed.ID), Value: raw},
+	}
 	return change, nil
 }

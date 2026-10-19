@@ -38,7 +38,10 @@ type groupReleaseDraft struct {
 // accepting the visible Task. The seal compares one completed stamp per member,
 // not every large leaf, keeping a 32-member Group inside both transaction limits.
 // No record here is executable or an active Script/Secret reference.
-func (ledger *ReleaseLedger) stageGroupRelease(ctx context.Context, capture GroupReleaseCapture) (keyvalue.Condition, error) {
+func (ledger *ReleaseLedger) stageGroupRelease(
+	ctx context.Context,
+	capture GroupReleaseCapture,
+) (keyvalue.Condition, error) {
 	task, err := capture.Validate()
 	if err != nil {
 		return keyvalue.Condition{}, err
@@ -68,7 +71,12 @@ func (ledger *ReleaseLedger) stageGroupRelease(ctx context.Context, capture Grou
 		if err != nil {
 			return keyvalue.Condition{}, err
 		}
-		prepared, err := ledger.stageGroupReleaseValue(ctx, groupReleaseDraftMemberKey(task.ID, workID, "preparation"), preparation, leafGuards)
+		prepared, err := ledger.stageGroupReleaseValue(
+			ctx,
+			groupReleaseDraftMemberKey(task.ID, workID, "preparation"),
+			preparation,
+			leafGuards,
+		)
 		clear(preparation)
 		if err != nil {
 			return keyvalue.Condition{}, err
@@ -77,7 +85,12 @@ func (ledger *ReleaseLedger) stageGroupRelease(ctx context.Context, capture Grou
 		if err != nil {
 			return keyvalue.Condition{}, err
 		}
-		rendered, err := ledger.stageGroupReleaseValue(ctx, groupReleaseDraftMemberKey(task.ID, workID, "rollout"), rollout, leafGuards)
+		rendered, err := ledger.stageGroupReleaseValue(
+			ctx,
+			groupReleaseDraftMemberKey(task.ID, workID, "rollout"),
+			rollout,
+			leafGuards,
+		)
 		clear(rollout)
 		if err != nil {
 			return keyvalue.Condition{}, err
@@ -86,7 +99,12 @@ func (ledger *ReleaseLedger) stageGroupRelease(ctx context.Context, capture Grou
 		if err != nil {
 			return keyvalue.Condition{}, err
 		}
-		stampGuard, err := ledger.stageGroupReleaseValue(ctx, stampKey, stamp, append(slices.Clone(guards), prepared, rendered))
+		stampGuard, err := ledger.stageGroupReleaseValue(
+			ctx,
+			stampKey,
+			stamp,
+			append(slices.Clone(guards), prepared, rendered),
+		)
 		clear(stamp)
 		if err != nil {
 			return keyvalue.Condition{}, err
@@ -98,7 +116,12 @@ func (ledger *ReleaseLedger) stageGroupRelease(ctx context.Context, capture Grou
 		if err != nil {
 			return keyvalue.Condition{}, err
 		}
-		guard, err := ledger.stageGroupReleaseValue(ctx, GroupReleasePreflightCaptureKey(task.ID, preflight.Execution.WorkItemID), value, guards)
+		guard, err := ledger.stageGroupReleaseValue(
+			ctx,
+			GroupReleasePreflightCaptureKey(task.ID, preflight.Execution.WorkItemID),
+			value,
+			guards,
+		)
 		clear(value)
 		if err != nil {
 			return keyvalue.Condition{}, err
@@ -114,7 +137,10 @@ func (ledger *ReleaseLedger) stageGroupReleaseValue(ctx context.Context, key str
 	guards []keyvalue.Condition,
 ) (keyvalue.Condition, error) {
 	if len(value) == 0 || len(value) > keyvalue.MaximumBytes || len(guards) == 0 {
-		return keyvalue.Condition{}, errs.New(errs.KindReleasePlanTooLarge, "Group admission record exceeds its bounded storage format")
+		return keyvalue.Condition{}, errs.New(
+			errs.KindReleasePlanTooLarge,
+			"Group admission record exceeds its bounded storage format",
+		)
 	}
 	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}})
 	if err != nil {
@@ -126,7 +152,10 @@ func (ledger *ReleaseLedger) stageGroupReleaseValue(ctx context.Context, key str
 	defer keyvalue.ClearValues(read.Values)
 	if saved := read.Values[0]; saved != nil {
 		if saved.Key != key || saved.ModRevision <= 0 || !bytes.Equal(saved.Value, value) {
-			return keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Group admission identity already holds different immutable input")
+			return keyvalue.Condition{}, errs.New(
+				errs.KindStateConflict,
+				"Group admission identity already holds different immutable input",
+			)
 		}
 		return keyvalue.Condition{Key: key, ModRevision: saved.ModRevision}, nil
 	}
@@ -134,13 +163,20 @@ func (ledger *ReleaseLedger) stageGroupReleaseValue(ctx context.Context, key str
 	if err != nil {
 		return keyvalue.Condition{}, err
 	}
-	result, err := ledger.store.Transact(ctx, conditions, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}})
+	result, err := ledger.store.Transact(
+		ctx,
+		conditions,
+		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}},
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return keyvalue.Condition{}, err
 	}
 	if !result.Succeeded {
-		return keyvalue.Condition{}, errs.New(errs.KindStateConflict, "Group admission draft changed before immutable staging")
+		return keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Group admission draft changed before immutable staging",
+		)
 	}
 	return keyvalue.Condition{Key: key, ModRevision: result.Revision}, nil
 }

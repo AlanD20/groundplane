@@ -9,7 +9,10 @@ import (
 
 // InspectProvision never runs a hook or adapter command. A missing Docker exec
 // is unobservable, not evidence that an externally authorized effect stopped.
-func (host *BackingHost) InspectProvision(ctx context.Context, input attachexecution.ProvisionRecoveryInput) (attachexecution.ProvisionInspection, error) {
+func (host *BackingHost) InspectProvision(
+	ctx context.Context,
+	input attachexecution.ProvisionRecoveryInput,
+) (attachexecution.ProvisionInspection, error) {
 	if err := input.Validate(); err != nil {
 		return attachexecution.ProvisionInspection{}, err
 	}

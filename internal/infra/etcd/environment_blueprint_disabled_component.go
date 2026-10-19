@@ -63,14 +63,23 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDisabledCompon
 		selection.Spec.Validate(selection.Capability) != nil ||
 		selection.Component.Desired.Enabled || len(selection.Component.Runtime.GeneratedServices) != 0 ||
 		selection.Component.Runtime.PinnedIPv4 != "" || selection.Component.Runtime.Healthy {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Blueprint disabled Component settlement identity is invalid")
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint disabled Component settlement identity is invalid",
+		)
 	}
 	if selection.Capability != core.ComponentCapabilityHTTPRouter && len(unit.Writes) != 1 {
-		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "only the router capability may claim Service forwarding resources")
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"only the router capability may claim Service forwarding resources",
+		)
 	}
 	engineChange := selection.Component.Desired.Kind != selection.Spec.Implementation
 	if engineChange != (preflight != nil) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "disabled proxy selection requires the exact affected-Service capture")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"disabled proxy selection requires the exact affected-Service capture",
+		)
 	}
 	ledger, err := blueprintunits.NewRepository(repository.store)
 	if err != nil {
@@ -81,7 +90,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDisabledCompon
 		return workqueue.Change{}, err
 	}
 	if snapshot.HeadTaskID != parent.ID {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint disabled Component parent is no longer current")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint disabled Component parent is no longer current",
+		)
 	}
 	parentKey := workqueue.TaskKey(parent.ID)
 	itemKey := workqueue.ItemKey(item.ID)
@@ -106,7 +118,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDisabledCompon
 	}
 	if read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil ||
 		read.Values[3] == nil || read.Values[4] == nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint disabled Component authority is unavailable")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint disabled Component authority is unavailable",
+		)
 	}
 	if read.Values[0].ModRevision != work.Task.Revision || read.Values[1].ModRevision != work.Item.Revision {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Component work changed")
@@ -140,7 +155,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDisabledCompon
 		return workqueue.Change{}, err
 	}
 	if runtime.ReadRevision != snapshot.ReadRevision {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint disabled Component runtime snapshot changed")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint disabled Component runtime snapshot changed",
+		)
 	}
 	if runtimePresent {
 		acknowledged := runtime.Record.Component
@@ -158,7 +176,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDisabledCompon
 		runtime,
 		runtimePresent,
 	) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "disabled Component may retain an unacknowledged effect")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"disabled Component may retain an unacknowledged effect",
+		)
 	}
 	candidate := current
 	candidate.Desired.Kind = selection.Spec.Implementation

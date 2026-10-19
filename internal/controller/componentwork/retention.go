@@ -26,16 +26,28 @@ type Retention struct {
 	preparations PreparationRetirement
 }
 
-func NewRetention(inputs *componentrecord.InputRepository, definitions DefinitionRetention, preparations PreparationRetirement) (*Retention, error) {
+func NewRetention(
+	inputs *componentrecord.InputRepository,
+	definitions DefinitionRetention,
+	preparations PreparationRetirement,
+) (*Retention, error) {
 	if inputs == nil || definitions == nil || preparations == nil {
 		return nil, errs.New(errs.KindInternal, "Component retention requires execution, definition and source owners")
 	}
 	return &Retention{inputs: inputs, definitions: definitions, preparations: preparations}, nil
 }
 
-func (owner *Retention) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (owner *Retention) RetireWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	if view.Item.Item.Operation != workexecution.Component {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Component retention cannot collect another operation")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Component retention cannot collect another operation",
+		)
 	}
 	if view.Item.Item.Placement.Executor == workexecution.Controller {
 		if view.Task.Task.Action != workexecution.ActionApply {
@@ -56,6 +68,9 @@ func (owner *Retention) RetireWork(ctx context.Context, view workqueue.View, at 
 	return true, change, nil
 }
 
-func (owner *Retention) PrepareAttemptRetirement(view workqueue.View, snapshot workqueue.AttemptSnapshot) (workqueue.Change, error) {
+func (owner *Retention) PrepareAttemptRetirement(
+	view workqueue.View,
+	snapshot workqueue.AttemptSnapshot,
+) (workqueue.Change, error) {
 	return componentrecord.PrepareAttemptRetirement(view, snapshot)
 }

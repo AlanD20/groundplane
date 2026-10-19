@@ -30,7 +30,8 @@ func (proof RecoveryRuntimeProof) Validate(input RecoveryInput, report RecoveryR
 	}
 	switch proof.Phase {
 	case InspectFailedRuntime:
-		if proof.Inventory == nil || proof.Inventory.Validate(input, report) != nil || proof.ObservedAt.Before(proof.Inventory.ObservedAt) {
+		if proof.Inventory == nil || proof.Inventory.Validate(input, report) != nil ||
+			proof.ObservedAt.Before(proof.Inventory.ObservedAt) {
 			return invalidProgress()
 		}
 	case RestoreServingRuntime, RemoveFailedCandidate, VerifyRestoration:
@@ -43,7 +44,11 @@ func (proof RecoveryRuntimeProof) Validate(input RecoveryInput, report RecoveryR
 	return nil
 }
 
-func EncodeRecoveryRuntimeProof(input RecoveryInput, report RecoveryReport, proof RecoveryRuntimeProof) (*agentpb.ReleaseRecoveryHelperResponse, error) {
+func EncodeRecoveryRuntimeProof(
+	input RecoveryInput,
+	report RecoveryReport,
+	proof RecoveryRuntimeProof,
+) (*agentpb.ReleaseRecoveryHelperResponse, error) {
 	if err := proof.Validate(input, report); err != nil {
 		return nil, err
 	}
@@ -54,8 +59,13 @@ func EncodeRecoveryRuntimeProof(input RecoveryInput, report RecoveryReport, proo
 	return &agentpb.ReleaseRecoveryHelperResponse{Proof: raw}, nil
 }
 
-func DecodeRecoveryRuntimeProof(input RecoveryInput, report RecoveryReport, response *agentpb.ReleaseRecoveryHelperResponse) (RecoveryRuntimeProof, error) {
-	if response == nil || executionplan.RejectUnknown(response) != nil || len(response.Proof) == 0 || len(response.Proof) > MaximumCheckpointBytes {
+func DecodeRecoveryRuntimeProof(
+	input RecoveryInput,
+	report RecoveryReport,
+	response *agentpb.ReleaseRecoveryHelperResponse,
+) (RecoveryRuntimeProof, error) {
+	if response == nil || executionplan.RejectUnknown(response) != nil || len(response.Proof) == 0 ||
+		len(response.Proof) > MaximumCheckpointBytes {
 		return RecoveryRuntimeProof{}, invalidProgress()
 	}
 	proof, err := jcs.Decode[RecoveryRuntimeProof](response.Proof)

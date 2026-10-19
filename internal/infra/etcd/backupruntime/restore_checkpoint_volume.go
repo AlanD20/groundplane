@@ -18,8 +18,12 @@ type BackupVolumeOldManifestProof struct {
 	FullTreeSHA256        [sha256.Size]byte
 }
 
-func PrepareVolumeRestoreCheckpoint(current BackupRestoreRecord, input *agentpb.BackupWorkInput, request *agentpb.BackupWorkCheckpointRequest,
-	old *BackupVolumeOldManifestProof, at time.Time,
+func PrepareVolumeRestoreCheckpoint(
+	current BackupRestoreRecord,
+	input *agentpb.BackupWorkInput,
+	request *agentpb.BackupWorkCheckpointRequest,
+	old *BackupVolumeOldManifestProof,
+	at time.Time,
 ) (BackupRestoreRecord, error) {
 	if ValidateBackupRestoreRecord(current) != nil || current.Point.SourceKind != BackupRuntimeSourceVolume ||
 		request == nil || request.GetAttempt().GetTaskId() != current.TaskID || ValidateRestoreWorkInput(current, input) != nil ||

@@ -17,7 +17,14 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (host *RuntimeHost) executeHook(ctx context.Context, input Input, stage lifecycleexecution.Stage, saved *agentworkjournal.LifecycleRecord, inspectOnly bool, exchange Exchange) (*lifecycleexecution.Receipt, error) {
+func (host *RuntimeHost) executeHook(
+	ctx context.Context,
+	input Input,
+	stage lifecycleexecution.Stage,
+	saved *agentworkjournal.LifecycleRecord,
+	inspectOnly bool,
+	exchange Exchange,
+) (*lifecycleexecution.Receipt, error) {
 	if hook := saved.Hook; hook != nil {
 		if hook.Result != nil {
 			result := *hook.Result
@@ -35,7 +42,10 @@ func (host *RuntimeHost) executeHook(ctx context.Context, input Input, stage lif
 				return nil, err
 			}
 		}
-		return nil, errs.New(errs.KindStateConflict, "Lifecycle hook was interrupted without a saved result; automatic replay is disabled")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Lifecycle hook was interrupted without a saved result; automatic replay is disabled",
+		)
 	}
 	if inspectOnly {
 		return nil, nil
@@ -47,7 +57,10 @@ func (host *RuntimeHost) executeHook(ctx context.Context, input Input, stage lif
 	if err != nil {
 		return nil, err
 	}
-	delivery, err := exchange.LifecycleHook(ctx, &agentpb.ServiceLifecycleHookRequest{Attempt: identity, StageId: stage.ID})
+	delivery, err := exchange.LifecycleHook(
+		ctx,
+		&agentpb.ServiceLifecycleHookRequest{Attempt: identity, StageId: stage.ID},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +84,8 @@ func (host *RuntimeHost) executeHook(ctx context.Context, input Input, stage lif
 	if err != nil {
 		return nil, err
 	}
-	if updated == nil || updated.Hook == nil || updated.Hook.ExitedAt == nil || updated.Hook.ExitCode == nil || *updated.Hook.ExitCode != 0 {
+	if updated == nil || updated.Hook == nil || updated.Hook.ExitedAt == nil || updated.Hook.ExitCode == nil ||
+		*updated.Hook.ExitCode != 0 {
 		return nil, invalidInput()
 	}
 	at := time.Now().UTC()
@@ -103,16 +117,36 @@ func (recorder hookRecorder) Created(ctx context.Context, containerID, execID st
 	if err := recorder.host.ownership.Check(); err != nil {
 		return err
 	}
-	return recorder.host.journal.PrepareLifecycleHookExec(ctx, recorder.input.attempt, recorder.input.procedure, containerID, execID, at)
+	return recorder.host.journal.PrepareLifecycleHookExec(
+		ctx,
+		recorder.input.attempt,
+		recorder.input.procedure,
+		containerID,
+		execID,
+		at,
+	)
 }
 
 func (recorder hookRecorder) Ready(ctx context.Context, execID string, at time.Time) error {
 	if err := recorder.host.ownership.Check(); err != nil {
 		return err
 	}
-	return recorder.host.journal.AuthorizeLifecycleHookExec(ctx, recorder.input.attempt, recorder.input.procedure, execID, at)
+	return recorder.host.journal.AuthorizeLifecycleHookExec(
+		ctx,
+		recorder.input.attempt,
+		recorder.input.procedure,
+		execID,
+		at,
+	)
 }
 
 func (recorder hookRecorder) Exited(ctx context.Context, execID string, exitCode int, at time.Time) error {
-	return recorder.host.journal.ObserveLifecycleHookExit(ctx, recorder.input.attempt, recorder.input.procedure, execID, exitCode, at)
+	return recorder.host.journal.ObserveLifecycleHookExit(
+		ctx,
+		recorder.input.attempt,
+		recorder.input.procedure,
+		execID,
+		exitCode,
+		at,
+	)
 }

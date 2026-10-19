@@ -261,7 +261,8 @@ func validateApplied(record AppliedRecord) error {
 		return invalidRecord()
 	}
 	if record.ControllerAttachInputRevision > 0 {
-		if len(record.ControllerAttachReferences) == 0 || len(record.ControllerAttachReferences) > attachments.MaximumAttachGrants+1 {
+		if len(record.ControllerAttachReferences) == 0 ||
+			len(record.ControllerAttachReferences) > attachments.MaximumAttachGrants+1 {
 			return invalidRecord()
 		}
 		seen := make(map[string]bool, len(record.ControllerAttachReferences))

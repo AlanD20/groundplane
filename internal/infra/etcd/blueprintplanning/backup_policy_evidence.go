@@ -297,7 +297,9 @@ func (repository *BackupPolicyPlanner) loadBlueprintBackupSources(
 		}
 		if selection.Kind == core.BackupSourceAttach {
 			attachRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-				attachrecord.AttachKey(selection.TargetID), attachrecord.AttachOwnerKey(input.EnvironmentID, selection.TargetID),
+				attachrecord.AttachKey(
+					selection.TargetID,
+				), attachrecord.AttachOwnerKey(input.EnvironmentID, selection.TargetID),
 				deletionrecord.TombstoneKey("attach", selection.TargetID),
 			}, Revision: revision})
 			if readErr != nil {
@@ -313,7 +315,11 @@ func (repository *BackupPolicyPlanner) loadBlueprintBackupSources(
 				attach.Operation != attachrecord.AttachOperationProvision || string(attachRead.Values[1].Value) != selection.TargetID {
 				return nil, errs.New(errs.KindValidationFailed, "backup Attach source must own credentials")
 			}
-			versioned := etcdstore.Versioned[attachrecord.Record]{Record: attach, Revision: attachRead.Values[0].ModRevision, ReadRevision: revision}
+			versioned := etcdstore.Versioned[attachrecord.Record]{
+				Record:       attach,
+				Revision:     attachRead.Values[0].ModRevision,
+				ReadRevision: revision,
+			}
 			item.attach = &versioned
 			item.attachOwner = backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(attachRead.Values[1])
 		}

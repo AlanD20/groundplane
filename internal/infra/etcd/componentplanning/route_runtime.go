@@ -18,7 +18,9 @@ import (
 // Component's desired settings are unchanged. Retain that exact applied plan,
 // rather than leaving the earlier Component Task as runtime authority.
 func EncodeRouteAcknowledgedRuntime(
-	execution blueprintunits.AppliedExecution, capturedArtifact *agentpb.ComposeArtifact, provider *environmentchanges.RouteProviderPin,
+	execution blueprintunits.AppliedExecution,
+	capturedArtifact *agentpb.ComposeArtifact,
+	provider *environmentchanges.RouteProviderPin,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) ([]byte, error) {
 	if execution.Validate() != nil || capturedArtifact == nil || provider == nil || projection.RenderGeneration == 0 {

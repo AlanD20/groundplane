@@ -31,7 +31,10 @@ func (executor *Executor) recoverConfigRestore(ctx context.Context, assignment *
 	}
 	if cursor.GetRestore().GetConfigProgress().GetMaterialization() == nil {
 		if cursor.GetRestore().GetConfigProgress().GetTransfer() == nil {
-			return nil, errs.New(errs.KindStateConflict, "Config Restore recovery requires the captured publication receipt")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Config Restore recovery requires the captured publication receipt",
+			)
 		}
 		artifact, err := staging.retainedConfigRestore(ctx, assignment)
 		if err != nil {
@@ -42,7 +45,14 @@ func (executor *Executor) recoverConfigRestore(ctx context.Context, assignment *
 			if err != nil {
 				return nil, err
 			}
-			artifact, err = downloadCapturedConfigRestore(ctx, assignment.Input, assignment.Attempt, 0, staged, exchange)
+			artifact, err = downloadCapturedConfigRestore(
+				ctx,
+				assignment.Input,
+				assignment.Attempt,
+				0,
+				staged,
+				exchange,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -71,7 +81,12 @@ func (executor *Executor) recoverConfigRestore(ctx context.Context, assignment *
 		return nil, err
 	}
 	step := assignment.Input.Steps[0]
-	journal, err := agentconfigjournal.Open(ctx, agentprotocol.StatePath+"/config-transfers/"+binding.TransferID, binding, step)
+	journal, err := agentconfigjournal.Open(
+		ctx,
+		agentprotocol.StatePath+"/config-transfers/"+binding.TransferID,
+		binding,
+		step,
+	)
 	if err != nil {
 		return nil, err
 	}

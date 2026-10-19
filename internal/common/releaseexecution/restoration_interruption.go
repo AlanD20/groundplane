@@ -10,7 +10,10 @@ type RestorationInterruption struct {
 	Failure Failure               `json:"failure"`
 }
 
-func (interruption RestorationInterruption) ValidateFor(current, source workexecution.Attempt, authority GroupRestorationAuthority) error {
+func (interruption RestorationInterruption) ValidateFor(
+	current, source workexecution.Attempt,
+	authority GroupRestorationAuthority,
+) error {
 	previous := interruption.Attempt
 	if interruption.ValidatePrevious(source, authority) != nil || current.Validate() != nil ||
 		current.Direction != workexecution.Recovery || current.FinishedAt != nil ||
@@ -25,12 +28,21 @@ func (interruption RestorationInterruption) ValidateFor(current, source workexec
 
 // ValidatePrevious permits admission before a new attempt exists. The caller
 // joins this actual previous attempt/result with the native explicit-Retry CAS.
-func (interruption RestorationInterruption) ValidatePrevious(source workexecution.Attempt, authority GroupRestorationAuthority) error {
+func (interruption RestorationInterruption) ValidatePrevious(
+	source workexecution.Attempt,
+	authority GroupRestorationAuthority,
+) error {
 	previous := interruption.Attempt
-	if authority.ValidateSource(source) != nil || previous.Validate() != nil || previous.FinishedAt == nil || previous.Result == nil ||
-		previous.Outcome != workexecution.Failed || previous.Executor.Executor != workexecution.Agent ||
-		previous.TaskID != source.TaskID || previous.WorkItemID == source.WorkItemID || previous.WorkItemID == authority.FailedWorkID ||
-		previous.Executor.HostID != source.Executor.HostID || previous.Input.ID != authority.SourceInput.ID || previous.Input == authority.SourceInput ||
+	if authority.ValidateSource(source) != nil || previous.Validate() != nil || previous.FinishedAt == nil ||
+		previous.Result == nil ||
+		previous.Outcome != workexecution.Failed ||
+		previous.Executor.Executor != workexecution.Agent ||
+		previous.TaskID != source.TaskID ||
+		previous.WorkItemID == source.WorkItemID ||
+		previous.WorkItemID == authority.FailedWorkID ||
+		previous.Executor.HostID != source.Executor.HostID ||
+		previous.Input.ID != authority.SourceInput.ID ||
+		previous.Input == authority.SourceInput ||
 		previous.AssignedAt.Before(authority.FailedAt) ||
 		!interruption.Failure.RecordedAt.Equal(*previous.FinishedAt) {
 		return invalidProgress()
@@ -78,6 +90,7 @@ func EqualRestorationInterruption(left, right *RestorationInterruption) bool {
 		return false
 	}
 	lf, rf := left.Failure, right.Failure
-	return lf.AttemptID == rf.AttemptID && lf.Input == rf.Input && lf.Reason == rf.Reason && lf.RecordedAt.Equal(rf.RecordedAt) &&
+	return lf.AttemptID == rf.AttemptID && lf.Input == rf.Input && lf.Reason == rf.Reason &&
+		lf.RecordedAt.Equal(rf.RecordedAt) &&
 		(lf.Checkpoint == nil && rf.Checkpoint == nil || lf.Checkpoint != nil && rf.Checkpoint != nil && EqualCheckpoint(*lf.Checkpoint, *rf.Checkpoint))
 }

@@ -10,5 +10,10 @@ import (
 func (owner *AgentWork) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnapshot,
 	item workqueue.ItemSnapshot, previous workqueue.AttemptSnapshot, revision int64, at time.Time,
 ) (workqueue.Change, error) {
-	return owner.inputs.PrepareRecoveryRetry(ctx, workqueue.View{Task: task, Item: item, ReadRevision: revision}, previous, at)
+	return owner.inputs.PrepareRecoveryRetry(
+		ctx,
+		workqueue.View{Task: task, Item: item, ReadRevision: revision},
+		previous,
+		at,
+	)
 }

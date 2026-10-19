@@ -17,10 +17,17 @@ func (repository *Repository) PrepareHookDelivery(ctx context.Context, view work
 	input *agentpb.ServiceLifecycleWorkInput, stageID string, at time.Time,
 ) (workqueue.Change, error) {
 	attempt, checkpoint := view.Attempt.Attempt, view.Checkpoint.Record
-	if input == nil || input.Hook == nil || input.Hook.StageId != stageID || !view.ActiveAttempt || !view.CurrentExecutor ||
-		attempt.Direction != workexecution.Forward || attempt.StartedAt == nil || attempt.FinishedAt != nil ||
-		!at.Before(attempt.Deadline) || view.Work.Task.Task.Stop != nil || view.Work.Task.Task.FinishedAt != nil ||
-		view.Work.Item.Item.ForwardRevoked || checkpoint == nil || checkpoint.StageID != stageID {
+	if input == nil || input.Hook == nil || input.Hook.StageId != stageID || !view.ActiveAttempt ||
+		!view.CurrentExecutor ||
+		attempt.Direction != workexecution.Forward ||
+		attempt.StartedAt == nil ||
+		attempt.FinishedAt != nil ||
+		!at.Before(attempt.Deadline) ||
+		view.Work.Task.Task.Stop != nil ||
+		view.Work.Task.Task.FinishedAt != nil ||
+		view.Work.Item.Item.ForwardRevoked ||
+		checkpoint == nil ||
+		checkpoint.StageID != stageID {
 		return workqueue.Change{}, conflict("Service lifecycle hook no longer owns an active execution stage")
 	}
 	key := ReportKey(attempt.ID, checkpoint.Sequence)
@@ -40,7 +47,8 @@ func (repository *Repository) PrepareHookDelivery(ctx context.Context, view work
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if progress.BeganAt == nil || len(progress.Completed) >= len(stages) || stages[len(progress.Completed)].ID != stageID ||
+	if progress.BeganAt == nil || len(progress.Completed) >= len(stages) ||
+		stages[len(progress.Completed)].ID != stageID ||
 		stages[len(progress.Completed)].Expected != lifecycleexecution.HookSucceeded {
 		return workqueue.Change{}, conflict("Service lifecycle hook is not the current in-flight stage")
 	}

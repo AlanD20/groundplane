@@ -22,14 +22,22 @@ type Effect struct {
 	exchange EffectExchange
 }
 
-func NewEffect(input releaseexecution.Input, journal *agentworkjournal.Journal, exchange EffectExchange) (*Effect, error) {
+func NewEffect(
+	input releaseexecution.Input,
+	journal *agentworkjournal.Journal,
+	exchange EffectExchange,
+) (*Effect, error) {
 	if input.Attempt.Validate() != nil || input.Attempt.StartedAt == nil || journal == nil || exchange == nil {
 		return nil, errs.New(errs.KindInternal, "Release effect evidence delivery is not configured")
 	}
 	return &Effect{input: input, journal: journal, exchange: exchange}, nil
 }
 
-func (delivery *Effect) RecordHelper(ctx context.Context, boundary releaseexecution.CheckpointReport, response *agentpb.ReleaseHelperResponse) (workexecution.Input, error) {
+func (delivery *Effect) RecordHelper(
+	ctx context.Context,
+	boundary releaseexecution.CheckpointReport,
+	response *agentpb.ReleaseHelperResponse,
+) (workexecution.Input, error) {
 	result, err := releaseexecution.HelperResult(response)
 	if err != nil {
 		return workexecution.Input{}, err
@@ -37,7 +45,11 @@ func (delivery *Effect) RecordHelper(ctx context.Context, boundary releaseexecut
 	return delivery.record(ctx, boundary, result)
 }
 
-func (delivery *Effect) RecordReadiness(ctx context.Context, boundary releaseexecution.CheckpointReport, observed *agentpb.ObservedProject) (workexecution.Input, error) {
+func (delivery *Effect) RecordReadiness(
+	ctx context.Context,
+	boundary releaseexecution.CheckpointReport,
+	observed *agentpb.ObservedProject,
+) (workexecution.Input, error) {
 	result, err := releaseexecution.ReadinessResult(delivery.input, boundary.Progress, observed)
 	if err != nil {
 		return workexecution.Input{}, err
@@ -45,12 +57,20 @@ func (delivery *Effect) RecordReadiness(ctx context.Context, boundary releaseexe
 	return delivery.record(ctx, boundary, result)
 }
 
-func (delivery *Effect) RecordDrain(ctx context.Context, boundary releaseexecution.CheckpointReport, at time.Time) (workexecution.Input, error) {
+func (delivery *Effect) RecordDrain(
+	ctx context.Context,
+	boundary releaseexecution.CheckpointReport,
+	at time.Time,
+) (workexecution.Input, error) {
 	at = at.UTC()
 	return delivery.record(ctx, boundary, releaseexecution.EffectResult{DrainedAt: &at})
 }
 
-func (delivery *Effect) RecordConfiguration(ctx context.Context, boundary releaseexecution.CheckpointReport, files []entrymaterialization.Header) (workexecution.Input, error) {
+func (delivery *Effect) RecordConfiguration(
+	ctx context.Context,
+	boundary releaseexecution.CheckpointReport,
+	files []entrymaterialization.Header,
+) (workexecution.Input, error) {
 	result, err := releaseexecution.ConfigurationResult(delivery.input, boundary, files)
 	if err != nil {
 		return workexecution.Input{}, err
@@ -58,7 +78,11 @@ func (delivery *Effect) RecordConfiguration(ctx context.Context, boundary releas
 	return delivery.record(ctx, boundary, result)
 }
 
-func (delivery *Effect) record(ctx context.Context, boundary releaseexecution.CheckpointReport, result releaseexecution.EffectResult) (workexecution.Input, error) {
+func (delivery *Effect) record(
+	ctx context.Context,
+	boundary releaseexecution.CheckpointReport,
+	result releaseexecution.EffectResult,
+) (workexecution.Input, error) {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
 	record, err := delivery.journal.PrepareEffect(ctx, delivery.input, boundary, result, time.Now().UTC())
@@ -70,7 +94,10 @@ func (delivery *Effect) record(ctx context.Context, boundary releaseexecution.Ch
 
 // Resume replays saved bytes only. found=false means the host effect still needs
 // operation-specific inspection, never that it is safe to repeat the mutation.
-func (delivery *Effect) Resume(ctx context.Context, boundary releaseexecution.CheckpointReport) (reference workexecution.Input, found bool, err error) {
+func (delivery *Effect) Resume(
+	ctx context.Context,
+	boundary releaseexecution.CheckpointReport,
+) (reference workexecution.Input, found bool, err error) {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
 	record, err := delivery.journal.Effect(ctx, delivery.input, boundary)
@@ -94,7 +121,10 @@ func (delivery *Effect) send(ctx context.Context, record agentworkjournal.Effect
 		return workexecution.Input{}, err
 	}
 	if ack != record.Reference {
-		return workexecution.Input{}, errs.New(errs.KindStateConflict, "Release effect evidence acknowledgement differs")
+		return workexecution.Input{}, errs.New(
+			errs.KindStateConflict,
+			"Release effect evidence acknowledgement differs",
+		)
 	}
 	if err := delivery.journal.AcknowledgeEffect(ctx, delivery.input, record.Boundary, ack); err != nil {
 		return workexecution.Input{}, err

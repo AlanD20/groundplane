@@ -19,7 +19,9 @@ func EncodeTaskBinding(binding TaskBinding) ([]byte, error) {
 	if binding.HostID != "" && ids.Validate(ids.KindHost, binding.HostID) != nil {
 		return nil, CorruptHierarchyDeletion()
 	}
-	if ids.Validate(ids.KindTask, binding.TaskID) != nil || !ValidHierarchyDeletionPrivateID(binding.OperationID, "del") || idempotency.ValidateIdempotencyLocator(binding.Marker) != nil {
+	if ids.Validate(ids.KindTask, binding.TaskID) != nil ||
+		!ValidHierarchyDeletionPrivateID(binding.OperationID, "del") ||
+		idempotency.ValidateIdempotencyLocator(binding.Marker) != nil {
 		return nil, CorruptHierarchyDeletion()
 	}
 	return recordcodec.Encode("hierarchy-work-task", binding)

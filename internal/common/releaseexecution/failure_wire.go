@@ -19,7 +19,9 @@ type FailureReceipt struct {
 }
 
 func (receipt FailureReceipt) Validate(attempt workexecution.Attempt, reason FailureReason) error {
-	if receipt.Outcome != workexecution.Failed && receipt.Outcome != workexecution.Cancelled && receipt.Outcome != workexecution.Superseded || receipt.Failure.Reason != reason {
+	if receipt.Outcome != workexecution.Failed && receipt.Outcome != workexecution.Cancelled &&
+		receipt.Outcome != workexecution.Superseded ||
+		receipt.Failure.Reason != reason {
 		return invalidProgress()
 	}
 	if attempt.StartedAt != nil && (receipt.StartedAt == nil || !attempt.StartedAt.Equal(*receipt.StartedAt)) {
@@ -33,16 +35,25 @@ func (receipt FailureReceipt) Validate(attempt workexecution.Attempt, reason Fai
 	return nil
 }
 
-func DecodeFailureAck(attempt workexecution.Attempt, reason FailureReason, ack *agentpb.ReleaseWorkFailureAck) (FailureReceipt, error) {
+func DecodeFailureAck(
+	attempt workexecution.Attempt,
+	reason FailureReason,
+	ack *agentpb.ReleaseWorkFailureAck,
+) (FailureReceipt, error) {
 	identity, err := workexecution.EncodeAgentAttempt(attempt)
 	if err != nil {
 		return FailureReceipt{}, err
 	}
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || !proto.Equal(identity, ack.Attempt) || ack.Evidence == nil ||
-		ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || !proto.Equal(identity, ack.Attempt) ||
+		ack.Evidence == nil ||
+		ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil {
 		return FailureReceipt{}, invalidProgress()
 	}
-	receipt := FailureReceipt{Evidence: workexecution.Input{ID: ack.Evidence.InputId, SHA256: hex.EncodeToString(ack.Evidence.Sha256)}, Outcome: workexecution.Outcome(ack.Outcome)}
+	receipt := FailureReceipt{
+		Evidence: workexecution.Input{ID: ack.Evidence.InputId, SHA256: hex.EncodeToString(ack.Evidence.Sha256)},
+		Outcome:  workexecution.Outcome(ack.Outcome),
+	}
 	if ack.StartedAt != nil {
 		if ack.StartedAt.CheckValid() != nil {
 			return FailureReceipt{}, invalidProgress()
@@ -55,7 +66,8 @@ func DecodeFailureAck(attempt workexecution.Attempt, reason FailureReason, ack *
 	}
 	attempt.StartedAt = receipt.StartedAt
 	receipt.Failure, err = DecodeFailure(attempt, ack.Failure, receipt.Evidence)
-	if err != nil || !receipt.Failure.RecordedAt.Equal(ack.FinishedAt.AsTime()) || receipt.Validate(attempt, reason) != nil {
+	if err != nil || !receipt.Failure.RecordedAt.Equal(ack.FinishedAt.AsTime()) ||
+		receipt.Validate(attempt, reason) != nil {
 		return FailureReceipt{}, invalidProgress()
 	}
 	return receipt, nil

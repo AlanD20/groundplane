@@ -72,7 +72,8 @@ func PrepareCheckpoint(ctx context.Context, reader ReportReader, view workqueue.
 	var previous *entryexecution.Progress
 	if view.Checkpoint.Record != nil {
 		value := read.Values[1]
-		if value == nil || value.Key != keys[1] || value.ModRevision <= 0 || value.ModRevision > view.Work.ReadRevision {
+		if value == nil || value.Key != keys[1] || value.ModRevision <= 0 ||
+			value.ModRevision > view.Work.ReadRevision {
 			return workqueue.Change{}, conflict("Entry configuration checkpoint has no saved report")
 		}
 		saved, err := entryexecution.DecodeProgress(attempt, owned, value.Value)
@@ -88,8 +89,10 @@ func PrepareCheckpoint(ctx context.Context, reader ReportReader, view workqueue.
 		previous = &saved
 	}
 	if existing := read.Values[0]; existing != nil {
-		if existing.Key != key || existing.ModRevision <= 0 || existing.ModRevision > view.Work.ReadRevision || !bytes.Equal(existing.Value, raw) ||
-			view.Checkpoint.Record == nil || next.Sequence > view.Checkpoint.Record.Sequence {
+		if existing.Key != key || existing.ModRevision <= 0 || existing.ModRevision > view.Work.ReadRevision ||
+			!bytes.Equal(existing.Value, raw) ||
+			view.Checkpoint.Record == nil ||
+			next.Sequence > view.Checkpoint.Record.Sequence {
 			return workqueue.Change{}, conflict("Entry configuration report sequence already has different evidence")
 		}
 		return workqueue.Change{Conditions: []keyvalue.Condition{
@@ -100,8 +103,11 @@ func PrepareCheckpoint(ctx context.Context, reader ReportReader, view workqueue.
 	if !view.ActiveAttempt || task.FinishedAt != nil {
 		return workqueue.Change{}, conflict("Entry configuration execution no longer accepts new reports")
 	}
-	if progress.InFlight && (!view.CurrentExecutor || item.ForwardRevoked || task.Stop != nil || !at.Before(attempt.Deadline)) {
-		return workqueue.Change{}, conflict("Entry configuration cannot start another stage after execution was stopped or replaced")
+	if progress.InFlight &&
+		(!view.CurrentExecutor || item.ForwardRevoked || task.Stop != nil || !at.Before(attempt.Deadline)) {
+		return workqueue.Change{}, conflict(
+			"Entry configuration cannot start another stage after execution was stopped or replaced",
+		)
 	}
 	if err := entryexecution.ValidateTransition(attempt, owned, previous, progress); err != nil {
 		return workqueue.Change{}, err
@@ -117,6 +123,9 @@ func PrepareCheckpoint(ctx context.Context, reader ReportReader, view workqueue.
 			Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision,
 		})
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)},
+	)
 	return change, nil
 }

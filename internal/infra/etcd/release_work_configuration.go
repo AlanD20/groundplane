@@ -19,13 +19,24 @@ func (ledger *ReleaseLedger) PrepareReleaseWorkConfiguration(ctx context.Context
 	work workqueue.View, configurationID string, generation uint64, changes []taskmaterialization.Record,
 ) (runtimeconfiguration.WorkCapture, error) {
 	if ledger == nil || ledger.store == nil || work.Item.Item.Operation != workexecution.Release {
-		return runtimeconfiguration.WorkCapture{}, errs.New(errs.KindValidationFailed, "Release configuration requires native Release work")
+		return runtimeconfiguration.WorkCapture{}, errs.New(
+			errs.KindValidationFailed,
+			"Release configuration requires native Release work",
+		)
 	}
 	sources, err := runtimeconfiguration.New(ledger.store)
 	if err != nil {
 		return runtimeconfiguration.WorkCapture{}, err
 	}
-	return sources.CaptureWork(ctx, work.Task.Task, work.Item.Item, work.ReadRevision, configurationID, generation, changes)
+	return sources.CaptureWork(
+		ctx,
+		work.Task.Task,
+		work.Item.Item,
+		work.ReadRevision,
+		configurationID,
+		generation,
+		changes,
+	)
 }
 
 // ReleaseWorkConfigurationConditions joins source and predecessor compares to

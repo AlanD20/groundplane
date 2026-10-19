@@ -45,7 +45,10 @@ func (capture GroupReleaseCapture) Validate() (workexecution.Task, error) {
 		return workexecution.Task{}, err
 	}
 	if len(capture.Members) != len(capture.Root.Members) || len(capture.Preflight) != len(capture.Root.Preflight) {
-		return workexecution.Task{}, errs.New(errs.KindValidationFailed, "Group admission has incomplete captured members or preflight")
+		return workexecution.Task{}, errs.New(
+			errs.KindValidationFailed,
+			"Group admission has incomplete captured members or preflight",
+		)
 	}
 	byID := make(map[string]workexecution.Item, len(capture.Root.Graph))
 	for _, item := range capture.Root.Graph {
@@ -62,19 +65,29 @@ func (capture GroupReleaseCapture) Validate() (workexecution.Task, error) {
 			member.Preparation.Intent.GroupOperationID != capture.Root.Policy.Manifest.OperationID ||
 			member.Preparation.Intent.GroupMemberOrdinal != binding.Member.Ordinal ||
 			member.Preparation.Intent.ID != binding.Member.ReleaseID || member.Preparation.Source.ReadRevision != capture.Root.SourceReadRevision {
-			return workexecution.Task{}, errs.New(errs.KindStateConflict, "Group admission member differs from its accepted root reference")
+			return workexecution.Task{}, errs.New(
+				errs.KindStateConflict,
+				"Group admission member differs from its accepted root reference",
+			)
 		}
 		if err := member.Preparation.Matches(task, byID[binding.ForwardID], member.Rollout); err != nil {
 			return workexecution.Task{}, err
 		}
-		phases, err := releaserender.OrderedReleaseHooks(member.Preparation.Intent.OperationKind, binding.Member.ServiceID, member.Rollout.Render.Hooks)
+		phases, err := releaserender.OrderedReleaseHooks(
+			member.Preparation.Intent.OperationKind,
+			binding.Member.ServiceID,
+			member.Rollout.Render.Hooks,
+		)
 		if err != nil {
 			return workexecution.Task{}, err
 		}
 		hasBefore := len(phases.Before) != 0
 		phases.Clear()
 		if hasBefore {
-			return workexecution.Task{}, errs.New(errs.KindStateConflict, "Group member repeats a hook owned by shared preflight")
+			return workexecution.Task{}, errs.New(
+				errs.KindStateConflict,
+				"Group member repeats a hook owned by shared preflight",
+			)
 		}
 	}
 	for index, preflight := range capture.Preflight {
@@ -88,7 +101,10 @@ func (capture GroupReleaseCapture) Validate() (workexecution.Task, error) {
 			execution.StartAuthorized || execution.AttemptID != "" || execution.Executor != nil || execution.SourceMembershipCount != 0 ||
 			preflight.Sources.Script.Record.Desired.ID != hook.ScriptID || preflight.Sources.Service.Record.Desired.ID != hook.ServiceID ||
 			preflight.Sources.Environment.Record.ID != task.Scope.EnvironmentID {
-			return workexecution.Task{}, errs.New(errs.KindStateConflict, "Group preflight differs from its captured Script sources")
+			return workexecution.Task{}, errs.New(
+				errs.KindStateConflict,
+				"Group preflight differs from its captured Script sources",
+			)
 		}
 	}
 	return task, nil

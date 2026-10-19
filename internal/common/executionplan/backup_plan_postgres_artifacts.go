@@ -12,8 +12,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func markBackupPostgresArtifacts(environmentID string, scope *agentpb.BackupPlanScope, step *agentpb.BackupStepAuthority,
-	artifacts map[string]*agentpb.ComposeArtifact, used map[string]bool,
+func markBackupPostgresArtifacts(
+	environmentID string,
+	scope *agentpb.BackupPlanScope,
+	step *agentpb.BackupStepAuthority,
+	artifacts map[string]*agentpb.ComposeArtifact,
+	used map[string]bool,
 ) error {
 	databaseID := step.GetCapture().GetPostgres().GetDatabaseServiceId()
 	catalog := step.GetCapture().GetPostgres().GetManagedReleaseIndex()
@@ -52,8 +56,13 @@ func markBackupMySQLArtifacts(environmentID string, scope *agentpb.BackupPlanSco
 		})
 }
 
-func markBackupDatabaseArtifacts(environmentID string, scope *agentpb.BackupPlanScope, step *agentpb.BackupStepAuthority,
-	artifacts map[string]*agentpb.ComposeArtifact, used map[string]bool, databaseID string,
+func markBackupDatabaseArtifacts(
+	environmentID string,
+	scope *agentpb.BackupPlanScope,
+	step *agentpb.BackupStepAuthority,
+	artifacts map[string]*agentpb.ComposeArtifact,
+	used map[string]bool,
+	databaseID string,
 	databaseImage func(*agentpb.ComposeService, *agentpb.BackupServiceFact) bool,
 ) error {
 	serviceIDs := append([]string{databaseID}, step.ConsumerServiceIds...)

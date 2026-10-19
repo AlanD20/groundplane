@@ -10,7 +10,10 @@ import (
 // AuthorizeServiceRemovalConfiguration rechecks the complete read authority at
 // one fresh linearizable revision before private bytes leave the Controller.
 // It does not create a new effect grant or rewrite a checkpoint to acknowledge IO.
-func (repository *ServiceRepository) AuthorizeServiceRemovalConfiguration(ctx context.Context, conditions []keyvalue.Condition) error {
+func (repository *ServiceRepository) AuthorizeServiceRemovalConfiguration(
+	ctx context.Context,
+	conditions []keyvalue.Condition,
+) error {
 	if len(conditions) == 0 || len(conditions) > 64 {
 		return errs.New(errs.KindValidationFailed, "Removal file delivery authority is incomplete")
 	}

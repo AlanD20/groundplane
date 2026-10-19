@@ -26,7 +26,11 @@ func ValidateVolumeRestoreExecutionPlan(record BackupRestoreRecord, plan *agentp
 	return validateVolumeRestoreInput(record, validated.BackupScope, validated.Steps[0].GetBackupStep())
 }
 
-func validateVolumeRestoreInput(record BackupRestoreRecord, scope *agentpb.BackupPlanScope, step *agentpb.BackupStepAuthority) error {
+func validateVolumeRestoreInput(
+	record BackupRestoreRecord,
+	scope *agentpb.BackupPlanScope,
+	step *agentpb.BackupStepAuthority,
+) error {
 	target := record.CurrentTarget.Volume
 	restore := step.GetRestore()
 	volume := restore.GetVolume()

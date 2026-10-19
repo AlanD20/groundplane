@@ -18,18 +18,31 @@ type ComponentDefinitionWork struct {
 	queue   *workqueue.Repository
 }
 
-func NewComponentDefinitionWork(service *Service, ledger *blueprintunits.Repository, queue *workqueue.Repository) (*ComponentDefinitionWork, error) {
+func NewComponentDefinitionWork(
+	service *Service,
+	ledger *blueprintunits.Repository,
+	queue *workqueue.Repository,
+) (*ComponentDefinitionWork, error) {
 	if service == nil || ledger == nil || queue == nil {
 		return nil, errs.New(errs.KindInternal, "Component definition work requires Blueprint and execution storage")
 	}
 	return &ComponentDefinitionWork{service: service, ledger: ledger, queue: queue}, nil
 }
 
-func (owner *ComponentDefinitionWork) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *ComponentDefinitionWork) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	task, item := request.Task.Task, request.Item.Item
 	view := workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}
-	if !request.DecisionOnly || item.Operation != workexecution.Component || item.Placement.Executor != workexecution.Controller || item.AttemptNumber != 0 {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Component metadata requires unstarted Controller decision work")
+	if !request.DecisionOnly || item.Operation != workexecution.Component ||
+		item.Placement.Executor != workexecution.Controller ||
+		item.AttemptNumber != 0 {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Component metadata requires unstarted Controller decision work",
+		)
 	}
 	if !at.Before(item.Deadline) || !at.Before(task.Deadline) {
 		change, err := blueprintunits.PrepareComponentDefinitionStop(view, workexecution.Failed, at)
@@ -48,8 +61,12 @@ func (owner *ComponentDefinitionWork) Admit(ctx context.Context, request workque
 		if captured.ID != item.ID {
 			continue
 		}
-		if captured.Operation != item.Operation || captured.TargetID != item.TargetID || captured.Placement != item.Placement {
-			return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Component work differs from its captured graph")
+		if captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
+			captured.Placement != item.Placement {
+			return workdispatch.Decision{}, errs.New(
+				errs.KindStateConflict,
+				"Component work differs from its captured graph",
+			)
 		}
 		unit = &graph.Record.Units[index]
 		expected, err := blueprintunits.ComponentDefinitionInput(task, *unit)
@@ -57,7 +74,10 @@ func (owner *ComponentDefinitionWork) Admit(ctx context.Context, request workque
 			return workdispatch.Decision{}, err
 		}
 		if item.Input == nil || captured.Input == nil || *item.Input != expected || *captured.Input != expected {
-			return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Component metadata input differs from accepted intent")
+			return workdispatch.Decision{}, errs.New(
+				errs.KindStateConflict,
+				"Component metadata input differs from accepted intent",
+			)
 		}
 		break
 	}
@@ -80,7 +100,10 @@ func (owner *ComponentDefinitionWork) Admit(ctx context.Context, request workque
 			return workdispatch.Decision{}, err
 		}
 		if work.Item.Item.TargetID != captured.TargetID || work.Item.Item.Placement != captured.Placement {
-			return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Proxy Service work differs from the captured graph")
+			return workdispatch.Decision{}, errs.New(
+				errs.KindStateConflict,
+				"Proxy Service work differs from the captured graph",
+			)
 		}
 		services = append(services, work)
 	}
@@ -89,7 +112,10 @@ func (owner *ComponentDefinitionWork) Admit(ctx context.Context, request workque
 		return workdispatch.Decision{}, err
 	}
 	if prepared == nil {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Component no longer has the captured disabled-runtime proof")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Component no longer has the captured disabled-runtime proof",
+		)
 	}
 	defer keyvalue.ClearMutationValues(prepared.Sources.Mutations)
 	change, err := owner.service.repository.PrepareBlueprintDisabledComponent(ctx, view, *unit,
@@ -98,12 +124,20 @@ func (owner *ComponentDefinitionWork) Admit(ctx context.Context, request workque
 		return workdispatch.Decision{}, err
 	}
 	change.Conditions = append(change.Conditions, keyvalue.Condition{
-		Key: blueprintunits.CapturedGraphKey(graph.Record.EnvironmentID, graph.Record.TaskID), ModRevision: graph.Revision,
+		Key: blueprintunits.CapturedGraphKey(
+			graph.Record.EnvironmentID,
+			graph.Record.TaskID,
+		), ModRevision: graph.Revision,
 	})
 	return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, nil
 }
 
-func (owner *ComponentDefinitionWork) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *ComponentDefinitionWork) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	view, err := owner.queue.ReadWork(ctx, task.Task.ID, item.Item.ID, 0)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -116,12 +150,20 @@ func (owner *ComponentDefinitionWork) Stop(ctx context.Context, task workqueue.T
 		return workqueue.Change{}, err
 	}
 	if !done {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Component stop is releasing unpublished proxy inputs")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Component stop is releasing unpublished proxy inputs",
+		)
 	}
 	return blueprintunits.PrepareComponentDefinitionStop(view, task.Task.Stop.Outcome, at)
 }
 
-func (owner *ComponentDefinitionWork) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (owner *ComponentDefinitionWork) RetireWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	if !final {
 		return false, workqueue.Change{}, errs.New(errs.KindInternal, "Component metadata cannot have attempts")
 	}
@@ -136,6 +178,9 @@ func (owner *ComponentDefinitionWork) RetireWork(ctx context.Context, view workq
 	return true, change, nil
 }
 
-func (owner *ComponentDefinitionWork) PrepareAttemptRetirement(workqueue.View, workqueue.AttemptSnapshot) (workqueue.Change, error) {
+func (owner *ComponentDefinitionWork) PrepareAttemptRetirement(
+	workqueue.View,
+	workqueue.AttemptSnapshot,
+) (workqueue.Change, error) {
 	return workqueue.Change{}, errs.New(errs.KindInternal, "Component metadata cannot have attempts")
 }

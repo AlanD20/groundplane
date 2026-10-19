@@ -22,8 +22,13 @@ const MaximumInputBytes = 8192
 func ValidateInput(input *agentpb.EnvironmentProvisionInput) error {
 	if input == nil || proto.Size(input) > MaximumInputBytes || executionplan.RejectUnknown(input) != nil ||
 		ids.Validate(ids.KindTask, input.TaskId) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemId) != nil ||
-		ids.Validate(ids.KindHost, input.HostId) != nil || input.CreatedAt == nil || input.CreatedAt.CheckValid() != nil ||
-		input.CreatedAt.AsTime().IsZero() || input.EnvironmentName == "" || len(input.EnvironmentName) > 256 || !utf8.ValidString(input.EnvironmentName) {
+		ids.Validate(
+			ids.KindHost,
+			input.HostId,
+		) != nil || input.CreatedAt == nil || input.CreatedAt.CheckValid() != nil ||
+		input.CreatedAt.AsTime().
+			IsZero() ||
+		input.EnvironmentName == "" || len(input.EnvironmentName) > 256 || !utf8.ValidString(input.EnvironmentName) {
 		return invalid("environment provisioning input is invalid")
 	}
 	scope, err := environmentpath.Parse(input.VolumeRoot, input.VolumeDirectory)
@@ -64,7 +69,8 @@ type Input struct {
 }
 
 func (input Input) Validate() error {
-	if input.Attempt.Validate() != nil || input.Attempt.Executor.Executor != workexecution.Agent || input.Attempt.FinishedAt != nil {
+	if input.Attempt.Validate() != nil || input.Attempt.Executor.Executor != workexecution.Agent ||
+		input.Attempt.FinishedAt != nil {
 		return invalid("environment provisioning requires an active Agent attempt")
 	}
 	reference, err := Reference(input.Attempt.Input.ID, input.Creation)

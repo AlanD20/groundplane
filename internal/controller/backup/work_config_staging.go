@@ -22,8 +22,11 @@ func (owner *AgentWork) configCapturePrefix(ctx context.Context, identity workex
 	capture, retained := step.GetCapture(), source.Sources[source.Ordinal].GetCapture()
 	config := capture.GetConfig()
 	row := run.Sources[source.Ordinal]
-	if config == nil || config.Content == nil || row.Snapshot.Config == nil || retained == nil || retained.PreparedArtifact != nil ||
-		entry.DatabaseExecution || len(entry.Files) < 1 || len(entry.Files) > 2 ||
+	if config == nil || config.Content == nil || row.Snapshot.Config == nil || retained == nil ||
+		retained.PreparedArtifact != nil ||
+		entry.DatabaseExecution ||
+		len(entry.Files) < 1 ||
+		len(entry.Files) > 2 ||
 		entry.Files[0].Role != agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_SOURCE_PLAINTEXT ||
 		entry.Files[0].SizeBytes > config.Content.SourceSizeBytes {
 		return nil, nil, invalidCaptureStaging()
@@ -43,8 +46,11 @@ func (owner *AgentWork) configCapturePrefix(ctx context.Context, identity workex
 	if err != nil {
 		return nil, nil, err
 	}
-	expected := &agentpb.BackupRecoveredFile{Role: agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_SOURCE_PLAINTEXT,
-		SizeBytes: evidence.SizeBytes, Sha256: append([]byte(nil), evidence.SHA256[:]...)}
+	expected := &agentpb.BackupRecoveredFile{
+		Role:      agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_SOURCE_PLAINTEXT,
+		SizeBytes: evidence.SizeBytes,
+		Sha256:    append([]byte(nil), evidence.SHA256[:]...),
+	}
 	if !proto.Equal(expected, entry.Files[0]) {
 		return nil, nil, invalidCaptureStaging()
 	}

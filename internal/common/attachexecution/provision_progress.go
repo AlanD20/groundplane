@@ -41,7 +41,9 @@ func SameProvisionCommandResult(left, right ProvisionCommandResult) bool {
 	}
 	if left.Consumer != nil {
 		a, b := left.Consumer, right.Consumer
-		if a.NetworkID != b.NetworkID || a.ServiceID != b.ServiceID || a.CandidateSHA256 != b.CandidateSHA256 || a.Connected != b.Connected || !a.ObservedAt.Equal(b.ObservedAt) {
+		if a.NetworkID != b.NetworkID || a.ServiceID != b.ServiceID || a.CandidateSHA256 != b.CandidateSHA256 ||
+			a.Connected != b.Connected ||
+			!a.ObservedAt.Equal(b.ObservedAt) {
 			return false
 		}
 	}
@@ -49,7 +51,11 @@ func SameProvisionCommandResult(left, right ProvisionCommandResult) bool {
 		left.StartedAt.Equal(right.StartedAt) && left.FinishedAt.Equal(right.FinishedAt)
 }
 
-func NewProvisionProgress(attempt workexecution.Attempt, authority ProvisionAuthority, at time.Time) (ProvisionProgress, error) {
+func NewProvisionProgress(
+	attempt workexecution.Attempt,
+	authority ProvisionAuthority,
+	at time.Time,
+) (ProvisionProgress, error) {
 	progress := ProvisionProgress{AttemptID: attempt.ID, UpdatedAt: at.UTC()}
 	if !at.Before(attempt.Deadline) {
 		return ProvisionProgress{}, invalid("Attach provisioning started after its deadline")
@@ -60,7 +66,8 @@ func NewProvisionProgress(attempt workexecution.Attempt, authority ProvisionAuth
 func (progress ProvisionProgress) Validate(attempt workexecution.Attempt, authority ProvisionAuthority) error {
 	if authority.Validate(attempt) != nil || attempt.StartedAt == nil || progress.AttemptID != attempt.ID ||
 		progress.Completed > authority.Commands || progress.Sequence != uint64(progress.Completed)*2+boolSequence(progress.InFlight) ||
-		progress.InFlight && progress.Completed == authority.Commands || progress.InFlight != (progress.BeganAt != nil) ||
+		progress.InFlight &&
+			progress.Completed == authority.Commands || progress.InFlight != (progress.BeganAt != nil) ||
 		progress.UpdatedAt.IsZero() || progress.UpdatedAt.Before(*attempt.StartedAt) ||
 		(progress.LastResult != nil) != (progress.Completed > 0) {
 		return invalid("Attach provisioning progress has inconsistent command boundaries")
@@ -74,13 +81,22 @@ func (progress ProvisionProgress) Validate(attempt workexecution.Attempt, author
 			return invalid("Attach result has mismatched connection evidence")
 		}
 		if consumer := result.Consumer; consumer != nil {
-			if !consumer.Connected || consumer.NetworkID != authority.ConsumerNetworkID || consumer.ServiceID != authority.ConsumerServiceID || consumer.CandidateSHA256 != authority.ConsumerCandidateSHA256 || consumer.ObservedAt.IsZero() || consumer.ObservedAt.Location() != time.UTC || consumer.ObservedAt.Before(result.StartedAt) || consumer.ObservedAt.After(result.FinishedAt) {
+			if !consumer.Connected || consumer.NetworkID != authority.ConsumerNetworkID ||
+				consumer.ServiceID != authority.ConsumerServiceID ||
+				consumer.CandidateSHA256 != authority.ConsumerCandidateSHA256 ||
+				consumer.ObservedAt.IsZero() ||
+				consumer.ObservedAt.Location() != time.UTC ||
+				consumer.ObservedAt.Before(result.StartedAt) ||
+				consumer.ObservedAt.After(result.FinishedAt) {
 				return invalid("Attach result does not prove the captured consumer connection")
 			}
 		}
-		if result.Ordinal+1 != progress.Completed || result.ExitCode != 0 || result.StartedAt.Before(*attempt.StartedAt) ||
-			!result.StartedAt.Before(attempt.Deadline) || result.FinishedAt.Before(result.StartedAt) ||
-			result.FinishedAt.After(progress.UpdatedAt) || progress.BeganAt != nil && result.FinishedAt.After(*progress.BeganAt) {
+		if result.Ordinal+1 != progress.Completed || result.ExitCode != 0 ||
+			result.StartedAt.Before(*attempt.StartedAt) ||
+			!result.StartedAt.Before(attempt.Deadline) ||
+			result.FinishedAt.Before(result.StartedAt) ||
+			result.FinishedAt.After(progress.UpdatedAt) ||
+			progress.BeganAt != nil && result.FinishedAt.After(*progress.BeganAt) {
 			return invalid("Attach provisioning progress lacks a successful command result")
 		}
 	}
@@ -88,13 +104,18 @@ func (progress ProvisionProgress) Validate(attempt workexecution.Attempt, author
 }
 
 func (progress ProvisionProgress) Complete(attempt workexecution.Attempt, authority ProvisionAuthority) bool {
-	return progress.Validate(attempt, authority) == nil && !progress.InFlight && progress.Completed == authority.Commands
+	return progress.Validate(attempt, authority) == nil && !progress.InFlight &&
+		progress.Completed == authority.Commands
 }
 
 // Begin refuses an in-flight command, including after reconnect. An uncertain
 // external effect requires operation-owned inspection or explicit safe Retry;
 // receiving the same assignment is not permission to execute it again.
-func (progress ProvisionProgress) Begin(attempt workexecution.Attempt, authority ProvisionAuthority, at time.Time) (ProvisionProgress, error) {
+func (progress ProvisionProgress) Begin(
+	attempt workexecution.Attempt,
+	authority ProvisionAuthority,
+	at time.Time,
+) (ProvisionProgress, error) {
 	if progress.Validate(attempt, authority) != nil || progress.InFlight || progress.Complete(attempt, authority) ||
 		at.Before(progress.UpdatedAt) || !at.Before(attempt.Deadline) {
 		return ProvisionProgress{}, invalid("Attach provisioning cannot begin another command")

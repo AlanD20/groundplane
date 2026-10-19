@@ -32,7 +32,13 @@ func (observer *workObserver) start(ctx context.Context, key string) (workexecut
 		return workexecution.Stage{}, err
 	}
 	at := time.Now().UTC()
-	stage := workexecution.Stage{Key: key, Name: name, Expected: expected, State: workexecution.StageRunning, StartedAt: &at}
+	stage := workexecution.Stage{
+		Key:       key,
+		Name:      name,
+		Expected:  expected,
+		State:     workexecution.StageRunning,
+		StartedAt: &at,
+	}
 	observer.record(ctx, stage)
 	return stage, nil
 }
@@ -69,17 +75,42 @@ func (observer *workObserver) record(ctx context.Context, stage workexecution.St
 	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	attempt := observer.attempt
-	err := observer.repository.Report(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor, observer.sequence+1, stage, time.Now().UTC())
+	err := observer.repository.Report(
+		bounded,
+		attempt.TaskID,
+		attempt.WorkItemID,
+		attempt.ID,
+		attempt.Executor,
+		observer.sequence+1,
+		stage,
+		time.Now().UTC(),
+	)
 	if err == nil {
 		observer.sequence++
 		return
 	}
 	observer.lost = true
-	slog.WarnContext(ctx, "Controller activation diagnostics incomplete", "task_id", attempt.TaskID, "attempt_id", attempt.ID, "error", err)
+	slog.WarnContext(
+		ctx,
+		"Controller activation diagnostics incomplete",
+		"task_id",
+		attempt.TaskID,
+		"attempt_id",
+		attempt.ID,
+		"error",
+		err,
+	)
 	loss, finish := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer finish()
 	if err := observer.repository.MarkIncomplete(loss, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor); err != nil {
-		slog.WarnContext(ctx, "unable to record Controller activation diagnostic loss", "attempt_id", attempt.ID, "error", err)
+		slog.WarnContext(
+			ctx,
+			"unable to record Controller activation diagnostic loss",
+			"attempt_id",
+			attempt.ID,
+			"error",
+			err,
+		)
 	}
 }
 
@@ -137,7 +168,14 @@ func (owner *Work) publishObservations(ctx context.Context, attempt workexecutio
 	defer cancel()
 	snapshot, err := owner.diagnostics.Read(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, 0)
 	if err != nil {
-		slog.WarnContext(ctx, "unable to read Controller reconciliation diagnostics", "attempt_id", attempt.ID, "error", err)
+		slog.WarnContext(
+			ctx,
+			"unable to read Controller reconciliation diagnostics",
+			"attempt_id",
+			attempt.ID,
+			"error",
+			err,
+		)
 		return
 	}
 	sequence := uint64(0)
@@ -146,7 +184,14 @@ func (owner *Work) publishObservations(ctx context.Context, attempt workexecutio
 	}
 	for _, stage := range stages {
 		if err := owner.diagnostics.ReportResult(bounded, attempt, sequence+1, stage); err != nil {
-			slog.WarnContext(ctx, "unable to publish Controller reconciliation diagnostics", "attempt_id", attempt.ID, "error", err)
+			slog.WarnContext(
+				ctx,
+				"unable to publish Controller reconciliation diagnostics",
+				"attempt_id",
+				attempt.ID,
+				"error",
+				err,
+			)
 			return
 		}
 		sequence++

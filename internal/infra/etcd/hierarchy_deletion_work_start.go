@@ -14,22 +14,33 @@ import (
 // PrepareHierarchyAgentStart supplies removal-specific authority to the shared
 // Start transaction. The shared owner adds authenticated process generation,
 // attempt, claims and deadline comparisons; these guards cannot grant Start alone.
-func (repository *HierarchyDeletionRepository) PrepareHierarchyAgentStart(ctx context.Context, view workqueue.ResumeView) (workqueue.Change, error) {
+func (repository *HierarchyDeletionRepository) PrepareHierarchyAgentStart(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (workqueue.Change, error) {
 	item, task, attempt := view.Work.Item.Item, view.Work.Task.Task, view.Attempt.Attempt
 	if !view.CurrentExecutor || !view.ActiveAttempt || task.Action != workexecution.ActionRemove ||
 		item.Operation != workexecution.Hierarchy || item.Placement.Executor != workexecution.Agent ||
-		attempt.Direction == workexecution.Forward && (task.Stop != nil || item.ForwardRevoked) || attempt.StartedAt != nil ||
+		attempt.Direction == workexecution.Forward &&
+			(task.Stop != nil || item.ForwardRevoked) || attempt.StartedAt != nil ||
 		attempt.Executor.HostID != item.Placement.HostID || workexecution.ValidateDelivery(item, attempt) != nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "removal host action no longer owns Start authority")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"removal host action no longer owns Start authority",
+		)
 	}
 	captured, err := repository.LoadHierarchyWork(ctx, view.Work)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if captured.Action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureAgent || captured.Action.AgentProcedure == nil ||
+	if captured.Action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureAgent ||
+		captured.Action.AgentProcedure == nil ||
 		captured.Operation.Fence.Dispatch != hierarchydeletion.HierarchyDeletionDispatchOpen ||
 		captured.Operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionExecuting {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "captured removal is no longer open for host execution")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"captured removal is no longer open for host execution",
+		)
 	}
 	if captured.Action.ActionKind == hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup {
 		environment, err := repository.LoadHierarchyEnvironmentInput(ctx, view.Work)

@@ -21,7 +21,9 @@ func (repository *InputRepository) PrepareInterrupted(ctx context.Context, view 
 		(item.Operation != workexecution.BackupPrune && item.Operation != workexecution.Backup && item.Operation != workexecution.Restore) ||
 		attempt.Direction != workexecution.Forward ||
 		attempt.FinishedAt != nil {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Backup interruption requires a replaced attempt")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Backup interruption requires a replaced attempt",
+		)
 	}
 	var change workqueue.Change
 	var err error
@@ -34,9 +36,17 @@ func (repository *InputRepository) PrepareInterrupted(ctx context.Context, view 
 	settled := attempt.StartedAt == nil
 	if settled {
 		if view.Checkpoint.Record != nil || view.Checkpoint.Revision != 0 {
-			return workqueue.Change{}, workexecution.Completion{}, conflict("Unstarted Backup prune has unexpected execution evidence")
+			return workqueue.Change{}, workexecution.Completion{}, conflict(
+				"Unstarted Backup prune has unexpected execution evidence",
+			)
 		}
-		change, err = repository.prepareUnexecutedResources(ctx, view.Work, outcome, executionplan.BackupExecutionInterrupted, at)
+		change, err = repository.prepareUnexecutedResources(
+			ctx,
+			view.Work,
+			outcome,
+			executionplan.BackupExecutionInterrupted,
+			at,
+		)
 	} else {
 		_, change, err = repository.PrepareAdmission(ctx, view.Work)
 	}
@@ -58,7 +68,10 @@ func (repository *InputRepository) PrepareInterrupted(ctx context.Context, view 
 		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision},
 		keyvalue.Condition{Key: workqueue.CheckpointKey(attempt.ID), ModRevision: view.Checkpoint.Revision},
 		keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: FailureKey(attempt.ID), Value: raw})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: FailureKey(attempt.ID), Value: raw},
+	)
 	result := workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: settled}
 	if !settled {
 		if err := retainFailedExecution(&change, item, attempt, result, raw, at); err != nil {

@@ -34,9 +34,13 @@ func (repository *InputRepository) prepareDirectRemovalFinalization(ctx context.
 	view workqueue.ResumeView, input *agentpb.NetworkWorkInput,
 ) (workqueue.Change, error) {
 	task, item := view.Work.Task.Task, view.Work.Item.Item
-	if task.Action != workexecution.ActionRemove || input.Action != agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE ||
-		input.RemovalSubnet == "" || item.Operation != workexecution.Network || item.TargetID != task.TargetID ||
-		input.NetworkId != task.TargetID || input.EnvironmentId != task.Scope.EnvironmentID {
+	if task.Action != workexecution.ActionRemove ||
+		input.Action != agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE ||
+		input.RemovalSubnet == "" ||
+		item.Operation != workexecution.Network ||
+		item.TargetID != task.TargetID ||
+		input.NetworkId != task.TargetID ||
+		input.EnvironmentId != task.Scope.EnvironmentID {
 		return workqueue.Change{}, conflict("direct Zone finalization requires its captured removal")
 	}
 	tombstoneKey := deletions.TombstoneKey(string(deletions.DeletionTargetZone), input.NetworkId)
@@ -57,7 +61,8 @@ func (repository *InputRepository) prepareDirectRemovalFinalization(ctx context.
 		}
 		if current := read.Values[1]; current != nil {
 			pool, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](current.Value, "zone_pool_registry")
-			if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil || pool.Reservations[input.NetworkId] != "" {
+			if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil ||
+				pool.Reservations[input.NetworkId] != "" {
 				return workqueue.Change{}, conflict("removed Zone has acquired a new subnet reservation")
 			}
 		}
@@ -89,7 +94,10 @@ func (repository *InputRepository) prepareDirectRemovalFinalization(ctx context.
 		return workqueue.Change{}, conflict("Zone removal subnet reservation changed")
 	}
 	if read.Values[2] != nil {
-		addresses, err := recordcodec.Decode[networkreservations.ComponentAddressRegistry](read.Values[2].Value, "component_address_registry")
+		addresses, err := recordcodec.Decode[networkreservations.ComponentAddressRegistry](
+			read.Values[2].Value,
+			"component_address_registry",
+		)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
@@ -135,6 +143,9 @@ func (repository *InputRepository) prepareDirectRemovalFinalization(ctx context.
 		keyvalue.ZeroMutationBytes(change.Mutations)
 		return workqueue.Change{}, err
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: poolKey, Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: poolKey, Value: value},
+	)
 	return change, nil
 }

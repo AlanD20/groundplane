@@ -39,7 +39,10 @@ func InspectNativeCommit(ctx context.Context, request *agentpb.ManagedConfigHelp
 	}
 	manifest, err := readManifest(root, tx)
 	if err != nil || !sameTransaction(manifest, owned) {
-		return false, errs.New(errs.KindStateConflict, "managed-file commit inspection has a different captured transaction")
+		return false, errs.New(
+			errs.KindStateConflict,
+			"managed-file commit inspection has a different captured transaction",
+		)
 	}
 	_, err = root.Lstat(path.Join(tx, "committed"))
 	if errors.Is(err, os.ErrNotExist) {
@@ -58,7 +61,10 @@ func InspectNativeCommit(ctx context.Context, request *agentpb.ManagedConfigHelp
 		return false, err
 	}
 	if !found || !digestEqual(live, owned.Sha256) || !targetOwnerMatches(owner, ownerFound, owned.TransactionId, true) {
-		return false, errs.New(errs.KindStateConflict, "committed managed file no longer belongs to its captured transaction")
+		return false, errs.New(
+			errs.KindStateConflict,
+			"committed managed file no longer belongs to its captured transaction",
+		)
 	}
 	return true, nil
 }

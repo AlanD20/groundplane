@@ -12,7 +12,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func checkpointRequest(assignment backingprovision.Assignment, progress backingprovision.Progress) (*agentpb.BackingProvisionCheckpointRequest, error) {
+func checkpointRequest(
+	assignment backingprovision.Assignment,
+	progress backingprovision.Progress,
+) (*agentpb.BackingProvisionCheckpointRequest, error) {
 	layout, err := backingprovision.CaptureLayout(assignment.Attempt, assignment.Procedure)
 	if err != nil {
 		return nil, err
@@ -28,14 +31,24 @@ func checkpointRequest(assignment backingprovision.Assignment, progress backingp
 	return &agentpb.BackingProvisionCheckpointRequest{Attempt: identity, Progress: raw}, nil
 }
 
-func (executor *Executor) save(ctx context.Context, assignment backingprovision.Assignment, exchange Exchange, progress backingprovision.Progress) error {
+func (executor *Executor) save(
+	ctx context.Context,
+	assignment backingprovision.Assignment,
+	exchange Exchange,
+	progress backingprovision.Progress,
+) error {
 	if _, err := executor.journal.PrepareBacking(ctx, assignment.Attempt, assignment.Procedure, progress); err != nil {
 		return err
 	}
 	return executor.acknowledge(ctx, assignment, exchange, progress)
 }
 
-func (executor *Executor) acknowledge(ctx context.Context, assignment backingprovision.Assignment, exchange Exchange, progress backingprovision.Progress) error {
+func (executor *Executor) acknowledge(
+	ctx context.Context,
+	assignment backingprovision.Assignment,
+	exchange Exchange,
+	progress backingprovision.Progress,
+) error {
 	request, err := checkpointRequest(assignment, progress)
 	if err != nil {
 		return err
@@ -47,7 +60,11 @@ func (executor *Executor) acknowledge(ctx context.Context, assignment backingpro
 	return executor.journal.AcknowledgeBacking(ctx, assignment.Attempt, assignment.Procedure, ack)
 }
 
-func (executor *Executor) complete(ctx context.Context, assignment backingprovision.Assignment, exchange Exchange) (workexecution.Attempt, error) {
+func (executor *Executor) complete(
+	ctx context.Context,
+	assignment backingprovision.Assignment,
+	exchange Exchange,
+) (workexecution.Attempt, error) {
 	saved, err := executor.journal.Backing(ctx, assignment.Attempt, assignment.Procedure)
 	if err != nil {
 		return workexecution.Attempt{}, err
@@ -84,7 +101,12 @@ func (executor *Executor) complete(ctx context.Context, assignment backingprovis
 	return executor.journal.CompleteBacking(ctx, assignment.Attempt, assignment.Procedure, ack)
 }
 
-func (executor *Executor) fail(ctx context.Context, assignment backingprovision.Assignment, exchange Exchange, cause error) (workexecution.Attempt, error) {
+func (executor *Executor) fail(
+	ctx context.Context,
+	assignment backingprovision.Assignment,
+	exchange Exchange,
+	cause error,
+) (workexecution.Attempt, error) {
 	reason := backingprovision.ExecutionFailed
 	if !time.Now().Before(assignment.Attempt.Deadline) {
 		reason = backingprovision.DeadlineExpired
@@ -93,7 +115,13 @@ func (executor *Executor) fail(ctx context.Context, assignment backingprovision.
 	}
 	delivery, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
-	failure, err := executor.journal.PrepareBackingFailure(delivery, assignment.Attempt, assignment.Procedure, reason, time.Now().UTC())
+	failure, err := executor.journal.PrepareBackingFailure(
+		delivery,
+		assignment.Attempt,
+		assignment.Procedure,
+		reason,
+		time.Now().UTC(),
+	)
 	if err != nil {
 		return workexecution.Attempt{}, errors.Join(cause, err)
 	}
@@ -114,7 +142,10 @@ func (executor *Executor) deliverFailure(ctx context.Context, assignment backing
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	ack, err := exchange.FailBackingProvision(ctx, &agentpb.BackingProvisionFailureRequest{Attempt: identity, Reason: string(failure.Reason)})
+	ack, err := exchange.FailBackingProvision(
+		ctx,
+		&agentpb.BackingProvisionFailureRequest{Attempt: identity, Reason: string(failure.Reason)},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}

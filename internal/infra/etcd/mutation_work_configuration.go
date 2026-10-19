@@ -34,7 +34,10 @@ func (repository *HierarchyRepository) PrepareMutationWorkConfiguration(ctx cont
 		claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || len(changes) == 0 ||
 		task.Stop != nil || task.FinishedAt != nil || task.PublicationComplete || item.AttemptNumber != 0 ||
 		item.ActiveAttemptID != "" || item.ForwardRevoked || item.Phase != workexecution.Waiting || item.Input != nil {
-		return MutationWorkConfiguration{}, errs.New(errs.KindValidationFailed, "Mutation configuration requires its unaccepted sealed mutation")
+		return MutationWorkConfiguration{}, errs.New(
+			errs.KindValidationFailed,
+			"Mutation configuration requires its unaccepted sealed mutation",
+		)
 	}
 	keys := []string{blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID),
 		blueprints.EnvironmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID),
@@ -44,12 +47,18 @@ func (repository *HierarchyRepository) PrepareMutationWorkConfiguration(ctx cont
 		return MutationWorkConfiguration{}, err
 	}
 	if read == nil || read.ReadRevision < readRevision || len(read.Values) != len(keys) {
-		return MutationWorkConfiguration{}, errs.New(errs.KindStateConflict, "Mutation configuration staging read is incomplete")
+		return MutationWorkConfiguration{}, errs.New(
+			errs.KindStateConflict,
+			"Mutation configuration staging read is incomplete",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision {
-			return MutationWorkConfiguration{}, errs.New(errs.KindStateConflict, "Mutation configuration staging owner is unavailable")
+			return MutationWorkConfiguration{}, errs.New(
+				errs.KindStateConflict,
+				"Mutation configuration staging owner is unavailable",
+			)
 		}
 	}
 	descriptor, err := blueprints.DecodeEnvironmentBlueprintStageDescriptor(read.Values[0].Value)
@@ -59,8 +68,13 @@ func (repository *HierarchyRepository) PrepareMutationWorkConfiguration(ctx cont
 	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(read.Values[1].Value)
 	if err != nil || descriptor.State != blueprints.EnvironmentBlueprintStageSealed ||
 		!blueprints.SameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) ||
-		seal != blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor) || read.Values[2].ModRevision != claim.BaselineHeadRevision {
-		return MutationWorkConfiguration{}, errs.New(errs.KindStateConflict, "Mutation configuration staging authority changed")
+		seal != blueprints.EnvironmentBlueprintSealFromDescriptor(
+			descriptor,
+		) || read.Values[2].ModRevision != claim.BaselineHeadRevision {
+		return MutationWorkConfiguration{}, errs.New(
+			errs.KindStateConflict,
+			"Mutation configuration staging authority changed",
+		)
 	}
 	guards := []keyvalue.Condition{{Key: workqueue.TaskKey(task.ID)}, {Key: workqueue.ItemKey(item.ID)}}
 	for index, key := range keys {
@@ -78,7 +92,11 @@ func (repository *HierarchyRepository) PrepareMutationWorkConfiguration(ctx cont
 	for index, condition := range guards {
 		pinGuards[index] = tasksecretpins.Condition{Key: condition.Key, ModRevision: condition.ModRevision}
 	}
-	view := workqueue.View{Task: workqueue.TaskSnapshot{Task: task}, Item: workqueue.ItemSnapshot{Item: item}, ReadRevision: readRevision}
+	view := workqueue.View{
+		Task:         workqueue.TaskSnapshot{Task: task},
+		Item:         workqueue.ItemSnapshot{Item: item},
+		ReadRevision: readRevision,
+	}
 	pins, err := prepareCapturedConfigurationPins(ctx, repository.store, view, operationID, capture, pinGuards)
 	if err != nil {
 		return MutationWorkConfiguration{}, err
@@ -92,7 +110,8 @@ func mutationConfigurationTarget(task workexecution.Task, item workexecution.Ite
 		return item.TargetID == environmentID
 	case workexecution.Component:
 		if ids.Validate(ids.KindRoute, task.TargetID) != nil || ids.Validate(ids.KindComponent, item.TargetID) != nil ||
-			task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove {
+			task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate &&
+				task.Action != workexecution.ActionRemove {
 			return false
 		}
 		for _, claim := range item.Claims {

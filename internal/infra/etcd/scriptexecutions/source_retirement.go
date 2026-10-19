@@ -26,9 +26,12 @@ func SourceRetirementPrefix(taskID string) string {
 }
 
 func (receipt SourceRetirement) Validate() error {
-	if ids.Validate(ids.KindTask, receipt.TaskID) != nil || ids.Validate(ids.KindOperation, receipt.OperationID) != nil ||
-		receipt.MembershipCount == 0 || !ValidLowerSHA256(receipt.MembershipSHA256) ||
-		receipt.RetiredAt.IsZero() || receipt.RetiredAt.Location() != time.UTC {
+	if ids.Validate(ids.KindTask, receipt.TaskID) != nil ||
+		ids.Validate(ids.KindOperation, receipt.OperationID) != nil ||
+		receipt.MembershipCount == 0 ||
+		!ValidLowerSHA256(receipt.MembershipSHA256) ||
+		receipt.RetiredAt.IsZero() ||
+		receipt.RetiredAt.Location() != time.UTC {
 		return errs.New(errs.KindValidationFailed, "Script source retirement receipt is invalid")
 	}
 	return nil

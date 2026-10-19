@@ -22,9 +22,16 @@ import (
 
 const taskEventReconnectDelay = time.Second
 
-func (c *Client) RetryTask(ctx context.Context, id string, input apiTypes.TaskRetryRequest) (apiTypes.TaskAccepted, error) {
+func (c *Client) RetryTask(
+	ctx context.Context,
+	id string,
+	input apiTypes.TaskRetryRequest,
+) (apiTypes.TaskAccepted, error) {
 	if ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil {
-		return apiTypes.TaskAccepted{}, errs.New(errs.KindValidationFailed, "Retry requires a work item and attempt number")
+		return apiTypes.TaskAccepted{}, errs.New(
+			errs.KindValidationFailed,
+			"Retry requires a work item and attempt number",
+		)
 	}
 	if input.Attempt == 0 && input.QueuedFailureAt == nil {
 		captured, err := c.captureQueuedTaskRetry(ctx, id, input.WorkItemID)
@@ -285,7 +292,10 @@ func decodeTaskEventFrame(path string, frameID string, data string) (uint64, api
 		return 0, apiTypes.TaskEvent{}, err
 	}
 	if event.Sequence != sequence || event.AttemptSequence == 0 || event.RecordedAt.IsZero() ||
-		ids.Validate(ids.KindWorkItem, event.WorkItemID) != nil || ids.Validate(ids.KindAttempt, event.AttemptID) != nil ||
+		ids.Validate(
+			ids.KindWorkItem,
+			event.WorkItemID,
+		) != nil || ids.Validate(ids.KindAttempt, event.AttemptID) != nil ||
 		event.Stage.Validate() != nil {
 		return 0, apiTypes.TaskEvent{}, errs.New(errs.KindInternal, "apiclient: Task event data is invalid")
 	}

@@ -15,12 +15,22 @@ func (repository *IdempotencyRepository) ApplyExecutionRetry(ctx context.Context
 	change workqueue.Change, marker idempotency.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if marker.Kind != idempotency.IdempotencyMarkerDirect || marker.State != idempotency.IdempotencyMarkerCompleted {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "execution retry requires a completed request receipt")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"execution retry requires a completed request receipt",
+		)
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerDirect, change.Conditions, change.Mutations,
+	plan, err := newIdempotencyMutationPlanForMarker(
+		idempotency.IdempotencyMarkerDirect,
+		change.Conditions,
+		change.Mutations,
 		func(_ int64, _ []*keyvalue.KeyValue) error {
-			return errs.New(errs.KindStateConflict, "The selected execution changed before Retry was accepted; refresh its attempt")
-		})
+			return errs.New(
+				errs.KindStateConflict,
+				"The selected execution changed before Retry was accepted; refresh its attempt",
+			)
+		},
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

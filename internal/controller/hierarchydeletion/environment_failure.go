@@ -20,7 +20,8 @@ import (
 func (service *Reports) FailEnvironmentRemoval(ctx context.Context, authorization agentregistration.WorkAuthorization,
 	request *agentpb.EnvironmentRemovalFailureRequest,
 ) (*agentpb.EnvironmentRemovalFailureAck, error) {
-	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || !hierarchyexecution.FailureReason(request.Reason).Valid() {
+	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil ||
+		!hierarchyexecution.FailureReason(request.Reason).Valid() {
 		return nil, errs.New(errs.KindValidationFailed, "Environment removal failure request is invalid")
 	}
 	guards, err := authorization.Conditions()
@@ -35,7 +36,8 @@ func (service *Reports) FailEnvironmentRemoval(ctx context.Context, authorizatio
 	if err != nil {
 		return nil, err
 	}
-	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || view.Work.Item.Item.Operation != workexecution.Hierarchy {
+	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
+		view.Work.Item.Item.Operation != workexecution.Hierarchy {
 		return nil, errs.New(errs.KindStateConflict, "Environment removal failure belongs to another assignment")
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
@@ -49,7 +51,13 @@ func (service *Reports) FailEnvironmentRemoval(ctx context.Context, authorizatio
 		}
 		input.Attempt = view.Attempt.Attempt
 		at := time.Now().UTC()
-		proof, result, err := service.owner.records.PrepareHierarchyEnvironmentFailure(ctx, view, input, hierarchyexecution.FailureReason(request.Reason), at)
+		proof, result, err := service.owner.records.PrepareHierarchyEnvironmentFailure(
+			ctx,
+			view,
+			input,
+			hierarchyexecution.FailureReason(request.Reason),
+			at,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -70,7 +78,10 @@ func (service *Reports) FailEnvironmentRemoval(ctx context.Context, authorizatio
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Environment removal failure ownership changed; resend the saved failure")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Environment removal failure ownership changed; resend the saved failure",
+			)
 		}
 		view, err = authorization.ReadResult(ctx, service.queue, claimed.TaskID, claimed.WorkItemID, claimed.ID)
 		if err != nil {
@@ -94,7 +105,10 @@ func (service *Reports) FailEnvironmentRemoval(ctx context.Context, authorizatio
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	ack := &agentpb.EnvironmentRemovalFailureAck{Attempt: proto.CloneOf(request.Attempt), Failure: raw,
-		Evidence: &agentpb.WorkInputReference{InputId: terminal.Result.ID, Sha256: digest}, Outcome: string(terminal.Outcome), FinishedAt: timestamppb.New(*terminal.FinishedAt)}
+		Evidence: &agentpb.WorkInputReference{
+			InputId: terminal.Result.ID,
+			Sha256:  digest,
+		}, Outcome: string(terminal.Outcome), FinishedAt: timestamppb.New(*terminal.FinishedAt)}
 	if terminal.StartedAt != nil {
 		ack.StartedAt = timestamppb.New(*terminal.StartedAt)
 	}

@@ -24,7 +24,10 @@ func (repository *TaskRepository) CreateImageOperation(ctx context.Context,
 			if len(values) != len(change.Conditions) {
 				return errs.New(errs.KindInternal, "image operation publication evidence is incomplete")
 			}
-			return errs.New(errs.KindStateConflict, "Image operation or an unfinished tag write changed before acceptance; refresh its Task before retrying")
+			return errs.New(
+				errs.KindStateConflict,
+				"Image operation or an unfinished tag write changed before acceptance; refresh its Task before retrying",
+			)
 		})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

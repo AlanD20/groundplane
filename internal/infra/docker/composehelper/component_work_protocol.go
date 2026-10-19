@@ -37,7 +37,11 @@ func ReadComponentWorkRequest(ctx context.Context, input io.Reader) (*agentpb.Co
 	return request, nil
 }
 
-func ReadComponentWorkResponse(ctx context.Context, input io.Reader, captured componentexecution.HelperInput) (*agentpb.ComponentWorkHelperResponse, error) {
+func ReadComponentWorkResponse(
+	ctx context.Context,
+	input io.Reader,
+	captured componentexecution.HelperInput,
+) (*agentpb.ComponentWorkHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
@@ -56,7 +60,12 @@ func ReadComponentWorkResponse(ctx context.Context, input io.Reader, captured co
 	return response, nil
 }
 
-func WriteComponentWorkResponse(ctx context.Context, output io.Writer, captured componentexecution.HelperInput, response *agentpb.ComponentWorkHelperResponse) error {
+func WriteComponentWorkResponse(
+	ctx context.Context,
+	output io.Writer,
+	captured componentexecution.HelperInput,
+	response *agentpb.ComponentWorkHelperResponse,
+) error {
 	if err := validateComponentHelperResponse(captured, response); err != nil {
 		return err
 	}
@@ -87,7 +96,10 @@ func WriteComponentWorkResponse(ctx context.Context, output io.Writer, captured 
 	return nil
 }
 
-func validateComponentHelperResponse(captured componentexecution.HelperInput, response *agentpb.ComponentWorkHelperResponse) error {
+func validateComponentHelperResponse(
+	captured componentexecution.HelperInput,
+	response *agentpb.ComponentWorkHelperResponse,
+) error {
 	if captured.Recovery != nil {
 		_, err := componentexecution.ReadHelperRecovery(captured, response)
 		return err

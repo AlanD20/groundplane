@@ -74,7 +74,10 @@ func (runtime *Runtime) ReconcileStartup(ctx context.Context, ownership *control
 	if err := ownership.Check(); err != nil {
 		return retained, err
 	}
-	current, err := runtime.queue.ReadExecutor(ctx, workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID})
+	current, err := runtime.queue.ReadExecutor(
+		ctx,
+		workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID},
+	)
 	if err != nil {
 		return retained, err
 	}

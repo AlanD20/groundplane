@@ -46,7 +46,10 @@ func (journal *Journal) PrepareEnvironmentFailure(ctx context.Context, attempt w
 	return *state.EnvironmentFailure, nil
 }
 
-func (journal *Journal) LoadEnvironmentFailure(ctx context.Context, attempt workexecution.Attempt) (*EnvironmentFailureDelivery, error) {
+func (journal *Journal) LoadEnvironmentFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+) (*EnvironmentFailureDelivery, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return nil, err
@@ -77,7 +80,11 @@ func (journal *Journal) AcknowledgeEnvironmentFailure(ctx context.Context, attem
 	if state == nil || state.EnvironmentFailure == nil || !workexecution.SameAssignment(state.Attempt, attempt) {
 		return workexecution.Attempt{}, conflict()
 	}
-	terminal, _, err := hierarchyexecution.DecodeEnvironmentFailureAck(state.Attempt, state.EnvironmentFailure.Reason, ack)
+	terminal, _, err := hierarchyexecution.DecodeEnvironmentFailureAck(
+		state.Attempt,
+		state.EnvironmentFailure.Reason,
+		ack,
+	)
 	if err != nil || terminal.FinishedAt.Before(state.UpdatedAt) {
 		if err != nil {
 			return workexecution.Attempt{}, err
@@ -85,7 +92,8 @@ func (journal *Journal) AcknowledgeEnvironmentFailure(ctx context.Context, attem
 		return workexecution.Attempt{}, conflict()
 	}
 	if prior := state.EnvironmentFailure.Receipt; prior != nil {
-		if prior.Outcome != terminal.Outcome || !prior.FinishedAt.Equal(*terminal.FinishedAt) || *prior.Result != *terminal.Result {
+		if prior.Outcome != terminal.Outcome || !prior.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*prior.Result != *terminal.Result {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *prior, nil

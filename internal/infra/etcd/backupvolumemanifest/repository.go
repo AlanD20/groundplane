@@ -49,7 +49,11 @@ func (repository *Repository) Read(
 
 // Open durably publishes the first grant. Reopen returns the actual latest
 // native credit so the sender can reconstruct and verify its immutable prefix.
-func (repository *Repository) Open(ctx context.Context, owner Owner, authorization []etcdstore.Condition) (*agentpb.BackupVolumeManifestAckCredit, error) {
+func (repository *Repository) Open(
+	ctx context.Context,
+	owner Owner,
+	authorization []etcdstore.Condition,
+) (*agentpb.BackupVolumeManifestAckCredit, error) {
 	if repository == nil || repository.guard == nil || owner.Validate() != nil || len(authorization) == 0 {
 		return nil, invalidLedger()
 	}

@@ -13,13 +13,23 @@ import (
 // RunReleaseFile uses the descriptor-confined materializer directly, never a
 // synthetic generic plan. The source owner has authenticated the captured file
 // metadata; this boundary also binds it to the active attempt and configuration.
-func (runtime *Runtime) RunReleaseFile(ctx context.Context, input releaseexecution.Input, report releaseexecution.CheckpointReport, header entrymaterialization.Header, source io.ReadCloser, verifyOnly bool) (err error) {
+func (runtime *Runtime) RunReleaseFile(
+	ctx context.Context,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+	header entrymaterialization.Header,
+	source io.ReadCloser,
+	verifyOnly bool,
+) (err error) {
 	if source == nil {
 		return errs.New(errs.KindInternal, "Release configuration source is missing")
 	}
 	defer func() { err = errors.Join(err, source.Close()) }()
-	if runtime == nil || runtime.helper == nil || ctx == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil ||
-		report.Progress.Validate(input) != nil || !report.Progress.InFlight || report.Progress.Phase != releaseexecution.Configuration {
+	if runtime == nil || runtime.helper == nil || ctx == nil || report.Ack == nil ||
+		report.ValidateEnvelope(input.Attempt) != nil ||
+		report.Progress.Validate(input) != nil ||
+		!report.Progress.InFlight ||
+		report.Progress.Phase != releaseexecution.Configuration {
 		return errs.New(errs.KindStateConflict, "Release file has no acknowledged configuration boundary")
 	}
 	stage, err := report.Progress.StageID(input)
@@ -37,5 +47,10 @@ func (runtime *Runtime) RunReleaseFile(ctx context.Context, input releaseexecuti
 	if !selected || input.Artifacts.Candidate == nil {
 		return errs.New(errs.KindStateConflict, "Release file is outside the captured destination set")
 	}
-	return runtime.runFile(ctx, input.Artifacts.Candidate.AuthorizedVolumeDir, Payload{Header: header, Source: source}, verifyOnly)
+	return runtime.runFile(
+		ctx,
+		input.Artifacts.Candidate.AuthorizedVolumeDir,
+		Payload{Header: header, Source: source},
+		verifyOnly,
+	)
 }

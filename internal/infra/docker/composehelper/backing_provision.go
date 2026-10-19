@@ -23,7 +23,10 @@ func ExecuteBackingProvision(ctx context.Context, taskRunner runner.Runner, volu
 		return nil, err
 	}
 	if ctx == nil || taskRunner == nil || input.Assignment.Procedure.VolumeRoot != volumeRoot {
-		return nil, errs.New(errs.KindValidationFailed, "backing creation helper has no matching host root and forward stage")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"backing creation helper has no matching host root and forward stage",
+		)
 	}
 	bounded, cancel := context.WithDeadline(ctx, input.Assignment.Attempt.Deadline)
 	if input.InspectOnly {
@@ -50,7 +53,11 @@ func ExecuteBackingProvision(ctx context.Context, taskRunner runner.Runner, volu
 	return backingprovision.HelperObservation(input, observation, runtime)
 }
 
-func cleanupBackingProvision(ctx context.Context, taskRunner runner.Runner, input backingprovision.HelperInput) (*agentpb.BackingProvisionHelperResponse, error) {
+func cleanupBackingProvision(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input backingprovision.HelperInput,
+) (*agentpb.BackingProvisionHelperResponse, error) {
 	procedure := input.Assignment.Procedure
 	containers, err := inspectCapturedContainers(ctx, taskRunner, procedure.Runtime, procedure.Runtime.Services[0])
 	if err != nil {
@@ -65,7 +72,10 @@ func cleanupBackingProvision(ctx context.Context, taskRunner runner.Runner, inpu
 			clear(result.Stdout)
 			clear(result.Stderr)
 			if err != nil || result.ExitCode != 0 {
-				return nil, errs.New(errs.KindRequestFailed, "backing creation cleanup could not stop and remove its captured container")
+				return nil, errs.New(
+					errs.KindRequestFailed,
+					"backing creation cleanup could not stop and remove its captured container",
+				)
 			}
 		}
 	}
@@ -79,7 +89,10 @@ func cleanupBackingProvision(ctx context.Context, taskRunner runner.Runner, inpu
 	return backingprovision.HelperRecovery(input, time.Now().UTC())
 }
 
-func provisionBackingDirectories(ctx context.Context, input backingprovision.HelperInput) (backingprovision.Observation, error) {
+func provisionBackingDirectories(
+	ctx context.Context,
+	input backingprovision.HelperInput,
+) (backingprovision.Observation, error) {
 	procedure, attempt := input.Assignment.Procedure, input.Assignment.Attempt
 	directories := environmentdirectoryhelper.Creator{}
 	if !input.InspectOnly {
@@ -123,10 +136,18 @@ func provisionBackingDirectories(ctx context.Context, input backingprovision.Hel
 	return observation, nil
 }
 
-func provisionBackingRuntime(ctx context.Context, taskRunner runner.Runner, input backingprovision.HelperInput) (backingprovision.Observation, *backingruntimefact.Observation, error) {
+func provisionBackingRuntime(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input backingprovision.HelperInput,
+) (backingprovision.Observation, *backingruntimefact.Observation, error) {
 	stage := input.Progress.Stage
-	if stage != backingprovision.ReconcileRuntime && stage != backingprovision.WaitReady && stage != backingprovision.VerifyRuntime {
-		return backingprovision.Observation{}, nil, errs.New(errs.KindValidationFailed, "backing creation stage is not a Docker runtime operation")
+	if stage != backingprovision.ReconcileRuntime && stage != backingprovision.WaitReady &&
+		stage != backingprovision.VerifyRuntime {
+		return backingprovision.Observation{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"backing creation stage is not a Docker runtime operation",
+		)
 	}
 	observation, runtime, err := observeBackingProvision(ctx, taskRunner, input)
 	if err != nil || input.InspectOnly || observation.Satisfies(stage, input.Layout) {

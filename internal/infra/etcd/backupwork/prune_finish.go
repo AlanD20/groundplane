@@ -9,18 +9,27 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (repository *InputRepository) PreparePruneFinish(ctx context.Context, finished workqueue.FinishedWork) (workqueue.Change, error) {
+func (repository *InputRepository) PreparePruneFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+) (workqueue.Change, error) {
 	task := finished.Task.Task
 	if task.Action != workexecution.ActionBackupPrune || task.ExpectedItems != 1 || len(finished.Items) != 1 {
 		return workqueue.Change{}, conflict("Backup prune requires one settled deletion operation")
 	}
 	item := finished.Items[0]
-	if item.Item.Operation != workexecution.BackupPrune || item.Item.TaskID != task.ID || item.Item.TargetID != task.TargetID ||
-		item.Item.Phase != workexecution.Settled || item.Item.Result == nil || item.Item.ActiveAttemptID != "" ||
+	if item.Item.Operation != workexecution.BackupPrune || item.Item.TaskID != task.ID ||
+		item.Item.TargetID != task.TargetID ||
+		item.Item.Phase != workexecution.Settled ||
+		item.Item.Result == nil ||
+		item.Item.ActiveAttemptID != "" ||
 		(item.Item.Cleanup != workexecution.CleanupNone && item.Item.Cleanup != workexecution.CleanupComplete) {
 		return workqueue.Change{}, conflict("Backup prune still has unresolved execution or cleanup")
 	}
-	input, guard, err := repository.Load(ctx, workqueue.View{Task: finished.Task, Item: item, ReadRevision: finished.ReadRevision})
+	input, guard, err := repository.Load(
+		ctx,
+		workqueue.View{Task: finished.Task, Item: item, ReadRevision: finished.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

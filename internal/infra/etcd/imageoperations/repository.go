@@ -34,7 +34,11 @@ func (repository *Repository) Load(ctx context.Context, taskID string) (keyvalue
 	return repository.LoadAt(ctx, taskID, 0)
 }
 
-func (repository *Repository) LoadAt(ctx context.Context, taskID string, revision int64) (keyvalue.Versioned[Record], error) {
+func (repository *Repository) LoadAt(
+	ctx context.Context,
+	taskID string,
+	revision int64,
+) (keyvalue.Versioned[Record], error) {
 	if ids.Validate(ids.KindTask, taskID) != nil || revision < 0 {
 		return keyvalue.Versioned[Record]{}, invalid()
 	}
@@ -59,7 +63,11 @@ func (repository *Repository) LoadAt(ctx context.Context, taskID string, revisio
 	if record.Input.TaskID != taskID {
 		return keyvalue.Versioned[Record]{}, errs.New(errs.KindInternal, "image operation ownership is corrupt")
 	}
-	return keyvalue.Versioned[Record]{Record: record, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[Record]{
+		Record:       record,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }
 
 // NewTask captures the resolved content exactly once. The caller joins this

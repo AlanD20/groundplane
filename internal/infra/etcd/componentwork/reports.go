@@ -29,7 +29,9 @@ func (repository *InputRepository) PrepareComponentWorkCheckpoint(ctx context.Co
 			return workqueue.Change{}, err
 		}
 		if !current {
-			return workqueue.Change{}, conflict("A newer Blueprint replaced this Component action; another stage cannot start")
+			return workqueue.Change{}, conflict(
+				"A newer Blueprint replaced this Component action; another stage cannot start",
+			)
 		}
 		guards = append(guards, desired...)
 	}
@@ -62,7 +64,10 @@ func (repository *InputRepository) PrepareCapturedCompletion(ctx context.Context
 }
 
 // ReadDesiredMatch fences new effects, not receipts of already authorized work.
-func (repository *InputRepository) ReadDesiredMatch(ctx context.Context, view workqueue.View) (bool, []keyvalue.Condition, error) {
+func (repository *InputRepository) ReadDesiredMatch(
+	ctx context.Context,
+	view workqueue.View,
+) (bool, []keyvalue.Condition, error) {
 	key := blueprints.EnvironmentBlueprintHeadKey(view.Task.Task.Scope.EnvironmentID)
 	read, err := repository.read(ctx, []string{key}, view.ReadRevision)
 	if err != nil {

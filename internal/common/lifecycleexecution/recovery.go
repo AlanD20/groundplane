@@ -70,10 +70,14 @@ func (source Recovery) ValidateFor(attempt workexecution.Attempt, input *agentpb
 }
 
 func (source Recovery) ValidateForStages(attempt workexecution.Attempt, stages []Stage) error {
-	if source.ValidateStages(stages) != nil || attempt.Validate() != nil || attempt.Direction != workexecution.Recovery ||
-		attempt.TaskID != source.Forward.TaskID || attempt.WorkItemID != source.Forward.WorkItemID ||
-		attempt.Input != source.Forward.Input || attempt.Number <= source.Forward.Number ||
-		attempt.Executor.Executor != workexecution.Agent || attempt.Executor.HostID != source.Forward.Executor.HostID {
+	if source.ValidateStages(stages) != nil || attempt.Validate() != nil ||
+		attempt.Direction != workexecution.Recovery ||
+		attempt.TaskID != source.Forward.TaskID ||
+		attempt.WorkItemID != source.Forward.WorkItemID ||
+		attempt.Input != source.Forward.Input ||
+		attempt.Number <= source.Forward.Number ||
+		attempt.Executor.Executor != workexecution.Agent ||
+		attempt.Executor.HostID != source.Forward.Executor.HostID {
 		return invalid()
 	}
 	return nil

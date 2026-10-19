@@ -13,11 +13,20 @@ import (
 )
 
 type AttachExchange interface {
-	CompleteAttachRecovery(context.Context, *agentpb.AttachRecoveryCompletionRequest) (*agentpb.AttachRecoveryCompletionAck, error)
+	CompleteAttachRecovery(
+		context.Context,
+		*agentpb.AttachRecoveryCompletionRequest,
+	) (*agentpb.AttachRecoveryCompletionAck, error)
 	FailAttachRemoval(context.Context, *agentpb.AttachRemovalFailureRequest) (*agentpb.AttachRemovalFailureAck, error)
 	Start(context.Context, *agentpb.WorkStartRequest) (*agentpb.WorkStartAck, error)
-	AttachRemovalCheckpoint(context.Context, *agentpb.AttachRemovalCheckpointRequest) (*agentpb.AttachRemovalCheckpointAck, error)
-	CompleteAttachRemoval(context.Context, *agentpb.AttachRemovalCompletionRequest) (*agentpb.AttachRemovalCompletionAck, error)
+	AttachRemovalCheckpoint(
+		context.Context,
+		*agentpb.AttachRemovalCheckpointRequest,
+	) (*agentpb.AttachRemovalCheckpointAck, error)
+	CompleteAttachRemoval(
+		context.Context,
+		*agentpb.AttachRemovalCompletionRequest,
+	) (*agentpb.AttachRemovalCompletionAck, error)
 }
 
 type AttachExecutor struct {
@@ -42,7 +51,8 @@ func (executor *AttachExecutor) Execute(ctx context.Context, input attachexecuti
 	if err != nil {
 		return nil, err
 	}
-	if saved != nil && saved.Acknowledged && !saved.Report.Progress.InFlight && saved.Report.Progress.Completed == saved.Authority.Commands {
+	if saved != nil && saved.Acknowledged && !saved.Report.Progress.InFlight &&
+		saved.Report.Progress.Completed == saved.Authority.Commands {
 		input.Attempt = *savedAttempt
 		if saved.Completion == nil {
 			if err := executor.complete(ctx, input, saved.Report.Progress, exchange); err != nil {
@@ -69,7 +79,10 @@ func (executor *AttachExecutor) Execute(ctx context.Context, input attachexecuti
 		return nil, err
 	}
 	if sequence < ack.CheckpointSequence {
-		return nil, errs.New(errs.KindStateConflict, "Agent Attach journal is missing acknowledged progress; command execution requires reconciliation")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Agent Attach journal is missing acknowledged progress; command execution requires reconciliation",
+		)
 	}
 	checkpoints, err := checkpointdelivery.NewAttachRemoval(input, executor.journal, exchange.AttachRemovalCheckpoint)
 	if err != nil {

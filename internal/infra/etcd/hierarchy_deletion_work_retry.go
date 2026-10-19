@@ -25,9 +25,13 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyForwardRetry(ctx 
 	if task.Action != workexecution.ActionRemove || task.Stop != nil || task.CollectionStartedAt != nil ||
 		item.Operation != workexecution.Hierarchy || item.Placement.Executor != workexecution.Agent ||
 		item.Phase != workexecution.Settled || item.Outcome != workexecution.Failed || item.ForwardRevoked || item.Input == nil || item.Result == nil ||
-		item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete || attempt.FinishedAt == nil ||
+		item.Cleanup != workexecution.CleanupNone &&
+			item.Cleanup != workexecution.CleanupComplete || attempt.FinishedAt == nil ||
 		attempt.Result == nil || attempt.Input != *item.Input || attempt.Number != item.AttemptNumber {
-		return workqueue.Change{}, 0, errs.New(errs.KindTaskNotRetryable, "removal Retry requires a failed attempt with settled effects")
+		return workqueue.Change{}, 0, errs.New(
+			errs.KindTaskNotRetryable,
+			"removal Retry requires a failed attempt with settled effects",
+		)
 	}
 	captured, err := repository.LoadHierarchyWork(ctx, view)
 	if err != nil {
@@ -36,9 +40,13 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyForwardRetry(ctx 
 	basis := attempt
 	var recoveryCondition []keyvalue.Condition
 	if attempt.Direction == workexecution.Recovery {
-		if item.Cleanup != workexecution.CleanupComplete || attempt.Outcome != workexecution.Succeeded || item.CleanupResult == nil ||
+		if item.Cleanup != workexecution.CleanupComplete || attempt.Outcome != workexecution.Succeeded ||
+			item.CleanupResult == nil ||
 			*item.CleanupResult != *attempt.Result {
-			return workqueue.Change{}, 0, errs.New(errs.KindTaskNotRetryable, "removal requires a successful captured recovery before forward Retry")
+			return workqueue.Change{}, 0, errs.New(
+				errs.KindTaskNotRetryable,
+				"removal requires a successful captured recovery before forward Retry",
+			)
 		}
 		if captured.Action.ActionKind == hierarchydeletion.HierarchyDeletionAttachDeprovision {
 			basis, recoveryCondition, err = repository.hierarchyAttachRetryBasis(ctx, view, attempt)
@@ -59,8 +67,11 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyForwardRetry(ctx 
 	if basis.Result == nil || *basis.Result != *item.Result {
 		return workqueue.Change{}, 0, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	if captured.Action.ActionKind != hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup && captured.Action.ActionKind != hierarchydeletion.HierarchyDeletionAttachDeprovision || captured.Action.AgentProcedure == nil ||
-		captured.Operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionExecuting || captured.Operation.Fence.Generation == math.MaxInt64 {
+	if captured.Action.ActionKind != hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup &&
+		captured.Action.ActionKind != hierarchydeletion.HierarchyDeletionAttachDeprovision ||
+		captured.Action.AgentProcedure == nil ||
+		captured.Operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionExecuting ||
+		captured.Operation.Fence.Generation == math.MaxInt64 {
 		return workqueue.Change{}, 0, errs.New(errs.KindTaskNotRetryable, "captured removal does not permit this Retry")
 	}
 	budget := time.Duration(captured.Action.AgentProcedure.TimeoutSeconds) * time.Second
@@ -88,7 +99,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyForwardRetry(ctx 
 		sourceConditions = source.Conditions
 	}
 	summaryKey := hierarchydeletion.WorkSummaryKey(task.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{failureKey, summaryKey}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{failureKey, summaryKey}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return workqueue.Change{}, 0, err
 	}
@@ -113,7 +127,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyForwardRetry(ctx 
 		checkpoint = failure.Checkpoint
 	}
 	if attempt.Direction == workexecution.Forward && checkpoint != nil && checkpoint.Sequence%2 != 0 {
-		return workqueue.Change{}, 0, errs.New(errs.KindTaskNotRetryable, "interrupted removal still requires effect inspection before Retry")
+		return workqueue.Change{}, 0, errs.New(
+			errs.KindTaskNotRetryable,
+			"interrupted removal still requires effect inspection before Retry",
+		)
 	}
 	change := workqueue.Change{Conditions: append(sourceConditions,
 		keyvalue.Condition{Key: failureKey, ModRevision: read.Values[0].ModRevision})}

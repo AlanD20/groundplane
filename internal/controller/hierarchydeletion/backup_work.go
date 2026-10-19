@@ -23,19 +23,36 @@ type BackupWork struct {
 	diagnostics *executiondiagnostics.Repository
 }
 
-func NewBackupWork(records *etcd.HierarchyDeletionRepository, queue *workqueue.Repository, cleanup *backup.DeletionCleanup, diagnostics *executiondiagnostics.Repository) (*BackupWork, error) {
+func NewBackupWork(
+	records *etcd.HierarchyDeletionRepository,
+	queue *workqueue.Repository,
+	cleanup *backup.DeletionCleanup,
+	diagnostics *executiondiagnostics.Repository,
+) (*BackupWork, error) {
 	if records == nil || queue == nil || cleanup == nil || diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "backup removal requires captured storage")
 	}
 	return &BackupWork{records: records, queue: queue, cleanup: cleanup, diagnostics: diagnostics}, nil
 }
 
-func (owner *BackupWork) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *BackupWork) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item, task := request.Item.Item, request.Task.Task
-	if request.DecisionOnly || (request.Direction != workexecution.Forward && request.Direction != workexecution.Recovery) ||
-		item.Operation != workexecution.RemovalBackupObject || item.Placement.Executor != workexecution.Controller ||
-		item.Phase != workexecution.Ready || item.ActiveAttemptID != "" || at.IsZero() || at.Before(item.UpdatedAt) {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "backup object removal cannot obtain this assignment")
+	if request.DecisionOnly ||
+		(request.Direction != workexecution.Forward && request.Direction != workexecution.Recovery) ||
+		item.Operation != workexecution.RemovalBackupObject ||
+		item.Placement.Executor != workexecution.Controller ||
+		item.Phase != workexecution.Ready ||
+		item.ActiveAttemptID != "" ||
+		at.IsZero() ||
+		at.Before(item.UpdatedAt) {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"backup object removal cannot obtain this assignment",
+		)
 	}
 	if task.Stop != nil && request.Direction == workexecution.Forward {
 		change, err := owner.Stop(ctx, request.Task, request.Item, at)
@@ -59,7 +76,10 @@ func (owner *BackupWork) Admit(ctx context.Context, request workqueue.Assignment
 				return workdispatch.Decision{}, err
 			}
 			if previous.Attempt.FinishedAt == nil || previous.Attempt.Result == nil {
-				return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "expired backup Retry has no saved preceding result")
+				return workdispatch.Decision{}, errs.New(
+					errs.KindStateConflict,
+					"expired backup Retry has no saved preceding result",
+				)
 			}
 			change, err := workqueue.PrepareQueuedRetrySettlement(request.Task, request.Item, workexecution.Completion{
 				Outcome: workexecution.Failed, Evidence: *previous.Attempt.Result, EffectsSettled: true,
@@ -71,10 +91,20 @@ func (owner *BackupWork) Admit(ctx context.Context, request workqueue.Assignment
 				Key: workqueue.AttemptKey(previous.Attempt.ID), ModRevision: previous.Revision})
 			return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, nil
 		}
-		change, err := owner.records.PrepareHierarchyUnstartedStop(ctx, request.Task, request.Item, workexecution.Failed, at)
+		change, err := owner.records.PrepareHierarchyUnstartedStop(
+			ctx,
+			request.Task,
+			request.Item,
+			workexecution.Failed,
+			at,
+		)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
-	change, err := owner.records.PrepareHierarchyBackupAdmission(ctx, workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision}, request.Direction)
+	change, err := owner.records.PrepareHierarchyBackupAdmission(
+		ctx,
+		workqueue.View{Task: request.Task, Item: request.Item, ReadRevision: request.ReadRevision},
+		request.Direction,
+	)
 	if err != nil {
 		return workdispatch.Decision{}, err
 	}
@@ -88,10 +118,18 @@ func (owner *BackupWork) Admit(ctx context.Context, request workqueue.Assignment
 	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: deadline, Change: change}, nil
 }
 
-func (owner *BackupWork) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *BackupWork) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil || item.Item.Operation != workexecution.RemovalBackupObject ||
 		item.Item.Placement.Executor != workexecution.Controller || item.Item.TaskID != task.Task.ID {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "backup object removal has no matching stop request")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"backup object removal has no matching stop request",
+		)
 	}
 	if item.Item.ActiveAttemptID == "" && item.Item.Cleanup == workexecution.CleanupNone {
 		return owner.records.PrepareHierarchyUnstartedStop(ctx, task, item, task.Task.Stop.Outcome, at)
@@ -102,5 +140,10 @@ func (owner *BackupWork) Stop(ctx context.Context, task workqueue.TaskSnapshot, 
 func (owner *BackupWork) PrepareWorkRetry(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot,
 	previous workqueue.AttemptSnapshot, revision int64, at time.Time,
 ) (workqueue.Change, error) {
-	return owner.records.PrepareHierarchyBackupRetry(ctx, workqueue.View{Task: task, Item: item, ReadRevision: revision}, previous, at)
+	return owner.records.PrepareHierarchyBackupRetry(
+		ctx,
+		workqueue.View{Task: task, Item: item, ReadRevision: revision},
+		previous,
+		at,
+	)
 }

@@ -14,7 +14,10 @@ import (
 )
 
 type ConfigurationSource interface {
-	DescribeEntry(context.Context, entryexecution.FileInput) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error)
+	DescribeEntry(
+		context.Context,
+		entryexecution.FileInput,
+	) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error)
 	OpenEntryFile(context.Context, entryexecution.FileInput, entrymaterialization.Header) (io.ReadCloser, error)
 }
 
@@ -30,7 +33,11 @@ func NewConfiguration(runtime *materialization.Runtime, source ConfigurationSour
 	return &Configuration{runtime: runtime, source: source}, nil
 }
 
-func (configuration *Configuration) Run(ctx context.Context, input entryexecution.FileInput, inspectOnly bool) (bool, error) {
+func (configuration *Configuration) Run(
+	ctx context.Context,
+	input entryexecution.FileInput,
+	inspectOnly bool,
+) (bool, error) {
 	if configuration == nil || ctx == nil || input.Procedure == nil {
 		return false, invalidInput()
 	}
@@ -39,8 +46,12 @@ func (configuration *Configuration) Run(ctx context.Context, input entryexecutio
 		return false, err
 	}
 	expected, _, _, selectionErr := entryexecution.ConfigurationSelection(input)
-	if selectionErr != nil || !proto.Equal(reference, expected) || entryexecution.ValidateConfigurationFiles(input, files) != nil {
-		return false, errs.New(errs.KindStateConflict, "Entry configuration response differs from the captured file set")
+	if selectionErr != nil || !proto.Equal(reference, expected) ||
+		entryexecution.ValidateConfigurationFiles(input, files) != nil {
+		return false, errs.New(
+			errs.KindStateConflict,
+			"Entry configuration response differs from the captured file set",
+		)
 	}
 	if !inspectOnly {
 		for index := range files {
@@ -58,12 +69,21 @@ func (configuration *Configuration) Run(ctx context.Context, input entryexecutio
 		ready = ready && matches
 	}
 	if !inspectOnly && !ready {
-		return false, errs.New(errs.KindStateConflict, "Entry configuration changed before all written files could be verified")
+		return false, errs.New(
+			errs.KindStateConflict,
+			"Entry configuration changed before all written files could be verified",
+		)
 	}
 	return ready, nil
 }
 
-func (configuration *Configuration) file(ctx context.Context, input entryexecution.FileInput, files []entrymaterialization.Header, index int, inspectOnly bool) (bool, error) {
+func (configuration *Configuration) file(
+	ctx context.Context,
+	input entryexecution.FileInput,
+	files []entrymaterialization.Header,
+	index int,
+	inspectOnly bool,
+) (bool, error) {
 	source, err := configuration.source.OpenEntryFile(ctx, input, files[index])
 	if err != nil {
 		if source != nil {

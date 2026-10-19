@@ -12,15 +12,28 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *AgentWork) admitRecovery(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *AgentWork) admitRecovery(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	task, item := request.Task.Task, request.Item.Item
-	if request.DecisionOnly || request.Direction != workexecution.Recovery || item.Operation != workexecution.ServiceRemoval ||
-		item.Placement.Executor != workexecution.Agent || item.Phase != workexecution.Ready || item.ActiveAttemptID != "" ||
-		!task.PublicationComplete || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
-		at.IsZero() || at.Before(item.UpdatedAt) ||
+	if request.DecisionOnly || request.Direction != workexecution.Recovery ||
+		item.Operation != workexecution.ServiceRemoval ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Ready ||
+		item.ActiveAttemptID != "" ||
+		!task.PublicationComplete ||
+		task.FinishedAt != nil ||
+		task.CollectionStartedAt != nil ||
+		at.IsZero() ||
+		at.Before(item.UpdatedAt) ||
 		(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped) ||
 		request.Executor.Record.Identity.HostID != item.Placement.HostID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Service removal recovery cannot obtain this host assignment")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Service removal recovery cannot obtain this host assignment",
+		)
 	}
 	if !at.Before(item.Deadline) {
 		change, err := workqueue.PrepareCleanupRetryExpiry(request.Task, request.Item, at)
@@ -32,7 +45,10 @@ func (owner *AgentWork) admitRecovery(ctx context.Context, request workqueue.Ass
 		return workdispatch.Decision{}, err
 	}
 	if captured.HostID != request.Executor.Record.Identity.HostID {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Service removal recovery belongs to another host")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Service removal recovery belongs to another host",
+		)
 	}
 	delivery, err := BuildHostInput(captured)
 	if err != nil {

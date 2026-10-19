@@ -54,13 +54,19 @@ func (owner *GraphPublication) prepareGroupPublication(ctx context.Context, task
 		currentProjection := member.Rollout.Render.Projection.RevisionID
 		clear(member.Rollout.CandidateArtifact)
 		if projectionID != "" && projectionID != currentProjection {
-			return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "Group members captured different Environment projections")
+			return workdispatch.PublicationBatch{}, errs.New(
+				errs.KindStateConflict,
+				"Group members captured different Environment projections",
+			)
 		}
 		projectionID = currentProjection
 		for _, network := range member.Preparation.Networks {
 			if previous, found := networks[network.NetworkID]; found &&
 				(previous.WorkItemID != network.WorkItemID || previous.Input != network.Input || !bytes.Equal(previous.Data, network.Data)) {
-				return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "Group members captured different definitions for a shared DNS bridge")
+				return workdispatch.PublicationBatch{}, errs.New(
+					errs.KindStateConflict,
+					"Group members captured different definitions for a shared DNS bridge",
+				)
 			}
 			networks[network.NetworkID] = network
 		}
@@ -71,7 +77,10 @@ func (owner *GraphPublication) prepareGroupPublication(ctx context.Context, task
 		}
 		network, found := networks[item.TargetID]
 		if !found || item.ID != network.WorkItemID || item.Input == nil || *item.Input != network.Input {
-			return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "Group DNS prerequisite differs from its sealed member sources")
+			return workdispatch.PublicationBatch{}, errs.New(
+				errs.KindStateConflict,
+				"Group DNS prerequisite differs from its sealed member sources",
+			)
 		}
 		input, err := network.Open(task.Task.Scope.EnvironmentID)
 		if err != nil {
@@ -107,14 +116,20 @@ func (owner *GraphPublication) commitGroupPreparation(ctx context.Context, task 
 		return workdispatch.PublicationBatch{}, err
 	}
 	defer clear(value)
-	staged.Mutations = append(staged.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: workqueue.TaskKey(task.Task.ID), Value: value})
+	staged.Mutations = append(
+		staged.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: workqueue.TaskKey(task.Task.ID), Value: value},
+	)
 	result, err := owner.queue.Commit(ctx, staged)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return workdispatch.PublicationBatch{}, err
 	}
 	if !result.Succeeded {
-		return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "Group preparation ownership changed before publication")
+		return workdispatch.PublicationBatch{}, errs.New(
+			errs.KindStateConflict,
+			"Group preparation ownership changed before publication",
+		)
 	}
 	return workdispatch.PublicationBatch{Planning: true}, nil
 }

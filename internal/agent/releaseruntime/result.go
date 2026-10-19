@@ -18,7 +18,12 @@ type ExecutionResult struct {
 	Failure *releaseexecution.FailureReceipt
 }
 
-func (executor *Executor) Execute(ctx context.Context, assignment *agentpb.ReleaseWorkAssignment, identity workexecution.Identity, exchange Exchange) (ExecutionResult, error) {
+func (executor *Executor) Execute(
+	ctx context.Context,
+	assignment *agentpb.ReleaseWorkAssignment,
+	identity workexecution.Identity,
+	exchange Exchange,
+) (ExecutionResult, error) {
 	if executor == nil || ctx == nil || exchange == nil {
 		return ExecutionResult{}, errs.New(errs.KindInternal, "native Release execution is not configured")
 	}
@@ -27,7 +32,10 @@ func (executor *Executor) Execute(ctx context.Context, assignment *agentpb.Relea
 		return ExecutionResult{}, err
 	}
 	if input.Attempt.Direction != workexecution.Forward {
-		return ExecutionResult{}, errs.New(errs.KindStateConflict, "recovery assignments require the Release recovery executor")
+		return ExecutionResult{}, errs.New(
+			errs.KindStateConflict,
+			"recovery assignments require the Release recovery executor",
+		)
 	}
 	pending, err := executor.journal.LoadReleaseFailure(ctx, input.Attempt)
 	if err != nil {
@@ -66,7 +74,12 @@ func (executor *Executor) Execute(ctx context.Context, assignment *agentpb.Relea
 	return executor.fail(ctx, input.Attempt, reason, exchange)
 }
 
-func (executor *Executor) fail(ctx context.Context, attempt workexecution.Attempt, reason releaseexecution.FailureReason, exchange Exchange) (ExecutionResult, error) {
+func (executor *Executor) fail(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	reason releaseexecution.FailureReason,
+	exchange Exchange,
+) (ExecutionResult, error) {
 	receipt, err := recordReleaseFailure(ctx, executor.journal, attempt, reason, exchange)
 	return ExecutionResult{Failure: receipt}, err
 }
@@ -75,7 +88,13 @@ type failureExchange interface {
 	FailRelease(context.Context, *agentpb.ReleaseWorkFailureRequest) (*agentpb.ReleaseWorkFailureAck, error)
 }
 
-func recordReleaseFailure(ctx context.Context, journal *agentworkjournal.Journal, attempt workexecution.Attempt, reason releaseexecution.FailureReason, exchange failureExchange) (*releaseexecution.FailureReceipt, error) {
+func recordReleaseFailure(
+	ctx context.Context,
+	journal *agentworkjournal.Journal,
+	attempt workexecution.Attempt,
+	reason releaseexecution.FailureReason,
+	exchange failureExchange,
+) (*releaseexecution.FailureReceipt, error) {
 	// Save before transport, including when the session was cancelled. This
 	// bounded local write cannot authorize any new host effect.
 	save, cancelSave := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
@@ -93,7 +112,10 @@ func recordReleaseFailure(ctx context.Context, journal *agentworkjournal.Journal
 	}
 	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	ack, err := exchange.FailRelease(bounded, &agentpb.ReleaseWorkFailureRequest{Attempt: identity, Reason: string(pending.Reason)})
+	ack, err := exchange.FailRelease(
+		bounded,
+		&agentpb.ReleaseWorkFailureRequest{Attempt: identity, Reason: string(pending.Reason)},
+	)
 	if err != nil {
 		return nil, err
 	}

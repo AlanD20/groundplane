@@ -12,7 +12,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (state *Staging) retainedConfigRestore(ctx context.Context, assignment *agentpb.BackupRecoveryAssignment) (*backupconfiguration.RestoreArtifact, error) {
+func (state *Staging) retainedConfigRestore(
+	ctx context.Context,
+	assignment *agentpb.BackupRecoveryAssignment,
+) (*backupconfiguration.RestoreArtifact, error) {
 	step := assignment.Input.Steps[0]
 	ids := backupstage.IDs{Task: assignment.Attempt.TaskId, Step: step.ExecutionId, Point: step.GetRestore().PointId}
 	state.mu.Lock()

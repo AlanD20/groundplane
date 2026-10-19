@@ -9,7 +9,13 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareComponentRecovery(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, source componentexecution.Recovery, boundary componentexecution.Progress) (*ComponentRecoveryRecord, error) {
+func (journal *Journal) PrepareComponentRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	source componentexecution.Recovery,
+	boundary componentexecution.Progress,
+) (*ComponentRecoveryRecord, error) {
 	restoration, err := componentexecution.CaptureRestoration(attempt, input)
 	if err != nil {
 		return nil, err
@@ -33,8 +39,11 @@ func (journal *Journal) PrepareComponentRecovery(ctx context.Context, attempt wo
 	}
 	if previous != nil {
 		old := previous.ComponentRecovery
-		if old == nil || !workexecution.SameAssignment(previous.Attempt, attempt) || previous.Attempt.StartedAt == nil || !previous.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
-			old.Restoration != captured.Restoration || !componentexecution.EqualProgress(old.Boundary, captured.Boundary) {
+		if old == nil || !workexecution.SameAssignment(previous.Attempt, attempt) ||
+			previous.Attempt.StartedAt == nil ||
+			!previous.Attempt.StartedAt.Equal(*attempt.StartedAt) ||
+			old.Restoration != captured.Restoration ||
+			!componentexecution.EqualProgress(old.Boundary, captured.Boundary) {
 			return nil, conflict()
 		}
 		left, err := componentexecution.EncodeRecovery(old.Source, input)
@@ -60,7 +69,12 @@ func (journal *Journal) PrepareComponentRecovery(ctx context.Context, attempt wo
 	return state.ComponentRecovery, nil
 }
 
-func (journal *Journal) SaveComponentRecoveryReport(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, report componentexecution.RecoveryReport) error {
+func (journal *Journal) SaveComponentRecoveryReport(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	report componentexecution.RecoveryReport,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -77,12 +91,24 @@ func (journal *Journal) SaveComponentRecoveryReport(ctx context.Context, attempt
 	if recovery.Failure != nil {
 		return conflict()
 	}
-	raw, _, err := componentexecution.EncodeRestorationReport(state.Attempt, recovery.Source, recovery.Restoration, recovery.Boundary, report)
+	raw, _, err := componentexecution.EncodeRestorationReport(
+		state.Attempt,
+		recovery.Source,
+		recovery.Restoration,
+		recovery.Boundary,
+		report,
+	)
 	if err != nil {
 		return err
 	}
 	if recovery.Report != nil {
-		previous, _, err := componentexecution.EncodeRestorationReport(state.Attempt, recovery.Source, recovery.Restoration, recovery.Boundary, *recovery.Report)
+		previous, _, err := componentexecution.EncodeRestorationReport(
+			state.Attempt,
+			recovery.Source,
+			recovery.Restoration,
+			recovery.Boundary,
+			*recovery.Report,
+		)
 		if err != nil || !bytes.Equal(previous, raw) {
 			return conflict()
 		}
@@ -92,7 +118,12 @@ func (journal *Journal) SaveComponentRecoveryReport(ctx context.Context, attempt
 	return journal.writeRecord(ctx, *state)
 }
 
-func (journal *Journal) AcknowledgeComponentRecovery(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ComponentWorkInput, terminal workexecution.Attempt) error {
+func (journal *Journal) AcknowledgeComponentRecovery(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+	terminal workexecution.Attempt,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -102,11 +133,15 @@ func (journal *Journal) AcknowledgeComponentRecovery(ctx context.Context, attemp
 	if err != nil {
 		return err
 	}
-	if state == nil || state.ComponentRecovery == nil || state.ComponentRecovery.Report == nil || !matchesComponentRecovery(state, attempt, input) || terminal.FinishedAt == nil || terminal.Result == nil {
+	if state == nil || state.ComponentRecovery == nil || state.ComponentRecovery.Report == nil ||
+		!matchesComponentRecovery(state, attempt, input) ||
+		terminal.FinishedAt == nil ||
+		terminal.Result == nil {
 		return conflict()
 	}
 	if previous := state.ComponentRecovery.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) || *previous.Result != *terminal.Result {
+		if previous.Outcome != terminal.Outcome || !previous.FinishedAt.Equal(*terminal.FinishedAt) ||
+			*previous.Result != *terminal.Result {
 			return conflict()
 		}
 		return nil
@@ -115,8 +150,15 @@ func (journal *Journal) AcknowledgeComponentRecovery(ctx context.Context, attemp
 	return journal.writeRecord(ctx, *state)
 }
 
-func matchesComponentRecovery(state *attemptRecord, attempt workexecution.Attempt, input *agentpb.ComponentWorkInput) bool {
-	if state == nil || state.ComponentRecovery == nil || !workexecution.SameAssignment(state.Attempt, attempt) || state.Attempt.StartedAt == nil || attempt.StartedAt == nil || !state.Attempt.StartedAt.Equal(*attempt.StartedAt) {
+func matchesComponentRecovery(
+	state *attemptRecord,
+	attempt workexecution.Attempt,
+	input *agentpb.ComponentWorkInput,
+) bool {
+	if state == nil || state.ComponentRecovery == nil || !workexecution.SameAssignment(state.Attempt, attempt) ||
+		state.Attempt.StartedAt == nil ||
+		attempt.StartedAt == nil ||
+		!state.Attempt.StartedAt.Equal(*attempt.StartedAt) {
 		return false
 	}
 	restoration, err := componentexecution.CaptureRestoration(attempt, input)

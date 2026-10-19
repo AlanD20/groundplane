@@ -23,7 +23,9 @@ func (repository *InputRepository) ContinueCascadeRejection(ctx context.Context,
 		return false, nil, workqueue.Change{}, err
 	}
 	if !found || task.Task.PublicationComplete || at.Before(task.Task.UpdatedAt) || len(authority.Conditions) == 0 {
-		return false, nil, workqueue.Change{}, conflict("publication cleanup requires its saved rejection and closed graph")
+		return false, nil, workqueue.Change{}, conflict(
+			"publication cleanup requires its saved rejection and closed graph",
+		)
 	}
 	if err := workexecution.ValidateGraph(task.Task, graph); err != nil {
 		return false, nil, workqueue.Change{}, err
@@ -141,7 +143,8 @@ func (repository *InputRepository) ContinueCascadeRejection(ctx context.Context,
 	fence, fenceErr := deletions.DecodeDeletionTombstone(read.Values[0].Value)
 	original, originalErr := deletions.DecodeDeletionTombstone(read.Values[1].Value)
 	view := workqueue.View{Task: task, Item: bridge, ReadRevision: revision}
-	if fenceErr != nil || originalErr != nil || !matchesRemovalFence(view, fence) || !matchesRemovalFence(view, original) ||
+	if fenceErr != nil || originalErr != nil || !matchesRemovalFence(view, fence) ||
+		!matchesRemovalFence(view, original) ||
 		fence.TargetRevision != original.TargetRevision {
 		return false, nil, workqueue.Change{}, conflict("rejected publication no longer owns the Zone fence")
 	}

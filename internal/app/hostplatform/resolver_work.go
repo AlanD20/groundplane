@@ -19,7 +19,10 @@ type resolverWork struct {
 	starts     []workdispatch.AgentStartRegistration
 }
 
-func (platform *Platform) newResolverWork(queue *workqueue.Repository, diagnostics *executiondiagnostics.Repository) (resolverWork, error) {
+func (platform *Platform) newResolverWork(
+	queue *workqueue.Repository,
+	diagnostics *executiondiagnostics.Repository,
+) (resolverWork, error) {
 	records, err := resolverwork.NewRepository(platform.dependencies.Store)
 	if err != nil {
 		return resolverWork{}, err
@@ -36,7 +39,9 @@ func (platform *Platform) newResolverWork(queue *workqueue.Repository, diagnosti
 		return resolverWork{}, err
 	}
 	return resolverWork{owner: owner,
-		admission: []workdispatch.Registration{{Operation: workexecution.Resolver, Executor: workexecution.Agent, Owner: owner}},
+		admission: []workdispatch.Registration{
+			{Operation: workexecution.Resolver, Executor: workexecution.Agent, Owner: owner},
+		},
 		retry:     []workdispatch.RetryRegistration{{Operation: workexecution.Resolver, Owner: owner}},
 		retention: []operationretention.WorkRegistration{{Operation: workexecution.Resolver, Owner: owner}},
 		completion: []workdispatch.CompletionRegistration{

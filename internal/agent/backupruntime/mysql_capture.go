@@ -101,8 +101,13 @@ func captureMySQL(ctx context.Context, assignment *agentpb.BackupWorkAssignment,
 		archive = preparedArchive
 	}
 	if sourceEvidence.Name == "" {
-		recorder := &mysqlStartRecorder{publisher: publisher, authority: authority, step: step, pointID: capture.PointId,
-			resume: &agentpb.BackupStepResume{Operation: &agentpb.BackupStepResume_Capture{Capture: resume}}}
+		recorder := &mysqlStartRecorder{
+			publisher: publisher,
+			authority: authority,
+			step:      step,
+			pointID:   capture.PointId,
+			resume:    &agentpb.BackupStepResume{Operation: &agentpb.BackupStepResume_Capture{Capture: resume}},
+		}
 		executor, err := mysql84execution.New(authority.selection, recorder)
 		if err != nil {
 			return err

@@ -13,7 +13,10 @@ type HierarchyEnvironmentInput struct {
 	Conditions []keyvalue.Condition
 }
 
-func (repository *HierarchyDeletionRepository) LoadHierarchyEnvironmentInput(ctx context.Context, view workqueue.View) (HierarchyEnvironmentInput, error) {
+func (repository *HierarchyDeletionRepository) LoadHierarchyEnvironmentInput(
+	ctx context.Context,
+	view workqueue.View,
+) (HierarchyEnvironmentInput, error) {
 	captured, err := repository.LoadHierarchyWork(ctx, view)
 	if err != nil {
 		return HierarchyEnvironmentInput{}, err
@@ -23,7 +26,10 @@ func (repository *HierarchyDeletionRepository) LoadHierarchyEnvironmentInput(ctx
 		return HierarchyEnvironmentInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	key := hierarchydeletion.EnvironmentInputKey(action.ParentOperationID, action.TargetID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return HierarchyEnvironmentInput{}, err
 	}
@@ -41,10 +47,14 @@ func (repository *HierarchyDeletionRepository) LoadHierarchyEnvironmentInput(ctx
 	if err != nil {
 		return HierarchyEnvironmentInput{}, err
 	}
-	if input.OperationID != action.ParentOperationID || input.EnvironmentID != action.TargetID || input.EnvironmentRevision != action.TargetRevision ||
+	if input.OperationID != action.ParentOperationID || input.EnvironmentID != action.TargetID ||
+		input.EnvironmentRevision != action.TargetRevision ||
 		input.SnapshotRevision != captured.Operation.Tombstone.SnapshotRevision {
 		clear(input.ComposeArtifact)
 		return HierarchyEnvironmentInput{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	return HierarchyEnvironmentInput{Input: input, Conditions: append(captured.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision})}, nil
+	return HierarchyEnvironmentInput{
+		Input:      input,
+		Conditions: append(captured.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}),
+	}, nil
 }

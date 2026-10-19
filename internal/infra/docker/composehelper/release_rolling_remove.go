@@ -16,10 +16,17 @@ import (
 
 // ExecuteReleaseReplicaRemoval removes only the replica selected by the durable
 // rolling cursor. The rest of the predecessor set remains owned and untouched.
-func ExecuteReleaseReplicaRemoval(ctx context.Context, taskRunner runner.Runner, input releaseexecution.Input, report releaseexecution.CheckpointReport) (PreviousRemovalResult, error) {
+func ExecuteReleaseReplicaRemoval(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.Input,
+	report releaseexecution.CheckpointReport,
+) (PreviousRemovalResult, error) {
 	result := PreviousRemovalResult{}
 	if ctx == nil || taskRunner == nil || report.Ack == nil || report.ValidateEnvelope(input.Attempt) != nil ||
-		report.Progress.Validate(input) != nil || !report.Progress.InFlight || report.Progress.Phase != releaseexecution.Rollout || report.Progress.Rolling == nil {
+		report.Progress.Validate(
+			input,
+		) != nil || !report.Progress.InFlight || report.Progress.Phase != releaseexecution.Rollout || report.Progress.Rolling == nil {
 		return result, invalidReleaseHelper()
 	}
 	cursor := report.Progress.Rolling
@@ -65,7 +72,15 @@ func ExecuteReleaseReplicaRemoval(ctx context.Context, taskRunner runner.Runner,
 		if err := bounded.Err(); err != nil {
 			return servingInventory{}, err
 		}
-		inventory, err := inspectServingInventory(bounded, taskRunner, prior, artifacts.Candidate, input.Release.ServiceId, input.Release.ReleaseId, artifacts.Prior.Proxy)
+		inventory, err := inspectServingInventory(
+			bounded,
+			taskRunner,
+			prior,
+			artifacts.Candidate,
+			input.Release.ServiceId,
+			input.Release.ReleaseId,
+			artifacts.Prior.Proxy,
+		)
 		if err != nil {
 			return inventory, err
 		}
@@ -77,12 +92,21 @@ func ExecuteReleaseReplicaRemoval(ctx context.Context, taskRunner runner.Runner,
 			if inventory.proxyID == "" {
 				return inventory, errs.New(errs.KindStateConflict, "rolling removal requires the serving proxy")
 			}
-			proven, err := observeRestorationProxy(bounded, taskRunner, inventory.proxyID, artifacts.Proxy.ProxyImplementation, traffic.AfterSHA256[:])
+			proven, err := observeRestorationProxy(
+				bounded,
+				taskRunner,
+				inventory.proxyID,
+				artifacts.Proxy.ProxyImplementation,
+				traffic.AfterSHA256[:],
+			)
 			if err != nil {
 				return inventory, err
 			}
 			if !proven {
-				return inventory, errs.New(errs.KindStateConflict, "rolling removal requires proven live and restart routing away from the selected replica")
+				return inventory, errs.New(
+					errs.KindStateConflict,
+					"rolling removal requires proven live and restart routing away from the selected replica",
+				)
 			}
 		}
 		return inventory, nil
@@ -120,14 +144,25 @@ func ExecuteReleaseReplicaRemoval(ctx context.Context, taskRunner runner.Runner,
 			expected = append(expected, id)
 		}
 	}
-	if !slices.Equal(after.predecessors, expected) || !slices.Equal(after.candidates, inventory.candidates) || after.proxyID != inventory.proxyID {
-		return result, errs.New(errs.KindStateConflict, "other Release containers changed during rolling replica removal")
+	if !slices.Equal(after.predecessors, expected) || !slices.Equal(after.candidates, inventory.candidates) ||
+		after.proxyID != inventory.proxyID {
+		return result, errs.New(
+			errs.KindStateConflict,
+			"other Release containers changed during rolling replica removal",
+		)
 	}
 	result.AbsenceObserved = true
 	return result, nil
 }
 
-func releaseReplicaRemovalIDs(ctx context.Context, taskRunner runner.Runner, inventory servingInventory, replica rollingrelease.Replica, prior *agentpb.ComposeArtifact, serviceID string) ([]string, error) {
+func releaseReplicaRemovalIDs(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	inventory servingInventory,
+	replica rollingrelease.Replica,
+	prior *agentpb.ComposeArtifact,
+	serviceID string,
+) ([]string, error) {
 	if replica.ContainerID != "" {
 		if !slices.Contains(inventory.predecessors, replica.ContainerID) {
 			return nil, nil

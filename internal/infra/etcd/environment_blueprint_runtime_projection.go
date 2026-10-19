@@ -203,8 +203,10 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 	if err != nil {
 		return err
 	}
-	if !found || desired.Revision != input.DesiredRootRevision || desired.Record.EnvironmentID != projection.EnvironmentID ||
-		desired.Record.RevisionID != parent.ID || desired.Record.RenderGeneration != projection.RenderGeneration {
+	if !found || desired.Revision != input.DesiredRootRevision ||
+		desired.Record.EnvironmentID != projection.EnvironmentID ||
+		desired.Record.RevisionID != parent.ID ||
+		desired.Record.RenderGeneration != projection.RenderGeneration {
 		return errs.New(errs.KindStateConflict, "Blueprint runtime captured input changed")
 	}
 	captured, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(desired.Record)

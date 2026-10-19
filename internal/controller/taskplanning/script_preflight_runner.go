@@ -10,7 +10,11 @@ import (
 
 // PrepareReleasePreflightRunner uses the captured pending Release selected by
 // admission. It is not manual Script execution against a serving Release.
-func PrepareReleasePreflightRunner(ctx context.Context, input ScriptRunnerInput, operation domain.OperationKind) (*PreparedScriptRunner, error) {
+func PrepareReleasePreflightRunner(
+	ctx context.Context,
+	input ScriptRunnerInput,
+	operation domain.OperationKind,
+) (*PreparedScriptRunner, error) {
 	when := input.Sources.Script.Record.Desired.When
 	if input.Candidate != nil || operation != domain.OperationDeploy && operation != domain.OperationRollback ||
 		operation == domain.OperationDeploy && when != core.ScriptPreDeploy ||

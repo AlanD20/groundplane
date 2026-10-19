@@ -12,7 +12,10 @@ import (
 // PrepareReleaseWorkRuntime projects the exact final runtime from native
 // captured input. It is not execution proof. Settlement must pair these bytes
 // with the acknowledged final serving observation and completed hooks.
-func PrepareReleaseWorkRuntime(attempt workexecution.Attempt, release *agentpb.ReleaseWorkInput) (CandidateRuntime, error) {
+func PrepareReleaseWorkRuntime(
+	attempt workexecution.Attempt,
+	release *agentpb.ReleaseWorkInput,
+) (CandidateRuntime, error) {
 	artifacts, err := OpenReleaseWorkArtifacts(attempt, release)
 	if err != nil {
 		return CandidateRuntime{}, err
@@ -24,7 +27,8 @@ func PrepareReleaseWorkRuntime(attempt workexecution.Attempt, release *agentpb.R
 	}
 	// Non-recreate strategies keep the actual stable proxy ownership. Merely
 	// copying candidate labels would describe a container execution never created.
-	if release.Strategy != agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE && artifacts.Prior != nil && artifacts.Prior.Proxy != nil {
+	if release.Strategy != agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_RECREATE && artifacts.Prior != nil &&
+		artifacts.Prior.Proxy != nil {
 		source, err = retainCandidateRuntimeProxy(source, artifacts.Prior.Artifact, release.ServiceId, names)
 		if err != nil {
 			return CandidateRuntime{}, err
@@ -42,7 +46,12 @@ func PrepareReleaseWorkRuntime(attempt workexecution.Attempt, release *agentpb.R
 		target = "singleton"
 	}
 	result := CandidateRuntime{ServiceID: release.ServiceId, ReleaseID: release.ReleaseId, Target: target}
-	proxy := releaseRuntimeService(source, release.ServiceId, "", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY)
+	proxy := releaseRuntimeService(
+		source,
+		release.ServiceId,
+		"",
+		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+	)
 	var before []byte
 	if proxy != nil {
 		if len(release.TrafficConfigurations) == 0 {
@@ -67,8 +76,16 @@ func PrepareReleaseWorkRuntime(attempt workexecution.Attempt, release *agentpb.R
 	if err != nil {
 		return CandidateRuntime{}, err
 	}
-	if release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_BLUE_GREEN && artifacts.Prior != nil && candidateRuntimeOppositeSlots(target, artifacts.Prior.Target) {
-		retained, _, _, err := projectCandidateRuntimeArtifact(artifacts.Prior.Artifact, release.ServiceId, artifacts.Prior.ReleaseID, artifacts.Prior.Target, false, nil)
+	if release.Strategy == agentpb.WorkReleaseStrategy_WORK_RELEASE_STRATEGY_BLUE_GREEN && artifacts.Prior != nil &&
+		candidateRuntimeOppositeSlots(target, artifacts.Prior.Target) {
+		retained, _, _, err := projectCandidateRuntimeArtifact(
+			artifacts.Prior.Artifact,
+			release.ServiceId,
+			artifacts.Prior.ReleaseID,
+			artifacts.Prior.Target,
+			false,
+			nil,
+		)
 		if err != nil {
 			return CandidateRuntime{}, err
 		}

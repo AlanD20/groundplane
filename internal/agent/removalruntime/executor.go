@@ -13,9 +13,18 @@ import (
 
 type Exchange interface {
 	StartAttempt(context.Context, workexecution.Attempt) (*agentpb.WorkStartAck, error)
-	RemovalRecoveryCheckpoint(context.Context, *agentpb.ServiceRemovalRecoveryCheckpointRequest) (*agentpb.ServiceRemovalRecoveryCheckpointAck, error)
-	CompleteRemovalRecovery(context.Context, *agentpb.ServiceRemovalRecoveryCompletionRequest) (*agentpb.ServiceRemovalRecoveryCompletionAck, error)
-	FailRemovalRecovery(context.Context, *agentpb.ServiceRemovalRecoveryFailureRequest) (*agentpb.ServiceRemovalRecoveryFailureAck, error)
+	RemovalRecoveryCheckpoint(
+		context.Context,
+		*agentpb.ServiceRemovalRecoveryCheckpointRequest,
+	) (*agentpb.ServiceRemovalRecoveryCheckpointAck, error)
+	CompleteRemovalRecovery(
+		context.Context,
+		*agentpb.ServiceRemovalRecoveryCompletionRequest,
+	) (*agentpb.ServiceRemovalRecoveryCompletionAck, error)
+	FailRemovalRecovery(
+		context.Context,
+		*agentpb.ServiceRemovalRecoveryFailureRequest,
+	) (*agentpb.ServiceRemovalRecoveryFailureAck, error)
 }
 
 // Host verifies captured ownership and joins every launched helper. Inspect
@@ -33,7 +42,10 @@ type Executor struct {
 
 func NewExecutor(journal *agentworkjournal.Journal, host Host) (*Executor, error) {
 	if journal == nil || host == nil {
-		return nil, errs.New(errs.KindInternal, "Service removal recovery requires its durable journal and host executor")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Service removal recovery requires its durable journal and host executor",
+		)
 	}
 	return &Executor{journal: journal, host: host}, nil
 }
@@ -146,7 +158,12 @@ func (executor *Executor) Run(ctx context.Context, input Input, exchange Exchang
 	return terminal, nil
 }
 
-func (executor *Executor) save(ctx context.Context, input Input, exchange Exchange, progress removalexecution.Progress) (workexecution.Checkpoint, error) {
+func (executor *Executor) save(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress removalexecution.Progress,
+) (workexecution.Checkpoint, error) {
 	if _, err := executor.journal.PrepareRemovalRecovery(ctx, input.attempt, input.procedure, input.capture, progress); err != nil {
 		return workexecution.Checkpoint{}, err
 	}
@@ -157,7 +174,12 @@ func (executor *Executor) save(ctx context.Context, input Input, exchange Exchan
 	return input.Acknowledged(progress, ack)
 }
 
-func (executor *Executor) acknowledge(ctx context.Context, input Input, exchange Exchange, progress removalexecution.Progress) (*agentpb.ServiceRemovalRecoveryCheckpointAck, error) {
+func (executor *Executor) acknowledge(
+	ctx context.Context,
+	input Input,
+	exchange Exchange,
+	progress removalexecution.Progress,
+) (*agentpb.ServiceRemovalRecoveryCheckpointAck, error) {
 	request, err := input.CheckpointRequest(progress)
 	if err != nil {
 		return nil, err

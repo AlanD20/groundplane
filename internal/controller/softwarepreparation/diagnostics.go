@@ -23,7 +23,13 @@ func (observer *preparationObserver) Run(ctx context.Context, key string, action
 		return err
 	}
 	at := time.Now().UTC()
-	stage := workexecution.Stage{Key: key, Name: name, Expected: expected, State: workexecution.StageRunning, StartedAt: &at}
+	stage := workexecution.Stage{
+		Key:       key,
+		Name:      name,
+		Expected:  expected,
+		State:     workexecution.StageRunning,
+		StartedAt: &at,
+	}
 	observer.record(ctx, stage)
 	executionErr := action(ctx)
 	finished := time.Now().UTC()
@@ -47,7 +53,16 @@ func (observer *preparationObserver) record(ctx context.Context, stage workexecu
 	if err := observer.repository.Report(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID,
 		attempt.Executor, observer.sequence+1, stage, time.Now().UTC()); err != nil {
 		observer.lost = true
-		slog.WarnContext(ctx, "software execution diagnostics incomplete", "task_id", attempt.TaskID, "attempt_id", attempt.ID, "error", err)
+		slog.WarnContext(
+			ctx,
+			"software execution diagnostics incomplete",
+			"task_id",
+			attempt.TaskID,
+			"attempt_id",
+			attempt.ID,
+			"error",
+			err,
+		)
 		loss, finish := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		defer finish()
 		if err := observer.repository.MarkIncomplete(loss, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor); err != nil {

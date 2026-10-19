@@ -46,6 +46,8 @@ func BuildReleaseHookRenderInput(
 		ScriptExecutionID: input.ExecutionID, RunnerSnapshotID: input.SnapshotID,
 		BodySize: body.Size, BodySHA256: hex.EncodeToString(body.Sha256),
 		ServiceDefinitionSHA256: hex.EncodeToString(run.ServiceDefinitionSha256),
-		RunnerSnapshot:          append([]byte(nil), execution.Snapshot...), RunnerProjection: append([]byte(nil), execution.RunnerProjection...),
+		RunnerSnapshot: append(
+			[]byte(nil),
+			execution.Snapshot...), RunnerProjection: append([]byte(nil), execution.RunnerProjection...),
 	}, nil
 }

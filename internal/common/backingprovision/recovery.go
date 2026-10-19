@@ -23,7 +23,9 @@ func (recovery Recovery) Validate(layout Layout) error {
 	forward := recovery.Forward
 	if forward.Validate() != nil || forward.Direction != workexecution.Forward || forward.FinishedAt == nil ||
 		forward.Result == nil || forward.Outcome == workexecution.Succeeded || *forward.Result != recovery.Evidence ||
-		!recovery.Failure.RecordedAt.Equal(*forward.FinishedAt) || (recovery.Failure.Checkpoint == nil) != (recovery.Boundary == nil) {
+		!recovery.Failure.RecordedAt.Equal(
+			*forward.FinishedAt,
+		) || (recovery.Failure.Checkpoint == nil) != (recovery.Boundary == nil) {
 		return invalid("backing creation recovery does not identify its actual failed forward execution")
 	}
 	_, evidence, err := EncodeFailure(forward, layout, recovery.Failure)
@@ -59,7 +61,8 @@ func (recovery Recovery) ValidateFor(attempt workexecution.Attempt, layout Layou
 	if recovery.Previous != nil {
 		previous = *recovery.Previous
 	}
-	if previous.Number == ^uint64(0) || attempt.Number != previous.Number+1 || attempt.AssignedAt.Before(*previous.FinishedAt) {
+	if previous.Number == ^uint64(0) || attempt.Number != previous.Number+1 ||
+		attempt.AssignedAt.Before(*previous.FinishedAt) {
 		return invalid("backing creation cleanup must follow its exact preceding attempt")
 	}
 	return nil

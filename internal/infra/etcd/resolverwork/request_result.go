@@ -12,7 +12,11 @@ import (
 // The latest requested target retains its forward outcome independently of
 // execution history. Cleanup never changes that outcome into success. An older
 // action completing after new intent cannot overwrite the newer request.
-func (repository *Repository) prepareRequestResult(ctx context.Context, view workqueue.View, outcome workexecution.Outcome) (workqueue.Change, error) {
+func (repository *Repository) prepareRequestResult(
+	ctx context.Context,
+	view workqueue.View,
+	outcome workexecution.Outcome,
+) (workqueue.Change, error) {
 	item := view.Item.Item
 	stored, err := repository.ReadRequest(ctx, item.Placement.HostID, item.TargetID, view.ReadRevision)
 	if err != nil {

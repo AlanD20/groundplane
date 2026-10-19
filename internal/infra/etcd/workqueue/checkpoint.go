@@ -41,7 +41,13 @@ func DecodeCheckpoint(value []byte) (workexecution.Checkpoint, error) {
 
 // PrepareStart persists permission before the executor can cross its first
 // effect boundary. It is joined to current operation-specific admission checks.
-func PrepareStart(task TaskSnapshot, item ItemSnapshot, attempt AttemptSnapshot, executor ExecutorSnapshot, at time.Time) (Change, error) {
+func PrepareStart(
+	task TaskSnapshot,
+	item ItemSnapshot,
+	attempt AttemptSnapshot,
+	executor ExecutorSnapshot,
+	at time.Time,
+) (Change, error) {
 	if task.Task.Stop != nil && attempt.Attempt.Direction == workexecution.Forward {
 		return Change{}, errs.New(errs.KindStateConflict, "task no longer permits forward execution")
 	}
@@ -51,7 +57,8 @@ func PrepareStart(task TaskSnapshot, item ItemSnapshot, attempt AttemptSnapshot,
 	if err := executor.Record.Validate(); err != nil {
 		return Change{}, err
 	}
-	if executor.Revision <= 0 || !executor.Record.Allows(item.Item.Operation) || executor.Record.Identity != attempt.Attempt.Executor {
+	if executor.Revision <= 0 || !executor.Record.Allows(item.Item.Operation) ||
+		executor.Record.Identity != attempt.Attempt.Executor {
 		return Change{}, errs.New(errs.KindStateConflict, "execution belongs to an unavailable or replaced executor")
 	}
 	if attempt.Attempt.StartedAt != nil {
@@ -81,7 +88,10 @@ func PrepareStart(task TaskSnapshot, item ItemSnapshot, attempt AttemptSnapshot,
 		},
 	}
 	if item.Item.Placement.Executor == workexecution.Agent && started.Direction == workexecution.Forward {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: HostForwardFenceKey(item.Item.Placement.HostID)})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: HostForwardFenceKey(item.Item.Placement.HostID)},
+		)
 	}
 	if err := countTransition(&change, task, item.Item, next, at); err != nil {
 		return Change{}, err

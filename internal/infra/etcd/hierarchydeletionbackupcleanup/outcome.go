@@ -51,7 +51,8 @@ func (repository *Repository) ReadOutcome(ctx context.Context, operation hierarc
 	if err := verifyRemoteTemplate(action, intent.FixedInputDigest); err != nil {
 		return Outcome{}, err
 	}
-	result.Absent = intent.Selected != (backupruntime.BackupObjectIdentity{}) && intent.ConfirmedAbsent == intent.Selected
+	result.Absent = intent.Selected != (backupruntime.BackupObjectIdentity{}) &&
+		intent.ConfirmedAbsent == intent.Selected
 	result.DeleteGranted = intent.DeleteAttempt != ""
 	return result, nil
 }

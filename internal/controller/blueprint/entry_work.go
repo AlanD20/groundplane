@@ -13,7 +13,12 @@ import (
 )
 
 type EntryPreparer interface {
-	PrepareEntrySettlement(context.Context, workqueue.View, blueprintunits.Unit, blueprintunits.Snapshot) (workqueue.Change, error)
+	PrepareEntrySettlement(
+		context.Context,
+		workqueue.View,
+		blueprintunits.Unit,
+		blueprintunits.Snapshot,
+	) (workqueue.Change, error)
 }
 
 type EntryWork struct {
@@ -28,10 +33,18 @@ func NewEntryWork(service EntryPreparer, ledger *blueprintunits.Repository) (*En
 	return &EntryWork{service: service, ledger: ledger}, nil
 }
 
-func (owner *EntryWork) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (owner *EntryWork) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	item := request.Item.Item
-	if item.Operation != workexecution.EntrySettlement || item.Placement.Executor != workexecution.Controller || item.AttemptNumber != 0 {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Entry work is not an unstarted Controller decision")
+	if item.Operation != workexecution.EntrySettlement || item.Placement.Executor != workexecution.Controller ||
+		item.AttemptNumber != 0 {
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Entry work is not an unstarted Controller decision",
+		)
 	}
 	if !at.Before(item.Deadline) {
 		change, err := blueprintunits.PrepareEntryWorkStop(request.Task, request.Item, workexecution.Failed, at)
@@ -44,7 +57,8 @@ func (owner *EntryWork) Admit(ctx context.Context, request workqueue.Assignment,
 	if err != nil {
 		return workdispatch.Decision{}, err
 	}
-	if snapshot.Desired == nil || snapshot.HeadTaskID != item.TaskID || snapshot.Desired.Record.ParentTaskID != item.TaskID {
+	if snapshot.Desired == nil || snapshot.HeadTaskID != item.TaskID ||
+		snapshot.Desired.Record.ParentTaskID != item.TaskID {
 		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Entry work no longer owns the captured Apply")
 	}
 	graph, err := owner.ledger.LoadCapturedGraph(ctx, request.Task.Task, request.ReadRevision)
@@ -56,8 +70,12 @@ func (owner *EntryWork) Admit(ctx context.Context, request workqueue.Assignment,
 			continue
 		}
 		unit := graph.Record.Units[index]
-		if captured.Operation != item.Operation || captured.TargetID != item.TargetID || captured.Placement != item.Placement {
-			return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Entry work differs from its captured graph")
+		if captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
+			captured.Placement != item.Placement {
+			return workdispatch.Decision{}, errs.New(
+				errs.KindStateConflict,
+				"Entry work differs from its captured graph",
+			)
 		}
 		expected, err := blueprintunits.EntryWorkInput(request.Task.Task, unit)
 		if err != nil {
@@ -80,7 +98,12 @@ func (owner *EntryWork) Admit(ctx context.Context, request workqueue.Assignment,
 	return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Entry is absent from the captured Apply")
 }
 
-func (owner *EntryWork) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (owner *EntryWork) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if err := ctx.Err(); err != nil {
 		return workqueue.Change{}, err
 	}
@@ -90,7 +113,12 @@ func (owner *EntryWork) Stop(ctx context.Context, task workqueue.TaskSnapshot, i
 	return blueprintunits.PrepareEntryWorkStop(task, item, task.Task.Stop.Outcome, at)
 }
 
-func (owner *EntryWork) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (owner *EntryWork) RetireWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	if !final {
 		return false, workqueue.Change{}, errs.New(errs.KindInternal, "Entry decision unexpectedly has attempts")
 	}
@@ -98,6 +126,9 @@ func (owner *EntryWork) RetireWork(ctx context.Context, view workqueue.View, at 
 	return err == nil, change, err
 }
 
-func (owner *EntryWork) PrepareAttemptRetirement(view workqueue.View, attempt workqueue.AttemptSnapshot) (workqueue.Change, error) {
+func (owner *EntryWork) PrepareAttemptRetirement(
+	view workqueue.View,
+	attempt workqueue.AttemptSnapshot,
+) (workqueue.Change, error) {
 	return workqueue.Change{}, errs.New(errs.KindInternal, "Controller Entry decision cannot have execution attempts")
 }

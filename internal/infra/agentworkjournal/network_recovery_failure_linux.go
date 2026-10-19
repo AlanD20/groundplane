@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareNetworkRecoveryFailure(ctx context.Context, attempt workexecution.Attempt, reason networkexecution.FailureReason) (*NetworkFailureDelivery, error) {
+func (journal *Journal) PrepareNetworkRecoveryFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	reason networkexecution.FailureReason,
+) (*NetworkFailureDelivery, error) {
 	if !reason.Valid() {
 		return nil, invalid()
 	}
@@ -21,7 +25,8 @@ func (journal *Journal) PrepareNetworkRecoveryFailure(ctx context.Context, attem
 	if err != nil {
 		return nil, err
 	}
-	if state == nil || state.NetworkRecovery == nil || state.NetworkRecovery.Report != nil || !workexecution.SameAssignment(state.Attempt, attempt) {
+	if state == nil || state.NetworkRecovery == nil || state.NetworkRecovery.Report != nil ||
+		!workexecution.SameAssignment(state.Attempt, attempt) {
 		return nil, conflict()
 	}
 	if state.NetworkRecovery.Failure != nil {
@@ -34,7 +39,11 @@ func (journal *Journal) PrepareNetworkRecoveryFailure(ctx context.Context, attem
 	return state.NetworkRecovery.Failure, nil
 }
 
-func (journal *Journal) AcknowledgeNetworkRecoveryFailure(ctx context.Context, attempt workexecution.Attempt, ack *agentpb.NetworkWorkFailureAck) (workexecution.Attempt, error) {
+func (journal *Journal) AcknowledgeNetworkRecoveryFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	ack *agentpb.NetworkWorkFailureAck,
+) (workexecution.Attempt, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return workexecution.Attempt{}, err
@@ -44,7 +53,8 @@ func (journal *Journal) AcknowledgeNetworkRecoveryFailure(ctx context.Context, a
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
-	if state == nil || state.NetworkRecovery == nil || state.NetworkRecovery.Failure == nil || !workexecution.SameAssignment(state.Attempt, attempt) {
+	if state == nil || state.NetworkRecovery == nil || state.NetworkRecovery.Failure == nil ||
+		!workexecution.SameAssignment(state.Attempt, attempt) {
 		return workexecution.Attempt{}, conflict()
 	}
 	failure := state.NetworkRecovery.Failure
@@ -53,7 +63,8 @@ func (journal *Journal) AcknowledgeNetworkRecoveryFailure(ctx context.Context, a
 		return workexecution.Attempt{}, err
 	}
 	if previous := failure.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result || !previous.FinishedAt.Equal(*terminal.FinishedAt) {
+		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result ||
+			!previous.FinishedAt.Equal(*terminal.FinishedAt) {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *previous, nil

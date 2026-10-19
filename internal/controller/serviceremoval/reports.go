@@ -23,9 +23,24 @@ import (
 )
 
 type WorkRecords interface {
-	SettleRecoveredServiceRemoval(context.Context, workqueue.ResumeView, *agentpb.ServiceLifecycleWorkInput, []keyvalue.Condition, time.Time) error
-	PrepareServiceRemovalCompletion(context.Context, workqueue.ResumeView, *agentpb.ServiceLifecycleWorkInput, time.Time) (workqueue.Change, error)
-	LoadServiceRemovalRecoveryConfiguration(context.Context, workqueue.ResumeView, *agentpb.ServiceLifecycleWorkInput) (*runtimeconfiguration.Reference, []taskmaterialization.Record, []keyvalue.Condition, error)
+	SettleRecoveredServiceRemoval(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.ServiceLifecycleWorkInput,
+		[]keyvalue.Condition,
+		time.Time,
+	) error
+	PrepareServiceRemovalCompletion(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.ServiceLifecycleWorkInput,
+		time.Time,
+	) (workqueue.Change, error)
+	LoadServiceRemovalRecoveryConfiguration(
+		context.Context,
+		workqueue.ResumeView,
+		*agentpb.ServiceLifecycleWorkInput,
+	) (*runtimeconfiguration.Reference, []taskmaterialization.Record, []keyvalue.Condition, error)
 	AuthorizeServiceRemovalConfiguration(context.Context, []keyvalue.Condition) error
 }
 
@@ -37,17 +52,33 @@ type WorkReports struct {
 }
 
 type CapturedFileReader interface {
-	OpenCapturedFile(context.Context, string, string, uint64, taskmaterialization.Record) (entrymaterialization.Header, io.ReadCloser, error)
+	OpenCapturedFile(
+		context.Context,
+		string,
+		string,
+		uint64,
+		taskmaterialization.Record,
+	) (entrymaterialization.Header, io.ReadCloser, error)
 }
 
-func NewWorkReports(queue *workqueue.Repository, inputs *serviceremovalwork.Repository, records WorkRecords, files CapturedFileReader) (*WorkReports, error) {
+func NewWorkReports(
+	queue *workqueue.Repository,
+	inputs *serviceremovalwork.Repository,
+	records WorkRecords,
+	files CapturedFileReader,
+) (*WorkReports, error) {
 	if queue == nil || inputs == nil || records == nil || files == nil {
-		return nil, errs.New(errs.KindInternal, "Service removal reporting requires execution, input and resource settlement storage")
+		return nil, errs.New(
+			errs.KindInternal,
+			"Service removal reporting requires execution, input and resource settlement storage",
+		)
 	}
 	return &WorkReports{queue: queue, inputs: inputs, records: records, files: files}, nil
 }
 
-func (service *WorkReports) CheckpointRemovalRecovery(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (service *WorkReports) CheckpointRemovalRecovery(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	request *agentpb.ServiceRemovalRecoveryCheckpointRequest,
 ) (*agentpb.ServiceRemovalRecoveryCheckpointAck, error) {
 	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil ||
@@ -93,7 +124,10 @@ func (service *WorkReports) CheckpointRemovalRecovery(ctx context.Context, autho
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Service removal recovery ownership changed; resend the saved checkpoint")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Service removal recovery ownership changed; resend the saved checkpoint",
+		)
 	}
 	digest, err := hex.DecodeString(checkpoint.Evidence.SHA256)
 	if err != nil {
@@ -119,7 +153,10 @@ func (service *WorkReports) recoveryView(ctx context.Context, authorization agen
 	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || claimed.Direction != workexecution.Recovery ||
 		view.Attempt.Attempt.StartedAt == nil || view.Work.Item.Item.Operation != workexecution.ServiceRemoval ||
 		!view.Work.Task.Task.PublicationComplete || view.Work.Task.Task.CollectionStartedAt != nil {
-		return workqueue.ResumeView{}, errs.New(errs.KindStateConflict, "Service removal recovery report has no retained started execution")
+		return workqueue.ResumeView{}, errs.New(
+			errs.KindStateConflict,
+			"Service removal recovery report has no retained started execution",
+		)
 	}
 	return view, nil
 }

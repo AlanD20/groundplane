@@ -21,7 +21,10 @@ func (repository *InputRepository) PrepareRecoveryRetry(ctx context.Context, vie
 		(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped) ||
 		attempt.FinishedAt == nil || attempt.Result == nil || attempt.Input != *item.Input ||
 		attempt.Number != item.AttemptNumber {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Backup Retry is limited to captured unresolved cleanup")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Backup Retry is limited to captured unresolved cleanup",
+		)
 	}
 	_, guards, err := repository.PrepareAdmission(ctx, view)
 	if err != nil {

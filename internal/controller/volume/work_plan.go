@@ -35,7 +35,10 @@ func buildVolumeWork(scope workexecution.Scope, placement workexecution.Placemen
 		}
 		input.RemovalImpactSha256 = digest
 	default:
-		return workexecution.Task{}, workexecution.Item{}, nil, errs.New(errs.KindValidationFailed, "Volume mutation action is invalid")
+		return workexecution.Task{}, workexecution.Item{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"Volume mutation action is invalid",
+		)
 	}
 	workID := ids.DeriveAt(ids.KindWorkItem, claim.CreatedAt, claim.TaskID, "volume")
 	timeout, err := volumeexecution.ExecutionBudget(input.Action)
@@ -50,13 +53,19 @@ func buildVolumeWork(scope workexecution.Scope, placement workexecution.Placemen
 	}
 	task := workexecution.Task{ID: claim.TaskID, Actor: workexecution.OperatorActor, Scope: scope,
 		Action: action, TargetID: request.volumeID, TargetName: request.slug,
-		Intent:    workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, claim.CreatedAt, claim.TaskID, "request-intent"), SHA256: claim.Intent.CiphertextDigest},
+		Intent: workexecution.Input{
+			ID:     ids.DeriveAt(ids.KindPlan, claim.CreatedAt, claim.TaskID, "request-intent"),
+			SHA256: claim.Intent.CiphertextDigest,
+		},
 		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt, Deadline: claim.CreatedAt.Add(timeout), ExpectedItems: 1}
 	item := workexecution.Item{ID: workID, TaskID: task.ID, Operation: workexecution.Volume, TargetID: request.volumeID,
 		Placement: placement, Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
 		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline,
 		Claims: []workexecution.Claim{{ScopeID: request.environmentID},
-			{HostID: placement.HostID, ScopeID: request.environmentID}, {HostID: placement.HostID, ScopeID: request.volumeID}}}
+			{
+				HostID:  placement.HostID,
+				ScopeID: request.environmentID,
+			}, {HostID: placement.HostID, ScopeID: request.volumeID}}}
 	if err := workexecution.ValidateGraph(task, []workexecution.Item{item}); err != nil {
 		return workexecution.Task{}, workexecution.Item{}, nil, err
 	}

@@ -26,7 +26,8 @@ func (journal *Journal) retireRecoveredNetwork(ctx context.Context, recovery Net
 		return conflict()
 	}
 	if failure := forward.Network.Failure; failure != nil && failure.Receipt != nil {
-		if *failure.Receipt.Result != recovery.Source.Evidence || !failure.Receipt.FinishedAt.Equal(*recovery.Source.Forward.FinishedAt) {
+		if *failure.Receipt.Result != recovery.Source.Evidence ||
+			!failure.Receipt.FinishedAt.Equal(*recovery.Source.Forward.FinishedAt) {
 			return conflict()
 		}
 	}

@@ -21,14 +21,22 @@ type Service struct {
 	artifacts  *taskplanning.ScriptArtifactService
 }
 
-func New(queue *workqueue.Repository, repository *etcd.ScriptRepository, artifacts *taskplanning.ScriptArtifactService) (*Service, error) {
+func New(
+	queue *workqueue.Repository,
+	repository *etcd.ScriptRepository,
+	artifacts *taskplanning.ScriptArtifactService,
+) (*Service, error) {
 	if queue == nil || repository == nil || artifacts == nil {
 		return nil, errs.New(errs.KindInternal, "Script execution requires queue and captured input storage")
 	}
 	return &Service{queue: queue, repository: repository, artifacts: artifacts}, nil
 }
 
-func (service *Service) Admit(ctx context.Context, request workqueue.Assignment, at time.Time) (workdispatch.Decision, error) {
+func (service *Service) Admit(
+	ctx context.Context,
+	request workqueue.Assignment,
+	at time.Time,
+) (workdispatch.Decision, error) {
 	if err := ctx.Err(); err != nil {
 		return workdispatch.Decision{}, err
 	}
@@ -57,7 +65,10 @@ func (service *Service) Admit(ctx context.Context, request workqueue.Assignment,
 	execution := input.Execution
 	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized ||
 		execution.AttemptID != "" || execution.Executor != nil || execution.ReconciliationRequired {
-		return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Script has prior execution evidence requiring settlement")
+		return workdispatch.Decision{}, errs.New(
+			errs.KindStateConflict,
+			"Script has prior execution evidence requiring settlement",
+		)
 	}
 	deadline := item.Deadline
 	if task.Deadline.Before(deadline) {
@@ -67,7 +78,12 @@ func (service *Service) Admit(ctx context.Context, request workqueue.Assignment,
 		Change: workqueue.Change{Conditions: input.Conditions}}, nil
 }
 
-func (service *Service) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
+func (service *Service) Stop(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	item workqueue.ItemSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	if task.Task.Stop == nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Script has no stop request")
 	}

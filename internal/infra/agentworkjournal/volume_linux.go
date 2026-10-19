@@ -8,7 +8,13 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareVolume(ctx context.Context, attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string, next volumeexecution.Progress) (*VolumeRecord, error) {
+func (journal *Journal) PrepareVolume(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	next volumeexecution.Progress,
+) (*VolumeRecord, error) {
 	if next.Validate(attempt, action, volumeID) != nil || next.Sequence == 0 {
 		return nil, invalid()
 	}
@@ -61,7 +67,12 @@ func (journal *Journal) PrepareVolume(ctx context.Context, attempt workexecution
 	return state.Volume, nil
 }
 
-func (journal *Journal) Volume(ctx context.Context, attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string) (*VolumeRecord, error) {
+func (journal *Journal) Volume(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+) (*VolumeRecord, error) {
 	if attempt.Validate() != nil {
 		return nil, invalid()
 	}
@@ -80,7 +91,13 @@ func (journal *Journal) Volume(ctx context.Context, attempt workexecution.Attemp
 	return state.Volume, nil
 }
 
-func (journal *Journal) AcknowledgeVolume(ctx context.Context, attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string, checkpoint workexecution.Checkpoint) error {
+func (journal *Journal) AcknowledgeVolume(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	checkpoint workexecution.Checkpoint,
+) error {
 	if attempt.Validate() != nil {
 		return invalid()
 	}
@@ -108,13 +125,24 @@ func (journal *Journal) AcknowledgeVolume(ctx context.Context, attempt workexecu
 	return journal.writeRecord(ctx, *state)
 }
 
-func matchesVolume(state *attemptRecord, attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string) bool {
+func matchesVolume(
+	state *attemptRecord,
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+) bool {
 	return state != nil && state.Volume != nil && workexecution.SameAssignment(state.Attempt, attempt) &&
 		state.Attempt.StartedAt != nil && attempt.StartedAt != nil && state.Attempt.StartedAt.Equal(*attempt.StartedAt) &&
 		state.Volume.Action == action && state.Volume.VolumeID == volumeID
 }
 
-func (journal *Journal) AcknowledgeVolumeCompletion(ctx context.Context, attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string, terminal workexecution.Attempt) error {
+func (journal *Journal) AcknowledgeVolumeCompletion(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	terminal workexecution.Attempt,
+) error {
 	if attempt.Validate() != nil || terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil {
 		return invalid()
 	}

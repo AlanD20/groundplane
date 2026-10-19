@@ -27,8 +27,11 @@ type Failure struct {
 }
 
 func (failure Failure) Validate(attempt workexecution.Attempt, layout Layout) error {
-	if layout.Validate(attempt) != nil || attempt.Direction != workexecution.Forward || failure.AttemptID != attempt.ID ||
-		failure.Input != attempt.Input || !canonicalTime(failure.RecordedAt) || failure.RecordedAt.Before(attempt.AssignedAt) ||
+	if layout.Validate(attempt) != nil || attempt.Direction != workexecution.Forward ||
+		failure.AttemptID != attempt.ID ||
+		failure.Input != attempt.Input ||
+		!canonicalTime(failure.RecordedAt) ||
+		failure.RecordedAt.Before(attempt.AssignedAt) ||
 		attempt.StartedAt != nil && failure.RecordedAt.Before(*attempt.StartedAt) ||
 		attempt.FinishedAt != nil && !attempt.FinishedAt.Equal(failure.RecordedAt) ||
 		failure.Reason != ExecutionFailed && failure.Reason != Interrupted && failure.Reason != DeadlineExpired ||
@@ -36,9 +39,13 @@ func (failure Failure) Validate(attempt workexecution.Attempt, layout Layout) er
 		return invalid("DNS resolver failure differs from its captured forward attempt")
 	}
 	if cursor := failure.Checkpoint; cursor != nil {
-		if attempt.StartedAt == nil || cursor.AttemptID != attempt.ID || cursor.Sequence == 0 || cursor.Sequence > uint64(len(layout.Stages())*2) ||
-			cursor.Evidence.Validate() != nil || cursor.Evidence.ID != attempt.Input.ID || !canonicalTime(cursor.RecordedAt) ||
-			cursor.RecordedAt.Before(*attempt.StartedAt) || cursor.RecordedAt.After(failure.RecordedAt) {
+		if attempt.StartedAt == nil || cursor.AttemptID != attempt.ID || cursor.Sequence == 0 ||
+			cursor.Sequence > uint64(len(layout.Stages())*2) ||
+			cursor.Evidence.Validate() != nil ||
+			cursor.Evidence.ID != attempt.Input.ID ||
+			!canonicalTime(cursor.RecordedAt) ||
+			cursor.RecordedAt.Before(*attempt.StartedAt) ||
+			cursor.RecordedAt.After(failure.RecordedAt) {
 			return invalid("DNS resolver failure checkpoint is invalid")
 		}
 		stageID, err := StageID(attempt.WorkItemID, layout.Stages()[(cursor.Sequence-1)/2])
@@ -62,7 +69,12 @@ func EncodeFailure(attempt workexecution.Attempt, layout Layout, failure Failure
 
 func FailureID(attemptID string) (string, error) { return derivedReferenceID(attemptID, "failure") }
 
-func DecodeFailure(attempt workexecution.Attempt, layout Layout, raw []byte, evidence workexecution.Input) (Failure, error) {
+func DecodeFailure(
+	attempt workexecution.Attempt,
+	layout Layout,
+	raw []byte,
+	evidence workexecution.Input,
+) (Failure, error) {
 	if len(raw) == 0 || len(raw) > MaximumReportBytes {
 		return Failure{}, invalid("DNS resolver failure is missing or oversized")
 	}

@@ -7,7 +7,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 )
 
-func (repository *Repository) hookPinGuard(ctx context.Context, input Input, revision int64) ([]keyvalue.Condition, error) {
+func (repository *Repository) hookPinGuard(
+	ctx context.Context,
+	input Input,
+	revision int64,
+) ([]keyvalue.Condition, error) {
 	if input.HookInputs == nil || input.HookInputs.SecretPins == nil {
 		return nil, nil
 	}

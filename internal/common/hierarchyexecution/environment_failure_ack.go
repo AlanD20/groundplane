@@ -8,9 +8,15 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func DecodeEnvironmentFailureAck(attempt workexecution.Attempt, reason FailureReason, ack *agentpb.EnvironmentRemovalFailureAck) (workexecution.Attempt, EnvironmentFailure, error) {
-	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil ||
-		ack.Outcome != string(workexecution.Failed) && ack.Outcome != string(workexecution.Cancelled) && ack.Outcome != string(workexecution.Superseded) {
+func DecodeEnvironmentFailureAck(
+	attempt workexecution.Attempt,
+	reason FailureReason,
+	ack *agentpb.EnvironmentRemovalFailureAck,
+) (workexecution.Attempt, EnvironmentFailure, error) {
+	if ack == nil || executionplan.RejectUnknown(ack) != nil || ack.Evidence == nil || ack.FinishedAt == nil ||
+		ack.FinishedAt.CheckValid() != nil ||
+		ack.Outcome != string(workexecution.Failed) && ack.Outcome != string(workexecution.Cancelled) &&
+			ack.Outcome != string(workexecution.Superseded) {
 		return workexecution.Attempt{}, EnvironmentFailure{}, invalidEnvironmentProgress()
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(ack.Attempt, attempt.Executor)

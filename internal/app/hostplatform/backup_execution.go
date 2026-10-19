@@ -10,7 +10,10 @@ import (
 )
 
 // Wire the native Backup owners and their captured-input transfer boundaries.
-func (platform *Platform) newBackupWork(queue *workqueue.Repository, dependencies ExecutionDependencies) (*backup.AgentWork, *backupkey.Work, error) {
+func (platform *Platform) newBackupWork(
+	queue *workqueue.Repository,
+	dependencies ExecutionDependencies,
+) (*backup.AgentWork, *backupkey.Work, error) {
 	inputs, err := backupwork.NewInputRepository(platform.dependencies.Store)
 	if err != nil {
 		return nil, nil, err
@@ -28,7 +31,11 @@ func (platform *Platform) newBackupWork(queue *workqueue.Repository, dependencie
 	if err != nil {
 		return nil, nil, err
 	}
-	restores, err := backup.NewConfigRestoreProducer(platform.dependencies.Store, runtime, platform.dependencies.Protector)
+	restores, err := backup.NewConfigRestoreProducer(
+		platform.dependencies.Store,
+		runtime,
+		platform.dependencies.Protector,
+	)
 	if err != nil {
 		return nil, nil, err
 	}

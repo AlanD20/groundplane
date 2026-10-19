@@ -44,7 +44,11 @@ func (reader *Reader) ResolveWorkSecretEvidence(ctx context.Context, queue *work
 	if !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
 		return WorkEvidence{}, errs.New(errs.KindStateConflict, "Backup credential attempt changed")
 	}
-	tracked := &credentialReadGuards{store: reader.store, revision: view.Work.ReadRevision, conditions: make(map[string]keyvalue.Condition)}
+	tracked := &credentialReadGuards{
+		store:      reader.store,
+		revision:   view.Work.ReadRevision,
+		conditions: make(map[string]keyvalue.Condition),
+	}
 	// Captured input owns its range evidence. Credential lookups remain tracked
 	// point reads; both sets of guards join the same plaintext-delivery grant.
 	source, err := reader.inputs.LoadSecretSource(ctx, view, ordinal, reader.now())
@@ -73,7 +77,11 @@ func (reader *Reader) ResolveWorkSecretEvidence(ctx context.Context, queue *work
 	return WorkEvidence{Evidence: evidence, Source: source, Attempt: view.Attempt.Attempt, Conditions: guards}, nil
 }
 
-func (reader *Reader) workResourceEvidence(ctx context.Context, source backupwork.SecretSource, revision int64) (Evidence, error) {
+func (reader *Reader) workResourceEvidence(
+	ctx context.Context,
+	source backupwork.SecretSource,
+	revision int64,
+) (Evidence, error) {
 	input, taskID := source.Input, source.TaskID
 	key := backupruntime.BackupRunKey(taskID)
 	if input.Operation == agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_RESTORE {
@@ -97,10 +105,17 @@ func (reader *Reader) workResourceEvidence(ctx context.Context, source backupwor
 		if err != nil {
 			return Evidence{}, err
 		}
-		if run.State != backupruntime.BackupRunQueued && run.State != backupruntime.BackupRunRunning || len(run.Sources) != len(input.Steps) {
+		if run.State != backupruntime.BackupRunQueued && run.State != backupruntime.BackupRunRunning ||
+			len(run.Sources) != len(input.Steps) {
 			return Evidence{}, errs.New(errs.KindStateConflict, "Backup run is not active")
 		}
-		scope := &agentpb.BackupPlanScope{ProjectId: input.ProjectId, Project: input.Project, EnvironmentId: input.EnvironmentId, Environment: input.Environment, Services: input.Services}
+		scope := &agentpb.BackupPlanScope{
+			ProjectId:     input.ProjectId,
+			Project:       input.Project,
+			EnvironmentId: input.EnvironmentId,
+			Environment:   input.Environment,
+			Services:      input.Services,
+		}
 		for index, captured := range run.Sources {
 			if err := backupplanning.ValidateBackupRunStepAuthority(run, captured, input.Steps[index], scope); err != nil {
 				return Evidence{}, err
@@ -112,7 +127,8 @@ func (reader *Reader) workResourceEvidence(ctx context.Context, source backupwor
 		if err != nil {
 			return Evidence{}, err
 		}
-		if restore.State == backupruntime.BackupRestoreFailedSafe || restore.State == backupruntime.BackupRestoreCompleted ||
+		if restore.State == backupruntime.BackupRestoreFailedSafe ||
+			restore.State == backupruntime.BackupRestoreCompleted ||
 			(restore.State == backupruntime.BackupRestoreRecoveryRequired) != source.Recovery {
 			return Evidence{}, errs.New(errs.KindStateConflict, "Restore is not active")
 		}

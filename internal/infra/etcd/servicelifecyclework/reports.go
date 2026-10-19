@@ -17,7 +17,14 @@ func (repository *Repository) LoadLifecycleInput(ctx context.Context, view workq
 	return input, err
 }
 
-func (repository *Repository) PrepareLifecycleCheckpoint(ctx context.Context, view workqueue.ResumeView, supplied Input, delivery *agentpb.ServiceLifecycleWorkInput, progress lifecycleexecution.Progress, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareLifecycleCheckpoint(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	supplied Input,
+	delivery *agentpb.ServiceLifecycleWorkInput,
+	progress lifecycleexecution.Progress,
+	at time.Time,
+) (workqueue.Change, error) {
 	captured, guard, err := repository.Load(ctx, view.Work)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -37,8 +44,18 @@ func (repository *Repository) PrepareLifecycleCheckpoint(ctx context.Context, vi
 		return workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, guard, continuationGuard)
-	if progress.BeganAt != nil && (view.Checkpoint.Record == nil || progress.Sequence > view.Checkpoint.Record.Sequence) {
-		conditions, _, err := services.PrepareLifecycleRuntime(ctx, repository.store, captured.ServiceID, captured.Scope.EnvironmentID, captured.TaskID, captured.Action, view.Work.ReadRevision, false)
+	if progress.BeganAt != nil &&
+		(view.Checkpoint.Record == nil || progress.Sequence > view.Checkpoint.Record.Sequence) {
+		conditions, _, err := services.PrepareLifecycleRuntime(
+			ctx,
+			repository.store,
+			captured.ServiceID,
+			captured.Scope.EnvironmentID,
+			captured.TaskID,
+			captured.Action,
+			view.Work.ReadRevision,
+			false,
+		)
 		if err != nil {
 			keyvalue.ZeroMutationBytes(change.Mutations)
 			return workqueue.Change{}, err
@@ -48,7 +65,13 @@ func (repository *Repository) PrepareLifecycleCheckpoint(ctx context.Context, vi
 	return change, nil
 }
 
-func (repository *Repository) PrepareLifecycleCompletion(ctx context.Context, view workqueue.ResumeView, supplied Input, delivery *agentpb.ServiceLifecycleWorkInput, at time.Time) (workqueue.Change, error) {
+func (repository *Repository) PrepareLifecycleCompletion(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	supplied Input,
+	delivery *agentpb.ServiceLifecycleWorkInput,
+	at time.Time,
+) (workqueue.Change, error) {
 	captured, guard, err := repository.Load(ctx, view.Work)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -64,7 +87,16 @@ func (repository *Repository) PrepareLifecycleCompletion(ctx context.Context, vi
 	// A stopped/replaced intent can acknowledge completed effects, but must not
 	// confirm or overwrite a newer Service request.
 	if view.Work.Task.Task.Stop == nil && !view.Work.Item.Item.ForwardRevoked {
-		conditions, mutations, err := services.PrepareLifecycleRuntime(ctx, repository.store, captured.ServiceID, captured.Scope.EnvironmentID, captured.TaskID, captured.Action, view.Work.ReadRevision, true)
+		conditions, mutations, err := services.PrepareLifecycleRuntime(
+			ctx,
+			repository.store,
+			captured.ServiceID,
+			captured.Scope.EnvironmentID,
+			captured.TaskID,
+			captured.Action,
+			view.Work.ReadRevision,
+			true,
+		)
 		if err != nil {
 			keyvalue.ZeroMutationBytes(change.Mutations)
 			return workqueue.Change{}, err

@@ -41,7 +41,8 @@ func (repository *InputRepository) LoadConfigTransfer(ctx context.Context, queue
 	if err != nil {
 		return nil, nil, err
 	}
-	if expected != binding || assignment.Input.Steps[binding.SourceOrdinal].StepDeadlineUnixNano <= uint64(now.UnixNano()) {
+	if expected != binding ||
+		assignment.Input.Steps[binding.SourceOrdinal].StepDeadlineUnixNano <= uint64(now.UnixNano()) {
 		return nil, nil, conflict("Config transfer differs from its captured source or its deadline has elapsed")
 	}
 	conditions := append(change.Conditions,

@@ -37,11 +37,13 @@ func (r *Runner) StopCaptured(ctx context.Context, owner Ownership) error {
 	}
 	if observed.State.Running || observed.State.Restarting || observed.State.Paused {
 		timeout := 0
-		if _, err := r.client.ContainerStop(bounded, observed.ID, client.ContainerStopOptions{Timeout: &timeout}); err != nil && !containerderrdefs.IsNotFound(err) {
+		if _, err := r.client.ContainerStop(bounded, observed.ID, client.ContainerStopOptions{Timeout: &timeout}); err != nil &&
+			!containerderrdefs.IsNotFound(err) {
 			return operationError(bounded, "stop captured materializer", err)
 		}
 	}
-	if _, err := r.client.ContainerRemove(bounded, observed.ID, client.ContainerRemoveOptions{}); err != nil && !containerderrdefs.IsNotFound(err) {
+	if _, err := r.client.ContainerRemove(bounded, observed.ID, client.ContainerRemoveOptions{}); err != nil &&
+		!containerderrdefs.IsNotFound(err) {
 		return operationError(bounded, "remove captured materializer", err)
 	}
 	_, err = r.client.ContainerInspect(bounded, name, client.ContainerInspectOptions{})

@@ -8,8 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func OpenEnvironmentHelperRequest(request *agentpb.EnvironmentRemovalHelperRequest) (EnvironmentInput, EnvironmentProgress, error) {
-	if request == nil || executionplan.RejectUnknown(request) != nil || request.Assignment == nil || request.Assignment.Attempt == nil {
+func OpenEnvironmentHelperRequest(
+	request *agentpb.EnvironmentRemovalHelperRequest,
+) (EnvironmentInput, EnvironmentProgress, error) {
+	if request == nil || executionplan.RejectUnknown(request) != nil || request.Assignment == nil ||
+		request.Assignment.Attempt == nil {
 		return EnvironmentInput{}, EnvironmentProgress{}, invalidEnvironmentProgress()
 	}
 	claimed := request.Assignment.Attempt
@@ -41,7 +44,10 @@ func DecodeEnvironmentHelperResponse(input EnvironmentInput, progress Environmen
 		return EnvironmentObservation{}, invalidEnvironmentProgress()
 	}
 	observation := EnvironmentObservation{EnvironmentID: response.EnvironmentId,
-		Source:        workexecution.Input{ID: response.CapturedSource.InputId, SHA256: hex.EncodeToString(response.CapturedSource.Sha256)},
+		Source: workexecution.Input{
+			ID:     response.CapturedSource.InputId,
+			SHA256: hex.EncodeToString(response.CapturedSource.Sha256),
+		},
 		RuntimeAbsent: response.RuntimeAbsent, DirectoryAbsent: response.DirectoryAbsent, At: response.ObservedAt.AsTime(),
 	}
 	if _, err := progress.Confirm(input, observation, observation.At); err != nil {

@@ -37,22 +37,35 @@ func (owner *AgentWork) BeginVolumeManifest(ctx context.Context, authorization a
 	return credit, cursor.Record.Complete, err
 }
 
-func (owner *AgentWork) AcceptVolumeManifestFrame(ctx context.Context, authorization agentregistration.WorkAuthorization,
+func (owner *AgentWork) AcceptVolumeManifestFrame(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
 	attempt *agentpb.WorkAttemptIdentity,
 	frame *agentpb.BackupVolumeManifestTransfer,
 ) (*agentpb.BackupVolumeManifestAckCredit, error) {
 	if frame == nil {
 		return nil, invalidVolumeManifestAuthority()
 	}
-	manifestOwner, guards, err := owner.volumeManifestOwner(ctx, authorization, attempt, frame.SourceOrdinal, frame.Direction)
+	manifestOwner, guards, err := owner.volumeManifestOwner(
+		ctx,
+		authorization,
+		attempt,
+		frame.SourceOrdinal,
+		frame.Direction,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return owner.manifests.Accept(ctx, manifestOwner, frame, guards)
 }
 
-func (owner *AgentWork) ReadCompleteVolumeManifest(ctx context.Context, authorization agentregistration.WorkAuthorization,
-	attempt *agentpb.WorkAttemptIdentity, ordinal uint32, direction agentpb.BackupVolumeManifestDirection, revision int64,
+func (owner *AgentWork) ReadCompleteVolumeManifest(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	attempt *agentpb.WorkAttemptIdentity,
+	ordinal uint32,
+	direction agentpb.BackupVolumeManifestDirection,
+	revision int64,
 ) (backupvolumemanifest.Complete, error) {
 	manifestOwner, _, err := owner.volumeManifestOwner(ctx, authorization, attempt, ordinal, direction)
 	if err != nil {

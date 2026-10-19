@@ -52,7 +52,10 @@ func ValidateBackupWorkInput(input *agentpb.BackupWorkInput) error {
 	return nil
 }
 
-func CaptureBackupWorkInput(inputID string, input *agentpb.BackupWorkInput) (*agentpb.BackupWorkInput, []byte, workexecution.Input, error) {
+func CaptureBackupWorkInput(
+	inputID string,
+	input *agentpb.BackupWorkInput,
+) (*agentpb.BackupWorkInput, []byte, workexecution.Input, error) {
 	if err := ValidateBackupWorkInput(input); err != nil {
 		return nil, nil, workexecution.Input{}, err
 	}
@@ -84,7 +87,10 @@ func DecodeBackupWorkInput(raw []byte) (*agentpb.BackupWorkInput, error) {
 	return input, nil
 }
 
-func OpenBackupWorkInput(attempt workexecution.Attempt, input *agentpb.BackupWorkInput) (*agentpb.BackupWorkInput, error) {
+func OpenBackupWorkInput(
+	attempt workexecution.Attempt,
+	input *agentpb.BackupWorkInput,
+) (*agentpb.BackupWorkInput, error) {
 	if attempt.Validate() != nil || attempt.Executor.Executor != workexecution.Agent ||
 		attempt.Direction != workexecution.Forward || attempt.FinishedAt != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Backup work attempt is invalid")

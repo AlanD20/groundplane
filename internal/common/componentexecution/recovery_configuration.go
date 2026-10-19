@@ -26,7 +26,8 @@ func ConfigurationSelection(input HelperInput) (*agentpb.WorkConfigurationRefere
 		return nil, "", 0, invalidProgress()
 	}
 	if input.Recovery != nil {
-		if input.Recovery.ValidateFor(input.Attempt, input.Procedure) != nil || input.Recovery.Failure.Checkpoint == nil {
+		if input.Recovery.ValidateFor(input.Attempt, input.Procedure) != nil ||
+			input.Recovery.Failure.Checkpoint == nil {
 			return nil, "", 0, invalidProgress()
 		}
 		checkpoint, err := input.Progress.Checkpoint(input.Recovery.Forward, input.Procedure)

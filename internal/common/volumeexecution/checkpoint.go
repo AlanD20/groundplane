@@ -32,7 +32,13 @@ func EqualProgress(left, right Progress) bool {
 	return true
 }
 
-func ValidateTransition(attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string, previous *Progress, next Progress) error {
+func ValidateTransition(
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	previous *Progress,
+	next Progress,
+) error {
 	if next.Validate(attempt, action, volumeID) != nil {
 		return invalidProgress()
 	}
@@ -65,7 +71,11 @@ func ValidateTransition(attempt workexecution.Attempt, action agentpb.VolumeWork
 	return nil
 }
 
-func (progress Progress) Checkpoint(attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string) (workexecution.Checkpoint, error) {
+func (progress Progress) Checkpoint(
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+) (workexecution.Checkpoint, error) {
 	if progress.Validate(attempt, action, volumeID) != nil || progress.Sequence == 0 {
 		return workexecution.Checkpoint{}, invalidProgress()
 	}
@@ -94,7 +104,12 @@ func (progress Progress) Checkpoint(attempt workexecution.Attempt, action agentp
 		RecordedAt: progress.UpdatedAt, Evidence: workexecution.Input{ID: attempt.Input.ID, SHA256: hex.EncodeToString(digest[:])}}, nil
 }
 
-func EncodeProgress(attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string, progress Progress) ([]byte, error) {
+func EncodeProgress(
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	progress Progress,
+) ([]byte, error) {
 	if _, err := progress.Checkpoint(attempt, action, volumeID); err != nil {
 		return nil, err
 	}
@@ -105,7 +120,12 @@ func EncodeProgress(attempt workexecution.Attempt, action agentpb.VolumeWorkActi
 	return jcs.Canonicalize(raw)
 }
 
-func DecodeProgress(attempt workexecution.Attempt, action agentpb.VolumeWorkAction, volumeID string, raw []byte) (Progress, error) {
+func DecodeProgress(
+	attempt workexecution.Attempt,
+	action agentpb.VolumeWorkAction,
+	volumeID string,
+	raw []byte,
+) (Progress, error) {
 	if len(raw) == 0 || len(raw) > MaximumProgressBytes {
 		return Progress{}, invalidProgress()
 	}

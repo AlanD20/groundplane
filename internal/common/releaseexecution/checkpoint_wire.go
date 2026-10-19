@@ -30,7 +30,8 @@ func EncodeCheckpointRequest(input Input, report CheckpointReport) (*agentpb.Rel
 // It validates the envelope only; the owner must also validate the transition
 // and atomically compare permission/evidence before publishing its receipt.
 func DecodeCheckpointRequest(input Input, request *agentpb.ReleaseWorkCheckpointRequest) (CheckpointReport, error) {
-	if request == nil || len(request.ProtoReflect().GetUnknown()) != 0 || len(request.Report) == 0 || len(request.Report) > MaximumCheckpointBytes {
+	if request == nil || len(request.ProtoReflect().GetUnknown()) != 0 || len(request.Report) == 0 ||
+		len(request.Report) > MaximumCheckpointBytes {
 		return CheckpointReport{}, invalidProgress()
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(request.Attempt, input.Attempt.Executor)
@@ -38,7 +39,8 @@ func DecodeCheckpointRequest(input Input, request *agentpb.ReleaseWorkCheckpoint
 		return CheckpointReport{}, invalidProgress()
 	}
 	report, err := jcs.Decode[CheckpointReport](request.Report)
-	if err != nil || report.Ack != nil || report.ValidateEnvelope(input.Attempt) != nil || report.Progress.Validate(input) != nil {
+	if err != nil || report.Ack != nil || report.ValidateEnvelope(input.Attempt) != nil ||
+		report.Progress.Validate(input) != nil {
 		return CheckpointReport{}, invalidProgress()
 	}
 	canonical, err := canonicalCheckpoint(report)
@@ -67,8 +69,13 @@ func EncodeCheckpointAck(input Input, report CheckpointReport) (*agentpb.Release
 	return &agentpb.ReleaseWorkCheckpointAck{Attempt: attempt, Checkpoint: raw}, nil
 }
 
-func DecodeCheckpointAck(input Input, report CheckpointReport, ack *agentpb.ReleaseWorkCheckpointAck) (workexecution.Checkpoint, error) {
-	if ack == nil || len(ack.ProtoReflect().GetUnknown()) != 0 || len(ack.Checkpoint) == 0 || len(ack.Checkpoint) > MaximumCheckpointBytes {
+func DecodeCheckpointAck(
+	input Input,
+	report CheckpointReport,
+	ack *agentpb.ReleaseWorkCheckpointAck,
+) (workexecution.Checkpoint, error) {
+	if ack == nil || len(ack.ProtoReflect().GetUnknown()) != 0 || len(ack.Checkpoint) == 0 ||
+		len(ack.Checkpoint) > MaximumCheckpointBytes {
 		return workexecution.Checkpoint{}, invalidProgress()
 	}
 	attempt, err := workexecution.DecodeAgentAttempt(ack.Attempt, input.Attempt.Executor)

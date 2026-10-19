@@ -18,14 +18,22 @@ type RecoveryEffect struct {
 	exchange EffectExchange
 }
 
-func NewRecoveryEffect(input releaseexecution.RecoveryInput, journal *agentworkjournal.Journal, exchange EffectExchange) (*RecoveryEffect, error) {
+func NewRecoveryEffect(
+	input releaseexecution.RecoveryInput,
+	journal *agentworkjournal.Journal,
+	exchange EffectExchange,
+) (*RecoveryEffect, error) {
 	if input.Validate() != nil || input.Input.Attempt.StartedAt == nil || journal == nil || exchange == nil {
 		return nil, errs.New(errs.KindInternal, "Release recovery evidence delivery is not configured")
 	}
 	return &RecoveryEffect{input: input, journal: journal, exchange: exchange}, nil
 }
 
-func (delivery *RecoveryEffect) Record(ctx context.Context, boundary releaseexecution.RecoveryReport, result releaseexecution.RecoveryEffectResult) (workexecution.Input, error) {
+func (delivery *RecoveryEffect) Record(
+	ctx context.Context,
+	boundary releaseexecution.RecoveryReport,
+	result releaseexecution.RecoveryEffectResult,
+) (workexecution.Input, error) {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
 	record, err := delivery.journal.PrepareRecoveryEffect(ctx, delivery.input, boundary, result, time.Now().UTC())
@@ -35,7 +43,10 @@ func (delivery *RecoveryEffect) Record(ctx context.Context, boundary releaseexec
 	return delivery.send(ctx, *record)
 }
 
-func (delivery *RecoveryEffect) Resume(ctx context.Context, boundary releaseexecution.RecoveryReport) (workexecution.Input, bool, error) {
+func (delivery *RecoveryEffect) Resume(
+	ctx context.Context,
+	boundary releaseexecution.RecoveryReport,
+) (workexecution.Input, bool, error) {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
 	record, err := delivery.journal.RecoveryEffect(ctx, delivery.input, boundary)
@@ -46,7 +57,10 @@ func (delivery *RecoveryEffect) Resume(ctx context.Context, boundary releaseexec
 	return reference, true, err
 }
 
-func (delivery *RecoveryEffect) send(ctx context.Context, record agentworkjournal.RecoveryEffectRecord) (workexecution.Input, error) {
+func (delivery *RecoveryEffect) send(
+	ctx context.Context,
+	record agentworkjournal.RecoveryEffectRecord,
+) (workexecution.Input, error) {
 	if record.Acknowledged {
 		return record.Reference, nil
 	}
@@ -59,7 +73,10 @@ func (delivery *RecoveryEffect) send(ctx context.Context, record agentworkjourna
 		return workexecution.Input{}, err
 	}
 	if ack != record.Reference {
-		return workexecution.Input{}, errs.New(errs.KindStateConflict, "Release recovery evidence acknowledgement differs")
+		return workexecution.Input{}, errs.New(
+			errs.KindStateConflict,
+			"Release recovery evidence acknowledgement differs",
+		)
 	}
 	if err := delivery.journal.AcknowledgeRecoveryEffect(ctx, delivery.input, record.Boundary, ack); err != nil {
 		return workexecution.Input{}, err

@@ -17,12 +17,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (service *ReleaseCheckpointService) FailRelease(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.ReleaseWorkFailureRequest) (*agentpb.ReleaseWorkFailureAck, error) {
+func (service *ReleaseCheckpointService) FailRelease(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.ReleaseWorkFailureRequest,
+) (*agentpb.ReleaseWorkFailureAck, error) {
 	if ctx == nil || service == nil || request == nil || executionplan.RejectUnknown(request) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Release failure request is invalid")
 	}
 	reason := releaseexecution.FailureReason(request.Reason)
-	if reason != releaseexecution.ExecutionFailed && reason != releaseexecution.DeadlineExpired && reason != releaseexecution.ExecutionInterrupted {
+	if reason != releaseexecution.ExecutionFailed && reason != releaseexecution.DeadlineExpired &&
+		reason != releaseexecution.ExecutionInterrupted {
 		return nil, errs.New(errs.KindValidationFailed, "Release failure reason is unsupported")
 	}
 	guards, err := authorization.Conditions()
@@ -37,7 +42,8 @@ func (service *ReleaseCheckpointService) FailRelease(ctx context.Context, author
 	if err != nil {
 		return nil, err
 	}
-	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) || service.outcomes[view.Work.Item.Item.Operation] == nil {
+	if !workexecution.SameAssignment(claimed, view.Attempt.Attempt) ||
+		service.outcomes[view.Work.Item.Item.Operation] == nil {
 		return nil, errs.New(errs.KindStateConflict, "Release failure does not match its saved attempt")
 	}
 	if view.Attempt.Attempt.FinishedAt == nil {
@@ -62,7 +68,10 @@ func (service *ReleaseCheckpointService) FailRelease(ctx context.Context, author
 		return nil, errs.New(errs.KindStateConflict, "saved Release outcome is not this failure")
 	}
 	key := releasework.FailureKey(attempt.Result.ID)
-	read, err := service.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := service.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -82,8 +91,15 @@ func (service *ReleaseCheckpointService) FailRelease(ctx context.Context, author
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	ack := &agentpb.ReleaseWorkFailureAck{Attempt: proto.CloneOf(request.Attempt), Evidence: &agentpb.WorkInputReference{InputId: attempt.Result.ID, Sha256: digest},
-		Failure: append([]byte(nil), value.Value...), Outcome: string(attempt.Outcome), FinishedAt: timestamppb.New(*attempt.FinishedAt)}
+	ack := &agentpb.ReleaseWorkFailureAck{
+		Attempt:  proto.CloneOf(request.Attempt),
+		Evidence: &agentpb.WorkInputReference{InputId: attempt.Result.ID, Sha256: digest},
+		Failure: append(
+			[]byte(nil),
+			value.Value...),
+		Outcome:    string(attempt.Outcome),
+		FinishedAt: timestamppb.New(*attempt.FinishedAt),
+	}
 	if attempt.StartedAt != nil {
 		ack.StartedAt = timestamppb.New(*attempt.StartedAt)
 	}

@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (journal *Journal) PrepareLifecycleFailure(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, reason lifecycleexecution.FailureReason,
+func (journal *Journal) PrepareLifecycleFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	reason lifecycleexecution.FailureReason,
 ) (*LifecycleFailureDelivery, error) {
 	if attempt.Validate() != nil || attempt.StartedAt == nil || attempt.FinishedAt != nil || !reason.Valid() {
 		return nil, invalid()
@@ -41,7 +45,8 @@ func (journal *Journal) PrepareLifecycleFailure(ctx context.Context, attempt wor
 		state = &attemptRecord{Attempt: attempt, UpdatedAt: progress.UpdatedAt,
 			Lifecycle: &LifecycleRecord{Stages: stages, Progress: progress}}
 	}
-	if !matchesLifecycle(state, attempt, input) || state.Lifecycle.Completion != nil || len(state.Lifecycle.Progress.Completed) == len(state.Lifecycle.Stages) {
+	if !matchesLifecycle(state, attempt, input) || state.Lifecycle.Completion != nil ||
+		len(state.Lifecycle.Progress.Completed) == len(state.Lifecycle.Stages) {
 		return nil, conflict()
 	}
 	if state.Lifecycle.Failure != nil {
@@ -54,7 +59,11 @@ func (journal *Journal) PrepareLifecycleFailure(ctx context.Context, attempt wor
 	return state.Lifecycle.Failure, nil
 }
 
-func (journal *Journal) AcknowledgeLifecycleFailure(ctx context.Context, attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, ack *agentpb.ServiceLifecycleFailureAck,
+func (journal *Journal) AcknowledgeLifecycleFailure(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	input *agentpb.ServiceLifecycleWorkInput,
+	ack *agentpb.ServiceLifecycleFailureAck,
 ) (workexecution.Attempt, error) {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
@@ -77,7 +86,8 @@ func (journal *Journal) AcknowledgeLifecycleFailure(ctx context.Context, attempt
 		return workexecution.Attempt{}, conflict()
 	}
 	if previous := failure.Receipt; previous != nil {
-		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result || !previous.FinishedAt.Equal(*terminal.FinishedAt) {
+		if previous.Outcome != terminal.Outcome || *previous.Result != *terminal.Result ||
+			!previous.FinishedAt.Equal(*terminal.FinishedAt) {
 			return workexecution.Attempt{}, conflict()
 		}
 		return *previous, nil

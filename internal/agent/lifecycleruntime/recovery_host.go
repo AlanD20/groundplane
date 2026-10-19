@@ -13,8 +13,10 @@ import (
 )
 
 func (host *RuntimeHost) InspectRecovery(ctx context.Context, input Input) (lifecycleexecution.RecoveryReport, error) {
-	if input.recovery == nil || input.recovery.ValidateFor(input.attempt, input.procedure) != nil || input.attempt.StartedAt == nil ||
-		input.recovery.Progress == nil || input.recovery.Progress.BeganAt == nil {
+	if input.recovery == nil || input.recovery.ValidateFor(input.attempt, input.procedure) != nil ||
+		input.attempt.StartedAt == nil ||
+		input.recovery.Progress == nil ||
+		input.recovery.Progress.BeganAt == nil {
 		return lifecycleexecution.RecoveryReport{}, invalidInput()
 	}
 	if err := host.ownership.Check(); err != nil {
@@ -34,7 +36,10 @@ func (host *RuntimeHost) InspectRecovery(ctx context.Context, input Input) (life
 			return lifecycleexecution.RecoveryReport{}, err
 		}
 		if saved == nil {
-			return lifecycleexecution.RecoveryReport{}, errs.New(errs.KindStateConflict, "Lifecycle hook recovery has no retained execution journal")
+			return lifecycleexecution.RecoveryReport{}, errs.New(
+				errs.KindStateConflict,
+				"Lifecycle hook recovery has no retained execution journal",
+			)
 		}
 		if hook := saved.Hook; hook != nil {
 			observed, err := host.commands.Inspect(bounded, hook.ContainerID, hook.ExecID)
@@ -42,7 +47,10 @@ func (host *RuntimeHost) InspectRecovery(ctx context.Context, input Input) (life
 				return lifecycleexecution.RecoveryReport{}, err
 			}
 			if observed.Running {
-				return lifecycleexecution.RecoveryReport{}, errs.New(errs.KindStateConflict, "Previous lifecycle hook is still running")
+				return lifecycleexecution.RecoveryReport{}, errs.New(
+					errs.KindStateConflict,
+					"Previous lifecycle hook is still running",
+				)
 			}
 			if hook.Result != nil {
 				copy := *hook.Result

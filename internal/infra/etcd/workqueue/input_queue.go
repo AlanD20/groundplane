@@ -63,7 +63,8 @@ func (repository *Repository) ScanInput(ctx context.Context, after string) (Queu
 	defer keyvalue.ClearRangeValues(read.Values)
 	page := QueuePage{More: read.More}
 	for _, value := range read.Values {
-		if !strings.HasPrefix(value.Key, inputQueuePrefix) || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision {
+		if !strings.HasPrefix(value.Key, inputQueuePrefix) || value.ModRevision <= 0 ||
+			value.ModRevision > read.ReadRevision {
 			return QueuePage{}, corrupt()
 		}
 		id := strings.TrimPrefix(value.Key, inputQueuePrefix)
@@ -72,7 +73,10 @@ func (repository *Repository) ScanInput(ctx context.Context, after string) (Queu
 			ids.Validate(ids.KindWorkItem, id) != nil || id <= after || page.LastID != "" && id <= page.LastID {
 			return QueuePage{}, corrupt()
 		}
-		page.Entries = append(page.Entries, QueueEntry{TaskID: owner.TaskID, WorkItemID: id, Revision: value.ModRevision})
+		page.Entries = append(
+			page.Entries,
+			QueueEntry{TaskID: owner.TaskID, WorkItemID: id, Revision: value.ModRevision},
+		)
 		page.LastID = id
 	}
 	return page, nil

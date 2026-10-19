@@ -117,8 +117,11 @@ func (repository *InputRepository) RouteDefinitionConditions(
 	}
 	result, err := recordcodec.Decode[RouteDefinitionResult](value.Value, "route-definition-result")
 	digest := sha256.Sum256(value.Value)
-	if err != nil || result.TaskID != task.ID || result.WorkItemID != item.ID || result.EnvironmentID != task.Scope.EnvironmentID ||
-		result.RouteID != task.TargetID || result.Removed != (task.Action == workexecution.ActionRemove) || !result.At.Equal(item.UpdatedAt) ||
+	if err != nil || result.TaskID != task.ID || result.WorkItemID != item.ID ||
+		result.EnvironmentID != task.Scope.EnvironmentID ||
+		result.RouteID != task.TargetID ||
+		result.Removed != (task.Action == workexecution.ActionRemove) ||
+		!result.At.Equal(item.UpdatedAt) ||
 		item.Result.ID != ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "route-definition-result") ||
 		item.Result.SHA256 != hex.EncodeToString(digest[:]) {
 		return nil, conflict("Route definition result differs from its settled action")

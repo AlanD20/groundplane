@@ -8,7 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasework"
 )
 
-func (service *ReleaseCheckpointService) reportDeployment(ctx context.Context, input releaseexecution.Input, previous releasework.Snapshot, report releaseexecution.CheckpointReport) {
+func (service *ReleaseCheckpointService) reportDeployment(
+	ctx context.Context,
+	input releaseexecution.Input,
+	previous releasework.Snapshot,
+	report releaseexecution.CheckpointReport,
+) {
 	var before *releaseexecution.Progress
 	if previous.Record != nil {
 		before = &previous.Record.Progress
@@ -29,8 +34,16 @@ func (service *ReleaseCheckpointService) reportDeployment(ctx context.Context, i
 		// the saved boundary. Exact diagnostic replay is idempotent.
 		started, startErr := releaseexecution.DeploymentStage(input, before, *before)
 		if startErr == nil {
-			startErr = service.diagnostics.Report(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor,
-				before.Sequence, started, before.UpdatedAt)
+			startErr = service.diagnostics.Report(
+				bounded,
+				attempt.TaskID,
+				attempt.WorkItemID,
+				attempt.ID,
+				attempt.Executor,
+				before.Sequence,
+				started,
+				before.UpdatedAt,
+			)
 		}
 		err = startErr
 	}
@@ -43,7 +56,14 @@ func (service *ReleaseCheckpointService) reportDeployment(ctx context.Context, i
 	if err != nil {
 		service.logger.WarnContext(ctx, "deployment diagnostics are incomplete", "attempt_id", attempt.ID, "error", err)
 		if lossErr := service.diagnostics.MarkIncomplete(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor); lossErr != nil {
-			service.logger.WarnContext(ctx, "could not record deployment diagnostic loss", "attempt_id", attempt.ID, "error", lossErr)
+			service.logger.WarnContext(
+				ctx,
+				"could not record deployment diagnostic loss",
+				"attempt_id",
+				attempt.ID,
+				"error",
+				lossErr,
+			)
 		}
 	}
 }

@@ -53,7 +53,12 @@ func (repository *TaskRepository) preparePostgresBackingGuardStagingCleanup(ctx 
 		if guard.GetPostgresRecoveryApply() != nil || guard.GetMysqlRecoveryApply() != nil {
 			return result, backupStagingConflict()
 		}
-		source, err := inputs.ReadStagingSource(ctx, queue, identity, delivery.Record.Inventory.Entries[index].RecoveryKeySha256)
+		source, err := inputs.ReadStagingSource(
+			ctx,
+			queue,
+			identity,
+			delivery.Record.Inventory.Entries[index].RecoveryKeySha256,
+		)
 		if err != nil {
 			return result, err
 		}
@@ -118,7 +123,11 @@ func (repository *TaskRepository) preparePostgresBackingGuardStagingCleanup(ctx 
 func loadPostgresBackingGuardCleanupWork(ctx context.Context, inputs *backupwork.InputRepository,
 	source backupwork.StagingSource,
 ) (*postgresBackingGuardCleanupWork, error) {
-	cleanup := &postgresBackingGuardCleanupWork{source: source, expected: make(map[uint32]string), covered: make(map[uint32]bool)}
+	cleanup := &postgresBackingGuardCleanupWork{
+		source:   source,
+		expected: make(map[uint32]string),
+		covered:  make(map[uint32]bool),
+	}
 	switch source.Input.Operation {
 	case agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_CAPTURE:
 		run, guard, err := inputs.LoadStagingCapture(ctx, source)
@@ -131,12 +140,14 @@ func loadPostgresBackingGuardCleanupWork(ctx context.Context, inputs *backupwork
 		cleanup.conditions = append(cleanup.conditions, guard)
 		cleanup.owner = postgresbackingguard.Owner(backupruntime.BackupOperationBackup, run.OperationID, run.TaskID)
 		for index, attempt := range run.Sources {
-			if attempt.Kind != backupruntime.BackupRuntimeSourceAttach || attempt.State == backupruntime.BackupSourceAttemptUnstarted {
+			if attempt.Kind != backupruntime.BackupRuntimeSourceAttach ||
+				attempt.State == backupruntime.BackupSourceAttemptUnstarted {
 				continue
 			}
 			step := source.Input.Steps[index]
 			environment := ""
-			if step.GetCapture().GetPostgres() != nil && attempt.Snapshot.Postgres != nil && attempt.Snapshot.MySQL == nil {
+			if step.GetCapture().GetPostgres() != nil && attempt.Snapshot.Postgres != nil &&
+				attempt.Snapshot.MySQL == nil {
 				environment = attempt.Snapshot.Postgres.BackingEnvironmentID
 			} else if step.GetCapture().GetMysql() != nil && attempt.Snapshot.MySQL != nil && attempt.Snapshot.Postgres == nil {
 				environment = attempt.Snapshot.MySQL.BackingEnvironmentID
@@ -162,7 +173,11 @@ func loadPostgresBackingGuardCleanupWork(ctx context.Context, inputs *backupwork
 			return nil, backupStagingConflict()
 		}
 		cleanup.conditions = append(cleanup.conditions, guard)
-		cleanup.owner = postgresbackingguard.Owner(backupruntime.BackupOperationRestore, restored.OperationID, restored.TaskID)
+		cleanup.owner = postgresbackingguard.Owner(
+			backupruntime.BackupOperationRestore,
+			restored.OperationID,
+			restored.TaskID,
+		)
 		cleanup.expected[0] = environment
 	default:
 		return nil, backupStagingConflict()

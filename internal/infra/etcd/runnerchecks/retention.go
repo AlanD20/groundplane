@@ -17,7 +17,10 @@ func (repository *Repository) PruneInput(ctx context.Context, taskID string, at 
 	if ids.Validate(ids.KindTask, taskID) != nil || at.IsZero() || at.Location() != time.UTC {
 		return false, errs.New(errs.KindValidationFailed, "Runner retention identity or time is invalid")
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{RecordKey(taskID), workqueue.TaskKey(taskID)}})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{RecordKey(taskID), workqueue.TaskKey(taskID)}},
+	)
 	if err != nil {
 		return false, err
 	}
@@ -39,18 +42,27 @@ func (repository *Repository) PruneInput(ctx context.Context, taskID string, at 
 	if err != nil {
 		return false, err
 	}
-	if record.Owner.TaskID != taskID || task.ID != taskID || task.Scope != (workexecution.Scope{TenantID: record.Source.Desired.TenantID, ProjectID: record.Source.Desired.ProjectID(), EnvironmentID: record.Source.Desired.EnvironmentID()}) {
+	if record.Owner.TaskID != taskID || task.ID != taskID ||
+		task.Scope != (workexecution.Scope{TenantID: record.Source.Desired.TenantID, ProjectID: record.Source.Desired.ProjectID(), EnvironmentID: record.Source.Desired.EnvironmentID()}) {
 		return false, errs.New(errs.KindStateConflict, "Runner retention owner differs from its Task")
 	}
-	if task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil || at.Before(*task.RetainUntil) || record.Phase != Finished {
+	if task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil ||
+		at.Before(*task.RetainUntil) ||
+		record.Phase != Finished {
 		return false, nil
 	}
-	keys := []string{workqueue.ItemKey(record.Owner.WorkItemID), OperationKey(record.Owner.OperationID), ActiveKey(record.Source.RunnerID), LatestKey(record.Source.RunnerID)}
+	keys := []string{
+		workqueue.ItemKey(record.Owner.WorkItemID),
+		OperationKey(record.Owner.OperationID),
+		ActiveKey(record.Source.RunnerID),
+		LatestKey(record.Source.RunnerID),
+	}
 	owned, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: read.ReadRevision})
 	if err != nil {
 		return false, err
 	}
-	if owned == nil || owned.ReadRevision != read.ReadRevision || len(owned.Values) != len(keys) || owned.Values[0] == nil {
+	if owned == nil || owned.ReadRevision != read.ReadRevision || len(owned.Values) != len(keys) ||
+		owned.Values[0] == nil {
 		return false, errs.New(errs.KindInternal, "Runner retention work read is incomplete")
 	}
 	defer keyvalue.ClearValues(owned.Values)
@@ -68,7 +80,10 @@ func (repository *Repository) PruneInput(ctx context.Context, taskID string, at 
 	conditions := []keyvalue.Condition{{Key: RecordKey(taskID), ModRevision: read.Values[0].ModRevision},
 		{Key: workqueue.TaskKey(taskID), ModRevision: read.Values[1].ModRevision}}
 	for index, key := range keys {
-		conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(owned.Values[index])})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(owned.Values[index])},
+		)
 	}
 	mutations := []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: RecordKey(taskID)}}
 	if owned.Values[3] != nil && string(owned.Values[3].Value) == taskID {

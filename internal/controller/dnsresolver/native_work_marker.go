@@ -11,8 +11,18 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func prepareNativeResolverMarker(ctx context.Context, coordinator *requestidempotency.Coordinator, work PreparedWork) (idempotency.IdempotencyMarker, error) {
-	intent, err := platformComponentLifecycleIntent(ctx, coordinator, work.Input.ComponentID, "update", platformComponentUpdateRoute)
+func prepareNativeResolverMarker(
+	ctx context.Context,
+	coordinator *requestidempotency.Coordinator,
+	work PreparedWork,
+) (idempotency.IdempotencyMarker, error) {
+	intent, err := platformComponentLifecycleIntent(
+		ctx,
+		coordinator,
+		work.Input.ComponentID,
+		"update",
+		platformComponentUpdateRoute,
+	)
 	if err != nil {
 		return idempotency.IdempotencyMarker{}, err
 	}

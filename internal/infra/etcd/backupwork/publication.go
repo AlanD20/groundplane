@@ -16,7 +16,11 @@ import (
 
 // NewItem keeps ordered sources in one operation. This preserves fail-fast
 // capture and source-local resume without manufacturing a Task per source.
-func NewItem(task workexecution.Task, workID, hostID string, input *agentpb.BackupWorkInput) (workexecution.Item, error) {
+func NewItem(
+	task workexecution.Task,
+	workID, hostID string,
+	input *agentpb.BackupWorkInput,
+) (workexecution.Item, error) {
 	if task.Validate() != nil || input == nil || task.ExpectedItems != 1 ||
 		task.Scope.ProjectID != input.ProjectId || task.Scope.EnvironmentID != input.EnvironmentId {
 		return workexecution.Item{}, conflict("Backup Task scope differs from its captured resources")

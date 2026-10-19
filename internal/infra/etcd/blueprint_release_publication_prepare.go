@@ -39,7 +39,10 @@ func (ledger *ReleaseLedger) PrepareReleaseWorkPublication(
 	if len(evidence.Manifest.Record.Members) != 1 ||
 		evidence.Manifest.Record.Members[0].ServiceID != prepared.Item.TargetID ||
 		evidence.Manifest.Record.Members[0].ReleaseID != evidence.ServiceRollout.Record.Render.ReleaseID {
-		return ReleaseWorkPublication{}, errs.New(errs.KindValidationFailed, "Blueprint Release manifest differs from its work item")
+		return ReleaseWorkPublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Release manifest differs from its work item",
+		)
 	}
 	conditions := []etcdstore.Condition{
 		{
@@ -130,7 +133,10 @@ func (ledger *ReleaseLedger) PrepareReleaseWorkPublication(
 			if hook.Execution.SourceMembershipCount != evidence.SourcePrepared.MembershipCount() ||
 				hook.Execution.SourceMembershipSHA256 != evidence.SourcePrepared.MembershipSHA256() {
 				etcdstore.ZeroMutationBytes(mutations)
-				return ReleaseWorkPublication{}, errs.New(errs.KindValidationFailed, "Blueprint hook retained source membership changed")
+				return ReleaseWorkPublication{}, errs.New(
+					errs.KindValidationFailed,
+					"Blueprint hook retained source membership changed",
+				)
 			}
 			conditions = append(
 				conditions,

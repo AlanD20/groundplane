@@ -29,6 +29,8 @@ func (publisher *RouteWorkPublisher) publishDefinition(ctx context.Context, requ
 		Project: request.Project, Environment: request.Environment, Target: request.Target, Current: request.Current,
 		Claim: request.Claim, Projection: request.Candidate, EpochRevision: request.EpochRevision,
 		Task: task, Item: item, Marker: marker, InactiveRouterKinds: kinds,
-		Capture: componentwork.Capture{Route: &componentwork.RouteSettlement{Record: record, Remove: request.Action == workexecution.ActionRemove}},
+		Capture: componentwork.Capture{
+			Route: &componentwork.RouteSettlement{Record: record, Remove: request.Action == workexecution.ActionRemove},
+		},
 	})
 }

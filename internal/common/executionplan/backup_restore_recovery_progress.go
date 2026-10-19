@@ -65,9 +65,13 @@ func AdvanceBackupRestoreRecovery(assignment *agentpb.BackupRecoveryAssignment,
 
 // Reaffirm only the exact interrupted restart. This creates an acknowledged
 // receipt for the recovery attempt without rewinding the consumer state machine.
-func repeatsDatabaseRestartIntent(current *agentpb.BackupRestoreResume, report *agentpb.BackupWorkCheckpointRequest) bool {
+func repeatsDatabaseRestartIntent(
+	current *agentpb.BackupRestoreResume,
+	report *agentpb.BackupWorkCheckpointRequest,
+) bool {
 	progress := current.GetDatabaseProgress()
-	if progress == nil || (!progress.ConsumersOnly && progress.PostgresVerified == nil && progress.MysqlVerified == nil) ||
+	if progress == nil ||
+		(!progress.ConsumersOnly && progress.PostgresVerified == nil && progress.MysqlVerified == nil) ||
 		current.Phase != agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_SERVICE_RECOVERY ||
 		progress.ConsumerPhase != agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_RESTART_INTENT {
 		return false

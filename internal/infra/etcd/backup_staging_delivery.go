@@ -110,7 +110,9 @@ func (repository *TaskRepository) writeBackupStagingDelivery(
 		return err
 	}
 	defer clear(encoded)
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: backupruntime.BackupStagingDeliveryKey(record.AgentID), Value: encoded}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupStagingDeliveryKey(record.AgentID), Value: encoded},
+	}
 	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
 		return err
 	}
@@ -147,7 +149,8 @@ func (repository *TaskRepository) ApplyBackupStagingDelivery(
 	if err != nil {
 		return nil, err
 	}
-	if !found || current.Record.HostID != identity.HostID || current.Record.AgentGeneration != identity.Generation || current.Record.ProcessGeneration != process {
+	if !found || current.Record.HostID != identity.HostID || current.Record.AgentGeneration != identity.Generation ||
+		current.Record.ProcessGeneration != process {
 		return nil, backupStagingConflict()
 	}
 	next := current.Record

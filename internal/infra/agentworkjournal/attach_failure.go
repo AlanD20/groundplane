@@ -13,14 +13,24 @@ type AttachFailureDelivery struct {
 
 func (record attemptRecord) validateAttachFailure() error {
 	failure := record.AttachFailure
-	if failure == nil || !failure.Reason.Valid() || record.EnvironmentFailure != nil || record.EnvironmentRemoval != nil ||
-		record.ScriptFailure != nil || record.ScriptRecovery != nil || record.ScriptCompletion != nil || record.Release != nil ||
-		record.Effect != nil || record.Completion != nil || record.Failure != nil || record.Recovery != nil || len(record.Script) != 0 {
+	if failure == nil || !failure.Reason.Valid() || record.EnvironmentFailure != nil ||
+		record.EnvironmentRemoval != nil ||
+		record.ScriptFailure != nil ||
+		record.ScriptRecovery != nil ||
+		record.ScriptCompletion != nil ||
+		record.Release != nil ||
+		record.Effect != nil ||
+		record.Completion != nil ||
+		record.Failure != nil ||
+		record.Recovery != nil ||
+		len(record.Script) != 0 {
 		return invalid()
 	}
 	if terminal := failure.Receipt; terminal != nil {
-		if terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil || terminal.Outcome == workexecution.Succeeded ||
-			!workexecution.SameAssignment(*terminal, record.Attempt) || terminal.FinishedAt.Before(record.UpdatedAt) {
+		if terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil ||
+			terminal.Outcome == workexecution.Succeeded ||
+			!workexecution.SameAssignment(*terminal, record.Attempt) ||
+			terminal.FinishedAt.Before(record.UpdatedAt) {
 			return invalid()
 		}
 		captured, err := attachexecution.DecodeRemovalFailure(*terminal, failure.Evidence, *terminal.Result)

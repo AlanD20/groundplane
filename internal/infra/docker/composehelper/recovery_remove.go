@@ -13,7 +13,13 @@ import (
 // RemoveRecoveryCandidate removes only the failed Release's verified container
 // IDs. It never invokes Compose down, expands dependencies, or removes Volumes.
 // On resumed delivery inspectOnly proves the result without replaying removal.
-func RemoveRecoveryCandidate(ctx context.Context, taskRunner runner.Runner, input releaseexecution.RecoveryInput, report releaseexecution.RecoveryReport, inspectOnly bool) error {
+func RemoveRecoveryCandidate(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	input releaseexecution.RecoveryInput,
+	report releaseexecution.RecoveryReport,
+	inspectOnly bool,
+) error {
 	if ctx == nil || taskRunner == nil || report.Validate(input) != nil || report.Ack == nil ||
 		!report.Progress.InFlight || report.Progress.Phase != releaseexecution.RemoveFailedCandidate {
 		return invalidReleaseHelper()
@@ -76,7 +82,12 @@ func RemoveRecoveryCandidate(ctx context.Context, taskRunner runner.Runner, inpu
 	return recoveryPredecessorServing(bounded, taskRunner, artifacts, inventory)
 }
 
-func recoveryPredecessorServing(ctx context.Context, taskRunner runner.Runner, artifacts executionplan.ReleaseWorkArtifacts, inventory servingInventory) error {
+func recoveryPredecessorServing(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	artifacts executionplan.ReleaseWorkArtifacts,
+	inventory servingInventory,
+) error {
 	if artifacts.Prior == nil {
 		if len(inventory.predecessors) != 0 {
 			return foreignRestorationRuntime()
@@ -89,7 +100,10 @@ func recoveryPredecessorServing(ctx context.Context, taskRunner runner.Runner, a
 		return err
 	}
 	if !ready {
-		return errs.New(errs.KindStateConflict, "captured previous workload is not ready; failed candidate cannot be removed")
+		return errs.New(
+			errs.KindStateConflict,
+			"captured previous workload is not ready; failed candidate cannot be removed",
+		)
 	}
 	if prior.Proxy != nil {
 		if inventory.proxyID == "" {
@@ -100,7 +114,10 @@ func recoveryPredecessorServing(ctx context.Context, taskRunner runner.Runner, a
 			return err
 		}
 		if !proven {
-			return errs.New(errs.KindStateConflict, "live and restart routing have not returned to the captured previous workload")
+			return errs.New(
+				errs.KindStateConflict,
+				"live and restart routing have not returned to the captured previous workload",
+			)
 		}
 	}
 	return nil

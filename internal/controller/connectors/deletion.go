@@ -30,8 +30,25 @@ type connectorDeletionRepository interface {
 	GetConnector(context.Context, string) (etcdstore.Versioned[connectorrecord.Record], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	CaptureConnectorRemoval(context.Context, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], etcdstore.Versioned[hierarchyrecord.ProjectRecord], etcdstore.Versioned[connectorrecord.Record], string, string, string, time.Time) (connectorremoval.Input, error)
-	PublishConnectorRemoval(context.Context, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], etcdstore.Versioned[hierarchyrecord.ProjectRecord], etcdstore.Versioned[connectorrecord.Record], connectorremoval.Input, workexecution.Task, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	CaptureConnectorRemoval(
+		context.Context,
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[connectorrecord.Record],
+		string,
+		string,
+		string,
+		time.Time,
+	) (connectorremoval.Input, error)
+	PublishConnectorRemoval(
+		context.Context,
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[connectorrecord.Record],
+		connectorremoval.Input,
+		workexecution.Task,
+		idempotencyrecord.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type connectorDeletionEvidence struct {
@@ -257,7 +274,11 @@ func (service *connectorDeletionService) deleteConnectorOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task := workexecution.Task{ID: input.TaskID, Actor: workexecution.OperatorActor,
-		Scope:  workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID},
+		Scope: workexecution.Scope{
+			TenantID:      input.TenantID,
+			ProjectID:     input.ProjectID,
+			EnvironmentID: input.EnvironmentID,
+		},
 		Action: workexecution.ActionRemove, TargetID: input.ConnectorID, TargetName: connector.Name,
 		Intent: ref, ExpectedItems: 1, CreatedAt: now, UpdatedAt: now,
 		Deadline: now.Add(time.Duration(connectorDeletionTimeoutSeconds) * time.Second)}
@@ -275,7 +296,15 @@ func (service *connectorDeletionService) deleteConnectorOnce(
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	result, deleteErr := service.repository.PublishConnectorRemoval(ctx, environment, project, current, input, task, marker)
+	result, deleteErr := service.repository.PublishConnectorRemoval(
+		ctx,
+		environment,
+		project,
+		current,
+		input,
+		task,
+		marker,
+	)
 	if deleteErr != nil {
 		if !isUnknownConnectorDeletionOutcome(deleteErr) {
 			return idempotencyrecord.IdempotencyResponse{}, deleteErr
@@ -367,17 +396,25 @@ func (repository *durableConnectorDeletionRepository) GetProject(
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
-func (repository *durableConnectorDeletionRepository) CaptureConnectorRemoval(ctx context.Context,
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	current etcdstore.Versioned[connectorrecord.Record], taskID, workID, planID string, at time.Time,
+func (repository *durableConnectorDeletionRepository) CaptureConnectorRemoval(
+	ctx context.Context,
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[connectorrecord.Record],
+	taskID, workID, planID string,
+	at time.Time,
 ) (connectorremoval.Input, error) {
 	return repository.connectors.CaptureConnectorRemoval(ctx, environment, project, current, taskID, workID, planID, at)
 }
 
-func (repository *durableConnectorDeletionRepository) PublishConnectorRemoval(ctx context.Context,
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	current etcdstore.Versioned[connectorrecord.Record], input connectorremoval.Input,
-	task workexecution.Task, marker idempotencyrecord.IdempotencyMarker,
+func (repository *durableConnectorDeletionRepository) PublishConnectorRemoval(
+	ctx context.Context,
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[connectorrecord.Record],
+	input connectorremoval.Input,
+	task workexecution.Task,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.connectors.PublishConnectorRemoval(ctx, environment, project, current, input, task, marker)
 }

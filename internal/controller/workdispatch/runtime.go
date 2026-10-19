@@ -37,20 +37,51 @@ type RuntimeConfig struct {
 	CollectionBudget    time.Duration
 }
 
-func NewRuntime(queue *workqueue.Repository, scheduler *Scheduler, controller *ControllerExecutor, completions *Completions, publications *Publications, inputs *Inputs,
-	retention *operationretention.Collector, diagnostics *executiondiagnostics.Repository, logger *slog.Logger,
+func NewRuntime(
+	queue *workqueue.Repository,
+	scheduler *Scheduler,
+	controller *ControllerExecutor,
+	completions *Completions,
+	publications *Publications,
+	inputs *Inputs,
+	retention *operationretention.Collector,
+	diagnostics *executiondiagnostics.Repository,
+	logger *slog.Logger,
 ) (*Runtime, error) {
-	if queue == nil || scheduler == nil || controller == nil || completions == nil || publications == nil || inputs == nil || retention == nil || diagnostics == nil || logger == nil ||
-		scheduler.queue != queue || controller.queue != queue || completions.queue != queue || publications.queue != queue || inputs.queue != queue {
+	if queue == nil || scheduler == nil || controller == nil || completions == nil || publications == nil ||
+		inputs == nil ||
+		retention == nil ||
+		diagnostics == nil ||
+		logger == nil ||
+		scheduler.queue != queue ||
+		controller.queue != queue ||
+		completions.queue != queue ||
+		publications.queue != queue ||
+		inputs.queue != queue {
 		return nil, errs.New(errs.KindInternal, "execution runtime requires one queue and complete loop owners")
 	}
-	return &Runtime{queue: queue, scheduler: scheduler, controller: controller, completions: completions, publications: publications, inputs: inputs, retention: retention, diagnostics: diagnostics, logger: logger}, nil
+	return &Runtime{
+		queue:        queue,
+		scheduler:    scheduler,
+		controller:   controller,
+		completions:  completions,
+		publications: publications,
+		inputs:       inputs,
+		retention:    retention,
+		diagnostics:  diagnostics,
+		logger:       logger,
+	}, nil
 }
 
 // Run refuses a stale or unreconciled identity. Any loop failure stops and joins
 // the process's loops; it cannot silently leave assignment running without an
 // executor or settlement. Durable claims and checkpoints survive shutdown.
-func (runtime *Runtime) Run(ctx context.Context, ownership *controllerownership.Lease, identity workexecution.Identity, config RuntimeConfig) error {
+func (runtime *Runtime) Run(
+	ctx context.Context,
+	ownership *controllerownership.Lease,
+	identity workexecution.Identity,
+	config RuntimeConfig,
+) error {
 	if err := ownership.Check(); err != nil {
 		return err
 	}
@@ -59,17 +90,32 @@ func (runtime *Runtime) Run(ctx context.Context, ownership *controllerownership.
 		config.DiagnosticRetention < time.Hour || config.DiagnosticRetention > config.HistoryRetention || config.CollectionBudget <= 0 {
 		return errs.New(errs.KindInternal, "execution runtime identity or intervals are invalid")
 	}
-	registration, err := runtime.queue.ReadExecutor(ctx, workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID})
+	registration, err := runtime.queue.ReadExecutor(
+		ctx,
+		workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID},
+	)
 	if err != nil {
 		return err
 	}
 	if registration.Revision == 0 || registration.Record.Identity != identity || !registration.Record.Ready {
-		return errs.New(errs.KindStateConflict, "controller execution must finish startup reconciliation before dispatch")
+		return errs.New(
+			errs.KindStateConflict,
+			"controller execution must finish startup reconciliation before dispatch",
+		)
 	}
 	running, cancel := context.WithCancel(ctx)
 	defer cancel()
 	report := func(issue Issue) {
-		runtime.logger.ErrorContext(running, "execution operation requires attention", "task_id", issue.TaskID, "work_id", issue.WorkID, "error", issue.Err)
+		runtime.logger.ErrorContext(
+			running,
+			"execution operation requires attention",
+			"task_id",
+			issue.TaskID,
+			"work_id",
+			issue.WorkID,
+			"error",
+			issue.Err,
+		)
 	}
 	loops := []func(context.Context) error{
 		func(ctx context.Context) error { return runtime.inputs.Run(ctx, config.Interval, report) },
@@ -87,7 +133,11 @@ func (runtime *Runtime) Run(ctx context.Context, ownership *controllerownership.
 			return runtime.completions.Run(ctx, config.Interval, config.HistoryRetention, report)
 		},
 		func(ctx context.Context) error {
-			return runtime.retention.Run(ctx, config.CollectionInterval, func(taskID string, err error) { report(Issue{TaskID: taskID, Err: err}) })
+			return runtime.retention.Run(
+				ctx,
+				config.CollectionInterval,
+				func(taskID string, err error) { report(Issue{TaskID: taskID, Err: err}) },
+			)
 		},
 		func(ctx context.Context) error { return runtime.expireDiagnostics(ctx, config, report) },
 	}
@@ -118,14 +168,23 @@ func (runtime *Runtime) Run(ctx context.Context, ownership *controllerownership.
 }
 
 func (runtime *Runtime) disable(ctx context.Context, identity workexecution.Identity) error {
-	current, err := runtime.queue.ReadExecutor(ctx, workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID})
+	current, err := runtime.queue.ReadExecutor(
+		ctx,
+		workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID},
+	)
 	if err != nil {
 		return err
 	}
 	if current.Revision == 0 || current.Record.Identity != identity || !current.Record.Ready {
 		return nil
 	}
-	change, err := workqueue.PrepareAvailability(current, identity, false, current.Record.Capacity, current.Record.UnavailableOperations)
+	change, err := workqueue.PrepareAvailability(
+		current,
+		identity,
+		false,
+		current.Record.Capacity,
+		current.Record.UnavailableOperations,
+	)
 	if err != nil {
 		return err
 	}

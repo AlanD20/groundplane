@@ -19,17 +19,26 @@ func unstartedEvidencePrefix(workID string) string {
 	return "/v1/network-unstarted-evidence/" + workID + "/"
 }
 
-func (repository *InputRepository) PrepareUnstartedRetry(ctx context.Context, view workqueue.View, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareUnstartedRetry(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Action == workexecution.ActionRemove && task.Scope.TenantID == "" && item.Result != nil &&
 		item.Result.ID == ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "cascade-publication-rejection") {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable,
-			"Zone removal was rejected before execution; submit a new removal to capture current consumers and approval")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Zone removal was rejected before execution; submit a new removal to capture current consumers and approval",
+		)
 	}
 	if item.Operation != workexecution.Network || task.Stop != nil || task.CollectionStartedAt != nil ||
 		item.AttemptNumber != 0 || item.Input == nil || item.Result == nil || item.Phase != workexecution.Settled ||
 		item.Outcome != workexecution.Failed || item.Cleanup != workexecution.CleanupNone || item.ForwardRevoked {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Network Retry requires a captured action that failed before execution")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Network Retry requires a captured action that failed before execution",
+		)
 	}
 	input, guards, err := repository.Load(ctx, view)
 	if err != nil {
@@ -55,12 +64,16 @@ func (repository *InputRepository) PrepareUnstartedRetry(ctx context.Context, vi
 	}
 	raw := read.Values[0].Value
 	digest := sha256.Sum256(raw)
-	if item.Result.ID != ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "network-unstarted") || item.Result.SHA256 != hex.EncodeToString(digest[:]) {
+	if item.Result.ID != ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "network-unstarted") ||
+		item.Result.SHA256 != hex.EncodeToString(digest[:]) {
 		return workqueue.Change{}, conflict("Network Retry queued failure differs from its recorded result")
 	}
 	failure, err := recordcodec.Decode[UnstartedResult](raw, "network-unstarted")
-	if err != nil || failure.TaskID != task.ID || failure.WorkItemID != item.ID || failure.NetworkID != input.NetworkId ||
-		failure.Input != *item.Input || failure.Outcome != workexecution.Failed || !failure.At.Equal(item.UpdatedAt) {
+	if err != nil || failure.TaskID != task.ID || failure.WorkItemID != item.ID ||
+		failure.NetworkID != input.NetworkId ||
+		failure.Input != *item.Input ||
+		failure.Outcome != workexecution.Failed ||
+		!failure.At.Equal(item.UpdatedAt) {
 		return workqueue.Change{}, conflict("Network Retry queued failure belongs to different work")
 	}
 	change, err := workqueue.PrepareUnstartedRetry(view.Task, view.Item, at.Add(budget), at)
@@ -76,7 +89,11 @@ func (repository *InputRepository) PrepareUnstartedRetry(ctx context.Context, vi
 	change.Conditions = append(change.Conditions, fence.Conditions...)
 	change.Mutations = append(change.Mutations, fence.Mutations...)
 	change.Conditions = append(change.Conditions, guards...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, keyvalue.Condition{Key: evidenceKey})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision},
+		keyvalue.Condition{Key: evidenceKey},
+	)
 	change.Mutations = append(change.Mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: evidenceKey, Value: append([]byte(nil), raw...)},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})

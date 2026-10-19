@@ -47,12 +47,16 @@ func New(queue *workqueue.Repository, connectors *connectorchecks.Repository,
 	tasks []TaskRegistration,
 	registrations ...WorkRegistration,
 ) (*Collector, error) {
-	if queue == nil || connectors == nil || backings == nil || dns == nil || edge == nil || runners == nil || images == nil || hierarchy == nil || networks == nil {
+	if queue == nil || connectors == nil || backings == nil || dns == nil || edge == nil || runners == nil ||
+		images == nil ||
+		hierarchy == nil ||
+		networks == nil {
 		return nil, errs.New(errs.KindInternal, "operation retention requires all operation repositories")
 	}
 	owners := make(map[workexecution.Operation]WorkOwner, len(registrations))
 	for _, registration := range registrations {
-		if !workexecution.ValidOperation(registration.Operation) || registration.Owner == nil || owners[registration.Operation] != nil {
+		if !workexecution.ValidOperation(registration.Operation) || registration.Owner == nil ||
+			owners[registration.Operation] != nil {
 			return nil, errs.New(errs.KindInternal, "work retention owner is invalid or duplicated")
 		}
 		owners[registration.Operation] = registration.Owner
@@ -69,7 +73,20 @@ func New(queue *workqueue.Repository, connectors *connectorchecks.Repository,
 			drafts = append(drafts, registration.Drafts)
 		}
 	}
-	return &Collector{queue: queue, connectors: connectors, backings: backings, dns: dns, edge: edge, runners: runners, images: images, hierarchy: hierarchy, networks: networks, workOwners: owners, taskOwners: taskOwners, draftOwners: drafts}, nil
+	return &Collector{
+		queue:       queue,
+		connectors:  connectors,
+		backings:    backings,
+		dns:         dns,
+		edge:        edge,
+		runners:     runners,
+		images:      images,
+		hierarchy:   hierarchy,
+		networks:    networks,
+		workOwners:  owners,
+		taskOwners:  taskOwners,
+		draftOwners: drafts,
+	}, nil
 }
 
 // Collect performs at most one eight-attempt batch. False means another
@@ -83,7 +100,8 @@ func (collector *Collector) Collect(ctx context.Context, taskID string, at time.
 		task.Task.TargetID == task.Task.Scope.EnvironmentID {
 		return collector.collectGraph(ctx, task, revision, at)
 	}
-	if task.Task.Action == workexecution.ActionActivate || task.Task.Action == workexecution.ActionDeploy || task.Task.Action == workexecution.ActionRollback {
+	if task.Task.Action == workexecution.ActionActivate || task.Task.Action == workexecution.ActionDeploy ||
+		task.Task.Action == workexecution.ActionRollback {
 		return collector.collectGraph(ctx, task, revision, at)
 	}
 	if task.Task.Action == workexecution.ActionRemove && ids.Validate(ids.KindNetwork, task.Task.TargetID) == nil {
@@ -108,9 +126,22 @@ func (collector *Collector) Collect(ctx context.Context, taskID string, at time.
 		if err != nil {
 			return false, err
 		}
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskEventsKey(taskID)})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskExpiryKey(taskID)})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: scriptexecutions.SourceRetirementPrefix(taskID), Prefix: true})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskEventsKey(taskID)},
+		)
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskExpiryKey(taskID)},
+		)
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{
+				Type:   keyvalue.MutationDelete,
+				Key:    scriptexecutions.SourceRetirementPrefix(taskID),
+				Prefix: true,
+			},
+		)
 		result, err := collector.queue.Commit(ctx, change)
 		return result.Succeeded, err
 	}
@@ -166,19 +197,43 @@ func (collector *Collector) Collect(ctx context.Context, taskID string, at time.
 		}
 		switch item.Item.Operation {
 		case workexecution.ConnectorCheck:
-			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: connectorchecks.ResultKey(attempt.Attempt.ID)})
+			change.Mutations = append(
+				change.Mutations,
+				keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: connectorchecks.ResultKey(attempt.Attempt.ID)},
+			)
 		case workexecution.BackingCheck:
-			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: backingchecks.ResultKey(attempt.Attempt.ID)})
+			change.Mutations = append(
+				change.Mutations,
+				keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: backingchecks.ResultKey(attempt.Attempt.ID)},
+			)
 		case workexecution.EdgeCheck:
-			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: edgechecks.ResultKey(attempt.Attempt.ID)})
+			change.Mutations = append(
+				change.Mutations,
+				keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: edgechecks.ResultKey(attempt.Attempt.ID)},
+			)
 		case workexecution.Image:
-			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: imageoperations.ProgressKey(attempt.Attempt.ID)})
-			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: imageoperations.ResultKey(attempt.Attempt.ID)})
+			change.Mutations = append(
+				change.Mutations,
+				keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: imageoperations.ProgressKey(attempt.Attempt.ID)},
+			)
+			change.Mutations = append(
+				change.Mutations,
+				keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: imageoperations.ResultKey(attempt.Attempt.ID)},
+			)
 			// DNS evidence is the finished operation input, already retired above.
 		}
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.Key(attempt.Attempt.ID)})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.LossKey(attempt.Attempt.ID)})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.EventsKey(attempt.Attempt.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.Key(attempt.Attempt.ID)},
+		)
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.LossKey(attempt.Attempt.ID)},
+		)
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.EventsKey(attempt.Attempt.ID)},
+		)
 		changes = append(changes, change)
 	}
 	_, err = collector.queue.Commit(ctx, changes...)
@@ -204,7 +259,12 @@ func operationInputKey(operation workexecution.Operation, taskID string) (string
 	}
 }
 
-func (collector *Collector) retireInput(ctx context.Context, operation workexecution.Operation, taskID string, at time.Time) (bool, error) {
+func (collector *Collector) retireInput(
+	ctx context.Context,
+	operation workexecution.Operation,
+	taskID string,
+	at time.Time,
+) (bool, error) {
 	switch operation {
 	case workexecution.ConnectorCheck:
 		return collector.connectors.PruneInput(ctx, taskID, at)

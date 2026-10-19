@@ -35,8 +35,10 @@ func (repository *InputRepository) LoadRecovery(ctx context.Context, view workqu
 	if err != nil {
 		return RecoverySnapshot{}, err
 	}
-	if source.Forward.TaskID != view.Task.Task.ID || source.Forward.WorkItemID != item.ID || source.Forward.Input != *item.Input ||
-		source.Forward.Executor.HostID != item.Placement.HostID || source.Forward.Number > item.AttemptNumber {
+	if source.Forward.TaskID != view.Task.Task.ID || source.Forward.WorkItemID != item.ID ||
+		source.Forward.Input != *item.Input ||
+		source.Forward.Executor.HostID != item.Placement.HostID ||
+		source.Forward.Number > item.AttemptNumber {
 		return RecoverySnapshot{}, conflict("Volume recovery source belongs to different execution")
 	}
 	return RecoverySnapshot{Source: source, Revision: read.Values[0].ModRevision}, nil
@@ -44,13 +46,27 @@ func (repository *InputRepository) LoadRecovery(ctx context.Context, view workqu
 
 // PrepareRecoveryRetry retains the original forward failure across repeated
 // cleanup attempts. It grants inspection of captured effects, not new intent.
-func (repository *InputRepository) PrepareRecoveryRetry(ctx context.Context, view workqueue.View, previous workqueue.AttemptSnapshot, at time.Time) (workqueue.Change, error) {
+func (repository *InputRepository) PrepareRecoveryRetry(
+	ctx context.Context,
+	view workqueue.View,
+	previous workqueue.AttemptSnapshot,
+	at time.Time,
+) (workqueue.Change, error) {
 	task, item, attempt := view.Task.Task, view.Item.Item, previous.Attempt
-	if task.CollectionStartedAt != nil || item.Operation != workexecution.Volume || item.Placement.Executor != workexecution.Agent ||
-		item.Phase != workexecution.Attention || item.ActiveAttemptID != "" || item.Input == nil ||
-		attempt.FinishedAt == nil || attempt.Result == nil || attempt.Input != *item.Input || attempt.Number != item.AttemptNumber ||
+	if task.CollectionStartedAt != nil || item.Operation != workexecution.Volume ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Attention ||
+		item.ActiveAttemptID != "" ||
+		item.Input == nil ||
+		attempt.FinishedAt == nil ||
+		attempt.Result == nil ||
+		attempt.Input != *item.Input ||
+		attempt.Number != item.AttemptNumber ||
 		item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "Volume has no captured unresolved effects to recover")
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Volume has no captured unresolved effects to recover",
+		)
 	}
 	input, guards, err := repository.Load(ctx, view)
 	if err != nil {
@@ -80,7 +96,10 @@ func (repository *InputRepository) PrepareRecoveryRetry(ctx context.Context, vie
 			return workqueue.Change{}, err
 		}
 		source = volumeexecution.Recovery{Forward: attempt, Failure: failure, Evidence: *attempt.Result}
-		guards = append(guards, keyvalue.Condition{Key: FailureKey(attempt.ID), ModRevision: read.Values[1].ModRevision})
+		guards = append(
+			guards,
+			keyvalue.Condition{Key: FailureKey(attempt.ID), ModRevision: read.Values[1].ModRevision},
+		)
 	} else {
 		if read.Values[0] == nil || item.CleanupResult == nil || *item.CleanupResult != *attempt.Result {
 			return workqueue.Change{}, conflict("Volume recovery Retry is missing its preceding cleanup result")

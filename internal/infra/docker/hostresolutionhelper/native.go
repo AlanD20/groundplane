@@ -29,7 +29,10 @@ func InspectCaptured(ctx context.Context, expectedSHA256 string) (CapturedState,
 	}
 	defer clear(baseline)
 	if found && !matchesBaseline(baseline, expectedSHA256) {
-		return CapturedState{}, errs.New(errs.KindStateConflict, "saved host resolver baseline differs from the captured input")
+		return CapturedState{}, errs.New(
+			errs.KindStateConflict,
+			"saved host resolver baseline differs from the captured input",
+		)
 	}
 	live, exists, err := readBounded(ResolverMountPath)
 	if err != nil {
@@ -41,10 +44,16 @@ func InspectCaptured(ctx context.Context, expectedSHA256 string) (CapturedState,
 	}
 	state := CapturedState{Managed: bytes.Equal(live, managedResolver), Baseline: matchesBaseline(live, expectedSHA256)}
 	if state.Managed && !found && !state.Baseline {
-		return CapturedState{}, errs.New(errs.KindStateConflict, "local host DNS has no captured baseline for restoration")
+		return CapturedState{}, errs.New(
+			errs.KindStateConflict,
+			"local host DNS has no captured baseline for restoration",
+		)
 	}
 	if !state.Managed && !state.Baseline {
-		return CapturedState{}, errs.New(errs.KindStateConflict, "host resolver was changed outside the captured operation")
+		return CapturedState{}, errs.New(
+			errs.KindStateConflict,
+			"host resolver was changed outside the captured operation",
+		)
 	}
 	return state, nil
 }

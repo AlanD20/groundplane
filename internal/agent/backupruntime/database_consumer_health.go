@@ -11,7 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func waitDatabaseConsumerObservation(ctx context.Context, input *agentpb.BackupWorkInput, ordinal uint32, serviceID string,
+func waitDatabaseConsumerObservation(
+	ctx context.Context,
+	input *agentpb.BackupWorkInput,
+	ordinal uint32,
+	serviceID string,
 	observe func(context.Context, string) (*agentpb.ObservedProject, [sha256.Size]byte, error),
 ) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
 	var zero [sha256.Size]byte
@@ -21,7 +25,10 @@ func waitDatabaseConsumerObservation(ctx context.Context, input *agentpb.BackupW
 		return nil, zero, err
 	}
 	if !service.HasHealthcheck && service.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
-		return nil, zero, errs.New(errs.KindValidationFailed, "database consumer requires a healthcheck before recovery")
+		return nil, zero, errs.New(
+			errs.KindValidationFailed,
+			"database consumer requires a healthcheck before recovery",
+		)
 	}
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -37,7 +44,11 @@ func waitDatabaseConsumerObservation(ctx context.Context, input *agentpb.BackupW
 			}
 			if service.HasHealthcheck {
 				if detail := healthcheckfailure.Detail(container.GetHealthcheckDiagnostic()); detail != "" {
-					return nil, zero, errs.Newf(errs.KindValidationFailed, "database consumer healthcheck failed: %s", detail)
+					return nil, zero, errs.Newf(
+						errs.KindValidationFailed,
+						"database consumer healthcheck failed: %s",
+						detail,
+					)
 				}
 				ready = ready && container.Health == agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY
 			}

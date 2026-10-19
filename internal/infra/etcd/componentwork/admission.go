@@ -11,7 +11,10 @@ import (
 
 // AdmissionConditions preserves the exact applied predecessor across the gap
 // between input preparation and execution. It never substitutes fresh sources.
-func (repository *InputRepository) AdmissionConditions(ctx context.Context, view workqueue.View) ([]keyvalue.Condition, error) {
+func (repository *InputRepository) AdmissionConditions(
+	ctx context.Context,
+	view workqueue.View,
+) ([]keyvalue.Condition, error) {
 	_, capture, guards, err := repository.Load(ctx, view)
 	if err != nil {
 		return nil, err

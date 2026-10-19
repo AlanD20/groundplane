@@ -30,7 +30,11 @@ func (repository *Repository) Get(ctx context.Context, taskID string) (etcdstore
 	return repository.At(ctx, taskID, 0)
 }
 
-func (repository *Repository) At(ctx context.Context, taskID string, revision int64) (etcdstore.Versioned[Record], error) {
+func (repository *Repository) At(
+	ctx context.Context,
+	taskID string,
+	revision int64,
+) (etcdstore.Versioned[Record], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[Record]{}, err
 	}
@@ -40,12 +44,19 @@ func (repository *Repository) At(ctx context.Context, taskID string, revision in
 			"software activation task identity is invalid",
 		)
 	}
-	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{Key(taskID)}, Revision: revision})
+	result, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{Key(taskID)}, Revision: revision},
+	)
 	if err != nil {
 		return etcdstore.Versioned[Record]{}, err
 	}
-	if result == nil || result.ReadRevision <= 0 || revision > 0 && result.ReadRevision != revision || len(result.Values) != 1 {
-		return etcdstore.Versioned[Record]{}, errs.New(errs.KindStorageUnavailable, "software activation snapshot is unavailable")
+	if result == nil || result.ReadRevision <= 0 || revision > 0 && result.ReadRevision != revision ||
+		len(result.Values) != 1 {
+		return etcdstore.Versioned[Record]{}, errs.New(
+			errs.KindStorageUnavailable,
+			"software activation snapshot is unavailable",
+		)
 	}
 	defer etcdstore.ClearValues(result.Values)
 	if result.Values[0] == nil {

@@ -88,8 +88,10 @@ func (record attemptRecord) validateBackup() error {
 			continue
 		}
 		attempt, err := workexecution.DecodeAgentAttempt(request.Attempt, record.Attempt.Executor)
-		if err != nil || !workexecution.SameAssignment(attempt, record.Attempt) || request.SourceOrdinal != uint32(ordinal) ||
-			request.CheckpointSequence == 0 || sequences > ^uint64(0)-request.CheckpointSequence {
+		if err != nil || !workexecution.SameAssignment(attempt, record.Attempt) ||
+			request.SourceOrdinal != uint32(ordinal) ||
+			request.CheckpointSequence == 0 ||
+			sequences > ^uint64(0)-request.CheckpointSequence {
 			return invalid()
 		}
 		sequences += request.CheckpointSequence
@@ -139,9 +141,14 @@ func (record attemptRecord) validateBackup() error {
 			return nil
 		}
 		evidence, err := record.Backup.CompletionEvidence(record.Attempt.Input.ID)
-		if err != nil || pending != 0 || terminal.Validate() != nil || !workexecution.SameAssignment(*terminal, record.Attempt) ||
-			terminal.StartedAt == nil || !terminal.StartedAt.Equal(*record.Attempt.StartedAt) || terminal.FinishedAt == nil ||
-			terminal.FinishedAt.Before(record.UpdatedAt) || terminal.Result == nil || *terminal.Result != evidence ||
+		if err != nil || pending != 0 || terminal.Validate() != nil ||
+			!workexecution.SameAssignment(*terminal, record.Attempt) ||
+			terminal.StartedAt == nil ||
+			!terminal.StartedAt.Equal(*record.Attempt.StartedAt) ||
+			terminal.FinishedAt == nil ||
+			terminal.FinishedAt.Before(record.UpdatedAt) ||
+			terminal.Result == nil ||
+			*terminal.Result != evidence ||
 			(terminal.Outcome != workexecution.Succeeded && terminal.Outcome != workexecution.Cancelled && terminal.Outcome != workexecution.Superseded) {
 			return invalid()
 		}

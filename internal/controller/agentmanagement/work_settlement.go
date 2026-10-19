@@ -11,7 +11,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *Work) Settle(ctx context.Context, queue *workqueue.Repository, delivery workqueue.Delivery, at time.Time) error {
+func (owner *Work) Settle(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	delivery workqueue.Delivery,
+	at time.Time,
+) error {
 	attempt := delivery.Attempt.Attempt
 	view, err := queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 	if err != nil || view.Attempt.Attempt.FinishedAt != nil {
@@ -41,8 +46,15 @@ func (owner *Work) Settle(ctx context.Context, queue *workqueue.Repository, deli
 	if err != nil {
 		return err
 	}
-	if input.Record.Action == workexecution.ActionUpdate && result.EffectsSettled && saved.Record.Result.Observed != agentoperations.NotStarted {
-		reopen, err := owner.registrations.PrepareResumeReplacement(ctx, input.Record.AgentID, input.Record.StartingGeneration, saved.Record.Result.Generation, view.Work.ReadRevision)
+	if input.Record.Action == workexecution.ActionUpdate && result.EffectsSettled &&
+		saved.Record.Result.Observed != agentoperations.NotStarted {
+		reopen, err := owner.registrations.PrepareResumeReplacement(
+			ctx,
+			input.Record.AgentID,
+			input.Record.StartingGeneration,
+			saved.Record.Result.Generation,
+			view.Work.ReadRevision,
+		)
 		if err != nil {
 			return err
 		}
@@ -67,9 +79,16 @@ func (owner *Work) Settle(ctx context.Context, queue *workqueue.Repository, deli
 	return nil
 }
 
-func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
+func (owner *Work) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	_ time.Time,
+) (workqueue.Change, error) {
 	if len(finished.Items) != 1 {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Agent lifecycle completion requires one captured work item")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Agent lifecycle completion requires one captured work item",
+		)
 	}
 	item := finished.Items[0].Item
 	input, err := owner.inputs.Load(ctx, item, finished.ReadRevision)
@@ -77,7 +96,10 @@ func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.Finishe
 		return workqueue.Change{}, err
 	}
 	if input.Record.Action != finished.Task.Task.Action || input.Record.AgentID != finished.Task.Task.TargetID {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Agent lifecycle completion changed its requested action")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Agent lifecycle completion changed its requested action",
+		)
 	}
 	if item.AttemptNumber == 0 {
 		reference, err := input.Record.Reference()
@@ -85,7 +107,10 @@ func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.Finishe
 			return workqueue.Change{}, err
 		}
 		if item.Result == nil || *item.Result != reference || item.Outcome == workexecution.Succeeded {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "unstarted Agent lifecycle has no captured rejection")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"unstarted Agent lifecycle has no captured rejection",
+			)
 		}
 		return inputGuard(input), nil
 	}
@@ -108,17 +133,30 @@ func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.Finishe
 	if previous.Attempt.Direction == workexecution.Recovery {
 		accepted = item.CleanupResult
 	}
-	if !result.EffectsSettled || accepted == nil || *accepted != result.Evidence || *previous.Attempt.Result != result.Evidence {
+	if !result.EffectsSettled || accepted == nil || *accepted != result.Evidence ||
+		*previous.Attempt.Result != result.Evidence {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Agent lifecycle retains unresolved effects")
 	}
 	return proof, nil
 }
 
-func (owner *Work) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (owner *Work) RetireWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
-	if task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil || at.Before(*task.RetainUntil) ||
-		item.Phase != workexecution.Settled || item.ActiveAttemptID != "" || item.Result == nil || item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Agent history collection requires expired settled work")
+	if task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil ||
+		at.Before(*task.RetainUntil) ||
+		item.Phase != workexecution.Settled ||
+		item.ActiveAttemptID != "" ||
+		item.Result == nil ||
+		item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete {
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Agent history collection requires expired settled work",
+		)
 	}
 	input, err := owner.inputs.Load(ctx, item, view.ReadRevision)
 	if err != nil {
@@ -126,22 +164,37 @@ func (owner *Work) RetireWork(ctx context.Context, view workqueue.View, at time.
 	}
 	change := inputGuard(input)
 	if final {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: agentoperations.InputKey(item.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: agentoperations.InputKey(item.ID)},
+		)
 	}
 	// Installed credentials, runtime files and the current Agent record are
 	// resource-owned and never deleted by diagnostic-history collection.
 	return true, change, nil
 }
 
-func (owner *Work) PrepareAttemptRetirement(view workqueue.View, snapshot workqueue.AttemptSnapshot) (workqueue.Change, error) {
+func (owner *Work) PrepareAttemptRetirement(
+	view workqueue.View,
+	snapshot workqueue.AttemptSnapshot,
+) (workqueue.Change, error) {
 	attempt := snapshot.Attempt
-	if view.Item.Item.Operation != workexecution.AgentLifecycle && view.Item.Item.Operation != workexecution.AgentSoftware ||
-		view.Item.Item.Input == nil || attempt.Input != *view.Item.Item.Input || attempt.Executor.Executor != workexecution.Controller {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Agent attempt history differs from its captured lifecycle")
+	if view.Item.Item.Operation != workexecution.AgentLifecycle &&
+		view.Item.Item.Operation != workexecution.AgentSoftware ||
+		view.Item.Item.Input == nil ||
+		attempt.Input != *view.Item.Item.Input ||
+		attempt.Executor.Executor != workexecution.Controller {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Agent attempt history differs from its captured lifecycle",
+		)
 	}
 	prepared, err := workqueue.PrepareAttemptCollection(view.Task, view.Item, snapshot)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	return workqueue.Change{Conditions: prepared.Conditions, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: agentoperations.ResultKey(attempt.ID)}}}, nil
+	return workqueue.Change{
+		Conditions: prepared.Conditions,
+		Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: agentoperations.ResultKey(attempt.ID)}},
+	}, nil
 }

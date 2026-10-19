@@ -45,7 +45,12 @@ type DetachReader interface {
 	Range(context.Context, keyvalue.RangeRequest) (*keyvalue.RangeResult, error)
 }
 
-func ReadDetachSnapshot(ctx context.Context, store DetachReader, revision int64, attachID string) (_ DetachSnapshot, resultErr error) {
+func ReadDetachSnapshot(
+	ctx context.Context,
+	store DetachReader,
+	revision int64,
+	attachID string,
+) (_ DetachSnapshot, resultErr error) {
 	if ctx == nil || store == nil || revision <= 0 || ids.Validate(ids.KindAttach, attachID) != nil {
 		return DetachSnapshot{}, errs.New(errs.KindValidationFailed, "Detach requires a fixed resource snapshot")
 	}
@@ -80,7 +85,8 @@ func ReadDetachSnapshot(ctx context.Context, store DetachReader, revision int64,
 	if err != nil {
 		return DetachSnapshot{}, err
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) || read.Values[0] == nil || read.Values[1] == nil {
+	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) || read.Values[0] == nil ||
+		read.Values[1] == nil {
 		return DetachSnapshot{}, errs.New(errs.KindStateConflict, "Detach consumer state is not fully captured")
 	}
 	for index, value := range read.Values {
@@ -95,7 +101,10 @@ func ReadDetachSnapshot(ctx context.Context, store DetachReader, revision int64,
 	result.EpochRevision, result.ServiceRuntimeRevision = read.Values[0].ModRevision, read.Values[1].ModRevision
 	result.RuntimeIntent = string(state.Runtime.RuntimeIntent)
 	if value := read.Values[2]; value != nil {
-		runtime, err := releases.DecodeReleaseRecord[serviceruntimerecord.Record](value.Value, "service-acknowledged-runtime")
+		runtime, err := releases.DecodeReleaseRecord[serviceruntimerecord.Record](
+			value.Value,
+			"service-acknowledged-runtime",
+		)
 		if err != nil {
 			return DetachSnapshot{}, err
 		}
@@ -116,7 +125,10 @@ func (snapshot DetachSnapshot) Validate() error {
 	}
 	if snapshot.Runtime == nil {
 		if snapshot.RuntimeRevision != 0 || snapshot.RuntimeIntent == "running" {
-			return errs.New(errs.KindStateConflict, "Detach cannot inspect a running Service without its acknowledged runtime")
+			return errs.New(
+				errs.KindStateConflict,
+				"Detach cannot inspect a running Service without its acknowledged runtime",
+			)
 		}
 	} else if snapshot.RuntimeRevision <= 0 || snapshot.RuntimeRevision > snapshot.Source.SnapshotRevision ||
 		serviceruntimerecord.Validate(*snapshot.Runtime) != nil ||
@@ -125,9 +137,12 @@ func (snapshot DetachSnapshot) Validate() error {
 	}
 	previous, found := "", false
 	for _, member := range snapshot.Members {
-		if ids.Validate(ids.KindAttach, member.AttachID) != nil || ids.Validate(ids.KindService, member.ServiceID) != nil ||
-			ids.Validate(ids.KindNetwork, member.NetworkID) != nil || strings.Compare(previous, member.AttachID) >= 0 ||
-			member.Revision <= 0 || member.Revision > snapshot.Source.SnapshotRevision ||
+		if ids.Validate(ids.KindAttach, member.AttachID) != nil ||
+			ids.Validate(ids.KindService, member.ServiceID) != nil ||
+			ids.Validate(ids.KindNetwork, member.NetworkID) != nil ||
+			strings.Compare(previous, member.AttachID) >= 0 ||
+			member.Revision <= 0 ||
+			member.Revision > snapshot.Source.SnapshotRevision ||
 			(member.Operation != attachrecord.AttachOperationProvision && member.Operation != attachrecord.AttachOperationDetach) {
 			return recordcodec.CorruptRecord()
 		}

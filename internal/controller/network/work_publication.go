@@ -13,7 +13,10 @@ func (owner *AgentWork) PreparePublication(ctx context.Context, task workqueue.T
 	at time.Time,
 ) (workdispatch.PublicationBatch, error) {
 	if task.Task.PublicationComplete || at.IsZero() || at.Before(task.Task.UpdatedAt) {
-		return workdispatch.PublicationBatch{}, errs.New(errs.KindStateConflict, "Zone publication timestamp predates its accepted Task")
+		return workdispatch.PublicationBatch{}, errs.New(
+			errs.KindStateConflict,
+			"Zone publication timestamp predates its accepted Task",
+		)
 	}
 	graph, authority, err := owner.inputs.LoadCascadeGraph(ctx, task, revision)
 	if err != nil {
@@ -24,7 +27,14 @@ func (owner *AgentWork) PreparePublication(ctx context.Context, task workqueue.T
 		return workdispatch.PublicationBatch{}, err
 	}
 	if rejected {
-		advanced, settled, cleanup, err := owner.inputs.ContinueCascadeRejection(ctx, task, graph, authority, revision, at)
+		advanced, settled, cleanup, err := owner.inputs.ContinueCascadeRejection(
+			ctx,
+			task,
+			graph,
+			authority,
+			revision,
+			at,
+		)
 		if err != nil {
 			return workdispatch.PublicationBatch{}, err
 		}

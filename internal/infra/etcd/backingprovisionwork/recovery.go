@@ -29,14 +29,23 @@ func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.V
 	return repository.loadRecovery(ctx, view, number, nil)
 }
 
-func (repository *Repository) LoadRecoveryForAttempt(ctx context.Context, view workqueue.View, attempt workexecution.Attempt) (RecoverySource, error) {
-	if attempt.Validate() != nil || attempt.Direction != workexecution.Recovery || attempt.TaskID != view.Task.Task.ID ||
-		attempt.WorkItemID != view.Item.Item.ID || attempt.Number > view.Item.Item.AttemptNumber {
+func (repository *Repository) LoadRecoveryForAttempt(
+	ctx context.Context,
+	view workqueue.View,
+	attempt workexecution.Attempt,
+) (RecoverySource, error) {
+	if attempt.Validate() != nil || attempt.Direction != workexecution.Recovery ||
+		attempt.TaskID != view.Task.Task.ID ||
+		attempt.WorkItemID != view.Item.Item.ID ||
+		attempt.Number > view.Item.Item.AttemptNumber {
 		return RecoverySource{}, invalid("backing creation cleanup source requires its actual retained attempt")
 	}
 	var evidence *workexecution.Input
 	if attempt.FinishedAt != nil {
-		read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{RecoveryResultKey(attempt.ID)}, Revision: view.ReadRevision})
+		read, err := repository.store.GetMany(
+			ctx,
+			keyvalue.GetManyRequest{Keys: []string{RecoveryResultKey(attempt.ID)}, Revision: view.ReadRevision},
+		)
 		if err != nil {
 			return RecoverySource{}, err
 		}
@@ -56,7 +65,12 @@ func (repository *Repository) LoadRecoveryForAttempt(ctx context.Context, view w
 	return repository.loadRecovery(ctx, view, attempt.Number, evidence)
 }
 
-func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.View, number uint64, evidence *workexecution.Input) (RecoverySource, error) {
+func (repository *Repository) loadRecovery(
+	ctx context.Context,
+	view workqueue.View,
+	number uint64,
+	evidence *workexecution.Input,
+) (RecoverySource, error) {
 	input, guard, err := repository.Load(ctx, view)
 	if err != nil {
 		return RecoverySource{}, err
@@ -73,7 +87,10 @@ func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.V
 		return RecoverySource{}, invalid("backing creation cleanup has no retained forward failure")
 	}
 	key := FailureKey(evidence.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return RecoverySource{}, err
 	}
@@ -98,20 +115,24 @@ func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.V
 	if err != nil {
 		return RecoverySource{}, err
 	}
-	if attemptRead == nil || attemptRead.ReadRevision != view.ReadRevision || len(attemptRead.Values) != 1 || attemptRead.Values[0] == nil {
+	if attemptRead == nil || attemptRead.ReadRevision != view.ReadRevision || len(attemptRead.Values) != 1 ||
+		attemptRead.Values[0] == nil {
 		return RecoverySource{}, invalid("backing creation original attempt is unavailable")
 	}
 	defer keyvalue.ClearValues(attemptRead.Values)
 	attemptValue := attemptRead.Values[0]
-	if attemptValue.Key != workqueue.AttemptKey(failure.AttemptID) || attemptValue.ModRevision <= 0 || attemptValue.ModRevision > view.ReadRevision {
+	if attemptValue.Key != workqueue.AttemptKey(failure.AttemptID) || attemptValue.ModRevision <= 0 ||
+		attemptValue.ModRevision > view.ReadRevision {
 		return RecoverySource{}, invalid("backing creation original attempt revision is invalid")
 	}
 	forward, err := workqueue.DecodeAttempt(attemptValue.Value)
 	if err != nil {
 		return RecoverySource{}, err
 	}
-	if forward.ID != failure.AttemptID || forward.TaskID != view.Task.Task.ID || forward.WorkItemID != view.Item.Item.ID ||
-		forward.Input != *view.Item.Item.Input || forward.Executor.HostID != procedure.HostId {
+	if forward.ID != failure.AttemptID || forward.TaskID != view.Task.Task.ID ||
+		forward.WorkItemID != view.Item.Item.ID ||
+		forward.Input != *view.Item.Item.Input ||
+		forward.Executor.HostID != procedure.HostId {
 		return RecoverySource{}, invalid("backing creation failure belongs to another captured action")
 	}
 	layout, err := backingprovision.CaptureLayout(forward, procedure)
@@ -122,7 +143,14 @@ func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.V
 	if err != nil {
 		return RecoverySource{}, err
 	}
-	sourceView, err := queue.ReadResumeAt(ctx, forward.TaskID, forward.WorkItemID, forward.ID, forward.Executor, view.ReadRevision)
+	sourceView, err := queue.ReadResumeAt(
+		ctx,
+		forward.TaskID,
+		forward.WorkItemID,
+		forward.ID,
+		forward.Executor,
+		view.ReadRevision,
+	)
 	if err != nil {
 		return RecoverySource{}, err
 	}
@@ -146,7 +174,10 @@ func (repository *Repository) loadRecovery(ctx context.Context, view workqueue.V
 			return RecoverySource{}, err
 		}
 		recovery.Previous = &previous.Attempt
-		conditions = append(conditions, keyvalue.Condition{Key: workqueue.AttemptKey(previous.Attempt.ID), ModRevision: previous.Revision})
+		conditions = append(
+			conditions,
+			keyvalue.Condition{Key: workqueue.AttemptKey(previous.Attempt.ID), ModRevision: previous.Revision},
+		)
 	}
 	if err := recovery.Validate(layout); err != nil {
 		return RecoverySource{}, err

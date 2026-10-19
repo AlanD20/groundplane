@@ -26,7 +26,11 @@ type QueuePage struct {
 // ScanReady returns a bounded page of ready work and captured delayed retries,
 // not just the oldest entry. The scheduler advances LastID while blocked or
 // not-yet-due candidates remain queued, then wraps at the end.
-func (repository *Repository) ScanReady(ctx context.Context, target workexecution.Placement, after string) (QueuePage, error) {
+func (repository *Repository) ScanReady(
+	ctx context.Context,
+	target workexecution.Placement,
+	after string,
+) (QueuePage, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return QueuePage{}, err
 	}
@@ -58,7 +62,10 @@ func (repository *Repository) ScanReady(ctx context.Context, target workexecutio
 			id <= after || page.LastID != "" && id <= page.LastID {
 			return QueuePage{}, corrupt()
 		}
-		page.Entries = append(page.Entries, QueueEntry{TaskID: owner.TaskID, WorkItemID: id, Revision: value.ModRevision})
+		page.Entries = append(
+			page.Entries,
+			QueueEntry{TaskID: owner.TaskID, WorkItemID: id, Revision: value.ModRevision},
+		)
 		page.LastID = id
 	}
 	return page, nil
@@ -74,7 +81,13 @@ type Candidate struct {
 // ReadCandidate uses one MVCC view for eligibility, prerequisites and resources.
 // A wait is returned without claiming a worker slot. The prepared assignment
 // still compares this evidence at commit, including the scanned queue revision.
-func (repository *Repository) ReadCandidate(ctx context.Context, entry QueueEntry, identity workexecution.Identity, at time.Time, decisions []workexecution.Operation) (Candidate, error) {
+func (repository *Repository) ReadCandidate(
+	ctx context.Context,
+	entry QueueEntry,
+	identity workexecution.Identity,
+	at time.Time,
+	decisions []workexecution.Operation,
+) (Candidate, error) {
 	if err := identity.Validate(); err != nil {
 		return Candidate{}, err
 	}
@@ -142,7 +155,8 @@ func (repository *Repository) ReadCandidate(ctx context.Context, entry QueueEntr
 		return Candidate{}, err
 	}
 	for _, reservation := range request.Reservations {
-		if owner := reservation.Owner; owner != nil && (owner.TaskID != item.TaskID || owner.Intent != view.Task.Task.Intent) {
+		if owner := reservation.Owner; owner != nil &&
+			(owner.TaskID != item.TaskID || owner.Intent != view.Task.Task.Intent) {
 			return waiting(workexecution.Wait{Reason: workexecution.WaitReservation, TaskID: owner.TaskID}), nil
 		}
 	}
@@ -179,7 +193,13 @@ func (repository *Repository) ReadCandidate(ctx context.Context, entry QueueEntr
 			return Candidate{}, corrupt()
 		}
 		if dependency.Phase != workexecution.Settled || dependency.Outcome != workexecution.Succeeded {
-			return waiting(workexecution.Wait{Reason: workexecution.WaitDependency, WorkItemID: dependency.ID, TaskID: item.TaskID}), nil
+			return waiting(
+				workexecution.Wait{
+					Reason:     workexecution.WaitDependency,
+					WorkItemID: dependency.ID,
+					TaskID:     item.TaskID,
+				},
+			), nil
 		}
 		request.Dependencies = append(request.Dependencies, ItemSnapshot{Item: dependency, Revision: value.ModRevision})
 	}
@@ -192,7 +212,13 @@ func (repository *Repository) ReadCandidate(ctx context.Context, entry QueueEntr
 				return Candidate{}, corrupt()
 			}
 			if owner.WorkItemID != item.ID || owner.TaskID != item.TaskID {
-				return waiting(workexecution.Wait{Reason: workexecution.WaitConflict, WorkItemID: owner.WorkItemID, TaskID: owner.TaskID}), nil
+				return waiting(
+					workexecution.Wait{
+						Reason:     workexecution.WaitConflict,
+						WorkItemID: owner.WorkItemID,
+						TaskID:     owner.TaskID,
+					},
+				), nil
 			}
 			snapshot.Owner, snapshot.Revision = &owner, value.ModRevision
 		}
@@ -206,7 +232,11 @@ func (repository *Repository) ReadCandidate(ctx context.Context, entry QueueEntr
 		if direction == workexecution.Forward && read.Values[offset+maximumExecutorCapacity+1] != nil {
 			return waiting(workexecution.Wait{Reason: workexecution.WaitExecutor}), nil
 		}
-		request.HostEffect, err = readHostEffect(read.Values[offset+maximumExecutorCapacity], item, direction == workexecution.Recovery)
+		request.HostEffect, err = readHostEffect(
+			read.Values[offset+maximumExecutorCapacity],
+			item,
+			direction == workexecution.Recovery,
+		)
 		if err != nil {
 			return Candidate{}, err
 		}

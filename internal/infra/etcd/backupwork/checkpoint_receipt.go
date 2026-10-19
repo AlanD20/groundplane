@@ -14,7 +14,10 @@ type checkpointReceipt struct {
 	Source  []byte `json:"source"`
 }
 
-func encodeCheckpointReceipt(request *agentpb.BackupWorkCheckpointRequest, source *agentpb.BackupStepResume) ([]byte, error) {
+func encodeCheckpointReceipt(
+	request *agentpb.BackupWorkCheckpointRequest,
+	source *agentpb.BackupStepResume,
+) ([]byte, error) {
 	rawRequest, err := (proto.MarshalOptions{Deterministic: true}).Marshal(request)
 	if err != nil {
 		return nil, conflict("Backup checkpoint request cannot be encoded")

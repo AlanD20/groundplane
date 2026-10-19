@@ -31,7 +31,12 @@ func (runtime *Runtime) expireDiagnostics(ctx context.Context, config RuntimeCon
 					finished = false
 					break
 				}
-				_, err := runtime.diagnostics.ExpireTask(bounded, candidate.Task.Task.ID, at, config.DiagnosticRetention)
+				_, err := runtime.diagnostics.ExpireTask(
+					bounded,
+					candidate.Task.Task.ID,
+					at,
+					config.DiagnosticRetention,
+				)
 				if err != nil && bounded.Err() == nil && !errors.Is(err, errs.New(errs.KindTaskNotFound, "")) &&
 					!errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 					report(Issue{TaskID: candidate.Task.Task.ID, Err: err})

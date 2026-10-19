@@ -8,7 +8,10 @@ import (
 
 // OpenNetworkRecoveryInput binds inspection to the original failed execution.
 // It does not relax the forward-only validation used by ordinary assignments.
-func OpenNetworkRecoveryInput(attempt workexecution.Attempt, message *agentpb.NetworkWorkAssignment) (*agentpb.NetworkWorkInput, networkexecution.Recovery, networkexecution.Progress, error) {
+func OpenNetworkRecoveryInput(
+	attempt workexecution.Attempt,
+	message *agentpb.NetworkWorkAssignment,
+) (*agentpb.NetworkWorkInput, networkexecution.Recovery, networkexecution.Progress, error) {
 	if message == nil || RejectUnknown(message) != nil || attempt.Direction != workexecution.Recovery {
 		return nil, networkexecution.Recovery{}, networkexecution.Progress{}, invalidNetworkWork()
 	}
@@ -27,7 +30,12 @@ func OpenNetworkRecoveryInput(attempt workexecution.Attempt, message *agentpb.Ne
 	if reference != attempt.Input || source.Failure.Checkpoint == nil {
 		return nil, networkexecution.Recovery{}, networkexecution.Progress{}, invalidNetworkWork()
 	}
-	boundary, err := networkexecution.DecodeProgress(source.Forward, input.Action, input.NetworkId, message.RecoveryBoundary)
+	boundary, err := networkexecution.DecodeProgress(
+		source.Forward,
+		input.Action,
+		input.NetworkId,
+		message.RecoveryBoundary,
+	)
 	if err != nil {
 		return nil, networkexecution.Recovery{}, networkexecution.Progress{}, err
 	}

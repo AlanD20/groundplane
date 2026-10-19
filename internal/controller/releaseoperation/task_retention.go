@@ -10,10 +10,17 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func (owner *GraphPublication) PrepareTaskRetirement(ctx context.Context, task workqueue.TaskSnapshot, revision int64, at time.Time) (workqueue.Change, error) {
+func (owner *GraphPublication) PrepareTaskRetirement(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	revision int64,
+	at time.Time,
+) (workqueue.Change, error) {
 	if ids.Validate(ids.KindReleaseGroup, task.Task.TargetID) != nil {
 		// Standalone preparation is retired with its sole Release member.
-		return workqueue.Change{Conditions: []keyvalue.Condition{{Key: etcd.DirectReleasePreparationKey(task.Task.ID)}}}, nil
+		return workqueue.Change{
+			Conditions: []keyvalue.Condition{{Key: etcd.DirectReleasePreparationKey(task.Task.ID)}},
+		}, nil
 	}
 	root, err := owner.groups.Load(ctx, task, revision)
 	if err != nil {

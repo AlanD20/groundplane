@@ -47,7 +47,9 @@ func advanceVolumeRestoreSource(input *agentpb.BackupWorkInput, sources []*agent
 		next.Checkpoint = &agentpb.BackupRestoreResume_ArtifactValidated{ArtifactValidated: value}
 	case report.GetVolume() != nil:
 		if err := advanceBackupVolumeRestore(step, next, input.Services, report.GetVolume()); err != nil {
-			return nil, invalidBackupCheckpoint("Volume restore transition does not match its saved filesystem or consumer progress")
+			return nil, invalidBackupCheckpoint(
+				"Volume restore transition does not match its saved filesystem or consumer progress",
+			)
 		}
 	default:
 		return nil, invalidBackupCheckpoint("report is not a Volume restore transition")

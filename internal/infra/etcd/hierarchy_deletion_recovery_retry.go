@@ -16,11 +16,21 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyRecoveryRetry(ctx
 	previous workqueue.AttemptSnapshot, at time.Time,
 ) (workqueue.Change, error) {
 	task, item, attempt := view.Task.Task, view.Item.Item, previous.Attempt
-	if task.Action != workexecution.ActionRemove || task.CollectionStartedAt != nil || item.Operation != workexecution.Hierarchy ||
-		item.Placement.Executor != workexecution.Agent || item.Phase != workexecution.Attention || item.ActiveAttemptID != "" ||
-		item.Input == nil || attempt.Result == nil || attempt.FinishedAt == nil || attempt.Input != *item.Input ||
-		attempt.Number != item.AttemptNumber || item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "removal has no stopped captured recovery to retry")
+	if task.Action != workexecution.ActionRemove || task.CollectionStartedAt != nil ||
+		item.Operation != workexecution.Hierarchy ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Attention ||
+		item.ActiveAttemptID != "" ||
+		item.Input == nil ||
+		attempt.Result == nil ||
+		attempt.FinishedAt == nil ||
+		attempt.Input != *item.Input ||
+		attempt.Number != item.AttemptNumber ||
+		item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped {
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"removal has no stopped captured recovery to retry",
+		)
 	}
 	captured, err := repository.LoadHierarchyWork(ctx, view)
 	if err != nil {
@@ -29,8 +39,12 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyRecoveryRetry(ctx
 	if captured.Action.ActionKind == hierarchydeletion.HierarchyDeletionAttachDeprovision {
 		return repository.prepareHierarchyAttachRecoveryRetry(ctx, view, previous, at)
 	}
-	if captured.Action.ActionKind != hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup || captured.Action.AgentProcedure == nil {
-		return workqueue.Change{}, errs.New(errs.KindTaskNotRetryable, "captured removal kind has no Environment recovery")
+	if captured.Action.ActionKind != hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup ||
+		captured.Action.AgentProcedure == nil {
+		return workqueue.Change{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"captured removal kind has no Environment recovery",
+		)
 	}
 	environment, err := repository.LoadHierarchyEnvironmentInput(ctx, view)
 	if err != nil {
@@ -42,7 +56,13 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyRecoveryRetry(ctx
 		return workqueue.Change{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	key := hierarchydeletion.EnvironmentRecoveryKey(item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key, hierarchydeletion.EnvironmentFailureKey(attempt.ID)}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{
+			Keys:     []string{key, hierarchydeletion.EnvironmentFailureKey(attempt.ID)},
+			Revision: view.ReadRevision,
+		},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -90,7 +110,13 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyRecoveryRetry(ctx
 	change.Conditions = append(change.Conditions, environment.Conditions...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: revision})
 	if attempt.Direction == workexecution.Forward {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: hierarchydeletion.EnvironmentFailureKey(attempt.ID), ModRevision: read.Values[1].ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{
+				Key:         hierarchydeletion.EnvironmentFailureKey(attempt.ID),
+				ModRevision: read.Values[1].ModRevision,
+			},
+		)
 	}
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
 	return change, nil

@@ -50,7 +50,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDNS(
 	}
 	expected, err := blueprintunits.DefinitionWorkInput(parent, unit)
 	if err != nil || item.Input == nil || *item.Input != expected {
-		return BlueprintDNSPreparation{}, errs.New(errs.KindStateConflict, "Blueprint DNS input differs from its captured declaration")
+		return BlueprintDNSPreparation{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint DNS input differs from its captured declaration",
+		)
 	}
 	conditions, authoredRevision, err := repository.blueprintDNSAuthority(ctx, work, unit)
 	if err != nil {
@@ -62,10 +65,17 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDNS(
 		return BlueprintDNSPreparation{}, err
 	}
 	conditions = append(conditions, selection.Conditions()...)
-	conditions = append(conditions,
-		keyvalue.Condition{Key: blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID), ModRevision: snapshot.HeadRevision},
+	conditions = append(
+		conditions,
+		keyvalue.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID),
+			ModRevision: snapshot.HeadRevision,
+		},
 		keyvalue.Condition{Key: blueprintunits.EpochKey(snapshot.EnvironmentID), ModRevision: snapshot.EpochRevision},
-		keyvalue.Condition{Key: blueprintunits.DesiredPlanKey(snapshot.EnvironmentID), ModRevision: snapshot.Desired.Revision},
+		keyvalue.Condition{
+			Key:         blueprintunits.DesiredPlanKey(snapshot.EnvironmentID),
+			ModRevision: snapshot.Desired.Revision,
+		},
 	)
 	var binding *dnsmodel.EnvironmentBinding
 	for _, candidate := range selection.Bindings() {
@@ -82,7 +92,8 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDNS(
 		return BlueprintDNSPreparation{}, err
 	}
 	conditions = append(conditions, ack.conditions...)
-	if !ready || ack.state.Applied == nil || !blueprintDNSBindingAcknowledged(*ack.state.Applied, unit.Target.ID, binding) {
+	if !ready || ack.state.Applied == nil ||
+		!blueprintDNSBindingAcknowledged(*ack.state.Applied, unit.Target.ID, binding) {
 		failedTaskID, _, err := failedResolverConfigurationRequest(ctx, repository.store, snapshot.ReadRevision, ack)
 		if err != nil {
 			return BlueprintDNSPreparation{}, err
@@ -109,12 +120,18 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDNS(
 			return BlueprintDNSPreparation{}, err
 		}
 		if claimRead == nil || len(claimRead.Values) != 1 || claimRead.Values[0] == nil {
-			return BlueprintDNSPreparation{}, errs.New(errs.KindStateConflict, "Blueprint DNS hostname ownership is unavailable")
+			return BlueprintDNSPreparation{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint DNS hostname ownership is unavailable",
+			)
 		}
 		defer keyvalue.ClearValues(claimRead.Values)
 		stored, err := dnsrecords.DecodeHostnameClaim(claimRead.Values[0].Value)
 		if err != nil || stored != claim {
-			return BlueprintDNSPreparation{}, errs.New(errs.KindStateConflict, "Blueprint DNS hostname ownership changed")
+			return BlueprintDNSPreparation{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint DNS hostname ownership changed",
+			)
 		}
 		conditions = append(conditions, keyvalue.Condition{
 			Key: claimRead.Values[0].Key, ModRevision: claimRead.Values[0].ModRevision,
@@ -143,7 +160,10 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDNS(
 		conditions = append(conditions, receipt.Conditions...)
 		mutations = append(mutations, receipt.Mutations...)
 	}
-	return BlueprintDNSPreparation{Change: workqueue.Change{Conditions: conditions, Mutations: mutations}, Complete: !more}, nil
+	return BlueprintDNSPreparation{
+		Change:   workqueue.Change{Conditions: conditions, Mutations: mutations},
+		Complete: !more,
+	}, nil
 }
 
 func blueprintDNSBindingAcknowledged(applied resolverwork.Applied,

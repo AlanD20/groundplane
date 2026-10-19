@@ -17,8 +17,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (service *WorkReports) RecoverVolume(ctx context.Context, authorization agentregistration.WorkAuthorization, request *agentpb.VolumeWorkRecoveryReportRequest) (*agentpb.VolumeWorkRecoveryReportAck, error) {
-	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 || len(request.Report) > volumeexecution.MaximumProgressBytes {
+func (service *WorkReports) RecoverVolume(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	request *agentpb.VolumeWorkRecoveryReportRequest,
+) (*agentpb.VolumeWorkRecoveryReportAck, error) {
+	if ctx == nil || request == nil || executionplan.RejectUnknown(request) != nil || len(request.Report) == 0 ||
+		len(request.Report) > volumeexecution.MaximumProgressBytes {
 		return nil, errs.New(errs.KindValidationFailed, "Volume recovery report is missing or invalid")
 	}
 	guards, err := authorization.Conditions()

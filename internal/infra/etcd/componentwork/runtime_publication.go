@@ -74,7 +74,10 @@ func (repository *InputRepository) configurationAcknowledgement(ctx context.Cont
 	}
 	change := workqueue.Change{}
 	for _, condition := range conditions {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: condition.Key, ModRevision: condition.ModRevision},
+		)
 	}
 	if capture.Prior != nil && capture.Current == *capture.Prior {
 		return change, nil

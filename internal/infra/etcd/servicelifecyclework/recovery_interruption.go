@@ -24,10 +24,15 @@ func (repository *Repository) PrepareRecoveryInterruption(ctx context.Context, v
 	input *agentpb.ServiceLifecycleWorkInput, at time.Time,
 ) (workqueue.Change, workexecution.Completion, error) {
 	attempt := view.Attempt.Attempt
-	if view.CurrentExecutor || !view.ActiveAttempt || view.ExecutorRevision <= 0 || attempt.Direction != workexecution.Recovery ||
-		attempt.FinishedAt != nil || at.Before(attempt.AssignedAt) || !recordcodec.IsCanonicalUTC(at) ||
+	if view.CurrentExecutor || !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
+		attempt.Direction != workexecution.Recovery ||
+		attempt.FinishedAt != nil ||
+		at.Before(attempt.AssignedAt) ||
+		!recordcodec.IsCanonicalUTC(at) ||
 		view.Work.Task.Task.CollectionStartedAt != nil {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Service lifecycle recovery interruption lacks replaced execution ownership")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Service lifecycle recovery interruption lacks replaced execution ownership",
+		)
 	}
 	captured, guard, err := repository.Load(ctx, view.Work)
 	if err != nil {
@@ -53,7 +58,10 @@ func (repository *Repository) PrepareRecoveryInterruption(ctx context.Context, v
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	digest := sha256.Sum256(raw)
-	evidence := workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, attempt.AssignedAt, attempt.ID, "lifecycle-recovery-interrupted"), SHA256: hex.EncodeToString(digest[:])}
+	evidence := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, attempt.AssignedAt, attempt.ID, "lifecycle-recovery-interrupted"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}
 	key := RecoveryInterruptionKey(attempt.ID)
 	conditions := []keyvalue.Condition{guard,
 		{Key: key}, {Key: RecoveryKey(attempt.WorkItemID), ModRevision: source.Revision},
@@ -62,6 +70,13 @@ func (repository *Repository) PrepareRecoveryInterruption(ctx context.Context, v
 		{Key: workqueue.AttemptKey(attempt.ID), ModRevision: view.Attempt.Revision},
 		{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision},
 	}
-	return workqueue.Change{Conditions: conditions, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}}},
-		workexecution.Completion{Outcome: workexecution.Failed, Evidence: evidence, EffectsSettled: false}, nil
+	return workqueue.Change{
+			Conditions: conditions,
+			Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}},
+		},
+		workexecution.Completion{
+			Outcome:        workexecution.Failed,
+			Evidence:       evidence,
+			EffectsSettled: false,
+		}, nil
 }

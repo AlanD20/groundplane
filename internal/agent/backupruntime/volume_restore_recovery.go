@@ -36,7 +36,10 @@ func findVolumeRestoreJournal(ctx context.Context, expected agentvolumejournal.C
 			row.Config.AuthorizedVolumeDir != expected.AuthorizedVolumeDir ||
 			row.Config.ComposeKey != expected.ComposeKey ||
 			row.Config.SiblingName != expected.SiblingName {
-			return expected, false, errs.New(errs.KindStateConflict, "Volume Restore journal differs from its acknowledged execution")
+			return expected, false, errs.New(
+				errs.KindStateConflict,
+				"Volume Restore journal differs from its acknowledged execution",
+			)
 		}
 		expected = row.Config
 	}
@@ -46,7 +49,10 @@ func findVolumeRestoreJournal(ctx context.Context, expected agentvolumejournal.C
 			progress.FinalizationCursor != 0 || progress.PendingFinalization != nil ||
 			progress.PendingExchange != nil || len(progress.OldFullTreeSha256) != 0 ||
 			progress.DeletionCursor != 0 || progress.PendingDelete != nil) {
-			return expected, false, errs.New(errs.KindStateConflict, "Volume Restore journal differs from its acknowledged execution")
+			return expected, false, errs.New(
+				errs.KindStateConflict,
+				"Volume Restore journal differs from its acknowledged execution",
+			)
 		}
 	}
 	return expected, found, nil
@@ -89,7 +95,10 @@ func reconstructVolumeOldTree(observed *backupvolumefs.Tree,
 		}
 		key := string(mutation.Entry.Path)
 		if _, present := entries[key]; present {
-			return backupvolumefs.Tree{}, errs.New(errs.KindStateConflict, "Volume Restore journal differs from its acknowledged execution")
+			return backupvolumefs.Tree{}, errs.New(
+				errs.KindStateConflict,
+				"Volume Restore journal differs from its acknowledged execution",
+			)
 		}
 		entries[key] = mutation.Entry
 	}
@@ -97,14 +106,20 @@ func reconstructVolumeOldTree(observed *backupvolumefs.Tree,
 		key := string(pending.Entry.Path)
 		if present, exists := entries[key]; exists {
 			if !sameVolumeRestoreEntry(present, pending.Entry) {
-				return backupvolumefs.Tree{}, errs.New(errs.KindStateConflict, "Volume Restore journal differs from its acknowledged execution")
+				return backupvolumefs.Tree{}, errs.New(
+					errs.KindStateConflict,
+					"Volume Restore journal differs from its acknowledged execution",
+				)
 			}
 		} else {
 			entries[key] = pending.Entry
 		}
 	}
 	if uint64(len(entries)) != config.OldEntryCount {
-		return backupvolumefs.Tree{}, errs.New(errs.KindStateConflict, "Volume Restore journal differs from its acknowledged execution")
+		return backupvolumefs.Tree{}, errs.New(
+			errs.KindStateConflict,
+			"Volume Restore journal differs from its acknowledged execution",
+		)
 	}
 	ordered := make([]backupvolume.Entry, 0, len(entries))
 	for _, entry := range entries {
@@ -113,7 +128,10 @@ func reconstructVolumeOldTree(observed *backupvolumefs.Tree,
 	sort.Slice(ordered, func(i, j int) bool { return bytes.Compare(ordered[i].Path, ordered[j].Path) < 0 })
 	tree, err := backupvolumefs.TreeFromEntries(ordered)
 	if err != nil || tree.FullTreeSHA256 != config.OldFullTreeSHA256 {
-		return backupvolumefs.Tree{}, errs.New(errs.KindStateConflict, "Volume Restore journal differs from its acknowledged execution")
+		return backupvolumefs.Tree{}, errs.New(
+			errs.KindStateConflict,
+			"Volume Restore journal differs from its acknowledged execution",
+		)
 	}
 	manifestEntries, err := backupvolumetransfer.EncodeEntries(ordered)
 	if err != nil {
@@ -121,7 +139,10 @@ func reconstructVolumeOldTree(observed *backupvolumefs.Tree,
 	}
 	manifest, err := backupvolume.ContentManifestSHA256(manifestEntries)
 	if err != nil || manifest != config.OldManifestSHA256 {
-		return backupvolumefs.Tree{}, errs.New(errs.KindStateConflict, "Volume Restore journal differs from its acknowledged execution")
+		return backupvolumefs.Tree{}, errs.New(
+			errs.KindStateConflict,
+			"Volume Restore journal differs from its acknowledged execution",
+		)
 	}
 	return tree, nil
 }

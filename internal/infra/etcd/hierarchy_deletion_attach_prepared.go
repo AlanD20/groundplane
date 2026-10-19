@@ -18,7 +18,10 @@ func hierarchyAttachPreparedKey(workID string) string {
 func (repository *HierarchyDeletionRepository) LoadHierarchyPreparedCapture(ctx context.Context, view workqueue.View,
 ) (attachremoval.WorkCapture, keyvalue.Condition, bool, error) {
 	key := hierarchyAttachPreparedKey(view.Item.Item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if read != nil {
 		defer keyvalue.ClearValues(read.Values)
 	}
@@ -26,7 +29,10 @@ func (repository *HierarchyDeletionRepository) LoadHierarchyPreparedCapture(ctx 
 		return attachremoval.WorkCapture{}, keyvalue.Condition{}, false, err
 	}
 	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 {
-		return attachremoval.WorkCapture{}, keyvalue.Condition{}, false, errs.New(errs.KindStateConflict, "hierarchy prepared capture read is incomplete")
+		return attachremoval.WorkCapture{}, keyvalue.Condition{}, false, errs.New(
+			errs.KindStateConflict,
+			"hierarchy prepared capture read is incomplete",
+		)
 	}
 	guard := keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])}
 	if read.Values[0] == nil {
@@ -37,9 +43,14 @@ func (repository *HierarchyDeletionRepository) LoadHierarchyPreparedCapture(ctx 
 		return attachremoval.WorkCapture{}, keyvalue.Condition{}, false, err
 	}
 	if capture.TaskID != view.Task.Task.ID || capture.WorkItemID != view.Item.Item.ID ||
-		capture.OperationID != HierarchyAttachOperation(view) || view.Item.Item.Input == nil || capture.Action != *view.Item.Item.Input {
+		capture.OperationID != HierarchyAttachOperation(
+			view,
+		) || view.Item.Item.Input == nil || capture.Action != *view.Item.Item.Input {
 		capture.Clear()
-		return attachremoval.WorkCapture{}, keyvalue.Condition{}, false, errs.New(errs.KindStateConflict, "hierarchy prepared capture belongs to different work")
+		return attachremoval.WorkCapture{}, keyvalue.Condition{}, false, errs.New(
+			errs.KindStateConflict,
+			"hierarchy prepared capture belongs to different work",
+		)
 	}
 	return capture, guard, true, nil
 }
@@ -49,7 +60,10 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyCaptureEnvelope(c
 ) (workqueue.Change, error) {
 	if view.Task.Task.PublicationComplete || view.Task.Task.Stop != nil || view.Task.Task.FinishedAt != nil ||
 		view.Item.Item.AttemptNumber != 0 || view.Item.Item.ActiveAttemptID != "" || view.Item.Revision <= 0 {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "hierarchy envelope requires closed unexecuted publication")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy envelope requires closed unexecuted publication",
+		)
 	}
 	current, err := repository.LoadHierarchyAttachCapture(ctx, view)
 	if err != nil {
@@ -68,10 +82,14 @@ func (repository *HierarchyDeletionRepository) PrepareHierarchyCaptureEnvelope(c
 		return workqueue.Change{}, err
 	}
 	key := hierarchyAttachPreparedKey(view.Item.Item.ID)
-	return workqueue.Change{Conditions: append(current.Conditions,
+	return workqueue.Change{Conditions: append(
+		current.Conditions,
 		keyvalue.Condition{Key: workqueue.TaskKey(view.Task.Task.ID), ModRevision: view.Task.Revision},
 		keyvalue.Condition{Key: workqueue.ItemKey(view.Item.Item.ID), ModRevision: view.Item.Revision},
-		keyvalue.Condition{Key: key}), Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}}}, nil
+		keyvalue.Condition{
+			Key: key,
+		},
+	), Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: raw}}}, nil
 }
 
 func (repository *HierarchyDeletionRepository) hierarchyPreparedCaptureGuard(ctx context.Context, view workqueue.View,
@@ -89,7 +107,10 @@ func (repository *HierarchyDeletionRepository) hierarchyPreparedCaptureGuard(ctx
 	clear(left)
 	clear(right)
 	if !same {
-		return keyvalue.Condition{}, errs.New(errs.KindStateConflict, "hierarchy activation changed its sealed hook envelope")
+		return keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy activation changed its sealed hook envelope",
+		)
 	}
 	return guard, nil
 }

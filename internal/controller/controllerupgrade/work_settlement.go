@@ -12,7 +12,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (owner *Work) Settle(ctx context.Context, queue *workqueue.Repository, delivery workqueue.Delivery, at time.Time) error {
+func (owner *Work) Settle(
+	ctx context.Context,
+	queue *workqueue.Repository,
+	delivery workqueue.Delivery,
+	at time.Time,
+) error {
 	attempt := delivery.Attempt.Attempt
 	view, err := queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor)
 	if err != nil {
@@ -71,9 +76,17 @@ func (owner *Work) Settle(ctx context.Context, queue *workqueue.Repository, deli
 	return nil
 }
 
-func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.FinishedWork, _ time.Time) (workqueue.Change, error) {
-	if len(finished.Items) != 1 || finished.Task.Task.Action != workexecution.ActionUpdate || finished.Task.Task.TargetID != controllersoftware.TargetID() {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Controller activation completion requires one captured work item")
+func (owner *Work) PrepareFinish(
+	ctx context.Context,
+	finished workqueue.FinishedWork,
+	_ time.Time,
+) (workqueue.Change, error) {
+	if len(finished.Items) != 1 || finished.Task.Task.Action != workexecution.ActionUpdate ||
+		finished.Task.Task.TargetID != controllersoftware.TargetID() {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Controller activation completion requires one captured work item",
+		)
 	}
 	item := finished.Items[0].Item
 	capture, err := owner.inputs.Load(ctx, item, finished.ReadRevision)
@@ -86,7 +99,10 @@ func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.Finishe
 			return workqueue.Change{}, err
 		}
 		if item.Result == nil || *item.Result != reference || item.Outcome == workexecution.Succeeded {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "unstarted Controller update has no matching rejection")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"unstarted Controller update has no matching rejection",
+			)
 		}
 		return captureGuard(capture), nil
 	}
@@ -109,7 +125,8 @@ func (owner *Work) PrepareFinish(ctx context.Context, finished workqueue.Finishe
 	if previous.Attempt.Direction == workexecution.Recovery {
 		accepted = item.CleanupResult
 	}
-	if !result.EffectsSettled || *previous.Attempt.Result != result.Evidence || accepted == nil || *accepted != result.Evidence {
+	if !result.EffectsSettled || *previous.Attempt.Result != result.Evidence || accepted == nil ||
+		*accepted != result.Evidence {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Controller update has unresolved handoff effects")
 	}
 	return proof, nil

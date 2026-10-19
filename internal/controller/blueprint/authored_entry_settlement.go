@@ -40,7 +40,10 @@ func (service *Service) PrepareEntrySettlement(
 	}
 	settler, ok := service.repository.(authoredEntrySettlementRepository)
 	if !ok {
-		return workqueue.Change{}, errs.New(errs.KindInternal, "Blueprint Entry settlement repository is not configured")
+		return workqueue.Change{}, errs.New(
+			errs.KindInternal,
+			"Blueprint Entry settlement repository is not configured",
+		)
 	}
 	input, err := service.loadAuthoredParentInput(ctx, parent)
 	if err != nil {
@@ -66,7 +69,10 @@ func (service *Service) PrepareEntrySettlement(
 		generator := service.entryGeneration
 		if desired.Source.Kind == core.SourceFact {
 			if desired.Source.Fact == nil {
-				return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Blueprint Entry fact reference is missing")
+				return workqueue.Change{}, errs.New(
+					errs.KindValidationFailed,
+					"Blueprint Entry fact reference is missing",
+				)
 			}
 			resolver, err := service.authoredEntryFactResolver(ctx, input, snapshot, desired.Source.Fact.Attach)
 			if err != nil {
@@ -98,7 +104,12 @@ func (service *Service) PrepareEntrySettlement(
 }
 
 type appliedAttachBindingReader interface {
-	ReadAppliedAttachBinding(context.Context, string, string, int64) (attachments.AppliedBinding, []keyvalue.Condition, error)
+	ReadAppliedAttachBinding(
+		context.Context,
+		string,
+		string,
+		int64,
+	) (attachments.AppliedBinding, []keyvalue.Condition, error)
 }
 
 type pinnedEntryFactResolver struct {
@@ -108,12 +119,21 @@ type pinnedEntryFactResolver struct {
 	conditions    []keyvalue.Condition
 }
 
-func (service *Service) authoredEntryFactResolver(ctx context.Context, input authoredParentInput, snapshot blueprintunits.Snapshot, attachName string) (*pinnedEntryFactResolver, error) {
+func (service *Service) authoredEntryFactResolver(
+	ctx context.Context,
+	input authoredParentInput,
+	snapshot blueprintunits.Snapshot,
+	attachName string,
+) (*pinnedEntryFactResolver, error) {
 	reader, ok := service.repository.(appliedAttachBindingReader)
 	if !ok {
 		return nil, errs.New(errs.KindInternal, "Applied Attach fact reader is not configured")
 	}
-	resolver := &pinnedEntryFactResolver{service: service, environmentID: input.desired.EnvironmentID, bindings: make(map[string]attachments.AppliedBinding)}
+	resolver := &pinnedEntryFactResolver{
+		service:       service,
+		environmentID: input.desired.EnvironmentID,
+		bindings:      make(map[string]attachments.AppliedBinding),
+	}
 	succeeded := false
 	defer func() {
 		if !succeeded {
@@ -130,7 +150,12 @@ func (service *Service) authoredEntryFactResolver(ctx context.Context, input aut
 		if identity.Name != attachName || !applied[identity.ID] {
 			continue
 		}
-		binding, conditions, err := reader.ReadAppliedAttachBinding(ctx, resolver.environmentID, identity.ID, snapshot.ReadRevision)
+		binding, conditions, err := reader.ReadAppliedAttachBinding(
+			ctx,
+			resolver.environmentID,
+			identity.ID,
+			snapshot.ReadRevision,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +170,13 @@ func (service *Service) authoredEntryFactResolver(ctx context.Context, input aut
 	return resolver, nil
 }
 
-func (resolver *pinnedEntryFactResolver) ResolveFact(ctx context.Context, environmentID string, reference core.FactRef, destinationSecret bool, consume secretvalue.PlaintextConsumer) error {
+func (resolver *pinnedEntryFactResolver) ResolveFact(
+	ctx context.Context,
+	environmentID string,
+	reference core.FactRef,
+	destinationSecret bool,
+	consume secretvalue.PlaintextConsumer,
+) error {
 	if resolver == nil || environmentID != resolver.environmentID {
 		return errs.New(errs.KindStateConflict, "Blueprint Entry fact Environment changed")
 	}

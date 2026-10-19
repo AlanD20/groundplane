@@ -27,7 +27,10 @@ func (repository *InputRepository) PreparePruneSettlement(ctx context.Context, v
 		return workqueue.Change{}, err
 	}
 	deleted := admitted.Request.GetPruneObjectDeleted()
-	keys := []string{backupruntime.BackupRecoveryPointPruneDispatchKey(view.Work.Task.Task.ID), backupruntime.BackupRecoveryPointPruneKey(deleted.PointId)}
+	keys := []string{
+		backupruntime.BackupRecoveryPointPruneDispatchKey(view.Work.Task.Task.ID),
+		backupruntime.BackupRecoveryPointPruneKey(deleted.PointId),
+	}
 	read, err := repository.readSettlementKeys(ctx, keys, view.Work.ReadRevision)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -70,8 +73,17 @@ func (repository *InputRepository) PreparePruneSettlement(ctx context.Context, v
 	if err := backupruntime.ValidateCompletedBackupRetentionSweep(anchor.Values[5], current.Point, anchor.Values[1].ModRevision); err != nil {
 		return workqueue.Change{}, err
 	}
-	fence, err := environmentfence.LoadOwned(ctx, repository.store, dispatch.EnvironmentID, view.Work.ReadRevision,
-		environmentfence.Owner{Kind: backupruntime.BackupOperationPrune, OperationID: dispatch.OperationID, TaskID: dispatch.TaskID})
+	fence, err := environmentfence.LoadOwned(
+		ctx,
+		repository.store,
+		dispatch.EnvironmentID,
+		view.Work.ReadRevision,
+		environmentfence.Owner{
+			Kind:        backupruntime.BackupOperationPrune,
+			OperationID: dispatch.OperationID,
+			TaskID:      dispatch.TaskID,
+		},
+	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -84,15 +96,25 @@ func (repository *InputRepository) PreparePruneSettlement(ctx context.Context, v
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision}},
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: authorityKeys[0], Value: encoded}}}
+	change := workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision}},
+		Mutations:  []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: authorityKeys[0], Value: encoded}},
+	}
 	for index, key := range authorityKeys {
-		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(anchor.Values[index])})
+		change.Conditions = append(
+			change.Conditions,
+			keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(anchor.Values[index])},
+		)
 		if index > 0 {
 			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})
 		}
 	}
-	conditions, mutations, err := backupvolumecleanup.Prepare(ctx, repository.store, current.Point, view.Work.ReadRevision)
+	conditions, mutations, err := backupvolumecleanup.Prepare(
+		ctx,
+		repository.store,
+		current.Point,
+		view.Work.ReadRevision,
+	)
 	if err != nil {
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err
@@ -109,7 +131,11 @@ func (repository *InputRepository) PreparePruneSettlement(ctx context.Context, v
 	return change, nil
 }
 
-func (repository *InputRepository) readSettlementKeys(ctx context.Context, keys []string, revision int64) (*keyvalue.GetManyResult, error) {
+func (repository *InputRepository) readSettlementKeys(
+	ctx context.Context,
+	keys []string,
+	revision int64,
+) (*keyvalue.GetManyResult, error) {
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err

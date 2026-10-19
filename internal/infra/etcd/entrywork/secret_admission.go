@@ -11,7 +11,10 @@ import (
 // ExecutionSecretConditions protects both forward execution and restoration.
 // Reading retained failure evidence does not require live pins; granting a new
 // effect or delivering captured Secret-backed files does.
-func (repository *InputRepository) ExecutionSecretConditions(ctx context.Context, view workqueue.View) ([]keyvalue.Condition, error) {
+func (repository *InputRepository) ExecutionSecretConditions(
+	ctx context.Context,
+	view workqueue.View,
+) ([]keyvalue.Condition, error) {
 	_, capture, guards, err := repository.Load(ctx, view)
 	if err != nil {
 		return nil, err

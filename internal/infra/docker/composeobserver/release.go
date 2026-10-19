@@ -11,7 +11,10 @@ import (
 
 // ObserveRelease uses captured candidate and predecessor ownership directly.
 // It does not manufacture an ExecutionPlan or reread desired configuration.
-func (observer *Observer) ObserveRelease(ctx context.Context, input releaseexecution.Input) (*agentpb.ObservedProject, error) {
+func (observer *Observer) ObserveRelease(
+	ctx context.Context,
+	input releaseexecution.Input,
+) (*agentpb.ObservedProject, error) {
 	if observer == nil || observer.engine == nil || observer.now == nil || ctx == nil {
 		return nil, errs.New(errs.KindInternal, "Release observer is not configured")
 	}

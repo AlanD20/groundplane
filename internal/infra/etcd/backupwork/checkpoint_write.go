@@ -35,14 +35,24 @@ func (repository *InputRepository) PrepareCheckpoint(ctx context.Context, view w
 	report := admitted.Request
 	grantsPublication := admitted.Assignment.Input.Operation == agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_RESTORE &&
 		report.GetConfig().GetTransferCompleted() != nil
-	if (checkpointGrantsEffect(report) || grantsPublication) && (task.Stop != nil || item.ForwardRevoked || !at.Before(attempt.Deadline) || !at.Before(task.Deadline)) {
+	if (checkpointGrantsEffect(report) || grantsPublication) &&
+		(task.Stop != nil || item.ForwardRevoked || !at.Before(attempt.Deadline) || !at.Before(task.Deadline)) {
 		return workqueue.Change{}, nil, conflict("Backup cannot start another effect after execution was stopped")
 	}
 	next, err := advanceCheckpoint(admitted, attempt.Executor, evidence, view.Work.ReadRevision)
 	if err != nil {
 		return workqueue.Change{}, nil, err
 	}
-	change, err := repository.prepareCheckpointWrite(ctx, view, admitted, admitted.Assignment.Input, len(admitted.Assignment.Sources), next, evidence.Conditions, at)
+	change, err := repository.prepareCheckpointWrite(
+		ctx,
+		view,
+		admitted,
+		admitted.Assignment.Input,
+		len(admitted.Assignment.Sources),
+		next,
+		evidence.Conditions,
+		at,
+	)
 	return change, nil, err
 }
 
@@ -84,9 +94,15 @@ func (repository *InputRepository) prepareCheckpointWrite(ctx context.Context, v
 	change.Conditions = append(change.Conditions, evidenceGuards...)
 	change.Conditions = append(change.Conditions,
 		keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: view.Work.Task.Revision})
-	change.Mutations = append(change.Mutations,
+	change.Mutations = append(
+		change.Mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: admitted.ReceiptKey, Value: append([]byte(nil), raw...)},
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ProgressKey(item.ID), Value: append([]byte(nil), progress...)})
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   ProgressKey(item.ID),
+			Value: append([]byte(nil), progress...),
+		},
+	)
 	return change, nil
 }
 
@@ -94,7 +110,10 @@ func (repository *InputRepository) prepareProgressAdvance(ctx context.Context, v
 	report *agentpb.BackupWorkCheckpointRequest, sourceCount int, next *agentpb.BackupStepResume,
 ) ([]byte, keyvalue.Condition, error) {
 	key := ProgressKey(view.Work.Item.Item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision},
+	)
 	if err != nil {
 		return nil, keyvalue.Condition{}, err
 	}

@@ -24,13 +24,25 @@ type Receipt struct {
 	Report  environmentexecution.Result `json:"report"`
 }
 
-func (repository *Repository) ReadResult(ctx context.Context, attempt workexecution.Attempt, revision int64) (keyvalue.Versioned[Receipt], error) {
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{ResultKey(attempt.ID)}, Revision: revision})
+func (repository *Repository) ReadResult(
+	ctx context.Context,
+	attempt workexecution.Attempt,
+	revision int64,
+) (keyvalue.Versioned[Receipt], error) {
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{ResultKey(attempt.ID)}, Revision: revision},
+	)
 	if err != nil {
 		return keyvalue.Versioned[Receipt]{}, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return keyvalue.Versioned[Receipt]{}, errs.New(errs.KindStateConflict, "environment provisioning result is unavailable")
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		len(read.Values) != 1 ||
+		read.Values[0] == nil {
+		return keyvalue.Versioned[Receipt]{}, errs.New(
+			errs.KindStateConflict,
+			"environment provisioning result is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	receipt, err := recordcodec.Decode[Receipt](read.Values[0].Value, "environment_provision_result")
@@ -43,14 +55,26 @@ func (repository *Repository) ReadResult(ctx context.Context, attempt workexecut
 		attempt.StartedAt != nil && !attempt.StartedAt.Equal(*receipt.Attempt.StartedAt) ||
 		receipt.Attempt.FinishedAt == nil || receipt.Attempt.Result == nil || *receipt.Attempt.Result != expected ||
 		receipt.Attempt.FinishedAt.Before(receipt.Report.ObservedAt) {
-		return keyvalue.Versioned[Receipt]{}, errs.New(errs.KindInternal, "environment provisioning result ownership is corrupt")
+		return keyvalue.Versioned[Receipt]{}, errs.New(
+			errs.KindInternal,
+			"environment provisioning result ownership is corrupt",
+		)
 	}
-	return keyvalue.Versioned[Receipt]{Record: receipt, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[Receipt]{
+		Record:       receipt,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }
 
 // PrepareResult is committed with native slot/claim settlement. Unresolved
 // helpers leave effects owned; successful cleanup never rewrites forward failure.
-func (repository *Repository) PrepareResult(ctx context.Context, view workqueue.ResumeView, report environmentexecution.Result, at time.Time) (workqueue.Change, workexecution.Completion, error) {
+func (repository *Repository) PrepareResult(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	report environmentexecution.Result,
+	at time.Time,
+) (workqueue.Change, workexecution.Completion, error) {
 	input, captured, err := repository.Load(ctx, view.Work)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
@@ -62,8 +86,12 @@ func (repository *Repository) PrepareResult(ctx context.Context, view workqueue.
 	}
 	if attempt.Executor.HostID != input.HostID || report.ObservedAt.After(at) || attempt.FinishedAt != nil ||
 		!view.ActiveAttempt || view.Checkpoint.Record != nil || view.Checkpoint.Revision != 0 ||
-		completion.Outcome == workexecution.Succeeded && attempt.Direction == workexecution.Forward && attempt.StartedAt == nil {
-		return workqueue.Change{}, workexecution.Completion{}, errs.New(errs.KindStateConflict, "environment provisioning result lacks its retained execution authority")
+		completion.Outcome == workexecution.Succeeded && attempt.Direction == workexecution.Forward &&
+			attempt.StartedAt == nil {
+		return workqueue.Change{}, workexecution.Completion{}, errs.New(
+			errs.KindStateConflict,
+			"environment provisioning result lacks its retained execution authority",
+		)
 	}
 	if attempt.Direction == workexecution.Forward {
 		if view.Work.Task.Task.Stop != nil {
@@ -92,7 +120,11 @@ func (repository *Repository) PrepareResult(ctx context.Context, view workqueue.
 		change.Conditions = append(change.Conditions, source)
 	}
 	if attempt.Direction == workexecution.Forward {
-		state, err := repository.PrepareResourceResult(ctx, view.Work, report.HelpersAbsent && report.DirectoryReady && report.Failure == "")
+		state, err := repository.PrepareResourceResult(
+			ctx,
+			view.Work,
+			report.HelpersAbsent && report.DirectoryReady && report.Failure == "",
+		)
 		if err != nil {
 			keyvalue.ClearMutationValues(change.Mutations)
 			return workqueue.Change{}, workexecution.Completion{}, err
@@ -104,14 +136,23 @@ func (repository *Repository) PrepareResult(ctx context.Context, view workqueue.
 	return change, completion, nil
 }
 
-func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.View) (workexecution.Attempt, keyvalue.Condition, error) {
+func (repository *Repository) LoadRecovery(
+	ctx context.Context,
+	view workqueue.View,
+) (workexecution.Attempt, keyvalue.Condition, error) {
 	key := RecoveryKey(view.Item.Item.ID)
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.ReadRevision},
+	)
 	if err != nil {
 		return workexecution.Attempt{}, keyvalue.Condition{}, err
 	}
 	if read == nil || read.ReadRevision != view.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
-		return workexecution.Attempt{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "environment provisioning cleanup source is unavailable")
+		return workexecution.Attempt{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"environment provisioning cleanup source is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
 	source, err := recordcodec.Decode[workexecution.Attempt](read.Values[0].Value, "environment_provision_recovery")
@@ -123,7 +164,10 @@ func (repository *Repository) LoadRecovery(ctx context.Context, view workqueue.V
 		source.Executor.HostID != item.Placement.HostID || item.Input == nil || source.Input != *item.Input ||
 		source.Direction != workexecution.Forward || source.FinishedAt == nil || source.Result == nil || source.Outcome == workexecution.Succeeded ||
 		source.Number > item.AttemptNumber || item.Result == nil || *source.Result != *item.Result {
-		return workexecution.Attempt{}, keyvalue.Condition{}, errs.New(errs.KindStateConflict, "environment provisioning cleanup source differs from the original failure")
+		return workexecution.Attempt{}, keyvalue.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"environment provisioning cleanup source differs from the original failure",
+		)
 	}
 	return source, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
 }

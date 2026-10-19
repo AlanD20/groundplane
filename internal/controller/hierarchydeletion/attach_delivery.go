@@ -16,7 +16,10 @@ import (
 
 // HierarchyAssignment dispatches the closed captured action, never inferring
 // operation type from the current resource or creating a hidden child Task.
-func (owner *AgentWork) HierarchyAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.ControllerMessage, error) {
+func (owner *AgentWork) HierarchyAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.ControllerMessage, error) {
 	item, attempt := view.Work.Item.Item, view.Attempt.Attempt
 	if !view.CurrentExecutor || !view.ActiveAttempt || item.Operation != workexecution.Hierarchy ||
 		workexecution.ValidateDelivery(item, attempt) != nil || view.Work.Task.Task.CollectionStartedAt != nil ||
@@ -33,30 +36,41 @@ func (owner *AgentWork) HierarchyAssignment(ctx context.Context, view workqueue.
 		if err != nil {
 			return nil, err
 		}
-		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_EnvironmentRemovalAssignment{EnvironmentRemovalAssignment: assignment}}, nil
+		return &agentpb.ControllerMessage{
+			Payload: &agentpb.ControllerMessage_EnvironmentRemovalAssignment{EnvironmentRemovalAssignment: assignment},
+		}, nil
 	case hierarchydeletion.HierarchyDeletionAttachDeprovision:
 		if attempt.Direction == workexecution.Recovery {
 			source, err := owner.records.LoadHierarchyAttachRecovery(ctx, view.Work)
 			if err != nil {
 				return nil, err
 			}
-			assignment, err := attachexecution.EncodeRecoveryAssignment(attachexecution.RecoveryInput{Attempt: attempt, Source: source.Source})
+			assignment, err := attachexecution.EncodeRecoveryAssignment(
+				attachexecution.RecoveryInput{Attempt: attempt, Source: source.Source},
+			)
 			if err != nil {
 				return nil, err
 			}
-			return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_AttachRecoveryAssignment{AttachRecoveryAssignment: assignment}}, nil
+			return &agentpb.ControllerMessage{
+				Payload: &agentpb.ControllerMessage_AttachRecoveryAssignment{AttachRecoveryAssignment: assignment},
+			}, nil
 		}
 		assignment, err := owner.capturedAttachAssignment(ctx, view)
 		if err != nil {
 			return nil, err
 		}
-		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_AttachRemovalAssignment{AttachRemovalAssignment: assignment}}, nil
+		return &agentpb.ControllerMessage{
+			Payload: &agentpb.ControllerMessage_AttachRemovalAssignment{AttachRemovalAssignment: assignment},
+		}, nil
 	default:
 		return nil, errs.New(errs.KindStateConflict, "captured removal action has no host execution handler")
 	}
 }
 
-func (owner *AgentWork) capturedAttachAssignment(ctx context.Context, view workqueue.ResumeView) (*agentpb.AttachRemovalAssignment, error) {
+func (owner *AgentWork) capturedAttachAssignment(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (*agentpb.AttachRemovalAssignment, error) {
 	input, err := owner.capturedAttachInput(ctx, view)
 	if err != nil {
 		return nil, err
@@ -65,14 +79,20 @@ func (owner *AgentWork) capturedAttachAssignment(ctx context.Context, view workq
 	return attachexecution.EncodeRemovalAssignment(input)
 }
 
-func (owner *AgentWork) capturedAttachInput(ctx context.Context, view workqueue.ResumeView) (attachexecution.RemovalInput, error) {
+func (owner *AgentWork) capturedAttachInput(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (attachexecution.RemovalInput, error) {
 	capture, err := owner.records.LoadHierarchyAttachCapture(ctx, view.Work)
 	if err != nil {
 		return attachexecution.RemovalInput{}, err
 	}
 	defer capture.Clear()
 	if capture.Revision <= 0 {
-		return attachexecution.RemovalInput{}, errs.New(errs.KindStateConflict, "Attach removal inputs have not been captured")
+		return attachexecution.RemovalInput{}, errs.New(
+			errs.KindStateConflict,
+			"Attach removal inputs have not been captured",
+		)
 	}
 	raw, err := attachremoval.EncodeWorkCapture(capture.Capture)
 	if err != nil {
@@ -81,7 +101,12 @@ func (owner *AgentWork) capturedAttachInput(ctx context.Context, view workqueue.
 	digest := sha256.Sum256(raw)
 	clear(raw)
 	input, err := owner.attachPlanner.Build(ctx, capture.Source.Input, &agentpb.WorkInputReference{
-		InputId: ids.DeriveAt(ids.KindPlan, view.Work.Task.Task.CreatedAt, view.Work.Item.Item.ID, "attach-removal-source"), Sha256: digest[:]}, nil)
+		InputId: ids.DeriveAt(
+			ids.KindPlan,
+			view.Work.Task.Task.CreatedAt,
+			view.Work.Item.Item.ID,
+			"attach-removal-source",
+		), Sha256: digest[:]}, nil)
 	if err != nil {
 		return attachexecution.RemovalInput{}, err
 	}

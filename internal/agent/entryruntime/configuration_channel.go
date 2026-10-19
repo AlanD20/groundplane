@@ -17,7 +17,10 @@ import (
 
 type ConfigurationExchange interface {
 	EntryConfiguration(context.Context, *agentpb.EntryConfigurationRequest) (*agentpb.EntryConfigurationManifest, error)
-	EntryConfigurationFile(context.Context, *agentpb.EntryConfigurationFileRequest) (*agentpb.EntryConfigurationFileDelivery, error)
+	EntryConfigurationFile(
+		context.Context,
+		*agentpb.EntryConfigurationFileRequest,
+	) (*agentpb.EntryConfigurationFileDelivery, error)
 }
 
 type ChannelConfigurationSource struct{ exchange ConfigurationExchange }
@@ -29,7 +32,10 @@ func NewChannelConfigurationSource(exchange ConfigurationExchange) (*ChannelConf
 	return &ChannelConfigurationSource{exchange: exchange}, nil
 }
 
-func (source *ChannelConfigurationSource) DescribeEntry(ctx context.Context, input entryexecution.FileInput) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error) {
+func (source *ChannelConfigurationSource) DescribeEntry(
+	ctx context.Context,
+	input entryexecution.FileInput,
+) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error) {
 	reference, stage, _, err := entryexecution.ConfigurationSelection(input)
 	if err != nil {
 		return nil, nil, err
@@ -38,12 +44,18 @@ func (source *ChannelConfigurationSource) DescribeEntry(ctx context.Context, inp
 	if err != nil {
 		return nil, nil, err
 	}
-	manifest, err := source.exchange.EntryConfiguration(ctx, &agentpb.EntryConfigurationRequest{Attempt: identity, StageId: stage})
+	manifest, err := source.exchange.EntryConfiguration(
+		ctx,
+		&agentpb.EntryConfigurationRequest{Attempt: identity, StageId: stage},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
-	if manifest == nil || executionplan.RejectUnknown(manifest) != nil || !proto.Equal(manifest.Attempt, identity) || manifest.StageId != stage ||
-		!proto.Equal(manifest.Configuration, reference) || len(manifest.Files) > 512 || len(manifest.Files) != len(input.Procedure.Files) {
+	if manifest == nil || executionplan.RejectUnknown(manifest) != nil || !proto.Equal(manifest.Attempt, identity) ||
+		manifest.StageId != stage ||
+		!proto.Equal(manifest.Configuration, reference) ||
+		len(manifest.Files) > 512 ||
+		len(manifest.Files) != len(input.Procedure.Files) {
 		return nil, nil, invalidConfigurationDelivery()
 	}
 	files := make([]entrymaterialization.Header, len(manifest.Files))
@@ -63,7 +75,11 @@ func (source *ChannelConfigurationSource) DescribeEntry(ctx context.Context, inp
 	return proto.CloneOf(manifest.Configuration), files, nil
 }
 
-func (source *ChannelConfigurationSource) OpenEntryFile(ctx context.Context, input entryexecution.FileInput, header entrymaterialization.Header) (io.ReadCloser, error) {
+func (source *ChannelConfigurationSource) OpenEntryFile(
+	ctx context.Context,
+	input entryexecution.FileInput,
+	header entrymaterialization.Header,
+) (io.ReadCloser, error) {
 	reference, _, generation, err := entryexecution.ConfigurationSelection(input)
 	if err != nil {
 		return nil, err
@@ -77,13 +93,22 @@ func (source *ChannelConfigurationSource) OpenEntryFile(ctx context.Context, inp
 	if err != nil {
 		return nil, err
 	}
-	delivery, err := source.exchange.EntryConfigurationFile(ctx, &agentpb.EntryConfigurationFileRequest{Attempt: identity, StageId: header.StepID(), Destination: header.Destination()})
+	delivery, err := source.exchange.EntryConfigurationFile(
+		ctx,
+		&agentpb.EntryConfigurationFileRequest{
+			Attempt:     identity,
+			StageId:     header.StepID(),
+			Destination: header.Destination(),
+		},
+	)
 	defer entryexecution.ClearConfigurationDelivery(delivery)
 	if err != nil {
 		return nil, err
 	}
-	if delivery == nil || executionplan.RejectUnknown(delivery) != nil || !proto.Equal(delivery.Attempt, identity) || delivery.StageId != header.StepID() ||
-		!proto.Equal(delivery.Configuration, reference) || !proto.Equal(delivery.File, entryexecution.EncodeConfigurationFile(header)) ||
+	if delivery == nil || executionplan.RejectUnknown(delivery) != nil || !proto.Equal(delivery.Attempt, identity) ||
+		delivery.StageId != header.StepID() ||
+		!proto.Equal(delivery.Configuration, reference) ||
+		!proto.Equal(delivery.File, entryexecution.EncodeConfigurationFile(header)) ||
 		uint64(len(delivery.Content)) != header.Length() {
 		return nil, invalidConfigurationDelivery()
 	}

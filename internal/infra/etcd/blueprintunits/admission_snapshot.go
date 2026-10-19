@@ -11,7 +11,11 @@ import (
 // LoadAdmission reads the resource ledger before accepting a new Apply. No head
 // is valid for a first Apply only when no prior resource ledger exists. Missing
 // runtime projection is irrelevant; this read never manufactures applied state.
-func (repository *Repository) LoadAdmission(ctx context.Context, environmentID string, revision int64) (Snapshot, error) {
+func (repository *Repository) LoadAdmission(
+	ctx context.Context,
+	environmentID string,
+	revision int64,
+) (Snapshot, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return Snapshot{}, err
 	}
@@ -33,7 +37,10 @@ func (repository *Repository) LoadAdmission(ctx context.Context, environmentID s
 		}
 		return repository.LoadAtRevision(ctx, environmentID, revision)
 	}
-	page, err := repository.store.Range(ctx, keyvalue.RangeRequest{Prefix: recordPrefix + environmentID + "/", Limit: 1, Revision: revision})
+	page, err := repository.store.Range(
+		ctx,
+		keyvalue.RangeRequest{Prefix: recordPrefix + environmentID + "/", Limit: 1, Revision: revision},
+	)
 	if err != nil {
 		return Snapshot{}, err
 	}

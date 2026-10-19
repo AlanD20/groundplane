@@ -37,14 +37,21 @@ func ReadBackupConsumerRequest(ctx context.Context, input io.Reader) (*agentpb.B
 	return request, nil
 }
 
-func ReadBackupConsumerResponse(ctx context.Context, input io.Reader, captured executionplan.BackupConsumerHelperInput) (*agentpb.BackupConsumerHelperResponse, error) {
+func ReadBackupConsumerResponse(
+	ctx context.Context,
+	input io.Reader,
+	captured executionplan.BackupConsumerHelperInput,
+) (*agentpb.BackupConsumerHelperResponse, error) {
 	raw, err := readFrame(ctx, input)
 	if err != nil {
 		return nil, err
 	}
 	defer clear(raw)
 	if len(raw) > executionplan.MaximumPlanBytes {
-		return nil, errs.New(errs.KindValidationFailed, "Backup Volume consumer helper response exceeds its observation bound")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Backup Volume consumer helper response exceeds its observation bound",
+		)
 	}
 	response := &agentpb.BackupConsumerHelperResponse{}
 	if proto.Unmarshal(raw, response) != nil {
@@ -56,7 +63,12 @@ func ReadBackupConsumerResponse(ctx context.Context, input io.Reader, captured e
 	return response, nil
 }
 
-func WriteBackupConsumerResponse(ctx context.Context, output io.Writer, captured executionplan.BackupConsumerHelperInput, response *agentpb.BackupConsumerHelperResponse) error {
+func WriteBackupConsumerResponse(
+	ctx context.Context,
+	output io.Writer,
+	captured executionplan.BackupConsumerHelperInput,
+	response *agentpb.BackupConsumerHelperResponse,
+) error {
 	if err := executionplan.ValidateBackupConsumerHelperResponse(captured, response); err != nil {
 		return err
 	}
@@ -65,7 +77,10 @@ func WriteBackupConsumerResponse(ctx context.Context, output io.Writer, captured
 		return errs.Wrap(errs.KindInternal, err)
 	}
 	if len(raw) > executionplan.MaximumPlanBytes {
-		return errs.New(errs.KindValidationFailed, "Backup Volume consumer helper response exceeds its observation bound")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Backup Volume consumer helper response exceeds its observation bound",
+		)
 	}
 	framed, err := frame(raw)
 	if err != nil {

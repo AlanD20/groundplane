@@ -16,7 +16,10 @@ import (
 )
 
 type Helper interface {
-	ExecuteComponentWork(context.Context, *agentpb.ComponentWorkHelperRequest) (*agentpb.ComponentWorkHelperResponse, error)
+	ExecuteComponentWork(
+		context.Context,
+		*agentpb.ComponentWorkHelperRequest,
+	) (*agentpb.ComponentWorkHelperResponse, error)
 	StopComponentWork(context.Context, *agentpb.ComponentWorkHelperRequest) error
 }
 
@@ -27,7 +30,12 @@ type RuntimeHost struct {
 	configuration *Configuration
 }
 
-func NewHost(journal *agentworkjournal.Journal, helper Helper, ownership *agentownership.Lease, configuration *Configuration) (*RuntimeHost, error) {
+func NewHost(
+	journal *agentworkjournal.Journal,
+	helper Helper,
+	ownership *agentownership.Lease,
+	configuration *Configuration,
+) (*RuntimeHost, error) {
 	if journal == nil || helper == nil || configuration == nil {
 		return nil, errs.New(errs.KindInternal, "Component host requires its journal and helper")
 	}
@@ -42,11 +50,20 @@ func (host *RuntimeHost) Apply(ctx context.Context, input Input, stage component
 	return err
 }
 
-func (host *RuntimeHost) Inspect(ctx context.Context, input Input, stage componentexecution.Stage) (componentexecution.Observation, error) {
+func (host *RuntimeHost) Inspect(
+	ctx context.Context,
+	input Input,
+	stage componentexecution.Stage,
+) (componentexecution.Observation, error) {
 	return host.execute(ctx, input, stage, true)
 }
 
-func (host *RuntimeHost) execute(ctx context.Context, input Input, stage componentexecution.Stage, inspectOnly bool) (componentexecution.Observation, error) {
+func (host *RuntimeHost) execute(
+	ctx context.Context,
+	input Input,
+	stage componentexecution.Stage,
+	inspectOnly bool,
+) (componentexecution.Observation, error) {
 	if input.procedure == nil || input.attempt.StartedAt == nil {
 		return componentexecution.Observation{}, invalidInput()
 	}
@@ -57,8 +74,13 @@ func (host *RuntimeHost) execute(ctx context.Context, input Input, stage compone
 	if err != nil {
 		return componentexecution.Observation{}, err
 	}
-	if saved == nil || !saved.Acknowledged || saved.Completion != nil || saved.Failure != nil || !saved.Progress.InFlight || saved.Progress.Stage != stage {
-		return componentexecution.Observation{}, errs.New(errs.KindStateConflict, "Component host operation has no matching acknowledged checkpoint")
+	if saved == nil || !saved.Acknowledged || saved.Completion != nil || saved.Failure != nil ||
+		!saved.Progress.InFlight ||
+		saved.Progress.Stage != stage {
+		return componentexecution.Observation{}, errs.New(
+			errs.KindStateConflict,
+			"Component host operation has no matching acknowledged checkpoint",
+		)
 	}
 	report, err := input.checkpointRequest(saved.Progress)
 	if err != nil {

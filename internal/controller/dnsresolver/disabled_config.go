@@ -14,16 +14,27 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *PlatformMutationService) saveDisabledConfig(ctx context.Context, current keyvalue.Versioned[componentrecord.Record],
-	desired core.Component, locator idempotency.IdempotencyLocator, intent platformComponentProtectedIntent,
+func (service *PlatformMutationService) saveDisabledConfig(
+	ctx context.Context,
+	current keyvalue.Versioned[componentrecord.Record],
+	desired core.Component,
+	locator idempotency.IdempotencyLocator,
+	intent platformComponentProtectedIntent,
 ) (idempotency.IdempotencyResponse, error) {
-	encoded, err := json.Marshal(apiTypes.ComponentConfigMutationResult{Resource: publicCoreDNSConfig(*desired.Config.CoreDNS)})
+	encoded, err := json.Marshal(
+		apiTypes.ComponentConfigMutationResult{Resource: publicCoreDNSConfig(*desired.Config.CoreDNS)},
+	)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(encoded)
 	response := idempotency.IdempotencyResponse{Status: http.StatusOK, ContentKind: "application/json", Body: encoded}
-	marker, err := idempotency.NewCompletedDirectIdempotencyMarker(locator, intent.durable, response, service.now().UTC())
+	marker, err := idempotency.NewCompletedDirectIdempotencyMarker(
+		locator,
+		intent.durable,
+		response,
+		service.now().UTC(),
+	)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
@@ -33,7 +44,13 @@ func (service *PlatformMutationService) saveDisabledConfig(ctx context.Context, 
 		if !unknownPlatformComponentMutationOutcome(publishErr) {
 			return idempotency.IdempotencyResponse{}, publishErr
 		}
-		resolution, err = service.coordinator.ResolveUnknown(ctx, service.idempotency, locator, intent.protected, publishErr)
+		resolution, err = service.coordinator.ResolveUnknown(
+			ctx,
+			service.idempotency,
+			locator,
+			intent.protected,
+			publishErr,
+		)
 	} else {
 		resolution, err = service.coordinator.ResolveKnown(ctx, intent.protected, result)
 	}
@@ -44,7 +61,10 @@ func (service *PlatformMutationService) saveDisabledConfig(ctx context.Context, 
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindInternal, "CoreDNS configuration save has no accepted result")
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"CoreDNS configuration save has no accepted result",
+		)
 	}
 	return cloneIdempotencyResponse(response), nil
 }

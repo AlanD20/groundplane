@@ -39,7 +39,10 @@ func SourceConditions(
 	}
 	defer keyvalue.ClearValues(read.Values)
 	for _, prefix := range []string{attachrecord.AttachGrantedByPrefix(input.Attach.ID), attachrecord.AttachCredentialByPrefix(input.Attach.ID)} {
-		dependents, err := store.Range(ctx, keyvalue.RangeRequest{Prefix: prefix, Limit: 1, Revision: read.ReadRevision})
+		dependents, err := store.Range(
+			ctx,
+			keyvalue.RangeRequest{Prefix: prefix, Limit: 1, Revision: read.ReadRevision},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -49,7 +52,10 @@ func SourceConditions(
 		inUse := len(dependents.Values) != 0 || dependents.More
 		keyvalue.ClearRangeValues(dependents.Values)
 		if inUse {
-			return nil, errs.New(errs.KindResourceInUse, "remove dependent Attaches and grants before detaching their credential owner")
+			return nil, errs.New(
+				errs.KindResourceInUse,
+				"remove dependent Attaches and grants before detaching their credential owner",
+			)
 		}
 	}
 	exclusion, err := attachrecord.RequireAttachBackupSourceExclusionAbsent(

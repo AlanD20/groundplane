@@ -7,10 +7,18 @@ import (
 	"time"
 )
 
-func (owner *Reports) RetireWork(ctx context.Context, view workqueue.View, at time.Time, final bool) (bool, workqueue.Change, error) {
+func (owner *Reports) RetireWork(
+	ctx context.Context,
+	view workqueue.View,
+	at time.Time,
+	final bool,
+) (bool, workqueue.Change, error) {
 	return owner.inputs.repository.PrepareRetention(ctx, view, at, final)
 }
 
-func (owner *Reports) PrepareAttemptRetirement(view workqueue.View, attempt workqueue.AttemptSnapshot) (workqueue.Change, error) {
+func (owner *Reports) PrepareAttemptRetirement(
+	view workqueue.View,
+	attempt workqueue.AttemptSnapshot,
+) (workqueue.Change, error) {
 	return attachprovision.PrepareAttemptRetirement(view, attempt)
 }

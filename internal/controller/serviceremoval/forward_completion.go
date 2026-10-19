@@ -36,7 +36,10 @@ func (service *WorkReports) CompleteLifecycle(ctx context.Context, authorization
 		return nil, err
 	}
 	if view.Checkpoint.Record == nil || view.Checkpoint.Record.Evidence != evidence {
-		return nil, errs.New(errs.KindStateConflict, "Service removal completion differs from its acknowledged checkpoint")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Service removal completion differs from its acknowledged checkpoint",
+		)
 	}
 	if view.Work.Task.Task.Stop != nil || view.Work.Item.Item.ForwardRevoked {
 		// Require complete host proof before interpreting a completion report as
@@ -67,7 +70,11 @@ func (service *WorkReports) CompleteLifecycle(ctx context.Context, authorization
 		if err != nil {
 			return nil, err
 		}
-		completion.Result = workexecution.Completion{Outcome: workexecution.Succeeded, Evidence: evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        workexecution.Succeeded,
+			Evidence:       evidence,
+			EffectsSettled: true,
+		}
 		completion.At = at
 		change, err := workqueue.PrepareCompletion(completion)
 		if err != nil {
@@ -80,7 +87,10 @@ func (service *WorkReports) CompleteLifecycle(ctx context.Context, authorization
 			return nil, err
 		}
 		if !result.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Service removal completion ownership changed; resend the saved result")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Service removal completion ownership changed; resend the saved result",
+			)
 		}
 		view, _, err = service.forwardReport(ctx, authorization, request.Attempt)
 		if err != nil {
@@ -88,9 +98,17 @@ func (service *WorkReports) CompleteLifecycle(ctx context.Context, authorization
 		}
 	}
 	attempt := view.Attempt.Attempt
-	if attempt.FinishedAt == nil || attempt.Result == nil || *attempt.Result != evidence || attempt.Outcome != workexecution.Succeeded {
+	if attempt.FinishedAt == nil || attempt.Result == nil || *attempt.Result != evidence ||
+		attempt.Outcome != workexecution.Succeeded {
 		return nil, errs.New(errs.KindStateConflict, "Saved Service removal result does not acknowledge completion")
 	}
-	return &agentpb.ServiceLifecycleCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: proto.CloneOf(request.Evidence),
-		StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt), Outcome: string(attempt.Outcome)}, nil
+	return &agentpb.ServiceLifecycleCompletionAck{
+		Attempt:  proto.CloneOf(request.Attempt),
+		Evidence: proto.CloneOf(request.Evidence),
+		StartedAt: timestamppb.New(
+			*attempt.StartedAt,
+		),
+		FinishedAt: timestamppb.New(*attempt.FinishedAt),
+		Outcome:    string(attempt.Outcome),
+	}, nil
 }

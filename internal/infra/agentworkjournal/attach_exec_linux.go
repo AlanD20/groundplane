@@ -9,7 +9,11 @@ import (
 
 // PrepareAttachExec must complete before Docker ExecAttach can start this exec.
 // A saved exec is never started again after a process interruption.
-func (journal *Journal) PrepareAttachExec(ctx context.Context, input attachexecution.RemovalInput, execution AttachExec) error {
+func (journal *Journal) PrepareAttachExec(
+	ctx context.Context,
+	input attachexecution.RemovalInput,
+	execution AttachExec,
+) error {
 	if execution.validate() != nil || execution.ReadyAt != nil || execution.ExitedAt != nil ||
 		!execution.CreatedAt.Before(input.Attempt.Deadline) {
 		return invalid()
@@ -42,7 +46,12 @@ func (journal *Journal) PrepareAttachExec(ctx context.Context, input attachexecu
 
 // AuthorizeAttachExec records an observed readiness handshake before the caller
 // sends permission. Repeated calls do not authorize a second permission write.
-func (journal *Journal) AuthorizeAttachExec(ctx context.Context, input attachexecution.RemovalInput, execID string, at time.Time) error {
+func (journal *Journal) AuthorizeAttachExec(
+	ctx context.Context,
+	input attachexecution.RemovalInput,
+	execID string,
+	at time.Time,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err
@@ -66,7 +75,13 @@ func (journal *Journal) AuthorizeAttachExec(ctx context.Context, input attachexe
 
 // ObserveAttachExecExit is also allowed after failure: it records process exit,
 // not operation success, and never replaces the original failure receipt.
-func (journal *Journal) ObserveAttachExecExit(ctx context.Context, input attachexecution.RemovalInput, execID string, exitCode int, at time.Time) error {
+func (journal *Journal) ObserveAttachExecExit(
+	ctx context.Context,
+	input attachexecution.RemovalInput,
+	execID string,
+	exitCode int,
+	at time.Time,
+) error {
 	unlock, err := journal.lock(ctx)
 	if err != nil {
 		return err

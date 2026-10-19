@@ -33,15 +33,18 @@ func (journal *Journal) AttachRecoverySource(ctx context.Context, attempt workex
 		return nil, conflict()
 	}
 	checkpoint, err := record.AttachRemoval.Report.CheckpointAuthority(record.Attempt, record.AttachRemoval.Authority)
-	if err != nil || checkpoint.Sequence != source.Failure.Checkpoint.Sequence || checkpoint.Evidence != source.Failure.Checkpoint.Evidence ||
-		checkpoint.StageID != source.Failure.Checkpoint.StageID || !checkpoint.RecordedAt.Equal(source.Failure.Checkpoint.RecordedAt) {
+	if err != nil || checkpoint.Sequence != source.Failure.Checkpoint.Sequence ||
+		checkpoint.Evidence != source.Failure.Checkpoint.Evidence ||
+		checkpoint.StageID != source.Failure.Checkpoint.StageID ||
+		!checkpoint.RecordedAt.Equal(source.Failure.Checkpoint.RecordedAt) {
 		return nil, conflict()
 	}
 	// The Controller may have settled interruption while the old Agent was
 	// offline. If a local failure receipt exists, it must match exactly.
 	if failure := record.AttachFailure; failure != nil && failure.Receipt != nil {
 		raw, _, err := attachexecution.EncodeRemovalFailure(source.Forward, source.Failure)
-		if err != nil || !bytes.Equal(raw, failure.Evidence) || failure.Receipt.Result == nil || *failure.Receipt.Result != source.Evidence {
+		if err != nil || !bytes.Equal(raw, failure.Evidence) || failure.Receipt.Result == nil ||
+			*failure.Receipt.Result != source.Evidence {
 			return nil, conflict()
 		}
 	}

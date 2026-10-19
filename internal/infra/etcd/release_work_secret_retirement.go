@@ -20,7 +20,10 @@ func (ledger *ReleaseLedger) RetireReleaseWorkSecretPins(ctx context.Context, vi
 		task.CollectionStartedAt == nil || task.FinishedAt == nil || task.Progress.Unsettled() != 0 ||
 		item.Phase != workexecution.Settled || item.ActiveAttemptID != "" || item.Operation != workexecution.Release ||
 		item.TaskID != task.ID || binding.Validate() != nil || binding.TaskID != task.ID || binding.WorkItemID != item.ID {
-		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "Secret retirement requires settled collecting Release work")
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Secret retirement requires settled collecting Release work",
+		)
 	}
 	guards := []keyvalue.Condition{{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
 		{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision}}

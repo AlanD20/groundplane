@@ -19,7 +19,13 @@ func (repository *SecretRepository) CaptureSecretRemoval(ctx context.Context, ow
 	if err := secrets.ValidateSecretVersion(current); err != nil {
 		return secretremoval.Input{}, err
 	}
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{secrets.ValueKey(current.Record.Secret.ID)}, Revision: current.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{
+			Keys:     []string{secrets.ValueKey(current.Record.Secret.ID)},
+			Revision: current.ReadRevision,
+		},
+	)
 	if err != nil {
 		return secretremoval.Input{}, err
 	}
@@ -28,7 +34,10 @@ func (repository *SecretRepository) CaptureSecretRemoval(ctx context.Context, ow
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.ReadRevision != current.ReadRevision || len(read.Values) != 1 || read.Values[0] == nil {
-		return secretremoval.Input{}, errs.New(errs.KindStateConflict, "Secret encrypted value is unavailable for removal")
+		return secretremoval.Input{}, errs.New(
+			errs.KindStateConflict,
+			"Secret encrypted value is unavailable for removal",
+		)
 	}
 	value, err := secrets.DecodeEncryptedValue(read.Values[0].Value)
 	defer clear(value.Ciphertext)

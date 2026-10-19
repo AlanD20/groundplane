@@ -33,7 +33,16 @@ func (runtime *Runtime) Start(ctx context.Context, capacity uint16, config Runti
 	}
 	issues, err := runtime.ReconcileStartup(ctx, ownership, identity)
 	for _, issue := range issues {
-		runtime.logger.ErrorContext(ctx, "interrupted execution retains unresolved effects", "task_id", issue.TaskID, "work_id", issue.WorkID, "error", issue.Err)
+		runtime.logger.ErrorContext(
+			ctx,
+			"interrupted execution retains unresolved effects",
+			"task_id",
+			issue.TaskID,
+			"work_id",
+			issue.WorkID,
+			"error",
+			issue.Err,
+		)
 	}
 	if err != nil {
 		return err

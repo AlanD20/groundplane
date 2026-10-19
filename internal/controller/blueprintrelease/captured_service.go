@@ -29,17 +29,29 @@ func (service *Service) PrepareCapturedService(ctx context.Context, work workque
 		work.Item.Item.Wait.Reason != workexecution.WaitInput || work.Item.Item.Input != nil ||
 		work.Item.Item.AttemptNumber != 0 || work.Item.Item.ForwardRevoked ||
 		!time.Now().Before(work.Item.Item.Deadline) || !time.Now().Before(work.Task.Task.Deadline) {
-		return Prepared{}, errs.New(errs.KindStateConflict, "Direct Release is not waiting for its accepted executable input")
+		return Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"Direct Release is not waiting for its accepted executable input",
+		)
 	}
 	if err := request.Matches(work.Task.Task, work.Item.Item, rollout.Record); err != nil {
 		return Prepared{}, err
 	}
 	if rollout.Revision <= 0 || rollout.Revision > work.ReadRevision {
-		return Prepared{}, errs.New(errs.KindStateConflict, "Direct Release rollout is not available at its work snapshot")
+		return Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"Direct Release rollout is not available at its work snapshot",
+		)
 	}
 	capture := rollout.Record
-	hooks := preparedHooks{members: []releaserender.ReleaseTaskRenderMember{{Intent: request.Intent, Render: capture.Render}},
-		sources: make(map[string]scriptsourcequeries.ScriptExecutionSources, len(request.Hooks)), executions: len(request.Hooks)}
+	hooks := preparedHooks{
+		members: []releaserender.ReleaseTaskRenderMember{{Intent: request.Intent, Render: capture.Render}},
+		sources: make(
+			map[string]scriptsourcequeries.ScriptExecutionSources,
+			len(request.Hooks),
+		),
+		executions: len(request.Hooks),
+	}
 	for _, hook := range request.Hooks {
 		hooks.sources[hook.ExecutionID] = hook.Sources
 	}
@@ -51,7 +63,12 @@ func (service *Service) PrepareCapturedService(ctx context.Context, work workque
 	if err != nil {
 		return Prepared{}, err
 	}
-	storage, err := service.ledger.PostgresPatchConditions(ctx, artifact, capture.Render.ServiceID, request.Source.ReadRevision)
+	storage, err := service.ledger.PostgresPatchConditions(
+		ctx,
+		artifact,
+		capture.Render.ServiceID,
+		request.Source.ReadRevision,
+	)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -63,7 +80,9 @@ func (service *Service) PrepareCapturedService(ctx context.Context, work workque
 	return service.finishSelectedRuntime(ctx, prepareInput{
 		Work: work, OperationID: capture.OperationID, PlanID: capture.Render.PlanID,
 		Projection: capture.Render.Projection, CreatedAt: work.Item.Item.CreatedAt,
-		Environment:   keyvalue.Versioned[hierarchy.EnvironmentRecord]{Record: hierarchy.EnvironmentRecord{ID: capture.Scope.EnvironmentID}},
+		Environment: keyvalue.Versioned[hierarchy.EnvironmentRecord]{
+			Record: hierarchy.EnvironmentRecord{ID: capture.Scope.EnvironmentID},
+		},
 		Configuration: &request.Configuration,
 		AllocateNamed: func(kind ids.Kind, name string) string {
 			return ids.DeriveAt(kind, work.Item.Item.CreatedAt, work.Item.Item.ID, name)

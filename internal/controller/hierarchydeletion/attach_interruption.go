@@ -13,7 +13,11 @@ import (
 
 // The caller authenticates the replacement on the same host. This only accounts
 // for saved evidence; it neither impersonates the old process nor runs a hook.
-func (owner *AgentWork) reconcileInterruptedAttach(ctx context.Context, view workqueue.ResumeView, guards []keyvalue.Condition) error {
+func (owner *AgentWork) reconcileInterruptedAttach(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	guards []keyvalue.Condition,
+) error {
 	if view.Attempt.Attempt.Direction == workexecution.Recovery {
 		return owner.reconcileInterruptedAttachInspection(ctx, view, guards)
 	}
@@ -28,7 +32,8 @@ func (owner *AgentWork) reconcileInterruptedAttach(ctx context.Context, view wor
 	}
 	at := time.Now().UTC()
 	var proof workqueue.Change
-	if checkpoint := view.Checkpoint.Record; checkpoint != nil && checkpoint.Sequence == uint64(input.CommandCount())*2 {
+	if checkpoint := view.Checkpoint.Record; checkpoint != nil &&
+		checkpoint.Sequence == uint64(input.CommandCount())*2 {
 		proof, err = owner.records.PrepareInterruptedHierarchyAttachCompletion(ctx, view, input, at)
 		outcome := workexecution.Succeeded
 		if view.Work.Task.Task.Stop != nil {
@@ -36,7 +41,11 @@ func (owner *AgentWork) reconcileInterruptedAttach(ctx context.Context, view wor
 		} else if view.Work.Item.Item.ForwardRevoked {
 			outcome = workexecution.Superseded
 		}
-		completion.Result = workexecution.Completion{Outcome: outcome, Evidence: checkpoint.Evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        outcome,
+			Evidence:       checkpoint.Evidence,
+			EffectsSettled: true,
+		}
 	} else {
 		proof, completion.Result, err = owner.records.PrepareInterruptedHierarchyAttachFailure(ctx, view, input, at)
 	}
@@ -61,12 +70,19 @@ func (owner *AgentWork) reconcileInterruptedAttach(ctx context.Context, view wor
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Attach interruption ownership changed before its saved result was accounted for")
+		return errs.New(
+			errs.KindStateConflict,
+			"Attach interruption ownership changed before its saved result was accounted for",
+		)
 	}
 	return nil
 }
 
-func (owner *AgentWork) reconcileInterruptedAttachInspection(ctx context.Context, view workqueue.ResumeView, guards []keyvalue.Condition) error {
+func (owner *AgentWork) reconcileInterruptedAttachInspection(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	guards []keyvalue.Condition,
+) error {
 	completion, err := owner.queue.ReadInterruptedHierarchyAt(ctx, view)
 	if err != nil {
 		return err

@@ -14,8 +14,15 @@ import (
 )
 
 type ConfigurationSource interface {
-	DescribeComponent(context.Context, componentexecution.HelperInput) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error)
-	OpenComponentFile(context.Context, componentexecution.HelperInput, entrymaterialization.Header) (io.ReadCloser, error)
+	DescribeComponent(
+		context.Context,
+		componentexecution.HelperInput,
+	) (*agentpb.WorkConfigurationReference, []entrymaterialization.Header, error)
+	OpenComponentFile(
+		context.Context,
+		componentexecution.HelperInput,
+		entrymaterialization.Header,
+	) (io.ReadCloser, error)
 }
 
 type Configuration struct {
@@ -30,7 +37,11 @@ func NewConfiguration(runtime *materialization.Runtime, source ConfigurationSour
 	return &Configuration{runtime: runtime, source: source}, nil
 }
 
-func (configuration *Configuration) Run(ctx context.Context, input componentexecution.HelperInput, inspectOnly bool) (bool, error) {
+func (configuration *Configuration) Run(
+	ctx context.Context,
+	input componentexecution.HelperInput,
+	inspectOnly bool,
+) (bool, error) {
 	if configuration == nil || ctx == nil || input.Procedure == nil {
 		return false, invalidInput()
 	}
@@ -39,8 +50,12 @@ func (configuration *Configuration) Run(ctx context.Context, input componentexec
 		return false, err
 	}
 	expected, _, _, selectionErr := componentexecution.ConfigurationSelection(input)
-	if selectionErr != nil || !proto.Equal(reference, expected) || componentexecution.ValidateConfigurationFiles(input, files) != nil {
-		return false, errs.New(errs.KindStateConflict, "Component configuration response differs from the captured file set")
+	if selectionErr != nil || !proto.Equal(reference, expected) ||
+		componentexecution.ValidateConfigurationFiles(input, files) != nil {
+		return false, errs.New(
+			errs.KindStateConflict,
+			"Component configuration response differs from the captured file set",
+		)
 	}
 	if input.Recovery != nil {
 		if err := configuration.runtime.StopComponentFiles(ctx, input, files); err != nil {
@@ -63,12 +78,21 @@ func (configuration *Configuration) Run(ctx context.Context, input componentexec
 		ready = ready && matches
 	}
 	if !inspectOnly && !ready {
-		return false, errs.New(errs.KindStateConflict, "Component configuration changed before all written files could be verified")
+		return false, errs.New(
+			errs.KindStateConflict,
+			"Component configuration changed before all written files could be verified",
+		)
 	}
 	return ready, nil
 }
 
-func (configuration *Configuration) file(ctx context.Context, input componentexecution.HelperInput, files []entrymaterialization.Header, index int, inspectOnly bool) (bool, error) {
+func (configuration *Configuration) file(
+	ctx context.Context,
+	input componentexecution.HelperInput,
+	files []entrymaterialization.Header,
+	index int,
+	inspectOnly bool,
+) (bool, error) {
 	source, err := configuration.source.OpenComponentFile(ctx, input, files[index])
 	if err != nil {
 		if source != nil {

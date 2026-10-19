@@ -203,7 +203,10 @@ func (prepared *preparedBlueprintAttachInputGenerations) finish(
 	for index, value := range read.Values {
 		if value != nil {
 			if value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision {
-				return result, errors.Join(publicationErr, errs.New(errs.KindInternal, "Attach input publication returned invalid storage evidence"))
+				return result, errors.Join(
+					publicationErr,
+					errs.New(errs.KindInternal, "Attach input publication returned invalid storage evidence"),
+				)
 			}
 			present++
 		}
@@ -211,7 +214,10 @@ func (prepared *preparedBlueprintAttachInputGenerations) finish(
 	if present == len(keys) {
 		storedTask, err := workqueue.DecodeTask(read.Values[0].Value)
 		if err != nil || storedTask.ID != parentTaskID || storedTask.Action != workexecution.ActionApply {
-			return result, errors.Join(publicationErr, errs.New(errs.KindInternal, "Attach input publication has an invalid owning Task"))
+			return result, errors.Join(
+				publicationErr,
+				errs.New(errs.KindInternal, "Attach input publication has an invalid owning Task"),
+			)
 		}
 		for index, generation := range prepared.generations {
 			stored, err := attachinputs.Decode(read.Values[index+1].Value)

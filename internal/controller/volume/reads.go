@@ -120,7 +120,10 @@ func (service *ReadService) ListVolumeViews(
 		state := "pending"
 		if stored, found := applied[item.Record.ID]; found {
 			if stored.EnvironmentID != environmentID || stored.ComposeKey != item.Record.Key {
-				return apiTypes.Page[apiTypes.Volume]{}, errs.New(errs.KindStateConflict, "applied Volume belongs to different storage")
+				return apiTypes.Page[apiTypes.Volume]{}, errs.New(
+					errs.KindStateConflict,
+					"applied Volume belongs to different storage",
+				)
 			}
 			state = "active"
 		}

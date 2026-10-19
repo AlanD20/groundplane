@@ -101,7 +101,8 @@ func PrepareCheckpoint(ctx context.Context, reader ReportReader, view workqueue.
 	if !view.ActiveAttempt || task.FinishedAt != nil {
 		return workqueue.Change{}, conflict("volume execution no longer accepts new reports")
 	}
-	if progress.InFlight && (!view.CurrentExecutor || item.ForwardRevoked || task.Stop != nil || !at.Before(attempt.Deadline)) {
+	if progress.InFlight &&
+		(!view.CurrentExecutor || item.ForwardRevoked || task.Stop != nil || !at.Before(attempt.Deadline)) {
 		return workqueue.Change{}, conflict("volume cannot start another stage after execution was stopped or replaced")
 	}
 	if err := volumeexecution.ValidateTransition(attempt, owned.Action, owned.VolumeId, previous, progress); err != nil {
@@ -118,7 +119,10 @@ func PrepareCheckpoint(ctx context.Context, reader ReportReader, view workqueue.
 			Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision,
 		})
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: append([]byte(nil), raw...)},
+	)
 	return change, nil
 }
 

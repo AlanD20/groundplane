@@ -22,13 +22,21 @@ func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, vi
 	return repository.prepareRecoveryResult(ctx, view, raw, at, false)
 }
 
-func (repository *InputRepository) prepareRecoveryResult(ctx context.Context, view workqueue.ResumeView, raw []byte, at time.Time, interrupted bool) (workqueue.Change, workexecution.Completion, error) {
+func (repository *InputRepository) prepareRecoveryResult(
+	ctx context.Context,
+	view workqueue.ResumeView,
+	raw []byte,
+	at time.Time,
+	interrupted bool,
+) (workqueue.Change, workexecution.Completion, error) {
 	attempt := view.Attempt.Attempt
 	if view.CanSettleResult() == interrupted || !view.ActiveAttempt || view.ExecutorRevision <= 0 ||
 		attempt.FinishedAt != nil || !interrupted && attempt.StartedAt == nil || attempt.Direction != workexecution.Recovery ||
 		view.Work.Task.Task.CollectionStartedAt != nil || at.IsZero() || at.Location() != time.UTC ||
 		at.Before(view.Work.Item.Item.UpdatedAt) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Entry recovery no longer owns active execution")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Entry recovery no longer owns active execution",
+		)
 	}
 	captured, err := repository.LoadRecoveryInput(ctx, view.Work, attempt)
 	if err != nil {
@@ -40,15 +48,26 @@ func (repository *InputRepository) prepareRecoveryResult(ctx context.Context, vi
 	}
 	digest := sha256.Sum256(raw)
 	evidence := workexecution.Input{ID: id, SHA256: hex.EncodeToString(digest[:])}
-	report, err := entryexecution.DecodeRecoveryReport(attempt, captured.Source, captured.Input, captured.Boundary, raw, evidence)
+	report, err := entryexecution.DecodeRecoveryReport(
+		attempt,
+		captured.Source,
+		captured.Input,
+		captured.Boundary,
+		raw,
+		evidence,
+	)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
 	if report.ObservedAt.After(at) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Entry recovery observation is newer than its settlement")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Entry recovery observation is newer than its settlement",
+		)
 	}
 	if interrupted && (report.EffectsStopped || report.FilesRestored || report.ConsumersRestored) {
-		return workqueue.Change{}, workexecution.Completion{}, conflict("Interrupted Entry recovery cannot infer host restoration")
+		return workqueue.Change{}, workexecution.Completion{}, conflict(
+			"Interrupted Entry recovery cannot infer host restoration",
+		)
 	}
 	guards := captured.Conditions
 	if report.Settled(captured.Input) {
@@ -94,11 +113,19 @@ func (repository *InputRepository) LoadRecoveryResult(ctx context.Context, view 
 		return nil, conflict("Entry recovery result is unavailable")
 	}
 	raw := read.Values[0].Value
-	report, err := entryexecution.DecodeRecoveryReport(attempt, captured.Source, captured.Input, captured.Boundary, raw, *attempt.Result)
+	report, err := entryexecution.DecodeRecoveryReport(
+		attempt,
+		captured.Source,
+		captured.Input,
+		captured.Boundary,
+		raw,
+		*attempt.Result,
+	)
 	if err != nil {
 		return nil, err
 	}
-	if report.ObservedAt.After(*attempt.FinishedAt) || (attempt.Outcome == workexecution.Succeeded) != report.Settled(captured.Input) {
+	if report.ObservedAt.After(*attempt.FinishedAt) ||
+		(attempt.Outcome == workexecution.Succeeded) != report.Settled(captured.Input) {
 		return nil, conflict("Entry recovery result differs from its recorded outcome")
 	}
 	return append([]byte(nil), raw...), nil

@@ -15,7 +15,10 @@ import (
 
 // PreparePendingBinding joins executable-input readiness, not a hidden Task
 // publication. No host effects can begin without this exact pending binding.
-func (repository *InputRepository) PreparePendingBinding(ctx context.Context, work workqueue.View) (workqueue.Change, error) {
+func (repository *InputRepository) PreparePendingBinding(
+	ctx context.Context,
+	work workqueue.View,
+) (workqueue.Change, error) {
 	source, err := repository.LoadWaitingCapture(ctx, work)
 	if err != nil {
 		return workqueue.Change{}, err
@@ -23,7 +26,9 @@ func (repository *InputRepository) PreparePendingBinding(ctx context.Context, wo
 	defer source.Clear()
 	generation := source.Generation.Record
 	if generation.SettlesInController() {
-		return workqueue.Change{}, checkpointConflict("Controller-only Attach does not require pending host provisioning")
+		return workqueue.Change{}, checkpointConflict(
+			"Controller-only Attach does not require pending host provisioning",
+		)
 	}
 	record, err := generation.PendingRecord(work.Task.Task.ID, work.Task.Task.CreatedAt)
 	if err != nil {
@@ -47,13 +52,25 @@ func (repository *InputRepository) publishBinding(ctx context.Context, work work
 	}
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: attachments.AttachKey(record.ID)},
 		keyvalue.Condition{Key: deletions.TombstoneKey("attach", record.ID)})
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: attachments.AttachKey(record.ID), Value: value})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: attachments.AttachKey(record.ID), Value: value},
+	)
 	indexes := []string{attachments.AttachNameKey(record.EnvironmentID, record.Name),
-		attachments.AttachOwnerKey(record.EnvironmentID, record.ID), attachments.AttachServiceKey(record.ServiceID, record.ID),
-		attachments.AttachBackingServiceKey(record.BackingServiceID, record.ID), attachments.AttachBackingProjectKey(record.BackingProjectID, record.ID)}
+		attachments.AttachOwnerKey(
+			record.EnvironmentID,
+			record.ID,
+		), attachments.AttachServiceKey(record.ServiceID, record.ID),
+		attachments.AttachBackingServiceKey(
+			record.BackingServiceID,
+			record.ID,
+		), attachments.AttachBackingProjectKey(record.BackingProjectID, record.ID)}
 	for _, key := range indexes {
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: []byte(record.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: []byte(record.ID)},
+		)
 	}
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: attachments.AttachFactsKey(record.ID)})
 	if record.OwnsCredential() && (len(generation.FactSets) != 0 || record.HookBundle) {
@@ -61,7 +78,10 @@ func (repository *InputRepository) publishBinding(ctx context.Context, work work
 		if err != nil {
 			return workqueue.Change{}, err
 		}
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: attachments.AttachFactsKey(record.ID), Value: facts})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: attachments.AttachFactsKey(record.ID), Value: facts},
+		)
 	}
 	credentialGuards, err := repository.CredentialConditions(ctx, generation, work.ReadRevision)
 	if err != nil {
@@ -71,7 +91,10 @@ func (repository *InputRepository) publishBinding(ctx context.Context, work work
 	if !record.OwnsCredential() {
 		key := attachments.AttachCredentialByKey(record.CredentialAttachID, record.ID)
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: []byte(record.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: []byte(record.ID)},
+		)
 	}
 	if generation.Provision != nil {
 		for _, grant := range generation.Provision.Grants {
@@ -85,7 +108,10 @@ func (repository *InputRepository) publishBinding(ctx context.Context, work work
 	for _, grantID := range record.GrantAttachIDs {
 		key := attachments.AttachGrantedByKey(grantID, record.ID)
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: []byte(record.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: []byte(record.ID)},
+		)
 	}
 	if len(record.GrantAttachIDs) > 0 {
 		value, err := attachments.EncodeAttachDependentGrantIndex(record.ID, record.GrantAttachIDs)
@@ -94,7 +120,10 @@ func (repository *InputRepository) publishBinding(ctx context.Context, work work
 		}
 		key := attachments.AttachDependentGrantKey(record.ID)
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key})
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value},
+		)
 	}
 	for _, environmentID := range []string{record.EnvironmentID, record.BackingEnvironmentID} {
 		fence, err := environmentfence.LoadOrdinary(ctx, repository.store, environmentID, work.ReadRevision)
@@ -103,7 +132,11 @@ func (repository *InputRepository) publishBinding(ctx context.Context, work work
 		}
 		change.Conditions = append(change.Conditions, fence.TransactionConditions()...)
 	}
-	change.Conditions, change.Mutations = attachments.BindBackingZoneCreation(record.BackingNetworkID, change.Conditions, change.Mutations)
+	change.Conditions, change.Mutations = attachments.BindBackingZoneCreation(
+		record.BackingNetworkID,
+		change.Conditions,
+		change.Mutations,
+	)
 	return change, nil
 }
 

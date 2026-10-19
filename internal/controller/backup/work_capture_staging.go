@@ -25,11 +25,17 @@ func (owner *AgentWork) resumePreparedCapture(ctx context.Context, identity work
 		source.Input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_CAPTURE ||
 		uint64(source.Ordinal) >= uint64(len(source.Sources)) ||
 		uint64(source.Ordinal) >= uint64(len(source.Input.Steps)) ||
-		executionplan.ValidateBackupStagingInventory(&agentpb.BackupStagingInventory{Entries: []*agentpb.BackupRecoveredStage{entry}}) != nil {
+		executionplan.ValidateBackupStagingInventory(
+			&agentpb.BackupStagingInventory{Entries: []*agentpb.BackupRecoveredStage{entry}},
+		) != nil {
 		return nil, nil, invalidCaptureStaging()
 	}
 	step := source.Input.Steps[source.Ordinal]
-	key, err := executionplan.BackupSourceStagingKey(source.View.Task.Task.ID, step.ExecutionId, step.GetCapture().GetPointId())
+	key, err := executionplan.BackupSourceStagingKey(
+		source.View.Task.Task.ID,
+		step.ExecutionId,
+		step.GetCapture().GetPointId(),
+	)
 	if err != nil || !bytes.Equal(key, entry.RecoveryKeySha256) {
 		return nil, nil, invalidCaptureStaging()
 	}
@@ -77,7 +83,14 @@ func (owner *AgentWork) stagingAssignment(ctx context.Context, identity workexec
 	if item.ActiveAttemptID == "" || item.ForwardRevoked || task.Stop != nil || task.FinishedAt != nil {
 		return nil, nil, invalidCaptureStaging()
 	}
-	view, err := owner.queue.ReadResumeAt(ctx, task.ID, item.ID, item.ActiveAttemptID, identity, source.View.ReadRevision)
+	view, err := owner.queue.ReadResumeAt(
+		ctx,
+		task.ID,
+		item.ID,
+		item.ActiveAttemptID,
+		identity,
+		source.View.ReadRevision,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -101,5 +114,8 @@ func (owner *AgentWork) stagingAssignment(ctx context.Context, identity workexec
 }
 
 func invalidCaptureStaging() error {
-	return errs.New(errs.KindStateConflict, "Backup source files require matching captured artifact evidence and a live resume decision")
+	return errs.New(
+		errs.KindStateConflict,
+		"Backup source files require matching captured artifact evidence and a live resume decision",
+	)
 }

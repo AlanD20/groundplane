@@ -44,7 +44,10 @@ func (owner *AgentWork) finishCaptureSource(ctx context.Context, authorization a
 	if uint64(ordinal) >= uint64(len(assignment.Sources)) {
 		return errs.New(errs.KindStateConflict, "Backup cleanup source is unavailable")
 	}
-	run, guard, err := owner.inputs.LoadStagingCapture(ctx, backupwork.StagingSource{View: view.Work, Input: assignment.Input, Ordinal: ordinal})
+	run, guard, err := owner.inputs.LoadStagingCapture(
+		ctx,
+		backupwork.StagingSource{View: view.Work, Input: assignment.Input, Ordinal: ordinal},
+	)
 	if err != nil {
 		return err
 	}
@@ -70,8 +73,16 @@ func (owner *AgentWork) finishCaptureSource(ctx context.Context, authorization a
 		if !at.After(sweep.Record.UpdatedAt) {
 			at = sweep.Record.UpdatedAt.Add(time.Nanosecond)
 		}
-		sweep, _, err = owner.configRuntime.AdvanceBackupRetentionSweep(ctx,
-			keyvalue.Versioned[backupruntime.BackupRunRecord]{Record: run, Revision: guard.ModRevision, ReadRevision: view.Work.ReadRevision}, sweep, at)
+		sweep, _, err = owner.configRuntime.AdvanceBackupRetentionSweep(
+			ctx,
+			keyvalue.Versioned[backupruntime.BackupRunRecord]{
+				Record:       run,
+				Revision:     guard.ModRevision,
+				ReadRevision: view.Work.ReadRevision,
+			},
+			sweep,
+			at,
+		)
 		if err != nil {
 			return err
 		}

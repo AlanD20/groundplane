@@ -35,9 +35,15 @@ func (repository *HierarchyRepository) prepareMutationDesiredRoot(ctx context.Co
 		marker.State != idempotency.IdempotencyMarkerPending ||
 		marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment || marker.Locator.ScopeID != claim.EnvironmentID ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(task.CreatedAt) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "resource desired publication differs from its captured action")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"resource desired publication differs from its captured action",
+		)
 	}
-	revision := blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: claim.EnvironmentID, RevisionID: claim.RevisionID}
+	revision := blueprints.EnvironmentDesiredRevisionIdentity{
+		EnvironmentID: claim.EnvironmentID,
+		RevisionID:    claim.RevisionID,
+	}
 	publication, err := repository.prepareEnvironmentBlueprintPublication(ctx, claim, revision, projection,
 		desiredPublicationOwner{TaskID: task.ID, EnvironmentID: task.Scope.EnvironmentID,
 			RevisionID: projection.RevisionID, RenderGeneration: uint64(projection.RenderGeneration)}, marker, expectedHeadRevision)
@@ -50,13 +56,20 @@ func (repository *HierarchyRepository) prepareMutationDesiredRoot(ctx context.Co
 		return workqueue.Change{}, err
 	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{
-		{Key: blueprints.EnvironmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID), ModRevision: publication.rootRevision},
+		{
+			Key:         blueprints.EnvironmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID),
+			ModRevision: publication.rootRevision,
+		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID), ModRevision: expectedHeadRevision},
 	}, Mutations: []keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: keyvalue.MutationDelete, Key: publication.locatorKey},
-		{Type: keyvalue.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID),
+			Value: reference,
+		},
 	}}, nil
 }

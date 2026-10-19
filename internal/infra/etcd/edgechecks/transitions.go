@@ -115,7 +115,8 @@ func (record *Record) Stop(failure string, now time.Time) error {
 }
 
 func (record *Record) resumeCleanup() error {
-	if (record.Phase != PrivateChecking && record.Phase != Cleaning && record.Phase != CleanupRequired) || !record.CleanupPending {
+	if (record.Phase != PrivateChecking && record.Phase != Cleaning && record.Phase != CleanupRequired) ||
+		!record.CleanupPending {
 		return errs.New(errs.KindStateConflict, "edge diagnostic has no interrupted helper to clean up")
 	}
 	record.Phase = Cleaning

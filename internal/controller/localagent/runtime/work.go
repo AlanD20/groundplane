@@ -54,7 +54,13 @@ func (owner *localAgentWork) RequireIdle(ctx context.Context, agentID string, ge
 // AbortActive closes only forward admission, requests cancellation through each
 // visible Task, then waits for operation-owned settlement. Recovery remains
 // dispatchable. Neither timeout nor a missing connection authorizes removal.
-func (owner *localAgentWork) AbortActive(ctx context.Context, agentID string, generation uint64, maximum int32, _ string) error {
+func (owner *localAgentWork) AbortActive(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	maximum int32,
+	_ string,
+) error {
 	if err := validateWorkBound(maximum); err != nil {
 		return err
 	}
@@ -81,7 +87,11 @@ func (owner *localAgentWork) AbortActive(ctx context.Context, agentID string, ge
 					continue
 				}
 				if err := workexecution.CancellationFailure(work.Task.Task); err != nil {
-					return errs.Newf(errs.KindResourceInUse, "Agent removal must wait for protected Task %s to finish its operation or recovery", work.Task.Task.ID)
+					return errs.Newf(
+						errs.KindResourceInUse,
+						"Agent removal must wait for protected Task %s to finish its operation or recovery",
+						work.Task.Task.ID,
+					)
 				}
 				at := time.Now().UTC()
 				if at.Before(work.Task.Task.UpdatedAt) {

@@ -31,7 +31,9 @@ func (binding AppliedBinding) Validate() error {
 	consumer, credential := binding.Consumer, binding.Credential
 	if ids.Validate(ids.KindTask, binding.TaskID) != nil || ids.Validate(ids.KindWorkItem, binding.WorkItemID) != nil ||
 		ids.Validate(ids.KindOperation, binding.OperationID) != nil || binding.Input.Validate() != nil ||
-		!recordcodec.ValidSHA256(binding.AuthoredSpecSHA256) || ValidateAttachRecord(consumer) != nil || ValidateAttachRecord(credential) != nil ||
+		!recordcodec.ValidSHA256(
+			binding.AuthoredSpecSHA256,
+		) || ValidateAttachRecord(consumer) != nil || ValidateAttachRecord(credential) != nil ||
 		consumer.Status != core.AttachReady || credential.Status != core.AttachReady ||
 		consumer.Operation != AttachOperationProvision || credential.Operation != AttachOperationProvision ||
 		!credential.OwnsCredential() || consumer.CredentialAttachID != credential.ID ||
@@ -40,14 +42,18 @@ func (binding AppliedBinding) Validate() error {
 		return errs.New(errs.KindValidationFailed, "applied Attach binding ownership is invalid")
 	}
 	for index, grant := range binding.Grants {
-		if ValidateAttachRecord(grant) != nil || grant.Status != core.AttachReady || grant.Operation != AttachOperationProvision ||
-			grant.ID != credential.GrantAttachIDs[index] || !grant.OwnsCredential() || grant.EnvironmentID != credential.EnvironmentID ||
+		if ValidateAttachRecord(grant) != nil || grant.Status != core.AttachReady ||
+			grant.Operation != AttachOperationProvision ||
+			grant.ID != credential.GrantAttachIDs[index] ||
+			!grant.OwnsCredential() ||
+			grant.EnvironmentID != credential.EnvironmentID ||
 			grant.BackingServiceID != credential.BackingServiceID {
 			return errs.New(errs.KindValidationFailed, "applied Attach grant ownership is invalid")
 		}
 	}
 	if len(credential.FactSets) != 0 || credential.HookBundle {
-		if binding.Facts == nil || ValidateAttachEncryptedFacts(*binding.Facts) != nil || binding.Facts.AttachID != credential.ID {
+		if binding.Facts == nil || ValidateAttachEncryptedFacts(*binding.Facts) != nil ||
+			binding.Facts.AttachID != credential.ID {
 			return errs.New(errs.KindValidationFailed, "applied Attach facts are unavailable")
 		}
 	} else if binding.Facts != nil {

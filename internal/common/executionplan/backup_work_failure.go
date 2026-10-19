@@ -38,7 +38,10 @@ type BackupWorkFailure struct {
 	RecordedAt time.Time                 `json:"recorded_at"`
 }
 
-func EncodeBackupWorkFailure(attempt workexecution.Attempt, failure BackupWorkFailure) ([]byte, workexecution.Input, error) {
+func EncodeBackupWorkFailure(
+	attempt workexecution.Attempt,
+	failure BackupWorkFailure,
+) ([]byte, workexecution.Input, error) {
 	invalid := func() ([]byte, workexecution.Input, error) {
 		return nil, workexecution.Input{}, errs.New(errs.KindValidationFailed, "Backup failure evidence is invalid")
 	}
@@ -70,12 +73,22 @@ func EncodeBackupWorkFailure(attempt workexecution.Attempt, failure BackupWorkFa
 		return nil, workexecution.Input{}, err
 	}
 	digest := sha256.Sum256(raw)
-	return raw, workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, at, attempt.ID, "backup/failure"), SHA256: hex.EncodeToString(digest[:])}, nil
+	return raw, workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, at, attempt.ID, "backup/failure"),
+		SHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }
 
-func DecodeBackupWorkFailure(attempt workexecution.Attempt, raw []byte, evidence workexecution.Input) (BackupWorkFailure, error) {
+func DecodeBackupWorkFailure(
+	attempt workexecution.Attempt,
+	raw []byte,
+	evidence workexecution.Input,
+) (BackupWorkFailure, error) {
 	if len(raw) == 0 || len(raw) > 16384 {
-		return BackupWorkFailure{}, errs.New(errs.KindValidationFailed, "Backup failure evidence is missing or oversized")
+		return BackupWorkFailure{}, errs.New(
+			errs.KindValidationFailed,
+			"Backup failure evidence is missing or oversized",
+		)
 	}
 	failure, err := jcs.Decode[BackupWorkFailure](raw)
 	if err != nil {
@@ -83,20 +96,32 @@ func DecodeBackupWorkFailure(attempt workexecution.Attempt, raw []byte, evidence
 	}
 	expected, reference, err := EncodeBackupWorkFailure(attempt, failure)
 	if err != nil || reference != evidence || !bytes.Equal(raw, expected) {
-		return BackupWorkFailure{}, errs.New(errs.KindStateConflict, "Backup failure evidence differs from its captured attempt")
+		return BackupWorkFailure{}, errs.New(
+			errs.KindStateConflict,
+			"Backup failure evidence differs from its captured attempt",
+		)
 	}
 	return failure, nil
 }
 
-func DecodeBackupWorkFailureAck(attempt workexecution.Attempt, reason BackupFailureReason, ack *agentpb.BackupWorkFailureAck) (workexecution.Attempt, error) {
+func DecodeBackupWorkFailureAck(
+	attempt workexecution.Attempt,
+	reason BackupFailureReason,
+	ack *agentpb.BackupWorkFailureAck,
+) (workexecution.Attempt, error) {
 	wire, err := workexecution.EncodeAgentAttempt(attempt)
 	if err != nil {
 		return workexecution.Attempt{}, err
 	}
 	if ack == nil || RejectUnknown(ack) != nil || !proto.Equal(wire, ack.Attempt) || ack.Evidence == nil ||
 		attempt.StartedAt == nil || ack.StartedAt == nil || ack.StartedAt.CheckValid() != nil ||
-		!ack.StartedAt.AsTime().Equal(*attempt.StartedAt) || ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil {
-		return workexecution.Attempt{}, errs.New(errs.KindStateConflict, "Backup failure acknowledgement differs from its started attempt")
+		!ack.StartedAt.AsTime().
+			Equal(*attempt.StartedAt) ||
+		ack.FinishedAt == nil || ack.FinishedAt.CheckValid() != nil {
+		return workexecution.Attempt{}, errs.New(
+			errs.KindStateConflict,
+			"Backup failure acknowledgement differs from its started attempt",
+		)
 	}
 	evidence := workexecution.Input{ID: ack.Evidence.InputId, SHA256: hex.EncodeToString(ack.Evidence.Sha256)}
 	failure, err := DecodeBackupWorkFailure(attempt, ack.Failure, evidence)
@@ -106,7 +131,10 @@ func DecodeBackupWorkFailureAck(attempt workexecution.Attempt, reason BackupFail
 	outcome := workexecution.Outcome(ack.Outcome)
 	if failure.Reason != reason || !failure.RecordedAt.Equal(ack.FinishedAt.AsTime()) ||
 		(outcome != workexecution.Failed && outcome != workexecution.Cancelled && outcome != workexecution.Superseded) {
-		return workexecution.Attempt{}, errs.New(errs.KindStateConflict, "Backup failure acknowledgement has a different result")
+		return workexecution.Attempt{}, errs.New(
+			errs.KindStateConflict,
+			"Backup failure acknowledgement has a different result",
+		)
 	}
 	terminal := attempt
 	finished := ack.FinishedAt.AsTime().UTC()

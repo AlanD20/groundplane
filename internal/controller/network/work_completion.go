@@ -52,7 +52,11 @@ func (service *WorkReports) CompleteNetwork(ctx context.Context, authorization a
 		if err != nil {
 			return nil, err
 		}
-		completion.Result = workexecution.Completion{Outcome: completedNetworkOutcome(view.Work), Evidence: evidence, EffectsSettled: true}
+		completion.Result = workexecution.Completion{
+			Outcome:        completedNetworkOutcome(view.Work),
+			Evidence:       evidence,
+			EffectsSettled: true,
+		}
 		completion.At = at
 		change, err := workqueue.PrepareCompletion(completion)
 		if err != nil {
@@ -65,7 +69,10 @@ func (service *WorkReports) CompleteNetwork(ctx context.Context, authorization a
 			return nil, err
 		}
 		if !result.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Network completion ownership changed; resend the saved result")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Network completion ownership changed; resend the saved result",
+			)
 		}
 		view, err = service.reportView(ctx, authorization, request.Attempt)
 		if err != nil {
@@ -77,8 +84,15 @@ func (service *WorkReports) CompleteNetwork(ctx context.Context, authorization a
 		(attempt.Outcome != workexecution.Succeeded && attempt.Outcome != workexecution.Cancelled && attempt.Outcome != workexecution.Superseded) {
 		return nil, errs.New(errs.KindStateConflict, "saved Network result does not acknowledge successful completion")
 	}
-	return &agentpb.NetworkWorkCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: proto.CloneOf(request.Evidence),
-		StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt), Outcome: string(attempt.Outcome)}, nil
+	return &agentpb.NetworkWorkCompletionAck{
+		Attempt:  proto.CloneOf(request.Attempt),
+		Evidence: proto.CloneOf(request.Evidence),
+		StartedAt: timestamppb.New(
+			*attempt.StartedAt,
+		),
+		FinishedAt: timestamppb.New(*attempt.FinishedAt),
+		Outcome:    string(attempt.Outcome),
+	}, nil
 }
 
 // A proven host effect remains applied, but cannot turn cancelled or superseded

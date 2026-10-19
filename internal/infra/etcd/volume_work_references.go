@@ -21,11 +21,16 @@ func (repository *HierarchyRepository) prepareVolumeDesiredReferences(ctx contex
 		expectedHeadRevision < 0 || readRevision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "Volume desired mutation has invalid resource ownership")
 	}
-	previous, found, err := repository.getEnvironmentBlueprintProjectionAtRevision(ctx, projection.EnvironmentID, readRevision)
+	previous, found, err := repository.getEnvironmentBlueprintProjectionAtRevision(
+		ctx,
+		projection.EnvironmentID,
+		readRevision,
+	)
 	if err != nil {
 		return nil, err
 	}
-	if (expectedHeadRevision == 0 && found) || (expectedHeadRevision > 0 && (!found || previous.Revision != expectedHeadRevision)) {
+	if (expectedHeadRevision == 0 && found) ||
+		(expectedHeadRevision > 0 && (!found || previous.Revision != expectedHeadRevision)) {
 		return nil, errs.New(errs.KindStateConflict, "Environment desired state changed before Volume publication")
 	}
 	removedID := ""

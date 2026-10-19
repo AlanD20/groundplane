@@ -19,8 +19,10 @@ func (record attemptRecord) validateEnvironmentFailure() error {
 		return invalid()
 	}
 	if terminal := failure.Receipt; terminal != nil {
-		if terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil || terminal.Outcome == workexecution.Succeeded ||
-			!workexecution.SameAssignment(*terminal, record.Attempt) || terminal.FinishedAt.Before(record.UpdatedAt) {
+		if terminal.Validate() != nil || terminal.FinishedAt == nil || terminal.Result == nil ||
+			terminal.Outcome == workexecution.Succeeded ||
+			!workexecution.SameAssignment(*terminal, record.Attempt) ||
+			terminal.FinishedAt.Before(record.UpdatedAt) {
 			return invalid()
 		}
 		captured, err := hierarchyexecution.DecodeEnvironmentFailure(*terminal, failure.Evidence, *terminal.Result)

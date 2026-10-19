@@ -206,6 +206,12 @@ func (repository *Repository) PublishSecretRemoval(
 	return repository.secrets.PublishSecretRemoval(ctx, owner, current, input, task, marker)
 }
 
-func (repository *Repository) CaptureSecretRemoval(ctx context.Context, owner secretrecord.Owner, current etcdstore.Versioned[secretrecord.Record], taskID, workID, planID string, at time.Time) (secretremoval.Input, error) {
+func (repository *Repository) CaptureSecretRemoval(
+	ctx context.Context,
+	owner secretrecord.Owner,
+	current etcdstore.Versioned[secretrecord.Record],
+	taskID, workID, planID string,
+	at time.Time,
+) (secretremoval.Input, error) {
 	return repository.secrets.CaptureSecretRemoval(ctx, owner, current, taskID, workID, planID, at)
 }

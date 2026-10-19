@@ -16,9 +16,16 @@ import (
 // resource snapshot. The Controller fills the encrypted hook envelope from this
 // snapshot before publication; no scheduler reads old Secret revisions later.
 func NewDetachCapture(task workexecution.Task, item workexecution.Item, input DetachInput) (WorkCapture, error) {
-	if task.Validate() != nil || item.Validate() != nil || item.Operation != workexecution.Detach || item.Input == nil ||
-		input.TaskID != task.ID || input.WorkItemID != item.ID || item.TaskID != task.ID || item.TargetID != input.Snapshot.Source.Attach.ID {
-		return WorkCapture{}, errs.New(errs.KindValidationFailed, "Detach capture requires matching Task, resource and input")
+	if task.Validate() != nil || item.Validate() != nil || item.Operation != workexecution.Detach ||
+		item.Input == nil ||
+		input.TaskID != task.ID ||
+		input.WorkItemID != item.ID ||
+		item.TaskID != task.ID ||
+		item.TargetID != input.Snapshot.Source.Attach.ID {
+		return WorkCapture{}, errs.New(
+			errs.KindValidationFailed,
+			"Detach capture requires matching Task, resource and input",
+		)
 	}
 	digest, err := Digest(input.Snapshot.Source)
 	if err != nil {
@@ -34,8 +41,13 @@ func NewDetachCapture(task workexecution.Task, item workexecution.Item, input De
 // same source comparisons; stale prepublication input fails rather than silently
 // switching versions. A direct action uses an absent Task; a graph batch uses
 // the exact accepted Task revision while its execution barrier remains closed.
-func (repository *InputRepository) PrepareDetachPublicationCapture(ctx context.Context, snapshot workqueue.TaskSnapshot, item workexecution.Item,
-	input DetachInput, capture WorkCapture, guards []keyvalue.Condition,
+func (repository *InputRepository) PrepareDetachPublicationCapture(
+	ctx context.Context,
+	snapshot workqueue.TaskSnapshot,
+	item workexecution.Item,
+	input DetachInput,
+	capture WorkCapture,
+	guards []keyvalue.Condition,
 ) (workqueue.Change, error) {
 	task := snapshot.Task
 	view := workqueue.View{Task: snapshot, Item: workqueue.ItemSnapshot{Item: item}}
@@ -44,19 +56,31 @@ func (repository *InputRepository) PrepareDetachPublicationCapture(ctx context.C
 		item.TaskID != task.ID || item.Operation != workexecution.Detach ||
 		item.Phase != workexecution.Ready || task.FinishedAt != nil || task.CollectionStartedAt != nil || task.Stop != nil ||
 		capture.Pins != nil || !matchesDetachCaptureSource(view, input, capture) || !matchesDetachHookCapture(input.Snapshot.Source, capture) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach capture is not eligible for initial publication")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Detach capture is not eligible for initial publication",
+		)
 	}
 	if snapshot.Revision > 0 && (input.Cascade == nil || task.Action != workexecution.ActionRemove ||
 		input.Cascade.Validate(input.Snapshot) != nil || input.Cascade.ZoneID != task.TargetID ||
 		task.ExpectedItems != input.Cascade.Count+1 || task.Scope.TenantID != "" ||
 		task.Scope.ProjectID != input.Snapshot.Source.Attach.BackingProjectID ||
 		task.Scope.EnvironmentID != input.Snapshot.Source.Attach.BackingEnvironmentID) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "accepted Detach capture requires its closed Backing Zone graph")
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"accepted Detach capture requires its closed Backing Zone graph",
+		)
 	}
 	change := workqueue.Change{Conditions: append([]keyvalue.Condition(nil), guards...)}
-	change.Conditions = append(change.Conditions,
-		keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: snapshot.Revision}, keyvalue.Condition{Key: workqueue.ItemKey(item.ID)},
-		keyvalue.Condition{Key: WorkCaptureKey(item.ID)})
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{
+			Key:         workqueue.TaskKey(task.ID),
+			ModRevision: snapshot.Revision,
+		},
+		keyvalue.Condition{Key: workqueue.ItemKey(item.ID)},
+		keyvalue.Condition{Key: WorkCaptureKey(item.ID)},
+	)
 	if snapshot.Revision == 0 {
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: DetachInputKey(item.ID)})
 	} else {
@@ -83,7 +107,11 @@ func (repository *InputRepository) PrepareDetachPublicationCapture(ctx context.C
 		}
 		owned := make([]tasksecretpins.Condition, len(change.Conditions))
 		for index, guard := range change.Conditions {
-			owned[index] = tasksecretpins.Condition{Key: guard.Key, ModRevision: guard.ModRevision, Prefix: guard.Prefix}
+			owned[index] = tasksecretpins.Condition{
+				Key:         guard.Key,
+				ModRevision: guard.ModRevision,
+				Prefix:      guard.Prefix,
+			}
 		}
 		prepared, err := pins.PrepareOwned(ctx, capture.OperationID, task.ID, item.ID, capture.Sources, owned)
 		if err != nil {
@@ -111,9 +139,15 @@ func (repository *InputRepository) PrepareDetachPublicationCapture(ctx context.C
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err
 	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: WorkCaptureKey(item.ID), Value: raw})
+	change.Mutations = append(
+		change.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: WorkCaptureKey(item.ID), Value: raw},
+	)
 	if snapshot.Revision > 0 {
-		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: preparedCascadeCaptureKey(item.ID)})
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: preparedCascadeCaptureKey(item.ID)},
+		)
 	}
 	return change, nil
 }

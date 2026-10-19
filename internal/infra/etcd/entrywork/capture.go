@@ -39,7 +39,8 @@ func (capture Capture) matches(view workqueue.View, input *agentpb.EntryConfigur
 		capture.Configuration.ReadRevision > view.ReadRevision || input.RenderGeneration != capture.Configuration.Generation ||
 		!configurationMatches(input.Configuration, capture.Configuration.Current) ||
 		(input.PriorConfiguration == nil) != (capture.Configuration.Prior == nil) ||
-		capture.Configuration.Prior != nil && !configurationMatches(input.PriorConfiguration, *capture.Configuration.Prior) {
+		capture.Configuration.Prior != nil &&
+			!configurationMatches(input.PriorConfiguration, *capture.Configuration.Prior) {
 		return conflict("Entry configuration capture differs from its operation or file sources")
 	}
 	if capture.Removal != nil {

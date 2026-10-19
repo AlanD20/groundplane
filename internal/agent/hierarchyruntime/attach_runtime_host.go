@@ -12,7 +12,10 @@ import (
 )
 
 type ConsumerHelper interface {
-	ExecuteAttachConsumer(context.Context, *agentpb.AttachConsumerHelperRequest) (*agentpb.AttachConsumerHelperResponse, error)
+	ExecuteAttachConsumer(
+		context.Context,
+		*agentpb.AttachConsumerHelperRequest,
+	) (*agentpb.AttachConsumerHelperResponse, error)
 }
 
 // AttachRuntimeHost uses one journal and process lease for credential commands
@@ -24,9 +27,18 @@ type AttachRuntimeHost struct {
 	ownership *agentownership.Lease
 }
 
-func NewAttachRuntimeHost(backing *BackingHost, journal *agentworkjournal.Journal, helper ConsumerHelper, ownership *agentownership.Lease) (*AttachRuntimeHost, error) {
-	if backing == nil || journal == nil || helper == nil || backing.journal != journal || backing.ownership != ownership {
-		return nil, errs.New(errs.KindInternal, "Attach runtime requires one journal, process lease and its typed executors")
+func NewAttachRuntimeHost(
+	backing *BackingHost,
+	journal *agentworkjournal.Journal,
+	helper ConsumerHelper,
+	ownership *agentownership.Lease,
+) (*AttachRuntimeHost, error) {
+	if backing == nil || journal == nil || helper == nil || backing.journal != journal ||
+		backing.ownership != ownership {
+		return nil, errs.New(
+			errs.KindInternal,
+			"Attach runtime requires one journal, process lease and its typed executors",
+		)
 	}
 	if err := ownership.Check(); err != nil {
 		return nil, err
@@ -42,7 +54,10 @@ func (host *AttachRuntimeHost) ExecuteRemovalCommand(ctx context.Context, input 
 		return host.backing.ExecuteRemovalCommand(ctx, input, progress, inspectOnly)
 	}
 	if ctx == nil || progress.Validate(input) != nil || !progress.InFlight {
-		return attachexecution.RemovalCommandResult{}, errs.New(errs.KindStateConflict, "Detach consumer requires its acknowledged command boundary")
+		return attachexecution.RemovalCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Detach consumer requires its acknowledged command boundary",
+		)
 	}
 	if err := host.ownership.Check(); err != nil {
 		return attachexecution.RemovalCommandResult{}, err
@@ -52,7 +67,10 @@ func (host *AttachRuntimeHost) ExecuteRemovalCommand(ctx context.Context, input 
 		return attachexecution.RemovalCommandResult{}, err
 	}
 	if saved == nil || !saved.Acknowledged || len(saved.Executions) != 0 {
-		return attachexecution.RemovalCommandResult{}, errs.New(errs.KindStateConflict, "Detach consumer has no matching saved authorization")
+		return attachexecution.RemovalCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Detach consumer has no matching saved authorization",
+		)
 	}
 	want, err := (attachexecution.RemovalReport{Progress: progress}).Checkpoint(input)
 	if err != nil {
@@ -61,7 +79,10 @@ func (host *AttachRuntimeHost) ExecuteRemovalCommand(ctx context.Context, input 
 	got, err := saved.Report.Checkpoint(input)
 	if err != nil || got.Sequence != want.Sequence || got.StageID != want.StageID || got.Evidence != want.Evidence ||
 		!got.RecordedAt.Equal(want.RecordedAt) {
-		return attachexecution.RemovalCommandResult{}, errs.New(errs.KindStateConflict, "Detach consumer differs from its acknowledged checkpoint")
+		return attachexecution.RemovalCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Detach consumer differs from its acknowledged checkpoint",
+		)
 	}
 	if saved.CommandResult != nil {
 		return *saved.CommandResult, nil
@@ -82,7 +103,10 @@ func (host *AttachRuntimeHost) ExecuteRemovalCommand(ctx context.Context, input 
 		return attachexecution.RemovalCommandResult{}, err
 	}
 	if !response.Detached {
-		return attachexecution.RemovalCommandResult{}, errs.New(errs.KindStateConflict, "Detach consumer transition was interrupted before endpoint removal; explicit recovery is required")
+		return attachexecution.RemovalCommandResult{}, errs.New(
+			errs.KindStateConflict,
+			"Detach consumer transition was interrupted before endpoint removal; explicit recovery is required",
+		)
 	}
 	if err := host.ownership.Check(); err != nil {
 		return attachexecution.RemovalCommandResult{}, err
@@ -100,14 +124,20 @@ func (host *AttachRuntimeHost) ExecuteRemovalCommand(ctx context.Context, input 
 	return result, nil
 }
 
-func (host *AttachRuntimeHost) InspectRemoval(ctx context.Context, input attachexecution.RecoveryInput) (attachexecution.RemovalInspection, error) {
+func (host *AttachRuntimeHost) InspectRemoval(
+	ctx context.Context,
+	input attachexecution.RecoveryInput,
+) (attachexecution.RemovalInspection, error) {
 	if input.RequiresConsumer() {
 		return host.inspectConsumerRecovery(ctx, input)
 	}
 	return host.backing.InspectRemoval(ctx, input)
 }
 
-func (host *AttachRuntimeHost) inspectConsumerRecovery(ctx context.Context, input attachexecution.RecoveryInput) (attachexecution.RemovalInspection, error) {
+func (host *AttachRuntimeHost) inspectConsumerRecovery(
+	ctx context.Context,
+	input attachexecution.RecoveryInput,
+) (attachexecution.RemovalInspection, error) {
 	if err := input.Validate(); err != nil {
 		return attachexecution.RemovalInspection{}, err
 	}

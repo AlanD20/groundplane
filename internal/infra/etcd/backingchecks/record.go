@@ -151,14 +151,18 @@ func NewRecord(owner Owner, source Source, ciphertext []byte, createdAt time.Tim
 }
 
 func (record Record) Validate() error {
-	if record.Schema != 1 || ids.Validate(ids.KindTask, record.Owner.TaskID) != nil || ids.Validate(ids.KindWorkItem, record.Owner.WorkItemID) != nil ||
+	if record.Schema != 1 || ids.Validate(ids.KindTask, record.Owner.TaskID) != nil ||
+		ids.Validate(ids.KindWorkItem, record.Owner.WorkItemID) != nil ||
 		ids.Validate(
 			ids.KindPlan,
 			record.Owner.PlanID,
-		) != nil || ids.Validate(ids.KindOperation, record.Owner.OperationID) != nil ||
+		) != nil ||
+		ids.Validate(ids.KindOperation, record.Owner.OperationID) != nil ||
 		ids.Validate(ids.KindEnvironment, record.Owner.EnvironmentID) != nil ||
-		ids.Validate(ids.KindTask, record.HelperTaskID) != nil || record.Source.Validate() != nil ||
-		record.Source.Parameters.EnvironmentID != record.Owner.EnvironmentID || !validTime(record.CreatedAt) ||
+		ids.Validate(ids.KindTask, record.HelperTaskID) != nil ||
+		record.Source.Validate() != nil ||
+		record.Source.Parameters.EnvironmentID != record.Owner.EnvironmentID ||
+		!validTime(record.CreatedAt) ||
 		record.HelperTaskID != record.Owner.TaskID {
 		return invalidRecord()
 	}
