@@ -34,9 +34,11 @@ func (owner *Work) Admit(
 	at time.Time,
 ) (workdispatch.Decision, error) {
 	item, task := request.Item.Item, request.Task.Task
+	// Expiry settles captured state without an available executor. Only live
+	// work can obtain a host dispatch grant.
 	if request.DecisionOnly || item.Operation != workexecution.BackingProvision ||
 		item.Placement.Executor != workexecution.Agent ||
-		request.Executor.Record.Identity.HostID != item.Placement.HostID ||
+		at.Before(item.Deadline) && request.Executor.Record.Identity.HostID != item.Placement.HostID ||
 		item.Input == nil {
 		return workdispatch.Decision{}, errs.New(
 			errs.KindStateConflict,

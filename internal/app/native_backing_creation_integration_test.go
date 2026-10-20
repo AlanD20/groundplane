@@ -11,11 +11,14 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/backingservices"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
+	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -181,6 +184,29 @@ func nativeCustomBackingCreationJourney(t *testing.T, race bool) {
 	after, found, err := f.blueprint.GetEnvironmentDesiredInput(t.Context(), f.environmentID)
 	if err != nil || !found || after.Revision != before.Revision {
 		t.Fatal("Backing creation changed unrelated desired state", err)
+	}
+	// An expired queued action must settle without an available executor,
+	// rather than remaining queued forever after its timeout.
+	owner, err := backingservices.NewWork(inputs, f.queue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision, err := owner.Admit(t.Context(), workqueue.Assignment{
+		Task: view.Task, Item: view.Item, ReadRevision: view.ReadRevision, Direction: workexecution.Forward,
+	}, view.Item.Item.Deadline.Add(time.Second))
+	if err != nil || decision.Disposition != workdispatch.Settle {
+		t.Fatal("expired backing creation still requires an available executor", err)
+	}
+	defer keyvalue.ClearMutationValues(decision.Change.Mutations)
+	committed, err := f.queue.Commit(t.Context(), decision.Change)
+	if err != nil || !committed.Succeeded {
+		t.Fatal("expired backing creation did not settle", err)
+	}
+	settled, err := f.queue.ReadWork(t.Context(), created.TaskID, view.Item.Item.ID, 0)
+	if err != nil || settled.Item.Item.Phase != workexecution.Settled ||
+		settled.Item.Item.Outcome != workexecution.Failed ||
+		settled.Item.Item.AttemptNumber != 0 {
+		t.Fatal("expiry dispatched work or lost the original captured action", err)
 	}
 }
 
