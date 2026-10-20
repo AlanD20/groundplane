@@ -95,6 +95,7 @@ func (owner *AgentWork) Fail(ctx context.Context, authorization agentregistratio
 	if err != nil {
 		return nil, err
 	}
+	owner.reportTerminal(ctx, saved)
 	return &agentpb.BackupWorkFailureAck{Attempt: proto.CloneOf(request.Attempt),
 		Evidence: &agentpb.WorkInputReference{InputId: saved.Result.ID, Sha256: digest}, Failure: raw,
 		Outcome: string(

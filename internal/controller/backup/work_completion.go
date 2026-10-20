@@ -95,6 +95,7 @@ func (owner *AgentWork) Complete(ctx context.Context, authorization agentregistr
 		(saved.Outcome != workexecution.Succeeded && saved.Outcome != workexecution.Cancelled && saved.Outcome != workexecution.Superseded) {
 		return nil, errs.New(errs.KindStateConflict, "Backup has no matching settled completion")
 	}
+	owner.reportTerminal(ctx, saved)
 	return &agentpb.BackupWorkCompletionAck{
 		Attempt:  proto.CloneOf(request.Attempt),
 		Evidence: proto.CloneOf(request.Evidence),

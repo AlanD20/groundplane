@@ -75,6 +75,48 @@ func (owner *AgentWork) reportCheckpoint(ctx context.Context, view workqueue.Res
 	}
 }
 
+// Source cleanup receipts can precede consumer recovery and final settlement.
+// Only the committed attempt result closes the remaining source observations.
+// No prior diagnostic record means no historical stage is reconstructed.
+func (owner *AgentWork) reportTerminal(ctx context.Context, attempt workexecution.Attempt) {
+	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	snapshot, err := owner.diagnostics.Read(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, 0)
+	if err == nil && !snapshot.Expired && snapshot.Record != nil {
+		sequence := snapshot.Record.Sequence
+		for _, stage := range snapshot.Record.Stages {
+			if stage.State != workexecution.StageRunning {
+				continue
+			}
+			if attempt.Outcome == workexecution.Succeeded {
+				stage.State, stage.FinishedAt = workexecution.StageSucceeded, attempt.FinishedAt
+				stage.Observed = "Source result and required cleanup confirmed by the committed operation outcome"
+			} else {
+				stage.State = workexecution.StageUnknown
+				stage.Observed = "The attempt stopped before source completion was confirmed; inspect its recorded outcome and cleanup state"
+			}
+			sequence++
+			err = owner.diagnostics.ReportResult(bounded, attempt, sequence, stage)
+			if err != nil {
+				break
+			}
+		}
+	}
+	if err != nil {
+		slog.WarnContext(ctx, "Backup outcome diagnostics incomplete", "attempt_id", attempt.ID, "error", err)
+		if markErr := owner.diagnostics.MarkIncomplete(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor); markErr != nil {
+			slog.WarnContext(
+				ctx,
+				"could not record Backup outcome diagnostic loss",
+				"attempt_id",
+				attempt.ID,
+				"error",
+				markErr,
+			)
+		}
+	}
+}
+
 func backupDiagnosticSource(step *agentpb.BackupStepAuthority) string {
 	capture, restore := step.GetCapture(), step.GetRestore()
 	switch {
