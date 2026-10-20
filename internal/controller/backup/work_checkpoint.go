@@ -142,11 +142,15 @@ func (owner *AgentWork) Checkpoint(ctx context.Context, authorization agentregis
 	if err := owner.finishCaptureSource(ctx, authorization, request); err != nil {
 		return nil, err
 	}
-	return owner.inputs.ReadCheckpointAcknowledgement(
+	ack, err := owner.inputs.ReadCheckpointAcknowledgement(
 		ctx,
 		admitted.Request,
 		admitted.Assignment.Input,
 		authorization.Identity(),
 		result.Revision,
 	)
+	if err == nil {
+		owner.reportCheckpoint(ctx, view, admitted.Assignment.Input, request, ack)
+	}
+	return ack, err
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupvolumemanifest"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
@@ -13,6 +14,7 @@ import (
 func (platform *Platform) newBackupWork(
 	queue *workqueue.Repository,
 	dependencies ExecutionDependencies,
+	diagnostics *executiondiagnostics.Repository,
 ) (*backup.AgentWork, *backupkey.Work, error) {
 	inputs, err := backupwork.NewInputRepository(platform.dependencies.Store)
 	if err != nil {
@@ -39,7 +41,7 @@ func (platform *Platform) newBackupWork(
 	if err != nil {
 		return nil, nil, err
 	}
-	reports, err := backup.NewAgentWork(inputs, queue, manifests, snapshots, runtime, restores)
+	reports, err := backup.NewAgentWork(inputs, queue, manifests, snapshots, runtime, restores, diagnostics)
 	if err != nil {
 		return nil, nil, err
 	}

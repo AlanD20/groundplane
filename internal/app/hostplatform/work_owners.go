@@ -96,10 +96,6 @@ func (platform *Platform) newWorkOwners(
 	queue *workqueue.Repository,
 	dependencies ExecutionDependencies,
 ) (*workOwners, error) {
-	backupReports, keyRotations, err := platform.newBackupWork(queue, dependencies)
-	if err != nil {
-		return nil, err
-	}
 	scriptRecords, err := etcd.NewScriptRepository(platform.dependencies.Store)
 	if err != nil {
 		return nil, err
@@ -141,6 +137,10 @@ func (platform *Platform) newWorkOwners(
 		return nil, err
 	}
 	diagnostics, err := executiondiagnostics.New(platform.dependencies.Store, queue)
+	if err != nil {
+		return nil, err
+	}
+	backupReports, keyRotations, err := platform.newBackupWork(queue, dependencies, diagnostics)
 	if err != nil {
 		return nil, err
 	}

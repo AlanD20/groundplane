@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupvolumemanifest"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -24,6 +25,7 @@ type AgentWork struct {
 	configRuntime   *etcd.BackupRuntimeRepository
 	configRestores  *ConfigRestoreProducer
 	configTransfers *backupconfiguration.ConfigTransferRepository
+	diagnostics     *executiondiagnostics.Repository
 }
 
 func NewAgentWork(
@@ -33,9 +35,10 @@ func NewAgentWork(
 	configSnapshots *ConfigSnapshotProducer,
 	configRuntime *etcd.BackupRuntimeRepository,
 	configRestores *ConfigRestoreProducer,
+	diagnostics *executiondiagnostics.Repository,
 ) (*AgentWork, error) {
 	if inputs == nil || queue == nil || manifests == nil || configSnapshots == nil || configRuntime == nil ||
-		configRestores == nil {
+		configRestores == nil || diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "Backup Agent work requires captured input storage")
 	}
 	return &AgentWork{
@@ -46,6 +49,7 @@ func NewAgentWork(
 		configTransfers: configRuntime.ConfigTransferRepository,
 		configRuntime:   configRuntime,
 		configRestores:  configRestores,
+		diagnostics:     diagnostics,
 	}, nil
 }
 

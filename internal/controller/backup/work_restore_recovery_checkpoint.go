@@ -83,6 +83,10 @@ func (owner *AgentWork) restoreRecoveryCheckpoint(ctx context.Context,
 	if !result.Succeeded {
 		return nil, errs.New(errs.KindStateConflict, "Restore recovery ownership changed before settlement")
 	}
-	return owner.inputs.ReadRestoreRecoveryCheckpointAcknowledgement(ctx, request, admitted.Recovery,
+	ack, err := owner.inputs.ReadRestoreRecoveryCheckpointAcknowledgement(ctx, request, admitted.Recovery,
 		authorization.Identity(), result.Revision)
+	if err == nil {
+		owner.reportCheckpoint(ctx, view, admitted.Input(), request, ack)
+	}
+	return ack, err
 }
