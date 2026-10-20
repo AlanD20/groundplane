@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -289,10 +288,8 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	}
 	defer attachInputs.clear()
 	captured := input.Graph
-	captured.Items = slices.Clone(input.Graph.Items)
 	for _, generation := range attachInputs.generations {
-		expected, err := blueprintattachinputs.WorkInput(generation)
-		if err != nil {
+		if _, err := blueprintattachinputs.WorkInput(generation); err != nil {
 			return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
 		}
 		matched := false
@@ -302,14 +299,12 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 				continue
 			}
 			if item.TargetID != generation.AttachID || item.Operation != workexecution.Attach ||
-				(item.Input != nil && *item.Input != expected) ||
-				(item.Input == nil && (item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput)) {
+				item.Input != nil || item.Phase != workexecution.Waiting ||
+				item.Wait == nil || item.Wait.Reason != workexecution.WaitInput {
 				break
 			}
-			// Pins are now bound. Seal their exact digest before publication,
-			// without changing the caller's draft or selecting any newer input.
-			item.Input = &expected
-			item.Phase, item.Wait = workexecution.Ready, nil
+			// Capturing encrypted input is not execution readiness. Preparation
+			// publishes its pending binding and exact input reference atomically.
 			matched = true
 			break
 		}
