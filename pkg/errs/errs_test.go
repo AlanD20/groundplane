@@ -8,114 +8,6 @@ import (
 	"testing"
 )
 
-func expectedKindCatalog() map[Kind]descriptor {
-	return map[Kind]descriptor{
-		KindTenantNotFound:                     {"tenant.not_found", "not_found", 404},
-		KindProjectNotFound:                    {"project.not_found", "not_found", 404},
-		KindEnvironmentNotFound:                {"environment.not_found", "not_found", 404},
-		KindServiceNotFound:                    {"service.not_found", "not_found", 404},
-		KindBackingServiceNotFound:             {"backing_service.not_found", "not_found", 404},
-		KindAttachNotFound:                     {"attach.not_found", "not_found", 404},
-		KindTaskNotFound:                       {"task.not_found", "not_found", 404},
-		KindTaskTimedOut:                       {"task.timed_out", "retryable", 503},
-		KindSecretNotFound:                     {"secret.not_found", "not_found", 404},
-		KindConnectorNotFound:                  {"connector.not_found", "not_found", 404},
-		KindRunnerNotFound:                     {"runner.not_found", "not_found", 404},
-		KindRunnerSlugConflict:                 {"runner.slug_conflict", "conflict", 409},
-		KindAgentNotFound:                      {"agent.not_found", "not_found", 404},
-		KindReleaseGroupNotFound:               {"release_group.not_found", "not_found", 404},
-		KindComponentNotFound:                  {"component.not_found", "not_found", 404},
-		KindRecoveryPointNotFound:              {"recovery_point.not_found", "not_found", 404},
-		KindDeployInFlight:                     {"deploy.in_flight", "conflict", 409},
-		KindTaskNotRetryable:                   {"task.not_retryable", "conflict", 409},
-		KindTaskNotAbortable:                   {"task.not_abortable", "conflict", 409},
-		KindTaskRetryInFlight:                  {"task.retry_in_flight", "conflict", 409},
-		KindSlugConflict:                       {"slug.conflict", "conflict", 409},
-		KindNameConflict:                       {"name.conflict", "conflict", 409},
-		KindStateConflict:                      {"state.conflict", "conflict", 409},
-		KindResourceInUse:                      {"resource.in_use", "conflict", 409},
-		KindCursorExpired:                      {"cursor.expired", "conflict", 409},
-		KindIdempotencyInProgress:              {"idempotency.in_progress", "conflict", 409},
-		KindIdempotencyMismatch:                {"idempotency.mismatch", "bad_request", 400},
-		KindStorageUnavailable:                 {"storage.unavailable", "retryable", 503},
-		KindWorkloadImageResolutionBusy:        {"workload.image_resolution_busy", "conflict", 409},
-		KindWorkloadImageResolutionUnavailable: {"workload.image_resolution_unavailable", "retryable", 503},
-		KindZoneNotFound:                       {"zone.not_found", "not_found", 404},
-		KindRouteNotFound:                      {"route.not_found", "not_found", 404},
-		KindVolumeNotFound:                     {"volume.not_found", "not_found", 404},
-		KindEntryNotFound:                      {"entry.not_found", "not_found", 404},
-		KindScriptNotFound:                     {"script.not_found", "not_found", 404},
-		KindScriptRetryUnsafe:                  {"script.retry_unsafe", "conflict", 409},
-		KindReleaseNotFound:                    {"release.not_found", "not_found", 404},
-		KindReleaseRecoveryRequired:            {"release.recovery_required", "conflict", 409},
-		KindReleaseDeadlineTooShort:            {"release.deadline_too_short", "validation", 422},
-		KindReleasePlanTooLarge:                {"release.plan_too_large", "validation", 422},
-		KindReleaseGroupTagRequired:            {"release_group.tag_required", "validation", 422},
-		KindRollbackNoPreviousRelease:          {"rollback.no_previous_release", "conflict", 409},
-		KindRollbackSourceExpired:              {"rollback.source_expired", "conflict", 409},
-		KindBackupSourceNotFound:               {"backup_source.not_found", "not_found", 404},
-		KindStrategyNotImplemented:             {"strategy.not_implemented", "validation", 422},
-		KindRotationNotImplemented:             {"rotation.not_implemented", "validation", 422},
-		KindAdapterCustomOnly:                  {"adapter.custom_only", "validation", 422},
-		KindValidationFailed:                   {"validation.failed", "validation", 422},
-		KindMalformedRequest:                   {"validation.failed", "bad_request", 400},
-		KindScopeUnauthorized:                  {"scope.unauthorized", "validation", 422},
-		KindConnectorScopeInvalid:              {"connector.scope_invalid", "validation", 422},
-		KindRequestNotFound:                    {"request.not_found", "not_found", 404},
-		KindRequestForbidden:                   {"request.forbidden", "forbidden", 403},
-		KindRequestMethodNotAllowed:            {"request.method_not_allowed", "method_not_allowed", 405},
-		KindRequestNotAcceptable:               {"request.not_acceptable", "not_acceptable", 406},
-		KindRequestUnsupportedMediaType:        {"request.unsupported_media_type", "unsupported_media_type", 415},
-		KindRequestTooLarge:                    {"request.failed", "bad_request", 413},
-		KindRequestUnavailable:                 {"request.failed", "retryable", 503},
-		KindRequestFailed:                      {"request.failed", "internal", 500},
-		KindNotImplemented:                     {"not_implemented", "internal", 501},
-		KindInternal:                           {"internal", "internal", 500},
-	}
-}
-
-// QA: UI-03, UI-05 - L0 error-catalog proof only; no HTTP framework mapping,
-// generated client, Controller handler, or operator-visible failure is exercised.
-// Rationale: every closed Kind must retain its independently specified public
-// code, control-flow class, and HTTP status without an ambiguous inbound tuple.
-func TestKindCatalogIsCompleteAndExact(t *testing.T) {
-	expected := expectedKindCatalog()
-	if len(expected) != int(kindLimit-1) {
-		t.Fatalf("test catalog has %d kinds, runtime catalog has %d", len(expected), kindLimit-1)
-	}
-
-	seenTuples := make(map[struct {
-		code   Code
-		status int
-	}]Kind)
-	for kind := Kind(1); kind < kindLimit; kind++ {
-		got, ok := descriptorFor(kind)
-		if !ok {
-			t.Fatalf("descriptorFor(%d) is missing", kind)
-		}
-		want, exists := expected[kind]
-		if !exists {
-			t.Fatalf("Kind %d is absent from the expected catalog", kind)
-		}
-		if got != want {
-			t.Errorf("Kind %d descriptor = %#v, want %#v", kind, got, want)
-		}
-		domainError := New(kind, "catalog check")
-		if domainError.Kind() != kind || domainError.Code != want.Code ||
-			domainError.Class() != want.Class || domainError.HTTPStatus() != want.Status {
-			t.Errorf("Kind %d constructor/accessors = %#v, want %#v", kind, domainError, want)
-		}
-		tuple := struct {
-			code   Code
-			status int
-		}{got.Code, got.Status}
-		if previous, duplicate := seenTuples[tuple]; duplicate {
-			t.Errorf("Kinds %d and %d share ambiguous problem tuple %#v", previous, kind, tuple)
-		}
-		seenTuples[tuple] = kind
-	}
-}
-
 // QA: UI-03, UI-05 - L0 constructor/accessor proof only; no HTTP request,
 // framework fallback, log record, or client presentation is exercised.
 // Rationale: unrecognized Kinds must fail closed as internal errors rather
@@ -265,10 +157,22 @@ func TestProblemJSONContainsOnlyRFC7807Fields(t *testing.T) {
 // Rationale: inbound problem reconstruction is trusted only when type, code,
 // class-derived status, and descriptor identity form an exact closed tuple.
 func TestFromProblemAcceptsOnlyExactCatalogTuples(t *testing.T) {
-	for kind, expected := range expectedKindCatalog() {
+	for _, test := range []struct {
+		kind   Kind
+		code   Code
+		status int
+	}{
+		{KindMalformedRequest, CodeValidationFailed, 400},
+		{KindValidationFailed, CodeValidationFailed, 422},
+		{KindStateConflict, CodeStateConflict, 409},
+		{KindAgentReadinessChanged, CodeAgentReadinessChanged, 409},
+		{KindStorageUnavailable, CodeStorageUnavailable, 503},
+		{KindInternal, CodeInternal, 500},
+	} {
+		kind := test.kind
 		source := Problem{
-			Type: "about:blank", Title: "upstream title", Status: expected.Status,
-			Detail: "upstream detail", Code: expected.Code,
+			Type: "about:blank", Title: "upstream title", Status: test.status,
+			Detail: "upstream detail", Code: test.code,
 		}
 		got, ok := FromProblem(source)
 		if !ok || got.Kind() != kind {

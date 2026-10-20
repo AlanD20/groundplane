@@ -419,7 +419,8 @@ func (delivery *AgentDeliveries) Ready(
 		return issues, err
 	}
 	if !result.Succeeded {
-		return issues, errs.New(errs.KindStateConflict, "Agent ownership changed before readiness was saved")
+		return issues, errs.New(errs.KindAgentReadinessChanged,
+			"Agent readiness changed during publication; recheck current ownership before dispatch")
 	}
 	return issues, nil
 }

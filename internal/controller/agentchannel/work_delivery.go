@@ -50,6 +50,13 @@ func (server *Server) dispatchWork(
 		)
 	}
 	if err != nil {
+		if kind, _ := errs.KindOf(err); kind == errs.KindAgentReadinessChanged {
+			// Lifecycle readiness can advance the same record after authentication.
+			// No work is granted from this stale snapshot. The next normal request
+			// resolves current credential/process fences again; it is not a new
+			// connection or permission to ignore an authentication failure.
+			return nil
+		}
 		return err
 	}
 	remaining := capacity

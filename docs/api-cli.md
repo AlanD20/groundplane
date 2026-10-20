@@ -415,6 +415,7 @@ The reference does not prove whether a mutation took effect.
 | Code | Operator response |
 | --- | --- |
 | `state.conflict` | Reread state or revision and reconcile the change |
+| `agent.readiness_changed` | Agent readiness publication lost its revision comparison; the Controller rechecks current ownership on the next normal dispatch request without granting work from the stale read |
 | `request.forbidden` (403) | Use the same-origin trusted Console for host terminal access |
 | `resource.in_use` | Inspect dependencies or retained operation authority |
 | `cursor.expired` | Start a fresh list or Task-event snapshot |

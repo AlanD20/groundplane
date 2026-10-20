@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
@@ -24,9 +25,10 @@ import (
 )
 
 type nativeDispatchPeer struct {
-	attempt *agentpb.WorkAttemptIdentity
-	prepare func()
-	calls   int
+	attempt   *agentpb.WorkAttemptIdentity
+	prepare   func()
+	readiness func() error
+	calls     int
 }
 
 func (*nativeDispatchPeer) AccountJournal(context.Context, agentregistration.WorkAuthorization,
@@ -35,10 +37,42 @@ func (*nativeDispatchPeer) AccountJournal(context.Context, agentregistration.Wor
 	return nil
 }
 
-func (*nativeDispatchPeer) Ready(context.Context, agentregistration.WorkAuthorization,
+func (peer *nativeDispatchPeer) Ready(context.Context, agentregistration.WorkAuthorization,
 	uint16, bool,
 ) ([]workdispatch.Issue, error) {
+	if peer.readiness != nil {
+		return nil, peer.readiness()
+	}
 	return nil, nil
+}
+
+// Rationale: a losing availability CAS must not kill a newly enrolled Agent,
+// but a stale credential/process must still fail closed. Neither conflict grants
+// work; only a later request that resolves current authority may dispatch it.
+func TestNativeDispatchDefersOnlyReadinessPublicationConflict(t *testing.T) {
+	server, session, peer, _ := nativeDispatchFixture(t)
+	if err := session.RecordReady(time.Now().UTC(), 1, "qa", buildversion.BuildProvenance{}); err != nil {
+		t.Fatal(err)
+	}
+	stream := &nativeDispatchStream{ctx: t.Context()}
+	payloads := newAssignmentPayloadDelivery(t.Context(), 1)
+	defer payloads.close()
+	delivered := map[string]string{}
+	peer.readiness = func() error { return errs.New(errs.KindAgentReadinessChanged, "lost publication CAS") }
+	if err := server.dispatchWork(stream, session, 1, 1, 1, false, delivered, payloads); err != nil ||
+		peer.calls != 0 || len(stream.messages) != 0 {
+		t.Fatalf("publication conflict disconnected or granted work: %v", err)
+	}
+	peer.readiness = func() error { return errs.New(errs.KindStateConflict, "foreign executor") }
+	if kind, _ := errs.KindOf(server.dispatchWork(stream, session, 1, 1, 1, false, delivered, payloads)); kind != errs.KindStateConflict ||
+		peer.calls != 0 {
+		t.Fatal("ordinary ownership refusal was swallowed")
+	}
+	peer.readiness = nil
+	if err := server.dispatchWork(stream, session, 1, 1, 1, false, delivered, payloads); err != nil ||
+		peer.calls != 1 || len(stream.messages) != 1 || len(delivered) != 1 {
+		t.Fatalf("fresh request did not deliver the exact saved attempt: %v", err)
+	}
 }
 
 func (peer *nativeDispatchPeer) Dispatch(_ context.Context, authorization agentregistration.WorkAuthorization,

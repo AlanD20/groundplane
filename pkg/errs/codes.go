@@ -33,6 +33,7 @@ const (
 	CodeSlugConflict          Code = "slug.conflict"
 	CodeNameConflict          Code = "name.conflict"
 	CodeStateConflict         Code = "state.conflict"
+	CodeAgentReadinessChanged Code = "agent.readiness_changed"
 	CodeResourceInUse         Code = "resource.in_use"
 	CodeCursorExpired         Code = "cursor.expired"
 	CodeIdempotencyInProgress Code = "idempotency.in_progress"
@@ -115,6 +116,7 @@ const (
 	KindSlugConflict
 	KindNameConflict
 	KindStateConflict
+	KindAgentReadinessChanged
 	KindResourceInUse
 	KindCursorExpired
 	KindIdempotencyInProgress
@@ -186,6 +188,7 @@ var kindDescriptors = [kindLimit]descriptor{
 	KindSlugConflict:                       {CodeSlugConflict, ClassConflict, 409},
 	KindNameConflict:                       {CodeNameConflict, ClassConflict, 409},
 	KindStateConflict:                      {CodeStateConflict, ClassConflict, 409},
+	KindAgentReadinessChanged:              {CodeAgentReadinessChanged, ClassConflict, 409},
 	KindResourceInUse:                      {CodeResourceInUse, ClassConflict, 409},
 	KindCursorExpired:                      {CodeCursorExpired, ClassConflict, 409},
 	KindIdempotencyInProgress:              {CodeIdempotencyInProgress, ClassConflict, 409},
