@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/lifecycleexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/servicelifecyclework"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
@@ -22,6 +23,8 @@ import (
 // WorkRecords owns the captured Service lifecycle mutation and its atomic resource changes.
 // Report handlers cannot settle queue ownership independently of these writes.
 type WorkRecords interface {
+	LifecycleDiagnosticStages(context.Context, workqueue.ResumeView, *agentpb.ServiceLifecycleWorkInput,
+		lifecycleexecution.Progress) (workexecution.Stage, workexecution.Stage, error)
 	PrepareRecoveryResult(
 		context.Context,
 		workqueue.ResumeView,
@@ -70,23 +73,25 @@ type WorkRecords interface {
 }
 
 type WorkReports struct {
-	queue   *workqueue.Repository
-	records WorkRecords
-	hooks   LifecycleHookResolver
+	queue       *workqueue.Repository
+	records     WorkRecords
+	hooks       LifecycleHookResolver
+	diagnostics *executiondiagnostics.Repository
 }
 
 func NewWorkReports(
 	queue *workqueue.Repository,
 	records WorkRecords,
 	hooks LifecycleHookResolver,
+	diagnostics *executiondiagnostics.Repository,
 ) (*WorkReports, error) {
-	if queue == nil || records == nil || hooks == nil {
+	if queue == nil || records == nil || hooks == nil || diagnostics == nil {
 		return nil, errs.New(
 			errs.KindInternal,
 			"Service lifecycle reporting requires execution storage and its publication owner",
 		)
 	}
-	return &WorkReports{queue: queue, records: records, hooks: hooks}, nil
+	return &WorkReports{queue: queue, records: records, hooks: hooks, diagnostics: diagnostics}, nil
 }
 
 func (service *WorkReports) CheckpointLifecycle(ctx context.Context, authorization agentregistration.WorkAuthorization,
@@ -136,6 +141,7 @@ func (service *WorkReports) CheckpointLifecycle(ctx context.Context, authorizati
 			"Service lifecycle checkpoint ownership changed; resend the saved report",
 		)
 	}
+	service.reportProgress(ctx, view, input, progress)
 	digest, err := hex.DecodeString(checkpoint.Evidence.SHA256)
 	if err != nil {
 		return nil, err

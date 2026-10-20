@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/lifecycleexecution"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -83,6 +84,15 @@ func (service *WorkReports) RecoverLifecycle(
 		return nil, errs.New(errs.KindStateConflict, "Service lifecycle recovery replay differs from the saved result")
 	}
 	attempt := view.Attempt.Attempt
+	stage := workexecution.Stage{Key: "inspection_result", Name: "Inspect interrupted Service action",
+		Expected: "Stop the previous helper and verify its captured effect without replaying the action",
+		Observed: "The captured effect could not be verified; resource protection remains held. Retry performs inspection, not a new action.",
+		State:    workexecution.StageFailed, StartedAt: attempt.StartedAt, FinishedAt: attempt.FinishedAt}
+	if completed {
+		stage.State = workexecution.StageSucceeded
+		stage.Observed = "The previous helper stopped and its captured effect was verified. No action was replayed; the original failure remains recorded."
+	}
+	service.reportResult(ctx, attempt, stage)
 	digest, err := hex.DecodeString(attempt.Result.SHA256)
 	if err != nil {
 		return nil, err

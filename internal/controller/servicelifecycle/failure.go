@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/lifecycleexecution"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -89,6 +90,12 @@ func (service *WorkReports) FailLifecycle(ctx context.Context, authorization age
 	if err != nil || string(failure.Reason) != request.Reason {
 		return nil, errs.New(errs.KindStateConflict, "Service lifecycle failure replay differs from the saved result")
 	}
+	service.reportResult(ctx, attempt, workexecution.Stage{
+		Key: "execution_result", Name: "Service action interrupted or failed", State: workexecution.StageFailed,
+		Expected:    "Complete every captured Service action and verify its result",
+		Observed:    "Execution ended without completing the captured procedure. Check cleanup status before retrying; this does not prove that host effects were undone.",
+		FailureCode: string(failure.Reason), StartedAt: attempt.StartedAt, FinishedAt: attempt.FinishedAt,
+	})
 	digest, err := hex.DecodeString(attempt.Result.SHA256)
 	if err != nil {
 		return nil, err

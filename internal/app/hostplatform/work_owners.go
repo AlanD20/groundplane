@@ -197,7 +197,12 @@ func (platform *Platform) newWorkOwners(
 	if err != nil {
 		return nil, err
 	}
-	lifecycleReports, err := servicelifecycle.NewWorkReports(queue, lifecycleRecords, dependencies.AttachFacts)
+	lifecycleReports, err := servicelifecycle.NewWorkReports(
+		queue,
+		lifecycleRecords,
+		dependencies.AttachFacts,
+		diagnostics,
+	)
 	if err != nil {
 		return nil, err
 	}
