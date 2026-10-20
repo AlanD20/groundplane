@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -115,6 +116,16 @@ func nativeCustomBackingCreationJourney(t *testing.T, race bool) {
 		t.Fatal(err)
 	}
 	defer clear(capture.Wire)
+	// Explicit Retry extends the mutable Task deadline, not the sealed procedure.
+	extended := view.Task.Task
+	extended.Deadline = extended.Deadline.Add(time.Minute)
+	if err := capture.Matches(extended, view.Item.Item); err != nil {
+		t.Fatal("Retry deadline invalidated the unchanged captured input", err)
+	}
+	extended.Deadline = view.Task.Task.Deadline.Add(-time.Second)
+	if capture.Matches(extended, view.Item.Item) == nil {
+		t.Fatal("capture accepted a Task deadline preceding its initial bound")
+	}
 	procedure, err := capture.Procedure()
 	if err != nil {
 		t.Fatal(err)

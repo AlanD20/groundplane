@@ -125,7 +125,7 @@ func (input Input) Matches(task workexecution.Task, item workexecution.Item) err
 	if task.Validate() != nil || item.Validate() != nil || task.ID != expected.ID || task.Action != expected.Action ||
 		task.Actor != expected.Actor || task.TargetID != expected.TargetID || task.TargetName != expected.TargetName ||
 		task.Scope != expected.Scope || task.Intent != expected.Intent || !task.CreatedAt.Equal(expected.CreatedAt) ||
-		!task.Deadline.Equal(expected.Deadline) || task.ExpectedItems != 1 || !task.PublicationComplete ||
+		task.Deadline.Before(expected.Deadline) || task.ExpectedItems != 1 || !task.PublicationComplete ||
 		item.ID != descriptor.ID || item.TaskID != task.ID || item.TargetID != descriptor.TargetID || item.Operation != descriptor.Operation ||
 		item.Placement != descriptor.Placement || item.Input == nil || *item.Input != *descriptor.Input ||
 		!item.CreatedAt.Equal(descriptor.CreatedAt) ||
