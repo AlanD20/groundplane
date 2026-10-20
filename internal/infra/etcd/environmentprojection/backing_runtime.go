@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/common/backingprovision"
 	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -106,9 +107,9 @@ func SelectBackingRuntime(
 	source := projection.BackingRuntime
 	if source == nil || source.ServiceID != serviceID ||
 		ValidateBackingProvisioningReceipt(*source) != nil || !recordcodec.ValidSHA256(source.ArtifactSHA256) ||
-		(source.Adapter != "postgres" && source.Adapter != "mysql") ||
+		(!backingcatalog.Managed(source.Adapter) && source.Adapter != "custom") ||
 		(source.Adapter == "postgres" && !recordcodec.ValidSHA256(source.ManagedReleaseSHA256)) ||
-		(source.Adapter == "mysql" && source.ManagedReleaseSHA256 != "") ||
+		(source.Adapter != "postgres" && source.ManagedReleaseSHA256 != "") ||
 		!workloadimage.LocalIDValid(source.LocalImageID) || source.RenderGeneration > projection.RenderGeneration ||
 		source.AcknowledgedAt.IsZero() || source.AcknowledgedAt.Location() != time.UTC {
 		return nil, nil, invalidBackingRuntime()

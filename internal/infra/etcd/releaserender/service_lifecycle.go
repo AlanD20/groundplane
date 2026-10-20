@@ -32,8 +32,7 @@ type ServiceLifecycleRenderInput struct {
 	AdapterKey                  string                                         `json:"adapter_key,omitempty"`
 	HookConfiguration           *backinghook.Configuration                     `json:"hook_configuration,omitempty"`
 	NativeBacking               *projectionrecord.EnvironmentComposeProjection `json:"native_backing,omitempty"`
-	AppliedRenderGeneration     uint64                                         `json:"applied_render_generation,omitempty"`
-	AppliedProjectionRevision   int64                                          `json:"applied_projection_revision"`
+	NativeBackingRevision       int64                                          `json:"native_backing_revision,omitempty"`
 	Release                     *ServiceLifecycleRelease                       `json:"release,omitempty"`
 	AcknowledgedRuntime         *serviceruntimerecord.Record                   `json:"acknowledged_runtime"`
 	AcknowledgedRuntimeRevision int64                                          `json:"acknowledged_runtime_revision"`
@@ -103,14 +102,14 @@ func ValidateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) erro
 			return errs.New(errs.KindValidationFailed, "Service lifecycle hook configuration is invalid")
 		}
 	}
-	if input.AppliedProjectionRevision <= 0 || input.RenderGeneration() == 0 {
+	if input.RenderGeneration() == 0 {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle render projection is invalid")
 	}
 	if input.NativeBacking != nil {
-		if input.AcknowledgedRuntime != nil || input.AcknowledgedRuntimeRevision != 0 ||
-			input.Release != nil || input.TenantID != "" || input.HookConfiguration != nil || input.AdapterKey != "" ||
+		if input.NativeBackingRevision <= 0 || input.AcknowledgedRuntime != nil || input.AcknowledgedRuntimeRevision != 0 ||
+			input.Release != nil ||
+			input.TenantID != "" ||
 			input.NativeBacking.EnvironmentID != input.EnvironmentID ||
-			input.NativeBacking.RenderGeneration != input.AppliedRenderGeneration ||
 			projectionrecord.ValidateEnvironmentComposeProjection(*input.NativeBacking) != nil {
 			return errs.New(errs.KindValidationFailed, "Service lifecycle native Backing authority is invalid")
 		}
@@ -121,7 +120,13 @@ func ValidateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) erro
 		if artifact.ArtifactId != input.ArtifactID {
 			return errs.New(errs.KindValidationFailed, "Service lifecycle native Backing artifact changed")
 		}
+		if input.HookConfiguration != nil && input.NativeBacking.BackingRuntime.Adapter != "custom" {
+			return errs.New(errs.KindValidationFailed, "Service lifecycle hooks require a Custom backing runtime")
+		}
 		return nil
+	}
+	if input.NativeBackingRevision != 0 {
+		return errs.New(errs.KindValidationFailed, "Service lifecycle Release cannot select a Backing projection")
 	}
 	if err := ValidateServiceLifecycleRelease(*input.Release, input); err != nil {
 		return err
@@ -130,7 +135,13 @@ func ValidateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) erro
 }
 
 func (input ServiceLifecycleRenderInput) RenderGeneration() uint64 {
-	return input.AppliedRenderGeneration
+	if input.NativeBacking != nil {
+		return input.NativeBacking.RenderGeneration
+	}
+	if input.AcknowledgedRuntime != nil {
+		return input.AcknowledgedRuntime.Source.RenderGeneration
+	}
+	return 0
 }
 
 func (input ServiceLifecycleRenderInput) RuntimeMemberCount() int {

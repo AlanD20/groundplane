@@ -148,7 +148,7 @@ func (repository *Repository) PrepareCompleted(ctx context.Context, view workque
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ResultKey(terminal.ID), Value: receipt},
 	)
 	applied := environmentprojection.CloneEnvironmentComposeProjection(projection.Record)
-	if backingruntimepublication.IsManagedDatabase(applied, procedure.ServiceId) {
+	if backingruntimepublication.IsBackingService(applied, procedure.ServiceId) {
 		conditions, err := backingruntimepublication.Prepare(ctx, repository.store, backingruntimepublication.Input{
 			Source: environmentprojection.BackingRuntimeReceipt{ServiceID: procedure.ServiceId, Attempt: terminal,
 				Checkpoint: *view.Checkpoint.Record, Observation: observation, LocalImageID: observation.LocalImageID,

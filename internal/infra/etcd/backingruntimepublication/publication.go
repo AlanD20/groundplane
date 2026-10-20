@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -23,10 +24,10 @@ type Input struct {
 	CreatedAt time.Time
 }
 
-func IsManagedDatabase(projection projectionrecord.EnvironmentComposeProjection, serviceID string) bool {
+func IsBackingService(projection projectionrecord.EnvironmentComposeProjection, serviceID string) bool {
 	for _, service := range projection.DesiredServices {
 		if service.Desired.ID == serviceID &&
-			(service.Desired.Adapter == "postgres" || service.Desired.Adapter == "mysql") &&
+			(backingcatalog.Managed(service.Desired.Adapter) || service.Desired.Adapter == "custom") &&
 			service.BackingNetworkID != "" {
 			return true
 		}
@@ -87,7 +88,7 @@ func Prepare(ctx context.Context, storage CatalogReader, input Input,
 			break
 		}
 	}
-	if adapter != "postgres" && adapter != "mysql" {
+	if !backingcatalog.Managed(adapter) && adapter != "custom" {
 		return nil, invalidBackingAcknowledgement()
 	}
 	artifactSHA := sha256.Sum256(projection.ComposeArtifact)

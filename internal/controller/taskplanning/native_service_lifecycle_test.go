@@ -172,7 +172,7 @@ func nativeLifecycleCaptureFixture(
 	runtime := &releaserender.ServiceLifecycleRenderInput{PlanID: planID, ServiceID: current.ServiceID,
 		TenantID: current.TenantID, TenantSlug: current.TenantSlug, ProjectID: current.ProjectID, ProjectSlug: current.ProjectSlug,
 		EnvironmentID: current.EnvironmentID, EnvironmentName: current.EnvironmentName, AuthorizedVolumeDir: current.AuthorizedVolumeDir,
-		ArtifactID: active.ArtifactId, AppliedRenderGeneration: current.Projection.RenderGeneration, AppliedProjectionRevision: 20,
+		ArtifactID:          active.ArtifactId,
 		AcknowledgedRuntime: &acknowledged, AcknowledgedRuntimeRevision: 21,
 		Release: &releaserender.ServiceLifecycleRelease{
 			ServingReleaseID:            current.ReleaseID,

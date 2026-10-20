@@ -27,12 +27,25 @@ import (
 // SVC-02/03/TASK-73: a freshly provisioned database has no Release. Lifecycle must
 // preserve its original ownership and reject forged/mixed runtime authority.
 func TestNativeBackingLifecyclePinsProvisionedRuntime(t *testing.T) {
+	for _, server := range []struct{ adapter, version, image string }{
+		{"mysql", "8.4", "mysql:8.4@sha256:" + strings.Repeat("a", 64)},
+		{"valkey", "9", "valkey/valkey:9-alpine@sha256:" + strings.Repeat("a", 64)},
+		{"custom", "", "alpine@sha256:" + strings.Repeat("a", 64)},
+	} {
+		t.Run(server.adapter, func(t *testing.T) {
+			nativeBackingLifecycleJourney(t, server.adapter, server.version, server.image)
+		})
+	}
+}
+
+func nativeBackingLifecycleJourney(t *testing.T, adapter, version, image string) {
+	t.Helper()
 	source := nativeRetainedRenderFixture(t, domain.StrategyRecreate)
 	projection := source.Projection
 	projection.Volumes = nil
 	service := &projection.DesiredServices[0]
-	service.Desired.Adapter, service.Desired.AdapterVersion = "mysql", "8.4"
-	service.Desired.Image = "mysql:8.4@sha256:" + strings.Repeat("a", 64)
+	service.Desired.Adapter, service.Desired.AdapterVersion = adapter, version
+	service.Desired.Image = image
 	service.BackingNetworkID = projection.DesiredZones[0].Desired.ID
 	project := &composetypes.Project{
 		Services: composetypes.Services{"api": {Name: "api", Image: service.Desired.Image,
@@ -103,7 +116,7 @@ func TestNativeBackingLifecyclePinsProvisionedRuntime(t *testing.T) {
 	creation.FinishedAt, creation.Outcome, creation.Result = &finished, workexecution.Succeeded, &result
 	projection.BackingRuntime = &projectionrecord.BackingRuntimeReceipt{
 		ServiceID: service.Desired.ID, ArtifactSHA256: hex.EncodeToString(digest[:]),
-		LocalImageID: "sha256:" + strings.Repeat("b", 64), Adapter: "mysql",
+		LocalImageID: "sha256:" + strings.Repeat("b", 64), Adapter: adapter,
 		Attempt: creation, Checkpoint: checkpoint, Observation: observation,
 		RenderGeneration: projection.RenderGeneration, AcknowledgedAt: finished,
 	}
@@ -112,7 +125,7 @@ func TestNativeBackingLifecyclePinsProvisionedRuntime(t *testing.T) {
 		ProjectID: source.ProjectID, ProjectSlug: source.ProjectSlug,
 		EnvironmentID: source.EnvironmentID, EnvironmentName: source.EnvironmentName,
 		AuthorizedVolumeDir: volumeDir, ArtifactID: artifact.ArtifactId,
-		NativeBacking: &projection, AppliedRenderGeneration: projection.RenderGeneration, AppliedProjectionRevision: 20,
+		NativeBacking: &projection, NativeBackingRevision: 20,
 	}
 	for _, action := range []workexecution.Action{workexecution.ActionStop, workexecution.ActionStart, workexecution.ActionDestroy} {
 		capture := servicelifecyclework.Input{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),

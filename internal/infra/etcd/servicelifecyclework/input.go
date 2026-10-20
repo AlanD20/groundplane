@@ -69,6 +69,7 @@ func (input Input) Validate() error {
 		runtime.EnvironmentID != input.Scope.EnvironmentID ||
 		runtime.ProjectID != input.Scope.ProjectID ||
 		runtime.TenantID != input.Scope.TenantID ||
+		runtime.NativeBacking != nil && runtime.NativeBacking.BackingRuntime.Attempt.Executor.HostID != input.HostID ||
 		runtime.AcknowledgedRuntime != nil && runtime.AcknowledgedRuntime.Source.Executor.HostID != input.HostID {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle runtime differs from its captured target")
 	}

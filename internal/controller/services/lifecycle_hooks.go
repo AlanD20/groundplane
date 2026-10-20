@@ -39,9 +39,7 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 		PlanID: planID, ServiceID: current.Record.Desired.ID,
 		ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
 		EnvironmentID: environment.Record.ID, EnvironmentName: environment.Record.Name,
-		AuthorizedVolumeDir:       environment.Record.VolumeDir,
-		AppliedRenderGeneration:   projection.Record.RenderGeneration,
-		AppliedProjectionRevision: projection.Revision,
+		AuthorizedVolumeDir: environment.Record.VolumeDir,
 	}
 	if nativeBacking {
 		artifact, _, err := projectionrecord.SelectBackingRuntime(projection.Record, current.Record.Desired.ID)
@@ -50,6 +48,7 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 		}
 		native := projectionrecord.CloneEnvironmentComposeProjection(projection.Record)
 		input.NativeBacking, input.ArtifactID = &native, artifact.ArtifactId
+		input.NativeBackingRevision = projection.Revision
 	} else {
 		releaseAuthority, err := controllerlifecycle.CaptureRelease(
 			ctx, service.repository, projection, environment.Record.ID, current.Record.Desired.ID,

@@ -12,14 +12,23 @@ import (
 func runtimeSourceConditions(input Input) []keyvalue.Condition {
 	runtime := input.Runtime
 	if runtime == nil {
-		return []keyvalue.Condition{{Key: serviceruntimerecord.Key(input.ServiceID)}}
+		conditions := []keyvalue.Condition{{Key: serviceruntimerecord.Key(input.ServiceID)},
+			{Key: releases.ReleaseProjectionKey(input.ServiceID)}}
+		if input.Scope.TenantID == "" {
+			conditions = append(conditions, keyvalue.Condition{
+				Key: environmentprojection.EnvironmentComposeProjectionStorageKey(input.Scope.EnvironmentID),
+			})
+		}
+		return conditions
 	}
 	conditions := []keyvalue.Condition{
-		{
-			Key:         environmentprojection.EnvironmentComposeProjectionStorageKey(input.Scope.EnvironmentID),
-			ModRevision: runtime.AppliedProjectionRevision,
-		},
 		{Key: serviceruntimerecord.Key(input.ServiceID), ModRevision: runtime.AcknowledgedRuntimeRevision},
+	}
+	if runtime.NativeBacking != nil {
+		conditions = append(conditions, keyvalue.Condition{
+			Key:         environmentprojection.EnvironmentComposeProjectionStorageKey(input.Scope.EnvironmentID),
+			ModRevision: runtime.NativeBackingRevision,
+		})
 	}
 	if release := runtime.Release; release != nil {
 		conditions = append(
