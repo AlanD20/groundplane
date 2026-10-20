@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -111,7 +112,7 @@ func cloneHostResolutionProjection(record HostResolutionProjectionRecord) HostRe
 }
 
 func cloneHostResolutionRoutes(routes []HostResolutionRouteRecord) []HostResolutionRouteRecord {
-	return append([]HostResolutionRouteRecord(nil), routes...)
+	return slices.Clone(routes)
 }
 
 func canonicalizeHostResolutionRoutes(routes []HostResolutionRouteRecord) {

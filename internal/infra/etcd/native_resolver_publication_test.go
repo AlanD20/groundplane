@@ -124,6 +124,9 @@ func TestNativeResolverPublicationReplaysAndFencesHostAndSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Reconciliation reuses the persisted projection. An empty route set must
+	// remain valid across decoding, rather than becoming an absent route set.
+	capture.Projection = selected.Record
 	replayed, err := restarted.PublishResolverWork(t.Context(), input, capture, marker)
 	if err != nil || replayed.kind != idempotencyTransactionExisting || store.revision != acceptedRevision {
 		t.Fatalf("resolver replay wrote storage or lost acceptance: %v", err)
