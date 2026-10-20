@@ -272,7 +272,7 @@ def main():
                 raise ValueError("no deployment receipt to resume")
             if value["status"] in TERMINAL:
                 print(f"Retained deployment: {value['task_id']} {value['status']}")
-                return 0 if value["status"] == "completed" else 1
+                return 0 if value["status"] == "succeeded" else 1
             return client.follow(value, 720)
         return (client.ensure if args.ensure else client.run)(args.release, args.key, 720)
     finally:

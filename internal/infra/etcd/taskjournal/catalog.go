@@ -11,10 +11,6 @@ const (
 	TaskRemove      TaskType = "remove"
 )
 
-type TaskExecutor string
-
-const TaskExecutorAgent TaskExecutor = "agent"
-
 // TaskStatus is retained by prepared resource intents until their operation
 // settles. It is not a queue, execution state machine or retry authority.
 type TaskStatus string

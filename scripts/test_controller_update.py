@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import controller_update as update
 
@@ -63,6 +64,21 @@ class ControllerUpdateClientTest(unittest.TestCase):
         self.assertEqual(self.client(transport).run(RELEASE, "deploy-different-key", 10), 0)
         self.assertEqual(transport.calls[0][0], "GET")
         self.assertEqual(self.receipt.read()["key"], "deploy-original-key")
+        # Exercise the actual --resume entry point with the durable receipt.
+        # Only the root preflight is simulated; receipt path/ownership/locking
+        # remain real for this process's fixture uid. No HTTP may be repeated.
+        uid, receipt_type = os.geteuid(), update.Receipt
+        self.receipt.close()
+        try:
+            with (patch.object(update.os, "geteuid", return_value=0),
+                  patch.object(update, "RELEASE_ROOT", self.root),
+                  patch.object(update, "Receipt", side_effect=lambda root, owner: receipt_type(root, uid)),
+                  patch.object(update, "Transport", return_value=transport),
+                  patch("sys.argv", ["controller_update.py", "--resume"])):
+                self.assertEqual(update.main(), 0)
+        finally:
+            self.receipt = receipt_type(self.root, uid)
+        self.assertEqual(len(transport.calls), 1)
 
     # QA: UP-11; local request ownership, not native publication fencing.
     # Rationale: selecting another release cannot erase an unresolved operation.

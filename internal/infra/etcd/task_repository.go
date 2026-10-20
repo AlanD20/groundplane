@@ -3,7 +3,6 @@ package etcd
 import (
 	"context"
 
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -37,11 +36,4 @@ func newTaskRepository(store taskRepositoryStore) (*TaskRepository, error) {
 
 func NewTaskRepository(store taskRepositoryStore) (*TaskRepository, error) {
 	return newTaskRepository(store)
-}
-
-// TaskRetryScope domain-separates a human retry intent from the same
-// idempotency key under another resource owner.
-type TaskRetryScope struct {
-	Kind idempotencyrecord.IdempotencyScopeKind
-	ID   string
 }

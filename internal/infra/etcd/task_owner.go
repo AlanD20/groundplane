@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -25,29 +24,6 @@ type TaskInitiation struct {
 func (initiation TaskInitiation) Owner() taskjournal.TaskOwner { return initiation.owner }
 
 func (initiation TaskInitiation) Actor() taskjournal.TaskActor { return initiation.actor }
-
-func (initiation TaskInitiation) RetryScope() (TaskRetryScope, error) {
-	if err := taskjournal.ValidateOwner(initiation.owner); err != nil || !taskjournal.ValidActor(initiation.actor) {
-		return TaskRetryScope{}, errs.New(errs.KindInternal, "task initiation is invalid")
-	}
-	return taskOwnerRetryScope(initiation.owner)
-}
-
-func taskOwnerRetryScope(owner taskjournal.TaskOwner) (TaskRetryScope, error) {
-	if err := taskjournal.ValidateOwner(owner); err != nil {
-		return TaskRetryScope{}, err
-	}
-	switch {
-	case owner.EnvironmentID != "":
-		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopeEnvironment, ID: owner.EnvironmentID}, nil
-	case owner.ProjectID != "":
-		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopeProject, ID: owner.ProjectID}, nil
-	case owner.WorkspaceType == taskjournal.TaskWorkspaceTenant:
-		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopeTenant, ID: owner.TenantID}, nil
-	default:
-		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopePlatform, ID: "-"}, nil
-	}
-}
 
 func newTaskInitiation(
 	owner taskjournal.TaskOwner,
