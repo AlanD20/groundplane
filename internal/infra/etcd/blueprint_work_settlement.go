@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -135,7 +136,27 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRelease(
 		return err
 	}
 	defer keyvalue.ZeroMutationBytes(execution.Mutations)
-	result, err := queue.Commit(ctx, workqueue.Change{Conditions: authorization}, runtime, history, files, execution)
+	var receipt workqueue.Change
+	if view.Work.Task.Task.Action == workexecution.ActionApply {
+		units, err := blueprintunits.NewRepository(ledger.store)
+		if err != nil {
+			return err
+		}
+		receipt, err = units.PrepareServiceCompletionReceipt(ctx, view)
+		if err != nil {
+			return err
+		}
+		defer keyvalue.ZeroMutationBytes(receipt.Mutations)
+	}
+	result, err := queue.Commit(
+		ctx,
+		workqueue.Change{Conditions: authorization},
+		runtime,
+		history,
+		files,
+		receipt,
+		execution,
+	)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return err

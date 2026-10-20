@@ -24,6 +24,15 @@ func (repository *Repository) PrepareVolumeCompletionReceipt(
 	return repository.prepareForwardResourceReceipt(ctx, view, ids.KindVolume, workexecution.Volume, false)
 }
 
+// The Release owner joins this receipt to its exact serving proof, runtime,
+// history and work completion. Direct Deploy Tasks have no Blueprint graph.
+func (repository *Repository) PrepareServiceCompletionReceipt(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (workqueue.Change, error) {
+	return repository.prepareForwardResourceReceipt(ctx, view, ids.KindService, workexecution.Release, false)
+}
+
 func (repository *Repository) PrepareServiceRemovalReceipt(
 	ctx context.Context,
 	view workqueue.ResumeView,
