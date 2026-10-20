@@ -234,11 +234,6 @@ export function ReleaseDetails({
                   Inspect Task
                 </TaskLink>
               </p>
-              <p>
-                <span className="text-muted-foreground">Attempts</span>
-                <br />
-                {release.attempts?.length ?? 0}
-              </p>
             </CardContent>
           </Card>
         </div>

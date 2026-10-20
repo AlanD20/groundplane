@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"slices"
 	"strings"
 
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -25,7 +24,6 @@ type ReleaseView struct {
 	Terminal   *domain.TerminalSummary
 	Retention  *domain.RollbackMaterial
 	Projection domain.ServiceProjection
-	Attempts   []domain.Attempt
 	Revision   int64
 }
 
@@ -206,41 +204,22 @@ func (ledger *Reader) Get(ctx context.Context, releaseID string) (ReleaseView, e
 	if err != nil || intent.ID != releaseID || domain.ValidateIntent(intent) != nil {
 		return ReleaseView{}, releases.CorruptReleaseRecord()
 	}
-	headRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{releases.ReleaseOperationKey(intent.OperationID)}, Revision: intentRead.ReadRevision,
+	indexRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys:     []string{releases.ReleaseServiceIndexKey(intent.EnvironmentID, intent.ServiceID, releaseID)},
+		Revision: intentRead.ReadRevision,
 	})
 	if err != nil {
 		return ReleaseView{}, err
 	}
-	if headRead == nil || len(headRead.Values) != 1 || headRead.Values[0] == nil {
-		if intent.OperationKind != domain.OperationBlueprintApply {
-			return ReleaseView{}, errs.New(errs.KindReleaseNotFound, "release was not published")
-		}
-		indexRead, indexErr := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys:     []string{releases.ReleaseServiceIndexKey(intent.EnvironmentID, intent.ServiceID, releaseID)},
-			Revision: intentRead.ReadRevision,
-		})
-		if indexErr != nil {
-			return ReleaseView{}, indexErr
-		}
-		if indexRead == nil || indexRead.ReadRevision != intentRead.ReadRevision ||
-			len(indexRead.Values) != 1 || indexRead.Values[0] == nil {
-			return ReleaseView{}, errs.New(errs.KindReleaseNotFound, "release was not published")
-		}
-		publicationID, decodeErr := DecodeReleaseIndex(indexRead.Values[0].Value, intent.ServiceID)
-		if decodeErr != nil {
-			return ReleaseView{}, decodeErr
-		}
-		return ledger.ReadViewAt(ctx, publicationID, releaseID, intentRead.ReadRevision)
+	if indexRead == nil || indexRead.ReadRevision != intentRead.ReadRevision ||
+		len(indexRead.Values) != 1 || indexRead.Values[0] == nil {
+		return ReleaseView{}, errs.New(errs.KindReleaseNotFound, "release was not published")
 	}
-	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](
-		headRead.Values[0].Value,
-		"release-operation",
-	)
-	if err != nil || head.OperationID != intent.OperationID {
-		return ReleaseView{}, releases.CorruptReleaseRecord()
+	publicationID, err := DecodeReleaseIndex(indexRead.Values[0].Value, intent.ServiceID)
+	if err != nil {
+		return ReleaseView{}, err
 	}
-	return ledger.ReadViewAt(ctx, head.PublicationID, releaseID, headRead.ReadRevision)
+	return ledger.ReadViewAt(ctx, publicationID, releaseID, intentRead.ReadRevision)
 }
 
 func (ledger *Reader) List(ctx context.Context, request ReleasePageRequest) (ReleasePage, error) {
@@ -377,15 +356,12 @@ func (ledger *Reader) ReadViewAt(
 		view.Retention = &retention
 	}
 	projectionRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{
-			releases.ReleaseProjectionKey(intent.ServiceID),
-			releases.ReleaseOperationKey(intent.OperationID),
-		}, Revision: read.ReadRevision,
+		Keys: []string{releases.ReleaseProjectionKey(intent.ServiceID)}, Revision: read.ReadRevision,
 	})
 	if err != nil {
 		return ReleaseView{}, err
 	}
-	if projectionRead == nil || len(projectionRead.Values) != 2 {
+	if projectionRead == nil || projectionRead.ReadRevision != read.ReadRevision || len(projectionRead.Values) != 1 {
 		return ReleaseView{}, releases.CorruptReleaseRecord()
 	}
 	if projectionRead.Values[0] != nil {
@@ -397,20 +373,6 @@ func (ledger *Reader) ReadViewAt(
 			return ReleaseView{}, releases.CorruptReleaseRecord()
 		}
 	}
-	if projectionRead.Values[1] == nil {
-		if intent.OperationKind != domain.OperationBlueprintApply {
-			return ReleaseView{}, releases.CorruptReleaseRecord()
-		}
-		return view, nil
-	}
-	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](
-		projectionRead.Values[1].Value,
-		"release-operation",
-	)
-	if err != nil {
-		return ReleaseView{}, err
-	}
-	view.Attempts = slices.Clone(head.Attempts)
 	return view, nil
 }
 

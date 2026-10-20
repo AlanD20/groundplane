@@ -194,13 +194,6 @@ func releaseSummary(view releasequeries.ReleaseView) apiTypes.ReleaseSummary {
 }
 
 func releaseDetail(view releasequeries.ReleaseView) apiTypes.ReleaseDetail {
-	attempts := make([]apiTypes.ReleaseAttempt, len(view.Attempts))
-	for index, attempt := range view.Attempts {
-		attempts[index] = apiTypes.ReleaseAttempt{
-			ID: attempt.ID, TaskID: attempt.TaskID, RetryOf: attempt.RetryOf,
-			StartedAt: attempt.StartedAt.Format(time.RFC3339Nano),
-		}
-	}
 	var material *apiTypes.ReleaseRollbackMaterial
 	if view.Retention != nil {
 		material = &apiTypes.ReleaseRollbackMaterial{
@@ -216,6 +209,6 @@ func releaseDetail(view releasequeries.ReleaseView) apiTypes.ReleaseDetail {
 		PriorServingReleaseID:    view.Intent.PriorServingReleaseID,
 		PriorSuccessfulReleaseID: view.Intent.PriorSuccessfulReleaseID,
 		RenderInputDigest:        view.Intent.RenderInputDigest, OriginatingTaskID: view.Intent.OriginatingTaskID,
-		Attempts: attempts, RollbackMaterial: material,
+		RollbackMaterial: material,
 	}
 }

@@ -47,13 +47,6 @@ type ReleaseSummary struct {
 	CurrentSuccessful  bool         `json:"current_successful"`
 }
 
-type ReleaseAttempt struct {
-	ID        string `json:"id"`
-	TaskID    string `json:"task_id"`
-	RetryOf   string `json:"retry_of,omitempty"`
-	StartedAt string `json:"started_at"`
-}
-
 type ReleaseRollbackMaterial struct {
 	Status    string  `json:"status"`
 	Revision  uint64  `json:"revision"`
@@ -67,7 +60,6 @@ type ReleaseDetail struct {
 	PriorSuccessfulReleaseID string                   `json:"prior_successful_release_id,omitempty"`
 	RenderInputDigest        string                   `json:"render_input_digest"`
 	OriginatingTaskID        string                   `json:"originating_task_id"`
-	Attempts                 []ReleaseAttempt         `json:"attempts"`
 	RollbackMaterial         *ReleaseRollbackMaterial `json:"rollback_material,omitempty"`
 }
 

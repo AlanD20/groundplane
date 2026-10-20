@@ -21,7 +21,6 @@ const (
 	releaseCheckpointStagingPrefix   = "/v1/staging/release-checkpoints/"
 	releaseManifestStagingPrefix     = "/v1/staging/release-manifests/"
 	releasePublicationPrefix         = "/v1/records/release-publications/"
-	releaseOperationPrefix           = "/v1/records/release-operations/"
 	releaseEnvironmentIndexPrefix    = "/v1/indexes/releases/by-environment/"
 	releaseServiceIndexPrefix        = "/v1/indexes/releases/by-service/"
 	releaseTerminalPrefix            = "/v1/records/release-terminal-summaries/"
@@ -67,25 +66,6 @@ type ReleaseStagedMemberRef struct {
 	CheckpointDigest string `json:"checkpoint_digest"`
 }
 
-type ReleaseOperationHead struct {
-	OperationID              string                `json:"operation_id"`
-	PublicationID            string                `json:"publication_id"`
-	EnvironmentID            string                `json:"environment_id"`
-	ReleaseGroupID           string                `json:"release_group_id,omitempty"`
-	FailurePolicy            domain.OnFailure      `json:"failure_policy"`
-	State                    domain.State          `json:"state"`
-	RecoveryOutcome          domain.State          `json:"recovery_outcome,omitempty"`
-	FailedMemberOrdinal      uint32                `json:"failed_member_ordinal,omitempty"`
-	Attempts                 []domain.Attempt      `json:"attempts"`
-	Members                  []domain.GroupMember  `json:"members"`
-	Progress                 *domain.GroupProgress `json:"progress,omitempty"`
-	LatestTaskID             string                `json:"latest_task_id"`
-	ConfiguredTimeoutSeconds int64                 `json:"configured_timeout_seconds"`
-	ComputedBudgetSeconds    int64                 `json:"computed_budget_seconds"`
-	CreatedAt                time.Time             `json:"created_at"`
-	UpdatedAt                time.Time             `json:"updated_at"`
-}
-
 type ReleaseEnvironmentIndexValue struct {
 	Schema        int    `json:"schema"`
 	ServiceID     string `json:"service_id"`
@@ -119,8 +99,6 @@ func ReleaseManifestStagingKey(publicationID string) string {
 func ReleasePublicationKey(publicationID string) string {
 	return releasePublicationPrefix + publicationID
 }
-
-func ReleaseOperationKey(operationID string) string { return releaseOperationPrefix + operationID }
 
 func ReleaseEnvironmentIndexKey(environmentID, releaseID string) string {
 	return releaseEnvironmentIndexPrefix + environmentID + "/" + releaseID

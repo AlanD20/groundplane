@@ -3712,12 +3712,6 @@ export interface components {
             items: components["schemas"]["RecoveryPoint"][] | null;
             next_cursor?: string;
         };
-        ReleaseAttempt: {
-            id: string;
-            retry_of?: string;
-            started_at: string;
-            task_id: string;
-        };
         ReleaseDetail: {
             /**
              * Format: uri
@@ -3725,7 +3719,6 @@ export interface components {
              * @example /api/v1/ReleaseDetail.json
              */
             readonly $schema?: string;
-            attempts: components["schemas"]["ReleaseAttempt"][] | null;
             completed_at?: string;
             created_at: string;
             current_successful: boolean;

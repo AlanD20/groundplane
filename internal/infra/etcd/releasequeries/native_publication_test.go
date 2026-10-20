@@ -2,6 +2,7 @@ package releasequeries
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,15 @@ import (
 // writes. A valid marker for another publication/operation/resource cannot make
 // this Release visible. This uses actual codecs/readers, not atomic publication.
 func TestNativePublicationReadersBindExactReleaseOwners(t *testing.T) {
+	for _, operation := range []domain.OperationKind{domain.OperationBlueprintApply, domain.OperationDeploy} {
+		t.Run(string(operation), func(t *testing.T) { nativePublicationReadersBindOwners(t, operation) })
+	}
+}
+
+func nativePublicationReadersBindOwners(t *testing.T, operation domain.OperationKind) {
+	t.Helper()
 	intent, publication := nativePublicationFixture(t)
+	intent.OperationKind = operation
 	for _, change := range []string{"unchanged", "publication", "operation", "environment", "service", "missing marker", "corrupt marker"} {
 		t.Run(change, func(t *testing.T) {
 			marker := publication
@@ -56,7 +65,7 @@ func TestNativePublicationReadersBindExactReleaseOwners(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			store := &nativePublicationReadStore{t: t, values: map[string][]byte{
+			store := &nativePublicationReadStore{values: map[string][]byte{
 				releases.ReleaseIntentStagingKey(publication.PublicationID, intent.ID):     intentBytes,
 				releases.ReleaseCheckpointStagingKey(publication.PublicationID, intent.ID): checkpointBytes,
 				releases.ReleasePublicationKey(publication.PublicationID):                  encoded,
@@ -96,6 +105,49 @@ func TestNativePublicationReadersBindExactReleaseOwners(t *testing.T) {
 	}
 }
 
+// A completed native Deploy has no old operation-head record. Its own published
+// index must support both the single Release page and the Service's history.
+func TestNativeDeployHistoryAndDetailUsePublishedIndex(t *testing.T) {
+	intent, publication := nativePublicationFixture(t)
+	intent.OperationKind = domain.OperationDeploy
+	intentValue, err := releases.EncodeReleaseRecord("release-intent", intent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpointValue, err := releases.EncodeReleaseRecord("release-checkpoint", domain.Checkpoint{
+		ReleaseID: intent.ID, State: domain.StateCompleted, UpdatedAt: intent.CreatedAt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker, err := releases.EncodeWorkPublication(publication)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := json.Marshal(releases.ReleaseServiceIndexValue{Schema: 1, PublicationID: publication.PublicationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &nativePublicationReadStore{values: map[string][]byte{
+		releases.ReleaseIntentStagingKey(publication.PublicationID, intent.ID):             intentValue,
+		releases.ReleaseCheckpointStagingKey(publication.PublicationID, intent.ID):         checkpointValue,
+		releases.ReleasePublicationKey(publication.PublicationID):                          marker,
+		releases.ReleaseServiceIndexKey(intent.EnvironmentID, intent.ServiceID, intent.ID): index,
+	}}
+	reader := NewReader(store)
+	detail, err := reader.Get(t.Context(), intent.ID)
+	if err != nil || detail.Intent.ID != intent.ID || detail.Checkpoint.State != domain.StateCompleted {
+		t.Fatalf("published native Deploy detail unavailable: %v", err)
+	}
+	page, err := reader.List(t.Context(), ReleasePageRequest{
+		EnvironmentID: intent.EnvironmentID, ServiceID: intent.ServiceID, Limit: 5,
+	})
+	if err != nil || len(page.Items) != 1 || page.Items[0].Intent.ID != intent.ID ||
+		page.Items[0].Intent.OriginatingTaskID != intent.OriginatingTaskID {
+		t.Fatalf("published native Deploy history unavailable: %v", err)
+	}
+}
+
 func nativePublicationFixture(t *testing.T) (domain.Intent, releases.WorkPublication) {
 	t.Helper()
 	at := time.Now().UTC()
@@ -129,7 +181,6 @@ func nativePublicationFixture(t *testing.T) (domain.Intent, releases.WorkPublica
 }
 
 type nativePublicationReadStore struct {
-	t         *testing.T
 	values    map[string][]byte
 	revisions []int64
 }
@@ -157,12 +208,29 @@ func (store *nativePublicationReadStore) GetMany(
 	return result, nil
 }
 
-func (store *nativePublicationReadStore) Get(context.Context, string) (*keyvalue.GetResult, error) {
-	store.t.Fatal("native Release read unexpectedly escaped its multi-key snapshot")
-	return nil, nil
+func (store *nativePublicationReadStore) Get(ctx context.Context, key string) (*keyvalue.GetResult, error) {
+	read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}})
+	if err != nil {
+		return nil, err
+	}
+	return &keyvalue.GetResult{
+		ReadRevision: read.ReadRevision,
+		Entry:        read.Values[0],
+	}, nil
 }
 
-func (store *nativePublicationReadStore) Range(context.Context, keyvalue.RangeRequest) (*keyvalue.RangeResult, error) {
-	store.t.Fatal("native Release read unexpectedly scanned unrelated history")
-	return nil, nil
+func (store *nativePublicationReadStore) Range(
+	_ context.Context,
+	request keyvalue.RangeRequest,
+) (*keyvalue.RangeResult, error) {
+	result := &keyvalue.RangeResult{ReadRevision: 42, ResponseRevision: 99}
+	for key, value := range store.values {
+		if strings.HasPrefix(key, request.Prefix) {
+			result.Values = append(
+				result.Values,
+				keyvalue.KeyValue{Key: key, Value: append([]byte(nil), value...), ModRevision: 40, Version: 1},
+			)
+		}
+	}
+	return result, nil
 }

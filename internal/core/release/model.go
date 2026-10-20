@@ -101,13 +101,6 @@ func FailureHookTargetReleaseID(intent Intent) string {
 	return intent.ID
 }
 
-type Attempt struct {
-	ID        string    `json:"id"`
-	TaskID    string    `json:"task_id"`
-	RetryOf   string    `json:"retry_of,omitempty"`
-	StartedAt time.Time `json:"started_at"`
-}
-
 type State string
 
 const (

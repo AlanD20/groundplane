@@ -3995,21 +3995,12 @@ type RecoveryPointPage struct {
 	NextCursor *string          `json:"next_cursor,omitempty"`
 }
 
-// ReleaseAttempt defines model for ReleaseAttempt.
-type ReleaseAttempt struct {
-	Id        string  `json:"id"`
-	RetryOf   *string `json:"retry_of,omitempty"`
-	StartedAt string  `json:"started_at"`
-	TaskId    string  `json:"task_id"`
-}
-
 // ReleaseDetail defines model for ReleaseDetail.
 type ReleaseDetail struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ReleaseDetail.json
 	Schema                   *string                  `json:"$schema,omitempty"`
-	Attempts                 *[]ReleaseAttempt        `json:"attempts"`
 	CompletedAt              *string                  `json:"completed_at,omitempty"`
 	CreatedAt                string                   `json:"created_at"`
 	CurrentSuccessful        bool                     `json:"current_successful"`

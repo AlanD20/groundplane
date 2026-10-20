@@ -5934,29 +5934,6 @@
         ],
         "type": "object"
       },
-      "ReleaseAttempt": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "retry_of": {
-            "type": "string"
-          },
-          "started_at": {
-            "type": "string"
-          },
-          "task_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "task_id",
-          "started_at"
-        ],
-        "type": "object"
-      },
       "ReleaseDetail": {
         "additionalProperties": false,
         "properties": {
@@ -5968,15 +5945,6 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
-          },
-          "attempts": {
-            "items": {
-              "$ref": "#/components/schemas/ReleaseAttempt"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
           },
           "completed_at": {
             "type": "string"
@@ -6056,7 +6024,6 @@
         "required": [
           "render_input_digest",
           "originating_task_id",
-          "attempts",
           "id",
           "environment_id",
           "service_id",
