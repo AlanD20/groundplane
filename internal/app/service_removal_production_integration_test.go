@@ -12,7 +12,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/serviceremoval"
 	serviceoperations "github.com/AlanD20/groundplane/internal/controller/services"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/serviceremovalwork"
 	api "github.com/AlanD20/groundplane/pkg/api"
@@ -86,6 +88,10 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 	if err := json.Unmarshal(created.Body, &service); err != nil {
 		t.Fatal(err)
 	}
+	createdDesired, found, err := blueprints.ReadCurrentDesiredInput(ctx, fixture.store, fixture.environmentID, 0)
+	if err != nil || !found {
+		t.Fatalf("created Service desired authority: %v", err)
+	}
 	// Direct dependency edits must survive the complete storage publication,
 	// not just the mutation service's in-memory projection.
 	prerequisite, err := mutations.CreateService(ctx, api.ServiceCreate{
@@ -131,6 +137,11 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 	var accepted api.TaskAccepted
 	if err := json.Unmarshal(removed.Body, &accepted); err != nil {
 		t.Fatal(err)
+	}
+	// TASK-184: published removal must release private staging ownership even
+	// before execution. Its native Task, not a leftover reservation, owns cleanup.
+	if _, err := desired.CleanupEnvironmentBlueprintStaging(ctx, time.Now().UTC(), 16); err != nil {
+		t.Fatalf("published removal blocked Blueprint maintenance: %v", err)
 	}
 	page, err := fixture.queue.ListWork(ctx, accepted.TaskID, "", 10, 0)
 	if err != nil || len(page.Items) != 1 {
@@ -182,5 +193,26 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 	replay, err := mutations.RemoveService(ctx, service.ID, "018f3111-0000-7000-8000-000000000022")
 	if err != nil || string(replay.Body) != string(removed.Body) {
 		t.Fatalf("removal replay changed: %v", err)
+	}
+	// Synchronous creation must retain an actual metadata cleanup owner, not
+	// wait forever for a Task that was never created. Exercise real pruning and
+	// collection after the replay window, while preserving the current head.
+	expired := time.Now().UTC().Add(idempotency.MarkerRetention + time.Hour)
+	if _, err := replays.Retention.PruneExpired(ctx, expired, 128); err != nil {
+		t.Fatalf("expire replay protection: %v", err)
+	}
+	for range 3 {
+		if _, err := desired.CleanupEnvironmentBlueprintStaging(ctx, expired, 16); err != nil {
+			t.Fatalf("collect retired desired metadata: %v", err)
+		}
+	}
+	retired, err := fixture.store.Get(ctx, blueprints.EnvironmentBlueprintRootKey(
+		fixture.environmentID, createdDesired.Record.RevisionID))
+	if err != nil || retired.Entry != nil {
+		t.Fatalf("obsolete synchronous Service revision was not collected: %v", err)
+	}
+	current, found, err := blueprints.ReadCurrentDesiredInput(ctx, fixture.store, fixture.environmentID, 0)
+	if err != nil || !found || current.Record.RevisionID == createdDesired.Record.RevisionID {
+		t.Fatalf("retention lost current desired authority: %v", err)
 	}
 }

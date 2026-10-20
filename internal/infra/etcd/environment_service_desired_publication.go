@@ -444,6 +444,9 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 	}
 	published := descriptor
 	published.State = blueprints.EnvironmentBlueprintStagePublished
+	if marker.Kind == idempotencyrecord.IdempotencyMarkerDirect {
+		published.State = blueprints.EnvironmentBlueprintStagePublishedMetadata
+	}
 	published.UpdatedAt = blueprints.NextBlueprintProgressTime(descriptor.UpdatedAt)
 	publishedValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(published)
 	if err != nil {

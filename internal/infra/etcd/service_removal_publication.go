@@ -197,6 +197,7 @@ func (repository *ServiceRepository) PublishServiceRemoval(
 			Key:   publication.descriptorKey,
 			Value: publication.publishedDescriptor,
 		},
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: publication.locatorKey},
 	)
 	mutations = append(mutations, identities.mutations...)
 	mutations = append(mutations, pinChange.Mutations...)
