@@ -323,6 +323,16 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
 	}
 	defer keyvalue.ClearMutationValues(graph.Mutations)
+	desiredPlan, err := blueprintunits.PrepareAuthoredPlanPublication(input.Baseline, blueprintunits.DesiredPlan{
+		EnvironmentID: parent.Scope.EnvironmentID, ParentTaskID: parent.ID,
+		Complete: true, Units: captured.Units,
+	})
+	if err != nil {
+		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
+	}
+	defer desiredPlan.Clear()
+	conditions = append(conditions, desiredPlan.Conditions()...)
+	mutations = append(mutations, desiredPlan.Mutations()...)
 	conditions = append(conditions, attachInputs.conditions...)
 	mutations = append(mutations, attachInputs.mutations...)
 	baseCount := len(conditions)

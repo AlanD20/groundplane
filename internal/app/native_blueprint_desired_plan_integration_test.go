@@ -112,6 +112,91 @@ func TestNativeBlueprintDesiredPlanSealsAfterFactDependentExpansion(t *testing.T
 	}
 }
 
+// Accepted membership must become visible with its new head. A raced head or
+// ledger epoch must reject the entire transaction, not leave executable work
+// waiting forever for a selection that was never published.
+func TestNativeBlueprintAuthoredPlanPublicationFencesHeadAndEpoch(t *testing.T) {
+	store := newMemoryHierarchyStore()
+	store.revision = 1
+	environmentID := ids.New(ids.KindEnvironment)
+	parentID := ids.New(ids.KindTask)
+	target := blueprintunits.ResourceKey{Kind: ids.KindNetwork, ID: ids.New(ids.KindNetwork)}
+	plan := blueprintunits.DesiredPlan{
+		EnvironmentID: environmentID, ParentTaskID: parentID, Complete: true,
+		Units: []blueprintunits.Unit{{Target: target, Writes: []blueprintunits.ResourceKey{target},
+			Fingerprint: strings.Repeat("a", 64)}},
+	}
+	headValue, err := idempotencyrecord.EncodeTaskReference(parentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(headValue)
+	absence, err := blueprintunits.PrepareInitialAbsencePublication(
+		environmentID,
+		parentID,
+		[]blueprintunits.ResourceKey{target},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer absence.Clear()
+	baseline := blueprintunits.Snapshot{EnvironmentID: environmentID, ReadRevision: store.revision}
+	prepared, err := blueprintunits.PrepareAuthoredPlanPublication(baseline, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Clear()
+	mutations := append(prepared.Mutations(), absence.Mutations()...)
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(environmentID), Value: headValue,
+	})
+	conditions := append(prepared.Conditions(), absence.Conditions()...)
+	if result, err := store.Transact(t.Context(), conditions, mutations); err != nil || !result.Succeeded {
+		t.Fatalf("admit head and sealed plan: %v", err)
+	}
+	ledger, err := blueprintunits.NewRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := ledger.Load(t.Context(), environmentID)
+	if err != nil || loaded.Desired == nil || !loaded.Desired.Record.Complete ||
+		loaded.HeadTaskID != parentID || loaded.Desired.Record.ParentTaskID != parentID ||
+		len(loaded.Desired.Record.Units) != 1 || loaded.Desired.Record.Units[0].Target != target ||
+		loaded.HeadRevision != loaded.Desired.Revision || loaded.EpochRevision != loaded.Desired.Revision {
+		t.Fatalf("accepted membership is not usable at its head: %#v %v", loaded, err)
+	}
+	plan.ParentTaskID = ids.New(ids.KindTask)
+	next, err := blueprintunits.PrepareAuthoredPlanPublication(loaded, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer next.Clear()
+	for _, key := range []string{blueprints.EnvironmentBlueprintHeadKey(environmentID), blueprintunits.EpochKey(environmentID)} {
+		read, err := store.Get(t.Context(), key)
+		if err != nil || read.Entry == nil {
+			t.Fatalf("load publication source: %v", err)
+		}
+		if _, err := store.Put(t.Context(), key, read.Entry.Value); err != nil {
+			t.Fatal(err)
+		}
+		clear(read.Entry.Value)
+		if result, err := store.Transact(t.Context(), next.Conditions(), next.Mutations()); err != nil ||
+			result.Succeeded {
+			t.Fatalf("stale source published another plan: %v", err)
+		}
+		loaded, err = ledger.Load(t.Context(), environmentID)
+		if err != nil || loaded.Desired == nil || loaded.Desired.Record.ParentTaskID != parentID {
+			t.Fatalf("rejected transaction changed the selected parent: %v", err)
+		}
+		next.Clear()
+		next, err = blueprintunits.PrepareAuthoredPlanPublication(loaded, plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer next.Clear()
+}
+
 func seedNativeBlueprintInitialAbsence(
 	t *testing.T, store *memoryHierarchyStore, environmentID, parentID string, targets ...blueprintunits.ResourceKey,
 ) {
