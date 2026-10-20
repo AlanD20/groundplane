@@ -7,10 +7,15 @@ load_task() {
         printf '%s\n' "$task_output" >&2
         return 1
     fi
-    task_status=$(printf '%s\n' "$task_output" |
-        sed -n 's/^[[:space:]]*"status":[[:space:]]*"\([^"]*\)".*$/\1/p')
+    task_status=$(printf '%s\n' "$task_output" | python3 -c '
+import json, sys
+task = json.load(sys.stdin)["task"]
+if task["id"] != sys.argv[1] or task["resource_kind"] != "agent":
+    raise ValueError("Agent Task identity mismatch")
+print(task["status"])
+' "$task_id") || return 1
     case "$task_status" in
-        completed | pending | running | failed | aborted | timed_out)
+        queued | preparing | waiting | running | attention_required | stopping | finishing | succeeded | failed | cancelled | superseded)
             return 0
             ;;
         *)
@@ -41,7 +46,7 @@ settle_timed_out_agent_task() {
         fi
         unresolved_task_state=$task_status
         case "$task_status" in
-            completed)
+            succeeded)
                 rollback=0
                 retain_recovery=0
                 unresolved_task_id=""
@@ -49,11 +54,11 @@ settle_timed_out_agent_task() {
                 printf 'Agent task: %s completed while abort was requested\n' "$task_id"
                 return 0
                 ;;
-            failed | aborted | timed_out)
+            failed | cancelled | superseded)
                 printf '%s\n' "$task_output" >&2
                 return 1
                 ;;
-            pending | running)
+            queued | preparing | waiting | running | attention_required | stopping | finishing)
                 ;;
         esac
         attempt=$((attempt + 1))
@@ -79,7 +84,7 @@ wait_for_agent_task() {
         fi
         unresolved_task_state=$task_status
         case "$task_status" in
-            completed)
+            succeeded)
                 rollback=0
                 retain_recovery=0
                 unresolved_task_id=""
@@ -87,9 +92,9 @@ wait_for_agent_task() {
                 printf 'Agent task: %s completed\n' "$task_id"
                 return 0
                 ;;
-            pending | running)
+            queued | preparing | waiting | running | attention_required | stopping | finishing)
                 ;;
-            failed | aborted | timed_out)
+            failed | cancelled | superseded)
                 printf '%s\n' "$task_output" >&2
                 return 1
                 ;;

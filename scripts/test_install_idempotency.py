@@ -32,11 +32,11 @@ class InstalledProofTest(unittest.TestCase):
     def test_fresh_bootstrap_and_completed_update_can_be_verified_without_mutation(self):
         self.assertTrue(self.check(host()))
         document = host()
-        document["controller"]["update"]["last_update"] = {"status": "completed", "phase": "healthy"}
+        document["controller"]["update"]["last_update"] = {"status": "succeeded", "phase": "healthy"}
         self.assertTrue(self.check(document))
         # A pre-activation cancellation has no journal phase; Host.available
         # independently proves that no unsettled recovery journal exists.
-        document["controller"]["update"]["last_update"] = {"status": "aborted", "phase": ""}
+        document["controller"]["update"]["last_update"] = {"status": "cancelled", "phase": ""}
         self.assertTrue(self.check(document))
 
     def test_different_running_binary_requires_normal_update(self):
@@ -91,7 +91,7 @@ class EnsureClientTest(unittest.TestCase):
         receipt.begin.return_value = {"release": RELEASE, "key": "deploy-protected-key", "task_id": "", "status": "pending"}
         document = host()
         document["controller"]["update"]["running_sha256"] = "sha256:" + "e" * 64
-        transport = Transport([(200, document), (202, {"task_id": TASK}), task("completed")])
+        transport = Transport([(200, document), (202, {"task_id": TASK}), task("succeeded")])
         client = update.Client(receipt, transport, sleep=lambda seconds: None)
         self.assertEqual(client.ensure(RELEASE, "deploy-protected-key", 10), 0)
         self.assertEqual([call[0] for call in transport.calls], ["GET", "POST", "GET"])
@@ -108,7 +108,7 @@ class EnsureClientTest(unittest.TestCase):
 
     def test_matching_installation_does_not_publish_or_rewrite_receipt(self):
         receipt = mock.Mock()
-        receipt.read.return_value = {"status": "completed"}
+        receipt.read.return_value = {"status": "succeeded"}
         transport = mock.Mock()
         client = update.Client(receipt, transport)
         with mock.patch.object(update, "already_installed", return_value=True):
@@ -122,7 +122,7 @@ class EnsureClientTest(unittest.TestCase):
         value = {"release": RELEASE, "key": "deploy-original-key", "task_id": TASK, "status": "running"}
         receipt.read.return_value = value
         receipt.begin.return_value = value
-        transport = Transport([task("completed")])
+        transport = Transport([task("succeeded")])
         with mock.patch.object(update, "already_installed") as proof:
             self.assertEqual(update.Client(receipt, transport).ensure(RELEASE, "deploy-new-key", 10), 0)
         proof.assert_not_called()

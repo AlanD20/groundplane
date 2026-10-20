@@ -31,7 +31,8 @@ class AgentInstallationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             first = Transport([INVENTORY, OSError("connection lost after acceptance")])
-            retry = Transport([INVENTORY, (202, {"task_id": TASK}), (200, {"status": "completed"})])
+            retry = Transport([INVENTORY, (202, {"task_id": TASK}),
+                               (200, {"task": {"id": TASK, "resource_kind": "agent", "status": "succeeded"}})])
             other = Transport([INVENTORY])
             with patch.object(install_agent, "Path", return_value=root), \
                     patch.object(install_agent, "Receipt", side_effect=lambda *_: controller_update.Receipt(root, os.geteuid())), \
@@ -51,6 +52,6 @@ class AgentInstallationTests(unittest.TestCase):
             self.assertEqual(retry.calls[1][2], {"image": IMAGE})
             receipt = controller_update.Receipt(root, os.geteuid())
             try:
-                self.assertEqual(receipt.read()["status"], "completed")
+                self.assertEqual(receipt.read()["status"], "succeeded")
             finally:
                 receipt.close()

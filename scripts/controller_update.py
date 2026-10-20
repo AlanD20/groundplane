@@ -16,8 +16,21 @@ from controller_release import DIGEST, RELEASE_ROOT, ReleaseStore, canonical, di
 
 TASK_ID = re.compile(r"task_[0-7][0-9A-HJKMNP-TV-Z]{25}")
 KEY = re.compile(r"[A-Za-z0-9._:-]{16,128}")
-TERMINAL = {"completed", "failed", "aborted", "timed_out", "rejected"}
+TASK_ACTIVE = {"queued", "preparing", "waiting", "running", "attention_required", "stopping", "finishing"}
+TASK_TERMINAL = {"succeeded", "failed", "cancelled", "superseded"}
+TERMINAL = TASK_TERMINAL | {"rejected"}
 DEFINITIVE = {400, 401, 403, 404, 405, 409, 422}
+
+
+def task_state(document, identity, resource_kind):
+    task = document.get("task") if isinstance(document, dict) else None
+    if (not isinstance(task, dict) or task.get("id") != identity
+            or task.get("resource_kind") != resource_kind):
+        raise ValueError("Task identity mismatch; receipt retained")
+    state = task.get("status")
+    if not isinstance(state, str) or state not in TASK_ACTIVE | TASK_TERMINAL:
+        raise ValueError("Task has invalid status; receipt retained")
+    return task, state
 
 
 def installed_controller_digest():
@@ -120,7 +133,7 @@ class Receipt:
                 or not isinstance(value["key"], str) or not KEY.fullmatch(value["key"])
                 or not isinstance(value["task_id"], str)
                 or (value["task_id"] and not TASK_ID.fullmatch(value["task_id"]))
-                or not isinstance(value["status"], str) or value["status"] not in TERMINAL | {"pending", "running"}):
+                or not isinstance(value["status"], str) or value["status"] not in TERMINAL | TASK_ACTIVE | {"pending"}):
             raise ValueError("deployment receipt is invalid; preserve it for recovery")
         return value
 
@@ -228,17 +241,14 @@ class Client:
         status, task = self.transport.request("GET", "/tasks/" + task_id)
         if status != 200:
             return None
-        if (not isinstance(task, dict) or task.get("id") != task_id
-                or task.get("type") != "update" or task.get("target") != "controller"):
+        summary, state = task_state(task, task_id, "controller")
+        if summary.get("action") != "update":
             raise ValueError("Controller Task identity mismatch; receipt retained")
-        state = task.get("status")
-        if not isinstance(state, str) or state not in {"pending", "running"} | (TERMINAL - {"rejected"}):
-            raise ValueError("Controller Task has invalid status; receipt retained")
         value["status"] = state
         self.receipt.write(value)
         if state in TERMINAL:
             print(f"Controller update Task {task_id}: {state}", flush=True)
-            return 0 if state == "completed" else 1
+            return 0 if state == "succeeded" else 1
         return None
 
 

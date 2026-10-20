@@ -9,7 +9,7 @@ import secrets
 import subprocess
 import time
 
-from controller_update import Receipt, TASK_ID, TERMINAL, Transport
+from controller_update import Receipt, TASK_ID, TERMINAL, TASK_ACTIVE, Transport, task_state
 
 
 def pull_image(image):
@@ -86,17 +86,17 @@ def install(image, *, allow_enroll=False):
             status, task = transport.request("GET", "/tasks/" + value["task_id"])
             if status != 200:
                 raise ValueError("Agent Task outcome unavailable; receipt retained")
-            state = task.get("status")
+            _, state = task_state(task, value["task_id"], "agent")
             if state in TERMINAL:
                 value["status"] = state
                 receipt.write(value)
-                if state != "completed":
+                if state != "succeeded":
                     raise ValueError(f"Agent update {state}; inspect retained Task and recovery evidence")
                 if current_image() != image:
                     raise ValueError("completed Agent update has a different runtime image")
                 print("Agent update completed.")
                 return
-            if state not in {"pending", "running"}:
+            if state not in TASK_ACTIVE:
                 raise ValueError("unknown Agent Task state; receipt retained")
             time.sleep(1)
         raise ValueError("Agent update deadline reached; receipt retained, Task not cancelled")

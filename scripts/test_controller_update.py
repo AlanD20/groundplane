@@ -25,7 +25,7 @@ class Transport:
 
 
 def task(status):
-    return 200, {"id": TASK, "type": "update", "target": "controller", "status": status}
+    return 200, {"task": {"id": TASK, "action": "update", "resource_kind": "controller", "status": status}}
 
 
 class ControllerUpdateClientTest(unittest.TestCase):
@@ -47,11 +47,11 @@ class ControllerUpdateClientTest(unittest.TestCase):
     # Rationale: a lost reply must preserve the protected request and original Task.
     def test_lost_post_replays_same_key_then_reads_only_same_task(self):
         transport = Transport([OSError("lost response"), (202, {"task_id": TASK}),
-                               OSError("restarting"), task("running"), task("completed")])
+                               OSError("restarting"), task("running"), task("succeeded")])
         self.assertEqual(self.client(transport).run(RELEASE, "deploy-protected-key", 10), 0)
         self.assertEqual(transport.calls[0], transport.calls[1])
         self.assertEqual([call[0] for call in transport.calls], ["POST", "POST", "GET", "GET", "GET"])
-        self.assertEqual(self.receipt.read()["status"], "completed")
+        self.assertEqual(self.receipt.read()["status"], "succeeded")
 
     # QA: UP-11, UI-04; local receipt reuse, not a process-crash recovery test.
     # Rationale: a resumed client must observe the known Task without a second POST.
@@ -59,7 +59,7 @@ class ControllerUpdateClientTest(unittest.TestCase):
         original = self.receipt.begin(RELEASE, "deploy-original-key")
         original["task_id"] = TASK
         self.receipt.write(original)
-        transport = Transport([task("completed")])
+        transport = Transport([task("succeeded")])
         self.assertEqual(self.client(transport).run(RELEASE, "deploy-different-key", 10), 0)
         self.assertEqual(transport.calls[0][0], "GET")
         self.assertEqual(self.receipt.read()["key"], "deploy-original-key")
@@ -95,8 +95,8 @@ class ControllerUpdateClientTest(unittest.TestCase):
         with self.assertRaises(OSError):
             self.receipt.begin(RELEASE, "deploy-protected-key")
         (self.root / "deployment.json").unlink()
-        wrong = task("completed")[1]
-        wrong["target"] = "agent"
+        wrong = task("succeeded")[1]
+        wrong["task"]["resource_kind"] = "agent"
         transport = Transport([(202, {"task_id": TASK}), (200, wrong)])
         with self.assertRaisesRegex(ValueError, "identity"):
             self.client(transport).run(RELEASE, "deploy-protected-key", 10)
