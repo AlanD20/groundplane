@@ -71,6 +71,12 @@ See [Blueprint reconciliation](blueprints.md).
 
 ## Diagnostic retention
 
+When etcd approaches its quota, GP pauses new operator changes and scheduled
+backups with `storage.unavailable` (HTTP 503). Reads, Agent reports, accepted work,
+Abort/Retry and maintenance remain available. Let retention, compaction and
+defragmentation reclaim space before retrying. This gate does not raise the quota
+or guarantee that an already-full backend can persist recovery.
+
 Disposable stage details and events have their own bounded retention, independent
 of Task history, captured inputs, applied resource state and recovery checkpoints.
 Task history has a 90-day retention boundary. Active or unresolved effects retain

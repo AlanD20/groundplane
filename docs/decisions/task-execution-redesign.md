@@ -255,6 +255,14 @@ active reader or a newly captured reference. Admission under storage pressure
 must reserve room for existing work to settle rather than continue unbounded
 publication; exact thresholds belong to the storage implementation.
 
+Low reserve pauses new operator state changes, not just Task submissions. Reads,
+Agent reports, existing-work recovery, Abort/Retry and maintenance remain available.
+The HTTP boundary checks operator admission; the transaction boundary also checks
+new Task acceptance from background publishers. Scheduled backups pause without
+skipping retention or storage maintenance. The live backend quota and allocated
+size determine reserve; reusable pages do not count as reclaimed capacity.
+The threshold lives in [storage admission](../../internal/infra/etcd/storage_admission.go).
+
 Backup recovery retains orphan cleanup authority in the same transaction as its
 validated recovery receipt, resource settlement and claim release. The orphan
 then owns the captured source and receipt identity independently of execution

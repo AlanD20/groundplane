@@ -17,8 +17,20 @@ type MutationAdmission interface {
 	CheckMutation(context.Context, string) error
 }
 
+type StorageAdmission interface {
+	CheckNewMutation(context.Context) error
+}
+
 func (server *Server) admitHTTPMutation(request *http.Request) *errs.Error {
-	if server.mutationAdmission == nil || !mayAcceptTask(request.Method) {
+	if !mayAcceptTask(request.Method) {
+		return nil
+	}
+	if server.storageAdmission != nil && !storageAdmissionExempt(request) {
+		if err := server.storageAdmission.CheckNewMutation(request.Context()); err != nil {
+			return mutationAdmissionProblem(err)
+		}
+	}
+	if server.mutationAdmission == nil {
 		return nil
 	}
 	if request.Method == http.MethodPost {
@@ -36,6 +48,27 @@ func (server *Server) admitHTTPMutation(request *http.Request) *errs.Error {
 		}
 	}
 	return mutationAdmissionProblem(server.mutationAdmission.CheckMutation(request.Context(), ""))
+}
+
+func storageAdmissionExempt(request *http.Request) bool {
+	if request.Method != http.MethodPost {
+		return false
+	}
+	if isReadOnlyEnvironmentPostPath(request.URL.Path) {
+		return true
+	}
+	if remainder, found := strings.CutPrefix(request.URL.Path, "/api/v1/environments/"); found {
+		environmentID, action, found := strings.Cut(remainder, "/")
+		if found && environmentID != "" && action == "restore/preview" {
+			return true
+		}
+	}
+	remainder, found := strings.CutPrefix(request.URL.Path, "/api/v1/tasks/")
+	if !found {
+		return false
+	}
+	taskID, action, found := strings.Cut(remainder, "/")
+	return found && (action == "abort" || action == "retry") && ids.Validate(ids.KindTask, taskID) == nil
 }
 
 func mutationAdmissionProblem(err error) *errs.Error {

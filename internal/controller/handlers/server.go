@@ -30,6 +30,7 @@ type Server struct {
 	API               huma.API
 	onHTTPReady       func()
 	mutationAdmission MutationAdmission
+	storageAdmission  StorageAdmission
 
 	host                    HostReader
 	hostTerminals           *hostterminal.Manager
@@ -115,6 +116,7 @@ type Server struct {
 type Options struct {
 	OnHTTPReady             func()
 	MutationAdmission       MutationAdmission
+	StorageAdmission        StorageAdmission
 	Host                    HostReader
 	HostTerminals           *hostterminal.Manager
 	ControllerConfig        NativeConfigStore
@@ -207,6 +209,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		API:                     humago.NewWithPrefix(mux, "/api/v1", config),
 		onHTTPReady:             options.OnHTTPReady,
 		mutationAdmission:       options.MutationAdmission,
+		storageAdmission:        options.StorageAdmission,
 		host:                    options.Host,
 		hostTerminals:           options.HostTerminals,
 		controllerConfig:        options.ControllerConfig,

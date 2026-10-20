@@ -29,6 +29,35 @@ func (admission *closedMutationAdmission) CheckMutation(_ context.Context, nativ
 
 type nativeAdmissionBackupSchedules struct{ calls int }
 
+type reserveAdmission struct{ low bool }
+
+func (admission *reserveAdmission) CheckNewMutation(context.Context) error {
+	if admission.low {
+		return errs.New(errs.KindStorageUnavailable, "storage reserve is low")
+	}
+	return nil
+}
+
+// Rationale: a low-reserve pause must not starve the cleanup that can reopen
+// admission; scheduled captures should resume without resetting the scheduler.
+func TestStorageReservePausesBackupsWithoutStarvingRetention(t *testing.T) {
+	sources, markers, schedules := &fakeSourceReleases{}, &fakeIdempotencyPruning{}, &nativeAdmissionBackupSchedules{}
+	drafts, admission := &fakeBlueprintRevisionCleanup{}, &reserveAdmission{low: true}
+	sch := &Scheduler{sources: sources, idempotency: markers, blueprintRevisions: drafts,
+		backupSchedules: schedules, maintenancePolicy: schedulerTestPolicy(), now: time.Now,
+		storageAdmission: admission}
+	if kind, _ := errs.KindOf(sch.tick(t.Context())); kind != errs.KindStorageUnavailable {
+		t.Fatal("low reserve was not reported")
+	}
+	if markers.calls != 1 || sources.calls != 1 || drafts.calls != 1 || schedules.calls != 0 {
+		t.Fatal("low reserve starved maintenance or started a new backup")
+	}
+	admission.low = false
+	if err := sch.tick(t.Context()); err != nil || schedules.calls != 1 {
+		t.Fatalf("backup scheduling did not resume: %v", err)
+	}
+}
+
 func (schedules *nativeAdmissionBackupSchedules) RunBackupSchedules(context.Context, time.Time) error {
 	schedules.calls++
 	return nil

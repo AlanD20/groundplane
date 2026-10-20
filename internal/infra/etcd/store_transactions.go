@@ -57,6 +57,9 @@ func (s *store) transactWithFailureReads(
 		return etcdstore.TransactionResult{}, err
 	}
 
+	if err := s.admitNewTaskPublication(ctx, conditions, mutations); err != nil {
+		return etcdstore.TransactionResult{}, err
+	}
 	transaction := s.client.Txn(ctx)
 	if len(prepared.comparisons) > 0 {
 		transaction = transaction.If(prepared.comparisons...)

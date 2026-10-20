@@ -261,7 +261,8 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		SoftwareActivator: dependencies.software.Activations,
 		Images:            dependencies.images,
 		OnHTTPReady:       dependencies.platform.Readiness.MarkHTTPReady, MutationAdmission: dependencies.platform.Upgrades,
-		Agents: dependencies.platform.AgentReads, AgentMutations: dependencies.platform.AgentMutations,
+		StorageAdmission: dependencies.bootstrap.storageMaintenance,
+		Agents:           dependencies.platform.AgentReads, AgentMutations: dependencies.platform.AgentMutations,
 		Tenants:                 dependencies.authority.hierarchyService,
 		Projects:                dependencies.authority.hierarchyService,
 		ProjectMutations:        dependencies.hierarchy.projectMutations,
@@ -335,6 +336,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		dependencies.backup.schedules, dependencies.backup.retention, dependencies.backup.orphans,
 	)
 	maintenanceScheduler.ConfigureMaintenance(dependencies.bootstrap.storageMaintenance)
+	maintenanceScheduler.ConfigureStorageAdmission(dependencies.bootstrap.storageMaintenance)
 	return &Controller{
 		Config:          dependencies.bootstrap.config,
 		Logger:          dependencies.bootstrap.logger,

@@ -48,6 +48,10 @@ type mutationAdmission interface {
 	CheckMutation(context.Context, string) error
 }
 
+type storageAdmission interface {
+	CheckNewMutation(context.Context) error
+}
+
 // Scheduler runs ONE tick that evaluates every backup schedule from
 // desired state and dispatches due actions to the Agent — N policies
 // cost nothing extra, no per-policy timer/unit churn. See mvp.md,
@@ -55,6 +59,7 @@ type mutationAdmission interface {
 type Scheduler struct {
 	logger                 *slog.Logger
 	admission              mutationAdmission
+	storageAdmission       storageAdmission
 	Interval               time.Duration
 	sources                sourceReleases
 	idempotency            idempotencyPruning
@@ -95,6 +100,10 @@ func New(
 func (sch *Scheduler) ConfigureMaintenance(storage storageMaintenance) {
 	sch.maintenancePolicy = storage.Policy()
 	sch.storageMaintenance = storage
+}
+
+func (sch *Scheduler) ConfigureStorageAdmission(admission storageAdmission) {
+	sch.storageAdmission = admission
 }
 
 // Run blocks, ticking at Interval until ctx is cancelled.
@@ -146,8 +155,16 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 		return err
 	}
 	if sch.backupSchedules != nil {
-		if err := sch.backupSchedules.RunBackupSchedules(ctx, now); err != nil {
-			return err
+		var admissionErr error
+		if sch.storageAdmission != nil {
+			admissionErr = sch.storageAdmission.CheckNewMutation(ctx)
+		}
+		if admissionErr == nil {
+			if err := sch.backupSchedules.RunBackupSchedules(ctx, now); err != nil {
+				return err
+			}
+		} else {
+			maintenanceErr = errors.Join(maintenanceErr, admissionErr)
 		}
 	}
 	if sch.backupRetention != nil {

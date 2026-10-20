@@ -15,6 +15,46 @@ import (
 
 const nativeAdmissionTaskID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
+type lowStorageAdmission struct{}
+
+func (lowStorageAdmission) CheckNewMutation(context.Context) error {
+	return errs.New(errs.KindStorageUnavailable, "storage reserve is low")
+}
+
+// Rationale: storage pressure must stop synchronous edits as well as Task
+// submissions, without removing the read and existing-Task recovery paths.
+func TestStorageAdmissionHTTPRecoveryBoundaries(t *testing.T) {
+	for _, test := range []struct {
+		method, path string
+		allowed      bool
+	}{
+		{"PATCH", "/api/v1/scripts/scr_x", false},
+		{"POST", "/api/v1/controller/update", false},
+		{"GET", "/api/v1/tasks", true},
+		{"POST", "/api/v1/environments/env_x/blueprint/validate", true},
+		{"POST", "/api/v1/environments/env_x/restore/preview", true},
+		{"POST", "/api/v1/tasks/" + nativeAdmissionTaskID + "/retry", true},
+		{"POST", "/api/v1/tasks/" + nativeAdmissionTaskID + "/abort", true},
+		{"POST", "/api/v1/tasks/" + nativeAdmissionTaskID + "/abort/extra", false},
+	} {
+		t.Run(test.method+test.path, func(t *testing.T) {
+			server, calls := idempotencyBoundaryServer()
+			server.storageAdmission = lowStorageAdmission{}
+			request := httptest.NewRequest(test.method, test.path, nil)
+			request.Header.Set(idempotencyKeyHeader, "storage-boundary-0001")
+			response := httptest.NewRecorder()
+			server.HTTPHandler().ServeHTTP(response, request)
+			want, wantCalls := http.StatusServiceUnavailable, 0
+			if test.allowed {
+				want, wantCalls = http.StatusNoContent, 1
+			}
+			if response.Code != want || *calls != wantCalls {
+				t.Fatalf("status=%d mutations=%d; want %d/%d", response.Code, *calls, want, wantCalls)
+			}
+		})
+	}
+}
+
 type closedMutationAdmission struct {
 	calls   int
 	failure error

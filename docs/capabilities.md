@@ -13,8 +13,10 @@ it does not redefine the [product contract](mvp.md) or authorize implementation.
 
 The [Task execution redesign](decisions/task-execution-redesign.md) is under
 implementation. Native scheduling, typed work/attempt storage, protocol cutover
-guards and the replacement viewer are written but unqualified and undeployed;
-remaining source integration and final review still precede QA. No offline
+guards and the replacement viewer have partial local and installed qualification;
+the QA matrix records candidate-specific limits. Low-reserve admission has local
+boundary qualification (TASK-175), but is not deployed; newer lifecycle and diagnostic repairs
+also await installation. This is not full Task qualification. No offline
 resource conversion is provided. The host-bound protocol does not establish
 multi-host runtime support. The table retains earlier feature evidence, not
 qualification of the replacement engine.
