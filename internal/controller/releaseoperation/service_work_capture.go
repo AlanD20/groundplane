@@ -323,7 +323,7 @@ func (service *Service) captureServiceWorkRender(ctx context.Context, scope rele
 	}
 	var priorRender *releaserender.ReleaseRenderInput
 	if candidate.priorReleaseID != "" {
-		render.PriorArtifactID, render.PriorWorkload = ids.New(ids.KindConfig), candidate.priorWorkload
+		render.PriorWorkload = candidate.priorWorkload
 		prior, err := service.ledger.GetReleaseRenderInputAt(ctx, candidate.priorReleaseID, scope.ReadRevision)
 		if err != nil {
 			return render, predecessor, err
@@ -331,7 +331,7 @@ func (service *Service) captureServiceWorkRender(ctx context.Context, scope rele
 		priorRender = &prior.Record
 		captured, err := servicelifecycle.CaptureAcknowledgedRuntime(ctx, service.ledger,
 			keyvalue.Versioned[environmentprojection.EnvironmentComposeProjection]{ReadRevision: scope.ReadRevision},
-			render.EnvironmentID, render.ServiceID, render.PriorArtifactID)
+			render.EnvironmentID, render.ServiceID)
 		if err != nil {
 			return render, predecessor, err
 		}

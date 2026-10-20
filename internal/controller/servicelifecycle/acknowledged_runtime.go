@@ -5,6 +5,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -12,7 +13,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 type AcknowledgedRuntimeReader interface {
@@ -26,11 +26,12 @@ type AcknowledgedRuntimeReader interface {
 }
 
 // AcknowledgedRuntimeCapture is exact per-Service applied runtime evidence at
-// one fixed planning revision. Artifact identity is the only rewritten field.
+// one fixed planning revision. Neither artifact bytes nor identity are rewritten.
 type AcknowledgedRuntimeCapture struct {
 	Release                releaserender.ServiceLifecycleRelease
 	RuntimeRevision        int64
 	CurrentArtifact        []byte
+	CurrentArtifactID      string
 	RetainedPriorArtifact  []byte
 	RetainedPriorReleaseID string
 }
@@ -41,10 +42,8 @@ func CaptureAcknowledgedRuntime(
 	applied etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	environmentID string,
 	serviceID string,
-	currentArtifactID string,
 ) (AcknowledgedRuntimeCapture, error) {
-	if ctx == nil || reader == nil || ids.Validate(ids.KindConfig, currentArtifactID) != nil ||
-		applied.ReadRevision <= 0 {
+	if ctx == nil || reader == nil || applied.ReadRevision <= 0 {
 		return AcknowledgedRuntimeCapture{}, errs.New(
 			errs.KindValidationFailed,
 			"acknowledged runtime capture input is invalid",
@@ -79,36 +78,24 @@ func CaptureAcknowledgedRuntime(
 			"acknowledged runtime does not match serving authority",
 		)
 	}
-	current, _, err := reidentifyRuntimeArtifact(source.Runtime.CurrentArtifact, currentArtifactID, serviceID)
+	runtime, err := executionplan.OpenNativeServingRuntime(environmentID, serviceID,
+		source.Runtime.CurrentArtifact, source.Runtime.RetainedPriorArtifact)
 	if err != nil {
 		return AcknowledgedRuntimeCapture{}, err
 	}
 	result := AcknowledgedRuntimeCapture{
-		Release: release, RuntimeRevision: sources[0].Revision, CurrentArtifact: current,
+		Release: release, RuntimeRevision: sources[0].Revision,
+		CurrentArtifact: slices.Clone(
+			source.Runtime.CurrentArtifact,
+		), CurrentArtifactID: runtime.Artifact.GetArtifactId(),
 	}
 	if len(source.Runtime.RetainedPriorArtifact) != 0 {
-		retainedID := ids.New(ids.KindConfig)
-		result.RetainedPriorArtifact, result.RetainedPriorReleaseID, err = reidentifyRuntimeArtifact(
-			source.Runtime.RetainedPriorArtifact,
-			retainedID,
-			serviceID,
-		)
+		result.RetainedPriorArtifact = slices.Clone(source.Runtime.RetainedPriorArtifact)
+		result.RetainedPriorReleaseID, err = runtimeArtifactReleaseID(runtime.Retained, serviceID)
 		if err != nil {
-			clear(result.CurrentArtifact)
+			result.Clear()
 			return AcknowledgedRuntimeCapture{}, err
 		}
-	}
-	if executionplan.ValidateNativePredecessorWitness(
-		environmentID,
-		serviceID,
-		result.CurrentArtifact,
-		result.RetainedPriorArtifact,
-	) != nil {
-		result.Clear()
-		return AcknowledgedRuntimeCapture{}, errs.New(
-			errs.KindStateConflict,
-			"acknowledged runtime artifact identity is invalid",
-		)
 	}
 	return result, nil
 }
@@ -122,15 +109,10 @@ func (capture *AcknowledgedRuntimeCapture) Clear() {
 	*capture = AcknowledgedRuntimeCapture{}
 }
 
-func reidentifyRuntimeArtifact(
-	encoded []byte,
-	artifactID string,
+func runtimeArtifactReleaseID(
+	artifact *agentpb.ComposeArtifact,
 	serviceID string,
-) ([]byte, string, error) {
-	artifact := new(agentpb.ComposeArtifact)
-	if (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(encoded, artifact) != nil {
-		return nil, "", errs.New(errs.KindStateConflict, "acknowledged runtime artifact is corrupt")
-	}
+) (string, error) {
 	releaseID := ""
 	for _, service := range artifact.GetServices() {
 		if service.GetServiceId() != serviceID ||
@@ -144,12 +126,7 @@ func reidentifyRuntimeArtifact(
 		}
 	}
 	if ids.Validate(ids.KindDeployment, releaseID) != nil {
-		return nil, "", errs.New(errs.KindStateConflict, "acknowledged runtime Release identity is invalid")
+		return "", errs.New(errs.KindStateConflict, "acknowledged runtime Release identity is invalid")
 	}
-	artifact.ArtifactId = artifactID
-	value, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil {
-		return nil, "", errs.Wrap(errs.KindInternal, err)
-	}
-	return value, releaseID, nil
+	return releaseID, nil
 }

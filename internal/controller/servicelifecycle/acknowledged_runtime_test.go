@@ -63,14 +63,12 @@ func TestCaptureAcknowledgedRuntimePreservesReceiptBytesAndRetainedProxy(t *test
 		},
 		Revision: 84, ReadRevision: revision,
 	}
-	newArtifactID := ids.New(ids.KindConfig)
 	captured, err := CaptureAcknowledgedRuntime(
 		context.Background(),
 		reader,
 		testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{ReadRevision: revision},
 		environmentID,
 		serviceID,
-		newArtifactID,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -80,13 +78,17 @@ func TestCaptureAcknowledgedRuntimePreservesReceiptBytesAndRetainedProxy(t *test
 		captured.Release.RetainedPrior == nil || captured.Release.RetainedPrior.ReleaseID != retainedReleaseID {
 		t.Fatalf("capture identity = %#v", captured)
 	}
-	assertReidentifiedRuntimeArtifact(t, record.Runtime.CurrentArtifact, captured.CurrentArtifact, newArtifactID)
+	if !bytes.Equal(record.Runtime.CurrentArtifact, captured.CurrentArtifact) ||
+		captured.CurrentArtifactID != mustOpenRuntimeArtifact(t, record.Runtime.CurrentArtifact).GetArtifactId() {
+		t.Fatal("capture rewrote acknowledged runtime bytes or identity")
+	}
 	retained := new(agentpb.ComposeArtifact)
 	if proto.Unmarshal(captured.RetainedPriorArtifact, retained) != nil {
 		t.Fatal("open retained acknowledged runtime")
 	}
-	assertReidentifiedRuntimeArtifact(t, record.Runtime.RetainedPriorArtifact,
-		captured.RetainedPriorArtifact, retained.GetArtifactId())
+	if !bytes.Equal(record.Runtime.RetainedPriorArtifact, captured.RetainedPriorArtifact) {
+		t.Fatal("capture rewrote the retained acknowledged artifact")
+	}
 	current := new(agentpb.ComposeArtifact)
 	if proto.Unmarshal(captured.CurrentArtifact, current) != nil || len(current.GetServices()) != 2 ||
 		!bytes.Contains(current.GetCanonicalYaml(), []byte("attached-after-release")) ||
@@ -131,7 +133,6 @@ func TestCaptureAcknowledgedRuntimeRejectsMissingForeignAndMismatchedReceipts(t 
 				testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{ReadRevision: revision},
 				environmentID,
 				serviceID,
-				ids.New(ids.KindConfig),
 			); err == nil {
 				t.Fatal("invalid acknowledged runtime was accepted")
 			}
@@ -262,15 +263,6 @@ func acknowledgedRuntimeArtifact(
 		t.Fatal(err)
 	}
 	return value, proxyConfig
-}
-
-func assertReidentifiedRuntimeArtifact(t *testing.T, before, after []byte, artifactID string) {
-	t.Helper()
-	want, got := mustOpenRuntimeArtifact(t, before), mustOpenRuntimeArtifact(t, after)
-	want.ArtifactId = artifactID
-	if !proto.Equal(want, got) {
-		t.Fatal("acknowledged runtime changed beyond artifact identity")
-	}
 }
 
 func mustOpenRuntimeArtifact(t *testing.T, value []byte) *agentpb.ComposeArtifact {

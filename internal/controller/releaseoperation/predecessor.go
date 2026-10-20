@@ -25,5 +25,6 @@ func bindServingRuntime(
 		ServiceID: render.ServiceID, CurrentArtifact: captured.CurrentArtifact,
 		RetainedPriorArtifact: captured.RetainedPriorArtifact,
 	}
+	render.PriorArtifactID = captured.CurrentArtifactID
 	return nil
 }

@@ -6,7 +6,6 @@ import (
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"sort"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -40,7 +39,6 @@ func captureNativePredecessor(
 		captured.applied,
 		scope.Environment.Record.ID,
 		captured.native.ServiceID,
-		ids.New(ids.KindConfig),
 	)
 	if err != nil {
 		return predecessorSnapshot{}, err

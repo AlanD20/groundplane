@@ -117,10 +117,26 @@ func TestImageRemovalProtectsRetainedReleaseWithoutContainers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ledger.Stage(t.Context(), releases.ReleaseStage{PublicationID: ids.NewULID(), OperationID: operationID, CreatedAt: at,
+	stage := releases.ReleaseStage{PublicationID: ids.NewULID(), OperationID: operationID, CreatedAt: at,
 		Members: []releases.ReleaseStageMember{{Intent: intent, RenderInput: raw,
-			Checkpoint: domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: at}}}}); err != nil {
+			Checkpoint: domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: at}}}}
+	staged, err := ledger.Stage(t.Context(), stage)
+	if err != nil {
 		t.Fatal(err)
+	}
+	// A producer retry must retain the original immutable identity and image
+	// protection, without rewriting staging or accepting changed captured input.
+	beforeReplay := f.store.revision
+	replayed, err := ledger.Stage(t.Context(), stage)
+	if err != nil || replayed.Revision != staged.Revision || replayed.Record.Digest != staged.Record.Digest ||
+		f.store.revision != beforeReplay {
+		t.Fatalf("exact staging replay changed retained authority: %#v %v", replayed, err)
+	}
+	changed := releases.CloneReleaseStage(stage)
+	changed.Members[0].Intent.Actor = "different-operator"
+	if _, err := ledger.Stage(t.Context(), changed); !errors.Is(err, errs.New(errs.KindStateConflict, "")) ||
+		f.store.revision != beforeReplay {
+		t.Fatalf("staging accepted or rewrote changed intent: %v", err)
 	}
 	f.registry.images = []imagefetch.LocalImage{{ID: imageID}}
 	inventory, err := f.service.ListImages(t.Context())
