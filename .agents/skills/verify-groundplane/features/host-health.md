@@ -45,31 +45,25 @@ groundplane --host <tunnel-url> --output json host show
 
 ## Assertions
 
-Each API and CLI response must independently match the canonical Host shape:
-the exact top-level and nested required keys, their JSON types, bounded integer
-percentages and CPU load, the accepted etcd and Agent status vocabularies,
-`etcd.node == "single-node"`, and the healthy native Controller identity. Agent
-labels must be a sorted array of strings, including an empty array when no labels
-are configured.
-Controller update metadata follows `docs/api-cli.md`: actual binary digest,
-availability/error and explicitly nullable candidate/history. Validate a present
-candidate's pinned identities and compatibility integers, and retained history's
-Task identity/status. Missing fields and empty synthetic objects fail the check.
-This validates observation, not activation or recovery success.
+Require healthy Controller, etcd and Agent observations, a working Docker
+version, bounded CPU/resource percentages and the expected native Controller
+service. Validate pinned update identities and native Task status evidence when
+candidate/history observations are present; absence remains explicitly nullable.
+A failed health assertion fails the journey, even when API and CLI agree.
 
-The API may include a string-valued top-level `$schema` hint; the CLI must omit
-it. After removing exactly that API field, the responses must have the same
-recursive object path/type map. Cross-request value equality is limited to the
-stable Host identity (`hostname`, `arch`, and `os`), CPU identity (`model` and
-`cores`), and Controller `status`, `service`, and `version`. Live uptime, CPU
-load, resources, Docker version, etcd health/size, and Agent health are validated
-in each response but may legitimately change between the two requests.
+Compare stable Host identity, CPU identity and Controller service/version between
+API and CLI. Resource use and update observations can change between requests;
+retain both responses instead of requiring identical live state or a frozen JSON
+field inventory. The API's optional string-valued `$schema` hint is omitted by CLI.
+
+This checks current observation and reachability, not software activation,
+recovery, application traffic or Task execution effects.
 
 ## Evidence and cleanup
 
 The evidence directory retains the exact API HTTP status and response headers,
-API JSON, CLI JSON, schema-normalized JSON, recursive path/type maps,
-stable-value projections, remote service status, supervisor ready/stopped/
+API JSON, CLI JSON, normalized JSON, stable identity projections, remote service
+status, supervisor ready/stopped/
 failure receipts, supervisor wait status, and a result summary. Receipts and
 all other evidence remain in the evidence directory; only the control socket,
 stop file, and temporary CLI build live in the disposable runtime directory.

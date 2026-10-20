@@ -168,7 +168,7 @@ cleanup() {
 		printf 'failed to remove journey runtime directory\n' >&2
 		[[ "$status" -ne 0 ]] || status=1
 	fi
-	printf 'exit_status=%s\nevidence_dir=%s\ntarget=%s\napi_base=%s\nruntime_dir=%s\ncontrol_socket=%s\nsupervisor_pid=%s\nservice_mutation=none\ntunnel_cleanup=%s\nruntime_cleanup=%s\nassertions=canonical-host-and-api-cli-semantic-parity\nunproven=bootstrap,public-exposure,mutations,console,repository-ci\n' \
+	printf 'exit_status=%s\nevidence_dir=%s\ntarget=%s\napi_base=%s\nruntime_dir=%s\ncontrol_socket=%s\nsupervisor_pid=%s\nservice_mutation=none\ntunnel_cleanup=%s\nruntime_cleanup=%s\nassertions=healthy-runtime-and-api-cli-identity-parity\nunproven=bootstrap,public-exposure,mutations,console,repository-ci\n' \
 		"$status" "$evidence_dir" "$GROUNDPLANE_SSH_TARGET" "$api_base" \
 		"${runtime_dir:-not-created}" "${control_socket:-not-created}" \
 		"${supervisor_pid:-not-created}" "$supervisor_cleanup" "$runtime_cleanup" \
@@ -337,76 +337,45 @@ IFS= read -r api_status <"$evidence_dir/api-status.txt"
 host_contract='
 def integer:
   type == "number" and floor == .;
-def exact_keys($expected):
-  type == "object" and keys == $expected;
+def nonempty:
+  type == "string" and length > 0;
 def host_resource:
-  exact_keys(["total", "used", "used_pct"]) and
-  (.total | type == "string") and
-  (.used | type == "string") and
+  (.total | nonempty) and (.used | nonempty) and
   (.used_pct | integer and . >= 0 and . <= 100);
-def etcd_status:
-  . == "healthy" or . == "degraded" or . == "failed";
-def agent_status:
-  . == "healthy" or . == "degraded" or . == "stopped" or . == "pending";
 def release_digest:
   type == "string" and test("^sha256:[0-9a-f]{64}$");
 def native_candidate:
   if . == null then true else
-    exact_keys(["agent_image", "channel_schema", "controller_sha256", "controller_version", "release", "storage_epoch"]) and
     (.release | release_digest) and (.controller_sha256 | release_digest) and
-    (.controller_version | type == "string") and
+    (.controller_version | nonempty) and
     (.agent_image | type == "string" and test("@sha256:[0-9a-f]{64}$")) and
     (.storage_epoch | integer and . > 0) and (.channel_schema | integer and . > 0)
   end;
 def native_history:
   if . == null then true else
-    exact_keys(["created_at", "phase", "release", "status", "task_id"]) and
     (.task_id | type == "string" and test("^task_[0-7][0-9A-HJKMNP-TV-Z]{25}$")) and
     (.release | release_digest) and (.phase | type == "string") and
-    (.created_at | type == "string") and
-    (.status | . == "pending" or . == "running" or . == "completed" or . == "failed" or . == "aborted" or . == "timed_out")
+    (.created_at | nonempty) and
+    (.status | IN("queued", "preparing", "waiting", "running", "attention_required",
+                  "stopping", "finishing", "succeeded", "failed", "cancelled", "superseded"))
   end;
 def native_update:
-  exact_keys(["available", "candidate", "error", "last_update", "running_sha256"]) and
+  has("candidate") and has("last_update") and
   (.available | type == "boolean") and (.error | type == "string") and
   (.running_sha256 | release_digest) and
   (.candidate | native_candidate) and (.last_update | native_history);
 def canonical_host:
-  exact_keys([
-    "agent", "arch", "controller", "cpu", "disk", "docker", "etcd",
-    "hostname", "memory", "os", "swap", "uptime"
-  ]) and
-  (.hostname | type == "string") and
-  (.arch | type == "string") and
-  (.os | type == "string") and
-  (.uptime | type == "string") and
-  (.docker | type == "string") and
-  (.cpu |
-    exact_keys(["cores", "load", "model"]) and
-    (.model | type == "string") and
-    (.cores | integer and . > 0) and
+  (.hostname | nonempty) and (.arch | nonempty) and (.os | nonempty) and
+  (.uptime | nonempty) and (.docker | nonempty and . != "unavailable") and
+  (.cpu | (.model | nonempty) and (.cores | integer and . > 0) and
     (.load | integer and . >= 0 and . <= 100)) and
-  (.memory | host_resource) and
-  (.disk | host_resource) and
-  (.swap | host_resource) and
-  (.etcd |
-    exact_keys(["db_size", "node", "status"]) and
-    .node == "single-node" and
-    (.status | type == "string" and etcd_status) and
-    (.db_size | type == "string")) and
-  (.controller |
-    exact_keys(["service", "status", "update", "version"]) and
-    .service == "groundplane-controller.service" and
-    .status == "healthy" and
-    (.version | type == "string") and (.update | native_update)) and
-  (.agent |
-    exact_keys(["labels", "max_concurrent", "pull_interval", "status"]) and
-    (.status | type == "string" and agent_status) and
-    (.pull_interval | type == "string") and
-    (.max_concurrent | integer) and
-    (.labels | type == "array") and
-    (all(.labels[]; type == "string")) and
-    (.labels == (.labels | sort)));
+  (.memory | host_resource) and (.disk | host_resource) and (.swap | host_resource) and
+  (.etcd | .node == "single-node" and .status == "healthy" and (.db_size | nonempty)) and
+  (.controller | .service == "groundplane-controller.service" and .status == "healthy" and
+    (.version | nonempty) and (.update | native_update)) and
+  (.agent | .status == "healthy" and (.pull_interval | nonempty) and
+    (.max_concurrent | integer and . > 0) and (.labels | type == "array") and
+    (all(.labels[]; type == "string")) and (.labels == (.labels | sort)));
 '
 
 jq -e "$host_contract
@@ -427,18 +396,6 @@ jq -e "$host_contract
 	jq -S . "$evidence_dir/cli.json" >"$evidence_dir/cli.normalized.json"
 )
 
-path_type_map='
-def path_type_map:
-  def walk($path):
-    [{path: $path, type: type}] +
-    if type == "object" then
-      [keys[] as $key | .[$key] | walk($path + [$key])] | add
-    else
-      []
-    end;
-  walk([]);
-path_type_map
-'
 stable_projection='{
   hostname,
   arch,
@@ -454,24 +411,12 @@ stable_projection='{
 for document in api cli; do
 	(
 		ulimit -f 2048
-		jq -S "$path_type_map" \
-			"$evidence_dir/$document.normalized.json" \
-			>"$evidence_dir/$document.path-types.json"
-	)
-	(
-		ulimit -f 2048
 		jq -S "$stable_projection" \
 			"$evidence_dir/$document.normalized.json" \
 			>"$evidence_dir/$document.stable.json"
 	)
 done
 
-cmp -s \
-	"$evidence_dir/api.path-types.json" \
-	"$evidence_dir/cli.path-types.json" || {
-	printf 'API and CLI Host path/type maps differ\n' >&2
-	exit 1
-}
 cmp -s \
 	"$evidence_dir/api.stable.json" \
 	"$evidence_dir/cli.stable.json" || {
