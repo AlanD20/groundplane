@@ -69,7 +69,7 @@ func TestNativeHierarchyRealEtcdParentLastAndDeletedTargetReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner := newNativeHierarchyEtcdRuntime(t, store, key)
+	owner := newNativeHierarchyEtcdRuntime(t, store, key, deletion.SystemClock{})
 	request := deletion.DeleteRequest{TargetKind: deletion.TargetProject, TargetID: projects[0].ID,
 		IdempotencyKey: "native-real-etcd-project-removal"}
 	accepted, err := owner.service.Delete(ctx, request)
@@ -84,7 +84,7 @@ func TestNativeHierarchyRealEtcdParentLastAndDeletedTargetReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	store = open()
-	owner = newNativeHierarchyEtcdRuntime(t, store, key)
+	owner = newNativeHierarchyEtcdRuntime(t, store, key, deletion.SystemClock{})
 	replayed, err := owner.service.Delete(ctx, request)
 	if err != nil || !replayed.Existing || replayed.TaskID != accepted.TaskID ||
 		replayed.OperationID != accepted.OperationID {
@@ -150,12 +150,16 @@ type nativeHierarchyEtcdRuntime struct {
 	publication *workdispatch.Publications
 	scheduler   *workdispatch.Scheduler
 	identity    workexecution.Identity
+	retries     *workdispatch.Retries
+	evidence    *etcd.IdempotencyRepository
+	coordinator *requestidempotency.Coordinator
 }
 
 func newNativeHierarchyEtcdRuntime(
 	t *testing.T,
 	store nativeEtcdStore,
 	key ageinfra.Keypair,
+	clock deletion.Clock,
 ) *nativeHierarchyEtcdRuntime {
 	t.Helper()
 	cipher := nativeVolumeCipher{key: key}
@@ -171,14 +175,15 @@ func newNativeHierarchyEtcdRuntime(
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := deletion.NewRuntime(store, evidence, coordinator)
-	if err != nil {
-		t.Fatal(err)
-	}
 	records, err := etcd.NewHierarchyDeletionRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
+	adapter, err := deletion.NewEtcdRepository(records, evidence, coordinator, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := deletion.NewService(adapter, deletion.StableIDGenerator{}, clock)
 	queue, err := workqueue.NewRepository(store)
 	if err != nil {
 		t.Fatal(err)
@@ -215,6 +220,16 @@ func newNativeHierarchyEtcdRuntime(
 	if err != nil {
 		t.Fatal(err)
 	}
+	agentOwner, err := deletion.NewAgentWork(queue, records, removals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retries, err := workdispatch.NewRetries(queue, []workdispatch.RetryRegistration{
+		{Operation: workexecution.Hierarchy, Owner: agentOwner},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	previous, err := queue.ReadExecutor(t.Context(), workexecution.Placement{Executor: workexecution.Controller})
 	if err != nil {
 		t.Fatal(err)
@@ -236,13 +251,21 @@ func newNativeHierarchyEtcdRuntime(
 		t.Fatal(err)
 	}
 	commitNativeEtcd(t, queue, availability)
-	return &nativeHierarchyEtcdRuntime{service, records, queue, publications, scheduler, registered.Identity}
+	return &nativeHierarchyEtcdRuntime{service, records, queue, publications, scheduler, registered.Identity,
+		retries, evidence, coordinator}
 }
 
 func (owner *nativeHierarchyEtcdRuntime) finish(t *testing.T, ctx context.Context, taskID string) {
 	t.Helper()
+	owner.publish(t, ctx, taskID, time.Now().UTC())
+	owner.settle(t, ctx, taskID)
+	owner.finalize(t, ctx, taskID)
+}
+
+func (owner *nativeHierarchyEtcdRuntime) publish(t *testing.T, ctx context.Context, taskID string, at time.Time) {
+	t.Helper()
 	for batch := 0; batch < 10; batch++ {
-		if err := owner.publication.Advance(ctx, taskID, time.Now().UTC()); err != nil {
+		if err := owner.publication.Advance(ctx, taskID, at); err != nil {
 			t.Fatal(err)
 		}
 		task, _, err := owner.queue.ReadTask(ctx, taskID, 0)
@@ -256,6 +279,10 @@ func (owner *nativeHierarchyEtcdRuntime) finish(t *testing.T, ctx context.Contex
 			t.Fatal("native hierarchy publication did not finish within its bound")
 		}
 	}
+}
+
+func (owner *nativeHierarchyEtcdRuntime) settle(t *testing.T, ctx context.Context, taskID string) {
+	t.Helper()
 	for sweep := 0; sweep < 10; sweep++ {
 		result, err := owner.scheduler.Schedule(ctx, owner.identity, "", time.Now().UTC())
 		if err != nil || len(result.Issues) != 0 {
@@ -272,6 +299,10 @@ func (owner *nativeHierarchyEtcdRuntime) finish(t *testing.T, ctx context.Contex
 			t.Fatalf("native hierarchy did not settle within its bound: %+v", task.Task.Progress)
 		}
 	}
+}
+
+func (owner *nativeHierarchyEtcdRuntime) finalize(t *testing.T, ctx context.Context, taskID string) {
+	t.Helper()
 	finished, err := owner.queue.ReadFinishedWork(ctx, taskID)
 	if err != nil {
 		t.Fatal(err)
