@@ -25,7 +25,7 @@ import (
 // The coordinator seals effective files after Custom Attaches produce their facts.
 func (service *Service) applyAuthoredOnce(
 	ctx context.Context,
-	environmentID, taskTarget string,
+	environmentID string,
 	bundle core.BlueprintBundle,
 	expectedRevision, idempotencyKey string,
 	preserveRoutes bool,
@@ -264,7 +264,12 @@ func (service *Service) applyAuthoredOnce(
 	}
 	plan := admission.Plan
 	parent, err := authoredApplyParent(
-		claim, baseline.scope, taskTarget, desired, uint32(len(plan.Units)), service.executionTimeout,
+		claim,
+		baseline.scope,
+		baseline.environment.Record.Name,
+		desired,
+		uint32(len(plan.Units)),
+		service.executionTimeout,
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

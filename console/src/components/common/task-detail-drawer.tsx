@@ -196,7 +196,7 @@ export function TaskDetailDrawer({
                 {presentation.destination.label}
               </Link>
             )}
-            {task.stop_requested && (
+            {task.stop_requested && !task.finished_at && (
               <p className="text-sm">
                 Stop requested. Running effects must be accounted for before
                 resource protection is released.

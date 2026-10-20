@@ -103,7 +103,7 @@ func (service *Service) ApplyBlueprint(
 	expectedRevision string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, expectedRevision, idempotencyKey, false)
+	return service.applyBlueprint(ctx, environmentID, bundle, expectedRevision, idempotencyKey, false)
 }
 
 func (service *Service) ApplyComponentBlueprint(
@@ -119,13 +119,12 @@ func (service *Service) ApplyComponentBlueprint(
 			"Component id or Blueprint revision is invalid",
 		)
 	}
-	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, expectedRevision, idempotencyKey, true)
+	return service.applyBlueprint(ctx, environmentID, bundle, expectedRevision, idempotencyKey, true)
 }
 
 func (service *Service) applyBlueprint(
 	ctx context.Context,
 	environmentID string,
-	taskTarget string,
 	bundle core.BlueprintBundle,
 	expectedRevision string,
 	idempotencyKey string,
@@ -151,7 +150,6 @@ func (service *Service) applyBlueprint(
 		response, err := service.applyAuthoredOnce(
 			ctx,
 			environmentID,
-			taskTarget,
 			bundle,
 			expectedRevision,
 			idempotencyKey,
