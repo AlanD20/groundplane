@@ -110,7 +110,7 @@ func newNativeVolumeFixture(t *testing.T) *nativeVolumeFixture {
 		1,
 		[16]byte{1},
 		2,
-		[]workexecution.Operation{workexecution.Volume},
+		[]workexecution.Operation{workexecution.Volume, workexecution.Network},
 	)
 	if err != nil {
 		t.Fatal(err)
