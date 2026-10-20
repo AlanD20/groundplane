@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -49,6 +50,10 @@ func NewInputs(queue *workqueue.Repository, registrations []InputRegistration) (
 }
 
 func (inputs *Inputs) Advance(ctx context.Context, entry workqueue.QueueEntry) error {
+	if err := keyvalue.ValidateContext(ctx); err != nil {
+		return err
+	}
+	ctx = imagefence.WithScope(ctx)
 	view, err := inputs.queue.ReadWork(ctx, entry.TaskID, entry.WorkItemID, 0)
 	if err != nil {
 		return err

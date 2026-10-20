@@ -3,9 +3,11 @@ package blueprint
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,9 +17,13 @@ import (
 func (service *Service) PrepareRuntimeProjection(ctx context.Context,
 	parent workexecution.Task, snapshot blueprintunits.Snapshot,
 ) (bool, error) {
+	if err := keyvalue.ValidateContext(ctx); err != nil {
+		return false, err
+	}
 	if err := validateAuthoredRuntimeProjectionParent(parent, snapshot); err != nil {
 		return false, err
 	}
+	ctx = imagefence.WithScope(ctx)
 	_, found, err := service.repository.ReadBlueprintRuntimeProjection(
 		ctx, parent.Scope.EnvironmentID, parent.ID, snapshot.ReadRevision,
 	)
