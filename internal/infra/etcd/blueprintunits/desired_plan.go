@@ -1,6 +1,8 @@
 package blueprintunits
 
 import (
+	"slices"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -13,6 +15,10 @@ const maximumDesiredUnits = 512
 // its new Blueprint head and immutable graph. Unlike later expansion, this
 // compares the preceding head; it must join the transaction advancing that head.
 func PrepareAuthoredPlanPublication(snapshot Snapshot, next DesiredPlan) (MutationPlan, error) {
+	// Captured graphs follow work IDs; selection records follow resource keys.
+	// Sorting a private copy preserves the immutable graph's item/unit pairing.
+	next.Units = slices.Clone(next.Units)
+	slices.SortFunc(next.Units, func(left, right Unit) int { return compareKey(left.Target, right.Target) })
 	if ids.Validate(ids.KindEnvironment, snapshot.EnvironmentID) != nil || snapshot.ReadRevision <= 0 ||
 		snapshot.HeadRevision < 0 || snapshot.ReadRevision < snapshot.HeadRevision ||
 		(snapshot.HeadRevision == 0 && snapshot.HeadTaskID != "") ||

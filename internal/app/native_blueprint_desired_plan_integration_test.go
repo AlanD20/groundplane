@@ -121,10 +121,17 @@ func TestNativeBlueprintAuthoredPlanPublicationFencesHeadAndEpoch(t *testing.T) 
 	environmentID := ids.New(ids.KindEnvironment)
 	parentID := ids.New(ids.KindTask)
 	target := blueprintunits.ResourceKey{Kind: ids.KindNetwork, ID: ids.New(ids.KindNetwork)}
+	otherTarget := blueprintunits.ResourceKey{Kind: ids.KindService, ID: ids.New(ids.KindService)}
 	plan := blueprintunits.DesiredPlan{
 		EnvironmentID: environmentID, ParentTaskID: parentID, Complete: true,
-		Units: []blueprintunits.Unit{{Target: target, Writes: []blueprintunits.ResourceKey{target},
-			Fingerprint: strings.Repeat("a", 64)}},
+		Units: []blueprintunits.Unit{
+			{
+				Target:      otherTarget,
+				Writes:      []blueprintunits.ResourceKey{otherTarget},
+				Fingerprint: strings.Repeat("b", 64),
+			},
+			{Target: target, Writes: []blueprintunits.ResourceKey{target}, Fingerprint: strings.Repeat("a", 64)},
+		},
 	}
 	headValue, err := idempotencyrecord.EncodeTaskReference(parentID)
 	if err != nil {
@@ -134,7 +141,7 @@ func TestNativeBlueprintAuthoredPlanPublicationFencesHeadAndEpoch(t *testing.T) 
 	absence, err := blueprintunits.PrepareInitialAbsencePublication(
 		environmentID,
 		parentID,
-		[]blueprintunits.ResourceKey{target},
+		[]blueprintunits.ResourceKey{target, otherTarget},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -146,6 +153,9 @@ func TestNativeBlueprintAuthoredPlanPublicationFencesHeadAndEpoch(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer prepared.Clear()
+	if plan.Units[0].Target != otherTarget {
+		t.Fatal("selection preparation reordered the captured graph")
+	}
 	mutations := append(prepared.Mutations(), absence.Mutations()...)
 	mutations = append(mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(environmentID), Value: headValue,
@@ -161,7 +171,7 @@ func TestNativeBlueprintAuthoredPlanPublicationFencesHeadAndEpoch(t *testing.T) 
 	loaded, err := ledger.Load(t.Context(), environmentID)
 	if err != nil || loaded.Desired == nil || !loaded.Desired.Record.Complete ||
 		loaded.HeadTaskID != parentID || loaded.Desired.Record.ParentTaskID != parentID ||
-		len(loaded.Desired.Record.Units) != 1 || loaded.Desired.Record.Units[0].Target != target ||
+		len(loaded.Desired.Record.Units) != 2 || loaded.Desired.Record.Units[0].Target != target ||
 		loaded.HeadRevision != loaded.Desired.Revision || loaded.EpochRevision != loaded.Desired.Revision {
 		t.Fatalf("accepted membership is not usable at its head: %#v %v", loaded, err)
 	}
