@@ -3,10 +3,10 @@
 Tasks record asynchronous actions. Activity shows the same records in their
 Platform, Tenant, Project or Environment scope. Workload logs are separate.
 
-The [replacement engine](../decisions/task-execution-redesign.md) is being
-implemented. Its code and viewer are not yet qualified or deployed. The behavior
-below describes that replacement; previous installation evidence does not qualify
-the new storage model or protocol.
+The [native execution engine](../decisions/task-execution-redesign.md) uses the
+Task, work-item and attempt model below. Selected installed journeys are
+qualified; full recovery and failure-boundary qualification remains incomplete.
+See [current limits](../capabilities.md) and the [QA matrix](../qa-matrix.md).
 
 ## Follow an operation
 
