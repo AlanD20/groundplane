@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -96,6 +97,17 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRelease(
 		return err
 	}
 	defer keyvalue.ZeroMutationBytes(runtime.Mutations)
+	stateCondition, stateMutation, err := services.AcknowledgeRunningRuntime(
+		ctx, ledger.store, input.Release.EnvironmentId, input.Release.ServiceId, view.Work.ReadRevision,
+	)
+	if err != nil {
+		return err
+	}
+	defer clear(stateMutation.Value)
+	state := workqueue.Change{
+		Conditions: []keyvalue.Condition{stateCondition},
+		Mutations:  []keyvalue.Mutation{stateMutation},
+	}
 	history, err := ledger.prepareCompletedBlueprintReleaseHistory(ctx, view, input, completed, at)
 	if err != nil {
 		return err
@@ -152,6 +164,7 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRelease(
 		ctx,
 		workqueue.Change{Conditions: authorization},
 		runtime,
+		state,
 		history,
 		files,
 		receipt,
