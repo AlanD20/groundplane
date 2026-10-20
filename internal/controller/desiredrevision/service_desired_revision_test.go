@@ -45,8 +45,16 @@ func TestCloneEnvironmentDesiredProjectionPreservesDesiredTopology(t *testing.T)
 			DesiredGeneration: 1,
 		}},
 		Components: []testcomponents.Record{component},
+		Backup:     &testenvironmentprojection.EnvironmentBlueprintBackupPolicy{Enabled: false},
 	}
 	result := CloneProjection(current)
+	if result.Backup == nil || result.Backup.Enabled {
+		t.Fatal("direct mutation lost the disabled Backup decision")
+	}
+	result.Backup.Enabled = true
+	if current.Backup.Enabled {
+		t.Fatal("editing a candidate changed its current Backup decision")
+	}
 	if len(result.DesiredZones) != 1 || result.DesiredZones[0].Desired.ID != zoneID ||
 		len(result.DesiredServices) != 2 || result.DesiredServices[0].Desired.ID != serviceID ||
 		result.DesiredServices[1].Desired.ID != generatedServiceID ||

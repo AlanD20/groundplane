@@ -4,11 +4,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 
-	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
-	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 )
@@ -37,33 +34,7 @@ func NextGeneration(
 func CloneProjection(
 	current projectionrecord.EnvironmentComposeProjection,
 ) projectionrecord.EnvironmentComposeProjection {
-	var runtimeFiles []core.BlueprintFile
-	if current.RuntimeFiles != nil {
-		runtimeFiles = make([]core.BlueprintFile, len(current.RuntimeFiles))
-		for index, file := range current.RuntimeFiles {
-			runtimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
-		}
-	}
-	result := projectionrecord.EnvironmentComposeProjection{
-		EnvironmentID: current.EnvironmentID, RevisionID: current.RevisionID,
-		RenderGeneration:       current.RenderGeneration,
-		ComposeArtifact:        append([]byte(nil), current.ComposeArtifact...),
-		NormalizedCompose:      append([]byte(nil), current.NormalizedCompose...),
-		RuntimeFiles:           runtimeFiles,
-		ServiceExtensions:      CloneServiceExtensions(current.ServiceExtensions),
-		DesiredZones:           append([]projectionrecord.EnvironmentZoneProjection(nil), current.DesiredZones...),
-		DesiredServices:        append([]servicerecord.EnvironmentServiceProjection(nil), current.DesiredServices...),
-		DesiredRoutes:          append([]projectionrecord.EnvironmentRouteProjection(nil), current.DesiredRoutes...),
-		Volumes:                append([]projectionrecord.EnvironmentVolumeIdentity(nil), current.Volumes...),
-		VolumeMounts:           append([]projectionrecord.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
-		Components:             append([]componentrecord.Record(nil), current.Components...),
-		Entries:                append([]entryrecord.Record(nil), current.Entries...),
-		ServiceDependencyPlans: current.ServiceDependencyPlans.Clone(),
-	}
-	result.ManagedComponentRuntimeSources = append(
-		[]projectionrecord.ManagedComponentRuntimeSource(nil), current.ManagedComponentRuntimeSources...,
-	)
-	return result
+	return projectionrecord.CloneEnvironmentComposeProjection(current)
 }
 
 func CloneServiceExtensions(source map[string]core.ServiceExtensionSpec) map[string]core.ServiceExtensionSpec {
