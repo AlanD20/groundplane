@@ -28,8 +28,8 @@ func TestValidateBackingServiceComponentsRejectsNonEmpty(t *testing.T) {
 }
 
 // Rationale: backing bootstrap publishes the complete facade atomically. Its
-// selected branch must retain the store-wide limit while the compare, success,
-// and failure arms together remain within etcd's full request envelope.
+// selected branch has its scoped 128-operation allowance while compare, success,
+// and failure arms together remain within the unchanged full request envelope.
 func TestBackingServicePublicationBudgetPreservesAtomicFacadeEnvelope(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -42,7 +42,10 @@ func TestBackingServicePublicationBudgetPreservesAtomicFacadeEnvelope(t *testing
 		{name: "current facade", comparisons: 43, successMutations: 37, failureReads: 43},
 		{name: "current Valkey facade with deferred failure evidence", comparisons: 46, successMutations: 40},
 		{name: "exact selected and request bounds", comparisons: 32, successMutations: 64, failureReads: 32},
-		{name: "selected branch overflow", comparisons: 1, successMutations: 96, failureReads: 1, wantError: true},
+		{name: "native PostgreSQL facade", comparisons: 50, successMutations: 58},
+		{name: "native Valkey facade", comparisons: 48, successMutations: 52},
+		{name: "exact backing selected bound", comparisons: 48, successMutations: 80},
+		{name: "selected branch overflow", comparisons: 1, successMutations: 128, wantError: true},
 		{name: "full request overflow", comparisons: 43, successMutations: 43, failureReads: 43, wantError: true},
 	}
 	for _, test := range tests {

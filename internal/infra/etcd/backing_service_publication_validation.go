@@ -35,7 +35,7 @@ func validateBackingServicePublicationOperationCounts(
 ) error {
 	selectedOperations := comparisons + successMutations
 	requestOperations := selectedOperations + failureReads
-	if selectedOperations > etcdstore.MaximumOperations ||
+	if selectedOperations > maximumBackingServiceTransactionOperations ||
 		requestOperations > maximumBackingServiceTransactionRequestOperations {
 		return errs.Newf(
 			errs.KindValidationFailed,
@@ -44,7 +44,7 @@ func validateBackingServicePublicationOperationCounts(
 			successMutations,
 			failureReads,
 			selectedOperations,
-			etcdstore.MaximumOperations,
+			maximumBackingServiceTransactionOperations,
 			requestOperations,
 			maximumBackingServiceTransactionRequestOperations,
 		)

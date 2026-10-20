@@ -172,8 +172,8 @@ func TestStoreTransactReturnsSameRevisionFailureReads(t *testing.T) {
 // failed compare still classifies from the exact failed MVCC view.
 func TestBackingServiceTransactionDefersFailureEvidence(t *testing.T) {
 	t.Parallel()
-	conditions := make([]testkeyvalue.Condition, 46)
-	mutations := make([]testkeyvalue.Mutation, 40)
+	conditions := make([]testkeyvalue.Condition, 50)
+	mutations := make([]testkeyvalue.Mutation, 58)
 	for index := range conditions {
 		conditions[index] = testkeyvalue.Condition{Key: fmt.Sprintf("/backing/condition/%02d", index)}
 	}
@@ -194,7 +194,7 @@ func TestBackingServiceTransactionDefersFailureEvidence(t *testing.T) {
 	if err != nil || !result.Succeeded || result.Revision != 17 {
 		t.Fatalf("Backing transaction = %#v, %v", result, err)
 	}
-	if len(backend.transaction.conditions) != 46 || len(backend.transaction.operations) != 40 ||
+	if len(backend.transaction.conditions) != 50 || len(backend.transaction.operations) != 58 ||
 		len(backend.transaction.otherwise) != 0 {
 		t.Fatalf("Backing transaction arms = %d/%d/%d", len(backend.transaction.conditions),
 			len(backend.transaction.operations), len(backend.transaction.otherwise))

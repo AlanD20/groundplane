@@ -25,7 +25,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const maximumBackingServiceTransactionRequestOperations = 128
+const (
+	maximumBackingServiceTransactionOperations        = 128
+	maximumBackingServiceTransactionRequestOperations = 128
+)
 
 // BackingServiceCreation is the complete durable input for one backing
 // facade. The repository publishes every public member and its first desired
