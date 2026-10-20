@@ -30,22 +30,7 @@ import (
 // clients must finish that same Task without repeating the swap. This is not a
 // server crash or an installed Controller/Console qualification.
 func TestNativeRotationRealEtcdLostCommitAndReopen(t *testing.T) {
-	endpoint := os.Getenv("GP_NATIVE_ETCD_ENDPOINT")
-	address, err := url.Parse(endpoint)
-	if err != nil || address.Scheme != "http" || address.Hostname() != "127.0.0.1" || address.Port() == "" {
-		t.Fatal("GP_NATIVE_ETCD_ENDPOINT must select an isolated loopback etcd listener")
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	prefix := "/native-task-acceptance/" + ids.New(ids.KindTask)
-	open := func() keyvalue.Store {
-		t.Helper()
-		store, err := etcd.New(ctx, []string{endpoint}, prefix+"/", config.DefaultMaintenanceConfig(), t.TempDir())
-		if err != nil {
-			t.Fatal(err)
-		}
-		return store
-	}
+	ctx, prefix, open := nativeEtcdAcceptanceConnector(t)
 	store := open()
 	t.Cleanup(func() {
 		if err := store.Close(); err != nil {
@@ -53,6 +38,40 @@ func TestNativeRotationRealEtcdLostCommitAndReopen(t *testing.T) {
 		}
 	})
 	f := newNativeRotationFixture(t)
+	runNativeEtcdRotation(t, ctx, prefix, open, &store, f)
+}
+
+type nativeEtcdStore interface {
+	keyvalue.Store
+	etcd.EnvironmentBlueprintStore
+}
+
+func nativeEtcdAcceptanceConnector(t *testing.T) (context.Context, string, func() nativeEtcdStore) {
+	t.Helper()
+	endpoint := os.Getenv("GP_NATIVE_ETCD_ENDPOINT")
+	address, err := url.Parse(endpoint)
+	if err != nil || address.Scheme != "http" || address.Hostname() != "127.0.0.1" || address.Port() == "" {
+		t.Fatal("GP_NATIVE_ETCD_ENDPOINT must select an isolated loopback etcd listener")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
+	t.Cleanup(cancel)
+	prefix := "/native-task-acceptance/" + ids.New(ids.KindTask)
+	open := func() nativeEtcdStore {
+		t.Helper()
+		store, err := etcd.New(ctx, []string{endpoint}, prefix+"/", config.DefaultMaintenanceConfig(), t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return store
+	}
+	return ctx, prefix, open
+}
+
+func runNativeEtcdRotation(t *testing.T, ctx context.Context, prefix string, open func() nativeEtcdStore,
+	current *nativeEtcdStore, f *nativeRotationFixture,
+) {
+	t.Helper()
+	store := *current
 	seedTask, _, err := f.queue.ReadTask(ctx, f.input.TaskID, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -113,6 +132,7 @@ func TestNativeRotationRealEtcdLostCommitAndReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	store = open()
+	*current = store
 	f.queue, err = workqueue.NewRepository(store)
 	if err != nil {
 		t.Fatal(err)
