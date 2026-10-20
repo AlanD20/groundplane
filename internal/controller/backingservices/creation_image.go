@@ -3,9 +3,11 @@ package backingservices
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	dockerreference "github.com/distribution/reference"
 )
 
 type creationImageRegistry interface {
@@ -27,6 +29,19 @@ func (service *CreationService) sealCreationImage(ctx context.Context, reference
 	agent, err := service.agents.GetSingleton(ctx)
 	if err != nil {
 		return creationImage{}, err
+	}
+	// The managed catalog's tag constrains its server line; the digest alone
+	// selects delivery bytes. Do not pass both selectors to the image resolver.
+	if backingcatalog.ValidPinnedImage(reference) {
+		named, err := dockerreference.ParseNormalizedNamed(reference)
+		if err != nil {
+			return creationImage{}, errs.Wrap(errs.KindValidationFailed, err)
+		}
+		pinned, ok := named.(dockerreference.Canonical)
+		if !ok {
+			return creationImage{}, errs.New(errs.KindValidationFailed, "managed Backing image requires a digest")
+		}
+		reference = dockerreference.TrimNamed(named).String() + "@" + pinned.Digest().String()
 	}
 	selected, err := service.imageRegistry.Resolve(ctx, reference)
 	if err != nil {
