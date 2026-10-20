@@ -25,15 +25,17 @@ func TestBackingAuthenticationDecodingIsExplicit(t *testing.T) {
 		}
 	}
 	mode, err := DecodeBackingAuthentication(
-		agentpb.BackingAuthentication_BACKING_AUTHENTICATION_UNSPECIFIED, false,
+		agentpb.BackingAuthentication_BACKING_AUTHENTICATION_USERNAME_PASSWORD, false,
 	)
 	if err != nil || mode != "" {
-		t.Fatalf("decodeBackingAuthentication(unspecified, false) = %q, %v", mode, err)
+		t.Fatalf("decodeBackingAuthentication(fixed username/password) = %q, %v", mode, err)
 	}
-	if _, err := DecodeBackingAuthentication(
-		agentpb.BackingAuthentication_BACKING_AUTHENTICATION_UNSPECIFIED, true,
-	); err == nil {
-		t.Fatal("decodeBackingAuthentication(unset selectable mode) succeeded")
+	for _, selectable := range []bool{false, true} {
+		if _, err := DecodeBackingAuthentication(
+			agentpb.BackingAuthentication_BACKING_AUTHENTICATION_UNSPECIFIED, selectable,
+		); err == nil {
+			t.Fatal("decodeBackingAuthentication(unset mode) succeeded")
+		}
 	}
 	if _, err := DecodeBackingAuthentication(
 		agentpb.BackingAuthentication_BACKING_AUTHENTICATION_PASSWORD, false,

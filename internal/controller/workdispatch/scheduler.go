@@ -192,6 +192,11 @@ func (scheduler *Scheduler) Schedule(
 			result.issue(entry, errs.New(errs.KindInternal, "queued operation has no registered owner"))
 			continue
 		}
+		if !candidate.Assignment.DecisionOnly {
+			// Admission may inspect the exact prospective recovery attempt. No
+			// execution is authorized until its assignment commits below.
+			candidate.Assignment.AttemptID = ids.New(ids.KindAttempt)
+		}
 		decision, err := owner.Admit(ctx, candidate.Assignment, at)
 		defer keyvalue.ClearMutationValues(decision.Change.Mutations)
 		if err != nil {
@@ -239,7 +244,6 @@ func (scheduler *Scheduler) Schedule(
 			continue
 		}
 		request.At, request.Deadline = at, decision.Deadline
-		request.AttemptID = ids.New(ids.KindAttempt)
 		change, attempt, err := workqueue.PrepareAssignment(request)
 		if err != nil {
 			result.issue(entry, err)

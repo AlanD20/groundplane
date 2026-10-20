@@ -12,9 +12,12 @@ func DecodeBackingAuthentication(
 	authentication agentpb.BackingAuthentication,
 	supported bool,
 ) (core.BackingAuthentication, error) {
-	if authentication == agentpb.BackingAuthentication_BACKING_AUTHENTICATION_UNSPECIFIED {
-		if supported {
-			return "", errs.New(errs.KindValidationFailed, "adapter authentication mode is required")
+	if !supported {
+		if authentication != agentpb.BackingAuthentication_BACKING_AUTHENTICATION_USERNAME_PASSWORD {
+			return "", errs.New(
+				errs.KindValidationFailed,
+				"fixed-authentication adapter requires username/password credentials",
+			)
 		}
 		return core.ResolveBackingAuthentication(false, "")
 	}
