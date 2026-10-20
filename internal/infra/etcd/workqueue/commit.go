@@ -16,7 +16,7 @@ func (repository *Repository) Commit(ctx context.Context, changes ...Change) (ke
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return keyvalue.TransactionResult{}, err
 	}
-	joined, err := joinChanges(changes)
+	joined, err := JoinChanges(changes...)
 	if err != nil {
 		return keyvalue.TransactionResult{}, err
 	}
@@ -37,7 +37,9 @@ func (repository *Repository) Commit(ctx context.Context, changes ...Change) (ke
 	return result, nil
 }
 
-func joinChanges(changes []Change) (Change, error) {
+// JoinChanges composes operation and execution fragments, retaining one copy
+// of identical comparisons while rejecting conflicting revisions or writes.
+func JoinChanges(changes ...Change) (Change, error) {
 	var joined Change
 	conditions := make(map[keyvalue.Condition]struct{})
 	revisions := make(map[string]int64)

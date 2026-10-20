@@ -20,10 +20,14 @@ func (repository *IdempotencyRepository) ApplyExecutionRetry(ctx context.Context
 			"execution retry requires a completed request receipt",
 		)
 	}
+	joined, err := workqueue.JoinChanges(change)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newIdempotencyMutationPlanForMarker(
 		idempotency.IdempotencyMarkerDirect,
-		change.Conditions,
-		change.Mutations,
+		joined.Conditions,
+		joined.Mutations,
 		func(_ int64, _ []*keyvalue.KeyValue) error {
 			return errs.New(
 				errs.KindStateConflict,
