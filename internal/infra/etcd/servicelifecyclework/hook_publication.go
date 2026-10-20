@@ -43,10 +43,6 @@ func (repository *Repository) PrepareInput(
 		return Publication{}, conflict("Service lifecycle publication requires its captured owner and hook envelope")
 	}
 	publication := Publication{Input: input, store: repository.store}
-	publication.Change.Conditions = []keyvalue.Condition{
-		{Key: workqueue.TaskKey(input.TaskID)}, {Key: workqueue.ItemKey(input.WorkItemID)},
-		{Key: InputKey(input.WorkItemID)},
-	}
 	defer func() {
 		if resultErr != nil {
 			keyvalue.ClearMutationValues(publication.Change.Mutations)
@@ -115,5 +111,6 @@ func (repository *Repository) PrepareInput(
 		return Publication{}, err
 	}
 	publication.Change.Mutations = append(publication.Change.Mutations, change.Mutations...)
+	publication.Change.Conditions = append(publication.Change.Conditions, change.Conditions...)
 	return publication, nil
 }

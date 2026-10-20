@@ -88,12 +88,15 @@ func (repository *ServiceRepository) PublishServiceLifecycle(ctx context.Context
 	}
 	defer clear(epoch.Value)
 	conditions := append(work.Conditions, publication.Change.Conditions...)
-	conditions = append(conditions, fence.TransactionConditions()...)
 	conditions = append(conditions,
 		keyvalue.Condition{Key: hierarchy.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		keyvalue.Condition{Key: hierarchy.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		keyvalue.Condition{Key: deletions.TombstoneKey("service", input.ServiceID)},
 	)
+	conditions, err = environmentfence.AppendConditions(conditions, fence)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	mutations := append(work.Mutations, publication.Change.Mutations...)
 	mutations = append(mutations, epoch)
 	initiation, err := newEnvironmentTaskInitiation(tenant, project, environment, taskjournal.TaskActorOperator)
