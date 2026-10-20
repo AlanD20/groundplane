@@ -77,6 +77,7 @@ func (s *Server) registerTasks() {
 		Middlewares: huma.Middlewares{s.rejectTaskMutationQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.retryTask)
+	s.setRoutePolicy("POST /api/v1/tasks/{id}/retry", routePolicy{body: jsonBody})
 	huma.Register(s.API, huma.Operation{
 		OperationID: "task.abort", Method: http.MethodPost, Path: "/tasks/{id}/abort",
 		Summary: "Abort an in-flight task", Tags: []string{"Task"}, DefaultStatus: http.StatusAccepted,
