@@ -235,7 +235,7 @@ func newControllerDataComposition(
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize backup runtime repository: %w", err)
 	}
-	scriptCheckpoints, err := taskcheckpoint.NewScriptCheckpointService(scriptRecords)
+	scriptCheckpoints, err := taskcheckpoint.NewScriptCheckpointService(scriptRecords, store)
 	if err != nil {
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Script checkpoint service: %w", err)

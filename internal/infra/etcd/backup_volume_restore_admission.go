@@ -17,13 +17,14 @@ import (
 )
 
 type PreparedVolumeRestore struct {
-	HostID      string
-	Restore     backupruntime.BackupRestoreRecord
-	Scope       *agentpb.BackupPlanScope
-	Authority   *agentpb.BackupStepAuthority
-	Artifacts   []*agentpb.ComposeArtifact
-	Owner       taskjournal.TaskOwner
-	Publication *PreparedVolumeRestorePublication
+	EnvironmentName string
+	HostID          string
+	Restore         backupruntime.BackupRestoreRecord
+	Scope           *agentpb.BackupPlanScope
+	Authority       *agentpb.BackupStepAuthority
+	Artifacts       []*agentpb.ComposeArtifact
+	Owner           taskjournal.TaskOwner
+	Publication     *PreparedVolumeRestorePublication
 }
 
 type volumeRestoreAdmissionState struct {
@@ -120,13 +121,14 @@ func (repository *BackupRuntimeRepository) PrepareVolumeRestore(ctx context.Cont
 		), authority: proto.CloneOf(authority), artifacts: cloneRestoreArtifacts(selected.Artifacts),
 		conditions: conditions, mutations: mutations}}
 	return PreparedVolumeRestore{
-		HostID:      host.Binding.HostID,
-		Restore:     backupruntime.CloneBackupRestoreRecord(restore),
-		Scope:       proto.CloneOf(selected.Scope),
-		Authority:   proto.CloneOf(authority),
-		Artifacts:   cloneRestoreArtifacts(selected.Artifacts),
-		Owner:       selected.Owner,
-		Publication: publication,
+		EnvironmentName: selected.EnvironmentName,
+		HostID:          host.Binding.HostID,
+		Restore:         backupruntime.CloneBackupRestoreRecord(restore),
+		Scope:           proto.CloneOf(selected.Scope),
+		Authority:       proto.CloneOf(authority),
+		Artifacts:       cloneRestoreArtifacts(selected.Artifacts),
+		Owner:           selected.Owner,
+		Publication:     publication,
 	}, nil
 }
 

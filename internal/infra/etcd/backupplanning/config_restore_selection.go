@@ -36,14 +36,15 @@ type ConfigRestoreSelectionInput struct {
 }
 
 type ConfigRestoreSelection struct {
-	Restore      backupruntime.BackupRestoreRecord
-	Scope        *agentpb.BackupPlanScope
-	Owner        taskjournal.TaskOwner
-	Connector    *agentpb.BackupConnectorAuthority
-	Encryption   *agentpb.BackupEncryptionAuthority
-	Files        *agentpb.BackupConfigFileContext
-	ReadRevision int64
-	Conditions   []etcdstore.Condition
+	EnvironmentName string
+	Restore         backupruntime.BackupRestoreRecord
+	Scope           *agentpb.BackupPlanScope
+	Owner           taskjournal.TaskOwner
+	Connector       *agentpb.BackupConnectorAuthority
+	Encryption      *agentpb.BackupEncryptionAuthority
+	Files           *agentpb.BackupConfigFileContext
+	ReadRevision    int64
+	Conditions      []etcdstore.Condition
 }
 
 func (repository *Planner) PrepareConfigRestoreSelection(ctx context.Context,
@@ -189,8 +190,17 @@ func (repository *Planner) PrepareConfigRestoreSelection(ctx context.Context,
 	if err := backupruntime.ValidateBackupRestoreRecord(restore); err != nil {
 		return zero, err
 	}
-	return ConfigRestoreSelection{Restore: restore, Scope: scope, Owner: owner, Connector: connectorAuthority,
-		Encryption: encryption, Files: files, ReadRevision: anchor.ReadRevision, Conditions: snapshot.compares()}, nil
+	return ConfigRestoreSelection{
+		EnvironmentName: environment.Name,
+		Restore:         restore,
+		Scope:           scope,
+		Owner:           owner,
+		Connector:       connectorAuthority,
+		Encryption:      encryption,
+		Files:           files,
+		ReadRevision:    anchor.ReadRevision,
+		Conditions:      snapshot.compares(),
+	}, nil
 }
 
 func (repository *Planner) configRestoreEncryption(ctx context.Context, run *backupruntime.BackupRunRecord,

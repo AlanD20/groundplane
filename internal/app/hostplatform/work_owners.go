@@ -181,7 +181,7 @@ func (platform *Platform) newWorkOwners(
 	if err != nil {
 		return nil, err
 	}
-	volumeReports, err := volume.NewWorkReports(queue, volumeRecords)
+	volumeReports, err := volume.NewWorkReports(queue, volumeRecords, diagnostics)
 	if err != nil {
 		return nil, err
 	}

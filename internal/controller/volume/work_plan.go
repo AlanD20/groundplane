@@ -59,7 +59,8 @@ func buildVolumeWork(scope workexecution.Scope, placement workexecution.Placemen
 		},
 		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt, Deadline: claim.CreatedAt.Add(timeout), ExpectedItems: 1}
 	item := workexecution.Item{ID: workID, TaskID: task.ID, Operation: workexecution.Volume, TargetID: request.volumeID,
-		Placement: placement, Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
+		TargetName: task.TargetName,
+		Placement:  placement, Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
 		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline,
 		Claims: []workexecution.Claim{{ScopeID: request.environmentID},
 			{

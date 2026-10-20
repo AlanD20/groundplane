@@ -18,13 +18,14 @@ import (
 )
 
 type PreparedDatabaseRestore struct {
-	HostID      string
-	Restore     backupruntime.BackupRestoreRecord
-	Scope       *agentpb.BackupPlanScope
-	Authority   *agentpb.BackupStepAuthority
-	Artifacts   []*agentpb.ComposeArtifact
-	Owner       taskjournal.TaskOwner
-	Publication *PreparedDatabaseRestorePublication
+	EnvironmentName string
+	HostID          string
+	Restore         backupruntime.BackupRestoreRecord
+	Scope           *agentpb.BackupPlanScope
+	Authority       *agentpb.BackupStepAuthority
+	Artifacts       []*agentpb.ComposeArtifact
+	Owner           taskjournal.TaskOwner
+	Publication     *PreparedDatabaseRestorePublication
 }
 
 type databaseRestoreAdmissionState struct {
@@ -151,13 +152,14 @@ func (repository *BackupRuntimeRepository) PrepareDatabaseRestore(ctx context.Co
 		), authority: proto.CloneOf(authority), artifacts: cloneRestoreArtifacts(artifacts),
 		conditions: conditions, mutations: mutations}}
 	return PreparedDatabaseRestore{
-		HostID:      host.Binding.HostID,
-		Restore:     backupruntime.CloneBackupRestoreRecord(restore),
-		Scope:       proto.CloneOf(selected.Scope),
-		Authority:   proto.CloneOf(authority),
-		Artifacts:   artifacts,
-		Owner:       selected.Owner,
-		Publication: publication,
+		EnvironmentName: selected.EnvironmentName,
+		HostID:          host.Binding.HostID,
+		Restore:         backupruntime.CloneBackupRestoreRecord(restore),
+		Scope:           proto.CloneOf(selected.Scope),
+		Authority:       proto.CloneOf(authority),
+		Artifacts:       artifacts,
+		Owner:           selected.Owner,
+		Publication:     publication,
 	}, nil
 }
 

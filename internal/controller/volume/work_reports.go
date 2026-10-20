@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/volumeexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -52,15 +53,20 @@ type WorkRecords interface {
 }
 
 type WorkReports struct {
-	queue   *workqueue.Repository
-	records WorkRecords
+	queue       *workqueue.Repository
+	records     WorkRecords
+	diagnostics *executiondiagnostics.Repository
 }
 
-func NewWorkReports(queue *workqueue.Repository, records WorkRecords) (*WorkReports, error) {
-	if queue == nil || records == nil {
+func NewWorkReports(
+	queue *workqueue.Repository,
+	records WorkRecords,
+	diagnostics *executiondiagnostics.Repository,
+) (*WorkReports, error) {
+	if queue == nil || records == nil || diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "Volume reporting requires execution storage and its publication owner")
 	}
-	return &WorkReports{queue: queue, records: records}, nil
+	return &WorkReports{queue: queue, records: records, diagnostics: diagnostics}, nil
 }
 
 func (service *WorkReports) CheckpointVolume(ctx context.Context, authorization agentregistration.WorkAuthorization,
@@ -111,6 +117,7 @@ func (service *WorkReports) CheckpointVolume(ctx context.Context, authorization 
 	if !result.Succeeded {
 		return nil, errs.New(errs.KindStateConflict, "Volume checkpoint ownership changed; resend the saved report")
 	}
+	service.reportProgress(ctx, view, input, progress)
 	digest, err := hex.DecodeString(checkpoint.Evidence.SHA256)
 	if err != nil {
 		return nil, err

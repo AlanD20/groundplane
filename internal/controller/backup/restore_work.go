@@ -39,7 +39,7 @@ func buildRestoreWork(
 	task := workexecution.Task{ID: restore.TaskID, Actor: workexecution.OperatorActor,
 		Scope: workexecution.Scope{TenantID: prepared.Owner.TenantID, ProjectID: prepared.Owner.ProjectID,
 			EnvironmentID: prepared.Owner.EnvironmentID},
-		Action: workexecution.ActionRestore, TargetID: restore.EnvironmentID, TargetName: restore.EnvironmentID,
+		Action: workexecution.ActionRestore, TargetID: restore.EnvironmentID, TargetName: prepared.EnvironmentName,
 		Intent: reference, ExpectedItems: 1, CreatedAt: restore.CreatedAt, UpdatedAt: restore.CreatedAt,
 		Deadline: restore.CreatedAt.Add(6 * time.Hour)}
 	item, err := backupwork.NewItem(task, ids.New(ids.KindWorkItem), prepared.HostID, owned)

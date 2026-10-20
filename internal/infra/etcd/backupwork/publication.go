@@ -34,7 +34,7 @@ func NewItem(
 		return workexecution.Item{}, conflict("Backup Task action differs from its captured input")
 	}
 	item := workexecution.Item{ID: workID, TaskID: task.ID, Operation: operation(input.Operation),
-		TargetID: task.TargetID, Placement: workexecution.Placement{Executor: workexecution.Agent, HostID: hostID},
+		TargetID: task.TargetID, TargetName: task.TargetName, Placement: workexecution.Placement{Executor: workexecution.Agent, HostID: hostID},
 		Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
 		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline,
 		Claims: claims(input, hostID)}

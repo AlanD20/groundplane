@@ -11,6 +11,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -25,15 +27,28 @@ type ScriptCheckpointRepository interface {
 }
 
 type ScriptCheckpointService struct {
-	repository ScriptCheckpointRepository
-	now        func() time.Time
+	repository  ScriptCheckpointRepository
+	now         func() time.Time
+	queue       *workqueue.Repository
+	diagnostics *executiondiagnostics.Repository
 }
 
-func NewScriptCheckpointService(repository ScriptCheckpointRepository) (*ScriptCheckpointService, error) {
+func NewScriptCheckpointService(
+	repository ScriptCheckpointRepository,
+	store workqueue.Store,
+) (*ScriptCheckpointService, error) {
 	if repository == nil {
 		return nil, errs.New(errs.KindInternal, "Script checkpoint repository is required")
 	}
-	return &ScriptCheckpointService{repository: repository, now: time.Now}, nil
+	queue, err := workqueue.NewRepository(store)
+	if err != nil {
+		return nil, err
+	}
+	diagnostics, err := executiondiagnostics.New(store, queue)
+	if err != nil {
+		return nil, err
+	}
+	return &ScriptCheckpointService{repository: repository, now: time.Now, queue: queue, diagnostics: diagnostics}, nil
 }
 
 func (service *ScriptCheckpointService) CheckpointScript(
@@ -105,6 +120,7 @@ func (service *ScriptCheckpointService) CheckpointScript(
 	if err != nil {
 		return nil, err
 	}
+	service.reportScriptProgress(ctx, input)
 	return &agentpb.ScriptCheckpointAck{
 		TaskId: request.GetTaskId(), OperationId: request.GetOperationId(),
 		WorkItemId: request.GetWorkItemId(), AttemptId: request.GetAttemptId(),

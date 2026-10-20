@@ -127,11 +127,11 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 			ProjectID:     owner.ProjectID,
 			EnvironmentID: owner.EnvironmentID,
 		},
-		Action: workexecution.ActionRotate, TargetID: record.EnvironmentID, TargetName: record.EnvironmentID,
+		Action: workexecution.ActionRotate, TargetID: record.EnvironmentID, TargetName: environment.Name,
 		Intent: reference, ExpectedItems: 1, CreatedAt: record.CreatedAt, UpdatedAt: record.CreatedAt,
 		Deadline: record.CreatedAt.Add(time.Duration(backupKeyRotationTimeoutSeconds) * time.Second)}
 	item := workexecution.Item{ID: record.WorkItemID, TaskID: record.TaskID, Operation: workexecution.SecretRotation,
-		TargetID: record.EnvironmentID, Placement: workexecution.Placement{Executor: workexecution.Controller},
+		TargetID: record.EnvironmentID, TargetName: environment.Name, Placement: workexecution.Placement{Executor: workexecution.Controller},
 		Claims: []workexecution.Claim{{ScopeID: record.EnvironmentID}}, Input: &reference, Phase: workexecution.Ready,
 		Cleanup: workexecution.CleanupNone, CreatedAt: record.CreatedAt, UpdatedAt: record.CreatedAt, Deadline: task.Deadline}
 	if err := task.Validate(); err != nil {

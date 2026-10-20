@@ -10,13 +10,14 @@ import (
 )
 
 type PreparedManualBackupRun struct {
-	HostID      string
-	Scope       *agentpb.BackupPlanScope
-	Authority   []*agentpb.BackupStepAuthority
-	Artifacts   []*agentpb.ComposeArtifact
-	Run         backupruntime.BackupRunRecord
-	Owner       taskjournal.TaskOwner
-	Publication *PreparedBackupRunPublication
+	EnvironmentName string
+	HostID          string
+	Scope           *agentpb.BackupPlanScope
+	Authority       []*agentpb.BackupStepAuthority
+	Artifacts       []*agentpb.ComposeArtifact
+	Run             backupruntime.BackupRunRecord
+	Owner           taskjournal.TaskOwner
+	Publication     *PreparedBackupRunPublication
 }
 
 type preparedBackupRunState struct {

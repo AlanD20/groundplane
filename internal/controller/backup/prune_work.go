@@ -60,7 +60,7 @@ func buildPruneWork(
 			ProjectID:     prepared.Owner.ProjectID,
 			EnvironmentID: prepared.Owner.EnvironmentID,
 		},
-		Action: workexecution.ActionBackupPrune, TargetID: dispatch.EnvironmentID, TargetName: dispatch.EnvironmentID,
+		Action: workexecution.ActionBackupPrune, TargetID: dispatch.EnvironmentID, TargetName: prepared.EnvironmentName,
 		Intent: reference, ExpectedItems: 1, CreatedAt: dispatch.CreatedAt, UpdatedAt: dispatch.CreatedAt, Deadline: deadline}
 	item, err := backupwork.NewItem(task, ids.New(ids.KindWorkItem), prepared.HostID, owned)
 	return task, item, owned, err

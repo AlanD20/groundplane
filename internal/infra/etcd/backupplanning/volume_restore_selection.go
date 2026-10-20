@@ -28,15 +28,16 @@ type VolumeRestoreSelectionInput struct {
 }
 
 type VolumeRestoreSelection struct {
-	Restore      backupruntime.BackupRestoreRecord
-	Scope        *agentpb.BackupPlanScope
-	Owner        taskjournal.TaskOwner
-	Connector    *agentpb.BackupConnectorAuthority
-	Encryption   *agentpb.BackupEncryptionAuthority
-	Projection   *agentpb.BackupVolumeProjectionAuthority
-	Artifacts    []*agentpb.ComposeArtifact
-	ReadRevision int64
-	Conditions   []etcdstore.Condition
+	EnvironmentName string
+	Restore         backupruntime.BackupRestoreRecord
+	Scope           *agentpb.BackupPlanScope
+	Owner           taskjournal.TaskOwner
+	Connector       *agentpb.BackupConnectorAuthority
+	Encryption      *agentpb.BackupEncryptionAuthority
+	Projection      *agentpb.BackupVolumeProjectionAuthority
+	Artifacts       []*agentpb.ComposeArtifact
+	ReadRevision    int64
+	Conditions      []etcdstore.Condition
 }
 
 // PrepareVolumeRestoreSelection freezes the surviving destination and the
@@ -191,7 +192,16 @@ func (repository *Planner) PrepareVolumeRestoreSelection(ctx context.Context,
 	if err := backupruntime.ValidateBackupRestoreRecord(restore); err != nil {
 		return zero, err
 	}
-	return VolumeRestoreSelection{Restore: restore, Scope: scope, Owner: owner, Connector: connectorAuthority,
-		Encryption: encryption, Projection: projection, Artifacts: artifacts, ReadRevision: anchor.ReadRevision,
-		Conditions: snapshot.compares()}, nil
+	return VolumeRestoreSelection{
+		EnvironmentName: environment.Name,
+		Restore:         restore,
+		Scope:           scope,
+		Owner:           owner,
+		Connector:       connectorAuthority,
+		Encryption:      encryption,
+		Projection:      projection,
+		Artifacts:       artifacts,
+		ReadRevision:    anchor.ReadRevision,
+		Conditions:      snapshot.compares(),
+	}, nil
 }

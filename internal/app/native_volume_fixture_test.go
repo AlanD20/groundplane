@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumework"
@@ -202,7 +203,11 @@ func newNativeVolumeFixture(t *testing.T) *nativeVolumeFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.reports, err = volume.NewWorkReports(f.queue, f.inputs)
+	diagnostics, err := executiondiagnostics.New(f.store, f.queue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.reports, err = volume.NewWorkReports(f.queue, f.inputs, diagnostics)
 	if err != nil {
 		t.Fatal(err)
 	}

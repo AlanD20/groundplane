@@ -17,12 +17,13 @@ import (
 )
 
 type PreparedConfigRestore struct {
-	HostID      string
-	Restore     backupruntime.BackupRestoreRecord
-	Scope       *agentpb.BackupPlanScope
-	Authority   *agentpb.BackupStepAuthority
-	Owner       taskjournal.TaskOwner
-	Publication *PreparedConfigRestorePublication
+	EnvironmentName string
+	HostID          string
+	Restore         backupruntime.BackupRestoreRecord
+	Scope           *agentpb.BackupPlanScope
+	Authority       *agentpb.BackupStepAuthority
+	Owner           taskjournal.TaskOwner
+	Publication     *PreparedConfigRestorePublication
 }
 
 type configRestoreAdmissionState struct {
@@ -116,11 +117,17 @@ func (repository *BackupRuntimeRepository) PrepareConfigRestore(ctx context.Cont
 		repository: repository, restore: backupruntime.CloneBackupRestoreRecord(restore), owner: selected.Owner,
 		scope: proto.CloneOf(selected.Scope), authority: proto.CloneOf(authority),
 		conditions: conditions, mutations: mutations}}
-	return PreparedConfigRestore{Restore: backupruntime.CloneBackupRestoreRecord(restore),
-		HostID: host.Binding.HostID,
+	return PreparedConfigRestore{
+		EnvironmentName: selected.EnvironmentName,
+		Restore:         backupruntime.CloneBackupRestoreRecord(restore),
+		HostID:          host.Binding.HostID,
 		Scope: proto.CloneOf(
 			selected.Scope,
-		), Authority: proto.CloneOf(authority), Owner: selected.Owner, Publication: publication}, nil
+		),
+		Authority:   proto.CloneOf(authority),
+		Owner:       selected.Owner,
+		Publication: publication,
+	}, nil
 }
 
 func (publication *PreparedConfigRestorePublication) Clear() {

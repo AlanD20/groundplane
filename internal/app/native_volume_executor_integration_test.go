@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/volume"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/agentworkjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
@@ -88,6 +89,24 @@ func TestNativeVolumeExecutorCreateRemoveSettlesExactResource(t *testing.T) {
 		if err != nil || saved.Work.Item.Item.Phase != workexecution.Settled ||
 			saved.Attempt.Attempt.Result == nil || *saved.Attempt.Attempt.Result != *terminal.Result {
 			t.Fatalf("Agent completion disagrees with durable resource result: %v", err)
+		}
+		diagnostics, err := executiondiagnostics.New(f.store, f.queue)
+		if err != nil {
+			t.Fatal(err)
+		}
+		observed, err := diagnostics.Read(t.Context(), terminal.TaskID, terminal.WorkItemID, terminal.ID, 0)
+		stageCount := len(expected)
+		if stageCount == 0 {
+			stageCount = 1 // Rename verifies storage without repeating its creation.
+		}
+		if err != nil || observed.Incomplete || observed.Record == nil || len(observed.Record.Stages) != stageCount {
+			t.Fatalf("acknowledged storage effects lack complete diagnostic observations: %v", err)
+		}
+		for _, stage := range observed.Record.Stages {
+			if stage.State != workexecution.StageSucceeded || stage.StartedAt == nil || stage.FinishedAt == nil ||
+				stage.Observed == "" {
+				t.Fatalf("storage stage did not preserve its checked execution result: %+v", stage)
+			}
 		}
 		if err := executor.Retire(t.Context(), terminal); err != nil {
 			t.Fatal(err)

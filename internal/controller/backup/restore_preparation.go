@@ -30,13 +30,14 @@ type restorePublication interface {
 }
 
 type preparedRestore struct {
-	HostID      string
-	Restore     backupruntime.BackupRestoreRecord
-	Scope       *agentpb.BackupPlanScope
-	Authority   *agentpb.BackupStepAuthority
-	Artifacts   []*agentpb.ComposeArtifact
-	Owner       taskjournal.TaskOwner
-	Publication restorePublication
+	EnvironmentName string
+	HostID          string
+	Restore         backupruntime.BackupRestoreRecord
+	Scope           *agentpb.BackupPlanScope
+	Authority       *agentpb.BackupStepAuthority
+	Artifacts       []*agentpb.ComposeArtifact
+	Owner           taskjournal.TaskOwner
+	Publication     restorePublication
 }
 
 func (service *RestoreService) prepareRestore(ctx context.Context, environmentID, taskID, operationID string,
@@ -75,12 +76,13 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 			return preparedRestore{}, err
 		}
 		return preparedRestore{
-			HostID:      selected.HostID,
-			Restore:     selected.Restore,
-			Scope:       selected.Scope,
-			Authority:   selected.Authority,
-			Owner:       selected.Owner,
-			Publication: selected.Publication,
+			EnvironmentName: selected.EnvironmentName,
+			HostID:          selected.HostID,
+			Restore:         selected.Restore,
+			Scope:           selected.Scope,
+			Authority:       selected.Authority,
+			Owner:           selected.Owner,
+			Publication:     selected.Publication,
 		}, nil
 	case backupruntime.BackupRuntimeSourceVolume:
 		selected, err := service.runtime.PrepareVolumeRestore(ctx, backupplanning.VolumeRestoreSelectionInput{
@@ -92,13 +94,14 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 			return preparedRestore{}, err
 		}
 		return preparedRestore{
-			HostID:      selected.HostID,
-			Restore:     selected.Restore,
-			Scope:       selected.Scope,
-			Authority:   selected.Authority,
-			Artifacts:   selected.Artifacts,
-			Owner:       selected.Owner,
-			Publication: selected.Publication,
+			EnvironmentName: selected.EnvironmentName,
+			HostID:          selected.HostID,
+			Restore:         selected.Restore,
+			Scope:           selected.Scope,
+			Authority:       selected.Authority,
+			Artifacts:       selected.Artifacts,
+			Owner:           selected.Owner,
+			Publication:     selected.Publication,
 		}, nil
 	case backupruntime.BackupRuntimeSourceAttach:
 		selected, err := service.runtime.PrepareDatabaseRestore(ctx, backupplanning.DatabaseRestoreSelectionInput{
@@ -113,13 +116,14 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 			return preparedRestore{}, err
 		}
 		return preparedRestore{
-			HostID:      selected.HostID,
-			Restore:     selected.Restore,
-			Scope:       selected.Scope,
-			Authority:   selected.Authority,
-			Artifacts:   selected.Artifacts,
-			Owner:       selected.Owner,
-			Publication: selected.Publication,
+			EnvironmentName: selected.EnvironmentName,
+			HostID:          selected.HostID,
+			Restore:         selected.Restore,
+			Scope:           selected.Scope,
+			Authority:       selected.Authority,
+			Artifacts:       selected.Artifacts,
+			Owner:           selected.Owner,
+			Publication:     selected.Publication,
 		}, nil
 	default:
 		return preparedRestore{}, errs.New(errs.KindStrategyNotImplemented, "Restore source execution is not available")

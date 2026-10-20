@@ -93,6 +93,7 @@ func (service *scriptMutationService) RunScript(
 	}
 	item := workexecution.Item{
 		ID: workID, TaskID: taskID, Operation: workexecution.Script, TargetID: scriptID,
+		TargetName: task.TargetName,
 		Placement: workexecution.Placement{
 			Executor: workexecution.Agent,
 			HostID:   sources.Host.Binding.HostID,

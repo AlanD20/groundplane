@@ -45,8 +45,9 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		state: prepareBackupRunPublicationState(repository, plan, sources.Scope, sources.Authority, sources.Artifacts),
 	}
 	return PreparedManualBackupRun{
-		HostID: host.Binding.HostID,
-		Scope:  sources.Scope, Authority: sources.Authority, Artifacts: sources.Artifacts,
+		EnvironmentName: sources.EnvironmentName,
+		HostID:          host.Binding.HostID,
+		Scope:           sources.Scope, Authority: sources.Authority, Artifacts: sources.Artifacts,
 		Run: backupruntime.CloneBackupRunPublicationRecord(sources.Run), Owner: sources.Owner, Publication: publication,
 	}, nil
 }

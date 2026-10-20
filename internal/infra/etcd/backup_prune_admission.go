@@ -19,12 +19,13 @@ import (
 )
 
 type PreparedBackupPrune struct {
-	HostID      string
-	Dispatch    backupruntime.BackupRecoveryPointPruneDispatchRecord
-	Scope       *agentpb.BackupPlanScope
-	Evidence    []backupplanning.PruneExecutionEvidence
-	Owner       taskjournal.TaskOwner
-	Publication *PreparedBackupPrunePublication
+	EnvironmentName string
+	HostID          string
+	Dispatch        backupruntime.BackupRecoveryPointPruneDispatchRecord
+	Scope           *agentpb.BackupPlanScope
+	Evidence        []backupplanning.PruneExecutionEvidence
+	Owner           taskjournal.TaskOwner
+	Publication     *PreparedBackupPrunePublication
 }
 
 type preparedBackupPruneState struct {
@@ -150,8 +151,9 @@ func (repository *BackupRuntimeRepository) PrepareBackupPrune(
 	}
 	plan.conditions = append(plan.conditions, host.Conditions...)
 	prepared := PreparedBackupPrune{
-		HostID:   host.Binding.HostID,
-		Dispatch: dispatch, Scope: proto.CloneOf(scope), Evidence: cloneBackupPruneExecutionEvidence(plan.evidence),
+		EnvironmentName: environment.Name,
+		HostID:          host.Binding.HostID,
+		Dispatch:        dispatch, Scope: proto.CloneOf(scope), Evidence: cloneBackupPruneExecutionEvidence(plan.evidence),
 		Owner: owner, Publication: &PreparedBackupPrunePublication{state: &preparedBackupPruneState{
 			hostID: host.Binding.HostID, dispatch: dispatch,
 			repository: repository, plan: plan, scope: scope, owner: owner,

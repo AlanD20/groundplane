@@ -26,11 +26,12 @@ func NewPlanner(store readStore) *Planner {
 }
 
 type ManualRunSources struct {
-	Run          backupruntime.BackupRunRecord
-	Owner        taskjournal.TaskOwner
-	Lock         backupruntime.BackupOperationLockRecord
-	ReadRevision int64
-	Scope        *agentpb.BackupPlanScope
-	Authority    []*agentpb.BackupStepAuthority
-	Artifacts    []*agentpb.ComposeArtifact
+	EnvironmentName string
+	Run             backupruntime.BackupRunRecord
+	Owner           taskjournal.TaskOwner
+	Lock            backupruntime.BackupOperationLockRecord
+	ReadRevision    int64
+	Scope           *agentpb.BackupPlanScope
+	Authority       []*agentpb.BackupStepAuthority
+	Artifacts       []*agentpb.ComposeArtifact
 }

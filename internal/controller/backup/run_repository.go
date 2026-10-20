@@ -35,13 +35,14 @@ type BackupRunPrepareInput struct {
 // revision evidence has been validated. Publication remains opaque and
 // one-shot.
 type BackupRunPrepared struct {
-	HostID      string
-	Scope       *agentpb.BackupPlanScope
-	Authority   []*agentpb.BackupStepAuthority
-	Artifacts   []*agentpb.ComposeArtifact
-	Run         backupruntime.BackupRunRecord
-	Owner       taskjournal.TaskOwner
-	Publication backupRunPublication
+	EnvironmentName string
+	HostID          string
+	Scope           *agentpb.BackupPlanScope
+	Authority       []*agentpb.BackupStepAuthority
+	Artifacts       []*agentpb.ComposeArtifact
+	Run             backupruntime.BackupRunRecord
+	Owner           taskjournal.TaskOwner
+	Publication     backupRunPublication
 }
 
 type backupRunPublication interface {
@@ -98,8 +99,9 @@ func (repository *durableBackupRunRepository) PrepareBackupRun(
 		return BackupRunPrepared{}, err
 	}
 	return BackupRunPrepared{
-		HostID: prepared.HostID,
-		Scope:  prepared.Scope, Authority: prepared.Authority,
+		EnvironmentName: prepared.EnvironmentName,
+		HostID:          prepared.HostID,
+		Scope:           prepared.Scope, Authority: prepared.Authority,
 		Artifacts: prepared.Artifacts,
 		Run:       prepared.Run, Owner: prepared.Owner, Publication: prepared.Publication,
 	}, nil

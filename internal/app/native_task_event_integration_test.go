@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -48,19 +49,28 @@ func TestNativeTaskHTTPEventReplayAndRetention(t *testing.T) {
 		response.Header.Get("Content-Type") != "text/event-stream" {
 		t.Fatalf("event stream: status=%d, %v", response.StatusCode, err)
 	}
-	lines := strings.Split(string(body), "\n")
-	if len(lines) != 4 || lines[0] != "id: 2" || !strings.HasPrefix(lines[1], "data: ") {
-		t.Fatalf("resume did not return one complete sequence-2 frame: %q", body)
+	frames := strings.Split(strings.TrimSpace(string(body)), "\n\n")
+	for index, frame := range frames {
+		lines := strings.Split(frame, "\n")
+		expected := uint64(index + 2)
+		if len(lines) != 2 || lines[0] != "id: "+strconv.FormatUint(expected, 10) ||
+			!strings.HasPrefix(lines[1], "data: ") {
+			t.Fatalf("resume did not return complete contiguous frames after cursor 1: %q", body)
+		}
+		var event api.TaskEvent
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[1], "data: ")), &event); err != nil {
+			t.Fatal(err)
+		}
+		if event.Sequence != expected || event.AttemptSequence != expected ||
+			event.WorkItemID != view.Work.Item.Item.ID ||
+			event.AttemptID != view.Attempt.Attempt.ID {
+			t.Fatal("SSE lost native work/attempt identity or cursor ordering")
+		}
+		if index == 0 && (event.Stage.Observed != stage.Observed || event.Stage.Name != stage.Name) {
+			t.Fatal("SSE lost useful observed evidence at the resumed boundary")
+		}
 	}
-	var event api.TaskEvent
-	if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[1], "data: ")), &event); err != nil {
-		t.Fatal(err)
-	}
-	if event.Sequence != 2 || event.AttemptSequence != 2 || event.WorkItemID != view.Work.Item.Item.ID ||
-		event.AttemptID != view.Attempt.Attempt.ID || event.Stage.Observed != stage.Observed || event.Stage.Name != stage.Name {
-		t.Fatal("SSE lost native work/attempt identity or useful observed evidence")
-	}
-	ahead := nativeTaskEventRequest(t, base, view.Work.Task.Task.ID, "3")
+	ahead := nativeTaskEventRequest(t, base, view.Work.Task.Task.ID, strconv.Itoa(len(frames)+2))
 	defer ahead.Body.Close()
 	if ahead.StatusCode != http.StatusUnprocessableEntity ||
 		!strings.HasPrefix(ahead.Header.Get("Content-Type"), "application/problem+json") {

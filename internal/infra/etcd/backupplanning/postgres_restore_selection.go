@@ -41,14 +41,15 @@ type DatabaseRestoreSelectionInput struct {
 }
 
 type DatabaseRestoreSelection struct {
-	Restore      backupruntime.BackupRestoreRecord
-	Scope        *agentpb.BackupPlanScope
-	Owner        taskjournal.TaskOwner
-	Connector    *agentpb.BackupConnectorAuthority
-	Encryption   *agentpb.BackupEncryptionAuthority
-	Artifacts    []*agentpb.ComposeArtifact
-	ReadRevision int64
-	Conditions   []etcdstore.Condition
+	EnvironmentName string
+	Restore         backupruntime.BackupRestoreRecord
+	Scope           *agentpb.BackupPlanScope
+	Owner           taskjournal.TaskOwner
+	Connector       *agentpb.BackupConnectorAuthority
+	Encryption      *agentpb.BackupEncryptionAuthority
+	Artifacts       []*agentpb.ComposeArtifact
+	ReadRevision    int64
+	Conditions      []etcdstore.Condition
 }
 
 // PrepareDatabaseRestoreSelection freezes both the captured database identity
@@ -301,9 +302,17 @@ func (repository *Planner) PrepareDatabaseRestoreSelection(ctx context.Context,
 	if err := backupruntime.ValidateBackupRestoreSelection(restore); err != nil {
 		return zero, err
 	}
-	selection := DatabaseRestoreSelection{Restore: restore, Scope: scope, Owner: owner, Connector: connectorAuthority,
-		Encryption: encryption, Artifacts: artifacts, ReadRevision: anchor.ReadRevision,
-		Conditions: snapshot.compares()}
+	selection := DatabaseRestoreSelection{
+		EnvironmentName: environment.Name,
+		Restore:         restore,
+		Scope:           scope,
+		Owner:           owner,
+		Connector:       connectorAuthority,
+		Encryption:      encryption,
+		Artifacts:       artifacts,
+		ReadRevision:    anchor.ReadRevision,
+		Conditions:      snapshot.compares(),
+	}
 	if input.ResolveVersions == nil {
 		return zero, errs.New(errs.KindInternal, "database version observer is required")
 	}

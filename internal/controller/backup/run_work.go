@@ -38,7 +38,7 @@ func buildBackupRunWork(
 	task := workexecution.Task{ID: prepared.Run.TaskID, Actor: actor,
 		Scope: workexecution.Scope{TenantID: prepared.Owner.TenantID, ProjectID: prepared.Owner.ProjectID,
 			EnvironmentID: prepared.Owner.EnvironmentID},
-		Action: workexecution.ActionBackup, TargetID: prepared.Run.EnvironmentID, TargetName: prepared.Run.EnvironmentID,
+		Action: workexecution.ActionBackup, TargetID: prepared.Run.EnvironmentID, TargetName: prepared.EnvironmentName,
 		Intent: reference, ExpectedItems: 1, CreatedAt: prepared.Run.CreatedAt, UpdatedAt: prepared.Run.CreatedAt,
 		Deadline: prepared.Run.CreatedAt.Add(6 * time.Hour)}
 	item, err := backupwork.NewItem(task, ids.New(ids.KindWorkItem), prepared.HostID, owned)

@@ -202,12 +202,13 @@ func (repository *Planner) PrepareManualRunSources(
 		Kind: backupruntime.BackupOperationBackup, CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
 	}
 	return ManualRunSources{
-		Run:          run,
-		Owner:        owner,
-		Lock:         lock,
-		ReadRevision: fixedRevision,
-		Scope:        scope,
-		Authority:    authorities,
-		Artifacts:    artifacts,
+		EnvironmentName: environment.Name,
+		Run:             run,
+		Owner:           owner,
+		Lock:            lock,
+		ReadRevision:    fixedRevision,
+		Scope:           scope,
+		Authority:       authorities,
+		Artifacts:       artifacts,
 	}, nil
 }
