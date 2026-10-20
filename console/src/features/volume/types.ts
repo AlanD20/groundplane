@@ -6,7 +6,7 @@ export type Volume = {
   slug: string
   key: string
   path?: string
-  state?: 'creating' | 'active' | 'create_failed' | 'deleting'
+  state?: 'pending' | 'creating' | 'active'
   createTaskId?: string
   originTaskId?: string
   currentTaskId?: string

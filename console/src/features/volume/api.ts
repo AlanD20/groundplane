@@ -35,10 +35,9 @@ function volumeFromAPI(volume: VolumeResponse): Volume {
 function volumeState(value: string | undefined): Volume['state'] {
   if (value === undefined) return undefined
   switch (value) {
+    case 'pending':
     case 'creating':
     case 'active':
-    case 'create_failed':
-    case 'deleting':
       return value
     default:
       throw new Error(`Controller returned unknown Volume state ${value}`)
