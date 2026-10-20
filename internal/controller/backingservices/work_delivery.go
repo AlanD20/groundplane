@@ -88,12 +88,11 @@ func (service *WorkReports) grantDelivery(ctx context.Context, selection backing
 	if !time.Now().Before(selection.input.Assignment.Attempt.Deadline) {
 		return invalidBackingDelivery()
 	}
-	result, err := service.queue.Commit(ctx, workqueue.Change{Conditions: selection.guards})
-	keyvalue.ClearValues(result.FailureReads)
+	current, err := service.queue.AuthorizeRead(ctx, selection.guards)
 	if err != nil {
 		return err
 	}
-	if !result.Succeeded {
+	if !current {
 		return invalidBackingDelivery()
 	}
 	return nil
