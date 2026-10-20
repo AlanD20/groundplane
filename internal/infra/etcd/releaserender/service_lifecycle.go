@@ -106,7 +106,8 @@ func ValidateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) erro
 		return errs.New(errs.KindValidationFailed, "Service lifecycle render projection is invalid")
 	}
 	if input.NativeBacking != nil {
-		if input.NativeBackingRevision <= 0 || input.AcknowledgedRuntime != nil || input.AcknowledgedRuntimeRevision != 0 ||
+		if input.NativeBackingRevision <= 0 || input.AcknowledgedRuntime != nil ||
+			input.AcknowledgedRuntimeRevision != 0 ||
 			input.Release != nil ||
 			input.TenantID != "" ||
 			input.NativeBacking.EnvironmentID != input.EnvironmentID ||
