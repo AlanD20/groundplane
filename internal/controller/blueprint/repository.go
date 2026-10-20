@@ -180,6 +180,8 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		etcd.BlueprintRuntimeProjectionSeal,
 	) error
+	ReadBlueprintRuntimeProjection(context.Context, string, string, int64,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	ListScripts(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[scriptrecord.Record], error)
 	PrepareBlueprintScriptPublication(
 		context.Context,

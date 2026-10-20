@@ -53,6 +53,10 @@ func (owner *ServiceWorkPreparation) Prepare(ctx context.Context, taskID, workID
 		snapshot.Desired.Record.ParentTaskID != task.ID || !snapshot.Desired.Record.Complete {
 		return errs.New(errs.KindStateConflict, "Blueprint Service no longer belongs to the current complete Apply")
 	}
+	ready, err := owner.service.PrepareRuntimeProjection(ctx, task, snapshot)
+	if err != nil || !ready {
+		return err
+	}
 	graph, err := owner.units.LoadCapturedGraph(ctx, task, work.ReadRevision)
 	if err != nil {
 		return err

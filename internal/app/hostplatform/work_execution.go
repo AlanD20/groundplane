@@ -141,7 +141,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	blueprintCompletion, err := blueprintcoordinator.NewCompletion(owners.blueprintLedger)
+	blueprintCompletion, err := blueprintcoordinator.NewCompletion(owners.blueprintLedger, dependencies.Blueprints)
 	if err != nil {
 		return nil, err
 	}

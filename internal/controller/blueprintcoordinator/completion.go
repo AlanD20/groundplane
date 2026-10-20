@@ -15,13 +15,20 @@ import (
 // Completion uses resource acknowledgements, never child Task terminal status.
 // Work owners settle resources before their items. The shared completion
 // coordinator commits this resource fence with the visible Task and replay.
-type Completion struct{ ledger *blueprintunits.Repository }
+type RuntimePreparer interface {
+	PrepareRuntimeProjection(context.Context, workexecution.Task, blueprintunits.Snapshot) (bool, error)
+}
 
-func NewCompletion(ledger *blueprintunits.Repository) (*Completion, error) {
-	if ledger == nil {
+type Completion struct {
+	ledger  *blueprintunits.Repository
+	runtime RuntimePreparer
+}
+
+func NewCompletion(ledger *blueprintunits.Repository, runtime RuntimePreparer) (*Completion, error) {
+	if ledger == nil || runtime == nil {
 		return nil, errs.New(errs.KindInternal, "blueprint completion requires resource acknowledgements")
 	}
-	return &Completion{ledger: ledger}, nil
+	return &Completion{ledger: ledger, runtime: runtime}, nil
 }
 
 func (completion *Completion) PrepareFinish(
@@ -84,6 +91,13 @@ func (completion *Completion) PrepareFinish(
 	}
 	// Resource-ledger writes advance its epoch, fencing the full resource read
 	// without adding one transaction comparison per resource in a large Apply.
+	ready, err := completion.runtime.PrepareRuntimeProjection(ctx, task, snapshot)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	if !ready {
+		return workqueue.Change{}, errs.New(errs.KindResourceInUse, "Blueprint runtime configuration is not sealed yet")
+	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{
 		{Key: blueprints.EnvironmentBlueprintHeadKey(task.TargetID), ModRevision: snapshot.HeadRevision},
 		{Key: blueprintunits.EpochKey(task.TargetID), ModRevision: snapshot.EpochRevision},
