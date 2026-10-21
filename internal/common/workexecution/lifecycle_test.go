@@ -1,11 +1,13 @@
 package workexecution
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // TASK-20: redelivery must not renew Start permission or run work on another host.
@@ -121,6 +123,54 @@ func TestNativeCleanupPreservesOriginalFailureAfterSupersession(t *testing.T) {
 	}
 	if recorded.Outcome != Failed || recorded.Result == nil || *recorded.Result != failure {
 		t.Fatal("cleanup mutated the original failed attempt")
+	}
+}
+
+// Handoff and Abort must have one winner; neither outcome permits a second
+// activation. This exercises lifecycle decisions, not a real process handoff.
+func TestNativeSoftwareActivationAndAbortAreMutuallyExclusive(t *testing.T) {
+	for _, operation := range []Operation{ControllerSoftware, AgentSoftware} {
+		t.Run(string(operation), func(t *testing.T) {
+			item, _, at := readyNativeWork()
+			item.Operation = operation
+			item.Placement.Executor = Controller
+			identity := Identity{Executor: Controller, HostID: item.Placement.HostID, Generation: 1}
+			assigned, attempt, err := Assign(item, identity, nativeAttemptID(item, at, "activation"), Forward,
+				at.Add(time.Second), item.Deadline)
+			if err != nil {
+				t.Fatal(err)
+			}
+			running, attempt, err := Start(assigned, attempt, at.Add(2*time.Second))
+			if err != nil {
+				t.Fatal(err)
+			}
+			task := Task{ID: item.TaskID, Action: ActionUpdate, Actor: OperatorActor, TargetID: item.Placement.HostID,
+				Intent: *item.Input, ExpectedItems: 1, PublicationComplete: true, Progress: Progress{Running: 1},
+				CreatedAt: at, UpdatedAt: running.UpdatedAt, Deadline: item.Deadline}
+			granted, err := AuthorizeActivation(task, running, attempt, *item.Input, at.Add(3*time.Second))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if granted.Activation == nil || granted.Activation.AttemptID != attempt.ID || task.Activation != nil {
+				t.Fatal("handoff did not capture its exact attempt independently of the original Task")
+			}
+			if _, err := RequestStop(granted, Cancelled, at.Add(4*time.Second)); !errors.Is(
+				err,
+				errs.New(errs.KindTaskNotAbortable, ""),
+			) {
+				t.Fatalf("Abort after handoff = %v", err)
+			}
+			if _, err := AuthorizeActivation(granted, running, attempt, *item.Input, at.Add(4*time.Second)); err == nil {
+				t.Fatal("replayed activation granted another handoff")
+			}
+			cancelled, err := RequestStop(task, Cancelled, at.Add(3*time.Second))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := AuthorizeActivation(cancelled, running, attempt, *item.Input, at.Add(4*time.Second)); err == nil {
+				t.Fatal("handoff crossed an accepted Abort")
+			}
+		})
 	}
 }
 
