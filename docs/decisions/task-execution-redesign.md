@@ -1,14 +1,15 @@
 # Task execution redesign
 
-- Status: Accepted design; implementation in progress, not qualified or deployed.
+- Status: Implemented and deployed to disposable QA; qualification remains partial.
 - Scope: replace Task execution and its storage/protocol boundaries, preserving
   existing feature behavior. This document does not authorize implementation.
 - Product owner: [Execution redesign](../mvp.md#accepted-task-execution-redesign).
 
 This is the single execution design reference. The superseded shared worker,
-assignment journal and hidden child-Task mechanism are being removed, not retained
-as another execution path. This document does not qualify the replacement or make
-it available in an older installation.
+assignment journal and hidden child-Task mechanism were removed, not retained
+as another execution path. The [QA matrix](../qa-matrix.md) records candidate-specific
+proof and remaining gaps; this design alone does not qualify the replacement or
+make it available in an older installation.
 
 ## Why replace the execution machinery?
 
@@ -346,10 +347,11 @@ Required proof concerns duplicate delivery, crashes around effects/checkpoints,
 lost acknowledgements, safe cancellation/cutover races, isolated failures, bounded
 retry, retention safety and operation-specific recovery. Host routing must reject
 wrong-host execution; multiple-host runtime support needs separate live evidence.
-These are future acceptance obligations, not tests run by this documentation work.
+The [QA matrix](../qa-matrix.md) records completed checks and their limits;
+these obligations are not satisfied merely by accepting this design.
 
 Remote installation and lifecycle, cross-host network/storage access, automatic
-placement and failover remain outside this redesign. Exact schemas, package names,
-diagnostic storage backend and the offline conversion procedure remain to be
-designed under these boundaries. They are not permission to weaken them or to
-retain the old execution engine.
+placement and failover remain outside this redesign. The implementation owns its
+schemas, modules and diagnostic storage. An offline resource conversion procedure
+is not provided. That gap is not permission to weaken these boundaries or retain
+the old execution engine.

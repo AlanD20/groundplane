@@ -10,8 +10,9 @@ explains the reasons for the important boundaries below.
 
 ## Processes and data flow
 
-The [Task execution replacement](decisions/task-execution-redesign.md) is under
-implementation, not qualified or deployed. The [scheduler](../internal/controller/workdispatch)
+The [Task execution replacement](decisions/task-execution-redesign.md) is implemented
+and deployed to disposable QA, with partial [qualification](qa-matrix.md).
+The [scheduler](../internal/controller/workdispatch)
 owns assignment and capacity; operation handlers own typed effects and recovery.
 [Execution storage](../internal/infra/etcd/workqueue), resource state and disposable
 diagnostics have separate owners. Assignments bind to the selected host and Agent
