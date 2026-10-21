@@ -29,7 +29,7 @@ type ReleaseForwardOwner interface {
 		releaseexecution.Input,
 		releasework.Snapshot,
 		releaseexecution.CheckpointReport,
-	) (workqueue.Change, error)
+	) (releasework.ForwardCheckpointDecision, error)
 }
 
 type ReleaseRestorationOwner interface {

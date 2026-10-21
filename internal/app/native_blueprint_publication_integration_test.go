@@ -14,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -33,7 +34,7 @@ func TestNativeBlueprintPublicationResumesWithoutDuplicateWork(t *testing.T) {
 			name = "abort_during_publication"
 		}
 		t.Run(name, func(t *testing.T) {
-			f := newNativeBlueprintPublication(t)
+			f := newNativeBlueprintPublication(t, false)
 			f.store.loseBatchResponse = true
 			if err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); !errors.Is(
 				err,
@@ -98,7 +99,7 @@ func TestNativeBlueprintPublicationResumesWithoutDuplicateWork(t *testing.T) {
 // An immutable captured graph is still validated when read. Corruption cannot
 // turn a partially published Apply into executable work or change its members.
 func TestNativeBlueprintPublicationRefusesChangedCapture(t *testing.T) {
-	f := newNativeBlueprintPublication(t)
+	f := newNativeBlueprintPublication(t, false)
 	if err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
@@ -121,14 +122,104 @@ func TestNativeBlueprintPublicationRefusesChangedCapture(t *testing.T) {
 
 var errLostBlueprintBatchResponse = errors.New("lost committed Blueprint batch response")
 
+// Obsolete input must settle without running its planner or inventing an
+// attempt. A newer head racing that settlement must invalidate the prepared
+// decision, preserving the original work until it is read again.
+func TestNativeBlueprintInputSupersessionFencesPlanningAndConcurrentHead(t *testing.T) {
+	for _, race := range []bool{false, true} {
+		t.Run(map[bool]string{false: "settle", true: "concurrent_head"}[race], func(t *testing.T) {
+			f := newNativeBlueprintPublication(t, true)
+			for range 4 {
+				if err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			page, err := f.queue.ListWork(t.Context(), f.task.ID, "", 1, 0)
+			if err != nil || len(page.Items) != 1 {
+				t.Fatalf("published pending input: %v", err)
+			}
+			item := page.Items[0]
+			headKey := blueprints.EnvironmentBlueprintHeadKey(f.task.Scope.EnvironmentID)
+			putHead := func(taskID string) {
+				t.Helper()
+				value, err := idempotency.EncodeTaskReference(taskID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := f.store.Put(t.Context(), headKey, value); err != nil {
+					t.Fatal(err)
+				}
+			}
+			putHead(f.task.ID)
+			units, err := blueprintunits.NewRepository(f.store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			planner := &nativeCountingInputPlanner{}
+			registered, err := blueprintcoordinator.NewInputPreparations(
+				f.queue,
+				units,
+				[]workdispatch.InputRegistration{
+					{Action: workexecution.ActionApply, Operation: workexecution.Release, Owner: planner},
+				},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			owner := registered[0].Owner
+			if err := owner.Prepare(t.Context(), f.task.ID, item.Item.ID); err != nil || planner.calls != 1 {
+				t.Fatalf("current captured input was not delegated to its typed planner: %v", err)
+			}
+			putHead(ids.New(ids.KindTask))
+			if race {
+				f.store.beforeCommit = func(mutations []keyvalue.Mutation) {
+					for _, mutation := range mutations {
+						if mutation.Key == workqueue.ItemKey(item.Item.ID) {
+							f.store.beforeCommit = nil
+							putHead(ids.New(ids.KindTask))
+							break
+						}
+					}
+				}
+			}
+			err = owner.Prepare(t.Context(), f.task.ID, item.Item.ID)
+			after, readErr := f.queue.ReadWork(t.Context(), f.task.ID, item.Item.ID, 0)
+			if readErr != nil || planner.calls != 1 || after.Item.Item.Input != nil ||
+				after.Item.Item.AttemptNumber != 0 {
+				t.Fatalf("supersession ran a stale planner or fabricated execution: %v", readErr)
+			}
+			if race {
+				if err == nil || after.Item.Revision != item.Revision ||
+					after.Item.Item.Phase != workexecution.Waiting {
+					t.Fatalf("changed source committed a stale supersession decision: %v", err)
+				}
+			} else if err != nil || after.Item.Item.Phase != workexecution.Settled || after.Item.Item.Outcome != workexecution.Superseded ||
+				after.Task.Task.Progress.Superseded != 1 {
+				t.Fatalf("obsolete waiting work was not settled with its Task outcome: %v", err)
+			}
+		})
+	}
+}
+
+type nativeCountingInputPlanner struct{ calls int }
+
+func (planner *nativeCountingInputPlanner) Prepare(context.Context, string, string) error {
+	planner.calls++
+	return nil
+}
+
 type nativeBlueprintPublicationStore struct {
 	*memoryHierarchyStore
 	loseBatchResponse bool
+	beforeCommit      func([]keyvalue.Mutation)
 }
 
 func (store *nativeBlueprintPublicationStore) Transact(ctx context.Context, conditions []keyvalue.Condition,
 	mutations []keyvalue.Mutation,
 ) (keyvalue.TransactionResult, error) {
+	if store.beforeCommit != nil {
+		store.beforeCommit(mutations)
+	}
 	result, err := store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
 	if err != nil || !result.Succeeded || !store.loseBatchResponse {
 		return result, err
@@ -150,7 +241,7 @@ type nativeBlueprintPublicationFixture struct {
 	publications *workdispatch.Publications
 }
 
-func newNativeBlueprintPublication(t *testing.T) *nativeBlueprintPublicationFixture {
+func newNativeBlueprintPublication(t *testing.T, waitingInput bool) *nativeBlueprintPublicationFixture {
 	t.Helper()
 	f := &nativeBlueprintPublicationFixture{
 		store: &nativeBlueprintPublicationStore{memoryHierarchyStore: newMemoryHierarchyStore()},
@@ -183,10 +274,18 @@ func newNativeBlueprintPublication(t *testing.T) *nativeBlueprintPublicationFixt
 	prepared := make([]blueprintcoordinator.PreparedUnit, 0, 17)
 	for index := 0; index < 17; index++ {
 		target := blueprintunits.ResourceKey{Kind: ids.KindRoute, ID: ids.New(ids.KindRoute)}
+		if waitingInput {
+			target = blueprintunits.ResourceKey{Kind: ids.KindService, ID: ids.New(ids.KindService)}
+		}
 		unit := blueprintunits.Unit{
 			Target:      target,
 			Fingerprint: strings.Repeat("b", 64),
 			Writes:      []blueprintunits.ResourceKey{target},
+		}
+		if waitingInput {
+			prepared = append(prepared, blueprintcoordinator.PreparedUnit{Unit: unit, Operation: workexecution.Release,
+				Placement: workexecution.Placement{Executor: workexecution.Agent, HostID: ids.New(ids.KindHost)}})
+			continue
 		}
 		input, err := blueprintunits.DefinitionWorkInput(f.task, unit)
 		if err != nil {

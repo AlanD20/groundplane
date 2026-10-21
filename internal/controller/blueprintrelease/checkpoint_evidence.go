@@ -2,6 +2,7 @@ package blueprintrelease
 
 import (
 	"context"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -22,13 +23,13 @@ func (service *Service) PrepareCheckpointEvidence(
 	input releaseexecution.Input,
 	previous releasework.Snapshot,
 	report releaseexecution.CheckpointReport,
-) (workqueue.Change, error) {
+) (releasework.ForwardCheckpointDecision, error) {
 	if service == nil || service.ledger == nil || ctx == nil || !view.ActiveAttempt || !view.CurrentExecutor ||
 		!workexecution.SameAssignment(
 			input.Attempt,
 			view.Attempt.Attempt,
 		) || input.Attempt.Direction != workexecution.Forward {
-		return workqueue.Change{}, errs.New(
+		return releasework.ForwardCheckpointDecision{}, errs.New(
 			errs.KindStateConflict,
 			"Blueprint Release checkpoint does not own this forward attempt",
 		)
@@ -38,7 +39,22 @@ func (service *Service) PrepareCheckpointEvidence(
 		prior = &previous.Record.Progress
 	}
 	if err := releaseexecution.ValidateTransition(input, prior, report.Progress); err != nil {
-		return workqueue.Change{}, err
+		return releasework.ForwardCheckpointDecision{}, err
+	}
+	if report.Progress.InFlight {
+		current, guards, err := service.ledger.ReadReleaseIntentMatch(ctx, view.Work)
+		if err != nil {
+			return releasework.ForwardCheckpointDecision{}, err
+		}
+		if !current {
+			at := time.Now().UTC()
+			change, err := workqueue.PrepareRevocation(view.Work.Task, view.Work.Item, workexecution.Superseded, at)
+			if err != nil {
+				return releasework.ForwardCheckpointDecision{}, err
+			}
+			change.Conditions = append(change.Conditions, guards...)
+			return releasework.ForwardCheckpointDecision{Change: change, RevokedAt: &at}, nil
+		}
 	}
 	var sources etcd.ReleaseWorkSources
 	var err error
@@ -48,15 +64,15 @@ func (service *Service) PrepareCheckpointEvidence(
 		sources, err = service.ledger.LoadReleaseWorkInput(ctx, view.Work)
 	}
 	if err != nil {
-		return workqueue.Change{}, err
+		return releasework.ForwardCheckpointDecision{}, err
 	}
 	defer clear(sources.Rollout.Record.CandidateArtifact)
 	if !report.Progress.InFlight {
-		return workqueue.Change{Conditions: sources.Conditions}, nil
+		return releasework.ForwardCheckpointDecision{Change: workqueue.Change{Conditions: sources.Conditions}}, nil
 	}
 	artifact, err := releaserender.OpenReleaseCandidateArtifact(sources.Rollout.Record)
 	if err != nil {
-		return workqueue.Change{}, err
+		return releasework.ForwardCheckpointDecision{}, err
 	}
 	storage, err := service.ledger.PostgresPatchConditions(
 		ctx,
@@ -65,7 +81,9 @@ func (service *Service) PrepareCheckpointEvidence(
 		view.Work.ReadRevision,
 	)
 	if err != nil {
-		return workqueue.Change{}, err
+		return releasework.ForwardCheckpointDecision{}, err
 	}
-	return workqueue.Change{Conditions: append(sources.Conditions, storage...)}, nil
+	return releasework.ForwardCheckpointDecision{
+		Change: workqueue.Change{Conditions: append(sources.Conditions, storage...)},
+	}, nil
 }

@@ -363,9 +363,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err := platform.dependencies.Channel.ConfigureEntryConfigurationWork(entryReports); err != nil {
 		return nil, err
 	}
-	inputs, err := workdispatch.NewInputs(
-		queue,
-		append(append(softwareWork.input, owners.directReleases.input...), []workdispatch.InputRegistration{
+	blueprintInputs, err := blueprintcoordinator.NewInputPreparations(
+		queue, owners.blueprintLedger, []workdispatch.InputRegistration{
 			{
 				Action:    workexecution.ActionApply,
 				Operation: workexecution.ServiceRemoval,
@@ -376,8 +375,13 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 			{Action: workexecution.ActionApply, Operation: workexecution.Volume, Owner: volumeInputs},
 			{Action: workexecution.ActionApply, Operation: workexecution.Network, Owner: networkInputs},
 			{Action: workexecution.ActionApply, Operation: workexecution.Attach, Owner: owners.attachPreparation},
-		}...),
+		},
 	)
+	if err != nil {
+		return nil, err
+	}
+	inputs, err := workdispatch.NewInputs(queue,
+		append(append(softwareWork.input, owners.directReleases.input...), blueprintInputs...))
 	if err != nil {
 		return nil, err
 	}

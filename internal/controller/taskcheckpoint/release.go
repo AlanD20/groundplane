@@ -145,13 +145,17 @@ func (service *ReleaseCheckpointService) CheckpointRelease(
 		}
 		hookConditions = append(hookConditions, conditions...)
 	}
-	evidence, err := owner.PrepareCheckpointEvidence(ctx, view, input, previous, report)
+	decision, err := owner.PrepareCheckpointEvidence(ctx, view, input, previous, report)
 	if err != nil {
 		return nil, err
 	}
+	evidence := decision.Change
 	defer keyvalue.ZeroMutationBytes(evidence.Mutations)
 	if len(evidence.Conditions) == 0 {
 		return nil, errs.New(errs.KindInternal, "Release checkpoint requires operation evidence comparisons")
+	}
+	if decision.RevokedAt != nil {
+		return nil, service.recordForwardRevocation(ctx, view, guards, decision)
 	}
 	result, err := service.queue.Commit(
 		ctx,
