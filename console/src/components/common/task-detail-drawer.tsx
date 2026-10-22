@@ -165,6 +165,7 @@ export function TaskDetailDrawer({
               {task.counts.succeeded} succeeded · {task.counts.failed} failed ·{" "}
               {task.counts.running + task.counts.assigned} active ·{" "}
               {task.counts.waiting} waiting
+              {task.counts.ready > 0 && ` · ${task.counts.ready} ready`}
               {task.counts.attention > 0 &&
                 ` · ${task.counts.attention} need attention`}
               {task.counts.cancelled > 0 &&

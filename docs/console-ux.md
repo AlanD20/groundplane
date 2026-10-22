@@ -182,8 +182,9 @@ of identifiers, repeated status summaries and implementation terminology.
 
 ## Task execution viewer
 
-Accepted target for the [Task redesign](decisions/task-execution-redesign.md), with
-implementation in progress and browser qualification pending. This replaces the terminal-first presentation requirement. Keep the
+Implemented target for the [Task redesign](decisions/task-execution-redesign.md),
+with candidate-specific browser proof and limits in the [QA matrix](qa-matrix.md).
+This replaces the terminal-first presentation requirement. Keep the
 existing dedicated Task drawer and shared controls; a terminal-styled event dump
 is not the primary explanation of an operation.
 
