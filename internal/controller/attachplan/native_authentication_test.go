@@ -3,13 +3,34 @@ package attachplan
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
+
+// TASK-197: a Blueprint's parent is created before its Attach candidates.
+// Host provisioning and Controller settlement must retain the same captured
+// owner identity, otherwise shared consumers reject the completed owner.
+func TestNativeAttachPublicationPreservesCapturedCreationTime(t *testing.T) {
+	fixture := newNativeAuthenticationFixture(t, core.BackingAuthenticationPassword)
+	captured := fixture.generation.Provision.Candidate
+	parentTime := captured.CreatedAt.Add(-time.Second)
+	pending, err := fixture.generation.PendingRecord(fixture.task.ID, parentTime)
+	if err != nil || !attachments.SameBlueprintAttachCandidateRecord(captured, pending) {
+		t.Fatalf("host publication changed captured credential-owner identity: %v", err)
+	}
+	fixture.generation.Provision.RequiresProvisioning = false
+	ready, err := fixture.generation.ControllerBinding(parentTime)
+	captured.Status = core.AttachReady
+	if err != nil || !attachments.SameBlueprintAttachCandidateRecord(captured, ready) {
+		t.Fatalf("Controller settlement changed captured credential-owner identity: %v", err)
+	}
+}
 
 // BACK-08: both accepted action types must preserve the captured password-only
 // identity through native delivery, including after the decryption callback clears it.

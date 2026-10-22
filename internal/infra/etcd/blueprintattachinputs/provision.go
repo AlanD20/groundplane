@@ -66,7 +66,10 @@ func (generation Generation) PendingRecord(taskID string, createdAt time.Time) (
 		return attachrecord.Record{}, errs.New(errs.KindValidationFailed, "Attach provisioning input is missing")
 	}
 	record := attachrecord.CloneAttachRecord(generation.Provision.Candidate)
-	record.TaskID, record.CreatedAt = taskID, createdAt.UTC()
+	// Credential consumers captured this exact candidate, including creation
+	// time. The parent Task can predate capture; changing the timestamp here
+	// would make the successfully provisioned owner contradict every consumer.
+	record.TaskID = taskID
 	if err := attachrecord.ValidateAttachRecord(record); err != nil {
 		return attachrecord.Record{}, err
 	}
@@ -87,9 +90,6 @@ func (generation Generation) ControllerBinding(createdAt time.Time) (attachrecor
 	}
 	if generation.Binding != nil {
 		return attachrecord.CloneAttachRecord(generation.Binding.Consumer.Record), nil
-	}
-	if generation.Provision != nil {
-		createdAt = generation.Provision.Candidate.CreatedAt
 	}
 	record, err := generation.PendingRecord(generation.ParentTaskID, createdAt)
 	if err != nil {
