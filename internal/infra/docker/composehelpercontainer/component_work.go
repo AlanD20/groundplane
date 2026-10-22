@@ -55,7 +55,11 @@ func (executor *Executor) ExecuteComponentWork(
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, "component-work-helper", nil)
+	artifact := input.Procedure.Candidate
+	if artifact == nil || input.Recovery != nil {
+		artifact = input.Procedure.Predecessor.Runtime
+	}
+	options := createOptions(executor.image, "component-work-helper", artifact)
 	options.Name, options.Config.Labels = name, labels
 	raw, err := executor.executeFrame(bounded, options, framed)
 	if err != nil {
