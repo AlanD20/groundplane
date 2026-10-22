@@ -14,7 +14,8 @@ import (
 
 // PrepareAppliedState publishes only the acknowledged runtime and configuration.
 // The operation owner joins Blueprint receipts, reservation cleanup and queue
-// completion. This method never rewrites the operator's current desired record.
+// completion. Component metadata describes the acknowledged effect; the
+// operator's immutable authored Blueprint head remains separate and unchanged.
 func (repository *InputRepository) PrepareAppliedState(ctx context.Context, view workqueue.ResumeView,
 	input *agentpb.ComponentWorkInput, at time.Time,
 ) (Capture, workqueue.Change, error) {
@@ -28,6 +29,13 @@ func (repository *InputRepository) PrepareAppliedState(ctx context.Context, view
 		return Capture{}, workqueue.Change{}, err
 	}
 	defer clear(runtime.Artifact)
+	metadata, err := repository.prepareMetadataPublication(ctx, view.Work, capture, runtime.Component)
+	if err != nil {
+		keyvalue.ClearMutationValues(proof.Mutations)
+		return Capture{}, workqueue.Change{}, err
+	}
+	proof.Conditions = append(proof.Conditions, metadata.Conditions...)
+	proof.Mutations = append(proof.Mutations, metadata.Mutations...)
 	route, err := repository.settleRoute(ctx, view.Work, capture.Route)
 	if err != nil {
 		keyvalue.ClearMutationValues(proof.Mutations)

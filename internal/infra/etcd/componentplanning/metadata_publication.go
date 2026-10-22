@@ -10,13 +10,39 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PrepareDisabledComponentSecretReplacement changes active metadata references
-// with a proven-disabled Component publication. It never changes Task/recovery
-// pins or reads plaintext; the caller owns atomic runtime-absence proof.
-func PrepareDisabledComponentSecretReplacement(ctx context.Context, store interface {
+// PrepareComponentMetadataPublication publishes the acknowledged Component
+// definition and its active Secret references together. The caller must join
+// runtime completion or proven absence; this fragment grants no host effects
+// and never changes authored Blueprint intent or Task/recovery Secret pins.
+func PrepareComponentMetadataPublication(ctx context.Context, store interface {
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+}, projectID string, current etcdstore.Versioned[componentrecord.Record], candidate componentrecord.Record,
+) (workqueue.Change, error) {
+	if componentrecord.ValidateComponentVersion(current) != nil {
+		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Component metadata requires a captured record")
+	}
+	conditions, mutations, err := prepareComponentSecretReplacement(ctx, store, projectID,
+		current.Record, candidate, current.ReadRevision)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	value, err := componentrecord.EncodeRecord(candidate)
+	if err != nil {
+		etcdstore.ClearMutationValues(mutations)
+		return workqueue.Change{}, err
+	}
+	key := componentrecord.RecordKey(candidate.Desired.ID)
+	conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: current.Revision})
+	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value},
+		componentrecord.WriteFenceMutation(candidate.Desired.ID))
+	return workqueue.Change{Conditions: conditions, Mutations: mutations}, nil
+}
+
+func prepareComponentSecretReplacement(ctx context.Context, store interface {
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }, projectID string, current, candidate componentrecord.Record, revision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
@@ -24,13 +50,10 @@ func PrepareDisabledComponentSecretReplacement(ctx context.Context, store interf
 		return nil, nil, err
 	}
 	if store == nil || revision <= 0 || componentrecord.ValidateRecord(current) != nil ||
-		componentrecord.ValidateRecord(candidate) != nil || current.Desired.Enabled || candidate.Desired.Enabled ||
+		componentrecord.ValidateRecord(candidate) != nil ||
 		current.Desired.ID != candidate.Desired.ID || current.Desired.Owner != candidate.Desired.Owner ||
-		current.Desired.OwnerID != candidate.Desired.OwnerID || !current.Desired.Kind.SharesEnvironmentCapability(candidate.Desired.Kind) ||
-		len(current.Runtime.GeneratedServices) != 0 || len(candidate.Runtime.GeneratedServices) != 0 ||
-		current.Runtime.PinnedIPv4 != "" || candidate.Runtime.PinnedIPv4 != "" ||
-		current.Runtime.Healthy || candidate.Runtime.Healthy {
-		return nil, nil, errs.New(errs.KindValidationFailed, "disabled Component Secret replacement is invalid")
+		current.Desired.OwnerID != candidate.Desired.OwnerID || !current.Desired.Kind.SharesEnvironmentCapability(candidate.Desired.Kind) {
+		return nil, nil, errs.New(errs.KindValidationFailed, "Component Secret replacement is invalid")
 	}
 	oldIDs, err := componentrecord.SecretReferences(current)
 	if err != nil {
@@ -62,13 +85,13 @@ func PrepareDisabledComponentSecretReplacement(ctx context.Context, store interf
 		return nil, nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return nil, nil, errs.New(errs.KindInternal, "disabled Component Secret references are unavailable")
+		return nil, nil, errs.New(errs.KindInternal, "Component Secret references are unavailable")
 	}
 	defer etcdstore.ClearValues(read.Values)
 	conditions := make([]etcdstore.Condition, 0, len(keys))
 	for index, value := range read.Values {
 		if value != nil && value.Key != keys[index] {
-			return nil, nil, errs.New(errs.KindInternal, "disabled Component Secret reference read is corrupt")
+			return nil, nil, errs.New(errs.KindInternal, "Component Secret reference read is corrupt")
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: keys[index], ModRevision: etcdstore.RevisionOf(value)})
 	}
@@ -76,7 +99,7 @@ func PrepareDisabledComponentSecretReplacement(ctx context.Context, store interf
 	for index, id := range allIDs {
 		value := read.Values[index]
 		if value != nil && string(value.Value) != current.Desired.ID {
-			return nil, nil, errs.New(errs.KindStateConflict, "disabled Component Secret reference changed")
+			return nil, nil, errs.New(errs.KindStateConflict, "Component Secret reference changed")
 		}
 		mutation := etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[index]}
 		if slices.Contains(nextIDs, id) {

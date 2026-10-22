@@ -231,26 +231,18 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDisabledCompon
 	)
 	conditions = append(conditions, runtimeCondition)
 	conditions = append(conditions, proxyPublication.Conditions()...)
-	secretConditions, secretMutations, err := componentplanning.PrepareDisabledComponentSecretReplacement(
-		ctx, repository.store, parent.Scope.ProjectID, current, candidate, snapshot.ReadRevision,
+	metadata, err := componentplanning.PrepareComponentMetadataPublication(
+		ctx, repository.store, parent.Scope.ProjectID,
+		keyvalue.Versioned[componentrecord.Record]{Record: current, Revision: read.Values[4].ModRevision,
+			ReadRevision: snapshot.ReadRevision}, candidate,
 	)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	defer keyvalue.ClearMutationValues(secretMutations)
-	conditions = append(conditions, secretConditions...)
-	value, err := componentrecord.EncodeRecord(candidate)
-	if err != nil {
-		return workqueue.Change{}, err
-	}
-	defer clear(value)
-	mutations := append(receipt.Mutations(), secretMutations...)
+	defer keyvalue.ClearMutationValues(metadata.Mutations)
+	conditions = append(conditions, metadata.Conditions...)
+	mutations := append(receipt.Mutations(), metadata.Mutations...)
 	mutations = append(mutations, proxyPublication.Mutations()...)
-	mutations = append(
-		mutations,
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: componentKey, Value: value},
-		componentrecord.WriteFenceMutation(parent.ID),
-	)
 	// Rewrite even unchanged metadata: its publication revision must equal the
 	// receipt revision. Retire only the proven-empty runtime when its metadata
 	// no longer matches; no Agent acknowledgement is fabricated.

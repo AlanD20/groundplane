@@ -116,6 +116,12 @@ result settlement through a narrow boundary. Publication and settlement remain
 atomic with the affected resource state; modularization must not split these
 transactions into independently successful writes.
 
+Component completion publishes its materialized definition, active Secret
+references, acknowledged runtime and queue outcome together. The authored
+Blueprint head remains separate: recording an already-applied effect does not
+replace a newer operator intention. Leaving the materialized definition behind
+would make the next projection reject a runtime that GP had just acknowledged.
+
 ## Operation ownership
 
 ### Typed effects and secret handling
