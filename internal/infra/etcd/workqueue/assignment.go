@@ -86,7 +86,7 @@ func PrepareAssignment(request Assignment) (Change, workexecution.Attempt, error
 			{Type: keyvalue.MutationDelete, Key: QueueKey(next)},
 		},
 	}
-	if err := addDependencies(&change, request.Item.Item, request.Dependencies, request.Direction); err != nil {
+	if err := assignmentDependencies(request); err != nil {
 		return Change{}, workexecution.Attempt{}, err
 	}
 	if err := addClaims(&change, next, request.Claims); err != nil {
@@ -106,22 +106,29 @@ func PrepareAssignment(request Assignment) (Change, workexecution.Attempt, error
 	return change, attempt, nil
 }
 
-func addDependencies(change *Change, item workexecution.Item, dependencies []ItemSnapshot,
-	direction workexecution.Direction,
-) error {
+func assignmentDependencies(request Assignment) error {
 	// Cleanup may be necessary precisely because a prerequisite failed. It uses
 	// the captured operation's own cleanup authority, not forward prerequisites.
-	if direction == workexecution.Recovery {
-		if len(dependencies) != 0 {
+	if request.Direction == workexecution.Recovery {
+		if len(request.Dependencies) != 0 {
 			return invalid("recovery assignment must not substitute forward dependencies")
 		}
 		return nil
 	}
-	conditions, err := DependencyConditions(item, dependencies)
+	_, err := DependencyConditions(request.Item.Item, request.Dependencies)
 	if err != nil {
 		return err
 	}
-	change.Conditions = append(change.Conditions, conditions...)
+	// ReadCandidate reads the Task and every prerequisite at one MVCC revision.
+	// Settlement and Retry change the prerequisite and Task together; collection
+	// requires a finished Task. The Task CAS added by countTransition (or the
+	// Controller decision fence) therefore protects all these successful outputs
+	// without one transaction comparison per prerequisite. Claims remain atomic.
+	for _, dependency := range request.Dependencies {
+		if request.ReadRevision < request.Task.Revision || request.Task.Revision < dependency.Revision {
+			return invalid("assignment dependencies do not belong to the captured Task snapshot")
+		}
+	}
 	return nil
 }
 

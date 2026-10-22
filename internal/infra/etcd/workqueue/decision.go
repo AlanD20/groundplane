@@ -46,16 +46,8 @@ func PrepareDecisionFence(request Assignment) (Change, error) {
 		{Key: QueueKey(item), ModRevision: request.QueueRevision},
 		{Key: ExecutorKey(request.Executor.Record.Identity), ModRevision: request.Executor.Revision},
 	}}
-	for index, dependency := range request.Dependencies {
-		if dependency.Revision <= 0 || dependency.Item.ID != item.Dependencies[index] ||
-			dependency.Item.TaskID != task.ID || dependency.Item.Phase != workexecution.Settled ||
-			dependency.Item.Outcome != workexecution.Succeeded {
-			return Change{}, invalid("Controller decision dependency is not settled")
-		}
-		change.Conditions = append(
-			change.Conditions,
-			keyvalue.Condition{Key: ItemKey(dependency.Item.ID), ModRevision: dependency.Revision},
-		)
+	if err := assignmentDependencies(request); err != nil {
+		return Change{}, err
 	}
 	for index, claim := range request.Claims {
 		if claim.Claim != item.Claims[index] || claim.Owner != nil || claim.Revision != 0 {

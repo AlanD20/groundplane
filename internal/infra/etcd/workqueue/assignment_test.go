@@ -200,7 +200,11 @@ func assignmentFixture(
 		store.values[key] = keyvalue.KeyValue{Key: key, Value: raw, ModRevision: 1}
 	}
 	return Assignment{
-		Task: TaskSnapshot{Task: task, Revision: 1}, Item: ItemSnapshot{Item: item, Revision: 1}, Executor: *executor,
+		ReadRevision: 1,
+		Task: TaskSnapshot{
+			Task:     task,
+			Revision: 1,
+		}, Item: ItemSnapshot{Item: item, Revision: 1}, Executor: *executor,
 		Claims: []ClaimSnapshot{{Claim: item.Claims[0]}}, QueueRevision: 1, Direction: workexecution.Forward,
 		AttemptID: ids.New(ids.KindAttempt), At: at.Add(time.Second), Deadline: item.Deadline,
 	}

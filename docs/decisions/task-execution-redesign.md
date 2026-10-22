@@ -104,6 +104,13 @@ does not occupy a worker slot or prevent unrelated ready work from being selecte
 Related items acquire their required conflict claims atomically before effects,
 not one resource at a time while holding partial claims indefinitely.
 
+Assignment reads the Task and prerequisites at one MVCC revision. Successful
+prerequisites are protected by the Task revision comparison: settlement and Retry
+update that record atomically, and collection requires a finished Task. Repeating
+a comparison for every prerequisite would make fan-in consume the budget needed
+to acquire conflict claims. Input preparation still compares the exact outputs
+used to construct its immutable input.
+
 The operation owner supplies validated preparation, conflict requirements and
 result settlement through a narrow boundary. Publication and settlement remain
 atomic with the affected resource state; modularization must not split these
