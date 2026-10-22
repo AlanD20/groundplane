@@ -2,6 +2,7 @@ package desiredrevision
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredauthoring"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -331,8 +332,8 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		}
 	}
 	count := len(page.Values)
-	if count > 32 {
-		count = 32
+	if count > 31 {
+		count = 31
 	}
 	final := count == len(page.Values) && !page.More
 	conditions := make([]etcdstore.Condition, 0, count+1)
@@ -362,6 +363,9 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		)
 		mutations = append(mutations, etcdstore.Mutation{
 			Type: etcdstore.MutationDelete, Key: volumework.InputPrefix(workID), Prefix: true,
+		})
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete, Key: blueprintattachinputs.ParentPrefix(stored.Claim.TaskID), Prefix: true,
 		})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: descriptorKey})
 	} else {

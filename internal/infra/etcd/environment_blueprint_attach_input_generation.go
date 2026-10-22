@@ -234,7 +234,7 @@ func (prepared *preparedBlueprintAttachInputGenerations) finish(
 		}
 		return result, publicationErr
 	}
-	if present != 0 {
+	if read.Values[0] != nil {
 		return result, errors.Join(publicationErr, errs.New(
 			errs.KindInternal, "Blueprint Attach input publication is partially visible",
 		))

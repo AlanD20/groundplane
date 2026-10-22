@@ -2,6 +2,7 @@ package workqueue
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -25,7 +26,9 @@ func (repository *Repository) Commit(ctx context.Context, changes ...Change) (ke
 		return keyvalue.TransactionResult{}, err
 	}
 	if !budget.Fits() {
-		return keyvalue.TransactionResult{}, invalid("execution decision exceeds the atomic storage limit")
+		return keyvalue.TransactionResult{}, invalid(fmt.Sprintf(
+			"execution decision exceeds the atomic storage limit: %d/%d operations, %d/%d bytes",
+			budget.Operations, keyvalue.MaximumOperations, budget.Bytes, keyvalue.MaximumBytes))
 	}
 	result, err := repository.store.Transact(ctx, joined.Conditions, joined.Mutations)
 	if err != nil {

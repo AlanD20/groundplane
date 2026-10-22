@@ -287,6 +287,15 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return keyvalue.TransactionResult{}, err
 	}
 	defer attachInputs.clear()
+	if err := repository.stageBlueprintAttachInputs(ctx, parent,
+		keyvalue.Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
+		[]keyvalue.Condition{
+			{Key: blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), ModRevision: input.ExpectedHeadRevision},
+			{Key: blueprintunits.EpochKey(environment.Record.ID), ModRevision: input.Baseline.EpochRevision},
+		},
+		&attachInputs); err != nil {
+		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
+	}
 	captured := input.Graph
 	for _, generation := range attachInputs.generations {
 		if _, err := blueprintattachinputs.WorkInput(generation); err != nil {

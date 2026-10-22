@@ -85,6 +85,12 @@ same content return the same Task; different content under that key is rejected.
 No work becomes executable before its complete required inputs are durably
 prepared. Missing or invalid input is not repaired by reading newer desired state.
 
+Blueprint Attach captures are staged under the existing revision descriptor before
+acceptance. A seal fences their immutable membership; desired-head, effect-epoch,
+backing-source and Secret-pin checks still protect final activation. Abandonment
+and expiry collect staged captures without rewriting accepted Task history. See
+the [capture staging owner](../../internal/infra/etcd/blueprint_attach_input_staging.go).
+
 Some inputs depend on preceding work, such as Custom Attach facts. Such a work
 item waits with a specific dependency reason. The Controller prepares it from
 the captured intent and exact accepted dependency outputs, then publishes its
