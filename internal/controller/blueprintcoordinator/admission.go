@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -59,6 +60,7 @@ func NewAdmission(registrations []ResourceRegistration) (*Admission, error) {
 
 func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task,
 	plan blueprintunits.DesiredPlan, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
+	attaches []blueprintattachinputs.Generation,
 ) (blueprintunits.CapturedGraph, error) {
 	if admission == nil || ctx == nil || !plan.Complete || plan.ParentTaskID != task.ID ||
 		plan.EnvironmentID != task.Scope.EnvironmentID || baseline.EnvironmentID != plan.EnvironmentID ||
@@ -69,6 +71,15 @@ func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task
 		)
 	}
 	prepared := make([]PreparedUnit, 0, len(plan.Units))
+	controllerBindings := make(map[string]bool, len(attaches))
+	for _, generation := range attaches {
+		if blueprintattachinputs.ValidateDraft(generation) != nil || generation.ParentTaskID != task.ID ||
+			generation.EnvironmentID != task.Scope.EnvironmentID {
+			return blueprintunits.CapturedGraph{}, errs.New(errs.KindValidationFailed,
+				"Blueprint Attach placement requires this Apply's captured binding")
+		}
+		controllerBindings[generation.AttachID] = generation.SettlesInController()
+	}
 	for _, unit := range plan.Units {
 		if err := ctx.Err(); err != nil {
 			return blueprintunits.CapturedGraph{}, err
@@ -88,6 +99,10 @@ func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task
 			}
 			selected.Input = &input
 		default:
+			if unit.Target.Kind == ids.KindAttach && !unit.Removal && controllerBindings[unit.Target.ID] {
+				selected.Operation = workexecution.Attach
+				break
+			}
 			owner := admission.planners[unit.Target.Kind]
 			if owner == nil {
 				return blueprintunits.CapturedGraph{}, errs.New(

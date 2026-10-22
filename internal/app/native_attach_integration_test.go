@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachprovision"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -154,6 +157,36 @@ func nativeControllerAttachJourney(t *testing.T, adapter string) {
 		t.Fatal(err)
 	}
 	defer captured.Clear()
+	// TASK-196: Blueprint admission must make the same executor decision as
+	// direct Attach. A binding with no host procedure cannot be assigned to an
+	// Agent and left permanently ready behind its provisioning authority guard.
+	serviceRecords, err := etcd.NewServiceRepository(f.base.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission, err := newBlueprintWorkAdmission(f.base.store, serviceRecords)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := task
+	parent.Action, parent.TargetID, parent.PublicationComplete = workexecution.ActionApply, f.base.environmentID, false
+	parent.Progress, parent.UpdatedAt = workexecution.Progress{}, parent.CreatedAt
+	generation := captured.Generation.Record
+	generation.WorkItemID = ""
+	target := blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: generation.AttachID}
+	unit := blueprintunits.Unit{
+		Target:      target,
+		Writes:      []blueprintunits.ResourceKey{target},
+		Fingerprint: strings.Repeat("a", 64),
+	}
+	graph, err := admission.Prepare(t.Context(), parent, blueprintunits.DesiredPlan{
+		EnvironmentID: f.base.environmentID, ParentTaskID: task.ID, Complete: true, Units: []blueprintunits.Unit{unit},
+	}, blueprintunits.Snapshot{EnvironmentID: f.base.environmentID, ReadRevision: f.base.store.revision}, nil,
+		[]blueprintattachinputs.Generation{generation})
+	if err != nil || len(graph.Items) != 1 || graph.Items[0].Placement.Executor != workexecution.Controller ||
+		graph.Items[0].Placement.HostID != "" || graph.Items[0].Operation != workexecution.Attach {
+		t.Fatalf("Blueprint routed a decision-only binding to host execution: %v", err)
+	}
 	if !captured.Generation.Record.SettlesInController() || captured.Generation.Record.AdapterKey != adapter ||
 		captured.Generation.Record.ConsumerServiceID != request.ServiceID {
 		t.Fatal("native capture changed the accepted connection")

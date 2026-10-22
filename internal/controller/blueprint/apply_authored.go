@@ -14,6 +14,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
+	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -274,7 +275,18 @@ func (service *Service) applyAuthoredOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	graph, err := service.workAdmission.Prepare(ctx, parent, plan, baseline.ledger, desired.Input.Components)
+	attachCaptures := make([]attachinputs.Generation, len(attachInputGenerations))
+	for index, capture := range attachInputGenerations {
+		attachCaptures[index] = capture.Generation
+	}
+	graph, err := service.workAdmission.Prepare(
+		ctx,
+		parent,
+		plan,
+		baseline.ledger,
+		desired.Input.Components,
+		attachCaptures,
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
