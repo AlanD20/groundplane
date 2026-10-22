@@ -174,6 +174,43 @@ func TestNativeStoppedRecoveryRetainsClaimsAndRetryIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	commit(wake)
+	// Branch from the same persisted retry: expiry must stop it without a new
+	// attempt or lost claims. The original branch below completes normally.
+	task, item = state()
+	expiry, err := PrepareCleanupRetryExpiry(task, item, decision.Deadline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiredStore := &assignmentStore{revision: store.revision, values: make(map[string]keyvalue.KeyValue)}
+	for key, value := range store.values {
+		value.Value = bytes.Clone(value.Value)
+		expiredStore.values[key] = value
+	}
+	expiredRepository, err := NewRepository(expiredStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiredResult, err := expiredRepository.Commit(t.Context(), expiry)
+	if err != nil || !expiredResult.Succeeded {
+		t.Fatalf("cleanup retry expiry did not commit: %v", err)
+	}
+	expiredItem, _ := recoveryRecord(t, expiredStore, ItemKey(workID), DecodeItem)
+	if expiredItem.Phase != workexecution.Attention || expiredItem.Cleanup != workexecution.CleanupStopped ||
+		expiredItem.ActiveAttemptID != "" || expiredItem.AttemptNumber != 2 ||
+		expiredItem.FirstFailure == nil || *expiredItem.FirstFailure != failure || *expiredItem.Input != input {
+		t.Fatal("expiry created execution permission or changed captured recovery authority")
+	}
+	for _, key := range []string{claimKey, HostEffectKey(item.Item.Placement.HostID, workID),
+		AttemptKey(forward.ID), AttemptKey(cleanup.ID), SlotKey(initial.Executor.Record.Identity, 0)} {
+		before, after := store.values[key], expiredStore.values[key]
+		if before.ModRevision == 0 || after.ModRevision != before.ModRevision ||
+			!bytes.Equal(after.Value, before.Value) {
+			t.Fatal("expiry released claims, changed an attempt or consumed unrelated capacity")
+		}
+	}
+	if _, exists := expiredStore.values[SlotKey(initial.Executor.Record.Identity, 1)]; exists {
+		t.Fatal("expired retry occupied a worker slot")
+	}
 	last := start(workexecution.Recovery, 10, 1)
 	proof := workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: strings.Repeat("d", 64)}
 	finish(
@@ -201,6 +238,10 @@ func TestNativeStoppedRecoveryRetainsClaimsAndRetryIdentity(t *testing.T) {
 	original, _ := recoveryRecord(t, store, AttemptKey(forward.ID), DecodeAttempt)
 	if original.Outcome != workexecution.Failed || original.Result == nil || *original.Result != failure {
 		t.Fatal("cleanup changed the original forward attempt")
+	}
+	lateExpiry, err := repository.Commit(t.Context(), expiry)
+	if err != nil || lateExpiry.Succeeded {
+		t.Fatal("stale expiry overwrote completed cleanup")
 	}
 }
 
