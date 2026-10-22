@@ -257,9 +257,10 @@ This does not authorize replaying Scripts or superseding ordinary Deploy,
 Backup, upgrade or destructive operations.
 
 Public Apply, the native work coordinator and protected omission paths are
-written but unqualified in the replacement engine. H98/H110/H111 record earlier
-supersession and interrupted recovery journeys, not qualification of the new
-engine or every fault and workload variant. Preparation conflicts retry
+implemented. The [QA matrix](../qa-matrix.md) records selected native installed
+journeys, including cancellation, supersession and retained concurrent-state
+presentation (TASK-177–194). H98/H110/H111 remain earlier-build evidence, not
+qualification of every fault and workload variant. Preparation conflicts retry
 when the captured head or unit ledger changed. An unchanged prerequisite failure
 closes the Apply's forward-publication gate and records its failed phase; already
 started work items still require settlement. Resource-in-use waits and transient
