@@ -160,7 +160,7 @@ export default function EnvironmentPage() {
     ),
     overview: <EnvironmentOverview env={env} now={observation.now} />,
     logs: <LogStream target={{ kind: "environment", id: env.id }} />,
-    zones: <Topology env={env} />,
+    zones: <Topology env={env} now={observation.now} />,
     routes: <RoutesCard env={env} />,
     dns: <EnvironmentDNSPanel key={env.id} env={env} />,
     attaches: <AttachesCard env={env} />,

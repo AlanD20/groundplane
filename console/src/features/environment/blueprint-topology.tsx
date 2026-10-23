@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useStore } from "@/lib/store";
 import type { Environment } from "@/lib/types";
+import { TopologyRuntimeStatus } from "./topology-runtime-status";
 import {
   buildTopology,
   topologyLayers,
@@ -32,7 +33,13 @@ const nodeColors = {
   Volume: colors.Storage,
 };
 
-export function BlueprintTopology({ env }: { env: Environment }) {
+export function BlueprintTopology({
+  env,
+  now,
+}: {
+  env: Environment;
+  now: number;
+}) {
   const { backingProjects } = useStore();
   const graph = useMemo(
     () => buildTopology(env, backingProjects),
@@ -298,10 +305,16 @@ export function BlueprintTopology({ env }: { env: Environment }) {
                 }}
               >
                 <span
-                  className="block text-[10px] uppercase tracking-wider"
+                  className="flex items-center justify-between gap-2 text-[10px]"
                   style={{ color: nodeColors[node.kind] }}
                 >
-                  {node.kind}
+                  <span className="uppercase tracking-wider">{node.kind}</span>
+                  {node.observation && (
+                    <TopologyRuntimeStatus
+                      observation={node.observation}
+                      now={now}
+                    />
+                  )}
                 </span>
                 <strong className="block truncate text-sm" title={node.label}>
                   {node.label}
@@ -321,6 +334,12 @@ export function BlueprintTopology({ env }: { env: Environment }) {
         <div className="space-y-3 rounded-lg border border-border bg-card p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <strong className="break-all text-sm">{active.label}</strong>
+            {active.observation && (
+              <TopologyRuntimeStatus
+                observation={active.observation}
+                now={now}
+              />
+            )}
             <Button
               size="xs"
               variant="ghost"

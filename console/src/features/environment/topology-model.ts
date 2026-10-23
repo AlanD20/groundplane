@@ -1,4 +1,5 @@
 import type { Environment, Project } from "@/lib/types";
+import type { ServiceObservation } from "@/features/service/service-observation";
 export const topologyLayers = [
   "Routes",
   "Dependencies",
@@ -12,6 +13,7 @@ export type TopologyNode = {
   kind: "Service" | "Route" | "Backing" | "Volume";
   detail: string;
   zone?: string;
+  observation?: ServiceObservation;
 };
 export type TopologyEdge = {
   from: string;
@@ -29,6 +31,7 @@ export function buildTopology(env: Environment, backingProjects: Project[]) {
       id: s.id,
       label: s.name,
       kind: "Service",
+      observation: s.observation,
       detail: s.image,
       zone:
         s.zones
@@ -67,14 +70,17 @@ export function buildTopology(env: Environment, backingProjects: Project[]) {
   });
   env.attaches.forEach((a) => {
     const id = `backing:${a.backingServiceId}`;
+    const backing = backingProjects.find((p) => p.id === a.projectId);
+    const service = backing?.environments
+      ?.flatMap((environment) => environment.services)
+      .find((candidate) => candidate.id === a.backingServiceId);
     if (!nodes.some((n) => n.id === id))
       nodes.push({
         id,
-        label:
-          backingProjects.find((p) => p.id === a.projectId)?.name ??
-          a.projectId,
+        label: backing?.name ?? a.projectId,
         kind: "Backing",
         detail: "Shared backing service",
+        observation: service?.observation ?? { state: "unavailable" },
       });
     edges.push({ from: a.serviceId, to: id, label: a.name, kind: "Backing" });
   });

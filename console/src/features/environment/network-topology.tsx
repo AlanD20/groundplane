@@ -28,7 +28,7 @@ import { ChevronRight, Database, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-export function Topology({ env }: { env: Environment }) {
+export function Topology({ env, now }: { env: Environment; now: number }) {
   const [zoneOpen, setZoneOpen] = useState(false);
   const [view, setView] = useState<"graph" | "zones">("graph");
   return (
@@ -68,7 +68,7 @@ export function Topology({ env }: { env: Environment }) {
       </div>
       <ZoneFormDialog env={env} open={zoneOpen} onOpenChange={setZoneOpen} />
       {view === "graph" ? (
-        <BlueprintTopology key={env.id} env={env} />
+        <BlueprintTopology key={env.id} env={env} now={now} />
       ) : (
         <ZoneMap
           env={env}
