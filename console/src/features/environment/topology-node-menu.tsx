@@ -36,7 +36,10 @@ export function TopologyNodeMenu({
   return (
     <ContextMenu>
       <ContextMenuTrigger className="h-full">{children}</ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent
+        onPointerDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
         <ContextMenuItem render={<Link to={href} />}>
           <ArrowUpRight /> {label}
         </ContextMenuItem>
