@@ -56,9 +56,15 @@ func (owner *GraphPublication) PrepareFinish(
 		)
 	}
 	view := workqueue.View{Task: finished.Task, Item: *release, ReadRevision: finished.ReadRevision}
-	rollout, err := owner.ledger.GetServiceRollout(ctx, view)
+	rollout, found, err := owner.ledger.ReadServiceRollout(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err
+	}
+	if !found {
+		return workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Release completion has no captured Service rollout",
+		)
 	}
 	defer clear(rollout.Record.CandidateArtifact)
 	if err := request.Matches(task, release.Item, rollout.Record); err != nil {

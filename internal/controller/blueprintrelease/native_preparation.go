@@ -153,6 +153,21 @@ func (service *Service) stageSelectedRuntime(
 	if err != nil {
 		return preparedSelectedRuntime{}, err
 	}
+	if input.RetainedRollout != nil {
+		revision, err := retainedHookSourceRevision(*input.RetainedRollout)
+		if err != nil {
+			return preparedSelectedRuntime{}, err
+		}
+		if revision != 0 {
+			if revision < manifest.Revision || revision > input.Work.ReadRevision {
+				return preparedSelectedRuntime{}, errs.New(
+					errs.KindStateConflict,
+					"Retained hook sources are outside their staged Release snapshot",
+				)
+			}
+			manifest.ReadRevision = revision
+		}
+	}
 	hooks, err := service.prepareDeployHooks(ctx, input, manifest, members)
 	if err != nil {
 		return preparedSelectedRuntime{}, err
@@ -200,4 +215,29 @@ func (service *Service) stageSelectedRuntime(
 		members: members, hooks: hooks, manifest: manifest,
 		predecessors: nativePredecessorCaptures(input, members),
 	}, nil
+}
+
+// Hook snapshots already bind their exact staged source revision. Reuse that
+// authority during preparation replay rather than replacing it with today's
+// storage revision and manufacturing different bytes for the same identity.
+func retainedHookSourceRevision(capture releaserender.ServiceRolloutCapture) (int64, error) {
+	var revision uint64
+	for _, hook := range capture.Render.Hooks {
+		var snapshot agentpb.ResolvedRunnerSnapshot
+		if proto.Unmarshal(hook.RunnerSnapshot, &snapshot) != nil {
+			return 0, errs.New(errs.KindStateConflict, "Retained Release hook snapshot cannot be decoded")
+		}
+		staged := snapshot.GetServiceSource().GetStaged()
+		current := staged.GetFixedReadRevision()
+		if current == 0 || current > uint64(^uint64(0)>>1) ||
+			staged.GetEnvironmentId() != capture.Scope.EnvironmentID || staged.GetRevisionId() != capture.TaskID ||
+			current < uint64(capture.SourceReadRevision) || revision != 0 && current != revision {
+			return 0, errs.New(
+				errs.KindStateConflict,
+				"Retained Release hooks do not share their captured Blueprint snapshot",
+			)
+		}
+		revision = current
+	}
+	return int64(revision), nil
 }

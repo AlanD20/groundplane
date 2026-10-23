@@ -71,47 +71,50 @@ func (ledger *ReleaseLedger) StageServiceRollout(ctx context.Context,
 	}, nil
 }
 
-func (ledger *ReleaseLedger) GetServiceRollout(ctx context.Context,
+func (ledger *ReleaseLedger) ReadServiceRollout(ctx context.Context,
 	work workqueue.View,
-) (keyvalue.Versioned[releaserender.ServiceRolloutCapture], error) {
+) (keyvalue.Versioned[releaserender.ServiceRolloutCapture], bool, error) {
 	var empty keyvalue.Versioned[releaserender.ServiceRolloutCapture]
 	if err := keyvalue.ValidateContext(ctx); err != nil {
-		return empty, err
+		return empty, false, err
 	}
 	task, item := work.Task.Task, work.Item.Item
 	if ledger == nil || ledger.store == nil || work.ReadRevision <= 0 ||
 		task.Validate() != nil || item.Validate() != nil || !releaserender.IsReleaseAction(task.Action) ||
 		item.TaskID != task.ID || item.Operation != workexecution.Release || task.Scope.EnvironmentID == "" {
-		return empty, errs.New(errs.KindValidationFailed, "Service rollout read requires captured Service work")
+		return empty, false, errs.New(errs.KindValidationFailed, "Service rollout read requires captured Service work")
 	}
 	key := releaserender.ServiceRolloutKey(task.Scope.EnvironmentID, task.ID, item.ID)
 	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: work.ReadRevision})
 	if err != nil {
-		return empty, err
+		return empty, false, err
 	}
 	if read == nil || read.ReadRevision != work.ReadRevision || len(read.Values) != 1 {
-		return empty, errs.New(errs.KindStateConflict, "Service rollout read is incomplete")
+		return empty, false, errs.New(errs.KindStateConflict, "Service rollout read is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	value := read.Values[0]
-	if value == nil || value.Key != key || value.ModRevision <= 0 || value.ModRevision > work.ReadRevision {
-		return empty, errs.New(errs.KindStateConflict, "Service has no captured rollout at this revision")
+	if value == nil {
+		return empty, false, nil
+	}
+	if value.Key != key || value.ModRevision <= 0 || value.ModRevision > work.ReadRevision {
+		return empty, false, errs.New(errs.KindStateConflict, "Service rollout revision is invalid")
 	}
 	capture, err := releaserender.DecodeServiceRolloutCapture(value.Value)
 	if err != nil {
-		return empty, err
+		return empty, false, err
 	}
 	if capture.SourceReadRevision > value.ModRevision {
-		return empty, errs.New(
+		return empty, false, errs.New(
 			errs.KindStateConflict,
 			"Service rollout source revision is newer than its stored capture",
 		)
 	}
 	if err := capture.MatchesWork(task, item); err != nil {
-		return empty, err
+		return empty, false, err
 	}
 	return keyvalue.Versioned[releaserender.ServiceRolloutCapture]{
-		Record: capture, Revision: value.ModRevision, ReadRevision: read.ReadRevision}, nil
+		Record: capture, Revision: value.ModRevision, ReadRevision: read.ReadRevision}, true, nil
 }
 
 // ServiceRolloutPublicationCondition binds final operation input to the

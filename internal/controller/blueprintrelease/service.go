@@ -17,6 +17,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
@@ -82,6 +83,7 @@ type prepareInput struct {
 	Scripts           []scriptrecord.Record
 	Files             []taskmaterialization.Record
 	Configuration     *runtimeconfiguration.WorkCapture
+	RetainedRollout   *releaserender.ServiceRolloutCapture
 	Work              workqueue.View
 	OperationID       string
 	PlanID            string

@@ -89,9 +89,12 @@ func (owner *InputPreparation) Prepare(ctx context.Context, taskID, workID strin
 		keyvalue.ClearValues(result.FailureReads)
 		return err
 	}
-	rollout, err := owner.ledger.GetServiceRollout(ctx, view)
+	rollout, found, err := owner.ledger.ReadServiceRollout(ctx, view)
 	if err != nil {
 		return err
+	}
+	if !found {
+		return errs.New(errs.KindStateConflict, "Release preparation has no captured Service rollout")
 	}
 	defer clear(rollout.Record.CandidateArtifact)
 	artifact, err := releaserender.OpenReleaseCandidateArtifact(rollout.Record)

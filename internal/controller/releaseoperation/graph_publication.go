@@ -55,9 +55,15 @@ func (owner *GraphPublication) PreparePublication(ctx context.Context, task work
 	if err != nil {
 		return workdispatch.PublicationBatch{}, err
 	}
-	rollout, err := owner.ledger.GetServiceRollout(ctx, work)
+	rollout, found, err := owner.ledger.ReadServiceRollout(ctx, work)
 	if err != nil {
 		return workdispatch.PublicationBatch{}, err
+	}
+	if !found {
+		return workdispatch.PublicationBatch{}, errs.New(
+			errs.KindStateConflict,
+			"Release graph has no captured Service rollout",
+		)
 	}
 	defer clear(rollout.Record.CandidateArtifact)
 	if err := request.Matches(task.Task, work.Item.Item, rollout.Record); err != nil {

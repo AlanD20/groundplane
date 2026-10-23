@@ -118,9 +118,12 @@ func (ledger *ReleaseLedger) loadCapturedReleaseWorkInput(
 	if err := input.Configuration.Matches(task, item); err != nil {
 		return empty, err
 	}
-	rollout, err := ledger.GetServiceRollout(ctx, work)
+	rollout, found, err := ledger.ReadServiceRollout(ctx, work)
 	if err != nil {
 		return empty, err
+	}
+	if !found {
+		return empty, errs.New(errs.KindStateConflict, "Release input has no captured Service rollout")
 	}
 	if err := input.ValidateRollout(rollout.Record); err != nil {
 		return empty, err

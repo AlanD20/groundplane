@@ -66,7 +66,18 @@ func (service *Service) PrepareServiceUnit(
 			prepared.sourceConditions = append(prepared.sourceConditions, conditions...)
 		}
 	}()
-	scope, err := service.ledger.LoadPlanningScopeForCapturedInput(ctx, input.Projection, input.Work.ReadRevision)
+	retained, found, err := service.ledger.ReadServiceRollout(ctx, input.Work)
+	if err != nil {
+		return Prepared{}, err
+	}
+	defer clear(retained.Record.CandidateArtifact)
+	// A retry reconstructs the same staged input, not a new snapshot under the
+	// same rollout identity. Its preparation pin retains this source revision.
+	sourceRevision := input.Work.ReadRevision
+	if found {
+		sourceRevision = retained.Record.SourceReadRevision
+	}
+	scope, err := service.ledger.LoadPlanningScopeForCapturedInput(ctx, input.Projection, sourceRevision)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -91,6 +102,9 @@ func (service *Service) PrepareServiceUnit(
 	preparedInput, err := service.prepareServiceUnitInput(ctx, input, scope, replacement)
 	if err != nil {
 		return Prepared{}, err
+	}
+	if found {
+		preparedInput.RetainedRollout = &retained.Record
 	}
 	return service.prepareSelected(ctx, preparedInput, preparedInput.ServiceChanges)
 }

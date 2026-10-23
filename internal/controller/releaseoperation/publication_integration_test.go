@@ -359,9 +359,9 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	if err != nil {
 		t.Fatal(err)
 	}
-	captured, err := ledger.GetServiceRollout(ctx, work)
-	if err != nil {
-		t.Fatal(err)
+	captured, found, err := ledger.ReadServiceRollout(ctx, work)
+	if err != nil || !found {
+		t.Fatalf("accepted Release lost its captured rollout: %v", err)
 	}
 	preparation, _, err := ledger.ReadDirectReleasePreparation(ctx, work)
 	if err != nil || preparation.Predecessor.Serving != nil ||
