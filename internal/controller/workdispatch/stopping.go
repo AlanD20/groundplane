@@ -40,7 +40,16 @@ func (scheduler *Scheduler) ContinueStop(ctx context.Context, cursor workqueue.S
 		if owner == nil {
 			return errs.New(errs.KindInternal, "stopped work has no operation owner")
 		}
-		change, err := owner.Stop(ctx, current.Task, current.Item, at)
+		// The sweep timestamp predates these fresh reads. Concurrent progress
+		// must not make a valid stop look like a backwards execution transition.
+		transitionAt := at
+		if transitionAt.Before(current.Task.Task.UpdatedAt) {
+			transitionAt = current.Task.Task.UpdatedAt
+		}
+		if transitionAt.Before(current.Item.Item.UpdatedAt) {
+			transitionAt = current.Item.Item.UpdatedAt
+		}
+		change, err := owner.Stop(ctx, current.Task, current.Item, transitionAt)
 		if err != nil {
 			return err
 		}

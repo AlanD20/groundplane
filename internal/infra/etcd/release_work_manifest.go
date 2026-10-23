@@ -19,7 +19,7 @@ func (ledger *ReleaseLedger) releaseWorkManifestMember(ctx context.Context,
 ) (releaserender.ReleaseTaskRenderMember, []keyvalue.Condition, error) {
 	var empty releaserender.ReleaseTaskRenderMember
 	if evidence.ServiceRollout == nil || len(evidence.Manifest.Record.Members) != 1 ||
-		evidence.Manifest.Revision <= 0 {
+		evidence.Manifest.Revision <= 0 || evidence.Manifest.ReadRevision < evidence.Manifest.Revision {
 		return empty, nil, releases.CorruptReleaseRecord()
 	}
 	capture := evidence.ServiceRollout.Record
@@ -37,11 +37,14 @@ func (ledger *ReleaseLedger) releaseWorkManifestMember(ctx context.Context,
 	reference := manifest.Members[0]
 	keys := []string{releases.ReleaseIntentStagingKey(manifest.PublicationID, reference.ReleaseID),
 		releases.ReleaseRenderInputStagingKey(manifest.PublicationID, reference.ReleaseID)}
-	read, err := ledger.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: evidence.Manifest.Revision})
+	read, err := ledger.store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: keys, Revision: evidence.Manifest.ReadRevision},
+	)
 	if err != nil {
 		return empty, nil, err
 	}
-	if read == nil || read.ReadRevision != evidence.Manifest.Revision || len(read.Values) != 2 {
+	if read == nil || read.ReadRevision != evidence.Manifest.ReadRevision || len(read.Values) != 2 {
 		return empty, nil, releases.CorruptReleaseRecord()
 	}
 	defer keyvalue.ClearValues(read.Values)

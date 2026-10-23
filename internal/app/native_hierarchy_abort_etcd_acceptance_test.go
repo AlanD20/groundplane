@@ -127,7 +127,9 @@ func TestNativeHierarchyRealEtcdAbortFencesEffectsAndKeepsCompletedWork(t *testi
 			if err != nil || len(stopping.Items) != 1 || stopping.Items[0].Record.TaskID != accepted.TaskID {
 				t.Fatalf("Abort did not retain its stop cursor: %v", err)
 			}
-			if err := owner.scheduler.ContinueStop(ctx, stopping.Items[0], time.Now().UTC()); err != nil {
+			// A sweep may begin before the Abort/concurrent completion updates
+			// the Task. Its fresh reads must still allow cancellation to settle.
+			if err := owner.scheduler.ContinueStop(ctx, stopping.Items[0], at); err != nil {
 				t.Fatal(err)
 			}
 			owner.finalize(t, ctx, accepted.TaskID)
