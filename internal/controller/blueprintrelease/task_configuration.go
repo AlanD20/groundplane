@@ -37,7 +37,11 @@ func (service *Service) prepareWorkConfiguration(ctx context.Context, input prep
 			)
 		}
 	} else {
-		capture, err = service.ledger.PrepareReleaseWorkConfiguration(ctx, input.Work,
+		// A staged rollout owns one planning snapshot. Replaying it must not
+		// change the configuration capture's digest merely because etcd advanced.
+		work := input.Work
+		work.ReadRevision = rollout.SourceReadRevision
+		capture, err = service.ledger.PrepareReleaseWorkConfiguration(ctx, work,
 			input.AllocateNamed(ids.KindConfig, "release-configuration/"+input.Work.Item.Item.ID),
 			uint64(input.Projection.RenderGeneration), files)
 		if err != nil {

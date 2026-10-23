@@ -93,6 +93,10 @@ func (owner *ServiceWorkPreparation) Prepare(ctx context.Context, taskID, workID
 	if _, err := workqueue.DependencyConditions(item, dependencies); err != nil {
 		return err
 	}
+	waiting, err := owner.waitsForServiceConfigurationTurn(ctx, work)
+	if err != nil || waiting {
+		return err
+	}
 	input, err := owner.service.prepareAuthoredServiceWorkInput(ctx, work, *unit)
 	if err != nil {
 		return err
