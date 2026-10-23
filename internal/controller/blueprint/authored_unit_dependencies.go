@@ -151,7 +151,19 @@ func (planner *authoredUnitPlanner) serviceDependencies(
 		dependencies = append(dependencies, authoredResourceKey(ids.KindScript, identity.ID))
 	}
 	dependencies = canonicalAuthoredUnitKeys(dependencies)
-	return dependencies, slices.Clone(dependencies), nil
+	after := slices.Clone(dependencies)
+	// Router work publishes the Environment's acknowledged file baseline.
+	// Service configuration must capture that result, not the previous Apply's
+	// files while this Apply's router is still replacing them.
+	capability := string(core.ComponentCapabilityHTTPRouter)
+	if _, declared := planner.input.desired.Input.Components[capability]; declared {
+		identity, found := planner.identities[ids.KindComponent][capability]
+		if !found {
+			return nil, nil, planner.missingInput("Service router", capability)
+		}
+		after = append(after, authoredResourceKey(ids.KindComponent, identity.ID))
+	}
+	return dependencies, canonicalAuthoredUnitKeys(after), nil
 }
 
 func (planner *authoredUnitPlanner) serviceEntryNames(service string) []string {
