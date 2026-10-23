@@ -14,6 +14,7 @@ export type TopologyNode = {
   detail: string;
   zone?: string;
   observation?: ServiceObservation;
+  backingProjectId?: string;
 };
 export type TopologyEdge = {
   from: string;
@@ -79,6 +80,7 @@ export function buildTopology(env: Environment, backingProjects: Project[]) {
         id,
         label: backing?.name ?? a.projectId,
         kind: "Backing",
+        backingProjectId: a.projectId,
         detail: "Shared backing service",
         observation: service?.observation ?? { state: "unavailable" },
       });

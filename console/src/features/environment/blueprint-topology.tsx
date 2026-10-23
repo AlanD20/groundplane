@@ -14,6 +14,7 @@ import {
 import { useStore } from "@/lib/store";
 import type { Environment } from "@/lib/types";
 import { TopologyRuntimeStatus } from "./topology-runtime-status";
+import { TopologyNodeMenu } from "./topology-node-menu";
 import {
   buildTopology,
   topologyLayers,
@@ -288,44 +289,48 @@ export function BlueprintTopology({
               height="78"
               opacity={!hasFocus || related.has(node.id) ? 1 : 0.4}
             >
-              <button
-                type="button"
-                aria-pressed={selected === node.id}
-                onClick={() => {
-                  setHighlightKind(null);
-                  setSelection(selected === node.id ? null : node.id);
-                }}
-                className="h-[72px] w-full cursor-pointer rounded-lg border bg-card px-3 py-2 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                style={{
-                  borderColor: focused.has(node.id)
-                    ? "var(--primary)"
-                    : "var(--border)",
-                  borderLeftWidth: 4,
-                  borderLeftColor: nodeColors[node.kind],
-                }}
-              >
-                <span
-                  className="flex items-center justify-between gap-2 text-[10px]"
-                  style={{ color: nodeColors[node.kind] }}
+              <TopologyNodeMenu node={node}>
+                <button
+                  type="button"
+                  aria-pressed={selected === node.id}
+                  onClick={() => {
+                    setHighlightKind(null);
+                    setSelection(selected === node.id ? null : node.id);
+                  }}
+                  className="h-[72px] w-full cursor-pointer rounded-lg border bg-card px-3 py-2 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  style={{
+                    borderColor: focused.has(node.id)
+                      ? "var(--primary)"
+                      : "var(--border)",
+                    borderLeftWidth: 4,
+                    borderLeftColor: nodeColors[node.kind],
+                  }}
                 >
-                  <span className="uppercase tracking-wider">{node.kind}</span>
-                  {node.observation && (
-                    <TopologyRuntimeStatus
-                      observation={node.observation}
-                      now={now}
-                    />
-                  )}
-                </span>
-                <strong className="block truncate text-sm" title={node.label}>
-                  {node.label}
-                </strong>
-                <span
-                  className="block truncate text-[10px] text-muted-foreground"
-                  title={node.zone ?? node.detail}
-                >
-                  {node.zone ?? node.detail}
-                </span>
-              </button>
+                  <span
+                    className="flex items-center justify-between gap-2 text-[10px]"
+                    style={{ color: nodeColors[node.kind] }}
+                  >
+                    <span className="uppercase tracking-wider">
+                      {node.kind}
+                    </span>
+                    {node.observation && (
+                      <TopologyRuntimeStatus
+                        observation={node.observation}
+                        now={now}
+                      />
+                    )}
+                  </span>
+                  <strong className="block truncate text-sm" title={node.label}>
+                    {node.label}
+                  </strong>
+                  <span
+                    className="block truncate text-[10px] text-muted-foreground"
+                    title={node.zone ?? node.detail}
+                  >
+                    {node.zone ?? node.detail}
+                  </span>
+                </button>
+              </TopologyNodeMenu>
             </foreignObject>
           );
         })}
