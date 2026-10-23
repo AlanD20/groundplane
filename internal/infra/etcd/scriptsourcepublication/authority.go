@@ -450,12 +450,13 @@ func (authority *Authority) validateMembers(
 
 func (authority *Authority) validateExistingSource(ctx context.Context, member ref.Member) error {
 	read, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{member.SourceKey}, Revision: member.Reference.SourceModRevision,
+		Keys: []string{member.SourceKey},
 	})
 	if err != nil {
 		return err
 	}
-	if read == nil || len(read.Values) != 1 || read.Values[0] == nil ||
+	if read == nil || read.ReadRevision < member.Reference.SourceModRevision ||
+		len(read.Values) != 1 || read.Values[0] == nil || read.Values[0].Key != member.SourceKey ||
 		read.Values[0].ModRevision != member.Reference.SourceModRevision {
 		return errs.New(errs.KindStateConflict, "existing Script source revision is unavailable")
 	}
@@ -468,12 +469,13 @@ func (authority *Authority) validateExistingSource(ctx context.Context, member r
 	metadata, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			secretrecord.RecordKey(member.Reference.Source.SecretID),
-		}, Revision: member.Reference.SourceModRevision,
+		}, Revision: read.ReadRevision,
 	})
 	if err != nil {
 		return err
 	}
-	if metadata == nil || len(metadata.Values) != 1 || metadata.Values[0] == nil {
+	if metadata == nil || metadata.ReadRevision != read.ReadRevision || len(metadata.Values) != 1 ||
+		metadata.Values[0] == nil {
 		return errs.New(errs.KindValidationFailed, "Script Secret source owner evidence is missing")
 	}
 	record, err := secretrecord.DecodeRecord(metadata.Values[0].Value)

@@ -41,6 +41,10 @@ func (service *Service) RetireWork(
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: etcd.ReleaseWorkInputKey(view.Item.Item.ID)},
 		keyvalue.Mutation{
 			Type: keyvalue.MutationDelete,
+			Key:  etcd.ReleaseWorkConfigurationCaptureKey(view.Item.Item.ID),
+		},
+		keyvalue.Mutation{
+			Type: keyvalue.MutationDelete,
 			Key: releaserender.ServiceRolloutKey(
 				view.Task.Task.Scope.EnvironmentID,
 				view.Task.Task.ID,
@@ -91,6 +95,9 @@ func (service *Service) RetireUnpreparedWork(
 	}
 	change, err := service.ledger.PrepareUnpublishedReleaseRetirement(ctx, view, at)
 	if err == nil {
+		change.Mutations = append(change.Mutations, keyvalue.Mutation{
+			Type: keyvalue.MutationDelete, Key: etcd.ReleaseWorkConfigurationCaptureKey(view.Item.Item.ID),
+		})
 		change, err = service.retireDirectPreparation(ctx, view, change)
 	}
 	return err == nil, change, err
