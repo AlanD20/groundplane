@@ -152,14 +152,12 @@ func (planner *authoredUnitPlanner) serviceDependencies(
 	}
 	dependencies = canonicalAuthoredUnitKeys(dependencies)
 	after := slices.Clone(dependencies)
-	// Router work publishes the Environment's acknowledged file baseline.
-	// Service configuration must capture that result, not the previous Apply's
-	// files while this Apply's router is still replacing them.
-	capability := string(core.ComponentCapabilityHTTPRouter)
-	if _, declared := planner.input.desired.Input.Components[capability]; declared {
+	// Components publish the same acknowledged file baseline as Service work.
+	// Capture Service configuration only after every declared Component settles.
+	for capability := range planner.input.desired.Input.Components {
 		identity, found := planner.identities[ids.KindComponent][capability]
 		if !found {
-			return nil, nil, planner.missingInput("Service router", capability)
+			return nil, nil, planner.missingInput("Service Component", capability)
 		}
 		after = append(after, authoredResourceKey(ids.KindComponent, identity.ID))
 	}
@@ -243,6 +241,18 @@ func (planner *authoredUnitPlanner) componentDependencies(
 	for _, dependency := range dependencies {
 		if dependency.Kind != ids.KindSecret {
 			after = append(after, dependency)
+		}
+	}
+	// The Tunnel and router also share that baseline. Prepare the Tunnel only
+	// after router work settles, so neither seals a predecessor the other replaces.
+	if core.ComponentCapability(capability) == core.ComponentCapabilityEdgeTunnel {
+		router := string(core.ComponentCapabilityHTTPRouter)
+		if _, declared := planner.input.desired.Input.Components[router]; declared {
+			identity, found := planner.identities[ids.KindComponent][router]
+			if !found {
+				return nil, nil, false, planner.missingInput("Tunnel router", router)
+			}
+			after = append(after, authoredResourceKey(ids.KindComponent, identity.ID))
 		}
 	}
 	return dependencies, canonicalAuthoredUnitKeys(after), true, nil
