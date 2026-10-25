@@ -270,7 +270,7 @@ export function imageChoice(
     currentTags.length > 0
       ? `${currentTags.join(" · ")} · ${compactDigest}`
       : previousImageReference(image)
-        ? `${compactDigest} · Previously known as ${previousImageReference(image)}`
+        ? `${compactDigest} · Previous tag: ${previousImageReference(image)}`
         : `${compactDigest} · Digest only`;
 
   return { label, references: available, value };

@@ -290,6 +290,24 @@ export default function ImagesPage() {
                           const repositories = imageRepositories(image);
                           const tags = imageCurrentTags(image);
                           const previous = previousImageReference(image);
+                          const containerOwners = [
+                            ...new Set(
+                              image.container_uses.map((use) =>
+                                use.owner?.backing
+                                  ? use.owner.project_slug
+                                  : use.owner
+                                    ? [
+                                        use.owner.tenant_slug,
+                                        use.owner.project_slug,
+                                        use.owner.environment_name,
+                                        use.owner.service_name,
+                                      ]
+                                        .filter(Boolean)
+                                        .join("/")
+                                    : use.name,
+                              ),
+                            ),
+                          ];
                           return (
                             <Fragment key={image.id}>
                               <ResourceRow
@@ -311,12 +329,14 @@ export default function ImagesPage() {
                                       {tags.length > 1
                                         ? `${tags.length} current tags`
                                         : previous
-                                          ? `Previously known as ${previous}`
+                                          ? `Previous tag: ${previous}`
                                           : (repositories[0] ?? "Digest only")}
                                     </span>
-                                    <code className="text-xs font-normal text-muted-foreground/70">
-                                      {shortImageId(image.id)}
-                                    </code>
+                                    {tags.length > 0 && (
+                                      <code className="text-xs font-normal text-muted-foreground/70">
+                                        {shortImageId(image.id)}
+                                      </code>
+                                    )}
                                   </Button>
                                 </TableCell>
                                 <TableCell className="hidden lg:table-cell">
@@ -360,6 +380,7 @@ export default function ImagesPage() {
                                   <Button
                                     variant="ghost"
                                     size="content"
+                                    className="flex max-w-64 flex-col items-start gap-1 whitespace-normal text-left"
                                     aria-label={`Show usage of ${imageName(image)}`}
                                     onClick={(event) => {
                                       event.stopPropagation();
@@ -385,6 +406,14 @@ export default function ImagesPage() {
                                           ? "Protected"
                                           : "No containers"}
                                     </Badge>
+                                    {containerOwners.length > 0 && (
+                                      <span className="text-xs font-normal text-muted-foreground [overflow-wrap:anywhere]">
+                                        {containerOwners.slice(0, 2).join(", ")}
+                                        {containerOwners.length > 2
+                                          ? `, +${containerOwners.length - 2} more`
+                                          : ""}
+                                      </span>
+                                    )}
                                   </Button>
                                 </TableCell>
                                 <TableCell className="px-1">

@@ -63,7 +63,7 @@ export function ImageDetails({
         eyebrow="Host image"
         description={
           previousImageReference(image)
-            ? `Previously known as ${previousImageReference(image)}`
+            ? `Previous tag: ${previousImageReference(image)}`
             : undefined
         }
         icon={<Package />}
