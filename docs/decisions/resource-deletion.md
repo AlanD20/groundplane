@@ -127,6 +127,11 @@ the hierarchy. Historical consumer Recovery Points and their Connectors remain
 consumer-owned. Instances with accepted deletion leave the active list, while
 the durable Task remains available for inspection and Retry.
 
+Directory removal needs `DAC_OVERRIDE` because workloads own their files under
+different UIDs. The helper grants it only during that removal phase; captured
+root validation and descriptor-relative traversal still reject symlinks and
+paths outside the selected Environment.
+
 ## Consequences
 
 - Destructive work is explicit, observable and resumable, but a failed or

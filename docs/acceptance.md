@@ -1892,6 +1892,32 @@ failed/aborted Tasks and missing credentials remain real errors; listing metadat
 does not authorize execution or unverified image removal. No test resources were
 created or removed.
 
+## Protected Backing Service deletion
+
+**H121 — BACK-18, 2026-10-25.** Ubuntu 24.04 amd64, Controller
+`6c39bfaee` and Agent `3a4d61c83`. An isolated PostgreSQL 16 instance contained
+a known SQL row. An active consumer blocked deletion with `resource.in_use`;
+the row remained readable after the rejection and protected Detach. Local
+publication checks also excluded an Attach inserted between the admission read
+and deletion transaction. The Console required the instance slug and exposed
+the returned Task.
+
+The first removal exposed missing file-access permission in the directory helper
+for PostgreSQL-owned files. The normal updater refused activation while cleanup
+was unresolved. A one-time Agent-only repair preserved credentials and unrelated
+containers; it is not normal-upgrade qualification. Explicit recovery and Retry
+completed all ten items in the original deletion Task, retaining its failure.
+Independent checks confirmed the container, actual Environment data directory,
+Docker Volume and network were absent; Backing, Project, Environment, Service
+and Volume reads returned 404. Active duplicate submission returned
+`idempotency.in_progress`; completed replay returned the original Task.
+
+The temporary consumer Tenant was removed through GP. The three pre-existing
+Backing container identities, images, start times and running/stopped states
+were unchanged. Full CI passed for `4f9a006b4`; focused storage/helper checks,
+Console build, vet and architecture checks covered the follow-up fixes.
+Custom hook deletion, other adapters and other platforms were not live-qualified.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

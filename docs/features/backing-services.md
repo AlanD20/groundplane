@@ -368,7 +368,7 @@ remaining qualification limits.
 explains why credential ownership, network edges and hook results are separate.
 [Network decisions](../decisions/network-and-shared-access.md) explain dedicated
 backing networks and authentication. [Resource deletion](../decisions/resource-deletion.md)
-records the deferred permanent-deletion boundary.
+explains protected permanent deletion.
 
 A new Custom hook owner and its fact-derived consumer configuration passed one
 same-Apply journey in [H117](../acceptance.md). Reuse, secret outputs and interrupted
