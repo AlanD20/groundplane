@@ -13,6 +13,7 @@ import { imageSize, type HostImage } from "./api";
 import {
   imageCurrentTags,
   imageName,
+  previousImageReference,
   imageRepositories,
   isDigestReference,
   previousFetchReference,
@@ -61,7 +62,9 @@ export function ImageDetails({
         title={imageName(image)}
         eyebrow="Host image"
         description={
-          previousFetch ? `Previously fetched as ${previousFetch}` : undefined
+          previousImageReference(image)
+            ? `Previously known as ${previousImageReference(image)}`
+            : undefined
         }
         icon={<Package />}
         actions={

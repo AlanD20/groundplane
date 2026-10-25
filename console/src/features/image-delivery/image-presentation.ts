@@ -15,10 +15,13 @@ export function imageRepositories(image: HostImage): string[] {
 
 export function imageName(image: HostImage): string {
   return (
-    imageCurrentTags(image)[0] ??
-    selectedImageTags(image)[0] ??
-    shortImageId(preferredImageDigest(image))
+    imageCurrentTags(image)[0] ?? shortImageId(preferredImageDigest(image))
   );
+}
+
+export function previousImageReference(image: HostImage): string | null {
+  if (imageCurrentTags(image).length > 0) return null;
+  return previousFetchReference(image) ?? selectedImageTags(image)[0] ?? null;
 }
 
 // A configured pinned reference can name these exact bytes without claiming
@@ -266,11 +269,9 @@ export function imageChoice(
   const label =
     currentTags.length > 0
       ? `${currentTags.join(" · ")} · ${compactDigest}`
-      : selectedImageTags(image)[0]
-        ? `${selectedImageTags(image)[0]} · ${compactDigest} · selected`
-        : previous
-          ? `${compactDigest} · Previously fetched as ${previous}`
-          : `${compactDigest} · Digest only`;
+      : previousImageReference(image)
+        ? `${compactDigest} · Previously known as ${previousImageReference(image)}`
+        : `${compactDigest} · Digest only`;
 
   return { label, references: available, value };
 }

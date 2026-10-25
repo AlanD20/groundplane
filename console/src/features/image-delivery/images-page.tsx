@@ -32,8 +32,8 @@ import { ImageFetchAction } from "./image-fetch-action";
 import {
   imageCurrentTags,
   imageName,
+  previousImageReference,
   selectedImageTags,
-  previousFetchReference,
   imageRepositories,
   shortImageId,
 } from "./image-presentation";
@@ -282,8 +282,7 @@ export default function ImagesPage() {
                         ].map((image) => {
                           const repositories = imageRepositories(image);
                           const tags = imageCurrentTags(image);
-                          const previousFetch = previousFetchReference(image);
-                          const selectedTag = selectedImageTags(image)[0];
+                          const previous = previousImageReference(image);
                           return (
                             <Fragment key={image.id}>
                               <ResourceRow
@@ -304,12 +303,9 @@ export default function ImagesPage() {
                                     <span className="w-full truncate text-xs font-normal text-muted-foreground">
                                       {tags.length > 1
                                         ? `${tags.length} current tags`
-                                        : previousFetch
-                                          ? `Previously fetched as ${previousFetch}`
-                                          : selectedTag
-                                            ? `Selected as ${selectedTag}`
-                                            : (repositories[0] ??
-                                              "Digest only")}
+                                        : previous
+                                          ? `Previously known as ${previous}`
+                                          : (repositories[0] ?? "Digest only")}
                                     </span>
                                     <code className="text-xs font-normal text-muted-foreground/70">
                                       {shortImageId(image.id)}
@@ -377,7 +373,7 @@ export default function ImagesPage() {
                                       }
                                     >
                                       {image.containers > 0
-                                        ? `${image.containers} containers`
+                                        ? `${image.containers} container${image.containers === 1 ? "" : "s"}`
                                         : image.removal_blocked
                                           ? "Protected"
                                           : "Unused"}
