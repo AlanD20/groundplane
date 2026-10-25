@@ -56,6 +56,11 @@ func (executor *Executor) ExecuteEnvironmentRemoval(ctx context.Context, volumeR
 	options.HostConfig.Mounts = append(options.HostConfig.Mounts, mount.Mount{
 		Type: mount.TypeBind, Source: volumeRoot, Target: volumeRoot,
 	})
+	if progress.Phase == hierarchyexecution.RemoveDirectory && !request.InspectOnly {
+		// Workloads own their data under different UIDs. The descriptor-relative
+		// remover still validates the captured root and never follows symlinks.
+		options.HostConfig.CapAdd = []string{"DAC_OVERRIDE"}
+	}
 	raw, err := executor.executeFrame(bounded, options, framed)
 	if err != nil {
 		return nil, err
