@@ -13,6 +13,8 @@ HTTP examples, request replay and asynchronous operations.
 Apply and recovery; the [Blueprint reference](blueprint.md) defines YAML fields,
 references, defaults and current syntax limits.
 The [changelog](../CHANGELOG.md) records release changes, not production readiness.
+The [frontend and API example](../examples/gp-demo/README.md) walks through
+building and deploying a small application with Caddy and Cloudflare Tunnel.
 
 ## Features
 

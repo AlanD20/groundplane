@@ -32,6 +32,9 @@ Compose-compatible desired state with Groundplane extensions.
 The [documentation index](docs/README.md) links the remaining guides.
 The [changelog](CHANGELOG.md) records release changes.
 
+For a small runnable application, try the [frontend and API demo](examples/gp-demo/README.md):
+two Services behind Caddy and Cloudflare Tunnel, with Dockerfiles and a Blueprint.
+
 ## Work on Groundplane
 
 Start with [architecture](docs/architecture.md), [technical decisions](docs/decisions/README.md)

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Groundplane demo</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="brand">GP / DEMO</span
+        ><span class="pill">Two services. One hostname.</span>
+      </header>
+      <section class="intro">
+        <p class="eyebrow">RUNNING ON YOUR OWN HOST</p>
+        <h1>A small app.<br />A real deployment.</h1>
+        <p>
+          This page is served by the frontend container. Its requests reach a
+          separate API container through Caddy. Cloudflare Tunnel connects the
+          public domain to your host.
+        </p>
+      </section>
+      <section class="flow" aria-label="Request path">
+        <span>Your browser</span><b>→</b><span>Cloudflare Tunnel</span><b>→</b
+        ><span>Caddy</span><b>→</b
+        ><span
+          >Frontend <small>/</small><br />Backend <small>/api/*</small></span
+        >
+      </section>
+      <section class="grid">
+        <article>
+          <div class="heading">
+            <h2>Meet the backend</h2>
+            <span id="status" class="pill">Not checked</span>
+          </div>
+          <p>
+            Get the API version, container hostname and uptime. Refresh to watch
+            the request count change.
+          </p>
+          <button id="refresh">Call GET /api/info</button>
+          <pre id="info" role="status" aria-live="polite">
+Ready to connect.</pre>
+        </article>
+        <article>
+          <h2>Send a message</h2>
+          <p>
+            Submit JSON to the API and see its response. Both services share
+            this domain, so no CORS configuration is needed.
+          </p>
+          <form id="echo-form">
+            <label for="message">Your message</label
+            ><input
+              id="message"
+              name="message"
+              maxlength="500"
+              value="Hello from gp-demo!"
+              required
+            /><button type="submit">Send POST /api/echo</button>
+          </form>
+          <pre id="echo" role="status" aria-live="polite">
+Your response will appear here.</pre>
+        </article>
+      </section>
+      <footer>
+        <span>Managed by Groundplane</span
+        ><span>Frontend + API · demo v0.1.0</span>
+      </footer>
+    </main>
+  </body>
+</html>

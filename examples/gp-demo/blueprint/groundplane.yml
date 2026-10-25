@@ -1,0 +1,70 @@
+kind: environment
+schema: 1
+metadata:
+  tenant: demo
+  project: gp-demo
+  environment: live
+x-gp-network-pool: 10.42.0.0/24
+services:
+  api:
+    image: gp-demo-api:0.1.0
+    expose:
+      - "3000"
+    networks:
+      - application
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    x-gp-release:
+      default_strategy: recreate
+  frontend:
+    image: gp-demo-frontend:0.1.0
+    expose:
+      - "80"
+    networks:
+      - application
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - http://127.0.0.1/health
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    x-gp-release:
+      default_strategy: recreate
+networks:
+  application:
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.42.0.0/26
+  edge:
+    internal: false
+    ipam:
+      config:
+        - subnet: 10.42.0.64/26
+x-gp-routes:
+  - hostname: app.example.com
+    path: /api/*
+    target: api
+    target_port: 3000
+    exposure: public
+  - hostname: app.example.com
+    path: /
+    target: frontend
+    target_port: 80
+    exposure: public
