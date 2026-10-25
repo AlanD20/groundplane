@@ -14,13 +14,13 @@ export type BackingServiceCreateRequest = CreateBase &
         adapter: "postgres" | "mysql";
         adapter_version: string;
         authentication?: never;
-        image?: never;
+        image?: string;
       }
     | {
         adapter: "valkey";
         adapter_version: string;
         authentication: "username_password" | "password" | "none";
-        image?: never;
+        image?: string;
       }
     | {
         adapter: "custom";

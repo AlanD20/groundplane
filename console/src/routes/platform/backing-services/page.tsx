@@ -8,6 +8,12 @@ import { BackingHookFields } from "@/features/backing-service/hook-fields";
 import { useAdapterCatalog } from "@/features/backing-service/use-adapter-catalog";
 
 import { Select } from "@/components/ui/select";
+import { ImagePicker } from "@/features/image-delivery/image-picker";
+import { listImages } from "@/features/image-delivery/api";
+import {
+  managedImageReferences,
+  managedUpdateReference,
+} from "@/features/backing-service/managed-images";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -68,6 +74,10 @@ export default function PlatformBackingServicesPage() {
   const versions = catalogAdapter?.versions ?? [];
   const selectedVersion =
     version || (versions.length === 1 ? versions[0].version : "");
+  const versionSpec = versions.find((item) => item.version === selectedVersion);
+  const imagePattern = versionSpec
+    ? new RegExp(versionSpec.image_pattern)
+    : null;
   const [image, setImage] = useState("");
   const [hooks, setHooks] = useState<BackingHooks>({});
   const [hookError, setHookError] = useState<string | null>(null);
@@ -93,7 +103,11 @@ export default function PlatformBackingServicesPage() {
       : authenticationFields &&
           selectedVersion &&
           versions.some((item) => item.version === selectedVersion)
-        ? { ...authenticationFields, adapter_version: selectedVersion }
+        ? {
+            ...authenticationFields,
+            adapter_version: selectedVersion,
+            image: image.trim() || versionSpec?.default_image,
+          }
         : undefined;
 
   const createBackingService = async () => {
@@ -118,11 +132,21 @@ export default function PlatformBackingServicesPage() {
     setCreating(true);
     setCreateError(null);
     try {
+      if (!createFields.image) throw new Error("Select a container image.");
+      const selectedImage =
+        adapter !== "custom" && imagePattern && createFields.image
+          ? managedUpdateReference(
+              createFields.image,
+              (await listImages()).images,
+              imagePattern,
+            )
+          : createFields.image;
       await store.addBackingProject({
         slug: slug.trim(),
         name: name.trim(),
         description: description.trim() || undefined,
         ...createFields,
+        image: selectedImage,
         network_pool: networkPool.trim(),
         zone: {
           name: zoneName.trim(),
@@ -250,7 +274,10 @@ export default function PlatformBackingServicesPage() {
                 <Select
                   id="backing-version"
                   value={selectedVersion}
-                  onValueChange={setVersion}
+                  onValueChange={(value) => {
+                    setVersion(value);
+                    setImage("");
+                  }}
                   placeholder={
                     adapterCatalog.catalog
                       ? "Select version"
@@ -307,6 +334,26 @@ export default function PlatformBackingServicesPage() {
                   network. Optional hooks can provision credentials and facts.
                   No volumes, health checks, grants or backups are added
                   automatically.
+                </p>
+              </div>
+            )}
+            {adapter !== "custom" && (
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <Label htmlFor="backing-managed-image">Upstream image</Label>
+                <ImagePicker
+                  id="backing-managed-image"
+                  value={image || versionSpec?.default_image || ""}
+                  onChange={setImage}
+                  referencesForImage={(item) =>
+                    imagePattern
+                      ? managedImageReferences(item, imagePattern)
+                      : []
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Select an image already fetched on Host → Images. The selected
+                  tag is pinned at creation; it is independent of the
+                  provisioning adapter and backup tools.
                 </p>
               </div>
             )}

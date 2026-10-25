@@ -2,6 +2,7 @@ package api
 
 type BackingAdapterVersion struct {
 	Version      string `json:"version"`
+	DefaultImage string `json:"default_image" doc:"Default upstream tag for this server line; exact image content is selected at creation."`
 	ImagePattern string `json:"image_pattern" doc:"Accepted upstream image references for this server version."`
 }
 

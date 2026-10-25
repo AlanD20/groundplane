@@ -32,6 +32,7 @@ import { ImageFetchAction } from "./image-fetch-action";
 import {
   imageCurrentTags,
   imageName,
+  selectedImageTags,
   previousFetchReference,
   imageRepositories,
   shortImageId,
@@ -82,6 +83,7 @@ export default function ImagesPage() {
       (inventory?.images ?? [])
         .filter(
           (image) =>
+            !image.parent_id &&
             (usage === "all" ||
               (usage === "containers"
                 ? image.containers > 0
@@ -91,6 +93,7 @@ export default function ImagesPage() {
             [
               image.id,
               ...imageReferences(image),
+              ...selectedImageTags(image),
               ...image.fetches.map((fetch) => fetch.requested),
             ].some((value) =>
               value.toLowerCase().includes(search.toLowerCase()),
@@ -150,7 +153,7 @@ export default function ImagesPage() {
           {inventory && (
             <SummaryStrip>
               <SummaryItem label="Local images">
-                {inventory.images.length}
+                {inventory.images.filter((image) => !image.parent_id).length}
               </SummaryItem>
               <SummaryItem label="In use by containers">
                 {inventory.images.filter((i) => i.containers > 0).length}
@@ -227,7 +230,12 @@ export default function ImagesPage() {
                 <>
                   <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
                     <span>
-                      {images.length} of {inventory.images.length} images
+                      {images.length} of{" "}
+                      {
+                        inventory.images.filter((image) => !image.parent_id)
+                          .length
+                      }{" "}
+                      images
                     </span>
                     <span>
                       Updated{" "}
@@ -275,6 +283,7 @@ export default function ImagesPage() {
                           const repositories = imageRepositories(image);
                           const tags = imageCurrentTags(image);
                           const previousFetch = previousFetchReference(image);
+                          const selectedTag = selectedImageTags(image)[0];
                           return (
                             <Fragment key={image.id}>
                               <ResourceRow
@@ -297,7 +306,10 @@ export default function ImagesPage() {
                                         ? `${tags.length} current tags`
                                         : previousFetch
                                           ? `Previously fetched as ${previousFetch}`
-                                          : (repositories[0] ?? "Digest only")}
+                                          : selectedTag
+                                            ? `Selected as ${selectedTag}`
+                                            : (repositories[0] ??
+                                              "Digest only")}
                                     </span>
                                     <code className="text-xs font-normal text-muted-foreground/70">
                                       {shortImageId(image.id)}
@@ -457,6 +469,10 @@ export default function ImagesPage() {
             )
           }
           image={detail}
+          platformImages={(inventory?.images ?? []).filter(
+            (image) => image.parent_id === detail.id,
+          )}
+          onInspect={setSelected}
           observedAt={inventory?.observed_at}
           unavailable={!!error || loading}
           onClose={() => setSelected(null)}

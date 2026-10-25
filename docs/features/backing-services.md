@@ -16,8 +16,8 @@ operator-selected container image under GP. Without hooks, an Attach only
 connects its consumer Service to the backing network. It creates no credentials
 or facts. Custom does not inherit database grants or managed Backup support.
 
-Backing creation does not accept an uploaded Blueprint, an existing Zone, an
-operator-selected PostgreSQL image, or runtime plugins. Existing-Zone selection
+Backing creation does not accept an uploaded Blueprint, an existing Zone, or
+runtime plugins. Existing-Zone selection
 is deferred post-MVP; [Backing Service provisioning](../decisions/backing-service-provisioning.md#network-selection-is-intentionally-narrow)
 records the constraints that a future decision must resolve without making
 that path current behavior.
@@ -48,14 +48,18 @@ Project slug, name and optional description, one adapter family and its server
 version for a managed database,
 the `main` Environment network pool, and one new Zone's name, subnet, and
 `internal` decision. Valkey also requires an explicit immutable authentication mode.
-Custom requires an image. It does not invent a data Volume, credentials, exposed
+Managed adapters accept an upstream image matching their selected server line;
+omitting it selects the catalog's readable family tag. Fetch the chosen image
+on Host → Images first. Creation captures the selected content, preserves the
+tag alongside its digest, and never silently substitutes the installation's
+database build. Custom requires an image. It does not invent a data Volume, credentials, exposed
 ports, or a healthcheck for an arbitrary image. Its Service name is the Project
 slug; the display name remains independent.
 
 The Controller publishes exactly one backing Project, one `main` Environment,
 one dedicated backing-owned Zone, one adapter Service, one adapter-defined data
 Volume for built-in database adapters, and one Agent Task. Managed PostgreSQL
-uses a release-pinned, unmodified upstream PostgreSQL 16 Alpine image. Its
+uses the selected, digest-pinned upstream PostgreSQL 16 Alpine image. Its
 Backup/Restore clients are a separate authenticated tool bundle, mounted
 read-only. A GP software update does not patch a running database. The Zone
 subnet must be canonical IPv4, inside the new Environment pool, and globally

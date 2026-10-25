@@ -30,7 +30,11 @@ func (server *Server) registerBackingAdapterCatalog() {
 				for _, version := range family.Versions {
 					item.Versions = append(
 						item.Versions,
-						apiTypes.BackingAdapterVersion{Version: version.Number, ImagePattern: version.ImagePattern},
+						apiTypes.BackingAdapterVersion{
+							Version:      version.Number,
+							DefaultImage: version.Image,
+							ImagePattern: version.ImagePattern,
+						},
 					)
 				}
 			}

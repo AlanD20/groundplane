@@ -90,9 +90,6 @@ func newBackingServiceCmd() *cobra.Command {
 			if adapter != "custom" && adapterVersion == "" {
 				return errs.New(errs.KindValidationFailed, "--adapter-version is required for a managed database")
 			}
-			if adapter != "custom" && image != "" {
-				return errs.New(errs.KindValidationFailed, "--image is accepted only for custom")
-			}
 			if adapter == "valkey" && authentication == "" {
 				return errs.New(errs.KindValidationFailed, "--authentication is required for valkey")
 			}
@@ -132,7 +129,8 @@ func newBackingServiceCmd() *cobra.Command {
 		StringVar(&adapter, "adapter", "", "adapter family: postgres, valkey, mysql, or custom")
 	create.Flags().
 		StringVar(&adapterVersion, "adapter-version", "", "supported server version (required for managed databases)")
-	create.Flags().StringVar(&image, "image", "", "container image (required only for custom)")
+	create.Flags().
+		StringVar(&image, "image", "", "container image; required for Custom, or an upstream image matching the selected database version")
 	create.Flags().StringVar(&hooksFile, "hooks-file", "", "custom hook configuration JSON file; - reads stdin")
 	create.Flags().StringVar(
 		&authentication,

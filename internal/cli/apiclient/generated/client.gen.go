@@ -2129,6 +2129,9 @@ type BackingAdapterCatalog struct {
 
 // BackingAdapterVersion defines model for BackingAdapterVersion.
 type BackingAdapterVersion struct {
+	// DefaultImage Default upstream tag for this server line; exact image content is selected at creation.
+	DefaultImage string `json:"default_image"`
+
 	// ImagePattern Accepted upstream image references for this server version.
 	ImagePattern string `json:"image_pattern"`
 	Version      string `json:"version"`
@@ -2265,7 +2268,7 @@ type BackingServiceCreate struct {
 	Description    *string                             `json:"description,omitempty"`
 	Hooks          *BackingHookConfiguration           `json:"hooks,omitempty"`
 
-	// Image Required for the custom adapter and rejected for managed adapters.
+	// Image Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it.
 	Image       *string                  `json:"image,omitempty"`
 	Name        string                   `json:"name"`
 	NetworkPool string                   `json:"network_pool"`
@@ -3526,12 +3529,18 @@ type HostEtcd struct {
 type HostImage struct {
 	ContainerUses []ImageContainer `json:"container_uses"`
 	Containers    int64            `json:"containers"`
-	CreatedAt     string           `json:"created_at"`
-	Digests       []string         `json:"digests"`
+
+	// ContentIds Observed image and platform-manifest identities used for usage and protection checks.
+	ContentIds []string `json:"content_ids"`
+	CreatedAt  string   `json:"created_at"`
+	Digests    []string `json:"digests"`
 
 	// Fetches Fetch requests still retained in the Task journal, with each attempt's status; not current Docker tags
 	Fetches []ImageFetchRecord `json:"fetches"`
 	Id      string             `json:"id"`
+
+	// ParentId Unique owning index for an untagged platform image; empty for separately listed images.
+	ParentId string `json:"parent_id"`
 
 	// ProtectionReason Additional non-container removal protection; empty when none is reported
 	ProtectionReason string `json:"protection_reason"`
@@ -3595,11 +3604,14 @@ type ImageContainerOwner struct {
 	Backing         bool   `json:"backing"`
 	EnvironmentId   string `json:"environment_id"`
 	EnvironmentName string `json:"environment_name"`
-	ProjectId       string `json:"project_id"`
-	ProjectSlug     string `json:"project_slug"`
-	ServiceId       string `json:"service_id"`
-	ServiceName     string `json:"service_name"`
-	TenantSlug      string `json:"tenant_slug"`
+
+	// ImageReference Configured Service image, not proof of serving content or a current Docker tag.
+	ImageReference string `json:"image_reference"`
+	ProjectId      string `json:"project_id"`
+	ProjectSlug    string `json:"project_slug"`
+	ServiceId      string `json:"service_id"`
+	ServiceName    string `json:"service_name"`
+	TenantSlug     string `json:"tenant_slug"`
 }
 
 // ImageFetchAccepted defines model for ImageFetchAccepted.

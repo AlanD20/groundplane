@@ -20,8 +20,7 @@ type Family struct {
 	Versions []Version
 }
 
-// Families returns independent catalog data. Exact managed PostgreSQL image
-// bytes are selected from the authenticated release catalog during creation.
+// Families returns independent server-line constraints and default image tags.
 func Families() []Family {
 	return []Family{
 		{Key: "postgres", Label: "PostgreSQL",

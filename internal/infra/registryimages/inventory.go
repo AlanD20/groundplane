@@ -71,8 +71,35 @@ func (Local) List(ctx context.Context) ([]imagefetch.LocalImage, error) {
 			ContentIDs: contentIDs, RemovalBlocked: blocked,
 		})
 	}
+	assignImageParents(result)
 	slices.SortFunc(result, func(a, b imagefetch.LocalImage) int { return strings.Compare(a.ID, b.ID) })
 	return result, nil
+}
+
+// Keep independently tagged or shared manifests separately selectable. A unique,
+// untagged child is presented inside its index without changing removal authority.
+func assignImageParents(images []imagefetch.LocalImage) {
+	type parent struct {
+		id    string
+		count int
+	}
+	parents := make(map[string]parent)
+	for _, image := range images {
+		for _, id := range image.ContentIDs {
+			if id != image.ID {
+				value := parents[id]
+				value.id = image.ID
+				value.count++
+				parents[id] = value
+			}
+		}
+	}
+	for index := range images {
+		value := parents[images[index].ID]
+		if value.count == 1 && len(images[index].Tags) == 0 {
+			images[index].ParentID = value.id
+		}
+	}
 }
 
 func imageReferences(values []string) []string {

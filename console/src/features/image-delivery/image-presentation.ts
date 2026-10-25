@@ -15,8 +15,46 @@ export function imageRepositories(image: HostImage): string[] {
 
 export function imageName(image: HostImage): string {
   return (
-    imageCurrentTags(image)[0] ?? shortImageId(preferredImageDigest(image))
+    imageCurrentTags(image)[0] ??
+    selectedImageTags(image)[0] ??
+    shortImageId(preferredImageDigest(image))
   );
+}
+
+// A configured pinned reference can name these exact bytes without claiming
+// that the mutable Docker tag still points here. Never infer this from tag-only intent.
+export function selectedImageTags(image: HostImage): string[] {
+  return [
+    ...new Set(
+      selectedImageReferences(image).map(
+        (reference) => reference.split("@")[0],
+      ),
+    ),
+  ].sort();
+}
+
+export function selectedImageReferences(image: HostImage): string[] {
+  const identities = new Set([
+    image.id,
+    ...image.content_ids,
+    ...image.digests.map((reference) =>
+      reference.slice(reference.lastIndexOf("@") + 1),
+    ),
+  ]);
+  return [
+    ...new Set(
+      image.container_uses.flatMap((use) => {
+        const reference = use.owner?.image_reference;
+        if (!reference) return [];
+        const [name, digest] = reference.split("@");
+        return digest &&
+          identities.has(digest) &&
+          name.lastIndexOf(":") > name.lastIndexOf("/")
+          ? [reference]
+          : [];
+      }),
+    ),
+  ].sort();
 }
 
 export function imageTag(reference: string): string {
@@ -228,9 +266,11 @@ export function imageChoice(
   const label =
     currentTags.length > 0
       ? `${currentTags.join(" · ")} · ${compactDigest}`
-      : previous
-        ? `${compactDigest} · Previously fetched as ${previous}`
-        : `${compactDigest} · Digest only`;
+      : selectedImageTags(image)[0]
+        ? `${selectedImageTags(image)[0]} · ${compactDigest} · selected`
+        : previous
+          ? `${compactDigest} · Previously fetched as ${previous}`
+          : `${compactDigest} · Digest only`;
 
   return { label, references: available, value };
 }

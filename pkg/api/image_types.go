@@ -8,6 +8,8 @@ type ImageFetchRequest struct {
 // containers; it is not a claim that the image is safe to delete.
 type HostImage struct {
 	ID               string             `json:"id"`
+	ContentIDs       []string           `json:"content_ids" nullable:"false" doc:"Observed image and platform-manifest identities used for usage and protection checks."`
+	ParentID         string             `json:"parent_id" doc:"Unique owning index for an untagged platform image; empty for separately listed images."`
 	Tags             []string           `json:"tags" nullable:"false"`
 	Digests          []string           `json:"digests" nullable:"false"`
 	SizeBytes        int64              `json:"size_bytes"`
@@ -28,6 +30,7 @@ type ImageContainer struct {
 }
 
 type ImageContainerOwner struct {
+	ImageReference  string `json:"image_reference" doc:"Configured Service image, not proof of serving content or a current Docker tag."`
 	ServiceID       string `json:"service_id"`
 	ServiceName     string `json:"service_name"`
 	EnvironmentID   string `json:"environment_id"`

@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
@@ -163,13 +164,14 @@ func (service *CreationService) CreateBackingService(
 		}
 		spec, err = adapters.CustomBackingCreationSpec(input.Slug, input.Image)
 	} else {
-		if input.Image != "" {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindValidationFailed,
-				"managed backing-service adapters do not accept an image",
-			)
-		}
 		spec, err = adapters.BackingCreationSpec(input.Adapter, input.AdapterVersion, authentication)
+		if err == nil && input.Image != "" {
+			if !backingcatalog.ValidImage(input.Adapter, input.AdapterVersion, input.Image) {
+				return idempotencyrecord.IdempotencyResponse{}, errs.New(
+					errs.KindValidationFailed, "image must match the selected database family and server version")
+			}
+			spec.Image = input.Image
+		}
 	}
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -321,16 +323,22 @@ func (service *CreationService) createBackingServiceFromStage(
 		volume = &resolvedVolume
 	}
 	serviceID := allocator.New(ids.KindService)
+	sealedImage, err := service.sealCreationImage(ctx, spec.Image)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	if !adapter.Custom() {
+		spec.Image = sealedImage.reference
+	}
 	var postgresRelease *backingpostgresrelease.Record
 	if input.Adapter == "postgres" {
 		release, releaseErr := postgres16protocol.CompiledManagedRelease()
 		if releaseErr != nil {
 			return idempotencyrecord.IdempotencyResponse{}, releaseErr
 		}
-		if spec.Image != release.DatabaseImage {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindStateConflict, "managed PostgreSQL creation image differs from release authority")
-		}
+		// Database selection is operator-owned; only the backup tool artifacts
+		// come from the authenticated installation catalog.
+		release.DatabaseImage = spec.Image
 		selected, releaseErr := backingpostgresrelease.New(environment.ID, serviceID, release)
 		if releaseErr != nil {
 			return idempotencyrecord.IdempotencyResponse{}, releaseErr
@@ -378,10 +386,6 @@ func (service *CreationService) createBackingServiceFromStage(
 		Entries: entryDesired, CreatedAt: environment.CreatedAt,
 	}
 	baseProject := backingComposeProject(spec, serviceID, zone.Desired, volume, environment)
-	sealedImage, err := service.sealCreationImage(ctx, spec.Image)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
 	workload := baseProject.Services[spec.ServiceName]
 	workload.Image = sealedImage.localID
 	baseProject.Services[spec.ServiceName] = workload

@@ -69,7 +69,8 @@ func (c *Client) ListImages(ctx context.Context) (apiTypes.ImageList, error) {
 			if owner := use.Owner; owner != nil {
 				item.Owner = &apiTypes.ImageContainerOwner{
 					ServiceID: owner.ServiceId, ServiceName: owner.ServiceName,
-					EnvironmentID: owner.EnvironmentId, EnvironmentName: owner.EnvironmentName,
+					ImageReference: owner.ImageReference,
+					EnvironmentID:  owner.EnvironmentId, EnvironmentName: owner.EnvironmentName,
 					ProjectID: owner.ProjectId, ProjectSlug: owner.ProjectSlug,
 					TenantSlug: owner.TenantSlug, Backing: owner.Backing,
 				}
@@ -92,6 +93,8 @@ func (c *Client) ListImages(ctx context.Context) (apiTypes.ImageList, error) {
 			result.Images,
 			apiTypes.HostImage{
 				ID:            image.Id,
+				ContentIDs:    image.ContentIds,
+				ParentID:      image.ParentId,
 				Tags:          image.Tags,
 				Digests:       image.Digests,
 				SizeBytes:     image.SizeBytes,

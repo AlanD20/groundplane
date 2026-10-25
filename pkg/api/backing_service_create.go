@@ -1,15 +1,14 @@
 package api
 
 // BackingServiceCreate is the complete operator input for one backing service.
-// Managed adapter workload details come from the compiled catalog; custom
-// creation requires only an operator-selected image.
+// Managed adapters own provisioning details independently of image selection.
 type BackingServiceCreate struct {
 	Slug           string                    `json:"slug"`
 	Name           string                    `json:"name"`
 	Description    string                    `json:"description,omitempty"`
 	Adapter        string                    `json:"adapter"`
 	AdapterVersion string                    `json:"adapter_version,omitempty" doc:"Required supported server version for a managed database adapter; omitted for Custom."`
-	Image          string                    `json:"image,omitempty" doc:"Required for the custom adapter and rejected for managed adapters."`
+	Image          string                    `json:"image,omitempty" doc:"Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it."`
 	Authentication string                    `json:"authentication,omitempty" enum:"username_password,password,none" doc:"Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters."`
 	NetworkPool    string                    `json:"network_pool"`
 	Zone           BackingServiceZoneCreate  `json:"zone"`

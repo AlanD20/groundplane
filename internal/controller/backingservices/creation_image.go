@@ -2,6 +2,7 @@ package backingservices
 
 import (
 	"context"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
@@ -15,6 +16,7 @@ type creationImageRegistry interface {
 }
 
 type creationImage struct {
+	reference    string
 	localID      string
 	architecture string
 	variant      string
@@ -32,6 +34,7 @@ func (service *CreationService) sealCreationImage(ctx context.Context, reference
 	}
 	// The managed catalog's tag constrains its server line; the digest alone
 	// selects delivery bytes. Do not pass both selectors to the image resolver.
+	authored := reference
 	if backingcatalog.ValidPinnedImage(reference) {
 		named, err := dockerreference.ParseNormalizedNamed(reference)
 		if err != nil {
@@ -56,6 +59,7 @@ func (service *CreationService) sealCreationImage(ctx context.Context, reference
 		return creationImage{}, err
 	}
 	return creationImage{
+		reference:    strings.SplitN(authored, "@", 2)[0] + "@" + selected.ManifestDigest,
 		localID:      seals[0].LocalImageID,
 		architecture: selected.Architecture,
 		variant:      selected.Variant,

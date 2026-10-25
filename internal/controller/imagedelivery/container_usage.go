@@ -77,6 +77,7 @@ func (service *Service) containerOwner(
 			for _, workload := range projection.Record.DesiredServices {
 				if workload.Desired.ID == use.ServiceID && workload.EnvironmentID == use.EnvironmentID {
 					owner.ServiceID, owner.ServiceName = workload.Desired.ID, workload.Desired.Name
+					owner.ImageReference = workload.Desired.Image
 					break
 				}
 			}

@@ -3,6 +3,7 @@ package imagefetch
 // LocalImage describes Docker observation, not a successful GP deployment.
 type LocalImage struct {
 	ID             string
+	ParentID       string
 	Tags           []string
 	Digests        []string
 	SizeBytes      int64

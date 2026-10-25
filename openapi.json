@@ -459,6 +459,10 @@
       "BackingAdapterVersion": {
         "additionalProperties": false,
         "properties": {
+          "default_image": {
+            "description": "Default upstream tag for this server line; exact image content is selected at creation.",
+            "type": "string"
+          },
           "image_pattern": {
             "description": "Accepted upstream image references for this server version.",
             "type": "string"
@@ -469,6 +473,7 @@
         },
         "required": [
           "version",
+          "default_image",
           "image_pattern"
         ],
         "type": "object"
@@ -1017,7 +1022,7 @@
             "$ref": "#/components/schemas/BackingHookConfiguration"
           },
           "image": {
-            "description": "Required for the custom adapter and rejected for managed adapters.",
+            "description": "Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it.",
             "type": "string"
           },
           "name": {
@@ -4564,6 +4569,13 @@
             "format": "int64",
             "type": "integer"
           },
+          "content_ids": {
+            "description": "Observed image and platform-manifest identities used for usage and protection checks.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "created_at": {
             "type": "string"
           },
@@ -4581,6 +4593,10 @@
             "type": "array"
           },
           "id": {
+            "type": "string"
+          },
+          "parent_id": {
+            "description": "Unique owning index for an untagged platform image; empty for separately listed images.",
             "type": "string"
           },
           "protection_reason": {
@@ -4604,6 +4620,8 @@
         },
         "required": [
           "id",
+          "content_ids",
+          "parent_id",
           "tags",
           "digests",
           "size_bytes",
@@ -4766,6 +4784,10 @@
           "environment_name": {
             "type": "string"
           },
+          "image_reference": {
+            "description": "Configured Service image, not proof of serving content or a current Docker tag.",
+            "type": "string"
+          },
           "project_id": {
             "type": "string"
           },
@@ -4783,6 +4805,7 @@
           }
         },
         "required": [
+          "image_reference",
           "service_id",
           "service_name",
           "environment_id",

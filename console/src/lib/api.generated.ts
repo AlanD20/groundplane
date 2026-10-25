@@ -2099,6 +2099,8 @@ export interface components {
             items: components["schemas"]["BackingAdapter"][] | null;
         };
         BackingAdapterVersion: {
+            /** @description Default upstream tag for this server line; exact image content is selected at creation. */
+            default_image: string;
             /** @description Accepted upstream image references for this server version. */
             image_pattern: string;
             version: string;
@@ -2226,7 +2228,7 @@ export interface components {
             authentication?: "username_password" | "password" | "none";
             description?: string;
             hooks?: components["schemas"]["BackingHookConfiguration"];
-            /** @description Required for the custom adapter and rejected for managed adapters. */
+            /** @description Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it. */
             image?: string;
             name: string;
             network_pool: string;
@@ -3269,11 +3271,15 @@ export interface components {
             container_uses: components["schemas"]["ImageContainer"][];
             /** Format: int64 */
             containers: number;
+            /** @description Observed image and platform-manifest identities used for usage and protection checks. */
+            content_ids: string[];
             created_at: string;
             digests: string[];
             /** @description Fetch requests still retained in the Task journal, with each attempt's status; not current Docker tags */
             fetches: components["schemas"]["ImageFetchRecord"][];
             id: string;
+            /** @description Unique owning index for an untagged platform image; empty for separately listed images. */
+            parent_id: string;
             /** @description Additional non-container removal protection; empty when none is reported */
             protection_reason: string;
             /** @description Empty when current observation permits removal; admission and execution recheck protection */
@@ -3332,6 +3338,8 @@ export interface components {
             backing: boolean;
             environment_id: string;
             environment_name: string;
+            /** @description Configured Service image, not proof of serving content or a current Docker tag. */
+            image_reference: string;
             project_id: string;
             project_slug: string;
             service_id: string;

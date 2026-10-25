@@ -238,6 +238,11 @@ verify image protection, the inventory remains visible but removal is disabled;
 listing an image is not permission to delete it.
 Sort images by name, creation date or size; the date is the image's creation time,
 not when it was fetched. Pages default to five rows, with 5/10/25/50 choices.
+An untagged platform image belonging to one index appears inside that index's
+details rather than as a duplicate table row. Independently tagged or shared
+platform images remain separate. Each exact image retains its protected removal
+action. A pinned Service reference may supply a readable **Selected as** label;
+it does not claim that the Docker tag currently points to that content.
 
 Fetch accepts an explicit tag or SHA-256 digest from a public registry or GP's
 managed private registry. For example, `groundplane image fetch nginx:latest`.

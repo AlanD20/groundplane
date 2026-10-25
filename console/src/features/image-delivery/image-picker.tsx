@@ -26,6 +26,7 @@ export function ImagePicker({
   const [fetchOpen, setFetchOpen] = useState(false);
   const { inventory, loading, error, refresh } = useImageInventory();
   const choices = (inventory?.images ?? [])
+    .filter((image) => !image.parent_id)
     .map((image) =>
       imageChoice(
         image,

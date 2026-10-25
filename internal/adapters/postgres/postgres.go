@@ -8,7 +8,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
-	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
@@ -25,14 +24,11 @@ func (a *adapter) CredentialIdentityLimit() int { return 63 }
 func (a *adapter) Key() string   { return "postgres" }
 func (a *adapter) Label() string { return "PostgreSQL" }
 func (a *adapter) DefaultImage(version string) (string, error) {
-	if _, err := backingcatalog.Resolve(a.Key(), version); err != nil {
-		return "", err
-	}
-	release, err := postgres16protocol.CompiledManagedRelease()
+	selected, err := backingcatalog.Resolve(a.Key(), version)
 	if err != nil {
 		return "", err
 	}
-	return release.DatabaseImage, nil
+	return selected.Image, nil
 }
 func (a *adapter) FactsPrefix() string               { return "pg_" }
 func (a *adapter) URLScheme() string                 { return "pgsql://" }

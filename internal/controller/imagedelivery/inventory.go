@@ -40,7 +40,8 @@ func (service *Service) ListImages(ctx context.Context) (apiTypes.ImageList, err
 			return apiTypes.ImageList{}, err
 		}
 		result.Images = append(result.Images, apiTypes.HostImage{
-			ID: image.ID, Tags: image.Tags, Digests: image.Digests, SizeBytes: image.SizeBytes,
+			ID: image.ID, ParentID: image.ParentID, ContentIDs: append([]string{}, image.ContentIDs...),
+			Tags: image.Tags, Digests: image.Digests, SizeBytes: image.SizeBytes,
 			CreatedAt: time.Unix(image.Created, 0).UTC().Format(time.RFC3339), Containers: image.Containers,
 			RemovalBlocked: removalReason(image, retention),
 			ContainerUses:  uses, ProtectionReason: otherRemovalReason(image, retention),

@@ -17,6 +17,7 @@ import {
   isDigestReference,
   previousFetchReference,
   shortImageId,
+  selectedImageTags,
 } from "./image-presentation";
 import { ImageUsage } from "./image-usage";
 
@@ -27,6 +28,8 @@ export function ImageDetails({
   onClose,
   onRemove,
   actionForm,
+  platformImages,
+  onInspect,
 }: {
   actionForm?: ReactNode;
   image: HostImage;
@@ -34,6 +37,8 @@ export function ImageDetails({
   observedAt?: string;
   onClose: () => void;
   onRemove: () => void;
+  platformImages: HostImage[];
+  onInspect: (id: string) => void;
 }) {
   const [search] = useSearchParams();
   const requestedTab = search.get("imageTab");
@@ -118,6 +123,34 @@ export function ImageDetails({
               </div>
             )}
           </ResourcePanel>
+          {selectedImageTags(image).length > 0 && (
+            <ResourcePanel title="Selected by Services">
+              <p className="text-sm text-muted-foreground">
+                These saved tag references are pinned to this content. They do
+                not change the current Docker tag.
+              </p>
+              {selectedImageTags(image).map((reference) => (
+                <Reference key={reference} value={reference} />
+              ))}
+            </ResourcePanel>
+          )}
+          {platformImages.length > 0 && (
+            <ResourcePanel title="Platform images">
+              <p className="text-sm text-muted-foreground">
+                The index and its platform content share one table entry. Each
+                exact image retains its own usage and protected removal action.
+              </p>
+              {platformImages.map((platform) => (
+                <Button
+                  key={platform.id}
+                  variant="outline"
+                  onClick={() => onInspect(platform.id)}
+                >
+                  Inspect platform image · {shortImageId(platform.id)}
+                </Button>
+              ))}
+            </ResourcePanel>
+          )}
         </>
       )}
       {tab === "usage" && (
