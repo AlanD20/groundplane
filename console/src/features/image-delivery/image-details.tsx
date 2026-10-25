@@ -127,10 +127,11 @@ export function ImageDetails({
             )}
           </ResourcePanel>
           {selectedImageTags(image).length > 0 && (
-            <ResourcePanel title="Selected by Services">
+            <ResourcePanel title="Pinned Service image references">
               <p className="text-sm text-muted-foreground">
-                These saved tag references are pinned to this content. They do
-                not change the current Docker tag.
+                These names were saved with this exact content in Service
+                configuration. They do not indicate current Docker tags or prove
+                that a Service is running.
               </p>
               {selectedImageTags(image).map((reference) => (
                 <Reference key={reference} value={reference} />

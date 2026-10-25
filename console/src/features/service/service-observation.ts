@@ -189,9 +189,9 @@ export function environmentRuntimeHint(
   const running = states.filter((state) => state === "running").length;
   if (healthy + running === states.length) {
     return running === 0
-      ? "all Services healthchecked healthy"
-      : `${healthy} healthy · ${running} running unchecked`;
+      ? "All Services passed their healthchecks"
+      : `${healthy} healthy · ${running} running without healthchecks`;
   }
   const incomplete = states.length - healthy - running;
-  return `${incomplete} of ${states.length} incomplete runtime`;
+  return `${incomplete} of ${states.length} Services are not fully running`;
 }

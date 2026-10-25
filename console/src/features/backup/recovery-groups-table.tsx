@@ -216,7 +216,12 @@ export function RecoveryGroupsTable({
                                       </p>
                                       <p className="text-xs text-muted-foreground">
                                         {point.sourceKind === "attach"
-                                          ? "PostgreSQL database"
+                                          ? point.database?.family === "mysql"
+                                            ? "MySQL database"
+                                            : point.database?.family ===
+                                                "postgres"
+                                              ? "PostgreSQL database"
+                                              : "Database"
                                           : point.sourceKind === "volume"
                                             ? "Persistent Volume"
                                             : "Environment configuration"}{" "}

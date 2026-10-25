@@ -202,7 +202,7 @@ export function BackupPolicyDialog({
                 </p>
                 {attachOptions.length === 0 && (
                   <p className="text-xs text-muted-foreground">
-                    No PostgreSQL database-owning connections yet.
+                    No credential-owning PostgreSQL or MySQL connections yet.
                   </p>
                 )}
                 {unsupportedAttachSources.map((source) => (
@@ -359,11 +359,9 @@ export function BackupPolicyDialog({
                       included)
                     </span>
                     <span className="text-muted-foreground">
-                      Exported and age-encrypted like any source; restore
-                      replaces this environment&apos;s entries. Does{" "}
-                      <span className="font-medium text-warning">NOT</span> back
-                      up backing environments — postgres, valkey, and their
-                      configs are never included — and never platform state.
+                      Includes this Environment&apos;s Entry values, encrypted
+                      with age. Restore replaces these Entries. Backing Service
+                      configuration and platform state are excluded.
                     </span>
                   </span>
                 </label>
@@ -429,7 +427,7 @@ export function BackupPolicyDialog({
                 }}
               />
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="bp-keep">Retention (backups kept)</Label>
+                <Label htmlFor="bp-keep">Recovery Points kept per source</Label>
                 <Input
                   id="bp-keep"
                   type="number"

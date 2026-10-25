@@ -224,7 +224,8 @@ export function ScriptsCard({ env }: { env: Environment }) {
           ))}
           {env.scripts.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              No scripts — hooks run automatically on deploy/rollback.
+              No Scripts configured. Add a Script to run manually or as a
+              deployment hook.
             </p>
           )}
           {env.scripts.length > 0 && !table.total && (

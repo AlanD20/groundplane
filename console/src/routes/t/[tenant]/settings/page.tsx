@@ -164,7 +164,7 @@ export default function TenantSettingsPage() {
               id="t-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What runs inside this isolation boundary"
+              placeholder="What this Tenant's projects are used for"
             />
           </div>
           <div className="flex items-center justify-between">
@@ -219,8 +219,7 @@ export default function TenantSettingsPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className="max-w-3xl text-xs text-muted-foreground">
-            Deleting the tenant removes its isolation boundary and everything
-            inside it:{" "}
+            Deleting the Tenant removes everything it owns:{" "}
             <span className="font-medium text-foreground">
               {projects.length} projects
             </span>{" "}

@@ -250,7 +250,7 @@ export function ServiceFormBody({
             {!inline && (
               <p className="text-xs text-muted-foreground">
                 {isBacking
-                  ? `A backing service is a service plus the adapter that knows how to provision, connect, and back it up. The adapter resolves its immutable managed workload release; operators do not select an image. It follows the same hierarchy: backing project → one environment ("main") → this service. It owns its own network: the zone "${backingZone}" is created with it, and consumers join it as external when they attach. It stays running even with zero consumers; only an explicit Destroy removes it.`
+                  ? `Run a shared workload on its own Zone, "${backingZone}". Built-in adapters provision consumer access; Custom supports optional hooks. The workload stays running when its last consumer disconnects.`
                   : section && section !== "workload"
                     ? "Save updates desired configuration. Deploy when you are ready to apply it to the running Service."
                     : "Saving only stores configuration; it does not start a container. Make the image available on the Agent host, then use Deploy. Deploy does not pull or build images."}

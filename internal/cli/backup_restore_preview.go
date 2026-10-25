@@ -13,7 +13,7 @@ func newBackupRestorePreviewCmd() *cobra.Command {
 	var point, identityPath string
 	command := &cobra.Command{
 		Use:   "preview-restore <source>",
-		Short: "Review the exact Restore Point, target versions and compatibility",
+		Short: "Review the selected Recovery Point, target versions and compatibility",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			environment, err := backupPolicyEnvironmentID(cmd)

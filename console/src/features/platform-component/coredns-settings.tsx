@@ -109,8 +109,8 @@ export function CoreDnsSettings({
           className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs"
         >
           <span>
-            A Task owns this resolver configuration. Updates resume when it
-            releases ownership.
+            A Task is changing this resolver configuration. Editing is available
+            after it finishes.
           </span>
           <TaskLink taskId={activeTaskId}>Open Task</TaskLink>
         </div>

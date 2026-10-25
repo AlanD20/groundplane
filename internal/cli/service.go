@@ -359,7 +359,8 @@ func newServiceCmd() *cobra.Command {
 			return renderDispatchedTask(cmd, accepted)
 		},
 	}
-	deploy.Flags().StringVar(&deployTag, "tag", "", "immutable image tag (defaults to the current tag)")
+	deploy.Flags().
+		StringVar(&deployTag, "tag", "", "image tag to resolve and pin for this deployment (defaults to the current tag)")
 	deploy.Flags().
 		StringVar(&deployImage, "image", "", "host-local image reference for this Release only (does not edit Service configuration)")
 	deploy.MarkFlagsMutuallyExclusive("tag", "image")
@@ -425,7 +426,7 @@ func newServiceCmd() *cobra.Command {
 	})
 	cmd.AddCommand(&cobra.Command{
 		Use:   "destroy <name>",
-		Short: "Destroy a service (typed confirmation in the Console)",
+		Short: "Remove service containers while retaining its definition and persistent volumes",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			serviceID, err := resolveServiceTarget(cmd, args[0])

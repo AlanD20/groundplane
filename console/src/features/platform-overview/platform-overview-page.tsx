@@ -100,7 +100,7 @@ export default function PlatformOverviewPage() {
     (state) =>
       state !== "healthy" && state !== "running" && state !== "unavailable",
   ).length;
-  const platformHealth = worst([
+  const provisioningStatus = worst([
     ...backingProjects.flatMap((g) => (g.status ? [g.status] : [])),
     ...allEnvs.map((e) => e.env.status),
   ]);
@@ -112,9 +112,11 @@ export default function PlatformOverviewPage() {
         title="Platform overview"
         actions={
           <span className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm">
-            <StatusDot status={platformHealth} />
-            <span className="font-medium capitalize">{platformHealth}</span>
-            <span className="text-muted-foreground">overall</span>
+            <StatusDot status={provisioningStatus} />
+            <span className="text-muted-foreground">Provisioning</span>
+            <span className="font-medium capitalize">
+              {provisioningStatus === "healthy" ? "ready" : provisioningStatus}
+            </span>
           </span>
         }
       />
@@ -127,11 +129,18 @@ export default function PlatformOverviewPage() {
       )}
 
       {search.get("create") === "tenant" && (
-        <TenantCreateForm onClose={() => setSearch((current) => {
-          const next = new URLSearchParams(current);
-          next.delete("create");
-          return next;
-        }, { replace: true })} />
+        <TenantCreateForm
+          onClose={() =>
+            setSearch(
+              (current) => {
+                const next = new URLSearchParams(current);
+                next.delete("create");
+                return next;
+              },
+              { replace: true },
+            )
+          }
+        />
       )}
       <SummaryStrip>
         <SummaryItem label="Tenants">

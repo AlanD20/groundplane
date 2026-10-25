@@ -16,9 +16,11 @@ export function ConnectionValues({
     (item) => item.id === attach.serviceId || item.name === attach.service,
   );
   return (
-    <Disclosure className="group border-t border-border pt-3" summaryClassName="cursor-pointer text-sm font-medium" summary={<>
-        Connection values & usage
-      </>}>
+    <Disclosure
+      className="group border-t border-border pt-3"
+      summaryClassName="cursor-pointer text-sm font-medium"
+      summary={<>Connection values & usage</>}
+    >
       <div className="mt-4 space-y-5">
         {!attach.factSets.some((set) => set.facts.length) && (
           <p className="text-sm text-muted-foreground">
@@ -29,7 +31,7 @@ export function ConnectionValues({
           <section key={set.grantAttachId ?? "own"} className="space-y-4">
             {set.grantAttachId && (
               <p className="text-sm text-muted-foreground">
-                Shared database · {set.grantAttachId}
+                Shared credentials · {set.grantAttachId}
               </p>
             )}
             {set.facts.map((fact) => {

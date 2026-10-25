@@ -33,7 +33,10 @@ func NewBackupServiceFactResolver(store etcdstore.Store) backupplanning.BackupSe
 			return nil, err
 		}
 		if !found || projection.ReadRevision != input.ReadRevision {
-			return nil, errs.New(errs.KindStateConflict, "backup Service desired projection is unavailable")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Saved Service configuration is unavailable at the Backup request's read revision",
+			)
 		}
 		var kind servicefactauthority.Kind
 		adapter := ""

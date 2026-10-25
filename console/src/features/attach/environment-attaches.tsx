@@ -124,8 +124,8 @@ export function AttachesCard({
                   {a.factLoadError
                     ? "Connection values unavailable"
                     : a.database !== "—"
-                    ? `database ${a.database} · role ${a.role}`
-                    : "attached"}
+                      ? `database ${a.database} · role ${a.role}`
+                      : "attached"}
                   {a.service ? ` · for ${a.service}` : ""}
                 </span>
               </ContextLink>
@@ -296,7 +296,7 @@ export function DetachAttach({
             ? detachHook
               ? "Runs the custom detach hook with the saved consumer facts, then removes the network attachment. A hook failure blocks detachment."
               : "Removes this consumer’s network attachment. No deprovisioning hook runs."
-            : "Runs the adapter's deprovision: revoke grants → drop role → optionally drop database. The desired-state record is removed as part of the task, never by a plain delete."
+            : "Runs the adapter's detach operation, then removes this connection. Credential and database cleanup follows the connection's ownership and removal settings."
         }
         type="detach"
         target={env.id}

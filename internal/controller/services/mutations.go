@@ -228,7 +228,7 @@ func (service *serviceMutationService) rejectComponentGeneratedServiceMutation(
 		return err
 	}
 	if !found {
-		return errs.New(errs.KindStateConflict, "Service desired projection is missing")
+		return errs.New(errs.KindStateConflict, "Saved Environment configuration is unavailable for this Service")
 	}
 	return rejectComponentGeneratedServiceTarget(projection.Record, record.Desired.ID)
 }

@@ -62,7 +62,7 @@ export function DeployReleaseGroupDialog({
               id="release-group-tag"
               value={tag}
               onChange={(event) => setTag(event.target.value)}
-              placeholder="sha-…"
+              placeholder="v1.2.3"
             />
           </div>
           <div className="rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
@@ -208,14 +208,14 @@ export function RollbackReleaseGroupDialog({
                 setTag(event.target.value);
                 invalidatePreview();
               }}
-              placeholder="sha-…"
+              placeholder="Previously deployed tag, e.g. v1.2.2"
             />
             <p
               id="release-group-rollback-tag-help"
               className="text-xs text-muted-foreground"
             >
-              Leave blank to use each member's previous successful served
-              release.
+              Leave blank to use the image from each member's previous
+              successful deployment.
             </p>
             <Button
               type="button"

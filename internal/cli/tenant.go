@@ -7,9 +7,9 @@ import (
 )
 
 // tenant: list | show <slug> | create | edit | rename | delete <slug>.
-// See mvp.md, "Tenant" — a strict isolation boundary.
+// See mvp.md, "Tenant" — the ownership scope for related Projects.
 func newTenantCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "tenant", Short: "Tenants — strict isolation boundaries"}
+	cmd := &cobra.Command{Use: "tenant", Short: "Tenants — ownership scopes for related projects"}
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",

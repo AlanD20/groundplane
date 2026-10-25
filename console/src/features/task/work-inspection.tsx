@@ -16,12 +16,12 @@ import {
 } from "./api";
 
 const waiting: Record<string, string> = {
-  input: "Waiting for captured input to be prepared",
+  input: "Waiting for operation inputs to be prepared",
   dependency: "Waiting for prerequisite work to finish",
   conflict: "Waiting for conflicting work to release this resource",
   reservation:
     "Waiting for the blocking Task to finish its reserved resource changes",
-  executor: "Waiting for an eligible executor",
+  executor: "Waiting for an available execution host",
   operation_unavailable:
     "The host is connected, but this operation's prerequisites are unavailable. Backup work requires reconciled host staging.",
   capacity: "Waiting for an execution slot",
@@ -68,7 +68,7 @@ export function WorkInspection({
         <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
           <p className="font-medium">
             {work.outcome === "succeeded"
-              ? "Completed without an executor"
+              ? "Completed during preparation"
               : "Stopped before execution"}
           </p>
           <p className="break-words">{work.preparation.summary}</p>

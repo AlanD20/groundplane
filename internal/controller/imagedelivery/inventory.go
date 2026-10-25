@@ -53,6 +53,9 @@ func (service *Service) ListImages(ctx context.Context) (apiTypes.ImageList, err
 
 func removalReason(image imagefetch.LocalImage, retention imageRetention) string {
 	if image.Containers > 0 {
+		if image.Containers == 1 {
+			return "Used by 1 container (running or stopped)"
+		}
 		return fmt.Sprintf("Used by %d containers, including stopped containers", image.Containers)
 	}
 	return otherRemovalReason(image, retention)

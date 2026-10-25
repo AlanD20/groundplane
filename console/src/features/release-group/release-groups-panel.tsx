@@ -55,7 +55,7 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
           <EmptyState
             icon={<Workflow />}
             title="No deployment groups"
-            description="Create an explicit ordered set when multiple services must release under one task lock."
+            description="Deploy Services in a declared order under one Task and failure policy."
           />
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">

@@ -140,7 +140,7 @@ func (ledger *Reader) ResolveServing(
 		return ServingRelease{}, err
 	}
 	if projectionRead == nil || len(projectionRead.Values) != 1 || projectionRead.Values[0] == nil {
-		return ServingRelease{}, errs.New(errs.KindReleaseNotFound, "Service has no serving Release")
+		return ServingRelease{}, errs.New(errs.KindReleaseNotFound, "This Service has no recorded serving deployment")
 	}
 	projection, err := releases.DecodeReleaseRecord[domain.ServiceProjection](
 		projectionRead.Values[0].Value,
@@ -150,7 +150,7 @@ func (ledger *Reader) ResolveServing(
 		return ServingRelease{}, releases.CorruptReleaseRecord()
 	}
 	if projection.ServingReleaseID == "" {
-		return ServingRelease{}, errs.New(errs.KindReleaseNotFound, "Service has no serving Release")
+		return ServingRelease{}, errs.New(errs.KindReleaseNotFound, "This Service has no recorded serving deployment")
 	}
 	if ids.Validate(ids.KindDeployment, projection.ServingReleaseID) != nil {
 		return ServingRelease{}, releases.CorruptReleaseRecord()

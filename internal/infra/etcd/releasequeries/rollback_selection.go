@@ -37,7 +37,7 @@ func (ledger *Reader) SelectRollback(
 	if projectionRead == nil || len(projectionRead.Values) != 1 || projectionRead.Values[0] == nil {
 		return ReleaseRollbackSelection{}, errs.New(
 			errs.KindRollbackNoPreviousRelease,
-			"service has no serving release",
+			"This Service has no recorded serving deployment",
 		)
 	}
 	projection, err := releases.DecodeReleaseRecord[domain.ServiceProjection](

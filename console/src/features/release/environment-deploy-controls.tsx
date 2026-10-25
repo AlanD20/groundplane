@@ -258,12 +258,12 @@ export function RollbackDialog({
               />
             </div>
             <div className="flex flex-col gap-1">
-              <Label htmlFor="rb-tag">Previous tag (tracked)</Label>
+              <Label htmlFor="rb-tag">Previously deployed image tag</Label>
               <Input
                 id="rb-tag"
                 value={tag}
                 onChange={(e) => setTag(e.target.value)}
-                placeholder="sha-…"
+                placeholder="v1.2.2"
               />
             </div>
           </div>

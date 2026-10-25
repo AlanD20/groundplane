@@ -9,7 +9,7 @@ import (
 )
 
 // release-group: list | show | add | edit | remove | deploy |
-// rollback. Coordinates multiple services under one task lock and one
+// rollback. Coordinates multiple services under one Task and one
 // failure policy — membership is always explicit, never inferred from
 // shared image or service names. See blueprint.md, "x-gp-release-groups".
 func newReleaseGroupCmd() *cobra.Command {
@@ -164,7 +164,7 @@ func newReleaseGroupCmd() *cobra.Command {
 	var deployTag string
 	deploy := &cobra.Command{
 		Use:   "deploy <name>",
-		Short: "Deploy every member service under one task lock",
+		Short: "Deploy member services in their declared order under one Task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID, err := resolveReleaseGroupTarget(cmd, args[0])
@@ -179,7 +179,7 @@ func newReleaseGroupCmd() *cobra.Command {
 			return runAction(cmd, path, body)
 		},
 	}
-	deploy.Flags().StringVar(&deployTag, "tag", "", "immutable image tag applied to every member")
+	deploy.Flags().StringVar(&deployTag, "tag", "", "image tag to resolve and pin for each member deployment")
 	cmd.AddCommand(deploy)
 
 	var rollbackTag string

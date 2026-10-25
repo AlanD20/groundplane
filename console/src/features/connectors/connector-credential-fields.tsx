@@ -32,8 +32,8 @@ export function ConnectorCredentialField({
 }) {
   const keepLabel = existing
     ? existing.kind === "ref"
-      ? `Keep existing secret ref : ${existing.name}`
-      : "Keep existing direct encrypted value"
+      ? `Keep existing Secret reference: ${existing.name}`
+      : "Keep existing credential value"
     : "Keep existing credential";
   return (
     <fieldset className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-surface p-3">
@@ -48,7 +48,7 @@ export function ConnectorCredentialField({
         options={[
           ...(existing ? [{ value: "keep", label: keepLabel }] : []),
           { value: "ref", label: "Reusable Secret" },
-          { value: "value", label: "Enter encrypted value" },
+          { value: "value", label: "Enter credential value" },
         ]}
       />
       {draft.kind !== "keep" && (

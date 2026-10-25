@@ -93,7 +93,7 @@ export function BackupsTab({
     >
       {adapter?.custom ? (
         <p className="text-xs text-muted-foreground">
-          Managed backups are unavailable for custom services.
+          Managed backups are not supported for Custom Backing Services.
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">

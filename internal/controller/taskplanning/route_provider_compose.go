@@ -15,7 +15,10 @@ import (
 func routeProviderCompose(provider environmentchanges.RouteProviderPin) environmentComposeTransform {
 	return func(project *composetypes.Project, projection projectionrecord.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
 		if project == nil {
-			return nil, errs.New(errs.KindStateConflict, "Route router projection is unavailable")
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Rendered Environment proxy configuration is unavailable for this Route",
+			)
 		}
 		owned := false
 		for _, component := range projection.Components {

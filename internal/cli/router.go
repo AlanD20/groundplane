@@ -6,12 +6,12 @@ import "github.com/spf13/cobra"
 func newRouterCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "router",
-		Short: "Inspect the environment router projection",
+		Short: "Inspect the Environment proxy and Tunnel configuration",
 	}
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "show",
-		Short: "Show the environment router projection",
+		Short: "Show the Environment proxy and Tunnel configuration",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			app := fromContext(cmd)

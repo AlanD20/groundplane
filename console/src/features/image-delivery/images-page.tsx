@@ -43,6 +43,9 @@ import { useImageInventory } from "./use-image-inventory";
 export default function ImagesPage() {
   const { inventory, loading, error, refresh } = useImageInventory();
   const [params, setParams] = useSearchParams();
+  const inventoryRows = (inventory?.images ?? []).filter(
+    (image) => !image.parent_id,
+  );
   const [fetchOpen, setFetchOpen] = useState(false);
   const search = params.get("q") ?? "";
   const usage = params.get("usage") ?? "all";
@@ -153,21 +156,25 @@ export default function ImagesPage() {
           {inventory && (
             <SummaryStrip>
               <SummaryItem label="Local images">
-                {inventory.images.filter((image) => !image.parent_id).length}
+                {inventoryRows.length}
               </SummaryItem>
-              <SummaryItem label="In use by containers">
-                {inventory.images.filter((i) => i.containers > 0).length}
+              <SummaryItem label="Images with containers">
+                {inventoryRows.filter((i) => i.containers > 0).length}
               </SummaryItem>
               <SummaryItem label="No containers">
-                {inventory.images.filter((i) => i.containers === 0).length}
+                {inventoryRows.filter((i) => i.containers === 0).length}
               </SummaryItem>
-              <SummaryItem label="Stored size">
+              <SummaryItem label="Reported image sizes">
                 {imageSize(
                   inventory.images.reduce(
                     (total, image) => total + image.size_bytes,
                     0,
                   ),
                 )}
+                <HelpHint label="About image sizes">
+                  Sum of Docker-reported image sizes. Images can share layers,
+                  so this is not disk usage or space freed by removal.
+                </HelpHint>
               </SummaryItem>
             </SummaryStrip>
           )}
@@ -376,7 +383,7 @@ export default function ImagesPage() {
                                         ? `${image.containers} container${image.containers === 1 ? "" : "s"}`
                                         : image.removal_blocked
                                           ? "Protected"
-                                          : "Unused"}
+                                          : "No containers"}
                                     </Badge>
                                   </Button>
                                 </TableCell>
