@@ -52,6 +52,8 @@ export default function BackingServiceDetailPage() {
   const [actionError, setActionError] = useState("");
   const [destroyOpen, setDestroyOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const needsHookShutdown =
+    !!svc?.hooks?.before_stop && svc.runtimeIntent !== "absent";
   const observationRefresh = useVisibleServiceObservations({
     environmentIds: env ? [env.id] : [],
     observations: svc ? [svc.observation] : [],
@@ -323,10 +325,17 @@ export default function BackingServiceDetailPage() {
                   instance.
                 </p>
               )}
+              {needsHookShutdown && (
+                <p className="text-sm text-warning">
+                  Complete Remove containers first to run this instance's
+                  before-stop hook.
+                </p>
+              )}
               <Button
                 variant="destructive"
                 disabled={
                   pendingAction !== null ||
+                  needsHookShutdown ||
                   (g.consumers?.length ?? 0) > 0 ||
                   g.deletionTaskId !== null
                 }

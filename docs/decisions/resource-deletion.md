@@ -111,6 +111,9 @@ and the facade hierarchy. Generic Project DELETE rejects backing Projects.
 The dedicated Backing Service Delete uses the same durable hierarchy cleanup
 owner, with its own route and idempotency identity. The Console confirms the
 instance slug and permanent data loss.
+An active lifecycle Task blocks admission. A configured Custom before-stop hook
+must finish through Remove containers before permanent deletion; aggregate
+cleanup never silently skips that hook.
 
 Deletion accepts only an unused instance. Its consumer index must be empty both
 at the admission read and in the atomic publication transaction. Publication

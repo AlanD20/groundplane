@@ -73,7 +73,7 @@ is a separate permanent deletion action.
 
 ### Permanent deletion
 
-Open the Backing Service's **Service** page and choose **Delete Backing Service**.
+Open the Backing Service's **Runtime & image** page and choose **Delete Backing Service**.
 Disconnect all consumers first. Type the instance slug to confirm deletion of
 the containers, owned network, configuration and all persistent Volume data.
 The returned Task removes children before releasing their parent records and
@@ -85,6 +85,10 @@ An existing consumer returns `resource.in_use` before deletion is accepted; a
 concurrent Attach cannot bypass the check. An accepted instance leaves the
 Backing Services list while cleanup proceeds. Follow its Task for completion,
 failure or Retry; interruption does not reopen a partially deleted instance.
+For a Custom instance with a before-stop hook, complete **Remove containers**
+first so its hook can run through the existing protected lifecycle Task. Then
+delete the instance. Permanent cleanup does not bypass that hook or an active
+runtime Task.
 
 ### PostgreSQL patch updates
 
