@@ -13,14 +13,17 @@ facade primary.
 
 Creation is one atomic aggregate publication followed by one Agent Task. The
 operator selects only the closed public choices, including adapter and explicit
-network pool/subnet decisions. For built-in adapters, the image, Service
-definition, health check, Volume, bootstrap Entries, fact schema, Attach
-procedures come from one compiled adapter per family. The separate server-version
-catalog selects supported images and tools. The complete creation input is frozen
+network pool/subnet decisions. Built-in adapters own the Service definition,
+health check, Volume, bootstrap Entries, fact schema and Attach procedures.
+The server-version catalog constrains upstream image families and supplies default
+tags; operators can select a matching image. Creation pins its content while
+retaining the readable tag. Authenticated backup tools are selected independently
+from installation artifacts, so choosing a database patch does not replace them.
+The complete creation input is frozen
 at publication; the operator cannot override adapter-owned procedures. Backup
 support is qualified separately from provisioning.
 
-Custom is the accepted, bounded exception: the operator selects its image and
+For Custom, the operator selects an image without a managed-family constraint and
 may declare typed Attach, Detach, before-stop and after-start hooks. Custom does
 not infer a data Volume, credentials, ports, health check or Backup strategy,
 and its image and hooks do not create a plugin or arbitrary host-execution
