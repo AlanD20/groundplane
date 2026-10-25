@@ -319,6 +319,11 @@ export default function BackingServiceDetailPage() {
                 Permanently delete this instance, its containers, network,
                 configuration and persistent data. This cannot be undone.
               </p>
+              {env.provisioningState === "provisioning" && (
+                <p className="text-sm text-warning">
+                  Wait for provisioning to finish before deleting this instance.
+                </p>
+              )}
               {(g.consumers?.length ?? 0) > 0 && (
                 <p className="text-sm text-warning">
                   Disconnect every consumer in Connections before deleting this
@@ -336,6 +341,7 @@ export default function BackingServiceDetailPage() {
                 disabled={
                   pendingAction !== null ||
                   needsHookShutdown ||
+                  env.provisioningState === "provisioning" ||
                   (g.consumers?.length ?? 0) > 0 ||
                   g.deletionTaskId !== null
                 }

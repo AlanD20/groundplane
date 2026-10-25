@@ -88,7 +88,7 @@ failure or Retry; interruption does not reopen a partially deleted instance.
 For a Custom instance with a before-stop hook, complete **Remove containers**
 first so its hook can run through the existing protected lifecycle Task. Then
 delete the instance. Permanent cleanup does not bypass that hook or an active
-runtime Task.
+runtime Task. Provisioning must also finish before deletion is accepted.
 
 ### PostgreSQL patch updates
 

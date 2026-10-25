@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingservices"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -36,16 +37,27 @@ func (repository *HierarchyDeletionRepository) protectBackingStopHook(
 	keys := []string{blueprints.EnvironmentBlueprintHeadKey(backing.Record.EnvironmentID),
 		services.ServiceRuntimeKey(
 			backing.Record.ServiceID,
-		), services.ServiceLifecycleActiveKey(backing.Record.ServiceID)}
+		), services.ServiceLifecycleActiveKey(backing.Record.ServiceID),
+		hierarchy.EnvironmentKey(backing.Record.EnvironmentID)}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 3 || read.Values[0] == nil ||
-		read.Values[1] == nil {
+	if read == nil || read.ReadRevision != revision || len(read.Values) != 4 || read.Values[0] == nil ||
+		read.Values[1] == nil || read.Values[3] == nil {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer keyvalue.ClearValues(read.Values)
+	environment, err := hierarchy.DecodeEnvironment(read.Values[3].Value)
+	if err != nil || environment.ID != backing.Record.EnvironmentID {
+		return nil, hierarchydeletion.CorruptHierarchyDeletion()
+	}
+	if environment.ProvisioningState == hierarchy.EnvironmentProvisioningProvisioning {
+		return nil, errs.New(
+			errs.KindResourceInUse,
+			"Wait for Backing Service provisioning to finish before deleting it",
+		)
+	}
 	if read.Values[2] != nil {
 		return nil, errs.New(
 			errs.KindResourceInUse,
@@ -58,5 +70,6 @@ func (repository *HierarchyDeletionRepository) protectBackingStopHook(
 			"Use Remove containers first to complete this Backing Service's before-stop hook, then delete the instance")
 	}
 	return []keyvalue.Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision},
-		{Key: keys[1], ModRevision: read.Values[1].ModRevision}, {Key: keys[2]}}, nil
+		{Key: keys[1], ModRevision: read.Values[1].ModRevision}, {Key: keys[2]},
+		{Key: keys[3], ModRevision: read.Values[3].ModRevision}}, nil
 }
