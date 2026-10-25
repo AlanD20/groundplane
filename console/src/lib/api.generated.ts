@@ -2244,11 +2244,15 @@ export interface components {
              * @enum {string}
              */
             authentication: "username_password" | "password" | "none";
+            /** @description Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it. */
+            image?: string;
         } | {
             /** @enum {string} */
             adapter: "postgres" | "mysql";
             /** @description Required supported server version for a managed database adapter; omitted for Custom. */
             adapter_version: string;
+            /** @description Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it. */
+            image?: string;
         } | {
             /** @enum {string} */
             adapter: "custom";

@@ -20,19 +20,19 @@ func backingServiceCreateSchema(registry huma.Registry) {
 		{Type: huma.TypeObject, Properties: map[string]*huma.Schema{
 			"adapter":         {Type: huma.TypeString, Enum: []any{"valkey"}},
 			"adapter_version": schema.Properties["adapter_version"],
+			"image":           schema.Properties["image"],
 			"authentication":  schema.Properties["authentication"],
 		}, Required: []string{"adapter", "adapter_version", "authentication"}, Not: &huma.Schema{
 			AnyOf: []*huma.Schema{
-				present("image"),
 				present("hooks"),
 			},
 		}},
 		{Type: huma.TypeObject, Properties: map[string]*huma.Schema{
 			"adapter":         {Type: huma.TypeString, Enum: []any{"postgres", "mysql"}},
 			"adapter_version": schema.Properties["adapter_version"],
+			"image":           schema.Properties["image"],
 		}, Required: []string{"adapter", "adapter_version"}, Not: &huma.Schema{AnyOf: []*huma.Schema{
 			present("authentication"),
-			present("image"),
 			present("hooks"),
 		}}},
 		{Type: huma.TypeObject, Properties: map[string]*huma.Schema{

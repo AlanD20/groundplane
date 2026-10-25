@@ -2289,6 +2289,9 @@ type BackingServiceCreate0 struct {
 
 	// Authentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
 	Authentication BackingServiceCreate0Authentication `json:"authentication"`
+
+	// Image Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it.
+	Image *string `json:"image,omitempty"`
 }
 
 // BackingServiceCreate0Adapter defines model for BackingServiceCreate.0.Adapter.
@@ -2303,6 +2306,9 @@ type BackingServiceCreate1 struct {
 
 	// AdapterVersion Required supported server version for a managed database adapter; omitted for Custom.
 	AdapterVersion string `json:"adapter_version"`
+
+	// Image Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it.
+	Image *string `json:"image,omitempty"`
 }
 
 // BackingServiceCreate1Adapter defines model for BackingServiceCreate.1.Adapter.

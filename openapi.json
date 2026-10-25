@@ -850,15 +850,6 @@
               "anyOf": [
                 {
                   "properties": {
-                    "image": {}
-                  },
-                  "required": [
-                    "image"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "properties": {
                     "hooks": {}
                   },
                   "required": [
@@ -887,6 +878,10 @@
                   "none"
                 ],
                 "type": "string"
+              },
+              "image": {
+                "description": "Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it.",
+                "type": "string"
               }
             },
             "required": [
@@ -905,15 +900,6 @@
                   },
                   "required": [
                     "authentication"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "properties": {
-                    "image": {}
-                  },
-                  "required": [
-                    "image"
                   ],
                   "type": "object"
                 },
@@ -938,6 +924,10 @@
               },
               "adapter_version": {
                 "description": "Required supported server version for a managed database adapter; omitted for Custom.",
+                "type": "string"
+              },
+              "image": {
+                "description": "Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it.",
                 "type": "string"
               }
             },

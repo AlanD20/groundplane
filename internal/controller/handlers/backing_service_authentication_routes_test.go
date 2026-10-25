@@ -13,9 +13,9 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-// Rationale: omission cannot reach publication or inherit a mode; each explicit
-// mode is preserved, while other adapters must omit the unsupported decision.
-func TestBackingServiceAuthenticationHTTPBoundary(t *testing.T) {
+// Explicit managed images must reach creation unchanged; Valkey authentication
+// remains required and adapters without authentication modes still reject it.
+func TestBackingServiceCreationHTTPBoundary(t *testing.T) {
 	for _, tc := range []struct {
 		name, adapter, field, mode string
 		valid                      bool
@@ -28,6 +28,8 @@ func TestBackingServiceAuthenticationHTTPBoundary(t *testing.T) {
 		{"password", "valkey", `,"authentication":"password"`, "password", true},
 		{"none", "valkey", `,"authentication":"none"`, "none", true},
 		{"postgres", "postgres", "", "", true},
+		{"postgres image", "postgres", `,"image":"postgres:16-alpine"`, "", true},
+		{"valkey image", "valkey", `,"authentication":"password","image":"valkey/valkey:9-alpine"`, "password", true},
 		{"postgres selected", "postgres", `,"authentication":"password"`, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -57,6 +59,10 @@ func TestBackingServiceAuthenticationHTTPBoundary(t *testing.T) {
 				t.Fatalf("explicit choice changed: status=%d calls=%d mode=%q body=%s",
 					response.Code, mutations.calls, mutations.mode, response.Body.String())
 			}
+			if tc.name == "postgres image" && mutations.image != "postgres:16-alpine" ||
+				tc.name == "valkey image" && mutations.image != "valkey/valkey:9-alpine" {
+				t.Fatal("HTTP validation dropped the selected managed image", mutations.image)
+			}
 		})
 	}
 }
@@ -65,6 +71,7 @@ type backingAuthenticationMutations struct {
 	BackingServiceMutator
 	calls int
 	mode  string
+	image string
 }
 
 func (mutations *backingAuthenticationMutations) CreateBackingService(
@@ -72,6 +79,7 @@ func (mutations *backingAuthenticationMutations) CreateBackingService(
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	mutations.calls++
 	mutations.mode = input.Authentication
+	mutations.image = input.Image
 	return testidempotencyowner.IdempotencyResponse{
 		Status: http.StatusCreated, ContentKind: "application/json", Body: []byte(`{}`),
 	}, nil
