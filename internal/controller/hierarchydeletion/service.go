@@ -43,6 +43,7 @@ const (
 	TenantDeleteRoute      = "/tenants/{id}"
 	ProjectDeleteRoute     = "/projects/{id}"
 	EnvironmentDeleteRoute = "/environments/{id}"
+	BackingDeleteRoute     = "/backing-services/{project_id}"
 )
 
 type PathBinding struct {
@@ -68,7 +69,10 @@ func idempotencyIntentWithScope(
 	scopeID string,
 ) IdempotencyIntent {
 	route := TenantDeleteRoute
-	if target == TargetProject || target == TargetBackingService {
+	pathName := "id"
+	if target == TargetBackingService {
+		route, pathName = BackingDeleteRoute, "project_id"
+	} else if target == TargetProject {
 		route = ProjectDeleteRoute
 	} else if target == TargetEnvironment {
 		route = EnvironmentDeleteRoute
@@ -78,7 +82,7 @@ func idempotencyIntentWithScope(
 		RouteTemplate: route,
 		ScopeKind:     scopeKind,
 		ScopeID:       scopeID,
-		PathBindings:  []PathBinding{{Name: "id", Value: targetID}},
+		PathBindings:  []PathBinding{{Name: pathName, Value: targetID}},
 	}
 }
 

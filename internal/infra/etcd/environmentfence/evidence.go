@@ -174,7 +174,7 @@ func loadEnvironmentMutationFence(
 			"environment mutation fence project is corrupt",
 		)
 	}
-	if projectRead.Values[1] != nil {
+	if projectRead.Values[1] != nil || project.DeletionTaskID != "" {
 		return Evidence{}, errs.New(
 			errs.KindResourceInUse,
 			"project hierarchy deletion is in progress",

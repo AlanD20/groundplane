@@ -24,7 +24,7 @@ the relevant [operator guide](../README.md#operators), not every decision file.
 Accepted design is not a delivery claim. Backup and Runner protocols retain
 unimplemented requirements; one compact Backup wire reference remains because the
 accepted fields do not yet exist in source. Latest-wins is not connected end to end.
-Existing-Zone backing creation and permanent backing deletion remain deferred.
+Existing-Zone backing creation remains deferred.
 Proposed storage mechanisms do not become approved merely by being described.
 
 Current limits belong in [capabilities](../capabilities.md). Git retains the

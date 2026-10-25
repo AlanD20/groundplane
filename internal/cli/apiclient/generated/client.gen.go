@@ -5535,6 +5535,11 @@ type BackingServiceCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// BackingServiceDeleteParams defines parameters for BackingServiceDelete.
+type BackingServiceDeleteParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // BackingServiceDestroyParams defines parameters for BackingServiceDestroy.
 type BackingServiceDestroyParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -7676,6 +7681,11 @@ type ClientInterface interface {
 	// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
 	BackingServiceCreate(ctx context.Context, params *BackingServiceCreateParams, body BackingServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// BackingServiceDelete Permanently delete a Backing Service and its data
+	//
+	// Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
+	BackingServiceDelete(ctx context.Context, projectId string, params *BackingServiceDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// BackingServiceShow Show a backing service
 	//
 	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
@@ -9279,6 +9289,21 @@ func (c *Client) BackingServiceCreateWithBody(ctx context.Context, params *Backi
 // Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
 func (c *Client) BackingServiceCreate(ctx context.Context, params *BackingServiceCreateParams, body BackingServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewBackingServiceCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceDelete Permanently delete a Backing Service and its data
+//
+// Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
+func (c *Client) BackingServiceDelete(ctx context.Context, projectId string, params *BackingServiceDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceDeleteRequest(c.Server, projectId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -13597,6 +13622,53 @@ func NewBackingServiceCreateRequestWithBody(server string, params *BackingServic
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewBackingServiceDeleteRequest constructs an http.Request for the BackingServiceDelete method
+func NewBackingServiceDeleteRequest(server string, projectId string, params *BackingServiceDeleteParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "project_id", projectId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/backing-services/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -22115,6 +22187,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
 	BackingServiceCreateWithResponse(ctx context.Context, params *BackingServiceCreateParams, body BackingServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceCreateResponse, error)
 
+	// BackingServiceDeleteWithResponse Permanently delete a Backing Service and its data
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
+	BackingServiceDeleteWithResponse(ctx context.Context, projectId string, params *BackingServiceDeleteParams, reqEditors ...RequestEditorFn) (*BackingServiceDeleteResponse, error)
+
 	// BackingServiceShowWithResponse Show a backing service
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -24453,6 +24532,54 @@ func (r BackingServiceCreateResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r BackingServiceCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type BackingServiceDeleteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *HierarchyDeleteOutputBody
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r BackingServiceDeleteResponse) GetJSON202() *HierarchyDeleteOutputBody {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackingServiceDeleteResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackingServiceDeleteResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackingServiceDeleteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackingServiceDeleteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackingServiceDeleteResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -32467,6 +32594,19 @@ func (c *ClientWithResponses) BackingServiceCreateWithResponse(ctx context.Conte
 	return ParseBackingServiceCreateResponse(rsp)
 }
 
+// BackingServiceDeleteWithResponse Permanently delete a Backing Service and its data
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
+func (c *ClientWithResponses) BackingServiceDeleteWithResponse(ctx context.Context, projectId string, params *BackingServiceDeleteParams, reqEditors ...RequestEditorFn) (*BackingServiceDeleteResponse, error) {
+	rsp, err := c.BackingServiceDelete(ctx, projectId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceDeleteResponse(rsp)
+}
+
 // BackingServiceShowWithResponse Show a backing service
 //
 // Returns a wrapper object for the known response body format(s).
@@ -35801,6 +35941,39 @@ func ParseBackingServiceCreateResponse(rsp *http.Response) (*BackingServiceCreat
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBackingServiceDeleteResponse parses an HTTP response from a BackingServiceDeleteWithResponse call
+func ParseBackingServiceDeleteResponse(rsp *http.Response) (*BackingServiceDeleteResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackingServiceDeleteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest HierarchyDeleteOutputBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

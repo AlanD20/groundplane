@@ -191,8 +191,7 @@ func stableActionID(
 }
 
 func validateRequest(request DeleteRequest) error {
-	if request.TargetKind != TargetTenant && request.TargetKind != TargetProject &&
-		request.TargetKind != TargetEnvironment {
+	if !request.TargetKind.Valid() {
 		return errs.Newf(errs.KindValidationFailed, "hierarchy deletion target kind %q is invalid", request.TargetKind)
 	}
 	if strings.TrimSpace(request.TargetID) == "" {

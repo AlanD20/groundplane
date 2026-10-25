@@ -17,6 +17,7 @@ type BackingWorkspace = {
   backingProjectError: string | null;
 };
 export type BackingServiceActions = {
+  deleteBackingService: (id: string) => Promise<string>;
   runBackingRuntimeAction: (
     id: string,
     action: "start" | "stop" | "destroy",
@@ -30,6 +31,14 @@ export function createBackingServiceActions(
   update: (change: (draft: BackingWorkspace) => void) => void,
 ): BackingServiceActions {
   return {
+    deleteBackingService: async (id) => {
+      const accepted = await controllerRequest<
+        operations["backing-service.delete"]["responses"][202]["content"]["application/json"]
+      >(`/backing-services/${encodeURIComponent(id)}`, 202, {
+        method: "DELETE",
+      });
+      return requireTaskId(accepted, "Backing Service deletion");
+    },
     runBackingRuntimeAction: async (id, action) => {
       const accepted = await controllerRequest<BackingRuntimeTaskAccepted>(
         `/backing-services/${encodeURIComponent(id)}/${action}`,

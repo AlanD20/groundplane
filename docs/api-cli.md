@@ -130,6 +130,12 @@ Start selects running; Stop selects stopped; Destroy removes runtime while
 retaining desired configuration and data. Remove deletes the Service definition
 after checked cleanup. Consult the feature guide before destructive actions.
 
+`groundplane backing-service delete SLUG` and
+`DELETE /backing-services/{project_id}` permanently remove an unused Backing
+Service and its owned data through a Task. Consumer Attaches block acceptance.
+This is distinct from Backing Service Destroy, which retains configuration and
+data. The Console requires the instance slug as confirmation.
+
 ### Follow a Task
 
 An asynchronous command returns a `task_id` without waiting for completion:

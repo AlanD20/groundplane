@@ -30,7 +30,7 @@ func (repository *Reader) ListAttachesByBackingNetworkAtRevision(
 		revision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "backing Zone impact scope is invalid")
 	}
-	prefix := attachBackingProjectPrefix(backingProjectID)
+	prefix := AttachBackingProjectPrefix(backingProjectID)
 	start := ""
 	indexes := make([]etcdstore.KeyValue, 0)
 	for {
@@ -94,8 +94,4 @@ func (repository *Reader) ListAttachesByBackingNetworkAtRevision(
 		return strings.Compare(left.Record.ID, right.Record.ID)
 	})
 	return result, nil
-}
-
-func attachBackingProjectPrefix(projectID string) string {
-	return "/v1/indexes/attaches/by-backing-project/project/" + projectID + "/"
 }

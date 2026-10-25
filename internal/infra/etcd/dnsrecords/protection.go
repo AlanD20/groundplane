@@ -247,7 +247,7 @@ func (reader *Reader) ProtectDNSHierarchy(
 		if kind == "environment" && service.Record.EnvironmentID == id {
 			return nil, referenced(record.Hostname)
 		}
-		if kind != "tenant" && kind != "project" && kind != "backing" {
+		if kind != "tenant" && kind != "project" && kind != "backing-service" {
 			continue
 		}
 		read, err := reader.store.GetMany(
@@ -267,7 +267,7 @@ func (reader *Reader) ProtectDNSHierarchy(
 		if err != nil {
 			return nil, err
 		}
-		if (kind == "project" || kind == "backing") && environment.ProjectID == id {
+		if (kind == "project" || kind == "backing-service") && environment.ProjectID == id {
 			return nil, referenced(record.Hostname)
 		}
 		if kind == "tenant" {

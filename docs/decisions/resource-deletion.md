@@ -1,9 +1,7 @@
 # Resource deletion
 
-- Decision status: Accepted for Volume, Environment, ordinary Project and
-  Tenant deletion
-- Explicit limit: permanent Backing Service deletion is deferred outside the
-  current MVP
+- Decision status: Accepted for Volume, Environment, Project, Tenant and
+  unused Backing Service deletion
 
 ## Volume identity and removal
 
@@ -106,20 +104,25 @@ state and scoped Secrets. Removing a Runner does not deregister it at GitHub.
 Platform Backing Services and Platform Secrets are not Tenant descendants and
 survive.
 
-## Permanent Backing deletion remains deferred
+## Permanent Backing deletion
 
 Backing Service Destroy removes runtime only and retains configuration, data
-and the facade hierarchy. Generic Project DELETE rejects backing Projects. No
-current API, CLI or Console action permanently deletes a Backing Service.
+and the facade hierarchy. Generic Project DELETE rejects backing Projects.
+The dedicated Backing Service Delete uses the same durable hierarchy cleanup
+owner, with its own route and idempotency identity. The Console confirms the
+instance slug and permanent data loss.
 
-Any future capability requires a distinct facade Delete with a complete impact
-preview and confirmation. It must preserve the retained dependency rules:
-incoming Attach grants and credentials are ordered safely, enabled consumer
-Backup Policies may block, historical consumer Recovery Points and Connector
-references remain consumer-owned, shared or external Zones are not silently
-deleted, and backing runtime must be reconstructed and proved before adapter
-deprovision. These constraints do not reserve current wire fields or authorize
-implementation.
+Deletion accepts only an unused instance. Its consumer index must be empty both
+at the admission read and in the atomic publication transaction. Publication
+marks the Project as deleting, so new consumer Attach writes cannot race into
+the instance. Operators detach consumers separately, preserving their existing
+credential, grant and Backup-policy protection rules. No automatic consumer
+cascade or cross-Environment impact approval is introduced.
+
+The Task removes owned runtime, storage, network and metadata before releasing
+the hierarchy. Historical consumer Recovery Points and their Connectors remain
+consumer-owned. Instances with accepted deletion leave the active list, while
+the durable Task remains available for inspection and Retry.
 
 ## Consequences
 

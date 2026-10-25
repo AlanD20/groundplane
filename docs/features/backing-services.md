@@ -69,7 +69,22 @@ aggregate; protected replay returns the original ids and response.
 Start, Stop, and Destroy change only the adapter Service's runtime intent under
 the current MVP and API contract. Destroy removes runtime, not the Project,
 Environment, Zone, Volume, Entries, Attach history, credentials, or data. There
-is no Backing Service DELETE endpoint.
+is a separate permanent deletion action.
+
+### Permanent deletion
+
+Open the Backing Service's **Service** page and choose **Delete Backing Service**.
+Disconnect all consumers first. Type the instance slug to confirm deletion of
+the containers, owned network, configuration and all persistent Volume data.
+The returned Task removes children before releasing their parent records and
+reservations. Images and consumer-owned backup archives are not deleted.
+
+Use `groundplane backing-service delete SLUG` or
+`DELETE /backing-services/{project_id}` with `Idempotency-Key` for automation.
+An existing consumer returns `resource.in_use` before deletion is accepted; a
+concurrent Attach cannot bypass the check. An accepted instance leaves the
+Backing Services list while cleanup proceeds. Follow its Task for completion,
+failure or Retry; interruption does not reopen a partially deleted instance.
 
 ### PostgreSQL patch updates
 
@@ -104,13 +119,6 @@ supported. Updating GP does not replace existing backup tools automatically.
 This pre-release change advances GP's storage epoch. Installations with the old
 wrapped database format reject an in-place update before activation; no legacy
 runtime conversion or compatibility path is provided.
-
-Permanent Backing deletion is outside the current MVP, by owner decision on
-2026-09-12. Start recreates runtime using the retained configuration and data.
-A future permanent Delete needs a separate Console action, CLI command and API
-operation with impact preview, confirmation and explicit approval. The
-[deferred safeguards](../decisions/resource-deletion.md#permanent-backing-deletion-remains-deferred)
-do not authorize a route or a change to Destroy.
 
 ### Unified provisioning and optional Custom hooks
 

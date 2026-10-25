@@ -4,9 +4,11 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
+	"net/http"
+	"net/url"
 )
 
-// backing-service (bs): list | show | create | start | stop | destroy.
+// backing-service (bs): list | show | create | start | stop | destroy | delete.
 // Create accepts only operator decisions. Managed adapters own their runtime
 // defaults; custom requires an image and adds no managed runtime defaults.
 func newBackingServiceCmd() *cobra.Command {
@@ -176,6 +178,17 @@ func newBackingServiceCmd() *cobra.Command {
 		},
 	})
 
+	cmd.AddCommand(&cobra.Command{
+		Use: "delete <slug>", Short: "Permanently delete an unused Backing Service and its persistent data",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectID, err := resolveBackingProjectTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			return runActionMethod(cmd, http.MethodDelete, "/api/v1/backing-services/"+url.PathEscape(projectID), nil)
+		},
+	})
 	return cmd
 }
 

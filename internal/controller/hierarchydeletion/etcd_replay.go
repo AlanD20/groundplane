@@ -264,6 +264,8 @@ func replayRequestFromBegin(begin BeginDeletion) (DeleteRequest, error) {
 		target = TargetProject
 	case EnvironmentDeleteRoute:
 		target = TargetEnvironment
+	case BackingDeleteRoute:
+		target = TargetBackingService
 	default:
 		return DeleteRequest{}, errs.New(errs.KindValidationFailed, "hierarchy deletion replay route is invalid")
 	}
@@ -381,6 +383,8 @@ func replayTargetForIntent(
 	case TenantDeleteRoute:
 		kind = idempotencyrecord.IdempotencyReplayTargetTenant
 	case ProjectDeleteRoute:
+		kind = idempotencyrecord.IdempotencyReplayTargetProject
+	case BackingDeleteRoute:
 		kind = idempotencyrecord.IdempotencyReplayTargetProject
 	case EnvironmentDeleteRoute:
 		kind = idempotencyrecord.IdempotencyReplayTargetEnvironment

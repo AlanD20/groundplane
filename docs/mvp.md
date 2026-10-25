@@ -72,7 +72,10 @@ is supplied at creation; Tenant description may be edited.
 
 A backing Environment has no instance-wide Backup Policy. Backups belong to
 consumer Environments. Destroy removes runtime while retaining desired state and
-data; it is not permanent Backing deletion.
+data; it is not permanent Backing deletion. Delete permanently removes an unused
+Backing Service and its owned hierarchy, including persistent data. Consumer
+Attaches block deletion and must be removed separately. The Console requires
+typed confirmation; CLI/API deletion requests are definitive.
 
 ## Shared behavior
 
@@ -243,7 +246,7 @@ evidence does not qualify the post-restructuring build.
 Multi-host scheduling, remote-Agent identity, human-API public authentication,
 hostile-tenant network isolation, external registry management, build-on-deploy,
 replicated blue-green deployment, runtime Component plugins,
-automatic provider DNS/certificate setup, scheduled Scripts, permanent Backing
-deletion, Runner autoscaling/in-place updates and automatic empty-host disaster
+automatic provider DNS/certificate setup, scheduled Scripts,
+Runner autoscaling/in-place updates and automatic empty-host disaster
 recovery are outside the current scope. Accepted-but-unimplemented Backup and
 Runner requirements remain documented; absence of code is not a scope reduction.

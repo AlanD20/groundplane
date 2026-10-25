@@ -51,6 +51,7 @@ export default function BackingServiceDetailPage() {
   >(null);
   const [actionError, setActionError] = useState("");
   const [destroyOpen, setDestroyOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const observationRefresh = useVisibleServiceObservations({
     environmentIds: env ? [env.id] : [],
     observations: svc ? [svc.observation] : [],
@@ -311,6 +312,29 @@ export default function BackingServiceDetailPage() {
                 <Trash2 /> Remove containers
               </Button>
             </ResourcePanel>
+            <ResourcePanel title="Delete Backing Service">
+              <p className="text-sm text-muted-foreground">
+                Permanently delete this instance, its containers, network,
+                configuration and persistent data. This cannot be undone.
+              </p>
+              {(g.consumers?.length ?? 0) > 0 && (
+                <p className="text-sm text-warning">
+                  Disconnect every consumer in Connections before deleting this
+                  instance.
+                </p>
+              )}
+              <Button
+                variant="destructive"
+                disabled={
+                  pendingAction !== null ||
+                  (g.consumers?.length ?? 0) > 0 ||
+                  g.deletionTaskId !== null
+                }
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 /> Delete Backing Service
+              </Button>
+            </ResourcePanel>
           </div>
         )}
         {tab === "connections" && (
@@ -349,6 +373,22 @@ export default function BackingServiceDetailPage() {
           workspace="platform"
           startLabel="Remove containers"
           onDispatch={() => store.runBackingRuntimeAction(g.id, "destroy")}
+        />
+      )}
+      {deleteOpen && (
+        <TaskRunnerDialog
+          open
+          onOpenChange={setDeleteOpen}
+          title={`Delete Backing Service · ${g.name}`}
+          description={`Permanently delete ${g.slug}, including its containers, network, configuration and all persistent Volume data. Disconnect every consumer first. Type the instance slug to confirm. This cannot be undone.`}
+          type="remove"
+          target={g.id}
+          workspace="platform"
+          destructive
+          confirmText={g.slug}
+          startLabel="Delete instance and data"
+          onDispatch={() => store.deleteBackingService(g.id)}
+          onCommit={() => window.location.assign("/platform/backing-services")}
         />
       )}
     </div>

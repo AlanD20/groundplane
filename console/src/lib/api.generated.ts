@@ -225,7 +225,8 @@ export interface paths {
         get: operations["backing-service.show"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Permanently delete a Backing Service and its data */
+        delete: operations["backing-service.delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5758,6 +5759,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BackingService"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backing-service.delete": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HierarchyDeleteOutputBody"];
                 };
             };
             /** @description Error */

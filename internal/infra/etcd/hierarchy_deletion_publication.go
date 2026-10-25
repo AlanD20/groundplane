@@ -145,6 +145,12 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		clear(root.targetValue)
 		return hierarchyDeletionRoot{}, 0, err
 	}
+	backingFences, err := repository.protectBackingDeletion(ctx, targetKind, targetID, result.ReadRevision)
+	if err != nil {
+		clear(root.targetValue)
+		return hierarchyDeletionRoot{}, 0, err
+	}
+	root.referenceFences = append(root.referenceFences, backingFences...)
 	return root, result.ReadRevision, nil
 }
 

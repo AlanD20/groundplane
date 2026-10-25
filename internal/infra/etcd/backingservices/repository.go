@@ -59,6 +59,10 @@ func (repository *Repository) GetBackingService(
 	if project.Record.Kind != hierarchyrecord.ProjectKindBacking || project.Record.TenantID != "" {
 		return etcdstore.Versioned[Record]{}, backingServiceNotFound()
 	}
+	if project.Record.DeletionTaskID != "" {
+		return etcdstore.Versioned[Record]{}, errs.Newf(errs.KindResourceInUse,
+			"Backing Service is being deleted; follow Task %s", project.Record.DeletionTaskID)
+	}
 	return repository.composeBackingService(ctx, project)
 }
 
@@ -103,16 +107,19 @@ func (repository *Repository) ListBackingServices(
 		return etcdstore.Page[Record]{}, err
 	}
 	page := etcdstore.Page[Record]{
-		Items:      make([]etcdstore.Versioned[Record], len(projects.Items)),
+		Items:      make([]etcdstore.Versioned[Record], 0, len(projects.Items)),
 		NextCursor: projects.NextCursor,
 		Revision:   projects.Revision,
 	}
-	for index, project := range projects.Items {
+	for _, project := range projects.Items {
+		if project.Record.DeletionTaskID != "" {
+			continue
+		}
 		item, err := repository.composeBackingService(ctx, project)
 		if err != nil {
 			return etcdstore.Page[Record]{}, err
 		}
-		page.Items[index] = item
+		page.Items = append(page.Items, item)
 	}
 	return page, nil
 }

@@ -1,7 +1,7 @@
 # Backing Service provisioning
 
 - Decision status: Accepted for current creation, Attach and runtime lifecycle
-- Deferred: existing-Zone selection and permanent Backing deletion
+- Deferred: existing-Zone selection
 
 ## The facade reuses the ordinary hierarchy
 
@@ -38,8 +38,9 @@ does not fabricate an empty Tenant identity.
 Start, Stop and Destroy delegate to the ordinary immutable Service lifecycle.
 Destroy means runtime absent only. It preserves Project, Environment, Zone,
 Volume, Entries, credentials, Attach history and data. Start recreates the
-runtime from frozen desired input. Permanent deletion is unavailable as
-described in [resource deletion](resource-deletion.md#permanent-backing-deletion-remains-deferred).
+runtime from frozen desired input. Permanent deletion uses the hierarchy cleanup
+owner and requires all consumers to be disconnected first; see
+[resource deletion](resource-deletion.md#permanent-backing-deletion).
 
 ## Attaches separate network membership from credential ownership
 

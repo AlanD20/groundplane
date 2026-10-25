@@ -92,7 +92,11 @@ func AttachBackingServiceKey(serviceID string, attachID string) string {
 }
 
 func AttachBackingProjectKey(projectID string, attachID string) string {
-	return "/v1/indexes/attaches/by-backing-project/project/" + projectID + "/" + attachID
+	return AttachBackingProjectPrefix(projectID) + attachID
+}
+
+func AttachBackingProjectPrefix(projectID string) string {
+	return "/v1/indexes/attaches/by-backing-project/project/" + projectID + "/"
 }
 
 func AttachGrantedByPrefix(attachID string) string {
