@@ -1,6 +1,9 @@
 import type { operations } from "@/lib/api.generated";
 import type { Environment } from "@/lib/types";
-import { environmentFromAPI } from "@/features/environment/projection";
+import {
+  environmentFromAPI,
+  environmentMetadataFromAPI,
+} from "@/features/environment/projection";
 import { listAllZones, listAllRoutes } from "./network-api";
 import { listAllServices } from "@/features/service/api";
 import { listAllEntries } from "@/features/entry/api";
@@ -14,11 +17,11 @@ import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { controllerRequest } from "@/lib/controller-json-request";
 type EnvironmentPageResponse =
   operations["environment.list"]["responses"][200]["content"]["application/json"];
-export async function listAllEnvironments(
+async function listEnvironmentDocuments(
   projectId: string,
   signal?: AbortSignal,
-): Promise<Environment[]> {
-  const environments: Environment[] = [];
+) {
+  const environments: NonNullable<EnvironmentPageResponse["items"]> = [];
   let cursor = "";
   do {
     const query = new URLSearchParams({ project: projectId, limit: "200" });
@@ -29,11 +32,29 @@ export async function listAllEnvironments(
       { signal },
     );
     for (const item of page.items ?? []) {
-      const environment = environmentFromAPI(item);
-      environments.push(environment);
+      environments.push(item);
     }
     cursor = page.next_cursor ?? "";
   } while (cursor);
+  return environments;
+}
+
+export async function listEnvironmentMetadata(
+  projectId: string,
+  signal?: AbortSignal,
+) {
+  return (await listEnvironmentDocuments(projectId, signal)).map(
+    environmentMetadataFromAPI,
+  );
+}
+
+export async function listAllEnvironments(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<Environment[]> {
+  const environments = (await listEnvironmentDocuments(projectId, signal)).map(
+    environmentFromAPI,
+  );
   return Promise.all(
     environments.map(async (environment) => {
       try {

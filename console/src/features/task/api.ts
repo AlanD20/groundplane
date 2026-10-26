@@ -1,6 +1,6 @@
 import type { operations } from "@/lib/api.generated";
 import { controllerRequest } from "@/lib/controller-json-request";
-import { observeTerminalTask } from "./terminal-observation";
+import { observeTask } from "./task-observation";
 import { captureRetryKey, forgetRetryKey } from "./retry-request";
 
 export type TaskResponse =
@@ -71,7 +71,7 @@ export async function requestTask(
     200,
     { signal },
   );
-  if (!signal?.aborted) observeTerminalTask(task);
+  if (!signal?.aborted) observeTask(task);
   return task;
 }
 

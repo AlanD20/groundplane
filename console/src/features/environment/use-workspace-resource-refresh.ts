@@ -1,5 +1,5 @@
 import { useResourceRefresh } from "@/features/task/use-resource-refresh";
-import { controllerMutationVersion } from "@/lib/controller-json-request";
+import { controllerMutationVersion } from "@/lib/resource-observation";
 import { readEnvironment } from "@/features/environment/workspace-read";
 import { listAllTenants } from "@/features/tenant/api";
 import { readProject } from "@/features/project/api";
@@ -83,17 +83,20 @@ export function useWorkspaceResourceRefresh({
             );
             if (!refreshed) {
               if (index >= 0) projects.splice(index, 1);
-            } else if (index >= 0)
-              Object.assign(
-                projects[index],
-                mergeEnvironmentProjectLoads(
-                  [projects[index]],
-                  [refreshed],
-                  generations,
-                  environmentGenerations.current,
-                  shouldPreserveEnvironmentOnLoad,
-                )[0],
-              );
+            } else if (
+              (refreshed.kind === "backing") ===
+              (projects === draft.backingProjects)
+            ) {
+              const merged = mergeEnvironmentProjectLoads(
+                index >= 0 ? [projects[index]] : [],
+                [refreshed],
+                generations,
+                environmentGenerations.current,
+                shouldPreserveEnvironmentOnLoad,
+              )[0];
+              if (index >= 0) projects[index] = merged;
+              else projects.push(merged);
+            }
           }
         });
     }

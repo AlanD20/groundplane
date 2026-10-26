@@ -9,9 +9,7 @@ export type EnvironmentProjection = Environment & {
   deletionTaskId: string | null;
 };
 
-export function environmentFromAPI(
-  environment: EnvironmentDocument,
-): EnvironmentProjection {
+export function environmentMetadataFromAPI(environment: EnvironmentDocument) {
   const provisioningState = environment.provisioning_state;
   if (
     provisioningState !== "provisioning" &&
@@ -24,7 +22,6 @@ export function environmentFromAPI(
   }
   return {
     id: environment.id,
-    resourceLoadError: undefined,
     projectId: environment.project_id,
     name: environment.name,
     networkPool: environment.network_pool,
@@ -43,6 +40,22 @@ export function environmentFromAPI(
     provisioningState,
     createTaskId: environment.create_task_id ?? null,
     deletionTaskId: environment.deletion_task_id ?? null,
+    volumeDir: environment.volume_dir,
+  } satisfies Partial<EnvironmentProjection>;
+}
+
+export function environmentFromAPI(
+  environment: EnvironmentDocument,
+): EnvironmentProjection {
+  return environmentFromMetadata(environmentMetadataFromAPI(environment));
+}
+
+export function environmentFromMetadata(
+  metadata: ReturnType<typeof environmentMetadataFromAPI>,
+): EnvironmentProjection {
+  return {
+    ...metadata,
+    resourceLoadError: undefined,
     release: "none",
     deploys: [],
     releaseGroups: [],
@@ -52,7 +65,6 @@ export function environmentFromAPI(
     routes: [],
     components: [],
     volumes: [],
-    volumeDir: environment.volume_dir,
     entries: [],
     envVars: [],
     files: [],

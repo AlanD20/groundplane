@@ -373,5 +373,5 @@ export function useConnectorStore(
       }
     },
   };
-  return { actions, reconcileConnectorRemoval };
+  return { actions, reconcileConnectorRemoval, refreshConnectorEnvironment };
 }

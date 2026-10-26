@@ -1,4 +1,5 @@
 import { useWorkspaceResourceRefresh } from "@/features/environment/use-workspace-resource-refresh";
+import { useVisibleWorkspaceRefresh } from "@/features/environment/use-visible-workspace-refresh";
 import {
   useTenantLoading,
   useBackingProjectLoading,
@@ -273,8 +274,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     state.projectsLoading,
   ]);
 
-  const { actions: connectorActions, reconcileConnectorRemoval } =
-    useConnectorStore(state, update, connectorEnvironmentIds);
+  const {
+    actions: connectorActions,
+    reconcileConnectorRemoval,
+    refreshConnectorEnvironment,
+  } = useConnectorStore(state, update, connectorEnvironmentIds);
+
+  useVisibleWorkspaceRefresh({
+    state,
+    update,
+    environmentGenerations,
+    shouldPreserveEnvironmentOnLoad,
+    observeEnvironmentDeletionTasks,
+    refreshAgents,
+    refreshPlatformComponents,
+    refreshReusableSecrets,
+    refreshRunners,
+    refreshHost: controllerPlatform.refreshHost,
+    refreshConnectors: refreshConnectorEnvironment,
+  });
 
   const resourceRefresh = useWorkspaceResourceRefresh({
     environmentGenerations,

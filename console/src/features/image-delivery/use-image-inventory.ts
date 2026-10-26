@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listImages, type ImageInventory } from "./api";
-import { subscribeTerminalTasks } from "@/features/task/terminal-observation";
+import { useVisibleRefresh } from "@/lib/use-visible-refresh";
 
 export function useImageInventory() {
   const [inventory, setInventory] = useState<ImageInventory | null>(null);
@@ -29,26 +29,7 @@ export function useImageInventory() {
       if (!current.signal.aborted) setLoading(false);
     }
   }, []);
-  useEffect(() => {
-    void refresh();
-    const unsubscribe = subscribeTerminalTasks(({ task }) => {
-      if (
-        [
-          "image",
-          "service",
-          "component",
-          "agent",
-          "runner",
-          "release_group",
-        ].includes(task.resource_kind ?? "") ||
-        ["deploy", "rollback", "destroy"].includes(task.action)
-      )
-        void refresh();
-    });
-    return () => {
-      unsubscribe();
-      request.current?.abort();
-    };
-  }, [refresh]);
+  useVisibleRefresh(refresh);
+  useEffect(() => () => request.current?.abort(), []);
   return { inventory, loading, error, refresh };
 }

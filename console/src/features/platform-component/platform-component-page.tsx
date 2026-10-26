@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import { ArrowLeft, Network, RefreshCw } from "lucide-react";
-import { useEffect } from "react";
+import { useVisibleRefresh } from "@/lib/use-visible-refresh";
 import { Link } from "react-router-dom";
 import { CoreDnsSettings } from "./coredns-settings";
 import { DNSRecordSettings } from "./dns-record-settings";
@@ -59,46 +59,16 @@ export default function PlatformComponentPage() {
   );
   const componentId = component?.kind === "coredns" ? component.id : undefined;
 
-  useEffect(() => {
-    if (!componentId) return;
-    const controller = new AbortController();
-    void refreshComponentConfig(componentId, controller.signal).catch(
-      () => undefined,
-    );
-    return () => controller.abort();
-  }, [componentId, refreshComponentConfig]);
-
-  useEffect(() => {
-    if (
-      !componentId ||
-      managedConfigComponentId !== componentId ||
-      !managedConfigTaskId
-    )
-      return;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
-      try {
-        await refreshComponentConfig(componentId, controller.signal);
-        await refreshPlatformComponents(controller.signal);
-      } catch {
-        /* Refresh actions expose their errors without discarding drafts. */
-      }
-      if (!controller.signal.aborted)
-        timer = setTimeout(() => void poll(), 2000);
-    };
-    timer = setTimeout(() => void poll(), 2000);
-    return () => {
-      controller.abort();
-      if (timer) clearTimeout(timer);
-    };
-  }, [
-    componentId,
-    managedConfigComponentId,
-    managedConfigTaskId,
-    refreshComponentConfig,
-    refreshPlatformComponents,
-  ]);
+  useVisibleRefresh(
+    async (signal) => {
+      if (componentId) await refreshComponentConfig(componentId, signal);
+    },
+    {
+      key: componentId,
+      enabled: !!componentId,
+      interval: managedConfigTaskId ? 2000 : 10000,
+    },
+  );
 
   const dnsConfig =
     platform.dns.upstream !== undefined &&

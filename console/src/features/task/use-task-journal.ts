@@ -68,7 +68,7 @@ export function useTaskJournal(
         journal.pageSize = pageSize;
         journal.loadError = null;
         journal.failedCursor = null;
-        journal.loading = !cursor;
+        journal.loading = !journal.loaded && !cursor;
         journal.loadingMore = !!cursor;
         draft.taskJournals[key] = journal;
       });
@@ -77,7 +77,18 @@ export function useTaskJournal(
           `/${surface}?${taskJournalQuery(scope, cursor, pageSize)}`,
           200,
         );
-        const entries = (page.items ?? []).map(taskFromAPI);
+        const entries = await Promise.all(
+          (page.items ?? []).map(async (task) => {
+            // Older pages retain their membership cursor, but active status must
+            // come from the current Task rather than that historical snapshot.
+            if (cursor && !task.finished_at) {
+              return taskFromAPI(
+                (await requestTask(task.id, undefined, { limit: 1 })).task,
+              );
+            }
+            return taskFromAPI(task);
+          }),
+        );
         if (taskJournalEpochs.current.get(key) !== epoch) return;
         update((draft) => {
           const journal = draft.taskJournals[key] ?? emptyTaskJournal(pageSize);

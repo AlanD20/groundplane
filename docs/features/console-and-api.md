@@ -87,6 +87,12 @@ Loading, errors, missing data and expired observations are explicit. The Console
 must not substitute sample data for unavailable health or claim an operation
 succeeded merely because its request was accepted.
 
+Resource collections and Task lists refresh in place after Console actions and
+Task progress. Visible workspaces also check for CLI/API changes every ten
+seconds and when the browser tab regains focus or connectivity. Background
+refresh preserves filters, pagination and unsaved drafts; hidden tabs pause
+these reads. Refreshing data does not deploy or restart resources.
+
 Forms group identity, runtime, network, credentials and health fields when those
 are separate concerns. Labels and relevant help stay beside their controls.
 Zone creation shows the Environment pool bounds and existing Zone subnets;

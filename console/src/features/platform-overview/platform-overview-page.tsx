@@ -27,7 +27,7 @@ import {
   MemoryStick,
   RefreshCw,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useVisibleRefresh } from "@/lib/use-visible-refresh";
 import { TenantCreateForm } from "@/features/tenant/tenant-create-form";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -55,11 +55,7 @@ export default function PlatformOverviewPage() {
   const { tenants, tenantProjects, backingProjects, host } = store;
   const platformJournal = store.getTaskJournal(platformTaskScope);
 
-  useEffect(() => {
-    void store
-      .loadTaskJournal("activity", platformTaskScope)
-      .catch(() => undefined);
-  }, [store.loadTaskJournal]);
+  useVisibleRefresh(() => store.loadTaskJournal("activity", platformTaskScope));
 
   const allEnvs: { env: Environment; project: string; tenant: string }[] =
     tenantProjects.flatMap((project) => {

@@ -278,8 +278,10 @@ destructive review and recovery confirmation retain focused dialogs.
 
 Successful synchronous writes update the authoritative local resource state.
 Asynchronous acceptance is not completion: observe the durable Task and refresh
-the affected resource graph when it settles, including failure or recovery that
-may have changed state. Refresh ownership must outlive the initiating dialog.
+the affected resource graph during progress and when it settles, including
+failure or recovery that may have changed state. Refresh ownership must outlive
+the initiating dialog. Visible collections revalidate on focus, reconnect and a
+bounded interval so CLI/API changes do not require a browser reload.
 Coalesce matching invalidations, reject superseded reads, preserve deletion
 fences and keep errors retryable without a browser reload. Do not wipe mounted
 editors, selections or unsaved drafts when replacing read models.

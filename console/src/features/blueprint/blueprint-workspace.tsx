@@ -7,7 +7,7 @@ import {
 } from "./service-document";
 
 import { Input } from "@/components/ui/input";
-import { subscribeTerminalTasks } from "@/features/task/terminal-observation";
+import { subscribeTerminalTasks } from "@/features/task/task-observation";
 import {
   workspaceSectionClassName,
   editorFooterClassName,

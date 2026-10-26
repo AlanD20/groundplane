@@ -7,9 +7,11 @@ import {
 } from "../features/task/resource-refresh-queue.ts";
 import {
   observeTerminalTask,
+  observeTask,
   subscribeTerminalTasks,
-} from "../features/task/terminal-observation.ts";
+} from "../features/task/task-observation.ts";
 import { mergeEnvironmentProjectLoads } from "../features/environment/workspace-reconciliation.ts";
+import { subscribeResourceChanges } from "./resource-observation.ts";
 
 async function until(predicate) {
   for (let i = 0; i < 100; i++) {
@@ -19,10 +21,38 @@ async function until(predicate) {
   assert.fail("refresh did not settle");
 }
 
+// A long-running deletion changes collection membership before it finishes.
+// Multiple readers of unchanged work must not create an invalidation loop.
+test("active Task changes refresh resources before completion and deduplicate readers", () => {
+  let changes = 0;
+  const unsubscribe = subscribeResourceChanges(() => changes++);
+  try {
+    const task = { id: "active-refresh", status: "running", updated_at: "one" };
+    observeTask({ task });
+    observeTask({ task });
+    assert.equal(changes, 1);
+    observeTask({ task: { ...task, updated_at: "two" } });
+    assert.equal(changes, 2);
+    observeTask({
+      task: {
+        ...task,
+        status: "failed",
+        finished_at: "three",
+        updated_at: "three",
+      },
+    });
+    assert.equal(changes, 3);
+  } finally {
+    unsubscribe();
+  }
+});
+
 // Mutation completion can arrive from multiple readers after its dialog closes.
 test("terminal observation deduplicates readers and includes failed partial effects", () => {
   const seen = [];
-  const unsubscribe = subscribeTerminalTasks((response) => seen.push(response.task.status));
+  const unsubscribe = subscribeTerminalTasks((response) =>
+    seen.push(response.task.status),
+  );
   try {
     const task = { id: "refresh-test", updated_at: "now", status: "running" };
     observeTerminalTask({ task });

@@ -37,7 +37,7 @@ export function projectFromAPI(
   };
 }
 
-export async function listAllTenantProjects(
+export async function listTenantProjectMetadata(
   signal: AbortSignal,
 ): Promise<Project[]> {
   const projects: Project[] = [];
@@ -53,6 +53,13 @@ export async function listAllTenantProjects(
     projects.push(...(page.items ?? []).map(projectFromAPI));
     cursor = page.next_cursor ?? "";
   } while (cursor);
+  return projects;
+}
+
+export async function listAllTenantProjects(
+  signal: AbortSignal,
+): Promise<Project[]> {
+  const projects = await listTenantProjectMetadata(signal);
   return Promise.all(
     projects.map(async (project) => {
       try {

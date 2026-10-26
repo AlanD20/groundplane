@@ -1,7 +1,7 @@
 import { Disclosure } from "@/components/common/disclosure";
 import type { Environment } from "@/lib/types";
 import { ReleaseTaskLog } from "./release-task-log";
-import { subscribeTerminalTasks } from "@/features/task/terminal-observation";
+import { subscribeTerminalTasks } from "@/features/task/task-observation";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import { CompactReference } from "@/components/common/compact-reference";
 ("use client");

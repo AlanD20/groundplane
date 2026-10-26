@@ -18,7 +18,9 @@ import type {
   TaskType,
 } from "@/lib/types";
 import { RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { useVisibleRefresh } from "@/lib/use-visible-refresh";
+import { taskJournalKey } from "./journal-model";
 import { useSearchParams } from "react-router-dom";
 import { TaskPagination } from "./task-pagination";
 
@@ -67,9 +69,18 @@ export function TaskList({
   const journal = store.getTaskJournal(scope);
   const visible = journal.entries;
   const busy = journal.loading || journal.loadingMore;
-  useEffect(() => {
-    void store.loadTaskJournal(surface, scope).catch(() => undefined);
-  }, [scope, surface, store.loadTaskJournal]);
+  useVisibleRefresh(
+    async () => {
+      if (journal.loading || journal.loadingMore) return;
+      await store.loadTaskJournal(
+        surface,
+        scope,
+        journal.pageCursors[journal.pageIndex],
+        journal.pageSize,
+      );
+    },
+    { key: `${surface}/${taskJournalKey(scope)}` },
+  );
   return (
     <ResourcePanel
       title={

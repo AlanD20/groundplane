@@ -24,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ArrowLeft, Boxes, RefreshCw, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { imageReferences, imageSize, type HostImage } from "./api";
 import { ImageDetails } from "./image-details";
@@ -75,12 +75,6 @@ export default function ImagesPage() {
     });
   }
   const [removing, setRemoving] = useState<HostImage | null>(null);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (!document.hidden) void refresh();
-    }, 10000);
-    return () => clearInterval(timer);
-  }, [refresh]);
   const images = useMemo(
     () =>
       (inventory?.images ?? [])

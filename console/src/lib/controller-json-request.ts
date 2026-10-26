@@ -4,9 +4,7 @@ import {
 } from "./controller-request-errors";
 import { newULID } from "./utils";
 import { reportAcceptedTasks } from "@/features/task/accepted-tasks";
-
-let mutationVersion = 0;
-export const controllerMutationVersion = () => mutationVersion;
+import { reportResourceChange } from "./resource-observation";
 
 export async function controllerRequest<Response>(
   path: string,
@@ -47,9 +45,10 @@ export async function controllerRequest<Response>(
     throw await controllerResponseError(response, method, path);
   }
   init.onResponseHeaders?.(response.headers);
-  const body: unknown = expectedStatus === 204 ? undefined : await response.json();
+  const body: unknown =
+    expectedStatus === 204 ? undefined : await response.json();
   if (method !== "GET") {
-    mutationVersion++;
+    reportResourceChange(true);
     reportAcceptedTasks(body);
   }
   return body as Response;

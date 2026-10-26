@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { subscribeTerminalTasks } from "./terminal-observation";
+import { subscribeTerminalTasks } from "./task-observation";
 import { ResourceRefreshQueue } from "./resource-refresh-queue";
 import type { TaskResponse } from "./api";
 
