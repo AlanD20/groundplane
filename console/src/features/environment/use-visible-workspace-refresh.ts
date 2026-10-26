@@ -10,6 +10,8 @@ import { listEnvironmentMetadata, readEnvironment } from "./workspace-read";
 import type { EnvironmentLifecycle } from "./lifecycle-types";
 import { environmentFromMetadata } from "./projection";
 import { mergeEnvironmentProjectLoads } from "./workspace-reconciliation";
+import { listAllServices } from "@/features/service/api";
+import type { Service } from "@/lib/types";
 
 type Options = Pick<
   EnvironmentLifecycle<State>,
@@ -54,6 +56,7 @@ export function useVisibleWorkspaceRefresh(options: Options) {
         Awaited<ReturnType<typeof listEnvironmentMetadata>>[number]
       >();
       const resourceReads = new Set<string>();
+      const serviceReads = new Map<string, Service[]>();
       // Refresh collection membership cheaply. Only visible/new Environments need
       // their full resource collections; do not reload every project's history.
       try {
@@ -70,14 +73,22 @@ export function useVisibleWorkspaceRefresh(options: Options) {
               project.id,
               signal,
             );
-            const selected =
+            const visibleProject =
               parts[0] === "t" &&
               parts[1] ===
                 tenants.find((tenant) => tenant.id === project.tenantId)
                   ?.slug &&
-              parts[2] === project.slug
-                ? parts[3]
-                : undefined;
+              parts[2] === project.slug;
+            const visibleTenant =
+              parts[0] === "t" &&
+              !parts[2] &&
+              tenants.some(
+                (tenant) =>
+                  tenant.id === project.tenantId && tenant.slug === parts[1],
+              );
+            const overview =
+              (parts[0] === "platform" && parts[1] === "overview") ||
+              visibleTenant;
             return {
               ...project,
               environments: (
@@ -87,7 +98,12 @@ export function useVisibleWorkspaceRefresh(options: Options) {
                     const cached = existing?.environments?.find(
                       (value) => value.id === environment.id,
                     );
-                    if (!cached || selected === environment.name) {
+                    if (
+                      !cached ||
+                      (visibleProject &&
+                        ((!parts[3] && view !== "runners") ||
+                          parts[3] === environment.name))
+                    ) {
                       resourceReads.add(environment.id);
                       try {
                         return await readEnvironment(environment.id, signal);
@@ -102,6 +118,14 @@ export function useVisibleWorkspaceRefresh(options: Options) {
                               : "Unable to refresh Environment resources",
                         };
                       }
+                    }
+                    if (overview) {
+                      const services = await listAllServices(
+                        environment.id,
+                        signal,
+                      );
+                      serviceReads.set(environment.id, services);
+                      return { ...cached, ...environment, services };
                     }
                     return { ...cached, ...environment };
                   }),
@@ -123,7 +147,13 @@ export function useVisibleWorkspaceRefresh(options: Options) {
                 .find((value) => value.id === project.id)
                 ?.environments?.find((value) => value.id === environment.id);
               return latest
-                ? { ...latest, ...environmentMetadata.get(environment.id) }
+                ? {
+                    ...latest,
+                    ...environmentMetadata.get(environment.id),
+                    ...(serviceReads.has(environment.id)
+                      ? { services: serviceReads.get(environment.id)! }
+                      : {}),
+                  }
                 : environment;
             }),
           }));
