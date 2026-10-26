@@ -25,6 +25,11 @@ func TestBackingDeletionFreezesProjectSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
+	environment, err := hierarchy.GetEnvironment(ctx, backing.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readyServiceMutationEnvironment(t, ctx, store, environment)
 	project, err := hierarchy.GetProject(ctx, backing.ProjectID)
 	if err != nil {
 		t.Fatalf("GetProject() error = %v", err)
