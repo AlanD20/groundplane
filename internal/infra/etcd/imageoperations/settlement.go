@@ -78,12 +78,12 @@ func Result(
 		outcome = workexecution.Failed
 	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{
-		{Key: Key(task.Task.ID), ModRevision: snapshot.Revision},
-		{Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision},
-		{Key: ResultKey(attempt.ID)},
-	}, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: ResultKey(attempt.ID), Value: value}}}, workexecution.Completion{Outcome: outcome, EffectsSettled: settled,
-		Evidence: workexecution.Input{
-			ID:     ids.DeriveAt(ids.KindPlan, record.Input.CreatedAt, attempt.ID, "image-result"),
-			SHA256: hex.EncodeToString(digest[:]),
-		}}, nil
+			{Key: Key(task.Task.ID), ModRevision: snapshot.Revision},
+			{Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision},
+			{Key: ResultKey(attempt.ID)},
+		}, Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: ResultKey(attempt.ID), Value: value}}}, workexecution.Completion{Outcome: outcome, EffectsSettled: settled,
+			Evidence: workexecution.Input{
+				ID:     ids.DeriveAt(ids.KindPlan, record.Input.CreatedAt, attempt.ID, "image-result"),
+				SHA256: hex.EncodeToString(digest[:]),
+			}}, nil
 }

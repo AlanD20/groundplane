@@ -38,9 +38,9 @@ func (repository *Repository) LoadFailure(
 		return nil, keyvalue.Condition{}, err
 	}
 	return append(
-		[]byte(nil),
-		read.Values[0].Value...), keyvalue.Condition{
-		Key:         key,
-		ModRevision: read.Values[0].ModRevision,
-	}, nil
+			[]byte(nil),
+			read.Values[0].Value...), keyvalue.Condition{
+			Key:         key,
+			ModRevision: read.Values[0].ModRevision,
+		}, nil
 }

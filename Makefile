@@ -22,6 +22,7 @@ TEST_POSTGRES16_RELEASE_BASE64 = $(shell PYTHONDONTWRITEBYTECODE=1 python3 -c 'i
 TEST_LDFLAGS = -X github.com/AlanD20/groundplane/internal/common/postgres16protocol.releaseIndexBase64=$(TEST_POSTGRES16_RELEASE_BASE64)
 DOCKER ?= docker
 PROTOC ?= protoc
+GOFMT := $(shell go env GOROOT)/bin/gofmt
 
 build: cli controller agent
 
@@ -199,10 +200,10 @@ tooling-check:
 
 format-check:
 	@set -eu; \
-		format_output="$$(gofmt -l ./cmd ./component-sdk ./console ./internal ./pkg ./proto ./registered-components)"; \
+		format_output="$$($(GOFMT) -l ./cmd ./component-sdk ./console ./internal ./pkg ./proto ./registered-components)"; \
 		if test -n "$$format_output"; then printf '%s\n' "$$format_output"; exit 1; fi
 	@set -eu; \
-		format_output="$$(go tool golines --base-formatter=gofmt --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./component-sdk/ ./registered-components/ ./console/)"; \
+		format_output="$$(go tool golines --base-formatter=$(GOFMT) --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./component-sdk/ ./registered-components/ ./console/)"; \
 		if test -n "$$format_output"; then printf '%s\n' "$$format_output"; exit 1; fi
 
 verifier-helper-check:

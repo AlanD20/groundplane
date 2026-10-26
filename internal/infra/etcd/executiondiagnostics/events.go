@@ -167,13 +167,13 @@ func (repository *Repository) prepareEvent(
 		}
 		if len(value) <= maximumBytes {
 			return keyvalue.Condition{
-				Key:         EventsKey(next.AttemptID),
-				ModRevision: modRevision,
-			}, keyvalue.Mutation{
-				Type:  keyvalue.MutationPut,
-				Key:   EventsKey(next.AttemptID),
-				Value: value,
-			}, nil
+					Key:         EventsKey(next.AttemptID),
+					ModRevision: modRevision,
+				}, keyvalue.Mutation{
+					Type:  keyvalue.MutationPut,
+					Key:   EventsKey(next.AttemptID),
+					Value: value,
+				}, nil
 		}
 		clear(value)
 		if len(record.Items) == 1 {

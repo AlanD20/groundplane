@@ -86,8 +86,8 @@ func PreparePublication(input Input) ([]keyvalue.Condition, []keyvalue.Mutation,
 	}
 	key := InputKey(input.WorkItemID)
 	return []keyvalue.Condition{
-		{Key: key},
-	}, []keyvalue.Mutation{
-		{Type: keyvalue.MutationPut, Key: key, Value: value},
-	}, nil
+			{Key: key},
+		}, []keyvalue.Mutation{
+			{Type: keyvalue.MutationPut, Key: key, Value: value},
+		}, nil
 }

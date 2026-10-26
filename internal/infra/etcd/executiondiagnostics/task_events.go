@@ -156,13 +156,13 @@ func (repository *Repository) prepareTaskEvent(
 		}
 		if len(value) <= maximumBytes {
 			return keyvalue.Condition{
-				Key:         TaskEventsKey(next.TaskID),
-				ModRevision: modRevision,
-			}, keyvalue.Mutation{
-				Type:  keyvalue.MutationPut,
-				Key:   TaskEventsKey(next.TaskID),
-				Value: value,
-			}, nil
+					Key:         TaskEventsKey(next.TaskID),
+					ModRevision: modRevision,
+				}, keyvalue.Mutation{
+					Type:  keyvalue.MutationPut,
+					Key:   TaskEventsKey(next.TaskID),
+					Value: value,
+				}, nil
 		}
 		clear(value)
 		if len(record.Items) == 1 {

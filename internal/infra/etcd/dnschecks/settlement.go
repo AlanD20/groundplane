@@ -46,11 +46,11 @@ func Result(snapshot keyvalue.Versioned[Record], task workqueue.TaskSnapshot,
 		outcome = task.Task.Stop.Outcome
 	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{
-		{Key: RecordKey(task.Task.ID), ModRevision: snapshot.Revision},
-		{Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision},
-	}}, workexecution.Completion{Outcome: outcome, EffectsSettled: true,
-		Evidence: workexecution.Input{
-			ID:     ids.DeriveAt(ids.KindPlan, record.CreatedAt, attempt.ID, "dns-check-result"),
-			SHA256: hex.EncodeToString(hash[:]),
-		}}, nil
+			{Key: RecordKey(task.Task.ID), ModRevision: snapshot.Revision},
+			{Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision},
+		}}, workexecution.Completion{Outcome: outcome, EffectsSettled: true,
+			Evidence: workexecution.Input{
+				ID:     ids.DeriveAt(ids.KindPlan, record.CreatedAt, attempt.ID, "dns-check-result"),
+				SHA256: hex.EncodeToString(hash[:]),
+			}}, nil
 }

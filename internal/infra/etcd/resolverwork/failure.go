@@ -129,9 +129,9 @@ func (repository *Repository) ReadFailure(
 		return resolverexecution.Failure{}, nil, keyvalue.Condition{}, err
 	}
 	return failure, bytes.Clone(
-		read.Values[0].Value,
-	), keyvalue.Condition{
-		Key:         key,
-		ModRevision: read.Values[0].ModRevision,
-	}, nil
+			read.Values[0].Value,
+		), keyvalue.Condition{
+			Key:         key,
+			ModRevision: read.Values[0].ModRevision,
+		}, nil
 }
