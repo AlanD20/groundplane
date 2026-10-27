@@ -19,6 +19,7 @@ type publicationStore struct {
 	transactions int
 	loseResponse bool
 	readError    error
+	beforeCommit func()
 }
 
 func (store *publicationStore) entry(key string) *testkeyvalue.KeyValue {
@@ -112,6 +113,11 @@ func (store *publicationStore) Transact(
 	conditions []testkeyvalue.Condition,
 	mutations []testkeyvalue.Mutation,
 ) (testkeyvalue.TransactionResult, error) {
+	if store.beforeCommit != nil {
+		hook := store.beforeCommit
+		store.beforeCommit = nil
+		hook()
+	}
 	if err := ctx.Err(); err != nil {
 		return testkeyvalue.TransactionResult{}, err
 	}
