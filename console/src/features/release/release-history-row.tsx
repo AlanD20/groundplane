@@ -31,8 +31,20 @@ export function ReleaseHistoryRow({
               {release.strategy}
             </span>
           </span>
-          <Badge variant={release.status === "active" ? "success" : "outline"}>
-            {release.status}
+          <Badge
+            variant={
+              release.status === "active"
+                ? "success"
+                : ["failed", "timed_out", "recovery_required"].includes(
+                      release.state,
+                    )
+                  ? "danger"
+                  : "outline"
+            }
+          >
+            {release.status === "active"
+              ? "Serving"
+              : release.state.replaceAll("_", " ")}
           </Badge>
         </span>
       }

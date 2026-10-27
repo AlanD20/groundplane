@@ -4982,6 +4982,55 @@ type TaskActionAvailability struct {
 	Reason  *string `json:"reason,omitempty"`
 }
 
+// TaskAlertSettings defines model for TaskAlertSettings.
+type TaskAlertSettings struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskAlertSettings.json
+	Schema             *string `json:"$schema,omitempty"`
+	ConsoleUrl         string  `json:"console_url"`
+	DeliveryState      string  `json:"delivery_state"`
+	Enabled            bool    `json:"enabled"`
+	LastAttemptAt      *string `json:"last_attempt_at,omitempty"`
+	LastError          *string `json:"last_error,omitempty"`
+	LastEventStatus    *string `json:"last_event_status,omitempty"`
+	LastNotificationId *string `json:"last_notification_id,omitempty"`
+	LastTaskId         *string `json:"last_task_id,omitempty"`
+	Revision           string  `json:"revision"`
+	WebhookConfigured  bool    `json:"webhook_configured"`
+}
+
+// TaskAlertSettingsWrite defines model for TaskAlertSettingsWrite.
+type TaskAlertSettingsWrite struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskAlertSettingsWrite.json
+	Schema           *string `json:"$schema,omitempty"`
+	ConsoleUrl       string  `json:"console_url"`
+	Enabled          bool    `json:"enabled"`
+	ExpectedRevision string  `json:"expected_revision"`
+	WebhookUrl       *string `json:"webhook_url,omitempty"`
+}
+
+// TaskAlertTestAccepted defines model for TaskAlertTestAccepted.
+type TaskAlertTestAccepted struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskAlertTestAccepted.json
+	Schema         *string `json:"$schema,omitempty"`
+	NotificationId string  `json:"notification_id"`
+	Queued         bool    `json:"queued"`
+}
+
+// TaskAlertTestRequest defines model for TaskAlertTestRequest.
+type TaskAlertTestRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskAlertTestRequest.json
+	Schema           *string `json:"$schema,omitempty"`
+	ExpectedRevision string  `json:"expected_revision"`
+}
+
 // TaskAttempt defines model for TaskAttempt.
 type TaskAttempt struct {
 	AgentId    *string              `json:"agent_id,omitempty"`
@@ -6072,6 +6121,26 @@ type SoftwareReleasesParams struct {
 // SoftwareReleasesParamsSelection defines parameters for SoftwareReleases.
 type SoftwareReleasesParamsSelection string
 
+// TaskAlertShowParams defines parameters for TaskAlertShow.
+type TaskAlertShowParams struct {
+	Environment *string `form:"environment,omitempty" json:"environment,omitempty"`
+	Platform    *bool   `form:"platform,omitempty" json:"platform,omitempty"`
+}
+
+// TaskAlertSetParams defines parameters for TaskAlertSet.
+type TaskAlertSetParams struct {
+	Environment    *string `form:"environment,omitempty" json:"environment,omitempty"`
+	Platform       *bool   `form:"platform,omitempty" json:"platform,omitempty"`
+	IdempotencyKey string  `json:"Idempotency-Key"`
+}
+
+// TaskAlertTestParams defines parameters for TaskAlertTest.
+type TaskAlertTestParams struct {
+	Environment    *string `form:"environment,omitempty" json:"environment,omitempty"`
+	Platform       *bool   `form:"platform,omitempty" json:"platform,omitempty"`
+	IdempotencyKey string  `json:"Idempotency-Key"`
+}
+
 // TaskListParams defines parameters for TaskList.
 type TaskListParams struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty"`
@@ -6364,6 +6433,12 @@ type ServiceRollbackJSONRequestBody = RollbackRequest
 
 // SoftwarePrepareJSONRequestBody defines body for SoftwarePrepare for application/json ContentType.
 type SoftwarePrepareJSONRequestBody = SoftwarePreparationRequest
+
+// TaskAlertSetJSONRequestBody defines body for TaskAlertSet for application/json ContentType.
+type TaskAlertSetJSONRequestBody = TaskAlertSettingsWrite
+
+// TaskAlertTestJSONRequestBody defines body for TaskAlertTest for application/json ContentType.
+type TaskAlertTestJSONRequestBody = TaskAlertTestRequest
 
 // TaskRetryJSONRequestBody defines body for TaskRetry for application/json ContentType.
 type TaskRetryJSONRequestBody = TaskRetryRequest
@@ -8718,6 +8793,39 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /software/releases (the `SoftwareReleases` operationId).
 	SoftwareReleases(ctx context.Context, params *SoftwareReleasesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskAlertShow Read scoped Discord Task alert settings and last delivery status
+	//
+	// Corresponds with GET /task-alerts (the `TaskAlertShow` operationId).
+	TaskAlertShow(ctx context.Context, params *TaskAlertShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskAlertSetWithBody Save scoped Discord Task alerts; webhook value is write-only
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /task-alerts (the `TaskAlertSet` operationId).
+	TaskAlertSetWithBody(ctx context.Context, params *TaskAlertSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskAlertSet Save scoped Discord Task alerts; webhook value is write-only
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /task-alerts (the `TaskAlertSet` operationId).
+	TaskAlertSet(ctx context.Context, params *TaskAlertSetParams, body TaskAlertSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskAlertTestWithBody Queue a test Discord notification using the saved destination
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /task-alerts/test (the `TaskAlertTest` operationId).
+	TaskAlertTestWithBody(ctx context.Context, params *TaskAlertTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskAlertTest Queue a test Discord notification using the saved destination
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /task-alerts/test (the `TaskAlertTest` operationId).
+	TaskAlertTest(ctx context.Context, params *TaskAlertTestParams, body TaskAlertTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TaskList List tasks
 	//
@@ -12027,6 +12135,89 @@ func (c *Client) SoftwareApply(ctx context.Context, task string, params *Softwar
 // Corresponds with GET /software/releases (the `SoftwareReleases` operationId).
 func (c *Client) SoftwareReleases(ctx context.Context, params *SoftwareReleasesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSoftwareReleasesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskAlertShow Read scoped Discord Task alert settings and last delivery status
+//
+// Corresponds with GET /task-alerts (the `TaskAlertShow` operationId).
+func (c *Client) TaskAlertShow(ctx context.Context, params *TaskAlertShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskAlertShowRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskAlertSetWithBody Save scoped Discord Task alerts; webhook value is write-only
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /task-alerts (the `TaskAlertSet` operationId).
+func (c *Client) TaskAlertSetWithBody(ctx context.Context, params *TaskAlertSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskAlertSetRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskAlertSet Save scoped Discord Task alerts; webhook value is write-only
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /task-alerts (the `TaskAlertSet` operationId).
+func (c *Client) TaskAlertSet(ctx context.Context, params *TaskAlertSetParams, body TaskAlertSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskAlertSetRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskAlertTestWithBody Queue a test Discord notification using the saved destination
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /task-alerts/test (the `TaskAlertTest` operationId).
+func (c *Client) TaskAlertTestWithBody(ctx context.Context, params *TaskAlertTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskAlertTestRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskAlertTest Queue a test Discord notification using the saved destination
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /task-alerts/test (the `TaskAlertTest` operationId).
+func (c *Client) TaskAlertTest(ctx context.Context, params *TaskAlertTestParams, body TaskAlertTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskAlertTestRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -20325,6 +20516,256 @@ func NewSoftwareReleasesRequest(server string, params *SoftwareReleasesParams) (
 	return req, nil
 }
 
+// NewTaskAlertShowRequest constructs an http.Request for the TaskAlertShow method
+func NewTaskAlertShowRequest(server string, params *TaskAlertShowParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/task-alerts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Environment != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Platform != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "platform", *params.Platform, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewTaskAlertSetRequest calls the generic TaskAlertSet builder with application/json body
+func NewTaskAlertSetRequest(server string, params *TaskAlertSetParams, body TaskAlertSetJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTaskAlertSetRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewTaskAlertSetRequestWithBody constructs an http.Request for the TaskAlertSet method, with any body, and a specified content type
+func NewTaskAlertSetRequestWithBody(server string, params *TaskAlertSetParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/task-alerts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Environment != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Platform != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "platform", *params.Platform, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewTaskAlertTestRequest calls the generic TaskAlertTest builder with application/json body
+func NewTaskAlertTestRequest(server string, params *TaskAlertTestParams, body TaskAlertTestJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTaskAlertTestRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewTaskAlertTestRequestWithBody constructs an http.Request for the TaskAlertTest method, with any body, and a specified content type
+func NewTaskAlertTestRequestWithBody(server string, params *TaskAlertTestParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/task-alerts/test")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Environment != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Platform != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "platform", *params.Platform, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewTaskListRequest constructs an http.Request for the TaskList method
 func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, error) {
 	var err error
@@ -23376,6 +23817,41 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /software/releases (the `SoftwareReleases` operationId).
 	SoftwareReleasesWithResponse(ctx context.Context, params *SoftwareReleasesParams, reqEditors ...RequestEditorFn) (*SoftwareReleasesResponse, error)
+
+	// TaskAlertShowWithResponse Read scoped Discord Task alert settings and last delivery status
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /task-alerts (the `TaskAlertShow` operationId).
+	TaskAlertShowWithResponse(ctx context.Context, params *TaskAlertShowParams, reqEditors ...RequestEditorFn) (*TaskAlertShowResponse, error)
+
+	// TaskAlertSetWithBodyWithResponse Save scoped Discord Task alerts; webhook value is write-only
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /task-alerts (the `TaskAlertSet` operationId).
+	TaskAlertSetWithBodyWithResponse(ctx context.Context, params *TaskAlertSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TaskAlertSetResponse, error)
+
+	// TaskAlertSetWithResponse Save scoped Discord Task alerts; webhook value is write-only
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /task-alerts (the `TaskAlertSet` operationId).
+	TaskAlertSetWithResponse(ctx context.Context, params *TaskAlertSetParams, body TaskAlertSetJSONRequestBody, reqEditors ...RequestEditorFn) (*TaskAlertSetResponse, error)
+
+	// TaskAlertTestWithBodyWithResponse Queue a test Discord notification using the saved destination
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /task-alerts/test (the `TaskAlertTest` operationId).
+	TaskAlertTestWithBodyWithResponse(ctx context.Context, params *TaskAlertTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TaskAlertTestResponse, error)
+
+	// TaskAlertTestWithResponse Queue a test Discord notification using the saved destination
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /task-alerts/test (the `TaskAlertTest` operationId).
+	TaskAlertTestWithResponse(ctx context.Context, params *TaskAlertTestParams, body TaskAlertTestJSONRequestBody, reqEditors ...RequestEditorFn) (*TaskAlertTestResponse, error)
 
 	// TaskListWithResponse List tasks
 	//
@@ -30955,6 +31431,164 @@ func (r SoftwareReleasesResponse) ContentType() string {
 	return ""
 }
 
+type TaskAlertShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TaskAlertSettings
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TaskAlertShowResponse) GetJSON200() *TaskAlertSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskAlertShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskAlertShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskAlertShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskAlertShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskAlertShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// TaskAlertSetResponse200Headers the declared response headers of an HTTP 200 response for TaskAlertSet
+type TaskAlertSetResponse200Headers struct {
+	ContentType *string
+}
+
+type TaskAlertSetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TaskAlertSettings
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *TaskAlertSetResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TaskAlertSetResponse) GetJSON200() *TaskAlertSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskAlertSetResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskAlertSetResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskAlertSetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskAlertSetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskAlertSetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// TaskAlertTestResponse200Headers the declared response headers of an HTTP 200 response for TaskAlertTest
+type TaskAlertTestResponse200Headers struct {
+	ContentType *string
+}
+
+type TaskAlertTestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TaskAlertTestAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *TaskAlertTestResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TaskAlertTestResponse) GetJSON200() *TaskAlertTestAccepted {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskAlertTestResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskAlertTestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskAlertTestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskAlertTestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskAlertTestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type TaskListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -34802,6 +35436,71 @@ func (c *ClientWithResponses) SoftwareReleasesWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseSoftwareReleasesResponse(rsp)
+}
+
+// TaskAlertShowWithResponse Read scoped Discord Task alert settings and last delivery status
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /task-alerts (the `TaskAlertShow` operationId).
+func (c *ClientWithResponses) TaskAlertShowWithResponse(ctx context.Context, params *TaskAlertShowParams, reqEditors ...RequestEditorFn) (*TaskAlertShowResponse, error) {
+	rsp, err := c.TaskAlertShow(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskAlertShowResponse(rsp)
+}
+
+// TaskAlertSetWithBodyWithResponse Save scoped Discord Task alerts; webhook value is write-only
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /task-alerts (the `TaskAlertSet` operationId).
+func (c *ClientWithResponses) TaskAlertSetWithBodyWithResponse(ctx context.Context, params *TaskAlertSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TaskAlertSetResponse, error) {
+	rsp, err := c.TaskAlertSetWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskAlertSetResponse(rsp)
+}
+
+// TaskAlertSetWithResponse Save scoped Discord Task alerts; webhook value is write-only
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /task-alerts (the `TaskAlertSet` operationId).
+func (c *ClientWithResponses) TaskAlertSetWithResponse(ctx context.Context, params *TaskAlertSetParams, body TaskAlertSetJSONRequestBody, reqEditors ...RequestEditorFn) (*TaskAlertSetResponse, error) {
+	rsp, err := c.TaskAlertSet(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskAlertSetResponse(rsp)
+}
+
+// TaskAlertTestWithBodyWithResponse Queue a test Discord notification using the saved destination
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /task-alerts/test (the `TaskAlertTest` operationId).
+func (c *ClientWithResponses) TaskAlertTestWithBodyWithResponse(ctx context.Context, params *TaskAlertTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TaskAlertTestResponse, error) {
+	rsp, err := c.TaskAlertTestWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskAlertTestResponse(rsp)
+}
+
+// TaskAlertTestWithResponse Queue a test Discord notification using the saved destination
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /task-alerts/test (the `TaskAlertTest` operationId).
+func (c *ClientWithResponses) TaskAlertTestWithResponse(ctx context.Context, params *TaskAlertTestParams, body TaskAlertTestJSONRequestBody, reqEditors ...RequestEditorFn) (*TaskAlertTestResponse, error) {
+	rsp, err := c.TaskAlertTest(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskAlertTestResponse(rsp)
 }
 
 // TaskListWithResponse List tasks
@@ -40933,6 +41632,131 @@ func ParseSoftwareReleasesResponse(rsp *http.Response) (*SoftwareReleasesRespons
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseTaskAlertShowResponse parses an HTTP response from a TaskAlertShowWithResponse call
+func ParseTaskAlertShowResponse(rsp *http.Response) (*TaskAlertShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskAlertShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TaskAlertSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTaskAlertSetResponse parses an HTTP response from a TaskAlertSetWithResponse call
+func ParseTaskAlertSetResponse(rsp *http.Response) (*TaskAlertSetResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskAlertSetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TaskAlertSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers TaskAlertSetResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseTaskAlertTestResponse parses an HTTP response from a TaskAlertTestWithResponse call
+func ParseTaskAlertTestResponse(rsp *http.Response) (*TaskAlertTestResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskAlertTestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TaskAlertTestAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers TaskAlertTestResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

@@ -18,6 +18,7 @@ import type { Environment, Service } from "@/lib/types";
 import { useDraftField } from "@/lib/use-draft-field";
 import { ArrowUpCircle, History } from "lucide-react";
 import { useState } from "react";
+import { DeployReleaseGroupDialog } from "@/features/release-group/release-group-operation-dialogs";
 
 export function DeployControls({
   env,
@@ -89,7 +90,11 @@ export function DeployDialog({
     ? env.services.find((s) => s.id === serviceId)
     : (env.services.find((s) => s.strategy === "blue-green") ??
       env.services[0]);
-  const [service, setService] = useState(defaultSvc?.id ?? "");
+  const [target, setTarget] = useState(`service:${defaultSvc?.id ?? ""}`);
+  const service = target.startsWith("service:") ? target.slice(8) : "";
+  const group = env.releaseGroups?.find(
+    (group) => target === `group:${group.id}`,
+  );
   const svc = env.services.find((s) => s.id === service);
   const [image, setImage] = useDraftField(svc?.image ?? "", service);
   const [strategy, setStrategy] = useDraftField<Service["strategy"]>(
@@ -97,6 +102,37 @@ export function DeployDialog({
     service,
   );
 
+  const targetSelector = (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor="dep-target">Deploy</Label>
+      <Select
+        id="dep-target"
+        searchable
+        value={target}
+        onValueChange={setTarget}
+        options={[
+          ...env.services.map((service) => ({
+            value: `service:${service.id}`,
+            label: `Service · ${service.name}`,
+          })),
+          ...(env.releaseGroups ?? []).map((group) => ({
+            value: `group:${group.id}`,
+            label: `Deployment group · ${group.name}`,
+          })),
+        ]}
+      />
+    </div>
+  );
+  if (group)
+    return (
+      <DeployReleaseGroupDialog
+        env={env}
+        group={group}
+        open={open}
+        onOpenChange={onOpenChange}
+        targetSelector={targetSelector}
+      />
+    );
   if (!svc)
     return <MissingServiceDialog open={open} onOpenChange={onOpenChange} />;
   const readinessError = deploymentReadinessError(svc, strategy);
@@ -114,20 +150,8 @@ export function DeployDialog({
       startLabel="Deploy"
       review={
         <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="dep-service">Service</Label>
-              <Select
-                searchable
-                id="dep-service"
-                value={service}
-                onValueChange={setService}
-                options={env.services.map((s) => ({
-                  value: s.id,
-                  label: s.name,
-                }))}
-              />
-            </div>
+          {targetSelector}
+          <div className="grid gap-3">
             <div className="flex flex-col gap-1">
               <Label htmlFor="dep-strategy">Strategy</Label>
               <Select
@@ -244,7 +268,7 @@ export function RollbackDialog({
       startLabel="Roll back"
       review={
         <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3">
             <div className="flex flex-col gap-1">
               <Label>Service</Label>
               <Select

@@ -1634,6 +1634,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/task-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read scoped Discord Task alert settings and last delivery status */
+        get: operations["task-alert.show"];
+        /** Save scoped Discord Task alerts; webhook value is write-only */
+        put: operations["task-alert.set"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/task-alerts/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a test Discord notification using the saved destination */
+        post: operations["task-alert.test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks": {
         parameters: {
             query?: never;
@@ -4646,6 +4681,55 @@ export interface components {
         TaskActionAvailability: {
             allowed: boolean;
             reason?: string;
+        };
+        TaskAlertSettings: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskAlertSettings.json
+             */
+            readonly $schema?: string;
+            console_url: string;
+            delivery_state: string;
+            enabled: boolean;
+            last_attempt_at?: string;
+            last_error?: string;
+            last_event_status?: string;
+            last_notification_id?: string;
+            last_task_id?: string;
+            revision: string;
+            webhook_configured: boolean;
+        };
+        TaskAlertSettingsWrite: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskAlertSettingsWrite.json
+             */
+            readonly $schema?: string;
+            console_url: string;
+            enabled: boolean;
+            expected_revision: string;
+            webhook_url?: string;
+        };
+        TaskAlertTestAccepted: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskAlertTestAccepted.json
+             */
+            readonly $schema?: string;
+            notification_id: string;
+            queued: boolean;
+        };
+        TaskAlertTestRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskAlertTestRequest.json
+             */
+            readonly $schema?: string;
+            expected_revision: string;
         };
         TaskAttempt: {
             agent_id?: string;
@@ -10023,6 +10107,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SoftwareReleaseCatalog"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "task-alert.show": {
+        parameters: {
+            query?: {
+                environment?: string;
+                platform?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAlertSettings"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "task-alert.set": {
+        parameters: {
+            query?: {
+                environment?: string;
+                platform?: boolean;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskAlertSettingsWrite"];
+            };
+        };
+        responses: {
+            /** @description Protected alert operation result */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAlertSettings"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "task-alert.test": {
+        parameters: {
+            query?: {
+                environment?: string;
+                platform?: boolean;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskAlertTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Protected alert operation result */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAlertTestAccepted"];
                 };
             };
             /** @description Error */

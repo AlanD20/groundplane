@@ -37,6 +37,13 @@ come from its owned container and immutable local image configuration. Its repor
 server version is a separate status observation, unavailable when that response
 cannot establish it. Neither comes from the next selected bootstrap image.
 
+## Task alert destination
+
+Platform settings includes a Discord destination for failed Tasks and Tasks needing
+attention that have no Environment scope. Configure Environment destinations in
+their own settings. See [Task alerts](tasks-and-logs.md#discord-task-alerts) for
+delivery status, retries, credential handling and the CLI/API equivalents.
+
 ## Controller configuration
 
 The Controller detail at `/platform/host/controller` shows its startup YAML.

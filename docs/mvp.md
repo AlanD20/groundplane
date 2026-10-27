@@ -62,6 +62,14 @@ predecessor settings while retaining the same data directory.
 | Script | A Service-associated manual action or deployment hook |
 | Release / Release Group | Immutable deployment history / an explicitly ordered group operation |
 | Task | Durable asynchronous work, including progress, failure, Retry and Abort |
+
+Task alerts have independently configured Discord destinations for each
+Environment and for the Platform. Environment-scoped Tasks use only their
+Environment destination; the Platform destination receives only Tasks without an
+Environment scope. New failure and needs-attention transitions queue notifications
+durably without making Task execution depend on Discord availability. Webhook
+credentials are encrypted and write-only. [Task alerts](features/tasks-and-logs.md#discord-task-alerts)
+defines delivery, retries and operator checks.
 | Runner | A Tenant-, Project- or Environment-owned isolated GitHub Actions runtime |
 | Component | A compiled integration using granted GP capabilities; not the Controller or Agent |
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useDraftField } from "@/lib/use-draft-field";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,8 @@ export function DeployReleaseGroupDialog({
   group,
   open,
   onOpenChange,
-}: OperationDialogProps) {
+  targetSelector,
+}: OperationDialogProps & { targetSelector?: ReactNode }) {
   const store = useStore();
   const params = useRequiredParams("tenant");
   const [tag, setTag] = useDraftField(group.tag ?? "", group.id);
@@ -56,6 +57,11 @@ export function DeployReleaseGroupDialog({
       startDisabled={!tag.trim()}
       review={
         <div className="flex flex-col gap-3">
+          {targetSelector}
+          <p className="text-sm text-muted-foreground">
+            Services deploy in order: {group.order.join(", ")}. Each Service
+            uses its configured deployment strategy.
+          </p>
           <div className="flex flex-col gap-1">
             <Label htmlFor="release-group-tag">Image tag</Label>
             <Input

@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import type { Environment } from "@/lib/types";
 import { TaskLink } from "@/components/common/task-link";
 import { useBackupRefresh } from "@/features/backup/use-backup-refresh";
+import { TaskAlertSettings } from "@/features/task-alerts/task-alert-settings";
 
 // ---- Shared-infra facts ----
 
@@ -75,6 +76,7 @@ export function SettingsCard({ env }: { env: Environment }) {
 
   return (
     <>
+      <TaskAlertSettings scope={env.id} />
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">

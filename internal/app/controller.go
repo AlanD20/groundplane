@@ -45,6 +45,7 @@ type Controller struct {
 	runners               controllerScheduler
 	resolverConfiguration controllerScheduler
 	localAgent            controllerScheduler
+	taskAlerts            controllerScheduler
 	attachMutations       *attachments.MutationService
 	container             ownedStore
 	etcdContainer         controllerEtcdLifecycle

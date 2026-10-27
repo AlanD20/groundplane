@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskalerts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -25,12 +26,18 @@ func readIdleEnvironmentMetadata(
 	)
 	poolKey := networkreservations.ZonePoolRegistryKey(environmentID)
 	stored, err := store.GetMany(ctx, keyvalue.GetManyRequest{
-		Keys: []string{policyKey, coordinationKey, poolKey}, Revision: revision,
+		Keys: []string{
+			policyKey,
+			coordinationKey,
+			poolKey,
+			taskalerts.ConfigKey(environmentID),
+			taskalerts.DeliveryKey(environmentID),
+		}, Revision: revision,
 	})
 	if err != nil {
 		return Effects{}, err
 	}
-	if stored == nil || stored.ReadRevision != revision || len(stored.Values) != 3 {
+	if stored == nil || stored.ReadRevision != revision || len(stored.Values) != 5 {
 		if stored != nil {
 			keyvalue.ClearValues(stored.Values)
 		}
@@ -71,11 +78,15 @@ func readIdleEnvironmentMetadata(
 			{Key: policyKey, ModRevision: keyvalue.RevisionOf(policy)},
 			{Key: coordinationKey, ModRevision: keyvalue.RevisionOf(coordination)},
 			{Key: poolKey, ModRevision: keyvalue.RevisionOf(pool)},
+			{Key: taskalerts.ConfigKey(environmentID), ModRevision: keyvalue.RevisionOf(stored.Values[3])},
+			{Key: taskalerts.DeliveryKey(environmentID), ModRevision: keyvalue.RevisionOf(stored.Values[4])},
 		},
 		mutations: []keyvalue.Mutation{
 			{Type: keyvalue.MutationDelete, Key: policyKey},
 			{Type: keyvalue.MutationDelete, Key: coordinationKey},
 			{Type: keyvalue.MutationDelete, Key: poolKey},
+			{Type: keyvalue.MutationDelete, Key: taskalerts.ConfigKey(environmentID)},
+			{Type: keyvalue.MutationDelete, Key: taskalerts.DeliveryKey(environmentID)},
 		},
 	}, nil
 }

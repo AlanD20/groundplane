@@ -49,7 +49,9 @@ export function projectReleaseSummary(
       deploys
         .filter(
           (deploy) =>
-            deploy.status === "superseded" && !activeTags.includes(deploy.tag),
+            deploy.state === "completed" &&
+            deploy.status === "superseded" &&
+            !activeTags.includes(deploy.tag),
         )
         .map((deploy) => deploy.tag),
     ),

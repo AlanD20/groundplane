@@ -31,6 +31,7 @@ func addCommands(root *cobra.Command, deps Dependencies) {
 		newRunnerCmd(),
 		newAgentCmd(),
 		newTaskCmd(),
+		newTaskAlertCmd(),
 		newActivityCmd(),
 		newHostCmd(),
 		newImageCmd(),

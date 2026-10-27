@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"sync"
 )
 
 // Run supervises HTTP, the local Agent channel, and the scheduler as one
@@ -19,30 +20,14 @@ func (c *Controller) Run(ctx context.Context) error {
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	schedulerDone := make(chan struct{})
-	go func() {
-		defer close(schedulerDone)
-		c.scheduler.Run(runCtx)
-	}()
-	localAgentDone := make(chan struct{})
-	go func() {
-		defer close(localAgentDone)
-		c.localAgent.Run(runCtx)
-	}()
-	runnersDone := make(chan struct{})
-	go func() {
-		defer close(runnersDone)
-		if c.runners != nil {
-			c.runners.Run(runCtx)
+	var workers sync.WaitGroup
+	for _, worker := range []controllerScheduler{c.scheduler, c.localAgent, c.runners, c.resolverConfiguration, c.taskAlerts} {
+		if worker == nil {
+			continue
 		}
-	}()
-	resolverDone := make(chan struct{})
-	go func() {
-		defer close(resolverDone)
-		if c.resolverConfiguration != nil {
-			c.resolverConfiguration.Run(runCtx)
-		}
-	}()
+		workers.Add(1)
+		go func(worker controllerScheduler) { defer workers.Done(); worker.Run(runCtx) }(worker)
+	}
 
 	type runtimeResult struct {
 		name string
@@ -86,10 +71,7 @@ func (c *Controller) Run(ctx context.Context) error {
 			cancel()
 		}
 	}
-	<-schedulerDone
-	<-localAgentDone
-	<-runnersDone
-	<-resolverDone
+	workers.Wait()
 
 	containerCloseErr := c.container.Close()
 	closeErr := c.store.Close()

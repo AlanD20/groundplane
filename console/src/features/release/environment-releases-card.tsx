@@ -3,6 +3,7 @@ import { useState } from "react";
 ("use client");
 
 import { History } from "lucide-react";
+import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Environment, Service } from "@/lib/types";
 import {
@@ -13,22 +14,32 @@ import {
 
 export function ReleasesCard({ env }: { env: Environment }) {
   const [query, setQuery] = useState("");
+  const [service, setService] = useState("all");
+  const [state, setState] = useState("all");
+  const [strategy, setStrategy] = useState("all");
   const table = useTableView(
-    env.deploys.filter((release) =>
-      `${release.service} ${release.tag} ${release.digest}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
+    env.deploys.filter(
+      (release) =>
+        (service === "all" || release.service === service) &&
+        (state === "all" ||
+          (state === "serving"
+            ? release.status === "active"
+            : release.state === state)) &&
+        (strategy === "all" || release.strategy === strategy) &&
+        `${release.service} ${release.tag} ${release.digest}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
     ),
     {
       service: (d) => d.service,
       tag: (d) => d.tag,
       strategy: (d) => d.strategy,
       when: (d) => Date.parse(d.when) || 0,
-      status: (d) => d.status,
+      status: (d) => d.state,
     },
     "when",
     "desc",
-    env.id,
+    `${env.id}/${query}/${service}/${state}/${strategy}`,
   );
   return (
     <Card>
@@ -51,6 +62,52 @@ export function ReleasesCard({ env }: { env: Environment }) {
             { value: "status", label: "Status" },
           ]}
         />
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            searchable
+            aria-label="Filter deployments by Service"
+            value={service}
+            onValueChange={setService}
+            options={[
+              { value: "all", label: "All Services" },
+              ...[...new Set(env.deploys.map((release) => release.service))]
+                .sort()
+                .map((name) => ({ value: name, label: name })),
+            ]}
+          />
+          <Select
+            aria-label="Filter deployment state"
+            value={state}
+            onValueChange={setState}
+            options={[
+              { value: "all", label: "All states" },
+              { value: "serving", label: "Serving" },
+              ...[...new Set(env.deploys.map((release) => release.state))]
+                .filter((value) => value !== "serving")
+                .sort()
+                .map((value) => ({ value, label: value.replaceAll("_", " ") })),
+            ]}
+          />
+          <Select
+            aria-label="Filter deployment strategy"
+            value={strategy}
+            onValueChange={setStrategy}
+            options={[
+              { value: "all", label: "All strategies" },
+              ...["recreate", "blue-green", "rolling"].map((value) => ({
+                value,
+                label: value,
+              })),
+            ]}
+          />
+          <span className="text-xs text-muted-foreground">
+            {table.field === "when"
+              ? table.direction === "desc"
+                ? "Newest first"
+                : "Oldest first"
+              : "Sorted by " + table.field}
+          </span>
+        </div>
         <div className="space-y-3">
           {table.rows.map((release) => (
             <ReleaseHistoryRow key={release.id} release={release} env={env} />

@@ -1,5 +1,11 @@
 # Services and Releases
 
+The Environment Deploy action selects either one Service or a deployment group.
+Group deployment uses its configured member order and each Service's release
+strategy. Deployment history defaults to newest-created first, including unfinished
+or failed attempts. Filter by Service, state or strategy, search the list, or change
+the date sort to oldest first.
+
 A Service is an Environment's declared workload. Saving its configuration changes
 desired state; it does not prove that the workload has been deployed. A Release
 records the exact inputs and outcome of a Deploy or Rollback. Live workload health

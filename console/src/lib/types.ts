@@ -222,6 +222,7 @@ export type DeployRecord = {
   strategy: ServiceStrategy; // the strategy chosen for THIS deployment
   when: string;
   status: "active" | "superseded";
+  state: string;
 };
 
 export type ReleaseGroupOnFailure = "switch_back" | "leave_active";

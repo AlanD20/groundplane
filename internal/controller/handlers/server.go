@@ -13,6 +13,7 @@ import (
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	"github.com/AlanD20/groundplane/internal/controller/hostterminal"
 	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
+	"github.com/AlanD20/groundplane/internal/controller/taskalerts"
 	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -35,6 +36,7 @@ type Server struct {
 	host                    HostReader
 	hostTerminals           *hostterminal.Manager
 	controllerConfig        NativeConfigStore
+	taskAlerts              *taskalerts.Service
 	etcdConfig              NativeConfigStore
 	etcdConfigApplier       EtcdConfigApplier
 	controllerUpdates       ControllerUpdater
@@ -120,6 +122,7 @@ type Options struct {
 	Host                    HostReader
 	HostTerminals           *hostterminal.Manager
 	ControllerConfig        NativeConfigStore
+	TaskAlerts              *taskalerts.Service
 	EtcdConfig              NativeConfigStore
 	EtcdConfigApplier       EtcdConfigApplier
 	ControllerUpdates       ControllerUpdater
@@ -213,6 +216,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		host:                    options.Host,
 		hostTerminals:           options.HostTerminals,
 		controllerConfig:        options.ControllerConfig,
+		taskAlerts:              options.TaskAlerts,
 		etcdConfig:              options.EtcdConfig,
 		etcdConfigApplier:       options.EtcdConfigApplier,
 		controllerUpdates:       options.ControllerUpdates,
@@ -296,6 +300,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	s.registerProjects()
 	s.registerBackingServices()
 	s.registerControllerConfig()
+	s.registerTaskAlerts()
 	s.registerEtcdConfig()
 	s.registerControllerUpdate()
 	s.registerSoftwarePreparation()

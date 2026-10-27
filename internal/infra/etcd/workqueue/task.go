@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskalerts"
 )
 
 type TaskSnapshot struct {
@@ -140,6 +141,11 @@ func taskChange(snapshot TaskSnapshot, next workexecution.Task) (Change, error) 
 		change.Mutations = append(change.Mutations, mutation)
 	}
 	updateRetentionIndex(&change, snapshot.Task, next)
+	alerts, err := taskalerts.PrepareTransition(snapshot.Task, next)
+	if err != nil {
+		return Change{}, err
+	}
+	change.Mutations = append(change.Mutations, alerts...)
 	return change, nil
 }
 

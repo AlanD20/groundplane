@@ -258,6 +258,17 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | UI-08 | Exercise GET/HEAD, HTML negotiation and browser cache reload after an upgrade. | Correct body/MIME/cache/security headers; new HTML resolves the matching assets; stale cached UI does not misreport an operation. | U |
 | UI-09 | Change resources through API while their Console collections are open; advance a Task, keep an unsaved form draft, and select an older Task page during refresh. | Visible data updates without reloading the document, active work invalidates resource reads before completion, and refresh preserves drafts and pagination. Hidden tabs pause periodic reads; focus/reconnect resumes them. | PARTIAL 2026-10-26: production Console dev server against installed QA passed external Tenant/Project creation, external Project name update with an unchanged unsaved draft, Page 2 retention and new Task visibility without document reload. Focus/reconnect and hidden-tab timing were not separately injected. Local checks cover active Task invalidation/deduplication and existing superseded-read, retry and deletion-merge behavior. |
 
+| UI-10 | Open Service-only bulk variables, choose a deployment group in the main Deploy dialog, and filter/sort deployment history. | Shared keys cannot be overwritten; new keys remain Service-only; group action uses its existing workflow; history includes failed/unfinished attempts newest-created first. | Local Console build and existing bulk edit behavior checks pass. Installed interaction verification pending. |
+
+## Task alert delivery
+
+| Case | Setup and action | Pass condition | Record |
+| --- | --- | --- | --- |
+| ALERT-01 | Save an encrypted webhook, lose/replay the save result, then reuse its key with another intent. | Original redacted revision replays; changed intent fails; no plaintext URL appears in durable records or responses. | PASS 2026-10-26: application integration over MVCC memory storage and real age encryption. Real etcd/network-loss injection not run. |
+| ALERT-02 | Queue Platform/Environment attention transitions; restart delivery before retry; disable a destination; persistently fail another. | Correct independent scopes; retry schedule survives a new worker; disabled delivery stops; five attempts exhaust and expose failure. | PASS 2026-10-26: actual service/repository/worker with a controlled sender. Real Discord delivery not run; no destination provided. |
+| ALERT-03 | Race a Task attention update with a stale duplicate transaction. | Only the successful Task CAS publishes its alert; a losing transition creates no orphan notification. | PASS 2026-10-26: native workqueue transaction with competing CAS. |
+| ALERT-04 | Return confirmed/unconfirmed success, rate limit, forbidden and redirect responses from the webhook transport. | Confirmation required; rate-limit delay honored; permanent rejection stops retries; private URL/body excluded from errors. | PASS 2026-10-26: HTTP client using controlled transport. Discord channel permissions and real delivery not qualified. |
+
 ## Blueprint authoring and reconciliation
 
 | Case | Setup and action | Pass condition | Record |

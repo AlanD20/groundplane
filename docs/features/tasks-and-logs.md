@@ -44,6 +44,38 @@ For CLI inspection, use `groundplane task show <id>`, then `task attempts`,
 `--after` and `--revision` select its work page. Command help and
 [API conventions](../api-cli.md) own the exact invocation and wire format.
 
+## Discord Task alerts
+
+Open Task alerts in Environment settings or Platform settings. Each destination
+is independent: Platform receives only Tasks without an Environment scope.
+Enable Discord notifications, enter a Discord webhook URL and Save alerts.
+The saved URL is encrypted and never returned. Leave its replacement field blank
+to keep it; Remove webhook disables notifications when saved. An optional Console
+origin adds a link to the exact Task.
+
+Send test queues a notification using the saved destination. Last delivery shows
+the result, time and relevant Task; a queued test is not a completed delivery.
+CLI equivalents are `groundplane task-alert show|set|test --platform`, or use the
+normal Environment scope. `set --webhook-url-file` reads a credential from a file
+or standard input; `--enabled=true` enables the destination. The API uses
+`GET/PUT /task-alerts` and `POST /task-alerts/test`, selecting `platform=true` or
+`environment=<id>`. Writes require an idempotency key and the current settings
+revision.
+
+New failed and needs-attention transitions enqueue one notification atomically
+with their Task update. Repeated reports of the same state do not enqueue again;
+a later retry that fails can produce another transition. Existing history is not
+backfilled. Notifications contain action, target, scope, Task identity and time,
+not captured inputs, Secrets or subprocess output.
+
+The Controller keeps pending delivery across restarts and makes at most five
+attempts, respecting rate-limit delays. Permanent webhook rejection stops retrying;
+delivery failure appears in settings and does not fail or block the original Task.
+Changing or disabling the destination cancels its older queued notifications.
+If Discord accepts a message but its reply is lost, a retry can deliver a duplicate.
+Deleting an Environment removes its alert settings. This is Task alerting, not
+availability or resource monitoring.
+
 ## Retry and cancellation
 
 Retry selects a work item and its exact recorded attempt. It retains the Task

@@ -8855,6 +8855,143 @@
         ],
         "type": "object"
       },
+      "TaskAlertSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/TaskAlertSettings.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "console_url": {
+            "type": "string"
+          },
+          "delivery_state": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "last_attempt_at": {
+            "type": "string"
+          },
+          "last_error": {
+            "type": "string"
+          },
+          "last_event_status": {
+            "type": "string"
+          },
+          "last_notification_id": {
+            "type": "string"
+          },
+          "last_task_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "webhook_configured": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "revision",
+          "enabled",
+          "webhook_configured",
+          "console_url",
+          "delivery_state"
+        ],
+        "type": "object"
+      },
+      "TaskAlertSettingsWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/TaskAlertSettingsWrite.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "console_url": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "webhook_url": {
+            "maxLength": 2048,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "expected_revision",
+          "enabled",
+          "console_url"
+        ],
+        "type": "object"
+      },
+      "TaskAlertTestAccepted": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/TaskAlertTestAccepted.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "notification_id": {
+            "type": "string"
+          },
+          "queued": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued",
+          "notification_id"
+        ],
+        "type": "object"
+      },
+      "TaskAlertTestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/TaskAlertTestRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "expected_revision": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "type": "object"
+      },
       "TaskAttempt": {
         "additionalProperties": false,
         "properties": {
@@ -18649,6 +18786,210 @@
         "summary": "List recent published component releases",
         "tags": [
           "Software"
+        ]
+      }
+    },
+    "/task-alerts": {
+      "get": {
+        "operationId": "task-alert.show",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "platform",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAlertSettings"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Read scoped Discord Task alert settings and last delivery status",
+        "tags": [
+          "Task alerts"
+        ]
+      },
+      "put": {
+        "operationId": "task-alert.set",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "platform",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskAlertSettingsWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAlertSettings"
+                }
+              }
+            },
+            "description": "Protected alert operation result",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Save scoped Discord Task alerts; webhook value is write-only",
+        "tags": [
+          "Task alerts"
+        ]
+      }
+    },
+    "/task-alerts/test": {
+      "post": {
+        "operationId": "task-alert.test",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "platform",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskAlertTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAlertTestAccepted"
+                }
+              }
+            },
+            "description": "Protected alert operation result",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Queue a test Discord notification using the saved destination",
+        "tags": [
+          "Task alerts"
         ]
       }
     },

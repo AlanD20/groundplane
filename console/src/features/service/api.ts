@@ -266,14 +266,19 @@ export function releaseForServiceName(
   serviceName: string,
 ): DeployRecord {
   const strategy =
-    release.strategy === "blue-green" ? "blue-green" : "recreate";
+    release.strategy === "blue-green"
+      ? "blue-green"
+      : release.strategy === "rolling"
+        ? "rolling"
+        : "recreate";
   return {
     id: release.id,
     service: serviceName,
     tag: release.tag,
     digest: release.digest ?? "",
     strategy,
-    when: release.completed_at ?? release.created_at,
+    when: release.created_at,
+    state: release.state,
     status: release.serving ? "active" : "superseded",
   };
 }

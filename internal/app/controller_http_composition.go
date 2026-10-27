@@ -17,6 +17,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
+	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/taskalerts"
 	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -65,6 +67,18 @@ type controllerHTTPDependencies struct {
 }
 
 func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Controller, error) {
+	alerts, alertWorker, err := taskalerts.NewRuntime(
+		dependencies.store,
+		dependencies.authority.idempotency,
+		dependencies.authority.intentCoordinator,
+		secretvalue.NewControllerKeyCipher(dependencies.authority.controllerKey),
+		dependencies.bootstrap.logger,
+	)
+	if err != nil {
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Task alerts: %w", err)
+	}
 	environmentDNS, err := environmentdns.NewService(dependencies.authority.environmentBlueprintRecords,
 		dependencies.authority.idempotency, dependencies.authority.intentCoordinator)
 	if err != nil {
@@ -323,6 +337,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		TaskMutations:           taskMutations,
 		TaskAborts:              taskAborts,
 		TaskInspection:          taskInspection,
+		TaskAlerts:              alerts,
 		AgentTaskWake:           dependencies.agentRuntime.Registry.WakeTaskDispatch,
 		TenantMutations:         dependencies.hierarchy.tenantMutations,
 		TenantChanges:           dependencies.hierarchy.tenantChanges,
@@ -344,6 +359,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		agent:           dependencies.agentRuntime,
 		scheduler:       maintenanceScheduler,
 		workExecution:   workRuntime,
+		taskAlerts:      alertWorker,
 		localAgent:      dependencies.platform,
 		attachMutations: dependencies.attachMutations,
 		container:       dependencies.platform,

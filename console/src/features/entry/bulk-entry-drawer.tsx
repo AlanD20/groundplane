@@ -71,8 +71,7 @@ export function BulkEntryDrawer({
         const visible = entries.filter(
           (entry) =>
             !serviceName ||
-            entry.exposure.includes("all") ||
-            entry.exposure.includes(serviceName),
+            (entry.exposure.length === 1 && entry.exposure[0] === serviceName),
         );
         const values = await loadBulkEntryValues(visible, (id) =>
           reveal.current(id),
@@ -108,7 +107,10 @@ export function BulkEntryDrawer({
       plan = planBulkEntryChanges(
         parseBulkEnvironmentEntries(bulkText),
         baseline,
-        { secret: bulkStorage === "secret", exposure: bulkExposure },
+        {
+          secret: bulkStorage === "secret",
+          exposure: serviceName ? [serviceName] : bulkExposure,
+        },
         outsideKeys,
       );
     } catch (error) {
@@ -171,7 +173,9 @@ export function BulkEntryDrawer({
       }}
     >
       <DialogHeader>
-        <DialogTitle>Bulk edit environment variables · {env.name}</DialogTitle>
+        <DialogTitle>
+          Bulk edit variables · {serviceName ?? env.name}
+        </DialogTitle>
       </DialogHeader>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
@@ -188,6 +192,13 @@ export function BulkEntryDrawer({
             KEY=value; multiline values use quoted \n escapes. Omitted keys stay
             unchanged.
           </p>
+          {serviceName && (
+            <p className="text-xs text-muted-foreground">
+              Only variables exposed exclusively to {serviceName} are editable
+              here. Shared variables stay unchanged. New variables are exposed
+              only to this Service.
+            </p>
+          )}
           {loading && (
             <p role="status" className="text-sm text-muted-foreground">
               Loading variables…
@@ -222,30 +233,34 @@ export function BulkEntryDrawer({
               ))}
             </div>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Exposure</Label>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={bulkExposure.includes("all") ? "default" : "outline"}
-                size="sm"
-                onClick={() => setBulkExposure(["all"])}
-              >
-                All services
-              </Button>
-              {env.services.map((service) => (
+          {!serviceName && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Exposure</Label>
+              <div className="flex flex-wrap gap-2">
                 <Button
-                  key={service.id}
-                  variant={
-                    bulkExposure.includes(service.name) ? "default" : "outline"
-                  }
+                  variant={bulkExposure.includes("all") ? "default" : "outline"}
                   size="sm"
-                  onClick={() => toggleBulkServiceExposure(service.name)}
+                  onClick={() => setBulkExposure(["all"])}
                 >
-                  {service.name}
+                  All services
                 </Button>
-              ))}
+                {env.services.map((service) => (
+                  <Button
+                    key={service.id}
+                    variant={
+                      bulkExposure.includes(service.name)
+                        ? "default"
+                        : "outline"
+                    }
+                    size="sm"
+                    onClick={() => toggleBulkServiceExposure(service.name)}
+                  >
+                    {service.name}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </fieldset>
         {!!plan?.replacedReferences.length && (
           <p role="status" className="break-words text-sm text-warning">

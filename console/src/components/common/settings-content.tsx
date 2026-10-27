@@ -7,6 +7,7 @@ import { useStore } from "@/lib/store";
 import { Settings } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { HostTerminalSettings } from "@/features/host-terminal/terminal-settings";
+import { TaskAlertSettings } from "@/features/task-alerts/task-alert-settings";
 
 export function SettingsContent({
   workspace,
@@ -33,6 +34,7 @@ export function SettingsContent({
         icon={<Settings />}
       />
       {workspace === "platform" ? <HostTerminalSettings /> : null}
+      {workspace === "platform" ? <TaskAlertSettings scope="platform" /> : null}
       <ResourcePanel title="Visualization">
         <div>
           <SettingsRow title="Appearance">

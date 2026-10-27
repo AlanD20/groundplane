@@ -492,15 +492,13 @@ export function EnvVarsCard({
         }
         actions={
           <div className="flex items-center gap-2">
-            {!service && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setBulkOpen(true)}
-              >
-                Bulk edit
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBulkOpen(true)}
+            >
+              Bulk edit
+            </Button>
             <CreationButton
               active={open || bulkOpen}
               variant="outline"

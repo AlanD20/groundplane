@@ -1,5 +1,11 @@
 # Volumes and Entries
 
+The Service Entries view offers bulk variable editing for Entries exposed only to
+that Service. Shared Entries are excluded and their keys cannot be overwritten
+there. New variables are exposed only to the selected Service. Use Environment
+Entries to edit shared configuration. Changes update managed files; running
+processes receive them on their next Deploy.
+
 Volumes provide persistent Environment-owned storage. Entries provide explicit
 configuration values as environment variables or files. Reusable Project and
 Platform Secrets are separate resources referenced by Entries.
