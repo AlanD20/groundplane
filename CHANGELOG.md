@@ -5,7 +5,7 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
-## 0.0.1 — pending publication
+## 0.0.1 — 2026-11-12
 
 Initial single-host release.
 

@@ -36,6 +36,13 @@ base digest is a reviewed contract change.
 Current source: [Agent Dockerfile](../../Dockerfile.agent) and
 [Agent release script](../../scripts/release-agent.sh).
 
+Installation preserves an already digest-pinned registry image reference. It
+does not copy public release indexes into the host registry: the host may cache
+only its native child, which is insufficient to republish the index. Locally
+built images still require publication to the managed registry before activation.
+Fresh installation and subsequent updates therefore use the same published
+Agent identity rather than introducing a host-specific mirror alias.
+
 The earlier image qualification covered `linux/amd64` only. Current release
 authority requires both supported platforms as described below; no other
 architecture is claimed.

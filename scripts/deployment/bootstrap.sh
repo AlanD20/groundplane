@@ -221,6 +221,12 @@ publish_image() {
     repository="localhost:5000/$repository_name"
     target_image="$repository:$version"
     source_id=$(docker image inspect "$source_image" --format '{{.Id}}')
+    # Registry-pinned inputs already have immutable publication authority. Keep
+    # that reference instead of re-pushing a partially cached multi-platform index.
+    if printf '%s\n' "$source_image" | grep -Eq '^[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}$'; then
+        printf '%s\n' "$source_image"
+        return 0
+    fi
     target_id=""
     target_ref=""
     if docker pull "$target_image" >/dev/null 2>&1; then
