@@ -2,6 +2,22 @@ package config
 
 import "testing"
 
+// Operator tailnet exposure must never redirect Runner/registry traffic onto
+// the tailnet or admit a public internal endpoint.
+func TestInternalEndpointRemainsPrivate(t *testing.T) {
+	for _, address := range []string{"127.0.0.1:8080", "172.17.0.1:8080", "100.100.1.2:8080", "0.0.0.0:8080"} {
+		t.Run(address, func(t *testing.T) {
+			cfg := validControllerConfig()
+			cfg.Listen.HTTP = []string{"127.0.0.1:8080", "100.100.1.2:8080"}
+			cfg.Listen.InternalHTTP = address
+			wantErr := address == "100.100.1.2:8080" || address == "0.0.0.0:8080"
+			if err := cfg.Validate(); (err != nil) != wantErr {
+				t.Fatalf("internal endpoint %s: %v", address, err)
+			}
+		})
+	}
+}
+
 // Rationale: the unauthenticated human API must retain loopback, permit only
 // explicit trusted private interfaces, and never accept wildcard or public binds.
 func TestControllerConfigValidateHumanHTTPListener(t *testing.T) {
@@ -14,6 +30,9 @@ func TestControllerConfigValidateHumanHTTPListener(t *testing.T) {
 	}{
 		{name: "default loopback address", addresses: []string{"127.0.0.1:8080"}},
 		{name: "explicit private address", addresses: []string{"127.0.0.1:8080", "192.168.1.10:8080"}},
+		{name: "tailnet address", addresses: []string{"127.0.0.1:8080", "100.64.0.1:8080"}},
+		{name: "tailnet upper boundary", addresses: []string{"127.0.0.1:8080", "100.127.255.255:8080"}},
+		{name: "outside tailnet", addresses: []string{"127.0.0.1:8080", "100.128.0.1:8080"}, wantErr: true},
 		{name: "documentation address", addresses: []string{"127.0.0.1:8080", "192.0.2.10:8080"}, wantErr: true},
 		{name: "lowest valid port", addresses: []string{"127.0.0.1:1"}},
 		{name: "highest valid port", addresses: []string{"127.0.0.1:65535"}},

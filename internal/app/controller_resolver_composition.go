@@ -52,7 +52,7 @@ func newControllerResolverComposition(
 		actionCatalog,
 		actionCatalog,
 		componentregistration.ManagedConfigActivateAction,
-		imagefetch.RegistryAddress(cfg.Listen.HTTP),
+		imagefetch.RegistryAddress(cfg.InternalAPI()),
 		zoneListeners,
 	)
 	if err != nil {

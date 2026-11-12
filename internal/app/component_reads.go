@@ -32,7 +32,7 @@ func newComponentReadService(
 		projections,
 		components,
 		baselines,
-		imagefetch.RegistryAddress(cfg.Listen.HTTP),
+		imagefetch.RegistryAddress(cfg.InternalAPI()),
 		zoneListeners,
 	)
 	if err != nil {

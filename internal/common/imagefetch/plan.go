@@ -13,16 +13,10 @@ import (
 const RegistryHostname = "registry.groundplane.internal"
 const RegistryAuthority = RegistryHostname + ":5000"
 
-// RegistryAddress follows the first trusted private Controller listener. A
-// loopback-only installation has no Runner admission or private registry access.
-func RegistryAddress(listeners []string) netip.Addr {
-	for _, listener := range listeners {
-		endpoint, err := netip.ParseAddrPort(listener)
-		if err == nil && endpoint.Addr().Is4() && endpoint.Addr().IsPrivate() {
-			return endpoint.Addr()
-		}
-	}
-	return netip.MustParseAddr("127.0.0.1")
+// RegistryAddress uses the validated internal endpoint, never an operator interface.
+func RegistryAddress(internal string) netip.Addr {
+	endpoint, _ := netip.ParseAddrPort(internal)
+	return endpoint.Addr()
 }
 
 // Plan contains no credentials. The manifest and config identities are selected

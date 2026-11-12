@@ -15,13 +15,15 @@ Initial single-host release.
   REST API.
 - Validate and apply Compose-compatible Blueprints with Groundplane extensions
   for managed resources and application configuration.
-- Deploy Services, inspect serving Releases, roll back and coordinate ordered
+- Deploy Services with recreate, blue-green or rolling strategies and configurable
+  healthchecks. Edit Service configuration or apply selected Services from a Blueprint.
+- Inspect serving Releases, roll back the image and coordinate ordered
   deployments through Release Groups.
-- Configure Zones, Routes, Caddy routing and Environment DNS through managed
-  Components.
+- Configure Zones, Routes, Caddy HTTP or Envoy HTTP/TCP/UDP routing and scoped
+  Environment DNS through managed Components.
 - Expose application Routes through Cloudflare Tunnel. Operators supply the
   Tunnel token and configure Cloudflare hostnames, DNS and origin policy.
-- Provision PostgreSQL and Valkey backing services and attach application
+- Provision PostgreSQL, Valkey and MySQL backing services and attach application
   consumers. Valkey requires an explicit choice of username/password,
   password-only or no authentication.
 - Share PostgreSQL through separate consumer databases and credentials, with
@@ -34,13 +36,22 @@ Initial single-host release.
 
 ### Operations
 
+- Expose the Console/API on an explicit Tailscale IPv4 address while retaining
+  loopback and a separate internal Runner API/registry endpoint. Tailnet
+  enrollment and access policy remain operator-managed.
+- Configure separate Platform and Environment Discord destinations for Task
+  failures and needs-attention transitions, with recorded delivery and bounded retries.
+- Use multiple host-terminal tabs with configurable input inactivity.
+- Edit Service-specific environment variables in bulk and filter/sort Release history.
+- Inspect image tags, immutable identities and container usage; fetch and remove
+  images through protected Tasks.
 - Inspect Host, Controller, Agent and Service health, workload logs and Activity.
 - Track durable Tasks and their events, with Retry and Abort where the operation
   permits them.
 - Perform guarded Controller and Agent updates with recorded update Tasks and
   recovery checks.
 - Capture and verify Environment configuration, managed Volumes and
-  credential-owning PostgreSQL Attach databases to S3-compatible storage.
+  credential-owning PostgreSQL and MySQL Attach databases to S3-compatible storage.
   Restore a verified Recovery Point to its original surviving target, with
   age encryption/key rotation, scheduled runs and per-source retention.
 - Retain Backup cleanup and Attach deprovisioning through hierarchy-deletion
@@ -99,7 +110,7 @@ Initial single-host release.
 
 ### Limits and deferred work
 
-- Config, Volume and PostgreSQL Backup/Restore have selected live capture,
+- Config, Volume, PostgreSQL and MySQL Backup/Restore have selected live capture,
   restore, key-era, retention and interruption proof on Ubuntu amd64. Full Gate B,
   other provider/archive/checkpoint and arm64 variants remain unqualified.
   Valkey and Custom Attach sources are unsupported. Privileged Backup staging
@@ -109,11 +120,12 @@ Initial single-host release.
   amd64. Full isolation, token-failure, concurrency, reboot and other platform
   variants remain unqualified. Runners are for trusted workflows, not hostile
   jobs; GitHub-side deregistration remains manual.
-- Blueprint Entry omission is implemented; omission of existing Services,
-  Zones, Attaches, Routes and persistent Volumes is rejected. Resource-level
-  latest-wins and same-Apply Custom hook facts remain unavailable. Use separate
-  supported removal actions; complete a Custom Attach before applying
-  configuration that consumes its facts.
+- Blueprint Apply supports resource-level reconciliation, protected omissions,
+  latest-wins settlement and same-Apply Custom hook facts. Persistent Volumes
+  and backing Zones with external consumers require separate protected removal.
+  Selected interruption/recovery journeys are qualified; not every fault variant.
+- Live Tailscale enrollment and remote client access remain unqualified.
+  Native Discord test delivery was confirmed on the disposable QA installation.
 - Packaging checks do not establish fresh-install qualification on every supported
   OS/architecture or guarantee uninterrupted upgrades for every workload.
 - This is a single-host release, not a multi-host or high-availability platform.

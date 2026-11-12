@@ -16,7 +16,10 @@ placement. Installation targets Ubuntu 24.04/26.04 and Debian 13; each combinati
 still needs its own qualification.
 
 The human API has no authentication. It defaults to loopback and may bind
-explicitly configured trusted private interfaces. Public addresses, wildcard
+explicitly configured trusted private or Tailscale IPv4 interfaces. A separate
+private internal endpoint serves Runner API access and selects the managed
+registry address; operator Tailscale listeners do not select those endpoints.
+Public addresses, wildcard
 listeners and application-Tunnel exposure are forbidden until an authentication
 design is accepted.
 

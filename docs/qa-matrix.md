@@ -268,6 +268,13 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | ALERT-02 | Queue Platform/Environment attention transitions; restart delivery before retry; disable a destination; persistently fail another. | Correct independent scopes; retry schedule survives a new worker; disabled delivery stops; five attempts exhaust and expose failure. | PASS 2026-10-26: actual service/repository/worker with a controlled sender. Real Discord delivery not run; no destination provided. |
 | ALERT-03 | Race a Task attention update with a stale duplicate transaction. | Only the successful Task CAS publishes its alert; a losing transition creates no orphan notification. | PASS 2026-10-26: native workqueue transaction with competing CAS. |
 | ALERT-04 | Return confirmed/unconfirmed success, rate limit, forbidden and redirect responses from the webhook transport. | Confirmation required; rate-limit delay honored; permanent rejection stops retries; private URL/body excluded from errors. | PASS 2026-10-26: HTTP client using controlled transport. Discord channel permissions and real delivery not qualified. |
+| ALERT-05 | Configure the supplied QA Platform webhook, send the native test notification and restore the original disabled destination. | Discord confirms the notification; delivery status identifies that notification as sent; no webhook bytes in evidence; original configuration restored. | PASS 2026-11-12 on QA .2, installed Controller7338b01bf. Notification op_01M77B4J131AHZ7WHAQMRTA4ES confirmed sent. This tests destination delivery, not an injected Task failure. |
+
+## Operator network access
+
+| Case | Setup and action | Pass condition | Record |
+| --- | --- | --- | --- |
+| ACCESS-01 | Configure loopback plus a Tailscale IPv4 listener and a separate private internal endpoint; reserve a not-yet-assigned tailnet socket and attempt a conflicting bind. | Tailnet operator address is accepted; public/wildcard/internal-tailnet endpoints are rejected; absent interface does not block binding; port conflict fails; closing releases the port. | Local configuration and socket checks pass 2026-11-12. Actual tailnet enrollment, remote Console/CLI/terminal access and host reboot are NOT RUN, deferred by operator. |
 
 ## Blueprint authoring and reconciliation
 

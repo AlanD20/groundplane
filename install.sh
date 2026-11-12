@@ -4,7 +4,7 @@ set -eu
 
 usage() {
     printf '%s\n' \
-        'Usage: sh install.sh [--version VERSION | --ref REF] [--listen-ip PRIVATE_IPV4]' \
+        'Usage: sh install.sh [--version VERSION | --ref REF] [--listen-ip OPERATOR_IPV4]' \
         '       [--bundle FILE --sha256 HEX] [--config FILE] [--stage-only]' \
         '       [--agent-only | --controller-only]' \
         'Ubuntu 24.04/26.04 or Debian 13, native amd64/arm64, root.' \

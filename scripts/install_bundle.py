@@ -103,8 +103,9 @@ def main() -> None:
     parser.add_argument("--agent-tag")
     args = parser.parse_args()
     address = ipaddress.ip_address(args.listen_ip)
-    if address.is_unspecified or address.is_multicast or not (address.is_private or address.is_loopback):
-        parser.error("listener must be an explicit trusted private or loopback IP")
+    if address.is_unspecified or address.is_multicast or not (address.is_private or address.is_loopback
+                    or address in ipaddress.ip_network("100.64.0.0/10")):
+        parser.error("listener must be an explicit trusted private, Tailscale or loopback IP")
     if address.version != 4:
         parser.error("this installer currently accepts an IPv4 listener only")
     if os.geteuid() != 0:

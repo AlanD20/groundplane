@@ -99,6 +99,25 @@ These values are safety invariants, not MVP configuration knobs. Current source:
 [HTTP lifecycle](../../internal/controller/handlers/http_lifecycle.go) and
 [listeners](../../internal/controller/handlers/listeners.go).
 
+### Operator tailnet and internal endpoints
+
+Operator listeners may include an exact Tailscale IPv4 address while retaining
+loopback. The Linux listener adapter uses per-socket `IP_FREEBIND` for that
+address so tailscaled startup order cannot prevent local Controller readiness.
+This reserves the address and port; it does not establish remote connectivity
+or bypass tailnet access policy. Direct HTTP uses Tailscale's encrypted transport;
+HTTPS forwarding and trusted-proxy headers are not part of this listener contract.
+
+Runner API and registry routing use the explicit `listen.internal_http` endpoint
+instead of choosing an operator interface. Fresh bootstrap selects the Docker
+bridge gateway, so restricting operator access to loopback and Tailscale does not
+require enrolling Runners in the tailnet. Configuration validation rejects
+Tailscale/public addresses for this internal endpoint.
+
+Owners: [config](../../internal/common/config/listeners.go),
+[socket binding](../../internal/infra/httplistener/listener.go) and
+[Runner network policy](../../internal/core/runner/network_policy.go).
+
 ## Console packaging
 
 The production Controller embeds the Vite output in one self-contained binary.

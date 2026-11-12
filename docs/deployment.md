@@ -58,7 +58,7 @@ Python, curl and CA certificates are installed
 when needed. A partial or mixed Docker installation is refused, not replaced.
 
 The unauthenticated Controller listens on loopback by default. To expose it on a
-trusted private interface, add `--listen-ip PRIVATE_IPV4`. Use
+trusted private or Tailscale IPv4 interface, add `--listen-ip OPERATOR_IPV4`. Use
 `--config /path/to/controller.yaml` for initial configuration, including suitable
 non-overlapping address pools. Bootstrap fills its pinned image selections.
 The installer does not configure public ingress, wildcard listeners or host
@@ -86,6 +86,38 @@ user and host with your own. If the CLI is also installed on your workstation,
 use `groundplane --host http://127.0.0.1:18080 host show` through the same tunnel.
 A configured private listener can be reached directly from its trusted network.
 Custom startup YAML may select a different HTTP port.
+For Tailscale operator access, enroll the host separately and add its exact
+Tailscale IPv4 address to `listen.http`, retaining loopback:
+
+```yaml
+listen:
+  http:
+    - 127.0.0.1:8080
+    - 100.101.102.103:8080
+  internal_http: 172.17.0.1:8080
+```
+
+Use the host's actual Tailscale address and Docker bridge gateway, not these
+example addresses. Save startup configuration, then restart the Controller.
+Visit `http://TAILSCALE_IP:8080`; the CLI uses that same origin with `--host`.
+[Tailscale encrypts the network transport](https://tailscale.com/docs/concepts/tailscale-ip-addresses). This direct HTTP listener does not
+configure Tailscale Serve, HTTPS certificates or tailnet access policy.
+
+Only exact IPv4 addresses in Tailscale's `100.64.0.0/10` range are accepted;
+public, wildcard and IPv6 listeners remain rejected. The Controller can bind its
+configured Tailscale address before the interface appears, so local operation
+does not depend on Tailscale startup order. Remote access requires the enrolled
+host and client to be connected with an allowing tailnet policy. Every client
+allowed to reach GP is a trusted operator with full API and host-terminal access.
+
+`listen.internal_http` is independent of operator listeners. Fresh installation
+sets it to the default Docker bridge gateway on port 8080 for Runner API access;
+the private registry uses that address on port 5000. Neither selects a Tailscale
+address. Manually configured installations default this endpoint to loopback;
+set an explicit private, container-reachable address before provisioning Runners.
+Existing installations must set this field explicitly when adopting this
+configuration; it is not inferred from their operator listeners.
+
 
 The Console and API share the Controller's HTTP listener. A successful host read
 checks control-plane access; it does not prove that an application is serving.

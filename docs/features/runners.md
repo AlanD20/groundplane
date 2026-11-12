@@ -66,10 +66,12 @@ Only trusted workflows should run here: they can manage other projects, shared
 Backing Services, Secrets and host-wide GP operations. Direct network isolation
 does not prevent actions that a workflow requests through GP.
 
-The image includes the GP CLI. Jobs receive `GROUNDPLANE_HOST` pointing to the
-first trusted private address in the Controller's `listen.http` configuration.
-A loopback-only Controller cannot create or retry a Runner: configure a private
-listener first. No public listener or API relay is created automatically.
+The image includes the GP CLI. Jobs receive `GROUNDPLANE_HOST` pointing to
+the Controller's explicit `listen.internal_http` endpoint. Installation sets
+this to the default Docker bridge gateway. A manual loopback-only internal
+endpoint cannot provision a Runner: configure a private container-reachable
+endpoint first. Operator LAN/Tailscale listeners do not select Runner API or
+registry addresses. No public listener or API relay is created automatically.
 
 The API remains private; Runner access does not require public exposure.
 

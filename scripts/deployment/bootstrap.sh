@@ -450,13 +450,22 @@ END {
 }
 ' "$rendered_config" > "$rendered_runner_config"
 
+internal_ip=$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}')
+if test -z "$internal_ip"; then
+    echo "Docker bridge gateway is required for internal GP access" >&2
+    exit 1
+fi
 rendered_listen_config="$deploy_dir/controller.listen.yaml.rendered"
-awk -v endpoint="$listen_ip:8080" '
+awk -v endpoint="$listen_ip:8080" -v internal="$internal_ip:8080" '
 BEGIN {
+    in_listen = 0
+    saw_internal = 0
     in_http = 0
     saw_endpoint = 0
     inserted = 0
 }
+$0 == "listen:" { in_listen = 1 }
+in_listen && /^  internal_http:/ { saw_internal = 1 }
 $0 == "  http:" {
     in_http = 1
 }
@@ -470,6 +479,10 @@ in_http && $0 != "  http:" && $0 !~ /^    - / && !inserted {
     inserted = 1
     in_http = 0
 }
+in_listen && /^[^ #]/ && $0 != "listen:" {
+    if (!saw_internal) print "  internal_http: " internal
+    in_listen = 0
+}
 {
     print
 }
@@ -477,6 +490,7 @@ END {
     if (in_http && !saw_endpoint) {
         print "    - " endpoint
     }
+    if (in_listen && !saw_internal) print "  internal_http: " internal
 }
 ' "$rendered_runner_config" > "$rendered_listen_config"
 if ! cmp -s "$rendered_listen_config" /etc/groundplane/controller.yaml; then

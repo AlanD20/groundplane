@@ -42,7 +42,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		runtimeDone <- runtimeResult{name: "run execution runtime", err: err}
 	}()
 	go func() {
-		err := c.server.Serve(runCtx, c.Config.Listen.HTTP)
+		err := c.server.Serve(runCtx, c.Config.HTTPAddresses())
 		if err == nil && runCtx.Err() == nil {
 			err = errors.New("http server stopped unexpectedly")
 		}

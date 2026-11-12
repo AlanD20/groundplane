@@ -41,7 +41,7 @@ func newControllerRunnerComposition(
 	}
 	runnerTokens := runnercapability.NewTokenBroker()
 	policy, err := corerunner.NewIsolationPolicy(
-		runnerPools.Runner.Network, []netip.Prefix{runnerPools.Environment, runnerPools.System}, cfg.Listen.HTTP,
+		runnerPools.Runner.Network, []netip.Prefix{runnerPools.Environment, runnerPools.System}, cfg.InternalAPI(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner network policy: %w", err)

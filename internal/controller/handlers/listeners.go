@@ -3,8 +3,8 @@ package handlers
 import (
 	"context"
 	"errors"
-	"net"
 
+	"github.com/AlanD20/groundplane/internal/infra/httplistener"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -20,7 +20,7 @@ func (s *Server) Serve(ctx context.Context, addresses []string) error {
 	}
 	listeners := make([]*readyListener, 0, len(addresses))
 	for _, address := range addresses {
-		listener, err := net.Listen("tcp", address)
+		listener, err := httplistener.Listen(ctx, address)
 		if err != nil {
 			for _, opened := range listeners {
 				_ = opened.Close() // Undo this call's partial binding only.

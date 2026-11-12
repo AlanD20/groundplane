@@ -22,6 +22,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/controllerendpoint"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
@@ -54,7 +55,8 @@ type ControllerConfig struct {
 		KeyPrefix string `yaml:"key_prefix"`
 	} `yaml:"etcd"`
 	Listen struct {
-		HTTP []string `yaml:"http"` // human API (REST/JSON)
+		HTTP         []string `yaml:"http"` // human API (REST/JSON)
+		InternalHTTP string   `yaml:"internal_http"`
 	} `yaml:"listen"`
 	Scheduler struct {
 		TickInterval string `yaml:"tick_interval"` // e.g. "30s"
@@ -105,6 +107,7 @@ func DefaultControllerConfig() ControllerConfig {
 	var c ControllerConfig
 	c.Etcd.KeyPrefix = "/groundplane/"
 	c.Listen.HTTP = []string{"127.0.0.1:8080"}
+	c.Listen.InternalHTTP = "127.0.0.1:8080"
 	c.Scheduler.TickInterval = "30s"
 	c.HostTerminal.InputInactivity = "15m"
 	c.Maintenance = DefaultMaintenanceConfig()
@@ -182,6 +185,11 @@ func (c ControllerConfig) Validate() error {
 	}
 	if err := validateHumanHTTPAddresses("controller listen.http", c.Listen.HTTP); err != nil {
 		return err
+	}
+	internal, err := netip.ParseAddrPort(c.Listen.InternalHTTP)
+	if err != nil || !internal.Addr().Is4() || internal.Port() == 0 ||
+		(internal.Addr() != netip.MustParseAddr("127.0.0.1") && !internal.Addr().IsPrivate()) {
+		return fmt.Errorf("config: controller listen.internal_http must be 127.0.0.1 or private IPv4 address:port")
 	}
 	tick, err := time.ParseDuration(c.Scheduler.TickInterval)
 	if err != nil {
@@ -363,8 +371,8 @@ func validateHumanHTTPAddresses(label string, addresses []string) error {
 		}
 		if endpoint.Addr() == netip.MustParseAddr("127.0.0.1") {
 			loopback = true
-		} else if !endpoint.Addr().IsPrivate() {
-			return fmt.Errorf("config: %s entries must be 127.0.0.1 or trusted private IPv4 addresses", label)
+		} else if !endpoint.Addr().IsPrivate() && !controllerendpoint.IsTailnet(endpoint.Addr()) {
+			return fmt.Errorf("config: %s entries must be loopback, private or Tailscale IPv4 addresses", label)
 		}
 		if _, duplicate := seen[endpoint]; duplicate {
 			return fmt.Errorf("config: %s entries must be unique", label)

@@ -14,8 +14,11 @@ runner:
 etcd:
   key_prefix: /groundplane/
 listen:
-  # Human API (REST/JSON). Keep loopback; add only explicit trusted private
+  # Operator API (REST/JSON). Keep loopback; add explicit trusted private or Tailscale
   # addresses. Wildcard and public addresses are rejected.
+  # Installer selects the Docker bridge gateway for Runner API/registry access.
+  # Manual installs default to loopback; set a private endpoint for Runners.
+  # internal_http: 172.17.0.1:8080
   http:
     - 127.0.0.1:8080
 scheduler:

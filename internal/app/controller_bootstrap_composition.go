@@ -77,7 +77,7 @@ func newControllerBootstrapComposition(
 			err,
 		)
 	}
-	if err := registryhost.Reconcile(ctx, imagefetch.RegistryAddress(cfg.Listen.HTTP)); err != nil {
+	if err := registryhost.Reconcile(ctx, imagefetch.RegistryAddress(cfg.InternalAPI())); err != nil {
 		return controllerBootstrapComposition{}, fmt.Errorf("controller: reconcile private registry: %w", err)
 	}
 	tick, err := time.ParseDuration(cfg.Scheduler.TickInterval)

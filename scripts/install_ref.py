@@ -183,8 +183,9 @@ def main() -> None:
     args = parser.parse_args()
     address = ipaddress.ip_address(args.listen_ip)
     if (address.version != 4 or address.is_unspecified or address.is_multicast
-            or not (address.is_private or address.is_loopback)):
-        parser.error("listener must be an explicit trusted private or loopback IPv4 address")
+            or not (address.is_private or address.is_loopback
+                    or address in ipaddress.ip_network("100.64.0.0/10"))):
+        parser.error("listener must be an explicit trusted private, Tailscale or loopback IPv4 address")
     if os.geteuid() != 0 or not re.fullmatch(r"[0-9a-f]{40}", args.commit):
         parser.error("root and an exact commit are required")
     output = args.deploy_dir
