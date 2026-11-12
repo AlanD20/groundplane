@@ -3,7 +3,6 @@ package etcd
 import (
 	"context"
 
-	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	activation "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
@@ -33,6 +32,10 @@ func (repository *TaskRepository) CreateSoftwareActivationWork(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(raw)
+	fence, err := repository.readSoftwareImageFence(ctx)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	change, err := workqueue.PrepareSmallGraph(task, items, marker)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -42,7 +45,7 @@ func (repository *TaskRepository) CreateSoftwareActivationWork(
 		change.Conditions,
 		keyvalue.Condition{Key: activation.Key(task.ID)},
 		keyvalue.Condition{Key: preparation.Key(prepared.Record.TaskID), ModRevision: prepared.Revision},
-		keyvalue.Condition{Key: imagefence.Key},
+		fence,
 	)
 	change.Mutations = append(
 		change.Mutations,

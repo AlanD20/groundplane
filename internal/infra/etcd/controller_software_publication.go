@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
@@ -45,19 +44,9 @@ func (repository *TaskRepository) CreateControllerSoftwareWork(
 		)
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if value := read.Values[1]; value != nil {
-		var fence struct {
-			Operation string `json:"operation"`
-		}
-		if json.Unmarshal(value.Value, &fence) != nil {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Host image cleanup fence is invalid")
-		}
-		if fence.Operation != "" {
-			return IdempotencyTransactionResult{}, errs.New(
-				errs.KindResourceInUse,
-				"Host image cleanup is in progress; wait before updating the Controller",
-			)
-		}
+	fence, err := softwareImageFence(read.Values[1])
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
 	}
 	var latestRevision int64
 	if read.Values[0] != nil {
@@ -69,7 +58,7 @@ func (repository *TaskRepository) CreateControllerSoftwareWork(
 	}
 	defer keyvalue.ClearMutationValues(work.Mutations)
 	work.Conditions = append(work.Conditions, keyvalue.Condition{Key: controllersoftware.InputKey(item.ID)},
-		keyvalue.Condition{Key: imagefence.Key, ModRevision: keyvalue.RevisionOf(read.Values[1])},
+		fence,
 		keyvalue.Condition{Key: controllersoftware.LatestKey, ModRevision: latestRevision})
 	work.Mutations = append(
 		work.Mutations,

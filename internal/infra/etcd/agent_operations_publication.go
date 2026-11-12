@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/imagefence"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -25,6 +24,10 @@ func (repository *TaskRepository) CreateAgentWork(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(input)
+	fence, err := repository.readSoftwareImageFence(ctx)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	work, err := workqueue.PrepareSingleTask(task, item, marker)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -33,7 +36,7 @@ func (repository *TaskRepository) CreateAgentWork(
 	work.Conditions = append(
 		work.Conditions,
 		keyvalue.Condition{Key: agentoperations.InputKey(item.ID)},
-		keyvalue.Condition{Key: imagefence.Key},
+		fence,
 	)
 	work.Mutations = append(
 		work.Mutations,
