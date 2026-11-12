@@ -75,8 +75,8 @@ class ReleaseAgentTest(unittest.TestCase):
                 print("Docker version 29.1.3, build release-test")
             elif arguments[0] == "run" and arguments[-3:] == ["compose", "version", "--short"]:
                 print("2.40.3")
-            elif arguments[0] == "run" and arguments[-1] == "compose-helper":
-                print("agent compose helper: validation.failed: incomplete input", file=sys.stderr)
+            elif arguments[0] == "run" and arguments[-1] == "release-helper":
+                print("agent Release helper: validation.failed: incomplete input", file=sys.stderr)
                 raise SystemExit(1)
             elif arguments[0] == "run" and "config" in arguments:
                 sys.stdin.read()

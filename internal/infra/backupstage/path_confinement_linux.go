@@ -168,7 +168,7 @@ func validateRegularFD(ctx context.Context, fd int, expectedSize int64, expected
 	if err := unix.Fstat(fd, &stat); err != nil {
 		return systemError("inspect staging file", err)
 	}
-	if stat.Mode&unix.S_IFMT != unix.S_IFREG || stat.Nlink != expectedLinks || stat.Uid != 0 || stat.Gid != 0 ||
+	if stat.Mode&unix.S_IFMT != unix.S_IFREG || uint64(stat.Nlink) != expectedLinks || stat.Uid != 0 || stat.Gid != 0 ||
 		stat.Mode&0o7777 != fileMode {
 		return validationError("staging file has unsafe metadata")
 	}

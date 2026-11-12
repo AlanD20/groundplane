@@ -79,10 +79,10 @@ printf 'services:\n  probe:\n    image: scratch\n' |
 		compose --project-name groundplane-release-probe --file - config --quiet --no-interpolate
 
 set +e
-helper_output="$(docker run --rm "$image" compose-helper </dev/null 2>&1)"
+helper_output="$(docker run --rm "$image" release-helper </dev/null 2>&1)"
 helper_status=$?
 set -e
-[[ $helper_status -eq 1 && "$helper_output" == 'agent compose helper:'* ]]
+[[ $helper_status -eq 1 && "$helper_output" == 'agent Release helper:'* ]]
 
 if [[ "$push" == false ]]; then
 	exit 0
