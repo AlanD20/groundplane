@@ -150,12 +150,6 @@ def setup(image: str, tag: str) -> None:
     os.umask(0o077)
     existing = inspect_existing(image)
     prepare_credentials(image)
-    target = image.split("@", 1)[0] + ":" + tag
-    tagged = subprocess.run(["docker", "image", "inspect", target], capture_output=True, text=True, timeout=30)
-    if tagged.returncode == 1:
-        run("docker", "tag", image, target)
-    elif tagged.returncode != 0:
-        raise subprocess.CalledProcessError(tagged.returncode, tagged.args)
     install_trust()
     DATA.parent.mkdir(mode=0o700, exist_ok=True)
     parent = DATA.parent.lstat()
@@ -178,6 +172,12 @@ def setup(image: str, tag: str) -> None:
     elif not existing["State"]["Running"]:
         run("docker", "start", existing["Id"], stdout=subprocess.DEVNULL)
     wait_ready()
+    target = image.split("@", 1)[0] + ":" + tag
+    tagged = subprocess.run(["docker", "image", "inspect", target], capture_output=True, text=True, timeout=30)
+    if tagged.returncode == 1:
+        run("docker", "tag", image, target)
+    elif tagged.returncode != 0:
+        raise subprocess.CalledProcessError(tagged.returncode, tagged.args)
 
 
 if __name__ == "__main__":
