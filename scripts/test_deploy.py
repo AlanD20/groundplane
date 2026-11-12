@@ -283,14 +283,15 @@ class DeployRollbackTest(unittest.TestCase):
             deploy_dir.mkdir()
             destination = root / "controller"
             backup = deploy_dir / "backup-controller"
-            destination.write_bytes(Path("/bin/sleep").read_bytes())
+            destination.write_bytes(Path("/bin/sh").read_bytes())
             destination.chmod(0o755)
             backup.write_bytes(Path("/bin/true").read_bytes())
             backup.chmod(0o701)
             (deploy_dir / "had-controller").touch()
 
-            # Multicall coreutils selects its program from argv[0], even after copying.
-            process = subprocess.Popen(["sleep", "30"], executable=str(destination))
+            # A shell builtin holds the copied executable open without depending
+            # on coreutils dispatch names or leaving a child sleep process behind.
+            process = subprocess.Popen([str(destination), "-c", "read -r marker"], stdin=subprocess.PIPE)
             try:
                 result = subprocess.run(
                     [
@@ -313,6 +314,8 @@ class DeployRollbackTest(unittest.TestCase):
             finally:
                 process.terminate()
                 process.wait(timeout=5)
+                if process.stdin is not None:
+                    process.stdin.close()
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue(process_was_running)
