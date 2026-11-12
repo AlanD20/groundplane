@@ -36,6 +36,13 @@ Initial single-host release.
 
 ### Operations
 
+- Retain readable local tags for installed platform images, using each artifact's
+  own release or commit identity while keeping execution pinned to digests.
+- Close Environment creation forms when their background Task is accepted;
+  progress remains available in Task notifications.
+- Use consistent empty, loading and error views across Environment collections,
+  hide unused pagination, and omit status summaries when nothing exists to observe.
+
 - Expose the Console/API on an explicit Tailscale IPv4 address while retaining
   loopback and a separate internal Runner API/registry endpoint. Tailnet
   enrollment and access policy remain operator-managed.

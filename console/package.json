@@ -47,9 +47,8 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.5",
     "openapi-typescript": "7.13.0",
-    "shadcn": "^4.8.0",
     "tailwindcss": "^4.3.3",
     "typescript": "5.7.3",
-    "vite": "8.2.1"
+    "vite": "8.3.8"
   }
 }
