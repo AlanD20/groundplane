@@ -41,6 +41,7 @@ CONTROLLER_UNIT = REPOSITORY_ROOT / "release" / "systemd" / "groundplane-control
 TMPFILES = REPOSITORY_ROOT / "packaging" / "tmpfiles.d" / "groundplane.conf"
 CONFIG_EXAMPLE = REPOSITORY_ROOT / "config" / "controller.yaml.example"
 REGISTRY_IMAGE = "registry@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"
+REGISTRY_TAG = "2.8.3"
 VERSION_PATTERN = re.compile(
     r"(?:dev|[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?)",
 )
@@ -121,7 +122,7 @@ if ! systemctl is-active --quiet docker.service; then
 fi
 docker version >/dev/null
 docker compose version >/dev/null
-""" + registry_setup_script(REGISTRY_IMAGE) + r"""
+""" + registry_setup_script(REGISTRY_IMAGE, REGISTRY_TAG) + r"""
 
 printf 'Docker: '
 docker --version

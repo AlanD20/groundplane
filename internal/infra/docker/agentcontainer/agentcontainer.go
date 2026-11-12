@@ -25,6 +25,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -93,6 +94,8 @@ type Lifecycle interface {
 }
 
 type engineClient interface {
+	ImageInspect(context.Context, string, ...client.ImageInspectOption) (client.ImageInspectResult, error)
+	ImageTag(context.Context, client.ImageTagOptions) (client.ImageTagResult, error)
 	ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error)
 	ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error)
 	ContainerStart(context.Context, string, client.ContainerStartOptions) (client.ContainerStartResult, error)
@@ -213,15 +216,24 @@ func (m *Manager) Reconcile(ctx context.Context, desired Desired) (Result, error
 	if err != nil {
 		return Result{}, err
 	}
+	if exists && !stateFromInspect(inspect).Owned {
+		return Result{}, unownedCollision()
+	}
+	image, err := m.client.ImageInspect(ctx, desired.Image)
+	if err != nil {
+		return Result{}, operationError(ctx, "inspect selected Agent image", err)
+	}
+	if image.Config != nil {
+		if err := managedimage.PreserveTag(ctx, m.client, desired.Image, managedimage.BuildTag(image.Config.Labels)); err != nil {
+			return Result{}, operationError(ctx, "preserve Agent image tag", err)
+		}
+	}
 	if !exists {
 		state, err := m.createAndStart(ctx, desired)
 		return Result{State: state, Action: ActionCreated}, err
 	}
 
 	state := stateFromInspect(inspect)
-	if !state.Owned {
-		return Result{}, unownedCollision()
-	}
 	if m.matchesDesired(inspect, desired) {
 		if state.Running {
 			return Result{State: state, Action: ActionNone}, nil

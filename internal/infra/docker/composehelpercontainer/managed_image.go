@@ -52,7 +52,10 @@ func (executor *Executor) prepareServiceImage(ctx context.Context, service *agen
 	}
 	observed, err := executor.engine.ImageInspect(ctx, service.GetImageReference())
 	if err == nil {
-		return verifyServiceImage(observed, service, managed)
+		if err := verifyServiceImage(observed, service, managed); err != nil {
+			return err
+		}
+		return executor.preserveServiceImageTag(ctx, service)
 	}
 	if !managed || !containerderrdefs.IsNotFound(err) {
 		return operationError(ctx, "inspect sealed service image", err)
@@ -73,7 +76,48 @@ func (executor *Executor) prepareServiceImage(ctx context.Context, service *agen
 	if err != nil {
 		return operationError(ctx, "inspect pulled managed image", err)
 	}
-	return verifyServiceImage(observed, service, true)
+	if err := verifyServiceImage(observed, service, true); err != nil {
+		return err
+	}
+	return executor.preserveServiceImageTag(ctx, service)
+}
+
+func (executor *Executor) preserveServiceImageTag(ctx context.Context, service *agentpb.ComposeService) error {
+	if service.GetImageSelectedTag() == "" {
+		return nil
+	}
+	// Name the captured index, not its child: tagging a child would create an
+	// independently listed duplicate beside an already cached multi-platform image.
+	index := service.GetImageRepository() + "@sha256:" + hex.EncodeToString(service.GetImageIndexDigest())
+	if _, err := executor.engine.ImageInspect(ctx, index); err != nil {
+		if !containerderrdefs.IsNotFound(err) {
+			return operationError(ctx, "inspect selected image index", err)
+		}
+		pull, err := executor.engine.ImagePull(ctx, index, client.ImagePullOptions{
+			Platforms: []ocispec.Platform{
+				{
+					OS:           service.GetImageOs(),
+					Architecture: service.GetImageArchitecture(),
+					Variant:      service.GetImageVariant(),
+				},
+			},
+		})
+		if err != nil {
+			return operationError(ctx, "pull selected image index", err)
+		}
+		if pull == nil {
+			return errs.New(errs.KindInternal, "selected image index pull returned no result")
+		}
+		waitErr := pull.Wait(ctx)
+		closeErr := pull.Close()
+		if err := errors.Join(waitErr, closeErr); err != nil {
+			return operationError(ctx, "complete selected image index pull", err)
+		}
+	}
+	if err := managedimage.PreserveTag(ctx, executor.engine, index, service.GetImageSelectedTag()); err != nil {
+		return operationError(ctx, "preserve selected image tag", err)
+	}
+	return nil
 }
 
 func verifyServiceImage(observed client.ImageInspectResult, service *agentpb.ComposeService, managed bool) error {

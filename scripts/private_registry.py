@@ -22,9 +22,9 @@ CONTAINER = "groundplane-registry"
 LABEL = "groundplane.registry.schema"
 
 
-def setup_script(image: str) -> str:
+def setup_script(image: str, tag: str) -> str:
     # Inline the same implementation into release bundles and remote setup.
-    return "\npython3 -c " + shlex.quote(Path(__file__).read_text()) + " " + shlex.quote(image) + "\n"
+    return "\npython3 -c " + shlex.quote(Path(__file__).read_text()) + " " + shlex.quote(image) + " " + shlex.quote(tag) + "\n"
 
 
 def run(*args: str, **kwargs) -> subprocess.CompletedProcess:
@@ -144,12 +144,18 @@ def wait_ready() -> None:
     raise RuntimeError("authenticated TLS registry did not become ready")
 
 
-def setup(image: str) -> None:
+def setup(image: str, tag: str) -> None:
     if os.geteuid() != 0:
         raise ValueError("registry setup requires root")
     os.umask(0o077)
     existing = inspect_existing(image)
     prepare_credentials(image)
+    target = image.split("@", 1)[0] + ":" + tag
+    tagged = subprocess.run(["docker", "image", "inspect", target], capture_output=True, text=True, timeout=30)
+    if tagged.returncode == 1:
+        run("docker", "tag", image, target)
+    elif tagged.returncode != 0:
+        raise subprocess.CalledProcessError(tagged.returncode, tagged.args)
     install_trust()
     DATA.parent.mkdir(mode=0o700, exist_ok=True)
     parent = DATA.parent.lstat()
@@ -176,7 +182,7 @@ def setup(image: str) -> None:
 
 if __name__ == "__main__":
     try:
-        setup(sys.argv[1])
+        setup(sys.argv[1], sys.argv[2])
     except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as error:
         # Never include captured subprocess output or credential documents.
         detail = str(error) if isinstance(error, ValueError) else type(error).__name__

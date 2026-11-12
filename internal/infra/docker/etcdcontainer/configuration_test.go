@@ -264,3 +264,11 @@ func (e *configEngine) ContainerStart(
 	e.current.State.Running = true
 	return client.ContainerStartResult{}, nil
 }
+
+func (*configEngine) ImageInspect(
+	context.Context,
+	string,
+	...client.ImageInspectOption,
+) (client.ImageInspectResult, error) {
+	return client.ImageInspectResult{}, nil
+}

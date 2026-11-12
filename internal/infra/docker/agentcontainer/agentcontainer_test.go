@@ -506,3 +506,14 @@ func (f *fakeEngine) Close() error {
 	f.closeCalls++
 	return f.closeErr
 }
+
+func (*fakeEngine) ImageInspect(
+	context.Context,
+	string,
+	...client.ImageInspectOption,
+) (client.ImageInspectResult, error) {
+	return client.ImageInspectResult{}, nil
+}
+func (*fakeEngine) ImageTag(context.Context, client.ImageTagOptions) (client.ImageTagResult, error) {
+	return client.ImageTagResult{}, nil
+}

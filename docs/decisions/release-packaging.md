@@ -43,6 +43,14 @@ built images still require publication to the managed registry before activation
 Fresh installation and subsequent updates therefore use the same published
 Agent identity rather than introducing a host-specific mirror alias.
 
+Readable local names are separate from execution authority. Bootstrap retains
+the selected release or commit recorded in each artifact, not the installing
+Controller's version. Managed runtime preparation names the captured index so
+its native child does not become a second tagged inventory entry. Ordinary
+reconciliation fills missing names without moving existing tags; explicit Fetch
+keeps its fenced reassignment path. A successful explicit Agent installation
+assigns that selected artifact's version name. Unknown provenance remains untagged.
+
 The earlier image qualification covered `linux/amd64` only. Current release
 authority requires both supported platforms as described below; no other
 architecture is claimed.

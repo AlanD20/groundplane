@@ -243,3 +243,7 @@ type memoryAddress string
 
 func (address memoryAddress) Network() string { return "memory" }
 func (address memoryAddress) String() string  { return string(address) }
+
+func (*fakeEngine) ImageTag(context.Context, client.ImageTagOptions) (client.ImageTagResult, error) {
+	return client.ImageTagResult{}, nil
+}

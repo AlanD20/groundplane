@@ -128,6 +128,7 @@ class BundleTests(unittest.TestCase):
             "arch": "amd64",
         }
         with mock.patch.object(install_bundle.subprocess, "run") as run, \
+                mock.patch.object(install_bundle.install_agent, "preserve_image_tag"), \
                 mock.patch.object(install_bundle.postgres16_tools, "install") as tools, \
                 mock.patch.object(install_bundle.os, "execvp") as execute, \
                 mock.patch.object(install_bundle.install_agent, "installed_image", return_value=self.agent), \

@@ -17,6 +17,42 @@ def pull_image(image):
     if image.split("/", 1)[0] in {"localhost:5000", "registry.groundplane.internal:5000"}:
         command += ["--config", "/etc/groundplane/registry/client"]
     subprocess.run([*command, "pull", image], check=True, timeout=600)
+    preserve_image_tag(image)
+
+
+def preserve_image_tag(image, *, replace=False):
+    """Retain a verified selection's name without changing its runtime reference."""
+    repository, separator, digest = image.rpartition("@")
+    if not separator or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+        raise ValueError("image tag preservation requires an immutable image")
+    if repository.rfind(":") > repository.rfind("/"):
+        target = repository
+    else:
+        inspected = json.loads(subprocess.check_output(
+            ["docker", "image", "inspect", image], text=True, timeout=30))[0]
+        labels = (inspected.get("Config") or {}).get("Labels") or {}
+        if labels.get("org.opencontainers.image.source") != "https://github.com/AlanD20/groundplane":
+            return
+        tag = labels.get("com.groundplane.image-tag", "")
+        if not tag and labels.get("com.groundplane.source-kind") == "source_ref":
+            tag = labels.get("org.opencontainers.image.revision", "")
+        if not tag and labels.get("com.groundplane.source-kind") == "release":
+            version = labels.get("com.groundplane.version") or labels.get("org.opencontainers.image.version", "")
+            version = version.removeprefix("agent/").removeprefix("controller/").removeprefix("v")
+            if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?", version):
+                tag = "v" + version
+        if not tag:
+            return
+        if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag):
+            raise ValueError("selected image has an invalid build tag")
+        target = repository + ":" + tag
+    if not replace:
+        existing = subprocess.run(["docker", "image", "inspect", target], capture_output=True, text=True, timeout=30)
+        if existing.returncode == 0:
+            return
+        if existing.returncode != 1:
+            raise subprocess.CalledProcessError(existing.returncode, existing.args)
+    subprocess.run(["docker", "tag", image, target], check=True, timeout=30)
 
 
 def current_image():
@@ -68,6 +104,7 @@ def install(image, *, allow_enroll=False):
         enrolling = absent or (active is not None and active["status"] not in TERMINAL and
                                active["release"] == enrollment_release)
         if not absent and (active is None or active["status"] in TERMINAL) and current_image() == image and agent["status"] == "healthy":
+            preserve_image_tag(image, replace=True)
             print("Agent is already installed and healthy; skipped.")
             return
         pull_image(image)
@@ -94,6 +131,7 @@ def install(image, *, allow_enroll=False):
                     raise ValueError(f"Agent update {state}; inspect retained Task and recovery evidence")
                 if current_image() != image:
                     raise ValueError("completed Agent update has a different runtime image")
+                preserve_image_tag(image, replace=True)
                 print("Agent update completed.")
                 return
             if state not in TASK_ACTIVE:

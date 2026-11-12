@@ -194,3 +194,71 @@ func managedService() *agentpb.ComposeService {
 		ImageOs:        "linux", ImageArchitecture: "amd64",
 	}
 }
+
+type taggedImageEngine struct {
+	*imageEngine
+	names map[string]string
+}
+
+func (engine *taggedImageEngine) ImageInspect(
+	ctx context.Context,
+	ref string,
+	options ...client.ImageInspectOption,
+) (client.ImageInspectResult, error) {
+	if ref == managedService().ImageReference {
+		return engine.imageEngine.ImageInspect(ctx, ref, options...)
+	}
+	if _, exists := engine.names[ref]; exists {
+		return client.ImageInspectResult{}, nil
+	}
+	return client.ImageInspectResult{}, containerderrdefs.ErrNotFound
+}
+
+func (engine *taggedImageEngine) ImagePull(
+	ctx context.Context,
+	ref string,
+	options client.ImagePullOptions,
+) (client.ImagePullResponse, error) {
+	engine.names[ref] = ref
+	return engine.imageEngine.ImagePull(ctx, ref, options)
+}
+
+func (engine *taggedImageEngine) ImageTag(
+	_ context.Context,
+	options client.ImageTagOptions,
+) (client.ImageTagResult, error) {
+	engine.names[options.Target] = options.Source
+	return client.ImageTagResult{}, nil
+}
+
+// IMG-05: a tagged native child would appear as a duplicate inventory row.
+// Preserve the selected index name while execution keeps its verified child.
+func TestManagedImageTagNamesIndexAndKeepsChildRuntime(t *testing.T) {
+	service := managedService()
+	service.ImageSelectedTag = "16-alpine"
+	engine := &taggedImageEngine{
+		imageEngine: &imageEngine{
+			fakeEngine: newFakeEngine(nil),
+			observed: client.ImageInspectResult{InspectResponse: image.InspectResponse{
+				ID: "sha256:" + hex.EncodeToString(service.ImageConfigDigest), Os: "linux", Architecture: "amd64",
+			}},
+			pullResult: &imagePull{},
+		},
+		names: make(map[string]string),
+	}
+	executor, err := NewWithEngine(engine, helperImage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := executor.prepareServiceImage(context.Background(), service); err != nil {
+		t.Fatal(err)
+	}
+	index := service.ImageRepository + "@sha256:" + hex.EncodeToString(service.ImageIndexDigest)
+	if engine.names[service.ImageRepository+":16-alpine"] != index ||
+		service.ImageReference != managedService().ImageReference {
+		t.Fatal("readable tag did not select the index independently of the pinned runtime child")
+	}
+	if len(engine.pulled) != 1 || engine.pulled[0] != index || !engine.pullResult.waited || !engine.pullResult.closed {
+		t.Fatal("selected index was not fully prepared before tagging")
+	}
+}

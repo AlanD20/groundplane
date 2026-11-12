@@ -30,7 +30,10 @@ case "$(uname -sm)" in
   *) printf 'managed PostgreSQL must be built natively on Linux amd64 or arm64\n' >&2; exit 2 ;;
 esac
 
+selected_tag=${image##*:}
+selected_tag=${selected_tag%"-$arch"}
 docker build --platform "linux/$arch" --file Dockerfile.postgres16-tools \
+  --build-arg "GP_IMAGE_TAG=$selected_tag" \
   --build-arg "BUILDARCH=$arch" --build-arg "TARGETARCH=$arch" \
   --build-arg "POSTGRES16_BASE=$base_image" --tag "$image" .
 printf 'Built native linux/%s image %s. Not published or qualified.\n' "$arch" "$image"

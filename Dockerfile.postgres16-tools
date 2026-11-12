@@ -50,6 +50,8 @@ RUN set -eu; mkdir -p /out/opt/groundplane/postgres16/bin /out/opt/groundplane/p
     && sha256sum bin/* lib/* client-gate helper release.json > SHA256SUMS
 
 FROM scratch
+ARG GP_IMAGE_TAG
 COPY --from=build /out/opt/ /opt/
 LABEL org.opencontainers.image.source="https://github.com/AlanD20/groundplane" \
+      com.groundplane.image-tag="${GP_IMAGE_TAG}" \
       org.opencontainers.image.title="Groundplane PostgreSQL 16 backup tools"

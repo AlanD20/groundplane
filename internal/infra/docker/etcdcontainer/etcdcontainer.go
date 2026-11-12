@@ -19,6 +19,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/infra/configdocument"
+	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -61,6 +62,7 @@ type engineClient interface {
 	ContainerRemove(context.Context, string, client.ContainerRemoveOptions) (client.ContainerRemoveResult, error)
 	ImagePull(context.Context, string, client.ImagePullOptions) (client.ImagePullResponse, error)
 	ImageInspect(context.Context, string, ...client.ImageInspectOption) (client.ImageInspectResult, error)
+	ImageTag(context.Context, client.ImageTagOptions) (client.ImageTagResult, error)
 	Close() error
 }
 
@@ -157,6 +159,9 @@ func (m *Manager) reconcile(ctx context.Context) error {
 		if _, err := m.client.ContainerStart(ctx, inspected.ID, client.ContainerStartOptions{}); err != nil {
 			return operationError(ctx, "start stopped container", err)
 		}
+	}
+	if err := managedimage.PreserveTag(ctx, m.client, Image, imageTag); err != nil {
+		return operationError(ctx, "preserve image tag", err)
 	}
 	return m.waitReady(ctx)
 }
