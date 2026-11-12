@@ -289,7 +289,8 @@ class DeployRollbackTest(unittest.TestCase):
             backup.chmod(0o701)
             (deploy_dir / "had-controller").touch()
 
-            process = subprocess.Popen([str(destination), "30"])
+            # Multicall coreutils selects its program from argv[0], even after copying.
+            process = subprocess.Popen(["sleep", "30"], executable=str(destination))
             try:
                 result = subprocess.run(
                     [
