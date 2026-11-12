@@ -124,7 +124,8 @@ Initial single-host release.
   latest-wins settlement and same-Apply Custom hook facts. Persistent Volumes
   and backing Zones with external consumers require separate protected removal.
   Selected interruption/recovery journeys are qualified; not every fault variant.
-- Live Tailscale enrollment and remote client access remain unqualified.
+- Tailscale Console/API/CLI and root-terminal access passed a selected Ubuntu
+  amd64 QA journey. Tailnet policy failures and host reboot remain unqualified.
   Native Discord test delivery was confirmed on the disposable QA installation.
 - Packaging checks do not establish fresh-install qualification on every supported
   OS/architecture or guarantee uninterrupted upgrades for every workload.

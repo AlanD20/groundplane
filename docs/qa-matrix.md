@@ -274,7 +274,8 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
-| ACCESS-01 | Configure loopback plus a Tailscale IPv4 listener and a separate private internal endpoint; reserve a not-yet-assigned tailnet socket and attempt a conflicting bind. | Tailnet operator address is accepted; public/wildcard/internal-tailnet endpoints are rejected; absent interface does not block binding; port conflict fails; closing releases the port. | Local configuration and socket checks pass 2026-11-12. Actual tailnet enrollment, remote Console/CLI/terminal access and host reboot are NOT RUN, deferred by operator. |
+| ACCESS-01 | Configure loopback plus a Tailscale IPv4 listener and a separate private internal endpoint; reserve a not-yet-assigned tailnet socket and attempt a conflicting bind. | Tailnet operator address is accepted; public/wildcard/internal-tailnet endpoints are rejected; absent interface does not block binding; port conflict fails; closing releases the port. | Local configuration and socket checks pass 2026-11-12. Host reboot is NOT RUN. Remote operator access is recorded separately in ACCESS-02. |
+| ACCESS-02 | Enroll an ephemeral QA host, add its exact tailnet listener, open the Console from another device, read Host through API/CLI, run a root UID check over a same-origin terminal WebSocket and terminate that session. | Console renders without errors; API/CLI identify the same Host; terminal returns UID 0 and confirms termination; loopback/internal API and registry remain separate; applications, etcd and host DNS survive. | PASS 2026-11-12 on Ubuntu amd64, installed Controller236d96d82. Two actual tailnet devices, 19 application containers preserved, etcd identity/start time and host DNS unchanged; registry remains on the private Docker bridge. No reboot or restrictive-policy fault injection. |
 
 ## Blueprint authoring and reconciliation
 
