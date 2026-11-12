@@ -1,9 +1,11 @@
 # Capability status and limits
 
-**GP is not fully qualified for production.** The architecture cleanup and test
-migration are integrated; local delivery checks do not qualify live hosting,
-upgrades or recovery. Earlier operator-journey passes apply only to their recorded
-builds and cases, not automatically to the restructured source.
+**0.0.1 has selected installation and upgrade qualification on Ubuntu 24.04
+amd64.** Public release publication, a tagged Controller/Agent upgrade, and
+released-candidate fresh/repeat installation passed. Image/bundle builds and anonymous
+downloads passed for amd64 and arm64; other installed-host platforms and broader
+failure variants remain unqualified. Earlier operator journeys apply only to
+their recorded builds and cases.
 
 The [QA matrix](qa-matrix.md) owns behavioral cases and variants.
 [Acceptance](acceptance.md#historical-evidence-register) owns historical results. This page summarizes gaps;
@@ -28,7 +30,7 @@ qualification of the replacement engine.
 | --- | --- | --- |
 | Task alerts | Independent encrypted Discord destinations for Environment Tasks and Platform Tasks without Environment scope; durable failure/needs-attention notifications, bounded retries, Console/CLI/API settings and test notification. | ALERT-01–04 qualify local replay, routing, retry and HTTP failure boundaries. Native Platform test delivery was confirmed by Discord on QA .2 on 2026-11-12; the original disabled destination was restored. Automatic failure/attention delivery to the real channel was not injected. This does not supply availability/resource monitoring. |
 | Operator tailnet access | Exact Tailscale IPv4 Console/API listeners retain loopback; dedicated internal API and registry addressing remains independent. Per-socket free binding avoids dependence on tailscaled boot order. | ACCESS-01 covers local configuration/socket startup. ACCESS-02 qualifies ephemeral enrollment and remote Console/API/CLI/root-terminal access on Ubuntu amd64. Host reboot, other clients and restrictive tailnet-policy failures remain unqualified. |
-| Host, Controller and Agent | Native Controller, owned Agent and independent etcd lifecycle; staged updates and recovery paths exist. Software preparation supports Controller, Agent or Both from source refs or component releases, with registry-pinned outputs and a separate Apply. [H97](acceptance.md#source-software-preparation-and-activation) qualifies selected source builds and normal activation on Ubuntu amd64. | Published artifact QA is deferred. Partial Both activation, broader interruption/replay, held connections, other operating systems and arm64 remain unqualified; historical passes are bounded. |
+| Host, Controller and Agent | Native Controller, owned Agent and independent etcd lifecycle; staged updates and recovery paths exist. Software preparation supports Controller, Agent or Both from source refs or component releases, with registry-pinned outputs and a separate Apply. [H97](acceptance.md#source-software-preparation-and-activation) qualifies selected source builds and normal activation on Ubuntu amd64. | Published 0.0.1 install/update evidence is recorded in PKG-01/02/04/05/06/08 of the [QA matrix](qa-matrix.md): final fresh/repeat and selected tagged upgrade PASS on Ubuntu 24.04 amd64. Partial Both activation, broader interruption/replay, held connections, other operating systems and arm64 runtime remain unqualified. |
 | Hierarchy and networking | Tenant/Project/Environment lifecycle, Zone reservations and aggregate deletion exist. | Current partial-failure, concurrency and physical-cleanup proof. Conflicting old Tasks are not repaired by admission guards. |
 | Environment DNS | Blueprint/export and Console/CLI/API share Environment-owned records, captured namespaces, stable targets and durable resolver updates. Internal-Zone DNS opt-in uses the shared CoreDNS instance. H105/H106/H108 qualify selected namespace, container resolution, opt-out and named-Service lifecycle journeys. | Broader supersession, concurrent claims and interrupted withdrawal/retention remain unqualified. Resolution is shared, not an Environment-private DNS view. |
 | Services and Release Groups | Lifecycle, immutable Releases, singleton blue-green, recreate, rolling and serial groups are integrated. H98 qualifies selected scaling, strategy transitions and supersession recovery; H109 qualifies image-only rolling rollback using current configuration. | Other counts, grouped hooks, held connections and broader interruption boundaries remain unqualified. Replicated blue-green is unsupported. |
