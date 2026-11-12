@@ -450,7 +450,8 @@ END {
 }
 ' "$rendered_config" > "$rendered_runner_config"
 
-internal_ip=$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}')
+bridge_gateways=$(docker network inspect bridge --format '{{range .IPAM.Config}}{{println .Gateway}}{{end}}')
+internal_ip=$(printf '%s\n' "$bridge_gateways" | awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }')
 if test -z "$internal_ip"; then
     echo "Docker bridge gateway is required for internal GP access" >&2
     exit 1
