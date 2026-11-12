@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { AnimatedSection } from "@/components/common/animated-section";
 import { useState, type ReactNode } from "react";
 import type { Environment, Zone } from "@/lib/types";
@@ -195,11 +196,15 @@ export function ZoneMap({
           )}
         </div>
         {!table.total && (
-          <p className="text-sm text-muted-foreground">
-            {env.zones.length
-              ? "No Zones match your search."
-              : "No Zones yet. Add a Zone to connect your Services."}
-          </p>
+          <EmptyState
+            embedded
+            title={env.zones.length ? "No matching Zones" : "No Zones yet"}
+            description={
+              env.zones.length
+                ? "Try another search."
+                : "Add a Zone to connect your Services."
+            }
+          />
         )}
         <TablePagination table={table} label="Zones" />
       </ResourcePanel>

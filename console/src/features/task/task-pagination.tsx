@@ -26,6 +26,13 @@ export function TaskPagination({
       .loadTaskJournal(surface, scope, cursor, pageSize)
       .catch(() => undefined);
   };
+  if (
+    !journal.entries.length &&
+    journal.pageIndex === 0 &&
+    !journal.nextCursor &&
+    !journal.scanLimited
+  )
+    return null;
 
   return (
     <nav

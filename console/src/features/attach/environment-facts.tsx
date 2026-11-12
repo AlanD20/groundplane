@@ -48,15 +48,6 @@ export function FactsCard({
       ];
     });
 
-  if (factGroups.length === 0)
-    return (
-      <EmptyState
-        icon={<Database />}
-        title="No connection values yet"
-        description="Connect a Service to a backing service. After provisioning, map its connection values to variables or files explicitly."
-      />
-    );
-
   return (
     <Card>
       <CardHeader>
@@ -66,10 +57,21 @@ export function FactsCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <p className="text-xs text-muted-foreground">
-          Connection outputs. Manage access in Backing connections; map values
-          in Variables & files.
-        </p>
+        {!factGroups.length && (
+          <EmptyState
+            embedded
+            icon={<Database />}
+            title="No connection values yet"
+            description="Connect a Service to a backing service to receive its connection values."
+          />
+        )}
+
+        {!!factGroups.length && (
+          <p className="text-xs text-muted-foreground">
+            Connection outputs. Manage access in Backing connections; map values
+            in Variables & files.
+          </p>
+        )}
         {factGroups.map((grp) => (
           <div key={grp.id} className="flex flex-col gap-2">
             <span className="font-mono text-xs text-muted-foreground">

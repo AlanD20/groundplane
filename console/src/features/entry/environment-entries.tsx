@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
 import {
   ResourceForm,
@@ -543,11 +544,19 @@ export function EnvVarsCard({
           {table.rows.map(renderEntry)}
         </ul>
         {!table.total && (
-          <p className="p-6 text-center text-xs text-muted-foreground">
-            {entries.length
-              ? "No Entries match your search."
-              : "No variables or files yet."}
-          </p>
+          <EmptyState
+            embedded
+            title={
+              entries.length
+                ? "No matching variables or files"
+                : "No variables or files yet"
+            }
+            description={
+              entries.length
+                ? "Try another search."
+                : "Add configuration values or files and select the Services that receive them."
+            }
+          />
         )}
         <TablePagination table={table} label="Variables & files" />
         <p className="mt-2 text-xs text-muted-foreground">

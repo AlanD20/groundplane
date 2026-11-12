@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
 
@@ -248,35 +249,43 @@ export function BackupsCard({ env }: { env: Environment }) {
           </div>
         </CardHeader>
         {points.loadError && (
-          <div className="mx-4 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            <span>{points.loadError}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={points.loading || points.loadingMore}
-              onClick={() =>
-                void store
-                  .loadRecoveryPoints(env.id, points.failedCursor ?? undefined)
-                  .catch(() => undefined)
-              }
-            >
-              Retry
-            </Button>
-          </div>
+          <EmptyState
+            embedded
+            error
+            title="Unable to load Recovery Points"
+            description={points.loadError}
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={points.loading || points.loadingMore}
+                onClick={() =>
+                  void store
+                    .loadRecoveryPoints(
+                      env.id,
+                      points.failedCursor ?? undefined,
+                    )
+                    .catch(() => undefined)
+                }
+              >
+                Retry
+              </Button>
+            }
+          />
         )}
         <CardContent aria-busy={points.loading || points.loadingMore}>
           {points.loading && !points.loaded && (
-            <p className="text-xs text-muted-foreground">
-              Loading verified Recovery Points...
-            </p>
+            <EmptyState embedded loading title="Loading Recovery Points" />
           )}
           {!points.loading &&
             !points.loadError &&
             points.loaded &&
             points.items.length === 0 && (
-              <p className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
-                No verified Recovery Points for this Environment.
-              </p>
+              <EmptyState
+                embedded
+                title="No Recovery Points yet"
+                description="Run a backup to create a verified Recovery Point."
+              />
             )}
           {points.items.length > 0 && (
             <RecoveryGroupsTable

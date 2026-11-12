@@ -47,12 +47,14 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
 
         {env.services.length < 2 ? (
           <EmptyState
+            embedded
             icon={<Workflow />}
             title="At least two services are required"
             description="Add another service before defining a coordinated deployment group."
           />
         ) : env.releaseGroups.length === 0 ? (
           <EmptyState
+            embedded
             icon={<Workflow />}
             title="No deployment groups"
             description="Deploy Services in a declared order under one Task and failure policy."

@@ -174,7 +174,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(
     () => () => {
       closeTaskStreams();
-      environmentMutations.close();
     },
     [],
   );
@@ -415,7 +414,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         state,
         update,
         lifecycle: environmentLifecycle,
-        providerActive,
         assertEnvironmentMutable,
         mutations: environmentMutations,
       }),

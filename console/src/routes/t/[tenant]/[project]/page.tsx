@@ -1,4 +1,5 @@
 import { CreationButton } from "@/components/common/creation-button";
+import { useEditorSession } from "@/components/common/editor-session";
 import { EnvironmentsTable } from "@/features/environment/environments-table";
 
 import { EmptyState } from "@/components/common/empty-state";
@@ -33,6 +34,7 @@ import { Link, useSearchParams } from "react-router-dom";
 export default function TenantProjectPage() {
   const params = useRequiredParams("tenant", "project");
   const store = useStore();
+  const editorSession = useEditorSession();
   const [search] = useSearchParams();
   const tenant = store.getTenant(params.tenant);
   const project = store.getProject(params.tenant, params.project);
@@ -172,6 +174,7 @@ export default function TenantProjectPage() {
                   slug,
                   networkPool.trim(),
                 );
+                editorSession?.finish();
                 setOpen(false);
                 setName("");
                 setNetworkPool("");

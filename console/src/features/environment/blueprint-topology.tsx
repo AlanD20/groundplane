@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { useId, useMemo, useState } from "react";
 import { TopologyCanvas } from "@/components/common/topology-canvas";
 import { Button } from "@/components/ui/button";
@@ -75,9 +76,11 @@ export function BlueprintTopology({
   const active = graph.nodes.find((n) => n.id === selected);
   if (!graph.nodes.length)
     return (
-      <p className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
-        No Services, Routes or connections yet.
-      </p>
+      <EmptyState
+        icon={<Layers />}
+        title="No topology yet"
+        description="Add Services, Routes or backing connections to see how they connect."
+      />
     );
   return (
     <section className="space-y-3" aria-label="Blueprint topology">

@@ -24,7 +24,6 @@ export type EnvironmentMutationIntent = {
   environmentId?: string;
   name?: string;
   networkPool?: string;
-  taskId?: string;
 };
 
 export function environmentMutationKey(
@@ -294,8 +293,6 @@ function decodeMutationIntent(
     (typeof candidate.name !== "string" ||
       typeof candidate.networkPool !== "string")
   )
-    return undefined;
-  if (candidate.taskId !== undefined && typeof candidate.taskId !== "string")
     return undefined;
   return candidate as EnvironmentMutationIntent;
 }

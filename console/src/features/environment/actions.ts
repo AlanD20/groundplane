@@ -1,4 +1,3 @@
-import type { RefObject } from "react";
 import type { operations } from "@/lib/api.generated";
 import type { Environment } from "@/lib/types";
 import type { EnvironmentLifecycle } from "@/features/environment/lifecycle-types";
@@ -6,14 +5,11 @@ import {
   findEnvironment,
   type EnvironmentRemovalDraft,
 } from "./environment-removal-model";
-import { requestTask, type TaskResponse } from "@/features/task/api";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { environmentMutationKey } from "@/features/environment/operation-storage";
 import { environmentFromAPI } from "@/features/environment/projection";
 import { applyAuthoritativeEnvironmentScalars } from "@/features/environment/authoritative-state";
-import { observeEnvironmentTask } from "@/features/environment/task-observation";
 import { newULID } from "@/lib/utils";
-import { listAllEnvironments } from "./workspace-read";
 import type { useEnvironmentMutationIntents } from "./use-mutation-intents";
 type EnvironmentCreateRequest =
   operations["environment.create"]["requestBody"]["content"]["application/json"];
@@ -46,7 +42,6 @@ type Options = {
   state: Workspace;
   update: (change: (draft: Workspace) => void) => void;
   lifecycle: EnvironmentLifecycle<Workspace>;
-  providerActive: RefObject<boolean>;
   assertEnvironmentMutable: (environmentId: string, operation: string) => void;
   mutations: ReturnType<typeof useEnvironmentMutationIntents>;
 };
@@ -54,7 +49,6 @@ export function createEnvironmentActions({
   state,
   update,
   lifecycle,
-  providerActive,
   assertEnvironmentMutable,
   mutations,
 }: Options): EnvironmentActions {
@@ -68,7 +62,6 @@ export function createEnvironmentActions({
   } = lifecycle;
   const {
     environmentMutationIntents,
-    environmentTaskControllers,
     persistEnvironmentMutationIntent,
     clearEnvironmentMutationIntent,
   } = mutations;
@@ -84,7 +77,7 @@ export function createEnvironmentActions({
         name,
         networkPool,
       ]);
-      let intent = environmentMutationIntents.current.get(key) ?? {
+      const intent = environmentMutationIntents.current.get(key) ?? {
         key,
         kind: "create" as const,
         idempotencyKey: `groundplane:${newULID()}`,
@@ -93,103 +86,17 @@ export function createEnvironmentActions({
         networkPool,
       };
       persistEnvironmentMutationIntent(intent);
-      let observedTaskStatus: TaskResponse["task"]["status"] | undefined;
       try {
-        const accepted = intent.taskId
-          ? { task_id: intent.taskId }
-          : await controllerRequest<EnvironmentTaskAccepted>(
-              "/environments",
-              202,
-              {
-                method: "POST",
-                body,
-                idempotencyKey: intent.idempotencyKey,
-              },
-            );
+        const accepted = await controllerRequest<EnvironmentTaskAccepted>(
+          "/environments",
+          202,
+          { method: "POST", body, idempotencyKey: intent.idempotencyKey },
+        );
         if (!accepted.task_id)
           throw new Error("Controller response is missing create task_id");
-        if (!intent.taskId) {
-          intent = { ...intent, taskId: accepted.task_id };
-          persistEnvironmentMutationIntent(intent);
-        }
-        const observationController = new AbortController();
-        environmentTaskControllers.current.add(observationController);
-        let task: TaskResponse;
-        try {
-          task = await observeEnvironmentTask(
-            requestTask,
-            accepted.task_id,
-            providerActive,
-            observationController.signal,
-          );
-        } finally {
-          environmentTaskControllers.current.delete(observationController);
-        }
-        observedTaskStatus = task.task.status;
-        if (
-          task.task.id !== accepted.task_id ||
-          task.task.action !== "create" ||
-          !task.task.target_id
-        ) {
-          clearEnvironmentMutationIntent(key);
-          throw new Error(
-            `Controller create Task ${accepted.task_id} did not identify an Environment target`,
-          );
-        }
-        if (task.task.scope.project_id !== projectId) {
-          clearEnvironmentMutationIntent(key);
-          throw new Error(
-            `Controller create Task ${accepted.task_id} belongs to a different Project`,
-          );
-        }
-        if (task.task.status !== "succeeded") {
-          clearEnvironmentMutationIntent(key);
-          throw new Error(
-            `Controller create Task ${accepted.task_id} ${task.task.status}`,
-          );
-        }
-        const environments = await listAllEnvironments(projectId);
-        const created = environments.find(
-          (environment) =>
-            environment.id === task.task.target_id &&
-            environment.projectId === projectId,
-        );
-        if (!created) {
-          clearEnvironmentMutationIntent(key);
-          throw new Error(
-            `Controller did not publish Environment for task ${accepted.task_id}`,
-          );
-        }
-        const generation = nextEnvironmentGeneration(created.id, "create");
-        update((draft) => {
-          if (
-            (environmentGenerations.current.get(created.id) ?? 0) !== generation
-          )
-            return;
-          const project = draft.tenantProjects.find(
-            (candidate) => candidate.id === projectId,
-          );
-          if (!project) return;
-          project.environments = project.environments ?? [];
-          const index = project.environments.findIndex(
-            (environment) => environment.id === created.id,
-          );
-          if (index >= 0) project.environments[index] = created;
-          else project.environments.push(created);
-        });
-        if (created.provisioningState === "failed") {
-          settleEnvironmentMutation(created.id, generation, "failed");
-          clearEnvironmentMutationIntent(key);
-          throw new Error(
-            `Controller Environment ${created.id} provisioning failed`,
-          );
-        }
-        settleEnvironmentMutation(created.id, generation, "succeeded");
         clearEnvironmentMutationIntent(key);
         return accepted;
       } catch (error) {
-        if (observedTaskStatus && observedTaskStatus !== "succeeded")
-          clearEnvironmentMutationIntent(key);
         const message =
           error instanceof Error
             ? error.message

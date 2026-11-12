@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
 import {
   ResourceForm,
@@ -154,16 +155,20 @@ export function AttachesCard({
             />
           </div>
         ))}
-        {attaches.length === 0 && (
-          <div className="text-xs text-muted-foreground">
-            No connections yet. Connect a database or another backing service to
-            get started.
-          </div>
-        )}
-        {attaches.length > 0 && !table.total && (
-          <p className="p-6 text-center text-xs text-muted-foreground">
-            No connections match your search.
-          </p>
+        {!table.total && (
+          <EmptyState
+            embedded
+            title={
+              attaches.length
+                ? "No matching connections"
+                : "No backing connections yet"
+            }
+            description={
+              attaches.length
+                ? "Try another search."
+                : "Connect a backing service to share its database, cache or other resources."
+            }
+          />
         )}
         <TablePagination table={table} label="Connections" />
       </CardContent>

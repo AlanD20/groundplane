@@ -209,6 +209,7 @@ export function TablePagination({
   };
   label?: string;
 }) {
+  if (!table.total) return null;
   return (
     <nav
       aria-label={`${label} pagination`}

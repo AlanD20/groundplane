@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
 import { Fragment, useState } from "react";
 import { Plus, RefreshCw, Pencil, Trash2 } from "lucide-react";
@@ -154,12 +155,12 @@ export function EnvironmentDNSPanel({ env }: { env: Environment }) {
           Add record
         </CreationButton>
       </div>
-      {dns.loading && (
+      {dns.loading && visibleRows.length > 0 && (
         <p role="status" className="text-sm text-muted-foreground">
           Loading DNS records…
         </p>
       )}
-      {dns.error && (
+      {dns.error && visibleRows.length > 0 && (
         <p role="alert" className="text-sm text-destructive">
           {dns.error}
         </p>
@@ -331,15 +332,29 @@ export function EnvironmentDNSPanel({ env }: { env: Environment }) {
             ))}
             {!visibleRows.length && (
               <TableRow>
-                <TableCell
-                  colSpan={4}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  {dns.loading
-                    ? "Loading…"
-                    : query
-                      ? "No matching DNS records."
-                      : "No DNS records in this Environment."}
+                <TableCell colSpan={4} className="p-0">
+                  <EmptyState
+                    embedded
+                    loading={dns.loading}
+                    error={!!dns.error}
+                    title={
+                      dns.error
+                        ? "Unable to load DNS records"
+                        : dns.loading
+                          ? "Loading DNS records"
+                          : query
+                            ? "No matching DNS records"
+                            : "No DNS records yet"
+                    }
+                    description={
+                      dns.error ??
+                      (dns.loading
+                        ? undefined
+                        : query
+                          ? "Try another search."
+                          : "Add a hostname pointing to an IP address or a Service.")
+                    }
+                  />
                 </TableCell>
               </TableRow>
             )}

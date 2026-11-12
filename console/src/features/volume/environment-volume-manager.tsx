@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
 import { AnimatedSection } from "@/components/common/animated-section";
@@ -439,11 +440,17 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
           </InlineEditorRegion>
         ))}
         {table.total === 0 && (
-          <p className="p-6 text-center text-xs text-muted-foreground">
-            {env.volumes.length
-              ? "No Volumes match your search."
-              : "No Volumes yet."}
-          </p>
+          <EmptyState
+            embedded
+            title={
+              env.volumes.length ? "No matching Volumes" : "No Volumes yet"
+            }
+            description={
+              env.volumes.length
+                ? "Try another search."
+                : "Create a Volume to keep Service data between deployments."
+            }
+          />
         )}
         <TablePagination table={table} label="Volumes" />
       </CardContent>

@@ -1,9 +1,11 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { HelpHint, ResourcePanel } from "@/components/common/resource-panel";
 import { TaskJournalItem } from "@/components/common/task-journal-item";
 import { ResourceTable } from "@/components/common/resource-table";
 import {
   Table,
   TableBody,
+  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -196,41 +198,36 @@ export function TaskList({
         </div>
       }
     >
-      {journal.loading && (
+      {journal.loading && visible.length > 0 && (
         <p role="status" className="text-xs text-muted-foreground">
           Loading Tasks…
         </p>
       )}
       {journal.loadError && (
-        <div
-          role="alert"
-          className="flex items-center justify-between gap-3 text-xs text-destructive"
-        >
-          <span>{journal.loadError}</span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              void store
-                .loadTaskJournal(
-                  surface,
-                  scope,
-                  journal.failedCursor ?? undefined,
-                )
-                .catch(() => undefined)
-            }
-          >
-            Retry
-          </Button>
-        </div>
-      )}
-      {!journal.loading && visible.length === 0 && (
-        <p className="py-4 text-center text-xs text-muted-foreground">
-          {journal.scanLimited
-            ? "No matches in this history segment. Continue to search older Tasks."
-            : "No recorded Tasks match these filters."}
-        </p>
+        <EmptyState
+          embedded
+          error
+          title="Unable to load Tasks"
+          description={journal.loadError}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                void store
+                  .loadTaskJournal(
+                    surface,
+                    scope,
+                    journal.failedCursor ?? undefined,
+                  )
+                  .catch(() => undefined)
+              }
+            >
+              Retry
+            </Button>
+          }
+        />
       )}
       <ResourceTable>
         <Table aria-label={title}>
@@ -247,6 +244,36 @@ export function TaskList({
             </TableRow>
           </TableHeader>
           <TableBody>
+            {!visible.length && !journal.loadError && (
+              <TableRow>
+                <TableCell colSpan={6} className="p-0">
+                  <EmptyState
+                    embedded
+                    loading={journal.loading}
+                    title={
+                      journal.loading
+                        ? "Loading Tasks"
+                        : filter !== "all" ||
+                            resource !== "all" ||
+                            operation !== "all"
+                          ? "No matching Tasks"
+                          : "No Tasks yet"
+                    }
+                    description={
+                      journal.loading
+                        ? undefined
+                        : journal.scanLimited
+                          ? "Continue to search older Tasks."
+                          : filter !== "all" ||
+                              resource !== "all" ||
+                              operation !== "all"
+                            ? "Try another filter."
+                            : "Operations in this Environment appear here as they are submitted."
+                    }
+                  />
+                </TableCell>
+              </TableRow>
+            )}
             {visible.map((task) => (
               <TaskJournalItem
                 key={task.id}

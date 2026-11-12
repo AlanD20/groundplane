@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
 import { AnimatedSection } from "@/components/common/animated-section";
@@ -222,16 +223,18 @@ export function ScriptsCard({ env }: { env: Environment }) {
               </div>
             </InlineEditorRegion>
           ))}
-          {env.scripts.length === 0 && (
-            <p className="text-xs text-muted-foreground">
-              No Scripts configured. Add a Script to run manually or as a
-              deployment hook.
-            </p>
-          )}
-          {env.scripts.length > 0 && !table.total && (
-            <p className="p-6 text-center text-xs text-muted-foreground">
-              No Scripts match your search.
-            </p>
+          {!table.total && (
+            <EmptyState
+              embedded
+              title={
+                env.scripts.length ? "No matching Scripts" : "No Scripts yet"
+              }
+              description={
+                env.scripts.length
+                  ? "Try another search."
+                  : "Add a Script to run manually or as a deployment hook."
+              }
+            />
           )}
           <TablePagination table={table} label="Scripts" />
         </CardContent>

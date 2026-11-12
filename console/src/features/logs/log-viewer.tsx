@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { LogLine, LogSource } from "./log-line";
 ("use client");
 
@@ -287,15 +288,24 @@ export function LogStream({ target }: { target: LogTarget }) {
         className="h-[60vh] min-h-72 overflow-auto rounded-xl border border-border bg-card p-3 font-mono text-sm"
       >
         {visible.length === 0 ? (
-          <p className="text-muted-foreground">
-            {events.length > 0
-              ? "No loaded lines match these filters."
-              : !started
-                ? "Open a stream to read container output."
+          <EmptyState
+            embedded
+            loading={streaming && !events.length}
+            title={
+              events.length
+                ? "No matching log lines"
                 : streaming
-                  ? "Waiting for container output…"
-                  : "No log lines returned. There may be no deployed workload, or its containers have not written output."}
-          </p>
+                  ? "Waiting for container output"
+                  : "No log output yet"
+            }
+            description={
+              events.length
+                ? "Try another search or filter."
+                : !started
+                  ? "Open a stream to read container output."
+                  : "Containers may not have written output, or no workload is deployed."
+            }
+          />
         ) : (
           visible.map((event) => (
             <LogLine

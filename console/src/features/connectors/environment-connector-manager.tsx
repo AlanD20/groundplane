@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
 import { AnimatedSection } from "@/components/common/animated-section";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
@@ -180,31 +181,21 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
           />
 
           {store.connectorsLoading ? (
-            <p
-              className="rounded-lg border border-border bg-surface px-3 py-4 text-sm text-muted-foreground"
-              role="status"
-            >
-              Loading destinations…
-            </p>
+            <EmptyState embedded loading title="Loading backup destinations" />
           ) : store.connectorError ? (
-            <p
-              className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm text-destructive"
-              role="alert"
-            >
-              {store.connectorError}
-            </p>
+            <EmptyState
+              embedded
+              error
+              title="Unable to load backup destinations"
+              description={store.connectorError}
+            />
           ) : connectors.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border px-4 py-8 text-center">
-              <Plug className="size-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">
-                  No backup destinations yet
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Create one before enabling backups.
-                </p>
-              </div>
-            </div>
+            <EmptyState
+              embedded
+              icon={<Plug />}
+              title="No backup destinations yet"
+              description="Add a destination before enabling backups."
+            />
           ) : (
             connectors.map((connector) => {
               const active =

@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { ReleaseHistoryRow } from "./release-history-row";
 import { useState } from "react";
 ("use client");
@@ -113,11 +114,20 @@ export function ReleasesCard({ env }: { env: Environment }) {
             <ReleaseHistoryRow key={release.id} release={release} env={env} />
           ))}
           {!table.total && (
-            <p className="py-4 text-sm text-muted-foreground">
-              {env.deploys.length
-                ? "No deployments match your search."
-                : "No deployments yet."}
-            </p>
+            <EmptyState
+              embedded
+              icon={<History />}
+              title={
+                env.deploys.length
+                  ? "No matching deployments"
+                  : "No deployments yet"
+              }
+              description={
+                env.deploys.length
+                  ? "Try another search or filter."
+                  : "Deploy a Service to see its release history here."
+              }
+            />
           )}
         </div>
         <div className="mt-3">

@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { Fragment, type ReactNode } from "react";
 import { TableExpansion } from "@/components/common/table-expansion";
 import { CompactReference } from "@/components/common/compact-reference";
@@ -178,13 +179,14 @@ export function RunnerInventory({
       </SummaryStrip>
       <ResourcePanel title="Runners">
         {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
+          <EmptyState
+            embedded
+            error
+            title="Unable to load Runners"
+            description={error}
+          />
         ) : loading ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            Loading Runners…
-          </p>
+          <EmptyState embedded loading title="Loading Runners" />
         ) : (
           <>
             <CollectionToolbar
@@ -359,14 +361,17 @@ export function RunnerInventory({
               </ResourceTable>
             </div>
             {!table.total && (
-              <p
-                role="status"
-                className="py-4 text-center text-xs text-muted-foreground"
-              >
-                {runners.length
-                  ? "No Runners match your search."
-                  : "No Runners yet."}
-              </p>
+              <EmptyState
+                embedded
+                title={
+                  runners.length ? "No matching Runners" : "No Runners yet"
+                }
+                description={
+                  runners.length
+                    ? "Try another search."
+                    : "Add a GitHub Actions Runner to build and deploy from trusted workflows."
+                }
+              />
             )}
             <TablePagination table={table} label="Runners" />
           </>

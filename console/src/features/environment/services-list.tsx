@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { ImageReference } from "@/components/common/image-reference";
 import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
 import {
@@ -176,9 +177,17 @@ export function ServicesList({
           </TableBody>
         </Table>
         {visible.length === 0 && (
-          <p className="py-10 text-center text-xs text-muted-foreground">
-            No Services match these filters.
-          </p>
+          <EmptyState
+            embedded
+            title={
+              env.services.length ? "No matching Services" : "No Services yet"
+            }
+            description={
+              env.services.length
+                ? "Try another search or filter."
+                : "Create a Service or apply a Blueprint."
+            }
+          />
         )}
       </ResourceTable>
       <TablePagination table={table} label="Services" />

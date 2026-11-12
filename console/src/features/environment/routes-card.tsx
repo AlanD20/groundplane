@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
 import { RouteAccessCheck } from "./edge-check-panel";
@@ -231,6 +232,13 @@ export function RoutesCard({ env }: { env: Environment }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <RouteFormDialog env={env} open={open} onOpenChange={setOpen} />
+        {!env.routes.length && (
+          <EmptyState
+            embedded
+            title="No Routes yet"
+            description="Add a Route to direct requests to a Service."
+          />
+        )}
         {env.routes.map((r) => (
           <InlineEditorRegion key={r.id} editing={false}>
             <div className={workspaceSectionClassName()}>
@@ -320,12 +328,6 @@ export function RoutesCard({ env }: { env: Environment }) {
             </div>
           </InlineEditorRegion>
         ))}
-        {env.routes.length === 0 && (
-          <div className="text-xs text-muted-foreground">
-            no routes — add one; public routes need an ingress component (Router
-            tab) to be served
-          </div>
-        )}
       </CardContent>
       <TaskRunnerDialog
         open={!!removing}

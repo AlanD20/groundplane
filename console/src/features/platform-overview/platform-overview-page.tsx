@@ -36,7 +36,7 @@ const platformTaskScope: TaskJournalScope = {
   workspace: "platform",
 };
 
-function worst(states: HealthState[]): HealthState {
+function worst(states: HealthState[]): HealthState | null {
   const order: HealthState[] = [
     "failed",
     "degraded",
@@ -46,7 +46,7 @@ function worst(states: HealthState[]): HealthState {
     "healthy",
   ];
   for (const s of order) if (states.includes(s)) return s;
-  return "unknown";
+  return null;
 }
 
 export default function PlatformOverviewPage() {
@@ -107,13 +107,17 @@ export default function PlatformOverviewPage() {
         eyebrow="Platform"
         title="Platform overview"
         actions={
-          <span className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm">
-            <StatusDot status={provisioningStatus} />
-            <span className="text-muted-foreground">Provisioning</span>
-            <span className="font-medium capitalize">
-              {provisioningStatus === "healthy" ? "ready" : provisioningStatus}
+          provisioningStatus && (
+            <span className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm">
+              <StatusDot status={provisioningStatus} />
+              <span className="text-muted-foreground">Provisioning</span>
+              <span className="font-medium capitalize">
+                {provisioningStatus === "healthy"
+                  ? "ready"
+                  : provisioningStatus}
+              </span>
             </span>
-          </span>
+          )
         }
       />
 

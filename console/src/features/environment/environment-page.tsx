@@ -213,10 +213,12 @@ export default function EnvironmentPage() {
         title={
           <span className="flex flex-wrap items-center gap-3">
             {env.name}
-            <StatusBadge
-              status={runtime}
-              label={runtime === "healthy" ? "Operational" : runtime}
-            />
+            {env.services.length > 0 && (
+              <StatusBadge
+                status={runtime}
+                label={runtime === "healthy" ? "Operational" : runtime}
+              />
+            )}
           </span>
         }
         eyebrow={`${params.tenant} / ${project.name} / Environment`}
