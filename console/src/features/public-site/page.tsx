@@ -15,6 +15,8 @@ import { ThemeToggle } from "@/components/common/theme-toggle";
 
 const repository = "https://github.com/AlanD20/groundplane";
 const command = "curl -fsSL https://gp.aland20.com/install.sh | sudo bash";
+const uninstallCommand =
+  "curl -fsSL https://gp.aland20.com/uninstall.sh | sudo bash -s -- --yes";
 
 export function LandingPage() {
   return (
@@ -148,6 +150,57 @@ export function LandingPage() {
             </Card>
           ))}
         </section>
+        <section
+          id="uninstall"
+          aria-labelledby="uninstall-title"
+          className="pb-10 pt-4"
+        >
+          <Card>
+            <CardHeader>
+              <h2 id="uninstall-title" className="text-lg font-semibold">
+                Uninstall or start fresh
+              </h2>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Permanently delete GP-managed workloads, local data, secrets and
+                configuration. Docker, Compose and unrelated resources stay
+                installed. To reinstall afterward, run the installation command
+                above yourself.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <pre
+                tabIndex={0}
+                aria-label="Uninstallation command"
+                className="whitespace-pre-wrap break-all rounded-lg border border-input bg-background p-3 font-mono text-xs leading-7"
+              >
+                <code>{uninstallCommand}</code>
+              </pre>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs leading-6 text-muted-foreground">
+                  Replace <code>--yes</code> with <code>--dry-run</code> to
+                  preview without deleting anything.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    nativeButton={false}
+                    role="link"
+                    render={<a href="/uninstall.sh" />}
+                    variant="link"
+                    size="sm"
+                  >
+                    Review uninstaller
+                    <ArrowUpRight />
+                  </Button>
+                  <CopyButton
+                    value={uninstallCommand}
+                    label="Copy uninstall command"
+                    className="border border-border bg-surface px-3 py-2"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
       </main>
       <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-border py-7 text-xs text-muted-foreground">
         <span>Groundplane · Self-hosted control plane</span>
@@ -160,7 +213,7 @@ export function LandingPage() {
             Installer checksum
             <ArrowUpRight className="ml-1 inline size-3" />
           </a>
-          <a href={`${repository}/blob/main/docs/deployment.md#uninstall-or-reset`}>
+          <a href="#uninstall">
             Uninstall / reset
             <ArrowUpRight className="ml-1 inline size-3" />
           </a>
