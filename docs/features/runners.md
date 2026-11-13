@@ -13,16 +13,49 @@ owns its local lifecycle and registration.
 ## Creation and limits
 
 Creation selects one Tenant, Project or Environment owner, a canonical GitHub repository or
-organization URL, a slug, optional custom labels and a fresh short-lived GitHub
+organization URL, a GitHub Runner group, a slug, optional custom labels and a fresh short-lived GitHub
 registration token. Obtain the token through GitHub settings; GP does not create
 or fetch it.
+
+GP ownership and GitHub registration scope are independent. A Project-owned Runner
+can register against an organization URL to serve multiple repositories. For an
+organization registration, enter the exact name of an existing GitHub Runner group;
+GitHub controls that group’s repository and workflow access. GP does not create
+groups or fetch their names with a registration token. Repository registrations
+use `Default`; a custom group requires an organization URL.
+
+The Console registration form exposes **GitHub Runner group**. The CLI uses
+`runner add ... --runner-group "Build runners"`; the API creation body requires
+`runner_group`. Console and CLI initially select `Default`. Names retain their
+case and internal spaces. Registration, Retry and diagnostics use the captured
+selection. A different group requires removing and registering the Runner again.
+
+An optional **GitHub Runner name** replaces the generated stable name. It must be
+unique within the GitHub registration scope and use at most 64 ASCII letters,
+digits, dots, underscores or hyphens. It is independent of GP’s renamable slug.
+The CLI uses `--github-name`; the API uses optional `github_name`.
+
+Creation also selects a combined CPU/RAM budget. Console and CLI start at 2 CPUs
+and 4 GiB; the API requires `cpu_millis` and `memory_bytes` explicitly. The CLI
+flags are `--cpus` and `--memory-gib`. A CPU is 1,000 millicores; one GiB is
+1,073,741,824 bytes. Accepted limits are 0.1–1,024 CPUs and 512 MiB–1 TiB.
+These are ceilings, not reserved host capacity. Leave room for applications and
+the control plane when selecting them.
+
+One cgroup v2 systemd slice contains the listener, rootless Docker daemon and
+its build processes. They share the CPU quota and memory maximum; the slice
+cannot use swap. An out-of-memory build can fail or terminate this Runner’s own
+processes. GP verifies actual kernel limits and requires host Docker’s systemd
+cgroup driver; unsupported hosts fail rather than run unbounded. Removing a
+Runner releases its empty slice. Persistent Docker cache consumes disk outside
+the RAM budget; automatic cache cleanup is not implemented.
 
 A Tenant can have at most five Runner records across all three ownership scopes.
 Provisioning, failed and deleting records count until cleanup releases them.
 Host identity slots, subordinate UID/GID ranges and network space are also finite;
 exhaustion reports `resource.in_use`, not automatic pool expansion.
 
-Only the slug is editable. Owner, GitHub URL, GitHub-visible name, labels and the
+Only the slug is editable. Owner, GitHub URL, GitHub Runner group, GitHub-visible name, resource budget, labels and the
 release-selected image are immutable. Renaming does not re-register the Runner.
 There is no in-place Runner update, autoscaling, ephemeral pool, multi-host
 placement or GitHub Enterprise support in the MVP contract.

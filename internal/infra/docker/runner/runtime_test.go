@@ -248,7 +248,7 @@ func validRuntimePlan(t *testing.T) corerunner.Plan {
 	tenantID := ids.NewAt(ids.KindTenant, now, 2)
 	plan, err := corerunner.NewPlan(corerunner.Target{
 		RunnerID: runnerID, TenantID: tenantID, OwnerKind: corerunner.OwnerTenant, OwnerID: tenantID,
-		GitHubURL: "https://github.com/acme", Labels: []string{"qa-workload"},
+		GitHubURL: "https://github.com/acme", RunnerGroup: "Default", CPUMillis: 2000, MemoryBytes: 4 << 30, Labels: []string{"qa-workload"},
 		ImageRef: "ghcr.io/aland20/groundplane-runner@sha256:" + repeatValue("a", 64), RuntimeEpoch: 1,
 		AllocationConfig: runnerallocation.RunnerAllocationConfig{
 			SystemPool: netip.MustParsePrefix("10.128.0.0/9"),

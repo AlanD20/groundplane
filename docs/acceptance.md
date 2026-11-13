@@ -1918,6 +1918,24 @@ were unchanged. Full CI passed for `4f9a006b4`; focused storage/helper checks,
 Console build, vet and architecture checks covered the follow-up fixes.
 Custom hook deletion, other adapters and other platforms were not live-qualified.
 
+## Runner registration options and aggregate budget
+
+**H122 — selected RUN-15/16 variants, 2026-11-13.** Runner-group/name
+framing and persisted selection passed focused behavior checks. A native host
+probe on disposable Ubuntu 24.04 amd64 used the current Runner implementation
+and an existing release listener image, without GitHub registration. Independent
+process cgroup inspection put a host listener and a container launched by its
+rootless daemon under the same owned slice. Kernel observations proved a 0.5-CPU
+quota, 512 MiB memory maximum and zero swap allowance. The first build-container
+launch exposed an incorrect default systemd user-slice selection; explicitly
+selecting the rootless cgroupfs driver corrected it. The final probe passed and
+removed its listener, daemon, account, network, slice and private storage.
+
+This proves aggregate limits and process membership, not throughput under
+saturation, OOM handling, reboot recovery, live GitHub group authorization,
+complete Runner creation with the new release image or arm64 runtime behavior.
+Those variants remain unqualified.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

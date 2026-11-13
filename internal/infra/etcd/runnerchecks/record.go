@@ -119,7 +119,7 @@ func (record Record) Validate() error {
 		plan.OwnerKind != string(source.Desired.OwnerKind) ||
 		plan.OwnerID != source.Desired.OwnerID ||
 		plan.Container.ImageRef != source.Desired.ImageRef ||
-		plan.Container.GitHubURL != source.Desired.GitHubURL ||
+		plan.Container.GitHubURL != source.Desired.GitHubURL || plan.Container.RunnerGroup != source.Desired.RunnerGroup || plan.Container.RunnerName != runnerallocation.RegistrationName(source.Desired.ID, source.Desired.GitHubName) || plan.CPUMillis != source.Desired.CPUMillis || plan.MemoryBytes != source.Desired.MemoryBytes ||
 		!slices.Equal(plan.Container.Labels, source.Desired.Labels) ||
 		plan.RuntimeEpoch != source.Ownership.RuntimeEpoch ||
 		plan.Paths.RawSocket != runnerallocation.DaemonSocketPath(source.RunnerID) ||

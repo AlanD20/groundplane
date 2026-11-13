@@ -245,6 +245,12 @@ replacing the Controller, leaving the installed software and application data
 intact. A fresh install is for an empty host; moving data between storage formats
 requires a separately qualified migration, not an installer compatibility path.
 
+The Runner-group revision of `0.0.1` changes the stored Runner format. Earlier
+`0.0.1` candidates cannot use the normal update path to this revision. For an
+installation with no data to retain, explicitly uninstall and reinstall, then
+recreate the configuration. Existing workloads or data require a reviewed
+migration; rerunning the installer does not authorize deleting them.
+
 `--stage-only` requires an existing guarded installation. It prepares a candidate
 without activating the Controller or replacing the CLI. Activate the printed
 digest through Host's Controller view or the CLI:

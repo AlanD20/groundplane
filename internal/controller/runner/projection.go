@@ -1,9 +1,10 @@
 package runner
 
 import (
+	"time"
+
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	"time"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
@@ -32,11 +33,14 @@ func PublicProjection(
 		age := time.Since(observation.ObservedAt)
 		online = observation.Online && age >= 0 && age <= ObservationLifetime
 	}
+	if record.Desired.GitHubName != "" {
+		name = record.Desired.GitHubName
+	}
 	result := apiTypes.Runner{
 		ID: record.Desired.ID, Slug: record.Desired.Slug,
 		TenantID: record.Desired.TenantID, ProjectID: record.Desired.ProjectID(),
 		EnvironmentID: record.Desired.EnvironmentID(),
-		GitHubURL:     record.Desired.GitHubURL, Name: name,
+		GitHubURL:     record.Desired.GitHubURL, RunnerGroup: record.Desired.RunnerGroup, GitHubName: record.Desired.GitHubName, CPUMillis: record.Desired.CPUMillis, MemoryBytes: record.Desired.MemoryBytes, Name: name,
 		Labels: append([]string(nil), record.Desired.Labels...), Lifecycle: lifecycle,
 		CreateTaskID: record.CreateTaskID, RemoveTaskID: removeTaskID,
 		Online: online, ObservedAt: observedAt,

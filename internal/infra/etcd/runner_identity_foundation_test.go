@@ -60,6 +60,24 @@ func TestRunnerDesiredCanonicalization(t *testing.T) {
 	}
 }
 
+// Rationale: the persisted selection must survive encoding and decoding before
+// Retry or native execution; it must not be reconstructed from current defaults.
+func TestProjectRunnerGroupSurvivesPersistence(t *testing.T) {
+	t.Parallel()
+	desired := runnerTestDesired(205, testrunners.RunnerOwnerProject,
+		ids.New(ids.KindProject), ids.New(ids.KindTenant))
+	desired.GitHubURL = "https://github.com/example"
+	desired.RunnerGroup = "Project builders"
+	value, err := testrunners.EncodeRunnerDesiredRecord(desired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := testrunners.DecodeRunnerDesiredRecord(value)
+	if err != nil || restored.RunnerGroup != desired.RunnerGroup {
+		t.Fatalf("restored group = %q, %v", restored.RunnerGroup, err)
+	}
+}
+
 // Rationale: Tenant slug uniqueness spans direct and Project ownership, and a
 // successful replacement must preserve exact replay after the Runner is gone.
 func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {

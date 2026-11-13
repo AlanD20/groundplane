@@ -4,10 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	buildversion "github.com/AlanD20/groundplane/internal/common/version"
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"net/netip"
 	"slices"
+
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 )
 
 type RunnerRuntimeStep string
@@ -73,11 +74,14 @@ type RunnerContainer struct {
 	DockerSocketSource string
 	DockerSocketTarget string
 	GitHubURL          string
+	RunnerGroup        string
 	RunnerName         string
 	Labels             []string
 }
 
 type RuntimePlan struct {
+	CPUMillis        int64
+	MemoryBytes      int64
 	RunnerID         string
 	TenantID         string
 	OwnerKind        string

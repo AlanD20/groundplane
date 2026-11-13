@@ -51,7 +51,7 @@ func (input Input) Validate() error {
 		(input.Operation != runnerallocation.RuntimeOperationCreate && input.Operation != runnerallocation.RuntimeOperationRemove) ||
 		plan.RunnerID != desired.ID || plan.TenantID != desired.TenantID ||
 		plan.OwnerKind != string(desired.OwnerKind) || plan.OwnerID != desired.OwnerID ||
-		plan.Container.ImageRef != desired.ImageRef || plan.Container.GitHubURL != desired.GitHubURL ||
+		plan.Container.ImageRef != desired.ImageRef || plan.Container.GitHubURL != desired.GitHubURL || plan.Container.RunnerGroup != desired.RunnerGroup || plan.Container.RunnerName != runnerallocation.RegistrationName(desired.ID, desired.GitHubName) || plan.CPUMillis != desired.CPUMillis || plan.MemoryBytes != desired.MemoryBytes ||
 		input.Operation == runnerallocation.RuntimeOperationCreate &&
 			!slices.Equal(plan.Container.Labels, desired.Labels) || plan.RuntimeEpoch == 0 ||
 		plan.AllocationConfig.ValidateAllocation(plan.Allocation) != nil || plan.Digest() == "" {

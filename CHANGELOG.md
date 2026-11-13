@@ -39,6 +39,11 @@ Initial single-host release.
 
 ### Operations
 
+- Select an existing GitHub Runner group at registration through the Console,
+  CLI or API. GP ownership is independent of GitHub organization/repository scope;
+  captured group selection is retained for Retry and shown in Runner details.
+- Set an optional GitHub-visible Runner name and a combined CPU/RAM budget for
+  the listener, rootless Docker daemon and builds, with kernel enforcement checks.
 - Retain readable local tags for installed platform images, using each artifact's
   own release or commit identity while keeping execution pinned to digests.
 - Close Environment creation forms when their background Task is accepted;

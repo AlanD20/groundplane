@@ -2,6 +2,7 @@ package cli
 
 import (
 	"io"
+	"math"
 	"strings"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -52,7 +53,8 @@ func newRunnerCmd() *cobra.Command {
 	}
 	cmd.AddCommand(list)
 
-	var tokenFile, githubURL string
+	var tokenFile, githubURL, runnerGroup, githubName string
+	var cpus, memoryGiB float64
 	var labels []string
 	add := &cobra.Command{
 		Use:   "add <slug>",
@@ -60,7 +62,12 @@ func newRunnerCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			request := apiTypes.RunnerCreateRequest{Slug: args[0], GitHubURL: githubURL, Labels: labels}
+			request := apiTypes.RunnerCreateRequest{
+				Slug:        args[0],
+				GitHubURL:   githubURL,
+				RunnerGroup: runnerGroup, GitHubName: githubName, CPUMillis: int64(math.Round(cpus * 1000)), MemoryBytes: int64(math.Round(memoryGiB * (1 << 30))),
+				Labels: labels,
+			}
 			var err error
 			if app.Scope.Environment != "" {
 				request.EnvironmentID, err = resolveEnvironmentTarget(cmd, app.Scope.Environment)
@@ -88,6 +95,11 @@ func newRunnerCmd() *cobra.Command {
 	add.Flags().
 		StringVar(&tokenFile, "registration-token-file", "", "read the short-lived GitHub registration token from PATH, or - for stdin")
 	add.Flags().StringVar(&githubURL, "github-url", "", "GitHub organization or repository URL")
+	add.Flags().StringVar(&runnerGroup, "runner-group", "Default", "existing GitHub organization Runner group name")
+	add.Flags().
+		StringVar(&githubName, "github-name", "", "optional GitHub-visible Runner name; blank generates a stable name")
+	add.Flags().Float64Var(&cpus, "cpus", 2, "combined CPU budget for the Runner and its build daemon")
+	add.Flags().Float64Var(&memoryGiB, "memory-gib", 4, "combined memory budget in GiB for the Runner and builds")
 	add.Flags().StringSliceVar(&labels, "label", nil, "additional GitHub Runner label (repeatable)")
 	_ = add.MarkFlagRequired("registration-token-file")
 	_ = add.MarkFlagRequired("github-url")
@@ -242,6 +254,10 @@ func runnerFields(runner apiTypes.Runner) map[string]any {
 		"project_id":     runner.ProjectID,
 		"environment_id": runner.EnvironmentID,
 		"github_url":     runner.GitHubURL,
+		"github_name":    runner.GitHubName,
+		"cpu_millis":     runner.CPUMillis,
+		"memory_bytes":   runner.MemoryBytes,
+		"runner_group":   runner.RunnerGroup,
 		"name":           runner.Name,
 		"labels":         runner.Labels,
 		"lifecycle":      runner.Lifecycle,

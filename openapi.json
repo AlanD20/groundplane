@@ -6832,6 +6832,10 @@
             "readOnly": true,
             "type": "string"
           },
+          "cpu_millis": {
+            "format": "int64",
+            "type": "integer"
+          },
           "create_task_id": {
             "type": "string"
           },
@@ -6839,6 +6843,9 @@
             "type": "string"
           },
           "environment_id": {
+            "type": "string"
+          },
+          "github_name": {
             "type": "string"
           },
           "github_url": {
@@ -6865,6 +6872,10 @@
             ],
             "type": "string"
           },
+          "memory_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
           "name": {
             "type": "string"
           },
@@ -6890,6 +6901,9 @@
             "format": "int64",
             "type": "integer"
           },
+          "runner_group": {
+            "type": "string"
+          },
           "slug": {
             "type": "string"
           },
@@ -6905,6 +6919,9 @@
           "slug",
           "tenant_id",
           "github_url",
+          "runner_group",
+          "cpu_millis",
+          "memory_bytes",
           "name",
           "lifecycle",
           "create_task_id",
@@ -6927,6 +6944,9 @@
           "image_reference": {
             "type": "string"
           },
+          "runner_group": {
+            "type": "string"
+          },
           "runner_id": {
             "type": "string"
           },
@@ -6946,6 +6966,7 @@
           "runtime_epoch",
           "image_reference",
           "github_url",
+          "runner_group",
           "controller_endpoint"
         ],
         "type": "object"
@@ -7108,7 +7129,14 @@
             "readOnly": true,
             "type": "string"
           },
+          "cpu_millis": {
+            "format": "int64",
+            "type": "integer"
+          },
           "environment_id": {
+            "type": "string"
+          },
+          "github_name": {
             "type": "string"
           },
           "github_url": {
@@ -7123,10 +7151,17 @@
               "null"
             ]
           },
+          "memory_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
           "project_id": {
             "type": "string"
           },
           "registration_token": {
+            "type": "string"
+          },
+          "runner_group": {
             "type": "string"
           },
           "slug": {
@@ -7139,6 +7174,9 @@
         "required": [
           "slug",
           "github_url",
+          "runner_group",
+          "cpu_millis",
+          "memory_bytes",
           "registration_token"
         ],
         "type": "object"

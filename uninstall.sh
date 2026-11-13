@@ -77,7 +77,7 @@ try:
                         ["list-units", "--all", "--plain", "--no-legend", "--no-pager"]):
             for line in run(["systemctl", *command]).splitlines():
                 name = line.split()[0] if line.split() else ""
-                if re.fullmatch(r"groundplane-[A-Za-z0-9_.@-]+\.(service|socket|timer)", name):
+                if re.fullmatch(r"groundplane-[A-Za-z0-9_.@-]+\.(service|socket|timer|slice)", name):
                     units.add(name)
         # Stop timers/upgrade guards/Runner daemons as well as the Controller.
         for unit in sorted(units):
@@ -173,6 +173,7 @@ try:
         remove_path(Path("/etc/systemd/system") / unit)
         remove_path(Path("/etc/systemd/system") / (unit + ".d"))
         remove_path(Path("/run/systemd/transient") / unit)
+        remove_path(Path("/run/systemd/system") / unit)
     paths = ["/etc/groundplane", "/var/lib/groundplane", "/var/log/groundplane",
              "/var/lib/groundplane-runners", "/run/groundplane", "/run/groundplane-runners",
              "/run/groundplane-execution", "/usr/local/libexec/groundplane",

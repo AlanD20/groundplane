@@ -2,6 +2,13 @@ package runner
 
 import (
 	"context"
+	"net/netip"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,12 +17,6 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
-	"net/netip"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"time"
 )
 
 func (operations *localOperations) StartRunner(
@@ -200,6 +201,7 @@ func validateRunnerContainer(inspected container.InspectResponse, plan corerunne
 		inspected.Config.Labels["groundplane.runner.id"] != plan.RunnerID ||
 		inspected.Config.Labels["groundplane.runtime.epoch"] != strconv.FormatUint(plan.RuntimeEpoch, 10) ||
 		inspected.Config.Labels["groundplane.runner.plan"] != plan.Digest() ||
+		inspected.HostConfig.CgroupParent != runnerallocation.ResourceSlice(plan.RunnerID) ||
 		inspected.HostConfig.Privileged || !inspected.HostConfig.ReadonlyRootfs ||
 		string(inspected.HostConfig.NetworkMode) != plan.Network.Name {
 		return errs.New(errs.KindStateConflict, "Runner container ownership changed")
@@ -226,6 +228,7 @@ func runnerContainerOptions(plan corerunner.Plan) client.ContainerCreateOptions 
 			},
 		},
 		HostConfig: &container.HostConfig{
+			Resources:      container.Resources{CgroupParent: runnerallocation.ResourceSlice(plan.RunnerID)},
 			DNS:            []netip.Addr{plan.Egress.ControllerEndpoint.Addr()},
 			NetworkMode:    container.NetworkMode(plan.Network.Name),
 			RestartPolicy:  container.RestartPolicy{Name: container.RestartPolicyDisabled},
@@ -310,12 +313,16 @@ func registrationPresent(plan corerunner.Plan) error {
 
 func registrationDocument(plan corerunner.Plan, token []byte) []byte {
 	labels := strings.Join(plan.Container.Labels, ",")
-	document := make([]byte, 0, len(plan.Container.GitHubURL)+len(plan.Container.RunnerName)+len(labels)+len(token)+4)
+	capacity := len(plan.Container.GitHubURL) + len(plan.Container.RunnerName) + len(labels)
+	capacity += len(plan.Container.RunnerGroup) + len(token) + 5
+	document := make([]byte, 0, capacity)
 	document = append(document, plan.Container.GitHubURL...)
 	document = append(document, '\n')
 	document = append(document, plan.Container.RunnerName...)
 	document = append(document, '\n')
 	document = append(document, labels...)
+	document = append(document, '\n')
+	document = append(document, plan.Container.RunnerGroup...)
 	document = append(document, '\n')
 	document = append(document, token...)
 	document = append(document, '\n')

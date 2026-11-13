@@ -77,7 +77,7 @@ export function RunnerInventory({
   const table = useTableView(
     runners.filter((runner) => {
       const ownership = owner(runner);
-      return `${runner.slug} ${runner.githubUrl} ${ownership.scope} ${ownership.name} ${runner.labels.join(" ")}`
+      return `${runner.slug} ${runner.githubUrl} ${runner.runnerGroup} ${ownership.scope} ${ownership.name} ${runner.labels.join(" ")}`
         .toLowerCase()
         .includes(query.trim().toLowerCase());
     }),
@@ -298,6 +298,23 @@ export function RunnerInventory({
                                       {runner.githubUrl}
                                     </p>
                                   </div>
+                                  <DetailRow
+                                    label="GitHub Runner group"
+                                    value={runner.runnerGroup}
+                                  />
+                                  <DetailRow
+                                    label="CPU budget"
+                                    value={
+                                      String(runner.cpuMillis / 1000) + " CPUs"
+                                    }
+                                  />
+                                  <DetailRow
+                                    label="Memory budget"
+                                    value={
+                                      String(runner.memoryBytes / 2 ** 30) +
+                                      " GiB"
+                                    }
+                                  />
                                   <DetailRow
                                     label="Runner name"
                                     value={runner.name || "Not reported"}

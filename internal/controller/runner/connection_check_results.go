@@ -48,7 +48,7 @@ func (service *ConnectionCheckService) GetConnectionCheck(
 	result := apiTypes.RunnerCheckResult{TaskID: record.Owner.TaskID, ExecutionLocation: "Registered Runner container",
 		Configuration: apiTypes.RunnerCheckConfiguration{RunnerID: runnerID, RunnerRevision: source.RunnerRevision,
 			RuntimeEpoch: source.Ownership.RuntimeEpoch, ImageReference: record.Plan.Container.ImageRef,
-			GitHubURL: source.Desired.GitHubURL, ControllerEndpoint: record.Request.ControllerEndpoint},
+			GitHubURL: source.Desired.GitHubURL, RunnerGroup: source.Desired.RunnerGroup, ControllerEndpoint: record.Request.ControllerEndpoint},
 		Stale: stale, Phase: string(record.Phase), Outcome: record.Outcome, Failure: record.Failure,
 		Stages: []apiTypes.RunnerCheckStage{}, CreatedAt: record.CreatedAt.Format(time.RFC3339)}
 	if record.StartedAt != nil {

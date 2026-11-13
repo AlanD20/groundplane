@@ -64,6 +64,10 @@ export default function RunnerManager({
   const [createOwner, setCreateOwner] = useState("tenant");
   const [runnerProvider, setRunnerProvider] = useState("github");
   const [githubUrl, setGithubUrl] = useState("");
+  const [runnerGroup, setRunnerGroup] = useState("Default");
+  const [githubName, setGithubName] = useState("");
+  const [cpus, setCpus] = useState("2");
+  const [memoryGiB, setMemoryGiB] = useState("4");
   const [labels, setLabels] = useState("");
   const [registrationToken, setRegistrationToken] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -361,8 +365,26 @@ export default function RunnerManager({
               .split(",")
               .map((label) => label.trim())
               .filter(Boolean);
-            if (!createSlug.trim() || !githubUrl.trim() || !registrationToken)
+            if (
+              !createSlug.trim() ||
+              !githubUrl.trim() ||
+              !runnerGroup.trim() ||
+              !registrationToken
+            )
               return;
+            if (
+              !Number.isFinite(Number(cpus)) ||
+              Number(cpus) < 0.1 ||
+              Number(cpus) > 1024 ||
+              !Number.isFinite(Number(memoryGiB)) ||
+              Number(memoryGiB) < 0.5 ||
+              Number(memoryGiB) > 1024
+            ) {
+              setCreateError(
+                "Enter a CPU budget from 0.1 to 1024 and memory from 0.5 to 1024 GiB.",
+              );
+              return;
+            }
             void (async () => {
               setSubmittingCreate(true);
               setCreateError(null);
@@ -381,6 +403,10 @@ export default function RunnerManager({
                     ? createOwner
                     : undefined,
                   githubUrl: githubUrl.trim(),
+                  runnerGroup: runnerGroup.trim(),
+                  githubName: githubName.trim(),
+                  cpuMillis: Math.round(Number(cpus) * 1000),
+                  memoryBytes: Math.round(Number(memoryGiB) * 2 ** 30),
                   labels: normalizedLabels,
                   registrationToken,
                 });
@@ -442,6 +468,38 @@ export default function RunnerManager({
           <fieldset className="grid gap-4 md:grid-cols-2 rounded-lg border border-border p-4">
             <legend className="px-2 text-xs font-medium">Registration</legend>
             <div className="space-y-2">
+              <Label htmlFor="runner-create-name">
+                GitHub Runner name (optional)
+              </Label>
+              <Input
+                id="runner-create-name"
+                value={githubName}
+                onChange={(event) => setGithubName(event.target.value)}
+                maxLength={64}
+                disabled={submittingCreate}
+                placeholder="Generated automatically"
+              />
+              <p className="text-xs text-muted-foreground">
+                Letters, digits, dots, underscores or hyphens. Independent of
+                the GP slug.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="runner-create-group">GitHub Runner group</Label>
+              <Input
+                id="runner-create-group"
+                value={runnerGroup}
+                onChange={(event) => setRunnerGroup(event.target.value)}
+                maxLength={255}
+                disabled={submittingCreate}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Existing group name for an organization URL. Repository Runners
+                use Default. Manage group access in GitHub.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="runner-create-labels">Labels</Label>
               <Input
                 id="runner-create-labels"
@@ -468,6 +526,43 @@ export default function RunnerManager({
               )}
             </div>
           </fieldset>
+          <fieldset className="grid gap-4 rounded-lg border border-border p-4 md:grid-cols-2">
+            <legend className="px-2 text-xs font-medium">
+              Resource budget
+            </legend>
+            <div className="space-y-2">
+              <Label htmlFor="runner-create-cpus">CPUs</Label>
+              <Input
+                id="runner-create-cpus"
+                type="number"
+                min="0.1"
+                max="1024"
+                step="0.1"
+                value={cpus}
+                onChange={(event) => setCpus(event.target.value)}
+                required
+                disabled={submittingCreate}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="runner-create-memory">Memory (GiB)</Label>
+              <Input
+                id="runner-create-memory"
+                type="number"
+                min="0.5"
+                max="1024"
+                step="0.5"
+                value={memoryGiB}
+                onChange={(event) => setMemoryGiB(event.target.value)}
+                required
+                disabled={submittingCreate}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground md:col-span-2">
+              Combined limit for this Runner, its Docker daemon and build
+              processes. These limits do not reserve host capacity.
+            </p>
+          </fieldset>
           <DialogFooter>
             <Button
               type="button"
@@ -486,6 +581,7 @@ export default function RunnerManager({
                 submittingCreate ||
                 !createSlug.trim() ||
                 !githubUrl.trim() ||
+                !runnerGroup.trim() ||
                 !registrationToken
               }
             >

@@ -20,7 +20,7 @@ func TestNewPlanBuildsDedicatedRootlessRuntime(t *testing.T) {
 	projectID := ids.NewAt(ids.KindProject, time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC), 3)
 	plan, err := NewPlan(Target{
 		RunnerID: runnerID, TenantID: tenantID, OwnerKind: OwnerProject, OwnerID: projectID,
-		GitHubURL: "https://github.com/acme/storefront", Labels: []string{"qa-workload", "zeta"},
+		GitHubURL: "https://github.com/acme/storefront", RunnerGroup: "Default", CPUMillis: 2000, MemoryBytes: 4 << 30, Labels: []string{"qa-workload", "zeta"},
 		ImageRef: "ghcr.io/aland20/groundplane-runner@sha256:" + repeatHex("a"), RuntimeEpoch: 4,
 		AllocationConfig: testPlanAllocationConfig(),
 		Allocation: runnerallocation.RunnerHostAllocationRecord{
@@ -102,13 +102,55 @@ func validTarget(t *testing.T) Target {
 	tenantID := ids.NewAt(ids.KindTenant, now, 10)
 	return Target{
 		RunnerID: ids.NewAt(ids.KindRunner, now, 11), TenantID: tenantID,
-		OwnerKind: OwnerTenant, OwnerID: tenantID, GitHubURL: "https://github.com/acme",
+		OwnerKind: OwnerTenant, OwnerID: tenantID, GitHubURL: "https://github.com/acme", RunnerGroup: "Default", CPUMillis: 2000, MemoryBytes: 4 << 30,
 		ImageRef: "ghcr.io/aland20/groundplane-runner@sha256:" + repeatHex("b"), RuntimeEpoch: 1,
 		AllocationConfig: testPlanAllocationConfig(),
 		Allocation: runnerallocation.RunnerHostAllocationRecord{
 			Slot: 0, HostUID: 200000, SubUIDStart: 300000, SubUIDCount: 65536,
 			SubGIDStart: 900000, SubGIDCount: 65536, NetworkCIDR: "10.240.0.0/29",
 		},
+	}
+}
+
+// Rationale: GitHub organization groups must work for Project-owned Runners,
+// while invalid group input must never reach the line-framed registration.
+func TestProjectRunnerCapturesOrganizationGroup(t *testing.T) {
+	t.Parallel()
+	target := validTarget(t)
+	target.OwnerKind = OwnerProject
+	target.OwnerID = ids.New(ids.KindProject)
+	target.RunnerGroup = "Project builders"
+	target.GitHubName = "project-ci"
+	plan, err := NewPlan(target, validPolicy())
+	if err != nil || plan.Container.RunnerGroup != target.RunnerGroup || plan.Container.RunnerName != "project-ci" {
+		t.Fatalf("organization registration = %#v, %v", plan.Container, err)
+	}
+	if err := ValidatePlan(plan); err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range []string{"", "bad\ngroup", "bad\rgroup", " padded", strings.Repeat("a", 256)} {
+		target.RunnerGroup = group
+		if _, err := NewPlan(target, validPolicy()); err == nil {
+			t.Fatalf("accepted invalid group %q", group)
+		}
+	}
+	target.RunnerGroup = "Project builders"
+	target.GitHubURL = "https://github.com/acme/storefront"
+	if _, err := NewPlan(target, validPolicy()); err == nil {
+		t.Fatal("repository registration accepted organization group")
+	}
+}
+
+// Rationale: invalid budgets must be rejected before account allocation or any
+// host process is started, rather than silently becoming an unlimited Runner.
+func TestRunnerPlanRejectsInvalidBudgets(t *testing.T) {
+	t.Parallel()
+	for _, budget := range [][2]int64{{0, 4 << 30}, {-1, 4 << 30}, {1024001, 4 << 30}, {2000, 0}, {2000, 511 << 20}, {2000, (1 << 40) + 1}} {
+		target := validTarget(t)
+		target.CPUMillis, target.MemoryBytes = budget[0], budget[1]
+		if _, err := NewPlan(target, validPolicy()); err == nil {
+			t.Fatalf("accepted budget %v", budget)
+		}
 	}
 }
 

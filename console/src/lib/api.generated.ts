@@ -4055,14 +4055,19 @@ export interface components {
              * @example /api/v1/Runner.json
              */
             readonly $schema?: string;
+            /** Format: int64 */
+            cpu_millis: number;
             create_task_id: string;
             created_at: string;
             environment_id?: string;
+            github_name?: string;
             github_url: string;
             id: string;
             labels?: string[] | null;
             /** @enum {string} */
             lifecycle: "provisioning" | "ready" | "failed" | "deleting";
+            /** Format: int64 */
+            memory_bytes: number;
             name: string;
             observed_at: string | null;
             online: boolean;
@@ -4070,6 +4075,7 @@ export interface components {
             remove_task_id: string | null;
             /** Format: int64 */
             revision?: number;
+            runner_group: string;
             slug: string;
             software?: components["schemas"]["ContainerIdentity"];
             tenant_id: string;
@@ -4078,6 +4084,7 @@ export interface components {
             controller_endpoint: string;
             github_url: string;
             image_reference: string;
+            runner_group: string;
             runner_id: string;
             /** Format: int64 */
             runner_revision: number;
@@ -4135,11 +4142,17 @@ export interface components {
              * @example /api/v1/RunnerCreateRequest.json
              */
             readonly $schema?: string;
+            /** Format: int64 */
+            cpu_millis: number;
             environment_id?: string;
+            github_name?: string;
             github_url: string;
             labels?: string[] | null;
+            /** Format: int64 */
+            memory_bytes: number;
             project_id?: string;
             registration_token: string;
+            runner_group: string;
             slug: string;
             tenant_id?: string;
         };

@@ -5,16 +5,17 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
-	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
-	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/moby/moby/client"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/moby/moby/client"
 )
 
 func (operations *localOperations) StartDaemon(ctx context.Context, plan corerunner.Plan) error {
@@ -33,10 +34,14 @@ func (operations *localOperations) StartDaemon(ctx context.Context, plan corerun
 			return err
 		}
 	}
+	if err := operations.ensureBudget(ctx, plan); err != nil {
+		return err
+	}
 	unit := daemonUnit(plan)
 	args := []string{
 		"--quiet", "--unit=" + unit,
 		"--description=" + daemonDescription(plan),
+		"--slice=" + runnerallocation.ResourceSlice(plan.RunnerID),
 		"--property=User=" + plan.Identity.User,
 		"--property=Group=" + plan.Identity.Group,
 		"--property=Environment=HOME=" + plan.Paths.RunnerHome,
@@ -59,6 +64,9 @@ printf 'nameserver %s\n' "$1" > /etc/resolv.conf; shift; exec "$@"`,
 		"--data-root=" + plan.Paths.DataRoot,
 		"--exec-root=" + filepath.Join(controlRoot, "docker-exec"),
 		"--pidfile=" + filepath.Join(controlRoot, "dockerd.pid"),
+		// The outer systemd slice owns the aggregate budget. Rootless children
+		// inherit it; do not ask Docker to create a separate user-manager slice.
+		"--exec-opt=native.cgroupdriver=cgroupfs",
 		"--storage-driver=fuse-overlayfs",
 	}
 	if err := operations.ensureUnit(ctx, plan, args); err != nil {
@@ -101,6 +109,9 @@ func (operations *localOperations) ObserveDaemon(
 	ctx context.Context,
 	plan corerunner.Plan,
 ) (corerunner.StepEvidence, error) {
+	if err := operations.observeBudget(ctx, plan); err != nil {
+		return corerunner.StepEvidence{}, err
+	}
 	if err := operations.observeUnit(ctx, plan); err != nil {
 		return corerunner.StepEvidence{}, err
 	}
@@ -119,6 +130,9 @@ func (operations *localOperations) StopDaemon(ctx context.Context, plan corerunn
 	if err := operations.stopUnit(ctx, plan); err != nil {
 		return "", err
 	}
+	if err := operations.removeBudget(ctx, plan); err != nil {
+		return "", err
+	}
 	return receipt(plan, corerunner.StepStopDaemon), nil
 }
 
@@ -128,6 +142,11 @@ func (operations *localOperations) ObserveDaemonAbsent(
 ) (corerunner.StepEvidence, error) {
 	if err := operations.observeUnitAbsent(ctx, plan); err != nil {
 		return corerunner.StepEvidence{}, err
+	}
+	if found, err := ownedBudget(plan); err != nil {
+		return corerunner.StepEvidence{}, err
+	} else if found {
+		return corerunner.StepEvidence{}, errs.New(errs.KindStateConflict, "Runner resource slice cleanup is incomplete")
 	}
 	return absent(plan, corerunner.StepStopDaemon), nil
 }

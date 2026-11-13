@@ -55,7 +55,7 @@ func TestNativeImageRemovalProtectsRunnerAndContainersWithoutGlobalHistoryLock(t
 	imageID := "sha256:" + strings.Repeat("d", 64)
 	desired := runners.RunnerDesiredRecord{ID: ids.New(ids.KindRunner), Slug: "image-guard",
 		OwnerKind: runners.RunnerOwnerTenant, OwnerID: ids.New(ids.KindTenant),
-		GitHubURL: "https://github.com/example", ImageRef: "docker.io/library/runner@" + imageID}
+		GitHubURL: "https://github.com/example", RunnerGroup: "Default", CPUMillis: 2000, MemoryBytes: 4 << 30, ImageRef: "docker.io/library/runner@" + imageID}
 	desired.TenantID = desired.OwnerID
 	raw, err := runners.EncodeRunnerDesiredRecord(desired)
 	if err != nil {

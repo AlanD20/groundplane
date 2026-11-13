@@ -2,10 +2,11 @@ package runners
 
 import (
 	"bytes"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"time"
 	"unicode/utf8"
+
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
@@ -47,6 +48,10 @@ type RunnerDesiredRecord struct {
 	// ownership already identifies its Project through OwnerID.
 	ParentProjectID string   `json:"parent_project_id,omitempty"`
 	GitHubURL       string   `json:"github_url"`
+	RunnerGroup     string   `json:"runner_group"`
+	GitHubName      string   `json:"github_name,omitempty"`
+	CPUMillis       int64    `json:"cpu_millis"`
+	MemoryBytes     int64    `json:"memory_bytes"`
 	Labels          []string `json:"labels,omitempty"`
 	ImageRef        string   `json:"image_ref"`
 }

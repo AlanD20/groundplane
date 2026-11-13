@@ -10,6 +10,7 @@ type RunnerCheckConfiguration struct {
 	RuntimeEpoch       uint64 `json:"runtime_epoch"`
 	ImageReference     string `json:"image_reference"`
 	GitHubURL          string `json:"github_url"`
+	RunnerGroup        string `json:"runner_group"`
 	ControllerEndpoint string `json:"controller_endpoint"`
 }
 

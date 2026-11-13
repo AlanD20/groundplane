@@ -11,6 +11,10 @@ type Runner struct {
 	ProjectID     string                     `json:"project_id,omitempty"`
 	EnvironmentID string                     `json:"environment_id,omitempty"`
 	GitHubURL     string                     `json:"github_url"`
+	RunnerGroup   string                     `json:"runner_group"`
+	GitHubName    string                     `json:"github_name,omitempty"`
+	CPUMillis     int64                      `json:"cpu_millis"`
+	MemoryBytes   int64                      `json:"memory_bytes"`
 	Name          string                     `json:"name"`
 	Labels        []string                   `json:"labels,omitempty"`
 	Lifecycle     RunnerLifecycle            `json:"lifecycle" enum:"provisioning,ready,failed,deleting"`
@@ -41,6 +45,10 @@ type RunnerCreateRequest struct {
 	ProjectID         string   `json:"project_id,omitempty"`
 	EnvironmentID     string   `json:"environment_id,omitempty"`
 	GitHubURL         string   `json:"github_url"`
+	RunnerGroup       string   `json:"runner_group"`
+	GitHubName        string   `json:"github_name,omitempty"`
+	CPUMillis         int64    `json:"cpu_millis"`
+	MemoryBytes       int64    `json:"memory_bytes"`
 	Labels            []string `json:"labels,omitempty"`
 	RegistrationToken string   `json:"registration_token"` // discarded by the Controller after registration
 }

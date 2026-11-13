@@ -32,6 +32,10 @@ export type RunnerActions = {
     projectId?: string;
     environmentId?: string;
     githubUrl: string;
+    runnerGroup: string;
+    githubName: string;
+    cpuMillis: number;
+    memoryBytes: number;
     labels: string[];
     registrationToken: string;
   }) => Promise<string>;
@@ -65,6 +69,10 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
             projectId: runner.project_id ?? null,
             environmentId: runner.environment_id ?? null,
             githubUrl: runner.github_url,
+            runnerGroup: runner.runner_group,
+            githubName: runner.github_name ?? "",
+            cpuMillis: runner.cpu_millis,
+            memoryBytes: runner.memory_bytes,
             software: runner.software,
             name: runner.name,
             labels: runner.labels ?? [],
@@ -104,12 +112,20 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
       projectId?: string;
       environmentId?: string;
       githubUrl: string;
+      runnerGroup: string;
+      githubName: string;
+      cpuMillis: number;
+      memoryBytes: number;
       labels: string[];
       registrationToken: string;
     }) => {
       const body: RunnerCreateRequest = {
         slug: input.slug,
         github_url: input.githubUrl,
+        runner_group: input.runnerGroup,
+        github_name: input.githubName || undefined,
+        cpu_millis: input.cpuMillis,
+        memory_bytes: input.memoryBytes,
         labels: input.labels,
         registration_token: input.registrationToken,
         tenant_id: input.tenantId,
@@ -145,6 +161,10 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
         projectId: response.project_id ?? null,
         environmentId: response.environment_id ?? null,
         githubUrl: response.github_url,
+        runnerGroup: response.runner_group,
+        githubName: response.github_name ?? "",
+        cpuMillis: response.cpu_millis,
+        memoryBytes: response.memory_bytes,
         software: response.software,
         name: response.name,
         labels: response.labels ?? [],

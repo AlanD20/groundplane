@@ -27,6 +27,24 @@ trusted jobs can request through the GP API.
 
 ## Native lifecycle and ownership
 
+GP ownership is independent of GitHub registration scope. Any owner can select
+a repository or organization URL. An organization registration captures an
+existing GitHub Runner group name; GitHub enforces that group’s repository and
+workflow access. The name is immutable desired state, included in publication
+identity and captured native execution input, so Retry cannot silently select
+another group. Registration tokens remain transient and separate from this input.
+
+The optional GitHub-visible name and combined CPU/RAM ceilings are captured with
+registration. A root-owned runtime slice applies one aggregate budget to the
+listener and daemon descendants. Both the systemd unit and Docker listener must
+join that slice; checking the kernel controllers avoids treating a declaration
+as enforced isolation. The rootless engine uses cgroupfs without a delegated
+user-manager hierarchy; its descendants inherit the outer slice rather than
+escaping into a separate user slice. Per-job Docker limits are not the budget
+authority. The slice is reconstructed from pinned inputs after a
+reboot and removed only after its processes are gone. Disk-cache management and
+in-place Runner reconfiguration remain separate work.
+
 The native Controller owns Runner allocation, registration, local observation
 and cleanup. It uses the existing host adapters, not a new privileged helper
 protocol or an Agent execution role. Release artifacts provide the immutable

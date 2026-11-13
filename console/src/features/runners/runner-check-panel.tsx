@@ -202,6 +202,10 @@ export function RunnerCheckPanel({
             />
             <DetailRow label="GitHub" value={result.configuration.github_url} />
             <DetailRow
+              label="Runner group"
+              value={result.configuration.runner_group}
+            />
+            <DetailRow
               label="GP API"
               value={result.configuration.controller_endpoint}
             />

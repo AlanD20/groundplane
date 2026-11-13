@@ -3,13 +3,14 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"slices"
+	"time"
+
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	"net/http"
-	"slices"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
@@ -157,7 +158,7 @@ func (service *ProvisioningService) CreateRunner(
 	plan, err := corerunner.NewPlan(corerunner.Target{
 		RunnerID: desired.ID, TenantID: desired.TenantID,
 		OwnerKind: corerunner.OwnerKind(desired.OwnerKind), OwnerID: desired.OwnerID,
-		GitHubURL: desired.GitHubURL, Labels: desired.Labels, ImageRef: desired.ImageRef,
+		GitHubURL: desired.GitHubURL, RunnerGroup: desired.RunnerGroup, GitHubName: desired.GitHubName, CPUMillis: desired.CPUMillis, MemoryBytes: desired.MemoryBytes, Labels: desired.Labels, ImageRef: desired.ImageRef,
 		RuntimeEpoch: record.RuntimeEpoch + 1, AllocationConfig: service.allocation, Allocation: record.Allocation,
 	}, service.policy)
 	if err != nil {
@@ -296,7 +297,9 @@ func (service *ProvisioningService) normalizeCreate(
 	request apiTypes.RunnerCreateRequest,
 ) (runnerrecord.RunnerDesiredRecord, error) {
 	desired := runnerrecord.RunnerDesiredRecord{
-		ID: ids.New(ids.KindRunner), Slug: request.Slug, GitHubURL: request.GitHubURL,
+		ID: ids.New(
+			ids.KindRunner,
+		), Slug: request.Slug, GitHubURL: request.GitHubURL, RunnerGroup: request.RunnerGroup, GitHubName: request.GitHubName, CPUMillis: request.CPUMillis, MemoryBytes: request.MemoryBytes,
 		Labels: slices.Clone(request.Labels), ImageRef: service.imageRef,
 	}
 	switch {
@@ -378,6 +381,10 @@ func (service *ProvisioningService) protectCreateIntent(
 			requestidempotency.Field{Name: "slug", Value: requestidempotency.String(desired.Slug)},
 			ownerField,
 			requestidempotency.Field{Name: "github_url", Value: requestidempotency.String(desired.GitHubURL)},
+			requestidempotency.Field{Name: "runner_group", Value: requestidempotency.String(desired.RunnerGroup)},
+			requestidempotency.Field{Name: "github_name", Value: requestidempotency.String(desired.GitHubName)},
+			requestidempotency.Field{Name: "cpu_millis", Value: requestidempotency.Integer(desired.CPUMillis)},
+			requestidempotency.Field{Name: "memory_bytes", Value: requestidempotency.Integer(desired.MemoryBytes)},
 			requestidempotency.Field{Name: "labels", Value: requestidempotency.List(labels...)},
 			requestidempotency.Field{Name: "registration_token_present", Value: requestidempotency.Bool(true)},
 		)),

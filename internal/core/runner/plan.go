@@ -28,6 +28,10 @@ type Target struct {
 	OwnerKind        OwnerKind
 	OwnerID          string
 	GitHubURL        string
+	RunnerGroup      string
+	GitHubName       string
+	CPUMillis        int64
+	MemoryBytes      int64
 	Labels           []string
 	ImageRef         string
 	RuntimeEpoch     uint64
@@ -84,7 +88,9 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 	home := path.Join(slotRoot, "runner")
 	labels := append([]string(nil), target.Labels...)
 	denied := append([]netip.Prefix(nil), policy.DeniedCIDRs...)
+	runnerName := runnerallocation.RegistrationName(target.RunnerID, target.GitHubName)
 	return Plan{
+		CPUMillis: target.CPUMillis, MemoryBytes: target.MemoryBytes,
 		RunnerID: target.RunnerID, TenantID: target.TenantID, OwnerKind: string(target.OwnerKind),
 		OwnerID: target.OwnerID, RuntimeEpoch: target.RuntimeEpoch,
 		AllocationConfig: target.AllocationConfig, Allocation: target.Allocation,
@@ -121,7 +127,7 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 			DockerSocketSource: runnerallocation.DaemonSocketPath(
 				target.RunnerID,
 			), DockerSocketTarget: "/var/run/groundplane-docker/docker.sock",
-			GitHubURL: target.GitHubURL, RunnerName: "gp-" + identityToken, Labels: labels,
+			GitHubURL: target.GitHubURL, RunnerGroup: target.RunnerGroup, RunnerName: runnerName, Labels: labels,
 		},
 	}, nil
 }
@@ -152,13 +158,18 @@ func validateTarget(target Target) error {
 		return errs.New(errs.KindValidationFailed, "runner GitHub URL is invalid")
 	}
 	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	wantSegments := 1
-	if target.OwnerKind == OwnerProject || target.OwnerKind == OwnerEnvironment {
-		wantSegments = 2
-	}
 	if parsed.Scheme != "https" || parsed.Host != "github.com" || parsed.RawQuery != "" ||
-		parsed.Fragment != "" || len(segments) != wantSegments || slices.Contains(segments, "") {
+		parsed.Fragment != "" || (len(segments) != 1 && len(segments) != 2) || slices.Contains(segments, "") {
 		return errs.New(errs.KindValidationFailed, "runner GitHub URL is invalid")
+	}
+	if err := runnerallocation.ValidateRunnerGroup(target.GitHubURL, target.RunnerGroup); err != nil {
+		return err
+	}
+	if err := runnerallocation.ValidateRunnerBudget(target.CPUMillis, target.MemoryBytes); err != nil {
+		return err
+	}
+	if err := runnerallocation.ValidateGitHubRunnerName(target.GitHubName); err != nil {
+		return err
 	}
 	if !validDigestImage(target.ImageRef) || !validLabels(target.Labels) {
 		return errs.New(errs.KindValidationFailed, "runner image or labels are invalid")
@@ -234,7 +245,8 @@ func validLabels(values []string) bool {
 func ValidatePlan(plan Plan) error {
 	target := Target{
 		RunnerID: plan.RunnerID, TenantID: plan.TenantID, OwnerKind: OwnerKind(plan.OwnerKind), OwnerID: plan.OwnerID,
-		GitHubURL: plan.Container.GitHubURL, Labels: plan.Container.Labels, ImageRef: plan.Container.ImageRef,
+		GitHubURL: plan.Container.GitHubURL, RunnerGroup: plan.Container.RunnerGroup, Labels: plan.Container.Labels, ImageRef: plan.Container.ImageRef,
+		GitHubName: plan.Container.RunnerName, CPUMillis: plan.CPUMillis, MemoryBytes: plan.MemoryBytes,
 		RuntimeEpoch: plan.RuntimeEpoch, AllocationConfig: plan.AllocationConfig, Allocation: plan.Allocation,
 	}
 	expected, err := NewPlan(target, IsolationPolicy{

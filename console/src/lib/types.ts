@@ -353,6 +353,10 @@ export type Runner = {
   projectId: string | null;
   environmentId: string | null;
   githubUrl: string;
+  runnerGroup: string;
+  githubName: string;
+  cpuMillis: number;
+  memoryBytes: number;
   name: string;
   labels: string[];
   lifecycle: "provisioning" | "ready" | "failed" | "deleting";

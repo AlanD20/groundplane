@@ -4322,19 +4322,23 @@ type Runner struct {
 	//
 	// Examples: /api/v1/Runner.json
 	Schema        *string            `json:"$schema,omitempty"`
+	CpuMillis     int64              `json:"cpu_millis"`
 	CreateTaskId  string             `json:"create_task_id"`
 	CreatedAt     string             `json:"created_at"`
 	EnvironmentId *string            `json:"environment_id,omitempty"`
+	GithubName    *string            `json:"github_name,omitempty"`
 	GithubUrl     string             `json:"github_url"`
 	Id            string             `json:"id"`
 	Labels        *[]string          `json:"labels,omitempty"`
 	Lifecycle     RunnerLifecycle    `json:"lifecycle"`
+	MemoryBytes   int64              `json:"memory_bytes"`
 	Name          string             `json:"name"`
 	ObservedAt    *string            `json:"observed_at"`
 	Online        bool               `json:"online"`
 	ProjectId     *string            `json:"project_id,omitempty"`
 	RemoveTaskId  *string            `json:"remove_task_id"`
 	Revision      *int64             `json:"revision,omitempty"`
+	RunnerGroup   string             `json:"runner_group"`
 	Slug          string             `json:"slug"`
 	Software      *ContainerIdentity `json:"software,omitempty"`
 	TenantId      string             `json:"tenant_id"`
@@ -4348,6 +4352,7 @@ type RunnerCheckConfiguration struct {
 	ControllerEndpoint string `json:"controller_endpoint"`
 	GithubUrl          string `json:"github_url"`
 	ImageReference     string `json:"image_reference"`
+	RunnerGroup        string `json:"runner_group"`
 	RunnerId           string `json:"runner_id"`
 	RunnerRevision     int64  `json:"runner_revision"`
 	RuntimeEpoch       int64  `json:"runtime_epoch"`
@@ -4412,11 +4417,15 @@ type RunnerCreateRequest struct {
 	//
 	// Examples: /api/v1/RunnerCreateRequest.json
 	Schema            *string   `json:"$schema,omitempty"`
+	CpuMillis         int64     `json:"cpu_millis"`
 	EnvironmentId     *string   `json:"environment_id,omitempty"`
+	GithubName        *string   `json:"github_name,omitempty"`
 	GithubUrl         string    `json:"github_url"`
 	Labels            *[]string `json:"labels,omitempty"`
+	MemoryBytes       int64     `json:"memory_bytes"`
 	ProjectId         *string   `json:"project_id,omitempty"`
 	RegistrationToken string    `json:"registration_token"`
+	RunnerGroup       string    `json:"runner_group"`
 	Slug              string    `json:"slug"`
 	TenantId          *string   `json:"tenant_id,omitempty"`
 }

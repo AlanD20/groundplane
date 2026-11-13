@@ -1,15 +1,17 @@
 package runners
 
 import (
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/imageref"
-	"github.com/AlanD20/groundplane/internal/common/slug"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/url"
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	"github.com/AlanD20/groundplane/internal/common/slug"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func ValidateRunnerDesired(desired RunnerDesiredRecord) error {
@@ -18,7 +20,7 @@ func ValidateRunnerDesired(desired RunnerDesiredRecord) error {
 	}
 	normalized, err := NormalizeRunnerDesired(desired)
 	if err != nil || normalized.Slug != desired.Slug || normalized.GitHubURL != desired.GitHubURL ||
-		normalized.ImageRef != desired.ImageRef || !slices.Equal(normalized.Labels, desired.Labels) {
+		normalized.RunnerGroup != desired.RunnerGroup || normalized.GitHubName != desired.GitHubName || normalized.ImageRef != desired.ImageRef || !slices.Equal(normalized.Labels, desired.Labels) {
 		return errs.New(errs.KindValidationFailed, "runner desired state is not canonical")
 	}
 	return nil
@@ -66,6 +68,17 @@ func NormalizeRunnerDesired(desired RunnerDesiredRecord) (RunnerDesiredRecord, e
 	if !validRunnerImageRef(desired.ImageRef) {
 		return RunnerDesiredRecord{}, errs.New(errs.KindValidationFailed, "runner image_ref is invalid")
 	}
+	desired.RunnerGroup = strings.TrimSpace(desired.RunnerGroup)
+	if err := runnerallocation.ValidateRunnerGroup(githubURL, desired.RunnerGroup); err != nil {
+		return RunnerDesiredRecord{}, err
+	}
+	desired.GitHubName = strings.TrimSpace(desired.GitHubName)
+	if err := runnerallocation.ValidateGitHubRunnerName(desired.GitHubName); err != nil {
+		return RunnerDesiredRecord{}, err
+	}
+	if err := runnerallocation.ValidateRunnerBudget(desired.CPUMillis, desired.MemoryBytes); err != nil {
+		return RunnerDesiredRecord{}, err
+	}
 	desired.GitHubURL = githubURL
 	desired.Labels = labels
 	return desired, nil
@@ -105,20 +118,11 @@ func CanonicalRunnerGitHubURL(ownerKind RunnerOwnerKind, value string) (string, 
 	if len(parts) == 0 || !validGitHubOrganization(parts[0]) {
 		return "", errs.New(errs.KindValidationFailed, "runner github_url organization is invalid")
 	}
-	switch ownerKind {
-	case RunnerOwnerTenant:
-		if len(parts) != 1 {
-			return "", errs.New(errs.KindValidationFailed, "tenant runner github_url must identify an organization")
-		}
-	case RunnerOwnerProject, RunnerOwnerEnvironment:
-		if len(parts) != 2 || !validGitHubRepository(parts[1]) {
-			return "", errs.New(
-				errs.KindValidationFailed,
-				"project or environment runner github_url must identify a repository",
-			)
-		}
-	default:
+	if ownerKind != RunnerOwnerTenant && ownerKind != RunnerOwnerProject && ownerKind != RunnerOwnerEnvironment {
 		return "", errs.New(errs.KindValidationFailed, "runner owner kind is invalid")
+	}
+	if len(parts) > 2 || len(parts) == 2 && !validGitHubRepository(parts[1]) {
+		return "", errs.New(errs.KindValidationFailed, "runner github_url must identify an organization or repository")
 	}
 	return "https://github.com/" + strings.ToLower(strings.Join(parts, "/")), nil
 }

@@ -102,7 +102,7 @@ func (c *Client) CreateRunner(
 		return apiTypes.TaskAccepted{}, err
 	}
 	body := generated.RunnerCreateJSONRequestBody{
-		Slug: request.Slug, GithubUrl: request.GitHubURL,
+		Slug: request.Slug, GithubUrl: request.GitHubURL, RunnerGroup: request.RunnerGroup, GithubName: &request.GitHubName, CpuMillis: request.CPUMillis, MemoryBytes: request.MemoryBytes,
 		RegistrationToken: request.RegistrationToken,
 	}
 	defer func() { body.RegistrationToken = "" }()
@@ -232,7 +232,7 @@ func runnerFromGenerated(runner generated.Runner) (apiTypes.Runner, error) {
 		Revision: revision,
 		ID:       runner.Id, Slug: runner.Slug, TenantID: runner.TenantId, ProjectID: projectID,
 		EnvironmentID: environmentID,
-		GitHubURL:     runner.GithubUrl, Name: runner.Name, Labels: labels,
+		GitHubURL:     runner.GithubUrl, RunnerGroup: runner.RunnerGroup, GitHubName: valueOrEmpty(runner.GithubName), CPUMillis: runner.CpuMillis, MemoryBytes: runner.MemoryBytes, Name: runner.Name, Labels: labels,
 		Lifecycle: apiTypes.RunnerLifecycle(runner.Lifecycle), CreateTaskID: runner.CreateTaskId,
 		RemoveTaskID: runner.RemoveTaskId, Online: runner.Online,
 		ObservedAt: runner.ObservedAt, CreatedAt: runner.CreatedAt,

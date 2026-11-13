@@ -160,7 +160,9 @@ func runnerTestDesired(
 		ID:        runnerID,
 		Slug:      "runner-" + strings.ToLower(strings.TrimPrefix(runnerID, "run_")),
 		OwnerKind: ownerKind, OwnerID: ownerID, TenantID: tenantID,
-		GitHubURL: runnerTestGitHubURL(ownerKind), Labels: []string{"qa-workload"},
+		GitHubURL: runnerTestGitHubURL(
+			ownerKind,
+		), RunnerGroup: "Default", CPUMillis: 2000, MemoryBytes: 4 << 30, Labels: []string{"qa-workload"},
 		ImageRef: "ghcr.io/groundplane/runner@sha256:" + strings.Repeat("0", 64),
 	}
 }
@@ -218,12 +220,14 @@ func prepareRunnerCreationFixture(t *testing.T, repository *RunnerRepository,
 	t.Cleanup(source.Clear)
 	record := source.Runner()
 	plan := runnerallocation.RuntimePlan{
+		CPUMillis: desired.CPUMillis, MemoryBytes: desired.MemoryBytes,
 		RunnerID: desired.ID, TenantID: desired.TenantID,
 		OwnerKind: string(desired.OwnerKind), OwnerID: desired.OwnerID,
 		RuntimeEpoch: record.RuntimeEpoch + 1, AllocationConfig: config, Allocation: record.Allocation,
 		Paths: runnerallocation.RunnerRuntimePaths{RawSocket: runnerallocation.DaemonSocketPath(desired.ID)},
 		Container: runnerallocation.RunnerContainer{
-			ImageRef: desired.ImageRef, GitHubURL: desired.GitHubURL, Labels: desired.Labels,
+			ImageRef: desired.ImageRef, GitHubURL: desired.GitHubURL, RunnerGroup: desired.RunnerGroup,
+			RunnerName: runnerallocation.RegistrationName(desired.ID, desired.GitHubName), Labels: desired.Labels,
 		},
 	}
 	input := runnerwork.Input{TaskID: taskID,

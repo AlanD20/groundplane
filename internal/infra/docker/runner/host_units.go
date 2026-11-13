@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,7 +19,7 @@ func daemonDescription(plan corerunner.Plan) string {
 func (operations *localOperations) unitState(ctx context.Context, plan corerunner.Plan) (string, error) {
 	result, err := operations.run(ctx, "systemctl", "show",
 		"--property=LoadState", "--property=ActiveState", "--property=Description",
-		"--property=User", "--property=Group", daemonUnit(plan))
+		"--property=User", "--property=Group", "--property=Slice", daemonUnit(plan))
 	if err != nil {
 		return "", err
 	}
@@ -34,7 +35,8 @@ func (operations *localOperations) unitState(ctx context.Context, plan corerunne
 		return "absent", nil
 	}
 	if values["LoadState"] != "loaded" || values["Description"] != daemonDescription(plan) ||
-		values["User"] != plan.Identity.User || values["Group"] != plan.Identity.Group {
+		values["User"] != plan.Identity.User || values["Group"] != plan.Identity.Group ||
+		values["Slice"] != runnerallocation.ResourceSlice(plan.RunnerID) {
 		return "", errs.New(errs.KindStateConflict, "Runner systemd unit ownership changed")
 	}
 	switch values["ActiveState"] {
