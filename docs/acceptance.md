@@ -1936,6 +1936,23 @@ saturation, OOM handling, reboot recovery, live GitHub group authorization,
 complete Runner creation with the new release image or arm64 runtime behavior.
 Those variants remain unqualified.
 
+## Repeatable uninstaller image cleanup
+
+**H123 — selected PKG-12 variants, 2026-11-13.** Docker 29.6.2 in a
+separate disposable daemon reproduced the operator failure: pulling by digest
+left both a tag and a digest-form alias in `RepoTags`; removing the final tag
+also removed the digest alias. The old uninstaller then failed on that stale
+alias and retained GP files. The corrected script resumed that partial uninstall,
+then passed a new tag/digest cleanup and a further repeat with no GP resources
+remaining. Independent checks found no managed containers, networks, Volumes,
+images or fixture configuration directories. Docker, an unrelated running
+registry and an unrelated Volume remained usable. Real command failures now
+include captured stderr rather than only a subprocess exception.
+
+This was a real Docker cleanup test inside an isolated container, not a full
+supported-OS/systemd or host-DNS uninstall qualification. No production host
+was modified by the test.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

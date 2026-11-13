@@ -151,16 +151,25 @@ try:
             remove_path(path)
         # Remove GP-built images, never prune shared upstream image caches.
         for identity in set(selected("image", "org.opencontainers.image.source=https://github.com/AlanD20/groundplane")):
+            if identity not in set(selected("image", "org.opencontainers.image.source=https://github.com/AlanD20/groundplane")):
+                continue
             image = json.loads(run(docker + ["image", "inspect", identity]))[0]
             users = run(docker + ["container", "ls", "--all", "--quiet", "--filter", "ancestor=" + identity]).split()
             if any(not any(user.startswith(owner) for owner in containers) for user in users):
                 print("Keeping image used by another container: " + identity, flush=True)
                 continue
-            for reference in image.get("RepoTags") or []:
+            references = list(dict.fromkeys((image.get("RepoTags") or []) + (image.get("RepoDigests") or [])))
+            for reference in references or [identity]:
+                if not dry:
+                    # Docker may remove other aliases and the image with the last tag.
+                    # Reobserve rather than acting on references captured before removal.
+                    if identity not in set(selected("image", "org.opencontainers.image.source=https://github.com/AlanD20/groundplane")):
+                        break
+                    current = json.loads(run(docker + ["image", "inspect", identity]))[0]
+                    live = (current.get("RepoTags") or []) + (current.get("RepoDigests") or [])
+                    if reference != identity and reference not in live:
+                        continue
                 run(docker + ["image", "rm", reference], change=True)
-            # Removing the final tag can already remove the image.
-            if not image.get("RepoTags"):
-                run(docker + ["image", "rm", identity], change=True)
 
     if shutil.which("nft"):
         inventory = json.loads(run(["nft", "--json", "list", "tables"]))
@@ -213,5 +222,7 @@ try:
     print("Dry run complete; nothing changed." if dry else "Groundplane removed. Docker and host dependencies remain installed. You can run install.sh again.")
 except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
     print("Uninstall incomplete: " + str(error), file=sys.stderr)
+    if isinstance(error, subprocess.CalledProcessError) and error.stderr:
+        print(error.stderr.strip(), file=sys.stderr)
     sys.exit(1)
 ' "$mode"
