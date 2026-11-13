@@ -40,7 +40,7 @@ func (service *ConnectionCheckService) GetConnectionCheck(
 			"Connection check was not found for this Runner",
 		)
 	}
-	stale, err := service.runners.RunnerCheckSourcesChanged(ctx, record.Source)
+	stale, err := service.runners.RunnerRuntimeSourcesChanged(ctx, record.Source)
 	if err != nil {
 		return apiTypes.RunnerCheckResult{}, err
 	}

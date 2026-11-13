@@ -18,18 +18,22 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerchecks"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerupdates"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type Collector struct {
-	queue       *workqueue.Repository
-	connectors  *connectorchecks.Repository
-	backings    *backingchecks.Repository
-	dns         *dnschecks.Repository
-	edge        *edgechecks.Repository
-	runners     *runnerchecks.Repository
+	queue      *workqueue.Repository
+	connectors *connectorchecks.Repository
+	backings   *backingchecks.Repository
+	dns        *dnschecks.Repository
+	edge       *edgechecks.Repository
+	runners    *runnerchecks.Repository
+	updates    interface {
+		PruneInput(context.Context, string, time.Time) (bool, error)
+	}
 	images      *imageoperations.Repository
 	hierarchy   *etcd.HierarchyDeletionRepository
 	networks    *networkwork.InputRepository
@@ -88,6 +92,10 @@ func New(queue *workqueue.Repository, connectors *connectorchecks.Repository,
 		draftOwners: drafts,
 	}, nil
 }
+
+func (collector *Collector) ConfigureRunnerUpdates(records interface {
+	PruneInput(context.Context, string, time.Time) (bool, error)
+}) { collector.updates = records }
 
 // Collect performs at most one eight-attempt batch. False means another
 // bounded pass is needed or a concurrent write won; it never restarts the Task.
@@ -250,6 +258,8 @@ func operationInputKey(operation workexecution.Operation, taskID string) (string
 		return dnschecks.RecordKey(taskID), nil
 	case workexecution.EdgeCheck:
 		return edgechecks.Key(taskID), nil
+	case workexecution.RunnerSoftware:
+		return runnerupdates.RecordKey(taskID), nil
 	case workexecution.RunnerCheck:
 		return runnerchecks.RecordKey(taskID), nil
 	case workexecution.Image:
@@ -274,6 +284,11 @@ func (collector *Collector) retireInput(
 		return collector.dns.PruneInput(ctx, taskID, at)
 	case workexecution.EdgeCheck:
 		return collector.edge.PruneInput(ctx, taskID, at)
+	case workexecution.RunnerSoftware:
+		if collector.updates == nil {
+			return false, errs.New(errs.KindInternal, "Runner update retention is not configured")
+		}
+		return collector.updates.PruneInput(ctx, taskID, at)
 	case workexecution.RunnerCheck:
 		return collector.runners.PruneInput(ctx, taskID, at)
 	case workexecution.Image:

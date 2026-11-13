@@ -55,10 +55,47 @@ Provisioning, failed and deleting records count until cleanup releases them.
 Host identity slots, subordinate UID/GID ranges and network space are also finite;
 exhaustion reports `resource.in_use`, not automatic pool expansion.
 
-Only the slug is editable. Owner, GitHub URL, GitHub Runner group, GitHub-visible name, resource budget, labels and the
+The slug and automatic upstream-update policy are editable. Owner, GitHub URL, GitHub Runner group, GitHub-visible name, resource budget, labels and the
 release-selected image are immutable. Renaming does not re-register the Runner.
-There is no in-place Runner update, autoscaling, ephemeral pool, multi-host
+There is no in-place GP Runner image/tooling update, autoscaling, ephemeral pool, multi-host
 placement or GitHub Enterprise support in the MVP contract.
+
+## GitHub runner application updates
+
+This capability is implemented separately from GP software upgrades. Live
+automatic/manual-update and interruption qualification has not been run.
+
+Creation exposes **Automatically update GitHub runner software**, initially enabled
+in Console/CLI (`runner add --auto-update`). The API requires `auto_update`.
+Change the policy through Runner settings, `runner edit --auto-update=false`, or
+the existing Runner edit endpoint. The policy is Controller-managed: hourly checks
+select newer verified upstream releases and submit the same durable update path
+used manually. GitHub’s independent updater remains disabled to avoid competing
+writers. Automatic checks require the Controller to be running and network access
+to GitHub; errors do not enable another update path.
+
+With automatic updates disabled, use the Runner software panel to load available
+versions, select an exact version and choose **Update when idle**. Equivalent
+commands are `runner versions`, `runner update --version` and `runner update-result`;
+the API uses `/runners/{id}/versions` and `/runners/{id}/updates`. Uncertain
+acceptance retries the original version/revision and idempotency key. The response
+links the update Task; acceptance is not completion. The version list contains
+checksummed official releases for this host architecture, not a promise that
+GitHub still accepts every listed release or that a downgrade is application-safe.
+
+GP verifies downloaded bytes before activation, preserves the registration,
+workspace and rootless Docker storage, then observes the installed version and
+GitHub reconnection. A busy Runner waits within the bounded Task deadline; an idle
+race cannot authorize killing an observed active worker. Captured host receipts
+support interruption reconciliation and exact predecessor restoration. Unproved
+restoration remains unresolved rather than being reported as a successful update.
+
+**Installed upstream version** is observed from the registered Runner binary.
+The GP image version shown elsewhere describes its packaged CLI, Docker tools and
+base OS. Updating the upstream application does not patch those tools or the OS,
+change resource budgets, or require a new registration token. A future upstream
+version needing different system libraries may fail and require a separately
+reviewed GP image/tooling update.
 
 ## Tokens and Retry
 

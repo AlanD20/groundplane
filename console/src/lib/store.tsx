@@ -108,7 +108,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const {
     refreshRunners,
     createRunner,
-    renameRunner,
+    editRunner,
     retryRunner,
     removeRunner,
   } = useRunnerStore(update);
@@ -446,7 +446,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...connectorActions,
       refreshRunners,
       createRunner,
-      renameRunner,
+      editRunner,
       retryRunner,
       removeRunner,
       ...createBackingServiceActions(state, update),

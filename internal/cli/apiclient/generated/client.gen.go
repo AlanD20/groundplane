@@ -4322,12 +4322,14 @@ type Runner struct {
 	//
 	// Examples: /api/v1/Runner.json
 	Schema        *string            `json:"$schema,omitempty"`
+	AutoUpdate    bool               `json:"auto_update"`
 	CpuMillis     int64              `json:"cpu_millis"`
 	CreateTaskId  string             `json:"create_task_id"`
 	CreatedAt     string             `json:"created_at"`
 	EnvironmentId *string            `json:"environment_id,omitempty"`
 	GithubName    *string            `json:"github_name,omitempty"`
 	GithubUrl     string             `json:"github_url"`
+	GithubVersion *string            `json:"github_version,omitempty"`
 	Id            string             `json:"id"`
 	Labels        *[]string          `json:"labels,omitempty"`
 	Lifecycle     RunnerLifecycle    `json:"lifecycle"`
@@ -4417,6 +4419,7 @@ type RunnerCreateRequest struct {
 	//
 	// Examples: /api/v1/RunnerCreateRequest.json
 	Schema            *string   `json:"$schema,omitempty"`
+	AutoUpdate        bool      `json:"auto_update"`
 	CpuMillis         int64     `json:"cpu_millis"`
 	EnvironmentId     *string   `json:"environment_id,omitempty"`
 	GithubName        *string   `json:"github_name,omitempty"`
@@ -4435,8 +4438,9 @@ type RunnerEditRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/RunnerEditRequest.json
-	Schema *string `json:"$schema,omitempty"`
-	Slug   string  `json:"slug"`
+	Schema     *string `json:"$schema,omitempty"`
+	AutoUpdate *bool   `json:"auto_update,omitempty"`
+	Slug       string  `json:"slug"`
 }
 
 // RunnerRetryRequest defines model for RunnerRetryRequest.
@@ -4446,6 +4450,54 @@ type RunnerRetryRequest struct {
 	// Examples: /api/v1/RunnerRetryRequest.json
 	Schema            *string `json:"$schema,omitempty"`
 	RegistrationToken string  `json:"registration_token"`
+}
+
+// RunnerUpdateRequest defines model for RunnerUpdateRequest.
+type RunnerUpdateRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerUpdateRequest.json
+	Schema   *string `json:"$schema,omitempty"`
+	Revision int64   `json:"revision"`
+	Version  string  `json:"version"`
+}
+
+// RunnerUpdateResult defines model for RunnerUpdateResult.
+type RunnerUpdateResult struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerUpdateResult.json
+	Schema     *string             `json:"$schema,omitempty"`
+	CreatedAt  string              `json:"created_at"`
+	Failure    *string             `json:"failure,omitempty"`
+	FinishedAt *string             `json:"finished_at,omitempty"`
+	Outcome    *string             `json:"outcome,omitempty"`
+	Phase      string              `json:"phase"`
+	Stages     []RunnerUpdateStage `json:"stages"`
+	TaskId     string              `json:"task_id"`
+	Version    string              `json:"version"`
+}
+
+// RunnerUpdateStage defines model for RunnerUpdateStage.
+type RunnerUpdateStage struct {
+	Failure *string `json:"failure,omitempty"`
+	Name    string  `json:"name"`
+	Outcome string  `json:"outcome"`
+}
+
+// RunnerVersion defines model for RunnerVersion.
+type RunnerVersion struct {
+	Architecture string `json:"architecture"`
+	Version      string `json:"version"`
+}
+
+// RunnerVersions defines model for RunnerVersions.
+type RunnerVersions struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerVersions.json
+	Schema *string         `json:"$schema,omitempty"`
+	Items  []RunnerVersion `json:"items"`
 }
 
 // Scope defines model for Scope.
@@ -4557,6 +4609,7 @@ type Secret struct {
 	Kind      string  `json:"kind"`
 	ProjectId *string `json:"project_id,omitempty"`
 	Ref       string  `json:"ref"`
+	Revision  *int64  `json:"revision,omitempty"`
 	Scope     string  `json:"scope"`
 	UpdatedAt string  `json:"updated_at"`
 }
@@ -4573,6 +4626,16 @@ type SecretCreateRequest struct {
 	Platform  *bool   `json:"platform,omitempty"`
 	ProjectId *string `json:"project_id,omitempty"`
 	Value     string  `json:"value"`
+}
+
+// SecretEditRequest defines model for SecretEditRequest.
+type SecretEditRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/SecretEditRequest.json
+	Schema   *string `json:"$schema,omitempty"`
+	Revision int64   `json:"revision"`
+	Value    string  `json:"value"`
 }
 
 // SecretValue defines model for SecretValue.
@@ -6008,6 +6071,16 @@ type RunnerRetryParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// RunnerUpdateShowParams defines parameters for RunnerUpdateShow.
+type RunnerUpdateShowParams struct {
+	Task *string `form:"task,omitempty" json:"task,omitempty"`
+}
+
+// RunnerUpdateParams defines parameters for RunnerUpdate.
+type RunnerUpdateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ScriptListParams defines parameters for ScriptList.
 type ScriptListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -6050,6 +6123,11 @@ type SecretCreateParams struct {
 
 // SecretRemoveParams defines parameters for SecretRemove.
 type SecretRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// SecretEditParams defines parameters for SecretEdit.
+type SecretEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -6419,6 +6497,9 @@ type RunnerCheckJSONRequestBody = RunnerCheckRequest
 // RunnerRetryJSONRequestBody defines body for RunnerRetry for application/json ContentType.
 type RunnerRetryJSONRequestBody = RunnerRetryRequest
 
+// RunnerUpdateJSONRequestBody defines body for RunnerUpdate for application/json ContentType.
+type RunnerUpdateJSONRequestBody = RunnerUpdateRequest
+
 // ScriptCreateJSONRequestBody defines body for ScriptCreate for application/json ContentType.
 type ScriptCreateJSONRequestBody = ScriptCreate
 
@@ -6427,6 +6508,9 @@ type ScriptEditJSONRequestBody = ScriptEdit
 
 // SecretCreateJSONRequestBody defines body for SecretCreate for application/json ContentType.
 type SecretCreateJSONRequestBody = SecretCreateRequest
+
+// SecretEditJSONRequestBody defines body for SecretEdit for application/json ContentType.
+type SecretEditJSONRequestBody = SecretEditRequest
 
 // ServiceCreateJSONRequestBody defines body for ServiceCreate for application/json ContentType.
 type ServiceCreateJSONRequestBody = ServiceCreate
@@ -8544,14 +8628,14 @@ type ClientInterface interface {
 	// Corresponds with GET /runners/{id} (the `RunnerShow` operationId).
 	RunnerShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RunnerEditWithBody Replace a Runner slug
+	// RunnerEditWithBody Edit Runner slug and automatic upstream updates
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
 	RunnerEditWithBody(ctx context.Context, id string, params *RunnerEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RunnerEdit Replace a Runner slug
+	// RunnerEdit Edit Runner slug and automatic upstream updates
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -8590,6 +8674,30 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
 	RunnerRetry(ctx context.Context, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerUpdateShow Show latest or selected Runner software update
+	//
+	// Corresponds with GET /runners/{id}/updates (the `RunnerUpdateShow` operationId).
+	RunnerUpdateShow(ctx context.Context, id string, params *RunnerUpdateShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerUpdateWithBody Update only this Runner upstream software after its job completes
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /runners/{id}/updates (the `RunnerUpdate` operationId).
+	RunnerUpdateWithBody(ctx context.Context, id string, params *RunnerUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerUpdate Update only this Runner upstream software after its job completes
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /runners/{id}/updates (the `RunnerUpdate` operationId).
+	RunnerUpdate(ctx context.Context, id string, params *RunnerUpdateParams, body RunnerUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerVersions List verified GitHub Runner versions for this host
+	//
+	// Corresponds with GET /runners/{id}/versions (the `RunnerVersions` operationId).
+	RunnerVersions(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ScriptList List scripts
 	//
@@ -8667,6 +8775,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /secrets/{id} (the `SecretShow` operationId).
 	SecretShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecretEditWithBody Replace a reusable Secret value without changing its stable reference
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /secrets/{id} (the `SecretEdit` operationId).
+	SecretEditWithBody(ctx context.Context, id string, params *SecretEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecretEdit Replace a reusable Secret value without changing its stable reference
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /secrets/{id} (the `SecretEdit` operationId).
+	SecretEdit(ctx context.Context, id string, params *SecretEditParams, body SecretEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SecretReveal Reveal a reusable secret value
 	//
@@ -11465,7 +11587,7 @@ func (c *Client) RunnerShow(ctx context.Context, id string, reqEditors ...Reques
 	return c.Client.Do(req)
 }
 
-// RunnerEditWithBody Replace a Runner slug
+// RunnerEditWithBody Edit Runner slug and automatic upstream updates
 //
 // Takes any type of body and a specified content type.
 //
@@ -11482,7 +11604,7 @@ func (c *Client) RunnerEditWithBody(ctx context.Context, id string, params *Runn
 	return c.Client.Do(req)
 }
 
-// RunnerEdit Replace a Runner slug
+// RunnerEdit Edit Runner slug and automatic upstream updates
 //
 // Takes a body of the `application/json` content type.
 //
@@ -11572,6 +11694,70 @@ func (c *Client) RunnerRetryWithBody(ctx context.Context, id string, params *Run
 // Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
 func (c *Client) RunnerRetry(ctx context.Context, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRunnerRetryRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerUpdateShow Show latest or selected Runner software update
+//
+// Corresponds with GET /runners/{id}/updates (the `RunnerUpdateShow` operationId).
+func (c *Client) RunnerUpdateShow(ctx context.Context, id string, params *RunnerUpdateShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerUpdateShowRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerUpdateWithBody Update only this Runner upstream software after its job completes
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /runners/{id}/updates (the `RunnerUpdate` operationId).
+func (c *Client) RunnerUpdateWithBody(ctx context.Context, id string, params *RunnerUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerUpdateRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerUpdate Update only this Runner upstream software after its job completes
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /runners/{id}/updates (the `RunnerUpdate` operationId).
+func (c *Client) RunnerUpdate(ctx context.Context, id string, params *RunnerUpdateParams, body RunnerUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerUpdateRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerVersions List verified GitHub Runner versions for this host
+//
+// Corresponds with GET /runners/{id}/versions (the `RunnerVersions` operationId).
+func (c *Client) RunnerVersions(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerVersionsRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -11779,6 +11965,40 @@ func (c *Client) SecretRemove(ctx context.Context, id string, params *SecretRemo
 // Corresponds with GET /secrets/{id} (the `SecretShow` operationId).
 func (c *Client) SecretShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSecretShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecretEditWithBody Replace a reusable Secret value without changing its stable reference
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /secrets/{id} (the `SecretEdit` operationId).
+func (c *Client) SecretEditWithBody(ctx context.Context, id string, params *SecretEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecretEdit Replace a reusable Secret value without changing its stable reference
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /secrets/{id} (the `SecretEdit` operationId).
+func (c *Client) SecretEdit(ctx context.Context, id string, params *SecretEditParams, body SecretEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretEditRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -19066,6 +19286,161 @@ func NewRunnerRetryRequestWithBody(server string, id string, params *RunnerRetry
 	return req, nil
 }
 
+// NewRunnerUpdateShowRequest constructs an http.Request for the RunnerUpdateShow method
+func NewRunnerUpdateShowRequest(server string, id string, params *RunnerUpdateShowParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/updates", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Task != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "task", *params.Task, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRunnerUpdateRequest calls the generic RunnerUpdate builder with application/json body
+func NewRunnerUpdateRequest(server string, id string, params *RunnerUpdateParams, body RunnerUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRunnerUpdateRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRunnerUpdateRequestWithBody constructs an http.Request for the RunnerUpdate method, with any body, and a specified content type
+func NewRunnerUpdateRequestWithBody(server string, id string, params *RunnerUpdateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/updates", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewRunnerVersionsRequest constructs an http.Request for the RunnerVersions method
+func NewRunnerVersionsRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/versions", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewScriptListRequest constructs an http.Request for the ScriptList method
 func NewScriptListRequest(server string, params *ScriptListParams) (*http.Request, error) {
 	var err error
@@ -19600,6 +19975,66 @@ func NewSecretShowRequest(server string, id string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSecretEditRequest calls the generic SecretEdit builder with application/json body
+func NewSecretEditRequest(server string, id string, params *SecretEditParams, body SecretEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSecretEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewSecretEditRequestWithBody constructs an http.Request for the SecretEdit method, with any body, and a specified content type
+func NewSecretEditRequestWithBody(server string, id string, params *SecretEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/secrets/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -23526,14 +23961,14 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /runners/{id} (the `RunnerShow` operationId).
 	RunnerShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RunnerShowResponse, error)
 
-	// RunnerEditWithBodyWithResponse Replace a Runner slug
+	// RunnerEditWithBodyWithResponse Edit Runner slug and automatic upstream updates
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
 	RunnerEditWithBodyWithResponse(ctx context.Context, id string, params *RunnerEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerEditResponse, error)
 
-	// RunnerEditWithResponse Replace a Runner slug
+	// RunnerEditWithResponse Edit Runner slug and automatic upstream updates
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -23574,6 +24009,34 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
 	RunnerRetryWithResponse(ctx context.Context, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerRetryResponse, error)
+
+	// RunnerUpdateShowWithResponse Show latest or selected Runner software update
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /runners/{id}/updates (the `RunnerUpdateShow` operationId).
+	RunnerUpdateShowWithResponse(ctx context.Context, id string, params *RunnerUpdateShowParams, reqEditors ...RequestEditorFn) (*RunnerUpdateShowResponse, error)
+
+	// RunnerUpdateWithBodyWithResponse Update only this Runner upstream software after its job completes
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /runners/{id}/updates (the `RunnerUpdate` operationId).
+	RunnerUpdateWithBodyWithResponse(ctx context.Context, id string, params *RunnerUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerUpdateResponse, error)
+
+	// RunnerUpdateWithResponse Update only this Runner upstream software after its job completes
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /runners/{id}/updates (the `RunnerUpdate` operationId).
+	RunnerUpdateWithResponse(ctx context.Context, id string, params *RunnerUpdateParams, body RunnerUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerUpdateResponse, error)
+
+	// RunnerVersionsWithResponse List verified GitHub Runner versions for this host
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /runners/{id}/versions (the `RunnerVersions` operationId).
+	RunnerVersionsWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RunnerVersionsResponse, error)
 
 	// ScriptListWithResponse List scripts
 	//
@@ -23665,6 +24128,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /secrets/{id} (the `SecretShow` operationId).
 	SecretShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*SecretShowResponse, error)
+
+	// SecretEditWithBodyWithResponse Replace a reusable Secret value without changing its stable reference
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /secrets/{id} (the `SecretEdit` operationId).
+	SecretEditWithBodyWithResponse(ctx context.Context, id string, params *SecretEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SecretEditResponse, error)
+
+	// SecretEditWithResponse Replace a reusable Secret value without changing its stable reference
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /secrets/{id} (the `SecretEdit` operationId).
+	SecretEditWithResponse(ctx context.Context, id string, params *SecretEditParams, body SecretEditJSONRequestBody, reqEditors ...RequestEditorFn) (*SecretEditResponse, error)
 
 	// SecretRevealWithResponse Reveal a reusable secret value
 	//
@@ -30005,6 +30482,157 @@ func (r RunnerRetryResponse) ContentType() string {
 	return ""
 }
 
+type RunnerUpdateShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RunnerUpdateResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RunnerUpdateShowResponse) GetJSON200() *RunnerUpdateResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerUpdateShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerUpdateShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerUpdateShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerUpdateShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerUpdateShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RunnerUpdateResponse202Headers the declared response headers of an HTTP 202 response for RunnerUpdate
+type RunnerUpdateResponse202Headers struct {
+	ContentType *string
+}
+
+type RunnerUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RunnerUpdateResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RunnerUpdateResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerUpdateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerUpdateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerUpdateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RunnerVersionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RunnerVersions
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RunnerVersionsResponse) GetJSON200() *RunnerVersions {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerVersionsResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerVersionsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerVersionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerVersionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerVersionsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ScriptListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -30521,6 +31149,61 @@ func (r SecretShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SecretShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// SecretEditResponse200Headers the declared response headers of an HTTP 200 response for SecretEdit
+type SecretEditResponse200Headers struct {
+	ContentType *string
+}
+
+type SecretEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *SecretEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SecretEditResponse) GetJSON200() *Secret {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SecretEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SecretEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SecretEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SecretEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SecretEditResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -34888,7 +35571,7 @@ func (c *ClientWithResponses) RunnerShowWithResponse(ctx context.Context, id str
 	return ParseRunnerShowResponse(rsp)
 }
 
-// RunnerEditWithBodyWithResponse Replace a Runner slug
+// RunnerEditWithBodyWithResponse Edit Runner slug and automatic upstream updates
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -34901,7 +35584,7 @@ func (c *ClientWithResponses) RunnerEditWithBodyWithResponse(ctx context.Context
 	return ParseRunnerEditResponse(rsp)
 }
 
-// RunnerEditWithResponse Replace a Runner slug
+// RunnerEditWithResponse Edit Runner slug and automatic upstream updates
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -34977,6 +35660,58 @@ func (c *ClientWithResponses) RunnerRetryWithResponse(ctx context.Context, id st
 		return nil, err
 	}
 	return ParseRunnerRetryResponse(rsp)
+}
+
+// RunnerUpdateShowWithResponse Show latest or selected Runner software update
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /runners/{id}/updates (the `RunnerUpdateShow` operationId).
+func (c *ClientWithResponses) RunnerUpdateShowWithResponse(ctx context.Context, id string, params *RunnerUpdateShowParams, reqEditors ...RequestEditorFn) (*RunnerUpdateShowResponse, error) {
+	rsp, err := c.RunnerUpdateShow(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerUpdateShowResponse(rsp)
+}
+
+// RunnerUpdateWithBodyWithResponse Update only this Runner upstream software after its job completes
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /runners/{id}/updates (the `RunnerUpdate` operationId).
+func (c *ClientWithResponses) RunnerUpdateWithBodyWithResponse(ctx context.Context, id string, params *RunnerUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerUpdateResponse, error) {
+	rsp, err := c.RunnerUpdateWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerUpdateResponse(rsp)
+}
+
+// RunnerUpdateWithResponse Update only this Runner upstream software after its job completes
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /runners/{id}/updates (the `RunnerUpdate` operationId).
+func (c *ClientWithResponses) RunnerUpdateWithResponse(ctx context.Context, id string, params *RunnerUpdateParams, body RunnerUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerUpdateResponse, error) {
+	rsp, err := c.RunnerUpdate(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerUpdateResponse(rsp)
+}
+
+// RunnerVersionsWithResponse List verified GitHub Runner versions for this host
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /runners/{id}/versions (the `RunnerVersions` operationId).
+func (c *ClientWithResponses) RunnerVersionsWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RunnerVersionsResponse, error) {
+	rsp, err := c.RunnerVersions(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerVersionsResponse(rsp)
 }
 
 // ScriptListWithResponse List scripts
@@ -35146,6 +35881,32 @@ func (c *ClientWithResponses) SecretShowWithResponse(ctx context.Context, id str
 		return nil, err
 	}
 	return ParseSecretShowResponse(rsp)
+}
+
+// SecretEditWithBodyWithResponse Replace a reusable Secret value without changing its stable reference
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /secrets/{id} (the `SecretEdit` operationId).
+func (c *ClientWithResponses) SecretEditWithBodyWithResponse(ctx context.Context, id string, params *SecretEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SecretEditResponse, error) {
+	rsp, err := c.SecretEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecretEditResponse(rsp)
+}
+
+// SecretEditWithResponse Replace a reusable Secret value without changing its stable reference
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /secrets/{id} (the `SecretEdit` operationId).
+func (c *ClientWithResponses) SecretEditWithResponse(ctx context.Context, id string, params *SecretEditParams, body SecretEditJSONRequestBody, reqEditors ...RequestEditorFn) (*SecretEditResponse, error) {
+	rsp, err := c.SecretEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecretEditResponse(rsp)
 }
 
 // SecretRevealWithResponse Reveal a reusable secret value
@@ -40547,6 +41308,118 @@ func ParseRunnerRetryResponse(rsp *http.Response) (*RunnerRetryResponse, error) 
 	return response, nil
 }
 
+// ParseRunnerUpdateShowResponse parses an HTTP response from a RunnerUpdateShowWithResponse call
+func ParseRunnerUpdateShowResponse(rsp *http.Response) (*RunnerUpdateShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerUpdateShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RunnerUpdateResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRunnerUpdateResponse parses an HTTP response from a RunnerUpdateWithResponse call
+func ParseRunnerUpdateResponse(rsp *http.Response) (*RunnerUpdateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers RunnerUpdateResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRunnerVersionsResponse parses an HTTP response from a RunnerVersionsWithResponse call
+func ParseRunnerVersionsResponse(rsp *http.Response) (*RunnerVersionsResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerVersionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RunnerVersions
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseScriptListResponse parses an HTTP response from a ScriptListWithResponse call
 func ParseScriptListResponse(rsp *http.Response) (*ScriptListResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -40950,6 +41823,52 @@ func ParseSecretShowResponse(rsp *http.Response) (*SecretShowResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseSecretEditResponse parses an HTTP response from a SecretEditWithResponse call
+func ParseSecretEditResponse(rsp *http.Response) (*SecretEditResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SecretEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Secret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers SecretEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

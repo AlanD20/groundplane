@@ -3,15 +3,9 @@ set -eu
 
 umask 077
 
-image_version=$(cat /opt/actions-runner/.groundplane-runner-version)
-if test -f .groundplane-runner-version; then
-    installed_version=$(cat .groundplane-runner-version)
-    if test "$installed_version" != "$image_version"; then
-        registration_token=
-        echo "Runner home belongs to a different immutable image" >&2
-        exit 78
-    fi
-else
+# The home contains independently maintained upstream software. The container
+# image identity is verified by GP; a newer upstream package must survive restart.
+if ! test -f .groundplane-runner-version; then
     cp -R /opt/actions-runner/. .
 fi
 

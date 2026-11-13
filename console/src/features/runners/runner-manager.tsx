@@ -21,6 +21,7 @@ import {
   ResourceFormTitle as DialogTitle,
 } from "@/components/common/resource-form";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import type { Runner } from "@/lib/types";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
@@ -66,6 +67,8 @@ export default function RunnerManager({
   const [runnerProvider, setRunnerProvider] = useState("github");
   const [githubUrl, setGithubUrl] = useState("");
   const [runnerGroup, setRunnerGroup] = useState("Default");
+  const [autoUpdate, setAutoUpdate] = useState(true);
+  const [editAutoUpdate, setEditAutoUpdate] = useState(true);
   const [githubName, setGithubName] = useState("");
   const [cpus, setCpus] = useState("2");
   const [memoryGiB, setMemoryGiB] = useState("4");
@@ -198,6 +201,17 @@ export default function RunnerManager({
               <p className="text-sm text-destructive">{retryError}</p>
             )}
           </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="runner-edit-auto-update"
+              checked={editAutoUpdate}
+              onChange={(event) => setEditAutoUpdate(event.target.checked)}
+              disabled={saving}
+            />
+            <Label htmlFor="runner-edit-auto-update">
+              Automatically update GitHub runner software
+            </Label>
+          </div>
           <DialogFooter>
             <Button
               type="button"
@@ -235,14 +249,19 @@ export default function RunnerManager({
               !editing ||
               !validSlug ||
               slugTaken ||
-              normalizedSlug === editing.slug
+              (normalizedSlug === editing.slug &&
+                editAutoUpdate === editing.autoUpdate)
             )
               return;
             void (async () => {
               setSaving(true);
               setEditError(null);
               try {
-                await store.renameRunner(editing.id, normalizedSlug);
+                await store.editRunner(
+                  editing.id,
+                  normalizedSlug,
+                  editAutoUpdate,
+                );
                 setEditing(null);
               } catch (error) {
                 setEditError(
@@ -288,10 +307,11 @@ export default function RunnerManager({
                 saving ||
                 !validSlug ||
                 slugTaken ||
-                normalizedSlug === editing?.slug
+                (normalizedSlug === editing?.slug &&
+                  editAutoUpdate === editing?.autoUpdate)
               }
             >
-              {saving ? "Saving..." : "Save slug"}
+              {saving ? "Saving..." : "Save settings"}
             </Button>
           </DialogFooter>
         </form>
@@ -406,6 +426,7 @@ export default function RunnerManager({
                   githubUrl: githubUrl.trim(),
                   runnerGroup: runnerGroup.trim(),
                   githubName: githubName.trim(),
+                  autoUpdate,
                   cpuMillis: Math.round(Number(cpus) * 1000),
                   memoryBytes: Math.round(Number(memoryGiB) * 2 ** 30),
                   labels: normalizedLabels,
@@ -467,6 +488,8 @@ export default function RunnerManager({
             </div>
           </fieldset>
           <RunnerCreationFields
+            autoUpdate={autoUpdate}
+            setAutoUpdate={setAutoUpdate}
             githubName={githubName}
             runnerGroup={runnerGroup}
             labels={labels}
@@ -535,6 +558,7 @@ export default function RunnerManager({
         onRename={(runner) => {
           setEditing(runner);
           setSlug(runner.slug);
+          setEditAutoUpdate(runner.autoUpdate);
           setEditError(null);
         }}
         onRetry={(runner) => {

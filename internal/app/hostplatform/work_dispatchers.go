@@ -173,6 +173,7 @@ func (owners *workOwners) newDispatchers(
 					Executor:  workexecution.Controller,
 					Owner:     owners.connections.edges,
 				},
+				{Operation: workexecution.RunnerSoftware, Executor: workexecution.Controller, Owner: dependencies.RunnerSoftware},
 				{
 					Operation: workexecution.RunnerCheck,
 					Executor:  workexecution.Controller,
@@ -199,6 +200,7 @@ func (owners *workOwners) newDispatchers(
 			{Operation: workexecution.DNSCheck, Owner: owners.connections.dns},
 			{Operation: workexecution.EdgeCheck, Owner: owners.connections.edges},
 			{Operation: workexecution.RunnerCheck, Owner: dependencies.RunnerChecks},
+			{Operation: workexecution.RunnerSoftware, Owner: dependencies.RunnerSoftware},
 		}...),
 	)
 	if err != nil {

@@ -52,6 +52,7 @@ function reusableSecretFromAPI(
 
   const base = {
     id: secret.id,
+    revision: secret.revision ?? 0,
     key: secret.key,
     kind,
     ref: secret.ref,

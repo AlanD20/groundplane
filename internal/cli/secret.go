@@ -16,6 +16,7 @@ import (
 func newSecretCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "secret", Short: "Project or platform secrets (env variable or file secret)"}
 	var platform bool
+	cmd.AddCommand(newSecretEditCmd(&platform))
 	cmd.PersistentFlags().BoolVar(&platform, "platform", false, "use platform Secret scope")
 
 	cmd.AddCommand(&cobra.Command{

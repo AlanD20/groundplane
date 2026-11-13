@@ -12,32 +12,32 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type RunnerCheckSource struct {
-	source       runnerchecks.Source
+type RunnerRuntimeSource struct {
+	source       runners.CapturedRuntime
 	runner       runners.RunnerRecord
 	parents      runners.RunnerParents
 	conditions   []keyvalue.Condition
 	readRevision int64
 }
 
-func (source RunnerCheckSource) Configuration() runnerchecks.Source {
+func (source RunnerRuntimeSource) Configuration() runners.CapturedRuntime {
 	value := source.source
 	value.Desired.Labels = slices.Clone(value.Desired.Labels)
 	return value
 }
-func (source RunnerCheckSource) Runner() runners.RunnerRecord {
+func (source RunnerRuntimeSource) Runner() runners.RunnerRecord {
 	value := source.runner
 	value.Desired.Labels = slices.Clone(value.Desired.Labels)
 	return value
 }
 
-func (repository *RunnerRepository) LoadRunnerCheckSource(
+func (repository *RunnerRepository) LoadRunnerRuntimeSource(
 	ctx context.Context,
 	runnerID string,
 	revision int64,
-) (RunnerCheckSource, error) {
+) (RunnerRuntimeSource, error) {
 	if ids.Validate(ids.KindRunner, runnerID) != nil || revision <= 0 {
-		return RunnerCheckSource{}, errs.New(
+		return RunnerRuntimeSource{}, errs.New(
 			errs.KindValidationFailed,
 			"Runner check requires its current id and revision",
 		)
@@ -55,52 +55,52 @@ func (repository *RunnerRepository) LoadRunnerCheckSource(
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
-		return RunnerCheckSource{}, err
+		return RunnerRuntimeSource{}, err
 	}
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) {
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
-		return RunnerCheckSource{}, errs.New(errs.KindInternal, "Runner diagnostic source read is incomplete")
+		return RunnerRuntimeSource{}, errs.New(errs.KindInternal, "Runner diagnostic source read is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.Values[0] == nil || read.Values[1] == nil {
-		return RunnerCheckSource{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
+		return RunnerRuntimeSource{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
 	}
 	if read.Values[0].ModRevision != revision {
-		return RunnerCheckSource{}, errs.New(
+		return RunnerRuntimeSource{}, errs.New(
 			errs.KindStateConflict,
 			"Runner changed; refresh before checking connections",
 		)
 	}
 	if read.Values[2] == nil || read.Values[3] != nil || read.Values[4] != nil {
-		return RunnerCheckSource{}, errs.New(
+		return RunnerRuntimeSource{}, errs.New(
 			errs.KindResourceInUse,
 			"Runner runtime is unavailable, being removed or already has an active connection check",
 		)
 	}
 	current, err := runners.DecodeRunnerAggregate(read.Values[0], read.Values[1])
 	if err != nil {
-		return RunnerCheckSource{}, err
+		return RunnerRuntimeSource{}, err
 	}
 	ownership, err := runners.DecodeRunnerRuntimeOwnership(read.Values[2].Value)
 	if err != nil {
-		return RunnerCheckSource{}, err
+		return RunnerRuntimeSource{}, err
 	}
 	if current.Desired.ID != runnerID || current.ProvisioningState != runners.RunnerProvisioningReady ||
 		ownership.RunnerID != runnerID ||
 		ownership.RuntimeEpoch != current.RuntimeEpoch {
-		return RunnerCheckSource{}, errs.New(
+		return RunnerRuntimeSource{}, errs.New(
 			errs.KindStateConflict,
 			"Runner must have a completed registration and current runtime before checking connections",
 		)
 	}
 	parents, err := repository.ResolveRunnerParentsAtRevision(ctx, current.Desired, read.ReadRevision)
 	if err != nil {
-		return RunnerCheckSource{}, err
+		return RunnerRuntimeSource{}, err
 	}
-	source := RunnerCheckSource{
-		source: runnerchecks.Source{
+	source := RunnerRuntimeSource{
+		source: runners.CapturedRuntime{
 			Software:          current.Software,
 			RunnerID:          runnerID,
 			RunnerRevision:    revision,
@@ -114,7 +114,7 @@ func (repository *RunnerRepository) LoadRunnerCheckSource(
 		readRevision: read.ReadRevision,
 	}
 	if err := source.source.Validate(); err != nil {
-		return RunnerCheckSource{}, err
+		return RunnerRuntimeSource{}, err
 	}
 	for index, key := range keys {
 		source.conditions = append(
@@ -126,9 +126,9 @@ func (repository *RunnerRepository) LoadRunnerCheckSource(
 	return source, nil
 }
 
-func (repository *RunnerRepository) RunnerCheckSourcesChanged(
+func (repository *RunnerRepository) RunnerRuntimeSourcesChanged(
 	ctx context.Context,
-	source runnerchecks.Source,
+	source runners.CapturedRuntime,
 ) (bool, error) {
 	if err := source.Validate(); err != nil {
 		return false, err

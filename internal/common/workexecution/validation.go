@@ -47,7 +47,7 @@ func ValidOperation(operation Operation) bool {
 		BackingCheck,
 		DNSCheck,
 		EdgeCheck,
-		RunnerCheck,
+		RunnerCheck, RunnerSoftware,
 		SecretRotation,
 		EntrySettlement,
 		EntryConfiguration,

@@ -33,6 +33,7 @@ const operationLabels: Record<string, string> = {
   dns_check: "Check DNS resolution",
   edge_check: "Check public access",
   runner_check: "Check GitHub Runner",
+  runner_software: "Update GitHub runner software",
   secret_rotation: "Rotate backup encryption key",
   entry_settlement: "Save Entry values",
   entry_configuration: "Write application configuration",

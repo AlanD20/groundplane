@@ -11,7 +11,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/common/runnerconnectioncheck"
-	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -33,18 +32,9 @@ type Owner struct {
 	PlanID      string `json:"plan_id"`
 	OperationID string `json:"operation_id"`
 }
-type Source struct {
-	Software          buildversion.ContainerIdentity       `json:"software"`
-	RunnerID          string                               `json:"runner_id"`
-	RunnerRevision    int64                                `json:"runner_revision"`
-	LifecycleRevision int64                                `json:"lifecycle_revision"`
-	Desired           runners.RunnerDesiredRecord          `json:"desired"`
-	Ownership         runners.RunnerRuntimeOwnershipRecord `json:"ownership"`
-	ContainerID       string                               `json:"container_id"`
-}
 type Record struct {
 	Owner       Owner                         `json:"owner"`
-	Source      Source                        `json:"source"`
+	Source      runners.CapturedRuntime       `json:"source"`
 	Plan        runnerallocation.RuntimePlan  `json:"plan"`
 	Request     runnerconnectioncheck.Request `json:"request"`
 	InputSHA256 string                        `json:"input_sha256"`
@@ -57,24 +47,9 @@ type Record struct {
 	FinishedAt  *time.Time                    `json:"finished_at,omitempty"`
 }
 
-func (source Source) Validate() error {
-	if runners.ValidateRunnerDesired(source.Desired) != nil ||
-		runners.ValidateRunnerRuntimeOwnership(source.Ownership) != nil ||
-		source.Software.Validate() != nil ||
-		source.Software.Image != source.Desired.ImageRef ||
-		source.RunnerID != source.Desired.ID ||
-		source.Ownership.RunnerID != source.RunnerID ||
-		source.RunnerRevision <= 0 ||
-		source.LifecycleRevision <= 0 ||
-		!runners.ValidLowerHex(source.ContainerID, runners.RunnerContainerIDEncodedLength) {
-		return errs.New(errs.KindValidationFailed, "Runner diagnostic source is invalid")
-	}
-	return nil
-}
-
 func NewRecord(
 	owner Owner,
-	source Source,
+	source runners.CapturedRuntime,
 	plan runnerallocation.RuntimePlan,
 	request runnerconnectioncheck.Request,
 	at time.Time,
@@ -91,7 +66,7 @@ func NewRecord(
 
 func (record Record) inputDigest() (string, error) {
 	value, err := json.Marshal(struct {
-		Source  Source
+		Source  runners.CapturedRuntime
 		Plan    runnerallocation.RuntimePlan
 		Request runnerconnectioncheck.Request
 	}{record.Source, record.Plan, record.Request})

@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { ContainerSoftwareIdentity } from "@/features/image-delivery/software-identity";
+import { RunnerSoftwarePanel } from "./runner-software-panel";
 import { RunnerCheckPanel } from "./runner-check-panel";
 
 function runnerStatus(runner: Runner) {
@@ -363,6 +364,7 @@ export function RunnerInventory({
                                   />
                                 </ResourcePanel>
                               </div>
+                              <RunnerSoftwarePanel runner={runner} />
                               <RunnerCheckPanel
                                 runnerId={runner.id}
                                 open

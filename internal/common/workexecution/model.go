@@ -40,6 +40,7 @@ const (
 	DNSCheck            Operation = "dns_check"
 	EdgeCheck           Operation = "edge_check"
 	RunnerCheck         Operation = "runner_check"
+	RunnerSoftware      Operation = "runner_software"
 	SecretRotation      Operation = "secret_rotation"
 	EntrySettlement     Operation = "entry_settlement"
 	EntryConfiguration  Operation = "entry_configuration"

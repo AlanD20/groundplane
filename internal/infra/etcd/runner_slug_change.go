@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerchecks"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -13,10 +14,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
+func (repository *RunnerRepository) ReplaceRunnerSettingsIdempotent(
 	ctx context.Context,
 	runnerID string,
 	slug string,
+	autoUpdate *bool,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -77,6 +79,9 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 	}
 	replacement := runnerrecord.CloneRunnerRecord(current.Record)
 	replacement.Desired.Slug = slug
+	if autoUpdate != nil {
+		replacement.Desired.AutoUpdate = *autoUpdate
+	}
 	value, err := runnerrecord.EncodeRunnerDesiredRecord(replacement.Desired)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -112,9 +117,13 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 			},
 		)
 	}
+	conditions = append(conditions, etcdstore.Condition{Key: runnerchecks.ActiveKey(runnerID)})
 	plan, err := NewIdempotencyMutationPlan(conditions, mutations, func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "runner slug mutation compare evidence is incomplete")
+		}
+		if values[len(values)-1] != nil {
+			return errs.New(errs.KindResourceInUse, "Runner has an active operation; wait before changing its settings")
 		}
 		if values[0] == nil {
 			return errs.New(errs.KindRunnerNotFound, "Runner was not found")

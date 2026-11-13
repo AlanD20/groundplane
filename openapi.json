@@ -6832,6 +6832,9 @@
             "readOnly": true,
             "type": "string"
           },
+          "auto_update": {
+            "type": "boolean"
+          },
           "cpu_millis": {
             "format": "int64",
             "type": "integer"
@@ -6849,6 +6852,9 @@
             "type": "string"
           },
           "github_url": {
+            "type": "string"
+          },
+          "github_version": {
             "type": "string"
           },
           "id": {
@@ -6915,6 +6921,7 @@
           }
         },
         "required": [
+          "auto_update",
           "id",
           "slug",
           "tenant_id",
@@ -7129,6 +7136,9 @@
             "readOnly": true,
             "type": "string"
           },
+          "auto_update": {
+            "type": "boolean"
+          },
           "cpu_millis": {
             "format": "int64",
             "type": "integer"
@@ -7172,6 +7182,7 @@
           }
         },
         "required": [
+          "auto_update",
           "slug",
           "github_url",
           "runner_group",
@@ -7192,6 +7203,9 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "auto_update": {
+            "type": "boolean"
           },
           "slug": {
             "maxLength": 63,
@@ -7222,6 +7236,140 @@
         },
         "required": [
           "registration_token"
+        ],
+        "type": "object"
+      },
+      "RunnerUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerUpdateRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "version"
+        ],
+        "type": "object"
+      },
+      "RunnerUpdateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerUpdateResult.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "failure": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerUpdateStage"
+            },
+            "type": "array"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "version",
+          "phase",
+          "stages",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "RunnerUpdateStage": {
+        "additionalProperties": false,
+        "properties": {
+          "failure": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "RunnerVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "architecture": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "architecture"
+        ],
+        "type": "object"
+      },
+      "RunnerVersions": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerVersions.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerVersion"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -7529,6 +7677,10 @@
           "ref": {
             "type": "string"
           },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
           "scope": {
             "type": "string"
           },
@@ -7580,6 +7732,32 @@
         "required": [
           "key",
           "kind",
+          "value"
+        ],
+        "type": "object"
+      },
+      "SecretEditRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/SecretEditRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
           "value"
         ],
         "type": "object"
@@ -17031,7 +17209,7 @@
             "description": "Error"
           }
         },
-        "summary": "Replace a Runner slug",
+        "summary": "Edit Runner slug and automatic upstream updates",
         "tags": [
           "Runner"
         ]
@@ -17221,6 +17399,167 @@
           }
         },
         "summary": "Retry failed Runner creation",
+        "tags": [
+          "Runner"
+        ]
+      }
+    },
+    "/runners/{id}/updates": {
+      "get": {
+        "operationId": "runner.update.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "task",
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerUpdateResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show latest or selected Runner software update",
+        "tags": [
+          "Runner"
+        ]
+      },
+      "post": {
+        "operationId": "runner.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update only this Runner upstream software after its job completes",
+        "tags": [
+          "Runner"
+        ]
+      }
+    },
+    "/runners/{id}/versions": {
+      "get": {
+        "operationId": "runner.versions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerVersions"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List verified GitHub Runner versions for this host",
         "tags": [
           "Runner"
         ]
@@ -17801,6 +18140,81 @@
           }
         },
         "summary": "Show reusable secret metadata",
+        "tags": [
+          "Secret"
+        ]
+      },
+      "patch": {
+        "operationId": "secret.edit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^sec_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecretEditRequest"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Secret"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace a reusable Secret value without changing its stable reference",
         "tags": [
           "Secret"
         ]

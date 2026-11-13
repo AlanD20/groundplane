@@ -229,5 +229,5 @@ func (repository *RunnerRepository) PublishRunnerCreation(
 func runnerCreationDesiredEqual(left, right runners.RunnerDesiredRecord) bool {
 	return left.ID == right.ID && left.Slug == right.Slug && left.OwnerKind == right.OwnerKind &&
 		left.OwnerID == right.OwnerID && left.TenantID == right.TenantID && left.ParentProjectID == right.ParentProjectID &&
-		left.GitHubURL == right.GitHubURL && left.RunnerGroup == right.RunnerGroup && left.GitHubName == right.GitHubName && left.CPUMillis == right.CPUMillis && left.MemoryBytes == right.MemoryBytes && left.ImageRef == right.ImageRef && slices.Equal(left.Labels, right.Labels)
+		left.GitHubURL == right.GitHubURL && left.RunnerGroup == right.RunnerGroup && left.AutoUpdate == right.AutoUpdate && left.GitHubName == right.GitHubName && left.CPUMillis == right.CPUMillis && left.MemoryBytes == right.MemoryBytes && left.ImageRef == right.ImageRef && slices.Equal(left.Labels, right.Labels)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	"github.com/AlanD20/groundplane/internal/common/runnersoftware"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -47,6 +48,7 @@ type RunnerDesiredRecord struct {
 	// ParentProjectID is present only for Environment ownership. Project
 	// ownership already identifies its Project through OwnerID.
 	ParentProjectID string   `json:"parent_project_id,omitempty"`
+	AutoUpdate      bool     `json:"auto_update"`
 	GitHubURL       string   `json:"github_url"`
 	RunnerGroup     string   `json:"runner_group"`
 	GitHubName      string   `json:"github_name,omitempty"`
@@ -86,9 +88,10 @@ type RunnerRuntimeOwnershipRecord struct {
 // RunnerObservationRecord is replaceable observed runtime state. It is not a
 // desired-state field and is never used as a lifecycle fence.
 type RunnerObservationRecord struct {
-	RunnerID   string    `json:"runner_id"`
-	Online     bool      `json:"online"`
-	ObservedAt time.Time `json:"observed_at"`
+	GitHubVersion string    `json:"github_version,omitempty"`
+	RunnerID      string    `json:"runner_id"`
+	Online        bool      `json:"online"`
+	ObservedAt    time.Time `json:"observed_at"`
 }
 
 func NewProvisioningRunner(
@@ -217,6 +220,9 @@ func ValidateRunnerLifecycle(record RunnerLifecycleRecord) error {
 }
 
 func ValidateRunnerObservation(record RunnerObservationRecord) error {
+	if record.GitHubVersion != "" && !runnersoftware.ValidVersion(record.GitHubVersion) {
+		return errs.New(errs.KindValidationFailed, "Runner observed GitHub version is invalid")
+	}
 	if ids.Validate(ids.KindRunner, record.RunnerID) != nil || !recordcodec.IsCanonicalUTC(record.ObservedAt) {
 		return errs.New(errs.KindValidationFailed, "runner observation is invalid")
 	}

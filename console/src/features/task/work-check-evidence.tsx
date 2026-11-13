@@ -3,6 +3,7 @@ import { BackingCheckPanel } from "@/features/attach/backing-check-panel";
 import { EdgeCheckPanel } from "@/features/environment/edge-check-panel";
 import { DNSCheckPanel } from "@/features/platform-component/dns-check-panel";
 import { RunnerCheckPanel } from "@/features/runners/runner-check-panel";
+import { RunnerUpdateEvidence } from "@/features/runners/runner-update-evidence";
 import type { TaskResponse, TaskWork } from "./api";
 
 export function WorkCheckEvidence({
@@ -14,6 +15,10 @@ export function WorkCheckEvidence({
 }) {
   const environmentId = task.scope.environment_id;
   switch (work.operation) {
+    case "runner_software":
+      return (
+        <RunnerUpdateEvidence runnerId={work.target_id} taskId={task.id} />
+      );
     case "connector_check":
       return environmentId ? (
         <ConnectorCheckPanel

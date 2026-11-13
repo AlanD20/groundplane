@@ -29,10 +29,11 @@ type mutationRepository interface {
 		context.Context,
 		string,
 	) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
-	ReplaceRunnerSlugIdempotent(
+	ReplaceRunnerSettingsIdempotent(
 		context.Context,
 		string,
 		string,
+		*bool,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -115,7 +116,7 @@ func (service *MutationService) renameOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	locator = runnerLocator(current.Record.Desired, idempotencyKey)
-	evidence, err := service.protectIntent(ctx, locator, runnerID, request.Slug)
+	evidence, err := service.protectIntent(ctx, locator, runnerID, request.Slug, request.AutoUpdate)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -141,6 +142,9 @@ func (service *MutationService) renameOnce(
 	}
 	replacement := current.Record
 	replacement.Desired.Slug = request.Slug
+	if request.AutoUpdate != nil {
+		replacement.Desired.AutoUpdate = *request.AutoUpdate
+	}
 	var observationRecord *runnerrecord.RunnerObservationRecord
 	if observed {
 		observationRecord = &observation.Record
@@ -174,8 +178,8 @@ func (service *MutationService) renameOnce(
 	marker.ReplayTarget = &target
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.ReplaceRunnerSlugIdempotent(
-		ctx, runnerID, request.Slug, marker,
+	result, mutationErr := service.repository.ReplaceRunnerSettingsIdempotent(
+		ctx, runnerID, request.Slug, request.AutoUpdate, marker,
 	)
 	if mutationErr != nil {
 		if !unknownMutationOutcome(mutationErr) {
@@ -206,7 +210,7 @@ func (service *MutationService) replay(
 	runnerID string,
 	request apiTypes.RunnerEditRequest,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	evidence, err := service.protectIntent(ctx, locator, runnerID, request.Slug)
+	evidence, err := service.protectIntent(ctx, locator, runnerID, request.Slug, request.AutoUpdate)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -231,7 +235,12 @@ func (service *MutationService) protectIntent(
 	locator idempotencyrecord.IdempotencyLocator,
 	runnerID string,
 	slugValue string,
+	autoUpdate *bool,
 ) (requestidempotency.ProtectedEvidence, error) {
+	autoValue := requestidempotency.Null()
+	if autoUpdate != nil {
+		autoValue = requestidempotency.Bool(*autoUpdate)
+	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPatch, Route: runnerEditRoute,
 		Scope: runnerIntentScope(locator),
@@ -239,6 +248,7 @@ func (service *MutationService) protectIntent(
 		Query: requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
 			requestidempotency.Field{Name: "slug", Value: requestidempotency.String(slugValue)},
+			requestidempotency.Field{Name: "auto_update", Value: autoValue},
 		)),
 	})
 	if err != nil {

@@ -193,6 +193,7 @@ export type EnvironmentComponent =
 export type SecretKind = "env" | "file";
 
 export type ReusableSecretBase = {
+  revision: number;
   id: string;
   key: string;
   kind: SecretKind;
@@ -346,6 +347,8 @@ export type Project = {
 };
 
 export type Runner = {
+  autoUpdate: boolean;
+  githubVersion: string;
   software?: import("./api.generated").components["schemas"]["ContainerIdentity"];
   id: string;
   slug: string;

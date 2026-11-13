@@ -100,7 +100,7 @@ func (service *ConnectionCheckService) CheckConnections(ctx context.Context, run
 			"Runner check replay marker is unavailable",
 		)
 	}
-	source, err := service.runners.LoadRunnerCheckSource(ctx, runnerID, input.Revision)
+	source, err := service.runners.LoadRunnerRuntimeSource(ctx, runnerID, input.Revision)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
@@ -146,7 +146,7 @@ func (service *ConnectionCheckService) CheckConnections(ctx context.Context, run
 
 func (service *ConnectionCheckService) publish(
 	ctx context.Context,
-	source etcd.RunnerCheckSource,
+	source etcd.RunnerRuntimeSource,
 	record runnerchecks.Record,
 	task workexecution.Task,
 	locator idempotency.IdempotencyLocator,

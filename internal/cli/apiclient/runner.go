@@ -102,7 +102,7 @@ func (c *Client) CreateRunner(
 		return apiTypes.TaskAccepted{}, err
 	}
 	body := generated.RunnerCreateJSONRequestBody{
-		Slug: request.Slug, GithubUrl: request.GitHubURL, RunnerGroup: request.RunnerGroup, GithubName: &request.GitHubName, CpuMillis: request.CPUMillis, MemoryBytes: request.MemoryBytes,
+		AutoUpdate: request.AutoUpdate, Slug: request.Slug, GithubUrl: request.GitHubURL, RunnerGroup: request.RunnerGroup, GithubName: &request.GitHubName, CpuMillis: request.CPUMillis, MemoryBytes: request.MemoryBytes,
 		RegistrationToken: request.RegistrationToken,
 	}
 	defer func() { body.RegistrationToken = "" }()
@@ -164,14 +164,14 @@ func (c *Client) RetryRunner(
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
-func (c *Client) EditRunner(ctx context.Context, id, slug string) (apiTypes.Runner, error) {
+func (c *Client) EditRunner(ctx context.Context, id, slug string, autoUpdate *bool) (apiTypes.Runner, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.Runner{}, err
 	}
 	path := "/api/v1/runners/" + id
 	params := &generated.RunnerEditParams{IdempotencyKey: ids.NewULID()}
-	body := generated.RunnerEditJSONRequestBody{Slug: slug}
+	body := generated.RunnerEditJSONRequestBody{Slug: slug, AutoUpdate: autoUpdate}
 	response, err := client.RunnerEditWithResponse(ctx, id, params, body)
 	if err != nil {
 		return apiTypes.Runner{}, generatedCallError(ctx, http.MethodPatch, path, err)
@@ -232,7 +232,7 @@ func runnerFromGenerated(runner generated.Runner) (apiTypes.Runner, error) {
 		Revision: revision,
 		ID:       runner.Id, Slug: runner.Slug, TenantID: runner.TenantId, ProjectID: projectID,
 		EnvironmentID: environmentID,
-		GitHubURL:     runner.GithubUrl, RunnerGroup: runner.RunnerGroup, GitHubName: valueOrEmpty(runner.GithubName), CPUMillis: runner.CpuMillis, MemoryBytes: runner.MemoryBytes, Name: runner.Name, Labels: labels,
+		AutoUpdate:    runner.AutoUpdate, GitHubVersion: valueOrEmpty(runner.GithubVersion), GitHubURL: runner.GithubUrl, RunnerGroup: runner.RunnerGroup, GitHubName: valueOrEmpty(runner.GithubName), CPUMillis: runner.CpuMillis, MemoryBytes: runner.MemoryBytes, Name: runner.Name, Labels: labels,
 		Lifecycle: apiTypes.RunnerLifecycle(runner.Lifecycle), CreateTaskID: runner.CreateTaskId,
 		RemoveTaskID: runner.RemoveTaskId, Online: runner.Online,
 		ObservedAt: runner.ObservedAt, CreatedAt: runner.CreatedAt,

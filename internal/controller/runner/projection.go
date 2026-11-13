@@ -37,7 +37,7 @@ func PublicProjection(
 		name = record.Desired.GitHubName
 	}
 	result := apiTypes.Runner{
-		ID: record.Desired.ID, Slug: record.Desired.Slug,
+		AutoUpdate: record.Desired.AutoUpdate, ID: record.Desired.ID, Slug: record.Desired.Slug,
 		TenantID: record.Desired.TenantID, ProjectID: record.Desired.ProjectID(),
 		EnvironmentID: record.Desired.EnvironmentID(),
 		GitHubURL:     record.Desired.GitHubURL, RunnerGroup: record.Desired.RunnerGroup, GitHubName: record.Desired.GitHubName, CPUMillis: record.Desired.CPUMillis, MemoryBytes: record.Desired.MemoryBytes, Name: name,
@@ -45,6 +45,9 @@ func PublicProjection(
 		CreateTaskID: record.CreateTaskID, RemoveTaskID: removeTaskID,
 		Online: online, ObservedAt: observedAt,
 		CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	if observation != nil {
+		result.GitHubVersion = observation.GitHubVersion
 	}
 	if record.Software.Image != "" {
 		software := record.Software

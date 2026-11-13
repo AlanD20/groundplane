@@ -3,6 +3,8 @@ package api
 import "github.com/AlanD20/groundplane/internal/common/version"
 
 type Runner struct {
+	AutoUpdate    bool                       `json:"auto_update"`
+	GitHubVersion string                     `json:"github_version,omitempty"`
 	Software      *version.ContainerIdentity `json:"software,omitempty"`
 	ID            string                     `json:"id"`
 	Revision      int64                      `json:"revision,omitempty"` // current desired revision on reads; mutation responses require a fresh read
@@ -40,6 +42,7 @@ type RunnerPage struct {
 }
 
 type RunnerCreateRequest struct {
+	AutoUpdate        bool     `json:"auto_update"`
 	Slug              string   `json:"slug"`
 	TenantID          string   `json:"tenant_id,omitempty"`
 	ProjectID         string   `json:"project_id,omitempty"`
@@ -58,7 +61,8 @@ type RunnerRetryRequest struct {
 }
 
 type RunnerEditRequest struct {
-	Slug string `json:"slug"`
+	AutoUpdate *bool  `json:"auto_update,omitempty"`
+	Slug       string `json:"slug"`
 }
 
 // --- Task / activity ---

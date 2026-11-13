@@ -17,6 +17,7 @@ const maximumGitHubRegistrationTokenBytes = 4096
 // Groundplane never generates or auto-fetches it. See mvp.md, "Runner".
 func newRunnerCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "runner", Short: "GitHub Actions self-hosted runners"}
+	cmd.AddCommand(newRunnerSoftwareUpdateCmd(), newRunnerSoftwareVersionsCmd(), newRunnerSoftwareResultCmd())
 	cmd.AddCommand(newRunnerCheckCmd(), newRunnerCheckResultCmd())
 
 	list := &cobra.Command{
@@ -55,6 +56,7 @@ func newRunnerCmd() *cobra.Command {
 
 	var tokenFile, githubURL, runnerGroup, githubName string
 	var cpus, memoryGiB float64
+	var autoUpdate, editAutoUpdate bool
 	var labels []string
 	add := &cobra.Command{
 		Use:   "add <slug>",
@@ -63,7 +65,7 @@ func newRunnerCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			request := apiTypes.RunnerCreateRequest{
-				Slug:        args[0],
+				AutoUpdate: autoUpdate, Slug: args[0],
 				GitHubURL:   githubURL,
 				RunnerGroup: runnerGroup, GitHubName: githubName, CPUMillis: int64(math.Round(cpus * 1000)), MemoryBytes: int64(math.Round(memoryGiB * (1 << 30))),
 				Labels: labels,
@@ -98,6 +100,7 @@ func newRunnerCmd() *cobra.Command {
 	add.Flags().StringVar(&runnerGroup, "runner-group", "Default", "existing GitHub organization Runner group name")
 	add.Flags().
 		StringVar(&githubName, "github-name", "", "optional GitHub-visible Runner name; blank generates a stable name")
+	add.Flags().BoolVar(&autoUpdate, "auto-update", true, "automatically update the upstream GitHub Runner when idle")
 	add.Flags().Float64Var(&cpus, "cpus", 2, "combined CPU budget for the Runner and its build daemon")
 	add.Flags().Float64Var(&memoryGiB, "memory-gib", 4, "combined memory budget in GiB for the Runner and builds")
 	add.Flags().StringSliceVar(&labels, "label", nil, "additional GitHub Runner label (repeatable)")
@@ -134,7 +137,19 @@ func newRunnerCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			runner, err := fromContext(cmd).Client.EditRunner(cmd.Context(), runnerID, nextSlug)
+			app := fromContext(cmd)
+			if nextSlug == "" {
+				current, err := app.Client.ShowRunner(cmd.Context(), runnerID)
+				if err != nil {
+					return err
+				}
+				nextSlug = current.Slug
+			}
+			var setting *bool
+			if cmd.Flags().Changed("auto-update") {
+				setting = &editAutoUpdate
+			}
+			runner, err := app.Client.EditRunner(cmd.Context(), runnerID, nextSlug, setting)
 			if err != nil {
 				return err
 			}
@@ -143,7 +158,7 @@ func newRunnerCmd() *cobra.Command {
 		},
 	}
 	edit.Flags().StringVar(&nextSlug, "slug", "", "new Tenant-unique Runner slug")
-	_ = edit.MarkFlagRequired("slug")
+	edit.Flags().BoolVar(&editAutoUpdate, "auto-update", true, "enable or disable upstream GitHub Runner automatic updates")
 	cmd.AddCommand(edit)
 
 	var retryTokenFile string
@@ -255,6 +270,7 @@ func runnerFields(runner apiTypes.Runner) map[string]any {
 		"environment_id": runner.EnvironmentID,
 		"github_url":     runner.GitHubURL,
 		"github_name":    runner.GitHubName,
+		"auto_update":    runner.AutoUpdate, "github_version": runner.GitHubVersion,
 		"cpu_millis":     runner.CPUMillis,
 		"memory_bytes":   runner.MemoryBytes,
 		"runner_group":   runner.RunnerGroup,

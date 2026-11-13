@@ -1,4 +1,4 @@
-package app
+package runnerassembly
 
 import (
 	"log/slog"
@@ -11,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerchecks"
 )
 
-func newControllerRunnerChecks(store etcd.EnvironmentBlueprintStore, runners *etcd.RunnerRepository,
+func newChecks(store etcd.EnvironmentBlueprintStore, runners *etcd.RunnerRepository,
 	evidence *etcd.IdempotencyRepository, coordinator *requestidempotency.Coordinator,
 	lifecycle *runnercapability.Executor, logger *slog.Logger,
 ) (*runnercapability.ConnectionCheckService, *runnercapability.ConnectionCheckExecutor, error) {

@@ -42,6 +42,29 @@ Create accepts a write-only value. The CLI reads it from `--value-file PATH|-`;
 plaintext is not accepted as an argv value. Value reveal is an explicit
 Console/API operation and intentionally has no CLI counterpart.
 
+Secret values can be replaced without changing their id, key, owner, kind or
+materialization reference. Use `secret edit --value-file` or the guarded Secret
+edit API with the current metadata `revision` and an idempotency key. Reads expose
+that revision without the value. A Script source or recoverable execution pin
+blocks replacement of bytes it still needs; edits do not retain a hidden old
+plaintext/ciphertext copy. Previously materialized running processes change only
+through their normal configuration/deployment actions.
+
+Platform and Project Secret pages provide **Import / edit .env** for pasted text
+or a local file. The editor uses the existing bulk Entry grammar: `KEY=value`,
+blank/comment lines, first-`=` splitting and JSON-quoted strings for escaped or
+multiline values. It does not expand shell variables or execute the file. Only
+submitted env-var keys are created/replaced; omitted keys and file Secrets remain
+unchanged. Loading existing values is an explicit reveal action and excludes
+Platform fallback values from a Project editing buffer.
+
+A UI batch is at most 256 keys / 1 MiB and orchestrates normal create/edit API
+requests; it is not one atomic storage transaction. Successfully saved keys remain
+saved if a later key fails. The editor reports progress by key and retains exact
+per-key requests to resolve uncertain acceptance. No secret values appear in its
+result list. The CLI/API expose the same underlying create/edit capabilities,
+without a second batch execution or plaintext-history mechanism.
+
 Secret deletion is an asynchronous Controller finalizer. Publication
 atomically tombstones the Secret and returns a Task, hiding it from reads and
 resolution while retaining metadata, indexes, and ciphertext. Success removes

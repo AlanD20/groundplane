@@ -6,6 +6,8 @@ package api
 const MaximumSecretValueBytes = 255 << 10
 
 type Secret struct {
+	Revision int64 `json:"revision,omitempty"`
+
 	ID        string `json:"id"`
 	Scope     string `json:"scope"` // "project" | "platform"
 	ProjectID string `json:"project_id,omitempty"`
@@ -24,6 +26,11 @@ type SecretCreateRequest struct {
 	Kind      string `json:"kind"`
 	Path      string `json:"path,omitempty"`
 	Value     string `json:"value"`
+}
+
+type SecretEditRequest struct {
+	Revision int64  `json:"revision"`
+	Value    string `json:"value"`
 }
 
 type SecretValue struct {

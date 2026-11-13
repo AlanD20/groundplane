@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/app/runnerassembly"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -16,6 +17,9 @@ import (
 )
 
 type controllerRunnerComposition struct {
+	software         *runnercapability.SoftwareService
+	softwareExecutor *runnercapability.SoftwareExecutor
+
 	pools         config.AllocationPools
 	lifecycle     *runnercapability.Executor
 	maintenance   *runnercapability.Maintenance
@@ -77,19 +81,13 @@ func newControllerRunnerComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner lifecycle: %w", err)
 	}
-	checks, checkExecutor, err := newControllerRunnerChecks(
-		store,
-		runnerRecords,
-		idempotency,
-		intentCoordinator,
-		lifecycle,
-		logger,
-	)
+	capabilities, err := runnerassembly.New(store, runnerRecords, idempotency, intentCoordinator, lifecycle, logger)
 	if err != nil {
-		return nil, fmt.Errorf("controller: initialize Runner connection checks: %w", err)
+		return nil, err
 	}
-	return &controllerRunnerComposition{
+	maintenance.ConfigureSoftwareUpdates(capabilities.Software)
+	return &controllerRunnerComposition{software: capabilities.Software, softwareExecutor: capabilities.SoftwareExecutor,
 		pools: runnerPools, lifecycle: lifecycle, maintenance: maintenance, provisioning: runnerProvisioning,
-		mutations: runnerMutations, removals: runnerRemovals, checks: checks, checkExecutor: checkExecutor,
+		mutations: runnerMutations, removals: runnerRemovals, checks: capabilities.Checks, checkExecutor: capabilities.CheckExecutor,
 	}, nil
 }

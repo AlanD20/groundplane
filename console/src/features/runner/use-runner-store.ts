@@ -27,6 +27,7 @@ export type RunnerState = {
 export type RunnerActions = {
   refreshRunners: (tenantId: string) => Promise<void>;
   createRunner: (input: {
+    autoUpdate: boolean;
     slug: string;
     tenantId?: string;
     projectId?: string;
@@ -39,7 +40,11 @@ export type RunnerActions = {
     labels: string[];
     registrationToken: string;
   }) => Promise<string>;
-  renameRunner: (runnerId: string, slug: string) => Promise<Runner>;
+  editRunner: (
+    runnerId: string,
+    slug: string,
+    autoUpdate?: boolean,
+  ) => Promise<Runner>;
   retryRunner: (runnerId: string, registrationToken: string) => Promise<string>;
   removeRunner: (runnerId: string) => Promise<string>;
 };
@@ -64,6 +69,8 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
         for (const runner of page.items ?? []) {
           runners.set(runner.id, {
             id: runner.id,
+            autoUpdate: runner.auto_update,
+            githubVersion: runner.github_version ?? "",
             slug: runner.slug,
             tenantId: runner.tenant_id,
             projectId: runner.project_id ?? null,
@@ -107,6 +114,7 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
   );
   const createRunner = useCallback(
     async (input: {
+      autoUpdate: boolean;
       slug: string;
       tenantId?: string;
       projectId?: string;
@@ -123,6 +131,7 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
         slug: input.slug,
         github_url: input.githubUrl,
         runner_group: input.runnerGroup,
+        auto_update: input.autoUpdate,
         github_name: input.githubName || undefined,
         cpu_millis: input.cpuMillis,
         memory_bytes: input.memoryBytes,
@@ -146,9 +155,9 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
     },
     [],
   );
-  const renameRunner = useCallback(
-    async (runnerId: string, slug: string) => {
-      const body: RunnerEditRequest = { slug };
+  const editRunner = useCallback(
+    async (runnerId: string, slug: string, autoUpdate?: boolean) => {
+      const body: RunnerEditRequest = { slug, auto_update: autoUpdate };
       const response = await controllerRequest<RunnerEditResponse>(
         `/runners/${encodeURIComponent(runnerId)}`,
         200,
@@ -156,6 +165,8 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
       );
       const renamed: Runner = {
         id: response.id,
+        autoUpdate: response.auto_update,
+        githubVersion: response.github_version ?? "",
         slug: response.slug,
         tenantId: response.tenant_id,
         projectId: response.project_id ?? null,
@@ -216,7 +227,7 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
   return {
     refreshRunners,
     createRunner,
-    renameRunner,
+    editRunner,
     retryRunner,
     removeRunner,
   };

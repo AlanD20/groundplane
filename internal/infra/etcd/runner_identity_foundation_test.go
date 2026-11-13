@@ -156,7 +156,7 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 		ID:   first.ID,
 	}
 	marker.Response.Body = []byte(`{"id":"` + first.ID + `","slug":"renamed"}`)
-	result, err = repository.ReplaceRunnerSlugIdempotent(ctx, first.ID, "renamed", marker)
+	result, err = repository.ReplaceRunnerSettingsIdempotent(ctx, first.ID, "renamed", nil, marker)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 	if err != nil || !removed.Succeeded {
 		t.Fatalf("remove Runner = %#v, %v", removed, err)
 	}
-	replay, err := repository.ReplaceRunnerSlugIdempotent(ctx, first.ID, "renamed", marker)
+	replay, err := repository.ReplaceRunnerSettingsIdempotent(ctx, first.ID, "renamed", nil, marker)
 	if err != nil {
 		t.Fatal(err)
 	}

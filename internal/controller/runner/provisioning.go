@@ -299,7 +299,7 @@ func (service *ProvisioningService) normalizeCreate(
 	desired := runnerrecord.RunnerDesiredRecord{
 		ID: ids.New(
 			ids.KindRunner,
-		), Slug: request.Slug, GitHubURL: request.GitHubURL, RunnerGroup: request.RunnerGroup, GitHubName: request.GitHubName, CPUMillis: request.CPUMillis, MemoryBytes: request.MemoryBytes,
+		), AutoUpdate: request.AutoUpdate, Slug: request.Slug, GitHubURL: request.GitHubURL, RunnerGroup: request.RunnerGroup, GitHubName: request.GitHubName, CPUMillis: request.CPUMillis, MemoryBytes: request.MemoryBytes,
 		Labels: slices.Clone(request.Labels), ImageRef: service.imageRef,
 	}
 	switch {
@@ -382,6 +382,7 @@ func (service *ProvisioningService) protectCreateIntent(
 			ownerField,
 			requestidempotency.Field{Name: "github_url", Value: requestidempotency.String(desired.GitHubURL)},
 			requestidempotency.Field{Name: "runner_group", Value: requestidempotency.String(desired.RunnerGroup)},
+			requestidempotency.Field{Name: "auto_update", Value: requestidempotency.Bool(desired.AutoUpdate)},
 			requestidempotency.Field{Name: "github_name", Value: requestidempotency.String(desired.GitHubName)},
 			requestidempotency.Field{Name: "cpu_millis", Value: requestidempotency.Integer(desired.CPUMillis)},
 			requestidempotency.Field{Name: "memory_bytes", Value: requestidempotency.Integer(desired.MemoryBytes)},

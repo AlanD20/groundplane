@@ -1,7 +1,10 @@
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
 type Props = {
+  autoUpdate: boolean;
+  setAutoUpdate: (value: boolean) => void;
   githubName: string;
   setGithubName: (value: string) => void;
   runnerGroup: string;
@@ -19,6 +22,8 @@ type Props = {
 };
 
 export function RunnerCreationFields({
+  autoUpdate,
+  setAutoUpdate,
   githubName,
   runnerGroup,
   labels,
@@ -38,6 +43,17 @@ export function RunnerCreationFields({
     <>
       <fieldset className="grid gap-4 md:grid-cols-2 rounded-lg border border-border p-4">
         <legend className="px-2 text-xs font-medium">Registration</legend>
+        <div className="flex items-center gap-2 md:col-span-2">
+          <Checkbox
+            id="runner-create-auto-update"
+            checked={autoUpdate}
+            onChange={(event) => setAutoUpdate(event.target.checked)}
+            disabled={submittingCreate}
+          />
+          <Label htmlFor="runner-create-auto-update">
+            Automatically update GitHub runner software
+          </Label>
+        </div>
         <div className="space-y-2">
           <Label htmlFor="runner-create-name">
             GitHub Runner name (optional)

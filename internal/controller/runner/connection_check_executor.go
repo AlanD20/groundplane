@@ -127,7 +127,7 @@ func (executor *ConnectionCheckExecutor) execute(ctx context.Context, delivery w
 	if err := ctx.Err(); err != nil {
 		return stopRunnerCheck(ctx, journal, runnerCheckExecutionFailure(err), err)
 	}
-	stale, err := executor.runners.RunnerCheckSourcesChanged(ctx, record.Source)
+	stale, err := executor.runners.RunnerRuntimeSourcesChanged(ctx, record.Source)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func (executor *ConnectionCheckExecutor) execute(ctx context.Context, delivery w
 	}
 	settlement, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
-	stale, err = executor.runners.RunnerCheckSourcesChanged(settlement, record.Source)
+	stale, err = executor.runners.RunnerRuntimeSourcesChanged(settlement, record.Source)
 	if err != nil {
 		return err
 	}

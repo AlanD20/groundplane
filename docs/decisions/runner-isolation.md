@@ -43,7 +43,7 @@ user-manager hierarchy; its descendants inherit the outer slice rather than
 escaping into a separate user slice. Per-job Docker limits are not the budget
 authority. The slice is reconstructed from pinned inputs after a
 reboot and removed only after its processes are gone. Disk-cache management and
-in-place Runner reconfiguration remain separate work.
+in-place GP image/tooling reconfiguration remain separate work.
 
 The native Controller owns Runner allocation, registration, local observation
 and cleanup. It uses the existing host adapters, not a new privileged helper
@@ -85,6 +85,23 @@ registration without reading another token from stdin. If an interrupted
 registration cannot be proved complete, report that a fresh token is required;
 do not replay an uncertain token delivery. Removal remains local and does not
 deregister the Runner in GitHub.
+
+## Upstream software maintenance
+
+The upstream GitHub runner package is independently maintained in its registered
+writable home. GP controls both automatic selection and manual version changes
+through one captured update Task; the upstream self-updater is disabled so it
+cannot race this package writer. The local journal records the exact release and
+predecessor before activation. Recovery observes a committed version or proves
+restoration of the captured package entries, without reading new desired inputs.
+Registration files, workspace and Docker data are outside the package replacement.
+
+Version observations read the installed upstream binary rather than borrowing
+metadata from the unchanged container image. The runtime adapter owns download,
+idle gating, package activation and host receipts; the Task repository owns
+publication, execution claims, result settlement and retention. See
+[software execution](../../internal/controller/runner/software_update_executor.go)
+and [host activation](../../internal/infra/docker/runner/software_update.go).
 
 ## One private registry and existing DNS
 

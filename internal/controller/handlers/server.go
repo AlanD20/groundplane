@@ -84,6 +84,7 @@ type Server struct {
 	runnerMutations         RunnerMutator
 	runnerRemovals          RunnerRemover
 	runnerChecks            RunnerChecker
+	runnerSoftware          RunnerSoftware
 	backupPolicies          BackupPolicyReader
 	backupPolicyMutations   BackupPolicyMutator
 	recoveryPoints          RecoveryPointReader
@@ -170,6 +171,7 @@ type Options struct {
 	RunnerMutations         RunnerMutator
 	RunnerRemovals          RunnerRemover
 	RunnerChecks            RunnerChecker
+	RunnerSoftware          RunnerSoftware
 	BackupPolicies          BackupPolicyReader
 	BackupPolicyMutations   BackupPolicyMutator
 	RecoveryPoints          RecoveryPointReader
@@ -263,36 +265,36 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		runnerProvisioning:      options.RunnerProvisioning,
 		runnerMutations:         options.RunnerMutations,
 		runnerRemovals:          options.RunnerRemovals,
-		runnerChecks:            options.RunnerChecks,
-		backupPolicies:          options.BackupPolicies,
-		backupPolicyMutations:   options.BackupPolicyMutations,
-		recoveryPoints:          options.RecoveryPoints,
-		recoveryPointRemover:    options.RecoveryPointRemover,
-		backupRuns:              options.BackupRuns,
-		backupRestores:          options.BackupRestores,
-		backupRestorePreviews:   options.BackupRestorePreviews,
-		backupKeyMutations:      options.BackupKeyMutations,
-		backupKeyExports:        options.BackupKeyExports,
-		volumes:                 options.Volumes,
-		volumeMutations:         options.VolumeMutations,
-		environmentMutations:    options.EnvironmentMutations,
-		environmentChanges:      options.EnvironmentChanges,
-		environmentBlueprints:   options.EnvironmentBlueprints,
-		hierarchyDeletions:      options.HierarchyDeletions,
-		attachMutations:         options.AttachMutations,
-		attachFacts:             options.AttachFacts,
-		backingChecks:           options.BackingChecks,
-		edgeChecks:              options.EdgeChecks,
-		dnsChecks:               options.DNSChecks,
-		environmentDNS:          options.EnvironmentDNS,
-		taskMutations:           options.TaskMutations,
-		taskAborts:              options.TaskAborts,
-		taskInspection:          options.TaskInspection,
-		controllerTaskWake:      options.ControllerTaskWake,
-		agentTaskWake:           options.AgentTaskWake,
-		console:                 options.Console,
-		logs:                    options.Logs,
-		routePolicies:           make(map[string]routePolicy),
+		runnerChecks:            options.RunnerChecks, runnerSoftware: options.RunnerSoftware,
+		backupPolicies:        options.BackupPolicies,
+		backupPolicyMutations: options.BackupPolicyMutations,
+		recoveryPoints:        options.RecoveryPoints,
+		recoveryPointRemover:  options.RecoveryPointRemover,
+		backupRuns:            options.BackupRuns,
+		backupRestores:        options.BackupRestores,
+		backupRestorePreviews: options.BackupRestorePreviews,
+		backupKeyMutations:    options.BackupKeyMutations,
+		backupKeyExports:      options.BackupKeyExports,
+		volumes:               options.Volumes,
+		volumeMutations:       options.VolumeMutations,
+		environmentMutations:  options.EnvironmentMutations,
+		environmentChanges:    options.EnvironmentChanges,
+		environmentBlueprints: options.EnvironmentBlueprints,
+		hierarchyDeletions:    options.HierarchyDeletions,
+		attachMutations:       options.AttachMutations,
+		attachFacts:           options.AttachFacts,
+		backingChecks:         options.BackingChecks,
+		edgeChecks:            options.EdgeChecks,
+		dnsChecks:             options.DNSChecks,
+		environmentDNS:        options.EnvironmentDNS,
+		taskMutations:         options.TaskMutations,
+		taskAborts:            options.TaskAborts,
+		taskInspection:        options.TaskInspection,
+		controllerTaskWake:    options.ControllerTaskWake,
+		agentTaskWake:         options.AgentTaskWake,
+		console:               options.Console,
+		logs:                  options.Logs,
+		routePolicies:         make(map[string]routePolicy),
 	}
 	s.routes()
 	s.registerLogOpenAPI()

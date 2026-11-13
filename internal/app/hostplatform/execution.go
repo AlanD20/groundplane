@@ -25,6 +25,7 @@ type ExecutionDependencies struct {
 	Definitions     blueprint.DefinitionPreparer
 	Images          *imagedelivery.Service
 	RunnerChecks    *runnercapability.ConnectionCheckExecutor
+	RunnerSoftware  *runnercapability.SoftwareExecutor
 	RunnerLifecycle *runnercapability.Executor
 	Keys            *backupkey.Service
 	Hierarchy       *hierarchydeletion.Service

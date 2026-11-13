@@ -179,6 +179,7 @@ at stream setup and cannot resume durable history after reconnect.
 groundplane secret add DATABASE_PASSWORD --value-file ./database-password.txt
 groundplane secret add DATABASE_PASSWORD --value-file - < ./database-password.txt
 groundplane secret show DATABASE_PASSWORD
+groundplane secret edit DATABASE_PASSWORD --value-file ./replacement-password.txt
 ```
 
 Secret creation reads a file or stdin; plaintext is not accepted as an argv

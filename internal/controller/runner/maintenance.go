@@ -49,12 +49,15 @@ type maintenanceRepository interface {
 }
 
 type readyRuntime interface {
+	InstalledVersion(context.Context, runnerallocation.RuntimePlan, string) (string, error)
 	Resume(context.Context, runnerallocation.RuntimePlan, string) (runnerallocation.RunnerRuntimeEvidence, error)
 }
 
 // Maintenance restores registered runtimes after boot and refreshes local
 // observations. It shares the executor lock, so it cannot race host cleanup.
 type Maintenance struct {
+	software *SoftwareService
+
 	repository maintenanceRepository
 	runtime    readyRuntime
 	executor   *Executor
@@ -78,7 +81,13 @@ func NewMaintenance(
 	}, nil
 }
 
+func (maintenance *Maintenance) ConfigureSoftwareUpdates(service *SoftwareService) {
+	maintenance.software = service
+}
 func (maintenance *Maintenance) Run(ctx context.Context) {
+	if maintenance.software != nil {
+		go maintenance.software.Run(ctx, maintenance.logger)
+	}
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -163,6 +172,10 @@ func (maintenance *Maintenance) refreshOne(ctx context.Context, runnerID string)
 			errs.New(errs.KindStateConflict, "Runner registered container changed"),
 		)
 	}
+	githubVersion, err := maintenance.runtime.InstalledVersion(ctx, plan, current.Record.ContainerID)
+	if err != nil {
+		return maintenance.offline(ctx, runnerID, err)
+	}
 	updated := prior.Record
 	updated.DaemonInstanceNonce, updated.SocketDevice, updated.SocketInode = evidence.DaemonNonce, evidence.SocketDevice, evidence.SocketInode
 	return maintenance.repository.RefreshRuntime(
@@ -172,7 +185,7 @@ func (maintenance *Maintenance) refreshOne(ctx context.Context, runnerID string)
 		evidence.ContainerID,
 		updated,
 		runnerrecord.RunnerObservationRecord{
-			RunnerID: runnerID, Online: true, ObservedAt: time.Now().UTC(),
+			GitHubVersion: githubVersion, RunnerID: runnerID, Online: true, ObservedAt: time.Now().UTC(),
 		},
 	)
 }
@@ -186,7 +199,11 @@ func (maintenance *Maintenance) offline(ctx context.Context, runnerID string, ca
 	if exists {
 		revision = prior.Revision
 	}
-	_, err = maintenance.repository.PutRunnerObservation(ctx, runnerrecord.RunnerObservationRecord{
+	lastVersion := ""
+	if exists {
+		lastVersion = prior.Record.GitHubVersion
+	}
+	_, err = maintenance.repository.PutRunnerObservation(ctx, runnerrecord.RunnerObservationRecord{GitHubVersion: lastVersion,
 		RunnerID: runnerID, Online: false, ObservedAt: time.Now().UTC(),
 	}, revision)
 	if err != nil {

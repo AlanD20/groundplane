@@ -252,12 +252,22 @@ Applicable CI, generated artifacts, security and surface parity remain release
 requirements. The [QA matrix](qa-matrix.md) owns behavioral cases; historical
 evidence does not qualify the post-restructuring build.
 
+## GitHub runner application updates
+
+Each Runner has an operator-controlled automatic-update policy and an explicit
+exact-version update action for its upstream GitHub runner application. GP uses
+one pinned, checksummed, architecture-matched update path, preserves registration
+and job data, waits for an idle activation window, and retains recovery authority
+until completion or exact predecessor restoration is proved. The installed
+upstream application version is distinct from the GP Runner image/tooling version.
+GP image/tooling replacement remains outside this update action.
+
 ## Outside the MVP
 
 Multi-host scheduling, remote-Agent identity, human-API public authentication,
 hostile-tenant network isolation, external registry management, build-on-deploy,
 replicated blue-green deployment, runtime Component plugins,
 automatic provider DNS/certificate setup, scheduled Scripts,
-Runner autoscaling/in-place updates and automatic empty-host disaster
+Runner autoscaling, GP Runner image/tooling updates in place, and automatic empty-host disaster
 recovery are outside the current scope. Accepted-but-unimplemented Backup and
 Runner requirements remain documented; absence of code is not a scope reduction.

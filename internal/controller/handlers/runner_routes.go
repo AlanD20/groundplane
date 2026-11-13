@@ -88,6 +88,7 @@ func (s *Server) registerRunners() {
 	s.registerRunnerEdit()
 	s.registerRunnerRemove()
 	s.registerRunnerChecks()
+	s.registerRunnerSoftware()
 }
 
 func (s *Server) listRunners(

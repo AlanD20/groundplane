@@ -1,3 +1,4 @@
+import { BulkSecretEditor } from "@/features/secrets/bulk-secret-editor";
 import { CreationButton } from "@/components/common/creation-button";
 ("use client");
 
@@ -20,6 +21,7 @@ import { useState } from "react";
 export default function PlatformSecretsPage() {
   const store = useStore();
   const [open, setOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [kind, setKind] = useState<"env" | "file">("env");
   const [key, setKey] = useState("");
   const [value, setValue] = useState("");
@@ -69,10 +71,30 @@ export default function PlatformSecretsPage() {
         eyebrow="Settings"
         icon={<KeyRound />}
         actions={
-          <CreationButton active={open} onClick={() => setOpen(true)}>
-            <Plus className="size-4" /> New secret
-          </CreationButton>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={open}
+              onClick={() => setBulkOpen(true)}
+            >
+              Import / edit .env
+            </Button>
+            <CreationButton
+              active={open}
+              disabled={bulkOpen}
+              onClick={() => setOpen(true)}
+            >
+              <Plus className="size-4" /> New secret
+            </CreationButton>
+          </div>
         }
+      />
+      <BulkSecretEditor
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        secrets={store.reusableSecrets.filter(
+          (secret) => secret.scope === "platform",
+        )}
       />
       <ResourceForm
         open={open}

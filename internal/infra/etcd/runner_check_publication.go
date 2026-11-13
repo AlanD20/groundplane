@@ -15,7 +15,7 @@ import (
 
 func (repository *RunnerRepository) CreateRunnerCheck(
 	ctx context.Context,
-	source RunnerCheckSource,
+	source RunnerRuntimeSource,
 	record runnerchecks.Record,
 	task workexecution.Task,
 	marker idempotency.IdempotencyMarker,

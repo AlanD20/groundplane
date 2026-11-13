@@ -91,3 +91,14 @@ func (mutator *fakeSecretMutator) CreateSecret(
 	mutator.key = key
 	return mutator.response, nil
 }
+
+func (mutator *fakeSecretMutator) EditSecret(
+	_ context.Context,
+	_ string,
+	_ apiTypes.SecretEditRequest,
+	key string,
+) (testidempotency.IdempotencyResponse, error) {
+	mutator.called = true
+	mutator.key = key
+	return mutator.response, nil
+}

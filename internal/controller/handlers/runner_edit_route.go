@@ -41,7 +41,7 @@ func (s *Server) registerRunnerEdit() {
 	runnerSchema := openAPISchema[apiTypes.Runner](registry, "Runner")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "runner.edit", Method: http.MethodPatch, Path: "/runners/{id}",
-		Summary: "Replace a Runner slug", Tags: []string{"Runner"}, DefaultStatus: http.StatusOK,
+		Summary: "Edit Runner slug and automatic upstream updates", Tags: []string{"Runner"}, DefaultStatus: http.StatusOK,
 		Middlewares: huma.Middlewares{s.rejectRunnerEditQuery}, SkipValidateBody: true,
 		RequestBody: &huma.RequestBody{Required: true, Content: map[string]*huma.MediaType{
 			"application/json": {Schema: requestSchema},
@@ -86,26 +86,35 @@ func decodeRunnerEdit(body []byte) (apiTypes.RunnerEditRequest, error) {
 		return apiTypes.RunnerEditRequest{}, errs.New(errs.KindMalformedRequest, "Runner edit body must be an object")
 	}
 	request := apiTypes.RunnerEditRequest{}
-	seen := false
+	seen := map[string]bool{}
 	for decoder.More() {
 		token, tokenErr := decoder.Token()
 		if tokenErr != nil {
 			return apiTypes.RunnerEditRequest{}, projectCreateJSONError(tokenErr)
 		}
 		member, ok := token.(string)
-		if !ok || member != "slug" {
+		if !ok || (member != "slug" && member != "auto_update") {
 			return apiTypes.RunnerEditRequest{}, errs.New(
 				errs.KindMalformedRequest,
 				"Runner edit body contains an unknown member",
 			)
 		}
-		if seen {
+		if seen[member] {
 			return apiTypes.RunnerEditRequest{}, errs.New(
 				errs.KindMalformedRequest,
 				"Runner edit body contains a duplicate member",
 			)
 		}
-		seen = true
+		seen[member] = true
+		if member == "auto_update" {
+			token, err := decoder.Token()
+			value, ok := token.(bool)
+			if err != nil || !ok {
+				return apiTypes.RunnerEditRequest{}, errs.New(errs.KindValidationFailed, "Runner auto_update must be a boolean")
+			}
+			request.AutoUpdate = &value
+			continue
+		}
 		if err := decoder.Decode(&request.Slug); err != nil {
 			var typeError *json.UnmarshalTypeError
 			if errors.As(err, &typeError) {
@@ -127,7 +136,7 @@ func decodeRunnerEdit(body []byte) (apiTypes.RunnerEditRequest, error) {
 		}
 		return apiTypes.RunnerEditRequest{}, projectCreateJSONError(err)
 	}
-	if !seen || !slug.Valid(request.Slug) {
+	if !seen["slug"] || !slug.Valid(request.Slug) {
 		return apiTypes.RunnerEditRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Runner slug must be a lowercase ASCII label of 1-63 bytes",

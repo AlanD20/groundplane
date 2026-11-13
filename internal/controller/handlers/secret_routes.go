@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"reflect"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -36,6 +35,12 @@ type SecretReader interface {
 }
 
 type SecretMutator interface {
+	EditSecret(
+		context.Context,
+		string,
+		apiTypes.SecretEditRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 	CreateSecret(
 		context.Context,
 		apiTypes.SecretCreateRequest,
@@ -87,16 +92,8 @@ type secretMutationOutput struct {
 }
 
 func (s *Server) registerSecrets() {
-	secretSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.Secret](),
-		true,
-		"Secret",
-	)
-	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.TaskAccepted](),
-		true,
-		"TaskAccepted",
-	)
+	secretSchema := openAPISchema[apiTypes.Secret](s.API.OpenAPI().Components.Schemas, "Secret")
+	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	registerSecretMutation[apiTypes.SecretCreateRequest](
 		s,
 		huma.Operation{
@@ -106,6 +103,7 @@ func (s *Server) registerSecrets() {
 			Middlewares:   huma.Middlewares{s.rejectSecretQuery},
 		},
 		secretSchema,
+		"SecretCreateRequest",
 		s.createSecret,
 	)
 	huma.Register(s.API, huma.Operation{
@@ -127,6 +125,7 @@ func (s *Server) registerSecrets() {
 		Middlewares: huma.Middlewares{s.rejectSecretDeleteBody, s.rejectSecretQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.removeSecret)
+	s.registerSecretEdit(secretSchema)
 	s.setRoutePolicy("POST /api/v1/secrets", routePolicy{body: jsonBody})
 }
 
@@ -173,6 +172,7 @@ func registerSecretMutation[InputBody any, Input any](
 	s *Server,
 	operation huma.Operation,
 	secretSchema *huma.Schema,
+	inputSchemaName string,
 	handler func(context.Context, *Input) (*secretMutationOutput, error),
 ) {
 	operation.SkipValidateBody = true
@@ -180,11 +180,7 @@ func registerSecretMutation[InputBody any, Input any](
 		Required: true,
 		Content: map[string]*huma.MediaType{
 			"application/json": {
-				Schema: s.API.OpenAPI().Components.Schemas.Schema(
-					reflect.TypeFor[InputBody](),
-					true,
-					"SecretCreateRequest",
-				),
+				Schema: openAPISchema[InputBody](s.API.OpenAPI().Components.Schemas, inputSchemaName),
 			},
 		},
 	}
@@ -350,6 +346,7 @@ func (s *Server) listSecrets(ctx context.Context, request *secretListInput) (*se
 	}
 	for index, item := range page.Items {
 		response.Items[index] = secretResponse(item.Record)
+		response.Items[index].Revision = item.Revision
 	}
 	return &secretPageOutput{Body: response}, nil
 }
@@ -362,7 +359,9 @@ func (s *Server) showSecret(ctx context.Context, request *secretShowInput) (*sec
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &secretOutput{Body: secretResponse(stored.Record)}, nil
+	result := secretResponse(stored.Record)
+	result.Revision = stored.Revision
+	return &secretOutput{Body: result}, nil
 }
 
 func (s *Server) revealSecret(ctx context.Context, request *secretShowInput) (*secretValueOutput, error) {

@@ -1263,7 +1263,7 @@ export interface paths {
         delete: operations["runner.remove"];
         options?: never;
         head?: never;
-        /** Replace a Runner slug */
+        /** Edit Runner slug and automatic upstream updates */
         patch: operations["runner.edit"];
         trace?: never;
     };
@@ -1296,6 +1296,41 @@ export interface paths {
         put?: never;
         /** Retry failed Runner creation */
         post: operations["runner.retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/{id}/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show latest or selected Runner software update */
+        get: operations["runner.update.show"];
+        put?: never;
+        /** Update only this Runner upstream software after its job completes */
+        post: operations["runner.update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/{id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List verified GitHub Runner versions for this host */
+        get: operations["runner.versions"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1389,7 +1424,8 @@ export interface paths {
         delete: operations["secret.remove"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Replace a reusable Secret value without changing its stable reference */
+        patch: operations["secret.edit"];
         trace?: never;
     };
     "/secrets/{id}/value": {
@@ -4055,6 +4091,7 @@ export interface components {
              * @example /api/v1/Runner.json
              */
             readonly $schema?: string;
+            auto_update: boolean;
             /** Format: int64 */
             cpu_millis: number;
             create_task_id: string;
@@ -4062,6 +4099,7 @@ export interface components {
             environment_id?: string;
             github_name?: string;
             github_url: string;
+            github_version?: string;
             id: string;
             labels?: string[] | null;
             /** @enum {string} */
@@ -4142,6 +4180,7 @@ export interface components {
              * @example /api/v1/RunnerCreateRequest.json
              */
             readonly $schema?: string;
+            auto_update: boolean;
             /** Format: int64 */
             cpu_millis: number;
             environment_id?: string;
@@ -4163,6 +4202,7 @@ export interface components {
              * @example /api/v1/RunnerEditRequest.json
              */
             readonly $schema?: string;
+            auto_update?: boolean;
             slug: string;
         };
         RunnerRetryRequest: {
@@ -4173,6 +4213,51 @@ export interface components {
              */
             readonly $schema?: string;
             registration_token: string;
+        };
+        RunnerUpdateRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RunnerUpdateRequest.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            revision: number;
+            version: string;
+        };
+        RunnerUpdateResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RunnerUpdateResult.json
+             */
+            readonly $schema?: string;
+            created_at: string;
+            failure?: string;
+            finished_at?: string;
+            outcome?: string;
+            phase: string;
+            stages: components["schemas"]["RunnerUpdateStage"][];
+            task_id: string;
+            version: string;
+        };
+        RunnerUpdateStage: {
+            failure?: string;
+            name: string;
+            outcome: string;
+        };
+        RunnerVersion: {
+            architecture: string;
+            version: string;
+        };
+        RunnerVersions: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RunnerVersions.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["RunnerVersion"][];
         };
         Scope: {
             environment_id?: string;
@@ -4267,6 +4352,8 @@ export interface components {
             kind: string;
             project_id?: string;
             ref: string;
+            /** Format: int64 */
+            revision?: number;
             scope: string;
             updated_at: string;
         };
@@ -4282,6 +4369,17 @@ export interface components {
             path?: string;
             platform?: boolean;
             project_id?: string;
+            value: string;
+        };
+        SecretEditRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/SecretEditRequest.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            revision: number;
             value: string;
         };
         SecretValue: {
@@ -9179,6 +9277,108 @@ export interface operations {
             };
         };
     };
+    "runner.update.show": {
+        parameters: {
+            query?: {
+                task?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerUpdateResult"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "runner.update": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunnerUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "runner.versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerVersions"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "script.list": {
         parameters: {
             query: {
@@ -9508,6 +9708,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "secret.edit": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecretEditRequest"];
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Secret"];
                 };
             };
             /** @description Error */
