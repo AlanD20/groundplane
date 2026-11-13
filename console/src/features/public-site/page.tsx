@@ -160,6 +160,10 @@ export function LandingPage() {
             Installer checksum
             <ArrowUpRight className="ml-1 inline size-3" />
           </a>
+          <a href={`${repository}/blob/main/docs/deployment.md#uninstall-or-reset`}>
+            Uninstall / reset
+            <ArrowUpRight className="ml-1 inline size-3" />
+          </a>
         </div>
       </footer>
     </div>

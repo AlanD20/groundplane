@@ -445,8 +445,9 @@ The following non-product operations are outside that parity set:
 - Local process commands: `controller serve` and `agent-run run`.
 - Same-host diagnostics: `controller key show` and `controller etcd show`.
 - Local CLI tooling: `version` and `completion`.
-- Machine bootstrap: immutable release staging and the fixed private
-  Controller startup/recovery modes. These are not binary-upload APIs.
+- Machine bootstrap: host installation and uninstall/reset scripts, immutable
+  release staging and the fixed private Controller startup/recovery modes.
+  These are not binary-upload APIs.
 
 Agent enrollment and normal Controller/Agent updates are operator capabilities,
 not bootstrap exemptions. Internal maintenance Tasks are visible in Activity but

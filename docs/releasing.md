@@ -98,7 +98,8 @@ and compatibility boundaries.
 
 [pages.yml](../.github/workflows/pages.yml) runs separately on pushes to `main`
 and manual dispatch on `main`. It publishes the landing page and that commit's
-installer/checksum, not repository contents or private evidence. The page imports
+installer, uninstaller and their checksums, not repository contents or private
+evidence. The page imports
 Console UI primitives, palette and local fonts; the Pages job installs the pinned
 Console dependencies and builds a separate static bundle. HTML is prerendered for
 readability without JavaScript; hydration adds copy and theme controls. Renderer

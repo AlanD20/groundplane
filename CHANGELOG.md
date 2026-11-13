@@ -5,6 +5,9 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Provide a standalone host uninstall/reset script alongside the installer;
+  remove GP-managed resources and local data while retaining Docker and host dependencies.
+
 ## 0.0.1 — 2026-11-12
 
 Initial single-host release.

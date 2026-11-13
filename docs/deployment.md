@@ -64,6 +64,37 @@ non-overlapping address pools. Bootstrap fills its pinned image selections.
 The installer does not configure public ingress, wildcard listeners or host
 firewalls. Do not expose the API to an untrusted network.
 
+## Uninstall or reset
+
+To erase this host’s Groundplane installation and start again:
+
+```sh
+curl -fsSL https://gp.aland20.com/uninstall.sh | sudo bash -s -- --yes
+```
+
+This permanently deletes GP-managed containers, networks, Volumes and their local
+data, including databases, Secrets, configuration, Task history, registry storage,
+Runner accounts and GP binaries. It works without a healthy Controller or API.
+If host DNS used GP’s resolver, its saved baseline is restored before CoreDNS
+is removed. A missing baseline requires repairing host DNS before continuing.
+Docker, Compose, host packages, unrelated Docker resources and shared upstream
+image caches remain installed. Remote backups, GitHub registrations and Cloudflare
+configuration are outside this host reset and remain untouched.
+
+Replace `--yes` with `--dry-run` to inspect the selected resources without changing
+them. The script selects Docker resources by GP ownership labels, not application
+names. It refuses to erase mounted directories or traverse symlink ancestors.
+If Docker is installed but unavailable, restore access to its local daemon and
+rerun; an unavailable daemon is not evidence that its resources are absent.
+Operator files stored outside GP-managed directories and Volume paths are not
+guessed or deleted. The shared installer lock inode remains for safe coordination;
+system journal records remain under the host’s normal retention.
+
+After successful removal, run the normal install command again. No package
+reinstallation or manual etcd cleanup is needed. The script and its checksum are
+published independently of release tags at `/uninstall.sh` and
+`/uninstall.sh.sha256`.
+
 ## Connect after installation
 
 With the default configuration, the Console is served at `http://127.0.0.1:8080`
