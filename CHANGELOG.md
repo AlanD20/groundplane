@@ -33,10 +33,12 @@ Initial single-host release.
   provisioning and lifecycle hooks that receive inputs and return declared facts.
 - Set CPU/RAM limits before a Backing Service's first startup. Custom Backings
   can also create an explicitly selected persistent data Volume at startup.
+- Edit shared Backing Service display names without changing consumer references.
 - Manage persistent Volumes, configuration Entries and Secrets. Materialize
   configuration for workloads and run Scripts and ordered deployment hooks.
 - Import and edit Platform and Project Secrets from dotenv text or files, with
   per-key results, stable references and protected execution-pinned values.
+- Reveal file Secrets in a searchable, full-width editor view with line numbers.
 
 ### Operations
 
@@ -67,6 +69,10 @@ Initial single-host release.
 - Inspect Host, Controller, Agent and Service health, workload logs and Activity.
 - Track durable Tasks and their events, with Retry and Abort where the operation
   permits them.
+- Verify backing-network membership for stopped consumers and safely settle
+  connection work when no consumer container exists.
+- Verify and remove application-owned Volume directories without changing their
+  ownership or weakening captured path and identity checks.
 - Perform guarded Controller and Agent updates with recorded update Tasks and
   recovery checks.
 - Capture and verify Environment configuration, managed Volumes and
