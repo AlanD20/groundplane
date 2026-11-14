@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -12,8 +13,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Standalone Script diagnostics observe accepted checkpoints only. Embedded
-// hooks remain with their parent operation's diagnostic owner.
+// Script diagnostics observe accepted checkpoints only. Embedded executions
+// keep their own stage namespace within the parent attempt; a Release cursor
+// cannot substitute for the Script's recorded command outcome and cleanup.
 func (service *ScriptCheckpointService) reportScriptProgress(
 	ctx context.Context,
 	input scriptexecutions.ScriptCheckpointInput,
@@ -21,8 +23,9 @@ func (service *ScriptCheckpointService) reportScriptProgress(
 	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	view, err := service.queue.ReadWork(bounded, input.TaskID, input.WorkItemID, 0)
+	prefix := ""
 	if err == nil && view.Item.Item.Operation != workexecution.Script {
-		return
+		prefix = "script_" + strings.ToLower(input.ExecutionID) + "_"
 	}
 	var snapshot executiondiagnostics.Snapshot
 	if err == nil {
@@ -32,7 +35,7 @@ func (service *ScriptCheckpointService) reportScriptProgress(
 		return
 	}
 	if err == nil {
-		err = service.writeScriptProgress(bounded, input, snapshot)
+		err = service.writeScriptProgress(bounded, input, snapshot, prefix)
 	}
 	if err != nil {
 		slog.WarnContext(bounded, "Script diagnostics incomplete", "attempt_id", input.AttemptID, "error", err)
@@ -50,7 +53,7 @@ func (service *ScriptCheckpointService) reportScriptProgress(
 }
 
 func (service *ScriptCheckpointService) writeScriptProgress(ctx context.Context,
-	input scriptexecutions.ScriptCheckpointInput, snapshot executiondiagnostics.Snapshot,
+	input scriptexecutions.ScriptCheckpointInput, snapshot executiondiagnostics.Snapshot, prefix string,
 ) error {
 	sequence := uint64(0)
 	var stages []workexecution.Stage
@@ -72,6 +75,7 @@ func (service *ScriptCheckpointService) writeScriptProgress(ctx context.Context,
 			input.Executor, sequence, stage, input.At)
 	}
 	start := func(key, name, expected string) error {
+		key = prefix + key
 		if find(key) != nil {
 			return nil // Exact checkpoint replay must not reopen a stage.
 		}
@@ -79,6 +83,7 @@ func (service *ScriptCheckpointService) writeScriptProgress(ctx context.Context,
 			State: workexecution.StageRunning, StartedAt: &input.At})
 	}
 	finish := func(key, observed string, failed bool) error {
+		key = prefix + key
 		stage := find(key)
 		if stage == nil {
 			return errs.New(errs.KindStateConflict, "Script stage start observation is unavailable")
@@ -128,8 +133,8 @@ func (service *ScriptCheckpointService) writeScriptProgress(ctx context.Context,
 		}
 		key := ""
 		for _, stage := range stages {
-			if stage.FinishedAt == nil && stage.Key != "cleanup" {
-				key = stage.Key
+			if stage.FinishedAt == nil && strings.HasPrefix(stage.Key, prefix) && stage.Key != prefix+"cleanup" {
+				key = strings.TrimPrefix(stage.Key, prefix)
 			}
 		}
 		if key != "" {
@@ -138,8 +143,8 @@ func (service *ScriptCheckpointService) writeScriptProgress(ctx context.Context,
 			if err := finish(key, observed, failed); err != nil {
 				return err
 			}
-		} else if len(stages) == 0 {
-			if err := report(workexecution.Stage{Key: "run_script", Name: "Execute captured Script",
+		} else if find(prefix+"run_script") == nil {
+			if err := report(workexecution.Stage{Key: prefix + "run_script", Name: "Execute captured Script",
 				Expected: "The captured command exits successfully within its execution deadline",
 				State:    workexecution.StageSkipped, FinishedAt: &input.At, Observed: observed}); err != nil {
 				return err

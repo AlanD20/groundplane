@@ -29,7 +29,11 @@ func DeploymentStage(input Input, before *Progress, progress Progress) (workexec
 		completed = "Captured configuration files were written and verified"
 	case PreHooks, PostHooks:
 		position := strconv.FormatUint(uint64(boundary.Hook)+1, 10)
-		stage.Key += "_" + position
+		key, keyErr := HookDiagnosticKey(boundary.Phase, boundary.Hook)
+		if keyErr != nil {
+			return workexecution.Stage{}, keyErr
+		}
+		stage.Key = key
 		stage.Name = "Run pre-deploy hook " + position
 		if boundary.Phase == PostHooks {
 			stage.Name = "Run post-deploy hook " + position
@@ -82,4 +86,13 @@ func DeploymentStage(input Input, before *Progress, progress Progress) (workexec
 		stage.State, stage.FinishedAt, stage.Observed = workexecution.StageSucceeded, &progress.UpdatedAt, completed
 	}
 	return stage, stage.Validate()
+}
+
+// HookDiagnosticKey identifies the captured hook position for both checkpoint
+// observations and projections of its retained execution outcome.
+func HookDiagnosticKey(phase Phase, position uint32) (string, error) {
+	if phase != PreHooks && phase != PostHooks {
+		return "", invalidProgress()
+	}
+	return string(phase) + "_" + strconv.FormatUint(uint64(position)+1, 10), nil
 }

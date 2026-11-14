@@ -5,6 +5,12 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Finish captured work revoked before assignment using a durable no-assignment
+  receipt, preserving its cancelled or superseded outcome and normal retention.
+- Show embedded Script preparation, command outcome and cleanup in parent Task
+  details. Read retained hook outcomes without requiring the Agent's local
+  delivery journal or storing Script output.
+
 ## 0.0.1 — 2026-11-14
 
 Initial single-host release.

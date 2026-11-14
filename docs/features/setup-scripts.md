@@ -103,6 +103,11 @@ Script output is drained and discarded. Task detail retains typed outcomes and
 cleanup or Abort evidence, but Groundplane does not add output-log storage or a
 secret-bearing output stream.
 
+Embedded hooks include their body preparation, container creation, command
+outcome and cleanup under the parent Task. A retained hook result can identify
+an exit code or a failure before Script start authorization even after the Agent
+retires its local delivery journal; missing proof remains explicitly unknown.
+
 ### Operator surfaces
 
 The existing Script create, edit and read actions, and the bodyless run action,

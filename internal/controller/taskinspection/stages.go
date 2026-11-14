@@ -75,6 +75,34 @@ func (service *Service) Stages(ctx context.Context, taskID, workID, attemptID st
 	if err := service.environmentOutcome(ctx, snapshot.Attempt, &result); err != nil {
 		return Stages{}, err
 	}
+	hook, err := service.diagnostics.ReleaseHookResult(ctx, snapshot.Attempt, snapshot.ReadRevision)
+	if err != nil {
+		return Stages{}, err
+	}
+	if hook != nil {
+		resolved := false
+		for index, stage := range result.Items {
+			if stage.Key != hook.Key || stage.State != workexecution.StageUnknown {
+				continue
+			}
+			stage.State, stage.Observed, stage.FailureCode = hook.State, hook.Observed, hook.FailureCode
+			stage.FinishedAt = &hook.FinishedAt
+			if err := stage.Validate(); err != nil {
+				return Stages{}, err
+			}
+			result.Items[index] = stage
+			resolved = true
+		}
+		if resolved && !snapshot.Incomplete {
+			result.Incomplete = false
+			for _, stage := range result.Items {
+				result.Incomplete = result.Incomplete || stage.State == workexecution.StageUnknown
+			}
+		}
+		if resolved && (result.UpdatedAt == nil || result.UpdatedAt.Before(hook.FinishedAt)) {
+			result.UpdatedAt = &hook.FinishedAt
+		}
+	}
 	return result, nil
 }
 

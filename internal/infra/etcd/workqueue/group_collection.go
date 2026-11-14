@@ -26,6 +26,7 @@ func PrepareWorkCollection(task TaskSnapshot, item ItemSnapshot) (Change, error)
 			{Type: keyvalue.MutationDelete, Key: ItemKey(item.Item.ID)},
 			{Type: keyvalue.MutationDelete, Key: TaskItemKey(task.Task.ID, item.Item.ID)},
 			{Type: keyvalue.MutationDelete, Key: inputSettlementKey(item.Item.ID)},
+			{Type: keyvalue.MutationDelete, Key: revocationResultKey(item.Item.ID)},
 		},
 	}, nil
 }

@@ -44,6 +44,9 @@ func (repository *Repository) ReadFinishedWork(ctx context.Context, taskID strin
 			if item.Phase != workexecution.Settled || item.Result == nil || item.ActiveAttemptID != "" {
 				return FinishedWork{}, corrupt()
 			}
+			if err := repository.validateRevocationResult(ctx, task, snapshot, revision); err != nil {
+				return FinishedWork{}, err
+			}
 			switch item.Outcome {
 			case workexecution.Succeeded:
 				counts.Succeeded++

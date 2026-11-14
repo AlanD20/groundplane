@@ -258,6 +258,11 @@ Latest-wins applies to conflicting desired-state work, not every Task on the hos
   Its outcome must be reconciled before contradictory effects proceed.
 - Supersession revokes forward permission, not permission for captured cleanup.
 
+Captured work revoked before assignment needs a no-assignment receipt before
+aggregate Task completion. The finalizer compares the settled work and empty
+attempt index atomically; it preserves the original outcome and leaves captured
+source retirement with the operation owner. No Agent result is invented.
+
 Abort is a request, not proof of termination. Completion can win the race. A Task
 cannot report clean cancellation while effects remain unknown. Task action outcome
 and cleanup status are separate: failure or cancellation can require attention;

@@ -61,6 +61,10 @@ func (completions *Completions) Finish(
 	if at.IsZero() || retention <= 0 {
 		return errs.New(errs.KindInternal, "task completion requires a timestamp and positive retention")
 	}
+	sealed, err := completions.queue.SealRevocationResult(ctx, taskID, at)
+	if err != nil || sealed {
+		return err
+	}
 	finished, err := completions.queue.ReadFinishedWork(ctx, taskID)
 	if err != nil {
 		return err
