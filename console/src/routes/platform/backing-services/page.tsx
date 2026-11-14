@@ -1,3 +1,4 @@
+import { BackingCreationRuntimeFields } from "@/features/backing-service/creation-runtime-fields";
 import { CreationButton } from "@/components/common/creation-button";
 import { BackingServicesTable } from "@/features/backing-service/backing-services-table";
 
@@ -89,6 +90,10 @@ export default function PlatformBackingServicesPage() {
   const [zoneInternal, setZoneInternal] = useState(true);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [memory, setMemory] = useState("");
+  const [cpus, setCpus] = useState("");
+  const [volumeSlug, setVolumeSlug] = useState("");
+  const [mountPath, setMountPath] = useState("");
 
   const openCreate = () => setCreateOpen(true);
   const authenticationFields =
@@ -146,6 +151,17 @@ export default function PlatformBackingServicesPage() {
         name: name.trim(),
         description: description.trim() || undefined,
         ...createFields,
+        resources:
+          memory.trim() || cpus
+            ? {
+                mem: memory.trim() || undefined,
+                cpus: cpus ? Number(cpus) : undefined,
+              }
+            : undefined,
+        custom_volume:
+          adapter === "custom" && (volumeSlug.trim() || mountPath.trim())
+            ? { slug: volumeSlug.trim(), mount_path: mountPath.trim() }
+            : undefined,
         image: selectedImage,
         network_pool: networkPool.trim(),
         zone: {
@@ -161,6 +177,10 @@ export default function PlatformBackingServicesPage() {
       setHooks({});
       setHookError(null);
       setAuthentication("");
+      setMemory("");
+      setCpus("");
+      setVolumeSlug("");
+      setMountPath("");
     } catch (error) {
       setCreateError(
         error instanceof Error
@@ -358,6 +378,17 @@ export default function PlatformBackingServicesPage() {
               </div>
             )}
           </FormSection>
+          <BackingCreationRuntimeFields
+            custom={adapter === "custom"}
+            memory={memory}
+            cpus={cpus}
+            volumeSlug={volumeSlug}
+            mountPath={mountPath}
+            onMemoryChange={setMemory}
+            onCpusChange={setCpus}
+            onVolumeSlugChange={setVolumeSlug}
+            onMountPathChange={setMountPath}
+          />
           <FormSection
             title="Network"
             description="Reserve a pool for this backing Environment, then choose its zone subnet within that pool."

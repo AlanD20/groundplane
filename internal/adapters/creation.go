@@ -10,8 +10,8 @@ import (
 )
 
 // CreationSpec is the resolved shape of a backing service. Managed adapters
-// compile every workload detail; custom creation supplies only its image and
-// canonical service name.
+// compile workload defaults; Custom contributes no inferred defaults. Explicit
+// operator resource and storage choices are applied before the first capture.
 type CreationSpec struct {
 	ServiceName   string
 	Image         string
@@ -26,6 +26,8 @@ type CreationSpec struct {
 	CapAdd        []string
 	CapDrop       []string
 	SecurityOpt   []string
+	Resources     core.Resources
+	MemoryBytes   int64
 }
 
 // CreationEnvironment declares one generated environment entry. Entries with

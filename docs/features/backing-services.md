@@ -56,6 +56,19 @@ database build. Custom requires an image. It does not invent a data Volume, cred
 ports, or a healthcheck for an arbitrary image. Its Service name is the Project
 slug; the display name remains independent.
 
+Creation can include optional CPU/RAM limits, enforced in the first sealed
+container configuration. Custom can also declare one initial persistent Volume
+with an explicit slug and absolute container mount path; it still invents no
+storage when that choice is omitted. These creation controls are implemented but
+not included in the published 0.0.1 artifacts or live-qualified yet.
+
+For example, after fetching the upstream image, a Custom scanner can be authored
+with `--memory 1536m --cpus 1 --volume-slug signatures --mount-path /var/lib/clamav`
+on `groundplane backing-service create` (along with its image, name and network
+arguments). The API fields are `resources` and `custom_volume`; the Console's
+creation form offers the same choices. Managed adapters reject `custom_volume`
+because they own their database storage layout.
+
 The Controller publishes exactly one backing Project, one `main` Environment,
 one dedicated backing-owned Zone, one adapter Service, one adapter-defined data
 Volume for built-in database adapters, and one Agent Task. Managed PostgreSQL

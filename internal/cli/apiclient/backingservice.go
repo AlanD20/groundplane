@@ -36,6 +36,15 @@ func (c *Client) CreateBackingService(
 		body.Image = &input.Image
 	}
 	body.Hooks = backingHooksToGenerated(input.Hooks)
+	if input.Resources != nil {
+		body.Resources = &generated.ServiceResources{Mem: &input.Resources.Mem, Cpus: &input.Resources.CPUs}
+	}
+	if input.CustomVolume != nil {
+		body.CustomVolume = &generated.BackingCustomVolume{
+			Slug:      input.CustomVolume.Slug,
+			MountPath: input.CustomVolume.MountPath,
+		}
+	}
 	if input.Authentication != "" {
 		authentication := generated.BackingServiceCreateAuthentication(input.Authentication)
 		body.Authentication = &authentication

@@ -13,6 +13,13 @@ type BackingServiceCreate struct {
 	NetworkPool    string                    `json:"network_pool"`
 	Zone           BackingServiceZoneCreate  `json:"zone"`
 	Hooks          *BackingHookConfiguration `json:"hooks,omitempty"`
+	Resources      *ServiceResources         `json:"resources,omitempty" doc:"Optional CPU/RAM limits enforced from the first container start."`
+	CustomVolume   *BackingCustomVolume      `json:"custom_volume,omitempty" doc:"Optional initial persistent Volume for Custom only; managed adapters own their storage layout."`
+}
+
+type BackingCustomVolume struct {
+	Slug      string `json:"slug"`
+	MountPath string `json:"mount_path"`
 }
 
 type BackingHookConfiguration struct {

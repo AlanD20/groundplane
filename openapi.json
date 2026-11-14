@@ -703,6 +703,22 @@
         ],
         "type": "object"
       },
+      "BackingCustomVolume": {
+        "additionalProperties": false,
+        "properties": {
+          "mount_path": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "mount_path"
+        ],
+        "type": "object"
+      },
       "BackingHookConfiguration": {
         "additionalProperties": false,
         "properties": {
@@ -856,6 +872,15 @@
                     "hooks"
                   ],
                   "type": "object"
+                },
+                {
+                  "properties": {
+                    "custom_volume": {}
+                  },
+                  "required": [
+                    "custom_volume"
+                  ],
+                  "type": "object"
                 }
               ]
             },
@@ -909,6 +934,15 @@
                   },
                   "required": [
                     "hooks"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "custom_volume": {}
+                  },
+                  "required": [
+                    "custom_volume"
                   ],
                   "type": "object"
                 }
@@ -1005,6 +1039,10 @@
             ],
             "type": "string"
           },
+          "custom_volume": {
+            "$ref": "#/components/schemas/BackingCustomVolume",
+            "description": "Optional initial persistent Volume for Custom only; managed adapters own their storage layout."
+          },
           "description": {
             "type": "string"
           },
@@ -1020,6 +1058,10 @@
           },
           "network_pool": {
             "type": "string"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ServiceResources",
+            "description": "Optional CPU/RAM limits enforced from the first container start."
           },
           "slug": {
             "type": "string"

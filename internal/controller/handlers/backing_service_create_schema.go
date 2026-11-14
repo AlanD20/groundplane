@@ -25,6 +25,7 @@ func backingServiceCreateSchema(registry huma.Registry) {
 		}, Required: []string{"adapter", "adapter_version", "authentication"}, Not: &huma.Schema{
 			AnyOf: []*huma.Schema{
 				present("hooks"),
+				present("custom_volume"),
 			},
 		}},
 		{Type: huma.TypeObject, Properties: map[string]*huma.Schema{
@@ -34,6 +35,7 @@ func backingServiceCreateSchema(registry huma.Registry) {
 		}, Required: []string{"adapter", "adapter_version"}, Not: &huma.Schema{AnyOf: []*huma.Schema{
 			present("authentication"),
 			present("hooks"),
+			present("custom_volume"),
 		}}},
 		{Type: huma.TypeObject, Properties: map[string]*huma.Schema{
 			"adapter": {Type: huma.TypeString, Enum: []any{"custom"}},

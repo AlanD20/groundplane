@@ -81,6 +81,8 @@ func newBackingServiceCmd() *cobra.Command {
 
 	var adapter, adapterVersion, image, authentication, name, description, networkPool, zoneName, zoneSubnet, hooksFile string
 	var zoneInternal bool
+	var memory, volumeSlug, mountPath string
+	var cpus float64
 	create := &cobra.Command{
 		Use:   "create <slug>",
 		Short: "Create a backing service",
@@ -96,6 +98,14 @@ func newBackingServiceCmd() *cobra.Command {
 				return errs.New(errs.KindValidationFailed, "--authentication is required for valkey")
 			}
 			var hooks *apiTypes.BackingHookConfiguration
+			var resources *apiTypes.ServiceResources
+			if cmd.Flags().Changed("memory") || cmd.Flags().Changed("cpus") {
+				resources = &apiTypes.ServiceResources{Mem: memory, CPUs: cpus}
+			}
+			var customVolume *apiTypes.BackingCustomVolume
+			if cmd.Flags().Changed("volume-slug") || cmd.Flags().Changed("mount-path") {
+				customVolume = &apiTypes.BackingCustomVolume{Slug: volumeSlug, MountPath: mountPath}
+			}
 			if cmd.Flags().Changed("hooks-file") {
 				if adapter != "custom" {
 					return errs.New(errs.KindValidationFailed, "--hooks-file is accepted only for custom")
@@ -111,7 +121,8 @@ func newBackingServiceCmd() *cobra.Command {
 				AdapterVersion: adapterVersion,
 				Authentication: authentication,
 				Hooks:          hooks,
-				NetworkPool:    networkPool,
+				Resources:      resources, CustomVolume: customVolume,
+				NetworkPool: networkPool,
 				Zone: apiTypes.BackingServiceZoneCreate{
 					Name:     zoneName,
 					Subnet:   zoneSubnet,
@@ -134,6 +145,11 @@ func newBackingServiceCmd() *cobra.Command {
 	create.Flags().
 		StringVar(&image, "image", "", "container image; required for Custom, or an upstream image matching the selected database version")
 	create.Flags().StringVar(&hooksFile, "hooks-file", "", "custom hook configuration JSON file; - reads stdin")
+	create.Flags().StringVar(&memory, "memory", "", "memory limit enforced from the first start, for example 1536m")
+	create.Flags().Float64Var(&cpus, "cpus", 0, "CPU limit enforced from the first start")
+	create.Flags().
+		StringVar(&volumeSlug, "volume-slug", "", "optional initial Custom Volume slug; requires --mount-path")
+	create.Flags().StringVar(&mountPath, "mount-path", "", "absolute Custom Volume mount path; requires --volume-slug")
 	create.Flags().StringVar(
 		&authentication,
 		"authentication",

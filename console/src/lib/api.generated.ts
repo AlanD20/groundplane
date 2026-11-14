@@ -2246,6 +2246,10 @@ export interface components {
             name: string;
             outcome: string;
         };
+        BackingCustomVolume: {
+            mount_path: string;
+            slug: string;
+        };
         BackingHookConfiguration: {
             after_start?: components["schemas"]["BackingHookDefinition"];
             attach?: components["schemas"]["BackingHookDefinition"];
@@ -2298,12 +2302,16 @@ export interface components {
              * @enum {string}
              */
             authentication?: "username_password" | "password" | "none";
+            /** @description Optional initial persistent Volume for Custom only; managed adapters own their storage layout. */
+            custom_volume?: components["schemas"]["BackingCustomVolume"];
             description?: string;
             hooks?: components["schemas"]["BackingHookConfiguration"];
             /** @description Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it. */
             image?: string;
             name: string;
             network_pool: string;
+            /** @description Optional CPU/RAM limits enforced from the first container start. */
+            resources?: components["schemas"]["ServiceResources"];
             slug: string;
             zone: components["schemas"]["BackingServiceZoneCreate"];
         } & ({

@@ -24,6 +24,7 @@ func backingComposeProject(
 	// Commands are literal normalized values. The Compose CLI transport owns
 	// dollar quoting; pre-quoting here changes the command the container runs.
 	service := composetypes.ServiceConfig{
+		MemLimit: composetypes.UnitBytes(spec.MemoryBytes), CPUS: float32(spec.Resources.CPUs),
 		Name: spec.ServiceName, Image: spec.Image, Command: composetypes.ShellCommand(slices.Clone(spec.Command)),
 		Expose: composetypes.StringOrNumberList(spec.Expose), Restart: "unless-stopped",
 		CapAdd: append([]string(nil), spec.CapAdd...), CapDrop: append([]string(nil), spec.CapDrop...),

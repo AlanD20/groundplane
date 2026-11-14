@@ -177,6 +177,9 @@ func (service *CreationService) CreateBackingService(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	input.Authentication = string(authentication)
+	if err := configureCreation(&spec, input, adapter.Custom()); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	requestBytes, err := json.Marshal(input)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -360,7 +363,8 @@ func (service *CreationService) createBackingServiceFromStage(
 		Expose:  append([]string(nil), spec.Expose...), Restart: "unless-stopped",
 		Adapter: input.Adapter, AdapterVersion: input.AdapterVersion, Authentication: authentication,
 		FactsPrefix: adapter.FactsPrefix(), Label: input.Name,
-		Hooks: taskplanning.BackingHookConfigurationFromAPI(input.Hooks),
+		Resources: spec.Resources,
+		Hooks:     taskplanning.BackingHookConfigurationFromAPI(input.Hooks),
 	}
 	serviceRecord, err := servicerecord.NewServiceRecord(environment.ID, desiredService, zone.Desired.ID)
 	if err != nil {

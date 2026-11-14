@@ -2206,6 +2206,12 @@ type BackingCheckStage struct {
 	Outcome   string  `json:"outcome"`
 }
 
+// BackingCustomVolume defines model for BackingCustomVolume.
+type BackingCustomVolume struct {
+	MountPath string `json:"mount_path"`
+	Slug      string `json:"slug"`
+}
+
 // BackingHookConfiguration defines model for BackingHookConfiguration.
 type BackingHookConfiguration struct {
 	AfterStart *BackingHookDefinition       `json:"after_start,omitempty"`
@@ -2265,16 +2271,22 @@ type BackingServiceCreate struct {
 
 	// Authentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
 	Authentication *BackingServiceCreateAuthentication `json:"authentication,omitempty"`
-	Description    *string                             `json:"description,omitempty"`
-	Hooks          *BackingHookConfiguration           `json:"hooks,omitempty"`
+
+	// CustomVolume Optional initial persistent Volume for Custom only; managed adapters own their storage layout.
+	CustomVolume *BackingCustomVolume      `json:"custom_volume,omitempty"`
+	Description  *string                   `json:"description,omitempty"`
+	Hooks        *BackingHookConfiguration `json:"hooks,omitempty"`
 
 	// Image Required for Custom; optional upstream image matching the selected managed family/version. Omission selects its catalog family tag. Creation pins the selected content without pulling it.
-	Image       *string                  `json:"image,omitempty"`
-	Name        string                   `json:"name"`
-	NetworkPool string                   `json:"network_pool"`
-	Slug        string                   `json:"slug"`
-	Zone        BackingServiceZoneCreate `json:"zone"`
-	union       json.RawMessage
+	Image       *string `json:"image,omitempty"`
+	Name        string  `json:"name"`
+	NetworkPool string  `json:"network_pool"`
+
+	// Resources Optional CPU/RAM limits enforced from the first container start.
+	Resources *ServiceResources        `json:"resources,omitempty"`
+	Slug      string                   `json:"slug"`
+	Zone      BackingServiceZoneCreate `json:"zone"`
+	union     json.RawMessage
 }
 
 // BackingServiceCreateAuthentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
@@ -6671,6 +6683,13 @@ func (t BackingServiceCreate) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if t.CustomVolume != nil {
+		object["custom_volume"], err = json.Marshal(t.CustomVolume)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'custom_volume': %w", err)
+		}
+	}
+
 	if t.Description != nil {
 		object["description"], err = json.Marshal(t.Description)
 		if err != nil {
@@ -6700,6 +6719,13 @@ func (t BackingServiceCreate) MarshalJSON() ([]byte, error) {
 	object["network_pool"], err = json.Marshal(t.NetworkPool)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'network_pool': %w", err)
+	}
+
+	if t.Resources != nil {
+		object["resources"], err = json.Marshal(t.Resources)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'resources': %w", err)
+		}
 	}
 
 	object["slug"], err = json.Marshal(t.Slug)
@@ -6755,6 +6781,13 @@ func (t *BackingServiceCreate) UnmarshalJSON(b []byte) error {
 		}
 	}
 
+	if raw, found := object["custom_volume"]; found {
+		err = json.Unmarshal(raw, &t.CustomVolume)
+		if err != nil {
+			return fmt.Errorf("error reading 'custom_volume': %w", err)
+		}
+	}
+
 	if raw, found := object["description"]; found {
 		err = json.Unmarshal(raw, &t.Description)
 		if err != nil {
@@ -6787,6 +6820,13 @@ func (t *BackingServiceCreate) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.NetworkPool)
 		if err != nil {
 			return fmt.Errorf("error reading 'network_pool': %w", err)
+		}
+	}
+
+	if raw, found := object["resources"]; found {
+		err = json.Unmarshal(raw, &t.Resources)
+		if err != nil {
+			return fmt.Errorf("error reading 'resources': %w", err)
 		}
 	}
 
