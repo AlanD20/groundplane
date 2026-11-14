@@ -77,7 +77,7 @@ export default function PlatformSecretsPage() {
               disabled={open}
               onClick={() => setBulkOpen(true)}
             >
-              Import / edit .env
+              Bulk edit
             </Button>
             <CreationButton
               active={open}

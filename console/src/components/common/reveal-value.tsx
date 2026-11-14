@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { AnimatedSection } from "./animated-section";
 import { CopyButton } from "./copy-button";
@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CodeEditor } from "@/components/ui/code-editor";
 
 // Masked value with an optional typed-confirmation reveal (never cached,
 // never logged). The typed confirmation is a PLATFORM-wide preference — off by
@@ -28,13 +29,16 @@ export function RevealValue({
   className,
   confirmWord = "reveal",
   sensitive = true,
+  file = false,
 }: {
   loadValue: () => Promise<string>;
   label?: string;
   className?: string;
   confirmWord?: string;
   sensitive?: boolean;
+  file?: boolean;
 }) {
+  const viewerId = useId();
   const { requireRevealConfirm } = useStore();
   const [open, setOpen] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -44,6 +48,10 @@ export function RevealValue({
   const [typed, setTyped] = useState("");
 
   const displayedValue = loadedValue;
+  const expanded =
+    file ||
+    (loadedValue?.includes("\n") ?? false) ||
+    (loadedValue?.length ?? 0) > 160;
 
   async function reveal(): Promise<boolean> {
     setError(null);
@@ -74,7 +82,7 @@ export function RevealValue({
         className={cn("flex min-w-0 max-w-full items-start gap-1", className)}
       >
         <code className="min-h-9 min-w-0 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted px-3 py-2 font-mono text-sm [overflow-wrap:anywhere]">
-          {revealed ? (
+          {revealed && !expanded ? (
             displayedValue === "" ? (
               <span className="font-sans italic text-muted-foreground">
                 Empty value
@@ -88,7 +96,7 @@ export function RevealValue({
             "not loaded"
           )}
         </code>
-        {revealed && (
+        {revealed && !expanded && (
           <CopyButton className="shrink-0" value={displayedValue ?? ""} />
         )}
         <Button
@@ -105,7 +113,13 @@ export function RevealValue({
           }}
           className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label={
-            revealed ? "Hide value" : sensitive ? "Reveal value" : "Show value"
+            revealed
+              ? "Hide value"
+              : file
+                ? "View file"
+                : sensitive
+                  ? "Reveal value"
+                  : "Show value"
           }
           aria-disabled={loading}
           aria-busy={loading}
@@ -119,15 +133,48 @@ export function RevealValue({
             ? "Loading…"
             : revealed
               ? "Hide"
-              : sensitive
-                ? "Reveal"
-                : "Show"}
+              : file
+                ? "View file"
+                : sensitive
+                  ? "Reveal"
+                  : "Show"}
         </Button>
         {error && (
           <span className="min-w-0 text-xs text-destructive [overflow-wrap:anywhere]">
             {error}
           </span>
         )}
+
+        <Dialog
+          open={revealed && expanded}
+          onOpenChange={(next) => {
+            if (!next) hide();
+          }}
+        >
+          <DialogContent className="max-w-5xl" submitOnEnter={false}>
+            <DialogHeader>
+              <DialogTitle>{label ?? "Secret value"}</DialogTitle>
+              <DialogDescription>
+                {file ? "File contents" : "Secret value"} · Read only
+              </DialogDescription>
+            </DialogHeader>
+            {revealed && expanded && (
+              <CodeEditor
+                id={viewerId}
+                label={label ?? "Secret value"}
+                value={displayedValue ?? ""}
+                readOnly
+                className="max-h-[60dvh] overflow-auto"
+              />
+            )}
+            <DialogFooter>
+              <CopyButton value={displayedValue ?? ""} />
+              <Button variant="outline" onClick={hide}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="max-w-md">

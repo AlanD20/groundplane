@@ -127,7 +127,7 @@ export function EntryRow({
         </div>
       </div>
       {secret && loadValue ? (
-        <RevealValue loadValue={loadValue} label={label} />
+        <RevealValue loadValue={loadValue} label={label} file={file} />
       ) : file ? (
         <Disclosure
           className="min-w-0 rounded-lg border border-border"

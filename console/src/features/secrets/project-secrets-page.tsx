@@ -109,7 +109,7 @@ export default function ProjectSecretsPage() {
               disabled={open}
               onClick={() => setBulkOpen(true)}
             >
-              Import / edit .env
+              Bulk edit
             </Button>
             <CreationButton
               active={open}

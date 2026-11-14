@@ -139,6 +139,7 @@ export function ReusableSecretOwnerList({
                         <RevealValue
                           loadValue={() => onReveal(secret)}
                           label={secret.key}
+                          file={secret.kind === "file"}
                         />
                         {onRemove && (
                           <Button
