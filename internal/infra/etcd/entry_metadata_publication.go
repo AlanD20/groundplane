@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredauthoring"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -28,7 +29,8 @@ type EntryMetadataPublication struct {
 }
 
 // PublishUnrenderedEntryWork accepts metadata only after proving that it has no
-// acknowledged host target. The same desired head and epoch fence every fact
+// acknowledged workload. An edit retains older configuration until the next
+// Deploy; a removal additionally requires no affected file. The desired head and epoch fence every fact
 // used by that proof. It never publishes a made-up runtime projection.
 func (repository *EnvironmentBlueprintRepository) PublishUnrenderedEntryWork(
 	ctx context.Context, request EntryMetadataPublication,
@@ -70,7 +72,7 @@ func (repository *EnvironmentBlueprintRepository) PublishUnrenderedEntryWork(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	configuration, runtimeGuards, err := repository.entryMetadataHostProof(ctx, source, request.Changed)
+	configuration, runtimeGuards, err := repository.entryMetadataHostProof(ctx, source, request.Changed, task.Action)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -141,16 +143,44 @@ func (repository *EnvironmentBlueprintRepository) PublishUnrenderedEntryWork(
 }
 
 func (repository *EnvironmentBlueprintRepository) entryMetadataHostProof(ctx context.Context,
-	source EntryMutationSource, changed []string,
+	source EntryMutationSource, changed []string, action workexecution.Action,
 ) (int64, []keyvalue.Condition, error) {
-	// Compare each observed runtime key in the publication transaction. The
-	// Environment epoch alone does not prove that an acknowledgement stayed absent.
+	files, err := runtimeconfiguration.New(repository.store)
+	if err != nil {
+		return 0, nil, err
+	}
+	snapshot, head, err := files.ReadAcknowledged(ctx, source.Desired.Record.EnvironmentID, source.Desired.ReadRevision)
+	if err != nil {
+		return 0, nil, err
+	}
+	// Captured files can belong to a Service omitted by a later failed Apply.
+	// Its runtime must also remain absent before deferring file materialization.
+	serviceIDs := make([]string, 0, len(source.Owned.Services)+len(snapshot.Files))
+	seen := make(map[string]bool)
+	for _, service := range source.Owned.Services {
+		if !seen[service.ID] {
+			serviceIDs = append(serviceIDs, service.ID)
+			seen[service.ID] = true
+		}
+	}
+	for _, file := range snapshot.Files {
+		if file.ServiceID == "" {
+			continue
+		}
+		if ids.Validate(ids.KindService, file.ServiceID) != nil {
+			return 0, nil, errs.New(errs.KindInternal, "Captured configuration has an invalid consumer")
+		}
+		if !seen[file.ServiceID] {
+			serviceIDs = append(serviceIDs, file.ServiceID)
+			seen[file.ServiceID] = true
+		}
+	}
 	var guards []keyvalue.Condition
-	for start := 0; start < len(source.Owned.Services); start += 64 {
-		end := min(start+64, len(source.Owned.Services))
+	for start := 0; start < len(serviceIDs); start += 64 {
+		end := min(start+64, len(serviceIDs))
 		keys := make([]string, 0, end-start)
-		for _, identity := range source.Owned.Services[start:end] {
-			keys = append(keys, serviceruntimerecord.Key(identity.ID))
+		for _, id := range serviceIDs[start:end] {
+			keys = append(keys, serviceruntimerecord.Key(id))
 		}
 		read, err := repository.store.GetMany(
 			ctx,
@@ -177,13 +207,11 @@ func (repository *EnvironmentBlueprintRepository) entryMetadataHostProof(ctx con
 			)
 		}
 	}
-	files, err := runtimeconfiguration.New(repository.store)
-	if err != nil {
-		return 0, nil, err
-	}
-	snapshot, head, err := files.ReadAcknowledged(ctx, source.Desired.Record.EnvironmentID, source.Desired.ReadRevision)
-	if err != nil {
-		return 0, nil, err
+	// Value edits preserve the acknowledged snapshot, including its generation
+	// pins. With no workload, the next Deploy can materialize the new selection.
+	// Removal still needs its Agent-owned file cleanup before forgetting an Entry.
+	if action != workexecution.ActionRemove {
+		return head, guards, nil
 	}
 	targets := make(map[string]bool, len(changed))
 	for _, id := range changed {

@@ -99,11 +99,12 @@ Release remains in history. With no selected running workload, the operation onl
 materializes files.
 
 Before runtime configuration has been prepared, Entry changes can settle as
-Controller metadata when there is no acknowledged workload or affected managed
-file. This lets operators supply secret values needed by a first deployment or
-failed setup hook. Files are prepared by the next deployment. An existing runtime
-or file still requires its normal captured host operation; missing configuration
-never proves that those resources are absent.
+Controller metadata when there is no acknowledged workload. This lets operators supply secret values needed by a first deployment or
+failed setup hook. Existing files and their protected generation references stay
+acknowledged exactly as they were; the next deployment prepares the new values.
+GP checks both declared Services and consumers of retained files. An acknowledged
+workload still requires the normal captured host operation. Removal also requires
+file cleanup; saving a new value does not prove older files have been removed.
 
 Entry removal is different: it updates or removes the pinned configuration files
 without running Compose or restarting a Service. A running process keeps its

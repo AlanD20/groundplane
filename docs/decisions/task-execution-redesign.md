@@ -266,7 +266,9 @@ source retirement with the operation owner. No Agent result is invented.
 Entry authoring reads declarations and their selected value generations, not
 derived Compose output. Before a runtime projection exists, a Controller
 decision may publish an Entry change only after comparing acknowledged workload
-absence and affected configuration bindings. Its typed receipt joins the desired
+absence for declared and retained-file consumers. Value edits preserve the exact
+acknowledged files and their source pins until Deploy; removal still checks affected
+configuration bindings. Its typed receipt joins the desired
 head, Environment fence and replay marker atomically. No empty runtime projection
 is fabricated. The normal Agent path owns existing host configuration. Flat Entry
 rows may lag authoring; they cannot override an immutable authored value selection.
