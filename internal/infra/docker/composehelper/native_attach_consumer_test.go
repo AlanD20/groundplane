@@ -61,6 +61,11 @@ func TestNativeAttachReconcilesOnlyCapturedContainerEndpoints(t *testing.T) {
 						}
 						return nativeAttachJSON(t, labels), nil
 					}
+					if strings.Contains(args[len(args)-2], "NetworkSettings") {
+						return nativeAttachJSON(t, map[string]any{"Id": container,
+							"State":           map[string]any{"Running": true},
+							"NetworkSettings": map[string]any{"Networks": map[string]any{}}}), nil
+					}
 					image := input.Baseline.Services[0].ImageReference
 					return runner.Result{Stdout: []byte(image + "\n" + image)}, nil
 				case args[0] == "network" && args[1] == "ls":

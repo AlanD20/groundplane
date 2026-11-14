@@ -41,6 +41,12 @@ func ApplyAttachConsumerDocker(
 	if err != nil {
 		return AttachConsumerObservation{}, err
 	}
+	if networkID == "" && input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT {
+		return AttachConsumerObservation{}, errs.New(errs.KindStateConflict, "Backing network is unavailable")
+	}
+	if err := inspectStoppedAttachMembership(ctx, taskRunner, input, networkID, containers, connected); err != nil {
+		return AttachConsumerObservation{}, err
+	}
 	for _, containerID := range containers {
 		_, found := connected[containerID]
 		connect := input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT
@@ -75,8 +81,11 @@ func ObserveAttachConsumerDocker(
 	if err != nil {
 		return AttachConsumerObservation{}, err
 	}
-	_, connected, err := inspectAttachBackingNetwork(ctx, taskRunner, input)
+	networkID, connected, err := inspectAttachBackingNetwork(ctx, taskRunner, input)
 	if err != nil {
+		return AttachConsumerObservation{}, err
+	}
+	if err := inspectStoppedAttachMembership(ctx, taskRunner, input, networkID, containers, connected); err != nil {
 		return AttachConsumerObservation{}, err
 	}
 	detached, fullyConnected := true, true
@@ -86,6 +95,12 @@ func ObserveAttachConsumerDocker(
 		} else {
 			fullyConnected = false
 		}
+	}
+	if len(containers) == 0 {
+		// No endpoint needs changing. Report the requested postcondition rather
+		// than the contradictory vacuous truth of both membership predicates.
+		fullyConnected = networkID != "" && input.Action == agentpb.AttachNetworkAction_ATTACH_NETWORK_ACTION_CONNECT
+		detached = !fullyConnected
 	}
 	return AttachConsumerObservation{NetworkID: input.NetworkId, ServiceID: input.ServiceId,
 		Detached: detached, Connected: fullyConnected, At: time.Now().UTC()}, nil
@@ -229,6 +244,9 @@ func inspectAttachBackingNetwork(
 		network.Labels["com.groundplane.managed"] != "true" || network.Labels["com.groundplane.kind"] != "network" ||
 		network.Labels["com.groundplane.environment-id"] != input.BackingEnvironmentId {
 		return "", nil, errs.New(errs.KindStateConflict, "Backing network ownership changed after Detach was accepted")
+	}
+	if network.Containers == nil {
+		network.Containers = make(map[string]struct{})
 	}
 	return network.ID, network.Containers, nil
 }
