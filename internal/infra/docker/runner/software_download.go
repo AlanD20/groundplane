@@ -24,11 +24,17 @@ var packageNames = []string{"bin", "externals", "run.sh", "run-helper.sh", "conf
 
 func validPackageName(name string) bool { return slices.Contains(packageNames, name) }
 
-func (updater *SoftwareUpdater) Prepare(ctx context.Context, plan runnerallocation.RuntimePlan, request runnersoftware.Request) (result error) {
+func (updater *SoftwareUpdater) Prepare(
+	ctx context.Context,
+	plan runnerallocation.RuntimePlan,
+	request runnersoftware.Request,
+) (result error) {
 	if err := validateCall(ctx, plan); err != nil {
 		return err
 	}
-	if request.Validate() != nil || request.RunnerID != plan.RunnerID || request.RuntimeEpoch != plan.RuntimeEpoch || request.PlanSHA256 != plan.Digest() || request.RunnerHome != plan.Paths.RunnerHome {
+	if request.Validate() != nil || request.RunnerID != plan.RunnerID || request.RuntimeEpoch != plan.RuntimeEpoch ||
+		request.PlanSHA256 != plan.Digest() ||
+		request.RunnerHome != plan.Paths.RunnerHome {
 		return errs.New(errs.KindValidationFailed, "Runner update does not match its captured runtime")
 	}
 	if err := observeSlotClaim(plan); err != nil {
@@ -69,12 +75,16 @@ func (updater *SoftwareUpdater) Prepare(ctx context.Context, plan runnerallocati
 	if err != nil {
 		return errs.Wrap(errs.KindInternal, err)
 	}
-	client := &http.Client{Timeout: 5 * time.Minute, CheckRedirect: func(next *http.Request, prior []*http.Request) error {
-		if len(prior) > 5 || next.URL.Scheme != "https" || !(next.URL.Hostname() == "github.com" || strings.HasSuffix(next.URL.Hostname(), ".githubusercontent.com")) {
-			return errs.New(errs.KindValidationFailed, "Runner artifact redirected outside GitHub HTTPS")
-		}
-		return nil
-	}}
+	client := &http.Client{
+		Timeout: 5 * time.Minute,
+		CheckRedirect: func(next *http.Request, prior []*http.Request) error {
+			if len(prior) > 5 || next.URL.Scheme != "https" ||
+				!(next.URL.Hostname() == "github.com" || strings.HasSuffix(next.URL.Hostname(), ".githubusercontent.com")) {
+				return errs.New(errs.KindValidationFailed, "Runner artifact redirected outside GitHub HTTPS")
+			}
+			return nil
+		},
+	}
 	response, err := client.Do(req)
 	if err != nil {
 		return errs.Wrap(errs.KindStorageUnavailable, err)
@@ -133,8 +143,13 @@ func extractRunnerPackage(archive, destination string, plan runnerallocation.Run
 		if clean == "." {
 			continue
 		}
-		if count > 30000 || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") || seen[clean] || header.Size < 0 || header.Size > 512<<20 {
-			return errs.New(errs.KindValidationFailed, "GitHub Runner archive has invalid paths or exceeds its extraction limit")
+		if count > 30000 || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") || seen[clean] ||
+			header.Size < 0 ||
+			header.Size > 512<<20 {
+			return errs.New(
+				errs.KindValidationFailed,
+				"GitHub Runner archive has invalid paths or exceeds its extraction limit",
+			)
 		}
 		seen[clean] = true
 		top := strings.Split(clean, string(filepath.Separator))[0]
@@ -157,7 +172,7 @@ func extractRunnerPackage(archive, destination string, plan runnerallocation.Run
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				return errs.Wrap(errs.KindInternal, err)
 			}
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
 			total += header.Size
 			if total > 1<<30 {
 				return errs.New(errs.KindValidationFailed, "Runner archive exceeds one GiB unpacked")

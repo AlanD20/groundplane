@@ -60,11 +60,22 @@ func (service *SoftwareService) updateAutomatic(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if !found || !observation.Record.Online || time.Since(observation.Record.ObservedAt) > ObservationLifetime || !runnersoftware.Newer(latest.Version, observation.Record.GitHubVersion) {
+			if !found || !observation.Record.Online ||
+				time.Since(observation.Record.ObservedAt) > ObservationLifetime ||
+				!runnersoftware.Newer(latest.Version, observation.Record.GitHubVersion) {
 				continue
 			}
-			key := "runner-auto-" + record.Desired.ID + "-" + latest.Version + "-" + time.Now().UTC().Format("2006010215")
-			_, err = service.update(ctx, record.Desired.ID, apiTypes.RunnerUpdateRequest{Revision: item.Revision, Version: latest.Version}, key, true, &latest)
+			key := "runner-auto-" + record.Desired.ID + "-" + latest.Version + "-" + time.Now().
+				UTC().
+				Format("2006010215")
+			_, err = service.update(
+				ctx,
+				record.Desired.ID,
+				apiTypes.RunnerUpdateRequest{Revision: item.Revision, Version: latest.Version},
+				key,
+				true,
+				&latest,
+			)
 			if err != nil && firstError == nil {
 				firstError = err
 			} // Admission failures are reported once per bounded pass.

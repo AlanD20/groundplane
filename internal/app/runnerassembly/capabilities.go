@@ -16,7 +16,14 @@ type Capabilities struct {
 	SoftwareExecutor *runner.SoftwareExecutor
 }
 
-func New(store etcd.EnvironmentBlueprintStore, records *etcd.RunnerRepository, evidence *etcd.IdempotencyRepository, coordinator *requestidempotency.Coordinator, lifecycle *runner.Executor, logger *slog.Logger) (Capabilities, error) {
+func New(
+	store etcd.EnvironmentBlueprintStore,
+	records *etcd.RunnerRepository,
+	evidence *etcd.IdempotencyRepository,
+	coordinator *requestidempotency.Coordinator,
+	lifecycle *runner.Executor,
+	logger *slog.Logger,
+) (Capabilities, error) {
 	checks, checkExecutor, err := newChecks(store, records, evidence, coordinator, lifecycle, logger)
 	if err != nil {
 		return Capabilities{}, err
@@ -25,5 +32,10 @@ func New(store etcd.EnvironmentBlueprintStore, records *etcd.RunnerRepository, e
 	if err != nil {
 		return Capabilities{}, err
 	}
-	return Capabilities{Checks: checks, CheckExecutor: checkExecutor, Software: software, SoftwareExecutor: softwareExecutor}, nil
+	return Capabilities{
+		Checks:           checks,
+		CheckExecutor:    checkExecutor,
+		Software:         software,
+		SoftwareExecutor: softwareExecutor,
+	}, nil
 }

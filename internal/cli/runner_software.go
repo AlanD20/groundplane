@@ -53,7 +53,18 @@ func newRunnerSoftwareResultCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fields, values := fieldsOfVia(map[string]any{"task_id": result.TaskID, "version": result.Version, "phase": result.Phase, "outcome": result.Outcome, "failure": result.Failure, "stages": result.Stages, "created_at": result.CreatedAt, "finished_at": result.FinishedAt})
+			fields, values := fieldsOfVia(
+				map[string]any{
+					"task_id":     result.TaskID,
+					"version":     result.Version,
+					"phase":       result.Phase,
+					"outcome":     result.Outcome,
+					"failure":     result.Failure,
+					"stages":      result.Stages,
+					"created_at":  result.CreatedAt,
+					"finished_at": result.FinishedAt,
+				},
+			)
 			return app.Out.RenderOne(fields, values, result)
 		},
 	}
@@ -62,21 +73,26 @@ func newRunnerSoftwareResultCmd() *cobra.Command {
 }
 
 func newRunnerSoftwareVersionsCmd() *cobra.Command {
-	return &cobra.Command{Use: "versions <slug>", Short: "List official checksummed GitHub Runner releases for this host", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		app := fromContext(cmd)
-		id, err := resolveRunnerTarget(cmd, args[0])
-		if err != nil {
-			return err
-		}
-		result, err := app.Client.ListRunnerVersions(cmd.Context(), id)
-		if err != nil {
-			return err
-		}
-		rows := []map[string]any{}
-		for _, item := range result.Items {
-			rows = append(rows, map[string]any{"version": item.Version, "architecture": item.Architecture})
-		}
-		headers, values := tabulateVia(app, rows)
-		return app.Out.Render(headers, values, result)
-	}}
+	return &cobra.Command{
+		Use:   "versions <slug>",
+		Short: "List official checksummed GitHub Runner releases for this host",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app := fromContext(cmd)
+			id, err := resolveRunnerTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			result, err := app.Client.ListRunnerVersions(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			rows := []map[string]any{}
+			for _, item := range result.Items {
+				rows = append(rows, map[string]any{"version": item.Version, "architecture": item.Architecture})
+			}
+			headers, values := tabulateVia(app, rows)
+			return app.Out.Render(headers, values, result)
+		},
+	}
 }

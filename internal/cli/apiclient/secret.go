@@ -170,7 +170,9 @@ func secretFromGenerated(secret generated.Secret) apiTypes.Secret {
 		projectID = *secret.ProjectId
 	}
 	return apiTypes.Secret{
-		Revision: secretRevision(secret.Revision), ID: secret.Id, Scope: secret.Scope, ProjectID: projectID, Key: secret.Key,
+		Revision: secretRevision(
+			secret.Revision,
+		), ID: secret.Id, Scope: secret.Scope, ProjectID: projectID, Key: secret.Key,
 		Kind: secret.Kind, Ref: secret.Ref, UpdatedAt: secret.UpdatedAt,
 	}
 }

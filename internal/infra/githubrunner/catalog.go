@@ -32,7 +32,12 @@ type releaseRecord struct {
 }
 
 func (catalog *Catalog) List(ctx context.Context) ([]runnersoftware.Release, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/actions/runner/releases?per_page=50", nil)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		"https://api.github.com/repos/actions/runner/releases?per_page=50",
+		nil,
+	)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
@@ -44,7 +49,11 @@ func (catalog *Catalog) List(ctx context.Context) ([]runnersoftware.Release, err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, errs.Newf(errs.KindStorageUnavailable, "GitHub Runner release lookup returned HTTP %d; retry after checking GitHub connectivity and API rate limits", response.StatusCode)
+		return nil, errs.Newf(
+			errs.KindStorageUnavailable,
+			"GitHub Runner release lookup returned HTTP %d; retry after checking GitHub connectivity and API rate limits",
+			response.StatusCode,
+		)
 	}
 	var records []releaseRecord
 	if err := json.NewDecoder(io.LimitReader(response.Body, 8<<20)).Decode(&records); err != nil {
@@ -62,7 +71,13 @@ func (catalog *Catalog) List(ctx context.Context) ([]runnersoftware.Release, err
 			if asset.Name != name {
 				continue
 			}
-			r := runnersoftware.Release{Version: v, Architecture: runtime.GOARCH, URL: asset.URL, SHA256: strings.TrimPrefix(asset.Digest, "sha256:"), Size: asset.Size}
+			r := runnersoftware.Release{
+				Version:      v,
+				Architecture: runtime.GOARCH,
+				URL:          asset.URL,
+				SHA256:       strings.TrimPrefix(asset.Digest, "sha256:"),
+				Size:         asset.Size,
+			}
 			if r.Validate() == nil {
 				result = append(result, r)
 			}
@@ -72,7 +87,10 @@ func (catalog *Catalog) List(ctx context.Context) ([]runnersoftware.Release, err
 }
 func (catalog *Catalog) Resolve(ctx context.Context, version string) (runnersoftware.Release, error) {
 	if !runnersoftware.ValidVersion(version) {
-		return runnersoftware.Release{}, errs.New(errs.KindValidationFailed, "Select an exact GitHub Runner version, for example 2.337.0")
+		return runnersoftware.Release{}, errs.New(
+			errs.KindValidationFailed,
+			"Select an exact GitHub Runner version, for example 2.337.0",
+		)
 	}
 	list, err := catalog.List(ctx)
 	if err != nil {
@@ -83,5 +101,8 @@ func (catalog *Catalog) Resolve(ctx context.Context, version string) (runnersoft
 			return release, nil
 		}
 	}
-	return runnersoftware.Release{}, errs.New(errs.KindValidationFailed, "Selected GitHub Runner version has no verified release for this host architecture")
+	return runnersoftware.Release{}, errs.New(
+		errs.KindValidationFailed,
+		"Selected GitHub Runner version has no verified release for this host architecture",
+	)
 }

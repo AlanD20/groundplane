@@ -158,7 +158,8 @@ func newRunnerCmd() *cobra.Command {
 		},
 	}
 	edit.Flags().StringVar(&nextSlug, "slug", "", "new Tenant-unique Runner slug")
-	edit.Flags().BoolVar(&editAutoUpdate, "auto-update", true, "enable or disable upstream GitHub Runner automatic updates")
+	edit.Flags().
+		BoolVar(&editAutoUpdate, "auto-update", true, "enable or disable upstream GitHub Runner automatic updates")
 	cmd.AddCommand(edit)
 
 	var retryTokenFile string

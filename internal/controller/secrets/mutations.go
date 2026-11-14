@@ -13,7 +13,12 @@ type MutationService struct {
 	*ValueEditor
 }
 
-func NewMutationService(repository *Repository, protector *secretvalue.Protector, evidence *etcd.IdempotencyRepository, coordinator *idempotency.Coordinator) (*MutationService, error) {
+func NewMutationService(
+	repository *Repository,
+	protector *secretvalue.Protector,
+	evidence *etcd.IdempotencyRepository,
+	coordinator *idempotency.Coordinator,
+) (*MutationService, error) {
 	creationEvidence, err := NewCreationIdempotency(coordinator, evidence)
 	if err != nil {
 		return nil, err

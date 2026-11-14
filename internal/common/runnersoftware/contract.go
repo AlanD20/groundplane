@@ -52,9 +52,20 @@ func Newer(candidate, installed string) bool {
 func (release Release) Validate() error {
 	arch := map[string]string{"amd64": "x64", "arm64": "arm64"}[release.Architecture]
 	digest, err := hex.DecodeString(release.SHA256)
-	want := fmt.Sprintf("https://github.com/actions/runner/releases/download/v%s/actions-runner-linux-%s-%s.tar.gz", release.Version, arch, release.Version)
-	if !ValidVersion(release.Version) || arch == "" || release.URL != want || err != nil || len(digest) != 32 || strings.ToLower(release.SHA256) != release.SHA256 || release.Size <= 0 || release.Size > 512<<20 {
-		return errs.New(errs.KindValidationFailed, "GitHub Runner release must have an official architecture-matched download and SHA256 checksum")
+	want := fmt.Sprintf(
+		"https://github.com/actions/runner/releases/download/v%s/actions-runner-linux-%s-%s.tar.gz",
+		release.Version,
+		arch,
+		release.Version,
+	)
+	if !ValidVersion(release.Version) || arch == "" || release.URL != want || err != nil || len(digest) != 32 ||
+		strings.ToLower(release.SHA256) != release.SHA256 ||
+		release.Size <= 0 ||
+		release.Size > 512<<20 {
+		return errs.New(
+			errs.KindValidationFailed,
+			"GitHub Runner release must have an official architecture-matched download and SHA256 checksum",
+		)
 	}
 	return nil
 }
@@ -70,7 +81,14 @@ type Request struct {
 }
 
 func (request Request) Validate() error {
-	base := runnerconnectioncheck.Request{RequestID: request.RequestID, RunnerID: request.RunnerID, RuntimeEpoch: request.RuntimeEpoch, PlanSHA256: request.PlanSHA256, ControllerEndpoint: request.ControllerEndpoint, RunnerHome: request.RunnerHome}
+	base := runnerconnectioncheck.Request{
+		RequestID:          request.RequestID,
+		RunnerID:           request.RunnerID,
+		RuntimeEpoch:       request.RuntimeEpoch,
+		PlanSHA256:         request.PlanSHA256,
+		ControllerEndpoint: request.ControllerEndpoint,
+		RunnerHome:         request.RunnerHome,
+	}
 	if err := base.Validate(); err != nil {
 		return err
 	}
@@ -93,7 +111,12 @@ type Result struct {
 }
 
 func (result Result) Validate(request Request) error {
-	if request.Validate() != nil || result.RequestID != request.RequestID || result.RunnerID != request.RunnerID || result.RuntimeEpoch != request.RuntimeEpoch || result.PlanSHA256 != request.PlanSHA256 || result.Version != request.Release.Version || result.ObservedAt.IsZero() || len(result.Stages) != 4 {
+	if request.Validate() != nil || result.RequestID != request.RequestID || result.RunnerID != request.RunnerID ||
+		result.RuntimeEpoch != request.RuntimeEpoch ||
+		result.PlanSHA256 != request.PlanSHA256 ||
+		result.Version != request.Release.Version ||
+		result.ObservedAt.IsZero() ||
+		len(result.Stages) != 4 {
 		return errs.New(errs.KindValidationFailed, "Runner update result differs from its pinned release")
 	}
 	for i, name := range []string{"download", "idle", "activate", "reconnect"} {

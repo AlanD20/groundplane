@@ -53,7 +53,11 @@ func saveSoftwareJournal(root string, state softwareJournal) error {
 	if err != nil {
 		return errs.Wrap(errs.KindInternal, err)
 	}
-	file, err := os.OpenFile(filepath.Join(root, "state.new"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC|unix.O_NOFOLLOW, 0o600)
+	file, err := os.OpenFile(
+		filepath.Join(root, "state.new"),
+		os.O_WRONLY|os.O_CREATE|os.O_TRUNC|unix.O_NOFOLLOW,
+		0o600,
+	)
 	if err != nil {
 		return errs.Wrap(errs.KindInternal, err)
 	}
@@ -92,7 +96,12 @@ func loadSoftwareJournal(root string) (softwareJournal, error) {
 	}
 	return state, nil
 }
-func (updater *SoftwareUpdater) WaitIdle(ctx context.Context, plan runnerallocation.RuntimePlan, expected runnerallocation.RunnerRuntimeEvidence) error {
+
+func (updater *SoftwareUpdater) WaitIdle(
+	ctx context.Context,
+	plan runnerallocation.RuntimePlan,
+	expected runnerallocation.RunnerRuntimeEvidence,
+) error {
 	for {
 		busy, _, err := updater.processes(ctx, plan, expected)
 		if err != nil {
@@ -108,7 +117,12 @@ func (updater *SoftwareUpdater) WaitIdle(ctx context.Context, plan runnerallocat
 		}
 	}
 }
-func (updater *SoftwareUpdater) processes(ctx context.Context, plan runnerallocation.RuntimePlan, expected runnerallocation.RunnerRuntimeEvidence) (bool, int, error) {
+
+func (updater *SoftwareUpdater) processes(
+	ctx context.Context,
+	plan runnerallocation.RuntimePlan,
+	expected runnerallocation.RunnerRuntimeEvidence,
+) (bool, int, error) {
 	engine, err := newEngine(hostDockerSocket)
 	if err != nil {
 		return false, 0, err
@@ -121,7 +135,15 @@ func (updater *SoftwareUpdater) processes(ctx context.Context, plan runneralloca
 	if !found || actual != expected {
 		return false, 0, errs.New(errs.KindStateConflict, "Runner runtime changed before its software update")
 	}
-	result, err := updater.operations.run(ctx, "docker", "--host=unix://"+hostDockerSocket, "top", expected.ContainerID, "-eo", "pid,comm")
+	result, err := updater.operations.run(
+		ctx,
+		"docker",
+		"--host=unix://"+hostDockerSocket,
+		"top",
+		expected.ContainerID,
+		"-eo",
+		"pid,comm",
+	)
 	if err != nil {
 		return false, 0, err
 	}
@@ -143,7 +165,13 @@ func (updater *SoftwareUpdater) processes(ctx context.Context, plan runneralloca
 	}
 	return busy, pid, nil
 }
-func (updater *SoftwareUpdater) Update(ctx context.Context, plan runnerallocation.RuntimePlan, expected runnerallocation.RunnerRuntimeEvidence, request runnersoftware.Request) (runnersoftware.Result, error) {
+
+func (updater *SoftwareUpdater) Update(
+	ctx context.Context,
+	plan runnerallocation.RuntimePlan,
+	expected runnerallocation.RunnerRuntimeEvidence,
+	request runnersoftware.Request,
+) (runnersoftware.Result, error) {
 	if err := validateCall(ctx, plan); err != nil {
 		return runnersoftware.Result{}, err
 	}
@@ -153,14 +181,20 @@ func (updater *SoftwareUpdater) Update(ctx context.Context, plan runnerallocatio
 		return runnersoftware.Result{}, err
 	}
 	if state.Request != request || state.Phase != "prepared" {
-		return runnersoftware.Result{}, errs.New(errs.KindStateConflict, "Runner update staging differs from its captured release")
+		return runnersoftware.Result{}, errs.New(
+			errs.KindStateConflict,
+			"Runner update staging differs from its captured release",
+		)
 	}
 	busy, pid, err := updater.processes(ctx, plan, expected)
 	if err != nil {
 		return runnersoftware.Result{}, err
 	}
 	if busy {
-		return runnersoftware.Result{}, errs.New(errs.KindResourceInUse, "Runner accepted another job; wait for it to finish and submit the update again")
+		return runnersoftware.Result{}, errs.New(
+			errs.KindResourceInUse,
+			"Runner accepted another job; wait for it to finish and submit the update again",
+		)
 	}
 	// Hold the exact listener process, then check again: an active worker must
 	// never be killed merely because an earlier idle observation became stale.
@@ -192,7 +226,10 @@ func (updater *SoftwareUpdater) Update(ctx context.Context, plan runnerallocatio
 		return runnersoftware.Result{}, err
 	}
 	if busy || again != pid {
-		return runnersoftware.Result{}, errs.New(errs.KindResourceInUse, "Runner became busy before activation; its job was left running")
+		return runnersoftware.Result{}, errs.New(
+			errs.KindResourceInUse,
+			"Runner became busy before activation; its job was left running",
+		)
 	}
 	state.ContainerID = expected.ContainerID
 	state.Phase = "activating"
@@ -214,7 +251,10 @@ func (updater *SoftwareUpdater) Update(ctx context.Context, plan runnerallocatio
 					return runnersoftware.Result{}, err
 				}
 			}
-			state.Entries = append(state.Entries, packageEntry{Name: name, Prior: oldErr == nil, Next: newErr == nil, PriorDigest: digest})
+			state.Entries = append(
+				state.Entries,
+				packageEntry{Name: name, Prior: oldErr == nil, Next: newErr == nil, PriorDigest: digest},
+			)
 		}
 	}
 	if err := saveSoftwareJournal(root, state); err != nil {
@@ -255,15 +295,43 @@ func (updater *SoftwareUpdater) Update(ctx context.Context, plan runnerallocatio
 	if err := os.RemoveAll(filepath.Join(root, "package")); err != nil {
 		return runnersoftware.Result{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return runnersoftware.Result{RequestID: request.RequestID, RunnerID: request.RunnerID, RuntimeEpoch: request.RuntimeEpoch, PlanSHA256: request.PlanSHA256, ObservedAt: time.Now().UTC(), Version: request.Release.Version, Stages: []runnersoftware.Stage{{Name: "download", Outcome: "passed"}, {Name: "idle", Outcome: "passed"}, {Name: "activate", Outcome: "passed"}, {Name: "reconnect", Outcome: "passed"}}}, nil
+	return runnersoftware.Result{
+		RequestID:    request.RequestID,
+		RunnerID:     request.RunnerID,
+		RuntimeEpoch: request.RuntimeEpoch,
+		PlanSHA256:   request.PlanSHA256,
+		ObservedAt:   time.Now().UTC(),
+		Version:      request.Release.Version,
+		Stages: []runnersoftware.Stage{
+			{Name: "download", Outcome: "passed"},
+			{Name: "idle", Outcome: "passed"},
+			{Name: "activate", Outcome: "passed"},
+			{Name: "reconnect", Outcome: "passed"},
+		},
+	}, nil
 }
 
-func (updater *SoftwareUpdater) connected(ctx context.Context, plan runnerallocation.RuntimePlan, containerID, version string, since time.Time) error {
+func (updater *SoftwareUpdater) connected(
+	ctx context.Context,
+	plan runnerallocation.RuntimePlan,
+	containerID, version string,
+	since time.Time,
+) error {
 	for {
 		actual, err := updater.InstalledVersion(ctx, plan, containerID)
 		if err == nil && actual == version {
-			logs, err := updater.operations.run(ctx, "docker", "--host=unix://"+hostDockerSocket, "logs", "--since", since.Format(time.RFC3339Nano), "--tail=200", containerID)
-			connected := err == nil && (strings.Contains(string(logs.Stdout), "Listening for Jobs") || strings.Contains(string(logs.Stderr), "Listening for Jobs"))
+			logs, err := updater.operations.run(
+				ctx,
+				"docker",
+				"--host=unix://"+hostDockerSocket,
+				"logs",
+				"--since",
+				since.Format(time.RFC3339Nano),
+				"--tail=200",
+				containerID,
+			)
+			connected := err == nil &&
+				(strings.Contains(string(logs.Stdout), "Listening for Jobs") || strings.Contains(string(logs.Stderr), "Listening for Jobs"))
 			clear(logs.Stdout)
 			clear(logs.Stderr)
 			if connected {
@@ -272,13 +340,31 @@ func (updater *SoftwareUpdater) connected(ctx context.Context, plan runneralloca
 		}
 		select {
 		case <-ctx.Done():
-			return errs.New(errs.KindStateConflict, "Runner did not reconnect with the selected version before the update deadline")
+			return errs.New(
+				errs.KindStateConflict,
+				"Runner did not reconnect with the selected version before the update deadline",
+			)
 		case <-time.After(time.Second):
 		}
 	}
 }
-func (updater *SoftwareUpdater) InstalledVersion(ctx context.Context, plan runnerallocation.RuntimePlan, containerID string) (string, error) {
-	result, err := updater.operations.run(ctx, "docker", "--host=unix://"+hostDockerSocket, "exec", "--user", plan.Container.User, containerID, filepath.Join(plan.Paths.RunnerHome, "bin/Runner.Listener"), "--version")
+
+func (updater *SoftwareUpdater) InstalledVersion(
+	ctx context.Context,
+	plan runnerallocation.RuntimePlan,
+	containerID string,
+) (string, error) {
+	result, err := updater.operations.run(
+		ctx,
+		"docker",
+		"--host=unix://"+hostDockerSocket,
+		"exec",
+		"--user",
+		plan.Container.User,
+		containerID,
+		filepath.Join(plan.Paths.RunnerHome, "bin/Runner.Listener"),
+		"--version",
+	)
 	if err != nil {
 		return "", err
 	}
@@ -291,7 +377,11 @@ func (updater *SoftwareUpdater) InstalledVersion(ctx context.Context, plan runne
 	return version, nil
 }
 
-func (control *HostControl) InstalledVersion(ctx context.Context, plan runnerallocation.RuntimePlan, id string) (string, error) {
+func (control *HostControl) InstalledVersion(
+	ctx context.Context,
+	plan runnerallocation.RuntimePlan,
+	id string,
+) (string, error) {
 	if err := validateCall(ctx, plan); err != nil {
 		return "", err
 	}
@@ -303,6 +393,11 @@ func (control *HostControl) InstalledVersion(ctx context.Context, plan runnerall
 	}
 	return reader.InstalledVersion(ctx, plan, id)
 }
-func (operations *localOperations) InstalledVersion(ctx context.Context, plan runnerallocation.RuntimePlan, id string) (string, error) {
+
+func (operations *localOperations) InstalledVersion(
+	ctx context.Context,
+	plan runnerallocation.RuntimePlan,
+	id string,
+) (string, error) {
 	return (&SoftwareUpdater{operations: operations}).InstalledVersion(ctx, plan, id)
 }

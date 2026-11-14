@@ -274,7 +274,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry removal idempotency: %w", err)
 	}
-	secretMutations, err := secrets.NewMutationService(dataServices.secretReadRepository, authority.intentProtector, authority.idempotency, authority.intentCoordinator)
+	secretMutations, err := secrets.NewMutationService(
+		dataServices.secretReadRepository,
+		authority.intentProtector,
+		authority.idempotency,
+		authority.intentCoordinator,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret creation service: %w", err)

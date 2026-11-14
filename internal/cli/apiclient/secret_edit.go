@@ -9,7 +9,12 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-func (client *Client) EditSecret(ctx context.Context, id string, input apiTypes.SecretEditRequest, key string) (apiTypes.Secret, error) {
+func (client *Client) EditSecret(
+	ctx context.Context,
+	id string,
+	input apiTypes.SecretEditRequest,
+	key string,
+) (apiTypes.Secret, error) {
 	if key == "" {
 		key = ids.NewULID()
 	}
@@ -18,7 +23,12 @@ func (client *Client) EditSecret(ctx context.Context, id string, input apiTypes.
 		return apiTypes.Secret{}, err
 	}
 	path := "/api/v1/secrets/" + id
-	response, err := transport.SecretEditWithResponse(ctx, id, &generated.SecretEditParams{IdempotencyKey: key}, generated.SecretEditJSONRequestBody{Revision: input.Revision, Value: input.Value})
+	response, err := transport.SecretEditWithResponse(
+		ctx,
+		id,
+		&generated.SecretEditParams{IdempotencyKey: key},
+		generated.SecretEditJSONRequestBody{Revision: input.Revision, Value: input.Value},
+	)
 	if err != nil {
 		return apiTypes.Secret{}, generatedCallError(ctx, http.MethodPatch, path, err)
 	}

@@ -192,7 +192,11 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 				{Action: workexecution.ActionCreate, Operation: workexecution.AgentLifecycle, Owner: owners.agentWork},
 				{Action: workexecution.ActionRemove, Operation: workexecution.AgentLifecycle, Owner: owners.agentWork},
 				{Action: workexecution.ActionUpdate, Operation: workexecution.AgentSoftware, Owner: owners.agentWork},
-				{Action: workexecution.ActionUpdate, Operation: workexecution.RunnerSoftware, Owner: workdispatch.CheckImageCompletion{}},
+				{
+					Action:    workexecution.ActionUpdate,
+					Operation: workexecution.RunnerSoftware,
+					Owner:     workdispatch.CheckImageCompletion{},
+				},
 				{
 					Action:    workexecution.ActionUpdate,
 					Operation: workexecution.ControllerSoftware,

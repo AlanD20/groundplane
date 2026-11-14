@@ -59,8 +59,8 @@ slug; the display name remains independent.
 Creation can include optional CPU/RAM limits, enforced in the first sealed
 container configuration. Custom can also declare one initial persistent Volume
 with an explicit slug and absolute container mount path; it still invents no
-storage when that choice is omitted. These creation controls are implemented but
-not included in the published 0.0.1 artifacts or live-qualified yet.
+storage when that choice is omitted. These creation controls are implemented;
+their live qualification remains pending.
 
 For example, after fetching the upstream image, a Custom scanner can be authored
 with `--memory 1536m --cpus 1 --volume-slug signatures --mount-path /var/lib/clamav`

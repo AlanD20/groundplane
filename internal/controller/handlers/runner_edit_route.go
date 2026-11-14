@@ -110,7 +110,10 @@ func decodeRunnerEdit(body []byte) (apiTypes.RunnerEditRequest, error) {
 			token, err := decoder.Token()
 			value, ok := token.(bool)
 			if err != nil || !ok {
-				return apiTypes.RunnerEditRequest{}, errs.New(errs.KindValidationFailed, "Runner auto_update must be a boolean")
+				return apiTypes.RunnerEditRequest{}, errs.New(
+					errs.KindValidationFailed,
+					"Runner auto_update must be a boolean",
+				)
 			}
 			request.AutoUpdate = &value
 			continue

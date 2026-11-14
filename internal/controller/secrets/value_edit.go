@@ -26,15 +26,30 @@ type ValueEditor struct {
 	coordinator *requestidempotency.Coordinator
 }
 
-func NewValueEditor(repository *Repository, protector *secretvalue.Protector, evidence *etcd.IdempotencyRepository, coordinator *requestidempotency.Coordinator) (*ValueEditor, error) {
+func NewValueEditor(
+	repository *Repository,
+	protector *secretvalue.Protector,
+	evidence *etcd.IdempotencyRepository,
+	coordinator *requestidempotency.Coordinator,
+) (*ValueEditor, error) {
 	if repository == nil || protector == nil || evidence == nil || coordinator == nil {
 		return nil, errs.New(errs.KindInternal, "Secret value editor dependencies are required")
 	}
 	return &ValueEditor{repository: repository, protector: protector, evidence: evidence, coordinator: coordinator}, nil
 }
-func (service *ValueEditor) EditSecret(ctx context.Context, id string, input apiTypes.SecretEditRequest, key string) (idempotency.IdempotencyResponse, error) {
-	if ctx == nil || ids.Validate(ids.KindSecret, id) != nil || input.Revision <= 0 || !utf8.ValidString(input.Value) || len(input.Value) > apiTypes.MaximumSecretValueBytes {
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Secret edit requires its current revision and a UTF-8 value of at most 255 KiB")
+
+func (service *ValueEditor) EditSecret(
+	ctx context.Context,
+	id string,
+	input apiTypes.SecretEditRequest,
+	key string,
+) (idempotency.IdempotencyResponse, error) {
+	if ctx == nil || ids.Validate(ids.KindSecret, id) != nil || input.Revision <= 0 || !utf8.ValidString(input.Value) ||
+		len(input.Value) > apiTypes.MaximumSecretValueBytes {
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Secret edit requires its current revision and a UTF-8 value of at most 255 KiB",
+		)
 	}
 	target := idempotency.IdempotencyReplayTarget{Kind: idempotency.IdempotencyReplayTargetSecret, ID: id}
 	locator, indexed, err := service.evidence.ResolveReplayLocator(ctx, target, http.MethodPatch, "/secrets/{id}", key)
@@ -46,7 +61,13 @@ func (service *ValueEditor) EditSecret(ctx context.Context, id string, input api
 		if err != nil {
 			return idempotency.IdempotencyResponse{}, err
 		}
-		locator = idempotency.IdempotencyLocator{ScopeKind: idempotency.IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPatch, Route: "/secrets/{id}", Key: key}
+		locator = idempotency.IdempotencyLocator{
+			ScopeKind: idempotency.IdempotencyScopePlatform,
+			ScopeID:   "-",
+			Method:    http.MethodPatch,
+			Route:     "/secrets/{id}",
+			Key:       key,
+		}
 		if current.Record.Secret.ProjectID != "" {
 			locator.ScopeKind = idempotency.IdempotencyScopeProject
 			locator.ScopeID = current.Record.Secret.ProjectID
@@ -59,7 +80,25 @@ func (service *ValueEditor) EditSecret(ctx context.Context, id string, input api
 	if locator.ScopeKind == idempotency.IdempotencyScopeProject {
 		scope = requestidempotency.Scope{Kind: requestidempotency.ScopeProject, ID: locator.ScopeID}
 	}
-	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{Method: http.MethodPatch, Route: "/secrets/{id}", Scope: scope, Path: []requestidempotency.PathBinding{{Name: "id", Value: id}}, Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(requestidempotency.Field{Name: "revision", Value: requestidempotency.Integer(input.Revision)}, requestidempotency.Field{Name: "value_sha256", Value: requestidempotency.String(hex.EncodeToString(hash[:]))}))})
+	version, digest, err := requestidempotency.Canonicalize(
+		ctx,
+		requestidempotency.CanonicalIntentV1{
+			Method: http.MethodPatch,
+			Route:  "/secrets/{id}",
+			Scope:  scope,
+			Path:   []requestidempotency.PathBinding{{Name: "id", Value: id}},
+			Query:  requestidempotency.Object(),
+			Body: requestidempotency.JSONBody(
+				requestidempotency.Object(
+					requestidempotency.Field{Name: "revision", Value: requestidempotency.Integer(input.Revision)},
+					requestidempotency.Field{
+						Name:  "value_sha256",
+						Value: requestidempotency.String(hex.EncodeToString(hash[:])),
+					},
+				),
+			),
+		},
+	)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
@@ -78,7 +117,10 @@ func (service *ValueEditor) EditSecret(ctx context.Context, id string, input api
 		return idempotency.IdempotencyResponse{}, err
 	}
 	if current.Revision != input.Revision {
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Secret changed; refresh before replacing its value")
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Secret changed; refresh before replacing its value",
+		)
 	}
 	owner := secretrecord.PlatformOwner()
 	if current.Record.Secret.ProjectID != "" {
@@ -95,7 +137,14 @@ func (service *ValueEditor) EditSecret(ctx context.Context, id string, input api
 	metadata := envelope.Metadata()
 	ciphertext := envelope.Ciphertext()
 	defer clear(ciphertext)
-	value := secretrecord.EncryptedValue{SecretID: id, EnvelopeVersion: uint8(metadata.Version), Cipher: string(metadata.Cipher), DigestAlgorithm: string(metadata.Digest.Algorithm), CiphertextSHA256: metadata.Digest.Value, Ciphertext: ciphertext}
+	value := secretrecord.EncryptedValue{
+		SecretID:         id,
+		EnvelopeVersion:  uint8(metadata.Version),
+		Cipher:           string(metadata.Cipher),
+		DigestAlgorithm:  string(metadata.Digest.Algorithm),
+		CiphertextSHA256: metadata.Digest.Value,
+		Ciphertext:       ciphertext,
+	}
 	replacement := current.Record
 	replacement.Secret.UpdatedAt = time.Now().UTC()
 	body, err := json.Marshal(secretCreationResponse(replacement))
@@ -108,13 +157,25 @@ func (service *ValueEditor) EditSecret(ctx context.Context, id string, input api
 		return idempotency.IdempotencyResponse{}, err
 	}
 	defer clear(durable.Ciphertext)
-	marker, err := idempotency.NewCompletedDirectIdempotencyMarker(locator, durable, response, replacement.Secret.UpdatedAt)
+	marker, err := idempotency.NewCompletedDirectIdempotencyMarker(
+		locator,
+		durable,
+		response,
+		replacement.Secret.UpdatedAt,
+	)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
 	marker.ReplayTarget = &target
 	defer clear(marker.Intent.Ciphertext)
-	result, mutationErr := service.repository.secrets.ReplaceSecretValueIdempotent(ctx, owner, current, replacement, value, marker)
+	result, mutationErr := service.repository.secrets.ReplaceSecretValueIdempotent(
+		ctx,
+		owner,
+		current,
+		replacement,
+		value,
+		marker,
+	)
 	if mutationErr != nil {
 		if !isUnknownSecretCreationOutcome(mutationErr) {
 			return idempotency.IdempotencyResponse{}, mutationErr

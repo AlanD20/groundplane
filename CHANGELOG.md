@@ -5,10 +5,7 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
-- Provide a standalone host uninstall/reset script alongside the installer;
-  remove GP-managed resources and local data while retaining Docker and host dependencies.
-
-## 0.0.1 — 2026-11-12
+## 0.0.1 — 2026-11-14
 
 Initial single-host release.
 
@@ -34,8 +31,12 @@ Initial single-host release.
   newly provisioned databases.
 - Run Custom backing services from an operator-selected image, with optional
   provisioning and lifecycle hooks that receive inputs and return declared facts.
+- Set CPU/RAM limits before a Backing Service's first startup. Custom Backings
+  can also create an explicitly selected persistent data Volume at startup.
 - Manage persistent Volumes, configuration Entries and Secrets. Materialize
   configuration for workloads and run Scripts and ordered deployment hooks.
+- Import and edit Platform and Project Secrets from dotenv text or files, with
+  per-key results, stable references and protected execution-pinned values.
 
 ### Operations
 
@@ -93,6 +94,9 @@ Initial single-host release.
 - Fetch a selected registry image explicitly through the Console, CLI or API,
   then use ordinary Service Deploy. Fetch retains the selected image identity
   for retries; it does not edit or deploy a Service itself.
+- Select automatic upstream Runner updates or an exact manual version, separate
+  from the GP Runner image. Updates verify official checksums, wait for idle
+  execution and retain captured recovery state without re-registering the Runner.
 - Preserve the serving Release and data when build, push or Fetch fails.
   Registered Runners resume without a new registration token; local Runner
   removal preserves shared registry content and application images.
@@ -105,6 +109,8 @@ Initial single-host release.
   Ubuntu 24.04/26.04 and Debian 13. Rerunning an already healthy, matching
   installation does not start another update. With no version specified, it
   resolves the latest stable release once; `--version` pins a chosen release.
+- Reset GP with the standalone `uninstall.sh`, retaining Docker and host
+  dependencies. Repeated cleanup tolerates image aliases already removed by Docker.
 - Install a branch, tag or commit with `install.sh --ref`, without a published
   release. Toolchains run in disposable Docker containers; temporary build
   files are cleaned up, and installation uses the same guarded upgrade path.
@@ -125,6 +131,12 @@ Initial single-host release.
 
 ### Limits and deferred work
 
+- Runner upstream updates, reusable Secret bulk editing and create-time Backing
+  limits/storage are implemented but have not received live qualification.
+- This replacement advances storage epoch to 46. Existing epoch-45 installations
+  reject in-place activation; no automatic data migration or compatibility path
+  is provided. A fresh installation deletes prior GP-managed local state only
+  when the operator explicitly runs the destructive reset procedure.
 - Config, Volume, PostgreSQL and MySQL Backup/Restore have selected live capture,
   restore, key-era, retention and interruption proof on Ubuntu amd64. Full Gate B,
   other provider/archive/checkpoint and arm64 variants remain unqualified.

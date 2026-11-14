@@ -203,9 +203,13 @@ func (maintenance *Maintenance) offline(ctx context.Context, runnerID string, ca
 	if exists {
 		lastVersion = prior.Record.GitHubVersion
 	}
-	_, err = maintenance.repository.PutRunnerObservation(ctx, runnerrecord.RunnerObservationRecord{GitHubVersion: lastVersion,
-		RunnerID: runnerID, Online: false, ObservedAt: time.Now().UTC(),
-	}, revision)
+	_, err = maintenance.repository.PutRunnerObservation(
+		ctx,
+		runnerrecord.RunnerObservationRecord{GitHubVersion: lastVersion,
+			RunnerID: runnerID, Online: false, ObservedAt: time.Now().UTC(),
+		},
+		revision,
+	)
 	if err != nil {
 		return err
 	}

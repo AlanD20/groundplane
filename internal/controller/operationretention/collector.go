@@ -95,7 +95,9 @@ func New(queue *workqueue.Repository, connectors *connectorchecks.Repository,
 
 func (collector *Collector) ConfigureRunnerUpdates(records interface {
 	PruneInput(context.Context, string, time.Time) (bool, error)
-}) { collector.updates = records }
+}) {
+	collector.updates = records
+}
 
 // Collect performs at most one eight-attempt batch. False means another
 // bounded pass is needed or a concurrent write won; it never restarts the Task.

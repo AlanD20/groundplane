@@ -24,7 +24,9 @@ func (executor *SoftwareExecutor) PruneInput(ctx context.Context, taskID string,
 	if err != nil {
 		return false, err
 	}
-	if task.Task.CollectionStartedAt == nil || task.Task.FinishedAt == nil || task.Task.RetainUntil == nil || at.Before(*task.Task.RetainUntil) || loaded.Record.Phase != runnerupdates.Finished {
+	if task.Task.CollectionStartedAt == nil || task.Task.FinishedAt == nil || task.Task.RetainUntil == nil ||
+		at.Before(*task.Task.RetainUntil) ||
+		loaded.Record.Phase != runnerupdates.Finished {
 		return false, nil
 	}
 	view, err := executor.queue.ReadWork(ctx, taskID, loaded.Record.Owner.WorkItemID, 0)

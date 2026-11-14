@@ -25,9 +25,41 @@ type runnerUpdateOutput struct{ Body apiTypes.RunnerUpdateResult }
 
 func (s *Server) registerRunnerSoftware() {
 	accepted := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
-	huma.Register(s.API, huma.Operation{OperationID: "runner.versions", Method: http.MethodGet, Path: "/runners/{id}/versions", Summary: "List verified GitHub Runner versions for this host", Tags: []string{"Runner"}}, s.runnerVersions)
-	huma.Register(s.API, huma.Operation{OperationID: "runner.update", Method: http.MethodPost, Path: "/runners/{id}/updates", Summary: "Update only this Runner upstream software after its job completes", Tags: []string{"Runner"}, DefaultStatus: http.StatusAccepted, Responses: attachMutationResponses(accepted)}, s.updateRunnerSoftware)
-	huma.Register(s.API, huma.Operation{OperationID: "runner.update.show", Method: http.MethodGet, Path: "/runners/{id}/updates", Summary: "Show latest or selected Runner software update", Tags: []string{"Runner"}}, s.showRunnerUpdate)
+	huma.Register(
+		s.API,
+		huma.Operation{
+			OperationID: "runner.versions",
+			Method:      http.MethodGet,
+			Path:        "/runners/{id}/versions",
+			Summary:     "List verified GitHub Runner versions for this host",
+			Tags:        []string{"Runner"},
+		},
+		s.runnerVersions,
+	)
+	huma.Register(
+		s.API,
+		huma.Operation{
+			OperationID:   "runner.update",
+			Method:        http.MethodPost,
+			Path:          "/runners/{id}/updates",
+			Summary:       "Update only this Runner upstream software after its job completes",
+			Tags:          []string{"Runner"},
+			DefaultStatus: http.StatusAccepted,
+			Responses:     attachMutationResponses(accepted),
+		},
+		s.updateRunnerSoftware,
+	)
+	huma.Register(
+		s.API,
+		huma.Operation{
+			OperationID: "runner.update.show",
+			Method:      http.MethodGet,
+			Path:        "/runners/{id}/updates",
+			Summary:     "Show latest or selected Runner software update",
+			Tags:        []string{"Runner"},
+		},
+		s.showRunnerUpdate,
+	)
 	s.setRoutePolicy("POST /api/v1/runners/{id}/updates", routePolicy{body: jsonBody})
 }
 func (s *Server) runnerVersions(ctx context.Context, input *runnerShowInput) (*runnerVersionOutput, error) {

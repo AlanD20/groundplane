@@ -41,7 +41,10 @@ func (CheckImageCompletion) PrepareFinish(
 		}
 	case workexecution.RunnerSoftware:
 		if task.Action != workexecution.ActionUpdate {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Runner software update does not match its Task action")
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Runner software update does not match its Task action",
+			)
 		}
 	case workexecution.Image:
 		if task.Action != workexecution.ActionFetch && task.Action != workexecution.ActionRemove {

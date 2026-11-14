@@ -30,7 +30,10 @@ func NewJournal(
 		ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
 		ids.Validate(ids.KindWorkItem, owner.WorkItemID) != nil || ids.Validate(ids.KindAttempt, attemptID) != nil ||
 		identity.Validate() != nil || identity.Executor != workexecution.Controller {
-		return nil, errs.New(errs.KindValidationFailed, "Runner update journal requires its exact Controller assignment")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Runner update journal requires its exact Controller assignment",
+		)
 	}
 	return &Journal{repository: repository, owner: owner, attemptID: attemptID, identity: identity}, nil
 }

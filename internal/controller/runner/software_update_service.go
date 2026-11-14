@@ -35,8 +35,12 @@ type SoftwareService struct {
 	coordinator *requestidempotency.Coordinator
 }
 
-func NewSoftwareService(runnerRecords *etcd.RunnerRepository,
-	records *runnerupdates.Repository, evidence *etcd.IdempotencyRepository, coordinator *requestidempotency.Coordinator, catalog ReleaseCatalog,
+func NewSoftwareService(
+	runnerRecords *etcd.RunnerRepository,
+	records *runnerupdates.Repository,
+	evidence *etcd.IdempotencyRepository,
+	coordinator *requestidempotency.Coordinator,
+	catalog ReleaseCatalog,
 ) (*SoftwareService, error) {
 	if runnerRecords == nil || records == nil || evidence == nil || coordinator == nil || catalog == nil {
 		return nil, errs.New(errs.KindInternal, "Runner software update admission dependencies are required")
@@ -49,11 +53,25 @@ func NewSoftwareService(runnerRecords *etcd.RunnerRepository,
 	}, nil
 }
 
-func (service *SoftwareService) UpdateRunner(ctx context.Context, runnerID string, input apiTypes.RunnerUpdateRequest, key string) (idempotency.IdempotencyResponse, error) {
+func (service *SoftwareService) UpdateRunner(
+	ctx context.Context,
+	runnerID string,
+	input apiTypes.RunnerUpdateRequest,
+	key string,
+) (idempotency.IdempotencyResponse, error) {
 	return service.update(ctx, runnerID, input, key, false, nil)
 }
-func (service *SoftwareService) update(ctx context.Context, runnerID string, input apiTypes.RunnerUpdateRequest, key string, automatic bool, selected *runnersoftware.Release) (idempotency.IdempotencyResponse, error) {
-	if ids.Validate(ids.KindRunner, runnerID) != nil || input.Revision <= 0 || !runnersoftware.ValidVersion(input.Version) {
+
+func (service *SoftwareService) update(
+	ctx context.Context,
+	runnerID string,
+	input apiTypes.RunnerUpdateRequest,
+	key string,
+	automatic bool,
+	selected *runnersoftware.Release,
+) (idempotency.IdempotencyResponse, error) {
+	if ids.Validate(ids.KindRunner, runnerID) != nil || input.Revision <= 0 ||
+		!runnersoftware.ValidVersion(input.Version) {
 		return idempotency.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Runner update requires its current id and revision",
@@ -116,7 +134,10 @@ func (service *SoftwareService) update(ctx context.Context, runnerID string, inp
 	}
 	runtime := source.Runner()
 	if runtime.Desired.AutoUpdate != automatic {
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Disable automatic updates before selecting a manual version")
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Disable automatic updates before selecting a manual version",
+		)
 	}
 	var release runnersoftware.Release
 	if selected != nil {

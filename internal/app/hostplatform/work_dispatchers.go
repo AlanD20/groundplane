@@ -173,7 +173,11 @@ func (owners *workOwners) newDispatchers(
 					Executor:  workexecution.Controller,
 					Owner:     owners.connections.edges,
 				},
-				{Operation: workexecution.RunnerSoftware, Executor: workexecution.Controller, Owner: dependencies.RunnerSoftware},
+				{
+					Operation: workexecution.RunnerSoftware,
+					Executor:  workexecution.Controller,
+					Owner:     dependencies.RunnerSoftware,
+				},
 				{
 					Operation: workexecution.RunnerCheck,
 					Executor:  workexecution.Controller,

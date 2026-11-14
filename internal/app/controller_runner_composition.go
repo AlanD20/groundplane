@@ -86,8 +86,16 @@ func newControllerRunnerComposition(
 		return nil, err
 	}
 	maintenance.ConfigureSoftwareUpdates(capabilities.Software)
-	return &controllerRunnerComposition{software: capabilities.Software, softwareExecutor: capabilities.SoftwareExecutor,
-		pools: runnerPools, lifecycle: lifecycle, maintenance: maintenance, provisioning: runnerProvisioning,
-		mutations: runnerMutations, removals: runnerRemovals, checks: capabilities.Checks, checkExecutor: capabilities.CheckExecutor,
+	return &controllerRunnerComposition{
+		software:         capabilities.Software,
+		softwareExecutor: capabilities.SoftwareExecutor,
+		pools:            runnerPools,
+		lifecycle:        lifecycle,
+		maintenance:      maintenance,
+		provisioning:     runnerProvisioning,
+		mutations:        runnerMutations,
+		removals:         runnerRemovals,
+		checks:           capabilities.Checks,
+		checkExecutor:    capabilities.CheckExecutor,
 	}, nil
 }

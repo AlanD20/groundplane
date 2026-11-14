@@ -33,7 +33,13 @@ func newSoftware(store etcd.EnvironmentBlueprintStore, runners *etcd.RunnerRepos
 	if err != nil {
 		return nil, nil, err
 	}
-	service, err := runnercapability.NewSoftwareService(runners, records, evidence, coordinator, githubrunner.NewCatalog())
+	service, err := runnercapability.NewSoftwareService(
+		runners,
+		records,
+		evidence,
+		coordinator,
+		githubrunner.NewCatalog(),
+	)
 	if err != nil {
 		return nil, nil, err
 	}
