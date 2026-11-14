@@ -166,15 +166,21 @@ func (reader *Reader) ProtectDNSProjection(
 	projection environmentprojection.EnvironmentComposeProjection,
 	revision int64,
 ) ([]keyvalue.Condition, error) {
-	hostnames := make([]string, 0, len(projection.DesiredRoutes))
-	for _, route := range projection.DesiredRoutes {
-		if route.Desired.Host != "" {
-			hostnames = append(hostnames, route.Desired.Host)
-		}
-	}
-	nameConditions, err := reader.RequireHostnamesUnclaimed(ctx, hostnames, revision)
+	hostnames := routeNames(projection)
+	desired, found, err := blueprints.ReadCurrentDesiredInput(ctx, reader.store, projection.EnvironmentID, revision)
 	if err != nil {
 		return nil, err
+	}
+	var nameConditions []keyvalue.Condition
+	// Existing Route names are already reserved by the fenced desired head.
+	// Rechecking every unchanged name makes unrelated Service edits consume a
+	// transaction comparison per hostname. New names still take the global
+	// claim checks, and target changes retain their separate protection below.
+	if !found || !slices.Equal(authoredRouteNames(desired.Record.Input.Routes), hostnames) {
+		nameConditions, err = reader.RequireHostnamesUnclaimed(ctx, hostnames, revision)
+		if err != nil {
+			return nil, err
+		}
 	}
 	previous, found, err := blueprints.ReadCurrentProjection(ctx, reader.store, projection.EnvironmentID, revision)
 	if err != nil {
