@@ -418,23 +418,6 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
-			if request := result.message.GetReleaseRecoveryCheckpointRequest(); request != nil {
-				if s.releaseCheckpoints == nil {
-					return status.Error(codes.Internal, "Release recovery checkpoint service is not configured")
-				}
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.releaseCheckpoints.CheckpointRecovery(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseRecoveryCheckpointAck{ReleaseRecoveryCheckpointAck: ack}}); err != nil {
-					return err
-				}
-				continue
-			}
 
 			if request := result.message.GetBackupWorkSecretRequest(); request != nil {
 				if err := s.deliverBackupWorkSecrets(stream, session, authorization.Generation, request); err != nil {
@@ -454,40 +437,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
-			if request := result.message.GetEnvironmentRemovalCheckpointRequest(); request != nil {
-				if s.hierarchyReports == nil {
-					return status.Error(codes.Internal, "Environment removal reporting is not configured")
-				}
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.hierarchyReports.CheckpointEnvironmentRemoval(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_EnvironmentRemovalCheckpointAck{EnvironmentRemovalCheckpointAck: ack}}); err != nil {
-					return err
-				}
-				continue
-			}
-			if request := result.message.GetReleaseWorkCheckpointRequest(); request != nil {
-				if s.releaseCheckpoints == nil {
-					return status.Error(codes.Internal, "Release checkpoint service is not configured")
-				}
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.releaseCheckpoints.CheckpointRelease(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseWorkCheckpointAck{ReleaseWorkCheckpointAck: ack}}); err != nil {
-					return err
-				}
-				continue
-			}
+
 			if request := result.message.GetReleaseEffectEvidenceRequest(); request != nil {
 				if s.releaseCheckpoints == nil {
 					return status.Error(codes.Internal, "Release evidence service is not configured")
@@ -572,20 +522,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
-			if request := result.message.GetScriptWorkCheckpointRequest(); request != nil {
-				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				ack, err := s.checkpointScriptWork(session.ctx, identity, request)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ScriptWorkCheckpointAck{ScriptWorkCheckpointAck: ack}}); err != nil {
-					return err
-				}
-				continue
-			}
+
 			if result.message.GetObservedState() != nil {
 				return status.Error(
 					codes.Unimplemented,

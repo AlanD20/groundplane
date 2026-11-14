@@ -2,6 +2,7 @@ package volumeruntime
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/volumeexecution"
@@ -16,8 +17,11 @@ func (executor *Executor) fail(
 	ctx context.Context,
 	input Input,
 	exchange Exchange,
-	_ error,
+	cause error,
 ) (workexecution.Attempt, error) {
+	slog.ErrorContext(ctx, "Volume execution failed", "task_id", input.attempt.TaskID,
+		"work_id", input.attempt.WorkItemID, "attempt_id", input.attempt.ID,
+		"direction", input.attempt.Direction, "error", cause)
 	reason := volumeexecution.ExecutionFailed
 	if !time.Now().Before(input.attempt.Deadline) {
 		reason = volumeexecution.DeadlineExpired

@@ -80,7 +80,10 @@ func (service *Reports) CheckpointEnvironmentRemoval(
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Environment removal ownership changed; resend the saved report")
+		return nil, errs.New(
+			errs.KindExecutionWriteContention,
+			"Environment removal checkpoint publication changed concurrently",
+		)
 	}
 	return hierarchyexecution.EncodeEnvironmentCheckpointAck(input, report)
 }

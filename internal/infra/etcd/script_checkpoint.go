@@ -125,7 +125,7 @@ func (repository *ScriptRepository) CheckpointScriptExecution(
 		}
 	}
 	return etcdstore.Versioned[scriptexecutions.ScriptExecutionRecord]{}, errs.New(
-		errs.KindStateConflict,
+		errs.KindExecutionWriteContention,
 		"Script checkpoint changed concurrently",
 	)
 }

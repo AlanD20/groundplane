@@ -111,7 +111,10 @@ func (service *Reports) CheckpointAttachProvision(
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Attach provisioning ownership changed; resend the saved report")
+		return nil, errs.New(
+			errs.KindExecutionWriteContention,
+			"Attach provisioning checkpoint publication changed concurrently",
+		)
 	}
 	service.reportProgress(ctx, view, input, report.Progress)
 	return attachexecution.EncodeProvisionCheckpointAck(input, report)

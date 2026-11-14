@@ -5,6 +5,12 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Keep Attach provisioning, Release, Script and Environment-removal checkpoint
+  conflicts local to their operation; retry atomic publication contention without
+  disconnecting unrelated Agent work.
+- Preserve Volume execution failure causes in private Agent logs, with the Task,
+  work item and attempt identifiers needed for diagnosis.
+
 ## 0.0.1 — 2026-11-14
 
 Initial single-host release.

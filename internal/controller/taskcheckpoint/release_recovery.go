@@ -102,8 +102,8 @@ func (service *ReleaseCheckpointService) CheckpointRecovery(
 	}
 	if !result.Succeeded {
 		return nil, errs.New(
-			errs.KindStateConflict,
-			"Recovery checkpoint authority changed; reload the saved cleanup attempt",
+			errs.KindExecutionWriteContention,
+			"Recovery checkpoint publication changed concurrently",
 		)
 	}
 	service.reportRecovery(ctx, input, previous, report)

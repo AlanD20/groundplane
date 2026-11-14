@@ -34,6 +34,16 @@ func DescribeCheckpoint(message *agentpb.AgentMessage) (*agentpb.WorkAttemptIden
 		identity, kind = payload.ServiceRemovalRecoveryCheckpointRequest.GetAttempt(), "removal_recovery_checkpoint"
 	case *agentpb.AgentMessage_AttachRemovalCheckpointRequest:
 		identity, kind = payload.AttachRemovalCheckpointRequest.GetAttempt(), "attach_removal_checkpoint"
+	case *agentpb.AgentMessage_AttachProvisionCheckpointRequest:
+		identity, kind = payload.AttachProvisionCheckpointRequest.GetAttempt(), "attach_provision_checkpoint"
+	case *agentpb.AgentMessage_ReleaseWorkCheckpointRequest:
+		identity, kind = payload.ReleaseWorkCheckpointRequest.GetAttempt(), "release_checkpoint"
+	case *agentpb.AgentMessage_ReleaseRecoveryCheckpointRequest:
+		identity, kind = payload.ReleaseRecoveryCheckpointRequest.GetAttempt(), "release_recovery_checkpoint"
+	case *agentpb.AgentMessage_EnvironmentRemovalCheckpointRequest:
+		identity, kind = payload.EnvironmentRemovalCheckpointRequest.GetAttempt(), "environment_removal_checkpoint"
+	case *agentpb.AgentMessage_ScriptWorkCheckpointRequest:
+		identity, kind = payload.ScriptWorkCheckpointRequest.GetAttempt(), "script_checkpoint"
 	case *agentpb.AgentMessage_BackupWorkCheckpointRequest:
 		identity, kind = payload.BackupWorkCheckpointRequest.GetAttempt(), "backup_checkpoint"
 	default:

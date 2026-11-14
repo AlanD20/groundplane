@@ -169,7 +169,7 @@ func (service *ReleaseCheckpointService) CheckpointRelease(
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Release checkpoint authority changed; reload the saved attempt")
+		return nil, errs.New(errs.KindExecutionWriteContention, "Release checkpoint publication changed concurrently")
 	}
 	service.reportDeployment(ctx, input, previous, report)
 	return releaseexecution.EncodeCheckpointAck(input, report)

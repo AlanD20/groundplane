@@ -35,7 +35,7 @@ func (server *Server) nativeOperationReport(
 	for _, route := range []func(*Session, uint64, *agentpb.AgentMessage) (bool, *agentpb.ControllerMessage, error){
 		server.resolverReport, server.backingReport, server.entryReport, server.componentReport,
 		server.networkReport, server.volumeReport, server.removalRecoveryReport,
-		server.backupWorkReport, server.lifecycleReport, server.attachReport,
+		server.backupWorkReport, server.lifecycleReport, server.attachReport, server.executionCheckpointReport,
 	} {
 		for attempt := 0; ; attempt++ {
 			handled, reply, err := route(session, generation, message)
