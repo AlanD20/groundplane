@@ -22,7 +22,12 @@ export type ProjectActions = {
   deleteProject: (projectId: string) => Promise<string>;
 };
 export function createProjectActions(
-  update: (change: (draft: { tenantProjects: Project[] }) => void) => void,
+  update: (
+    change: (draft: {
+      tenantProjects: Project[];
+      backingProjects: Project[];
+    }) => void,
+  ) => void,
 ): ProjectActions {
   return {
     addProject: async (project) => {
@@ -53,10 +58,14 @@ export function createProjectActions(
         ),
       );
       update((draft) => {
-        const index = draft.tenantProjects.findIndex(
+        const projects =
+          updated.kind === "backing"
+            ? draft.backingProjects
+            : draft.tenantProjects;
+        const index = projects.findIndex(
           (project) => project.id === updated.id,
         );
-        if (index >= 0) Object.assign(draft.tenantProjects[index], updated);
+        if (index >= 0) Object.assign(projects[index], updated);
       });
       return updated;
     },

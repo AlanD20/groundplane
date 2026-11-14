@@ -24,7 +24,7 @@ func ValidateProjectEditInput(input EditProjectInput) error {
 }
 
 func PrepareProjectEdit(current core.Project, input EditProjectInput) (core.Project, error) {
-	if current.Kind != core.ProjectKindTenant {
+	if current.Kind != core.ProjectKindTenant && current.Kind != core.ProjectKindBacking {
 		return core.Project{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	if err := ValidateProjectEditInput(input); err != nil {

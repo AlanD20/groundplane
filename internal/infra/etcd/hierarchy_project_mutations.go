@@ -11,8 +11,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// MutateProjectIdempotent atomically commits the only tenant-Project direct
-// mutations: display-name edit or scoped slug rename. Stable ownership,
+// MutateProjectIdempotent atomically commits display-name edits for both Project
+// kinds and tenant-Project slug renames. Stable ownership,
 // description, kind, descendants, and materialized state cannot move here.
 func (repository *HierarchyRepository) MutateProjectIdempotent(
 	ctx context.Context,
@@ -29,8 +29,9 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	if err := hierarchyrecord.ValidateProject(replacement); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if current.Record.Kind != hierarchyrecord.ProjectKindTenant ||
-		replacement.Kind != hierarchyrecord.ProjectKindTenant {
+	if current.Record.Kind != replacement.Kind ||
+		(current.Record.Kind != hierarchyrecord.ProjectKindTenant && current.Record.Kind != hierarchyrecord.ProjectKindBacking) ||
+		(current.Record.Kind == hierarchyrecord.ProjectKindBacking && current.Record.Slug != replacement.Slug) {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	if current.Record.ID != replacement.ID || current.Record.TenantID != replacement.TenantID ||
@@ -57,7 +58,10 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 		hierarchyrecord.ProjectSlugKey(current.Record),
 		hierarchyrecord.ProjectOwnerKey(current.Record),
 		deletions.TombstoneKey("project", current.Record.ID),
-		deletions.TombstoneKey("tenant", current.Record.TenantID),
+	}
+	tenantOwned := current.Record.Kind == hierarchyrecord.ProjectKindTenant
+	if tenantOwned {
+		secondaryKeys = append(secondaryKeys, deletions.TombstoneKey("tenant", current.Record.TenantID))
 	}
 	if renaming {
 		secondaryKeys = append(secondaryKeys, hierarchyrecord.ProjectSlugKey(replacement))
@@ -84,7 +88,7 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	if secondary.Values[2] != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Project deletion is in progress")
 	}
-	if secondary.Values[3] != nil {
+	if tenantOwned && secondary.Values[3] != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
 	}
 	if renaming && secondary.Values[4] != nil {
@@ -100,7 +104,12 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 		{Key: hierarchyrecord.ProjectSlugKey(current.Record), ModRevision: secondary.Values[0].ModRevision},
 		{Key: hierarchyrecord.ProjectOwnerKey(current.Record), ModRevision: secondary.Values[1].ModRevision},
 		{Key: deletions.TombstoneKey("project", current.Record.ID)},
-		{Key: deletions.TombstoneKey("tenant", current.Record.TenantID)},
+	}
+	if tenantOwned {
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: deletions.TombstoneKey("tenant", current.Record.TenantID)},
+		)
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(current.Record.ID), Value: value},

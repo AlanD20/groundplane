@@ -89,12 +89,22 @@ func newProjectCmd() *cobra.Command {
 	cmd.AddCommand(create)
 
 	var editName string
+	var editKind string
 	edit := &cobra.Command{
 		Use:   "edit <slug>",
 		Short: "Edit a project's fields (partial update)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveProjectTarget(cmd, args[0])
+			var id string
+			var err error
+			switch editKind {
+			case "tenant":
+				id, err = resolveProjectTarget(cmd, args[0])
+			case "backing":
+				id, err = resolveBackingProjectTarget(cmd, args[0])
+			default:
+				return errs.New(errs.KindValidationFailed, "project kind must be tenant or backing")
+			}
 			if err != nil {
 				return err
 			}
@@ -110,6 +120,7 @@ func newProjectCmd() *cobra.Command {
 		},
 	}
 	edit.Flags().StringVar(&editName, "name", "", "new display name")
+	edit.Flags().StringVar(&editKind, "kind", "tenant", "project kind: tenant | backing")
 	cmd.AddCommand(edit)
 
 	var newSlug string

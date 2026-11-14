@@ -21,6 +21,7 @@ import { ArrowLeft, Database, Power, PowerOff, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ServiceTab } from "./service-tab";
+import { ProjectNameDialog } from "@/features/project/project-name-dialog";
 
 import { BackupsTab } from "./backing-backups";
 import { ConnectionsTab } from "./backing-connections";
@@ -36,6 +37,7 @@ export default function BackingServiceDetailPage() {
   const svc = env?.services[0];
   const [search, setSearch] = useSearchParams();
   const [updatingImage, setUpdatingImage] = useState(false);
+  const [editingName, setEditingName] = useState(false);
   const requested = search.get("tab");
   const tab =
     backingDestinations.find((item) => item.key === requested)?.key ??
@@ -125,6 +127,9 @@ export default function BackingServiceDetailPage() {
         }
         actions={
           <>
+            <Button variant="outline" onClick={() => setEditingName(true)}>
+              Edit name
+            </Button>
             {running ? (
               <Button
                 variant="outline"
@@ -144,6 +149,9 @@ export default function BackingServiceDetailPage() {
           </>
         }
       />
+      {editingName && (
+        <ProjectNameDialog project={g} onClose={() => setEditingName(false)} />
+      )}
       <ServiceMetadata
         service={svc}
         now={observationRefresh.now}

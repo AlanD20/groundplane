@@ -43,6 +43,16 @@ credentials; GP does not redact arbitrary container output.
 
 ### Creation and lifecycle
 
+The display name describes the shared instance, not its consumers. For example,
+use `Staging PostgreSQL` for a database shared by staging Projects and
+`Primary ClamAV` for one scanner shared by staging and production. These labels
+do not restrict which Environments can Attach.
+
+Choose **Edit name** on the Backing Service to change its display name without
+restarting it or changing its stable references. Automation uses
+`groundplane project edit SLUG --kind backing --name "Primary ClamAV"` or
+`PATCH /projects/{id}` with a `name` field. This does not rename the slug.
+
 Backing creation is one protected atomic operation. The operator supplies the
 Project slug, name and optional description, one adapter family and its server
 version for a managed database,
