@@ -209,6 +209,19 @@ selected topology; compilation is not connectivity qualification.
 
 ## Runner registry resolution
 
+Host DNS ownership must include its existing writers. On dhcpcd hosts, a passive
+owned hook suppresses only the resolver-writing hook while the live file matches
+GP's resolver and its captured baseline exists. Both dhcpcd and GP's resolver
+helpers hold one advisory lock across the ownership check and file update; merely
+checking the file before a DHCP write leaves a race. The lock is released before
+later service hooks so their background daemons cannot inherit it. Restoring the baseline
+releases DNS ownership without disabling DHCP or restarting a link. Uninstall
+restores the baseline under the same lock and removes the owned hook.
+The [host integration](../../internal/infra/hostresolution/dhcpcd.go),
+[resolver lock](../../internal/infra/docker/hostresolutionhelper/lock.go) and
+[uninstaller](../../uninstall.sh) own this boundary. Other host DNS managers need
+their own integration; direct file writes do not coordinate them.
+
 The accepted [Runner delivery design](runner-isolation.md#one-private-registry-and-existing-dns)
 reuses CoreDNS for the same-host registry. Keep one managed name/address mapping
 and make it reachable from the host Docker daemon and the Runner's rootless

@@ -16,9 +16,9 @@ import (
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	controllerconfigstore "github.com/AlanD20/groundplane/internal/infra/configdocument"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
-	"github.com/AlanD20/groundplane/internal/infra/docker/registryhost"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/hostbootstrap"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -77,8 +77,8 @@ func newControllerBootstrapComposition(
 			err,
 		)
 	}
-	if err := registryhost.Reconcile(ctx, imagefetch.RegistryAddress(cfg.InternalAPI())); err != nil {
-		return controllerBootstrapComposition{}, fmt.Errorf("controller: reconcile private registry: %w", err)
+	if err := hostbootstrap.Reconcile(ctx, imagefetch.RegistryAddress(cfg.InternalAPI())); err != nil {
+		return controllerBootstrapComposition{}, fmt.Errorf("controller: reconcile native host services: %w", err)
 	}
 	tick, err := time.ParseDuration(cfg.Scheduler.TickInterval)
 	if err != nil {

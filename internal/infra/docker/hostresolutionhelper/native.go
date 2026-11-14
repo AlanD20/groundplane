@@ -59,6 +59,10 @@ func InspectCaptured(ctx context.Context, expectedSHA256 string) (CapturedState,
 }
 
 func ApplyCaptured(ctx context.Context, expectedSHA256 string) error {
+	return withResolverLock(ctx, func() error { return applyCaptured(ctx, expectedSHA256) })
+}
+
+func applyCaptured(ctx context.Context, expectedSHA256 string) error {
 	state, err := InspectCaptured(ctx, expectedSHA256)
 	if err != nil {
 		return err
@@ -101,6 +105,10 @@ func ApplyCaptured(ctx context.Context, expectedSHA256 string) error {
 }
 
 func RestoreCaptured(ctx context.Context, expectedSHA256 string) error {
+	return withResolverLock(ctx, func() error { return restoreCaptured(ctx, expectedSHA256) })
+}
+
+func restoreCaptured(ctx context.Context, expectedSHA256 string) error {
 	state, err := InspectCaptured(ctx, expectedSHA256)
 	if err != nil {
 		return err

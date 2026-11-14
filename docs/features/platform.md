@@ -72,6 +72,13 @@ Host Components lists CoreDNS. Environment routers and tunnels remain in their
 Environment workspace. CoreDNS has Overview, DNS records and Resolver settings
 sections, with configuration drafts retained when switching sections.
 
+On hosts using dhcpcd, GP installs a passive DNS hook without restarting DHCP or
+the network link. It prevents DHCP from replacing GP's active resolver file;
+DHCP addressing and routes remain unchanged. Restoring the captured DNS baseline
+when CoreDNS is disabled lets DHCP manage DNS again. Uninstall removes the owned
+hook after restoring host DNS. This integration does not configure other DNS
+managers such as NetworkManager or systemd-resolved.
+
 ## CoreDNS connection checks
 
 Open CoreDNS → Overview → Test DNS. The check queries the running resolver and

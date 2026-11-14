@@ -149,7 +149,16 @@ try:
 
     # Host-DNS opt-in must be undone before its local resolver is removed.
     resolver = Path("/etc/resolv.conf")
-    baseline = Path("/var/lib/groundplane/agent/host-resolution/resolv.conf.previous")
+    resolver_state = Path("/var/lib/groundplane/agent/host-resolution")
+    baseline = resolver_state / "resolv.conf.previous"
+    if not dry and resolver_state.exists():
+        if resolver_state.is_symlink() or not resolver_state.is_dir():
+            raise RuntimeError("Host resolver state is not a trusted directory")
+        resolver_lock = os.open(resolver_state / "resolver.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        metadata = os.fstat(resolver_lock)
+        if metadata.st_uid != 0 or not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 or metadata.st_mode & 0o022:
+            raise RuntimeError("Host resolver lock is not trusted")
+        fcntl.flock(resolver_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     if resolver.exists() and resolver.read_bytes() == b"nameserver 127.0.0.1\n" and Path("/etc/groundplane").exists():
         with os.fdopen(os.open(baseline, os.O_RDONLY | os.O_NOFOLLOW), "rb") as saved:
             metadata = os.fstat(saved.fileno())
@@ -162,6 +171,19 @@ try:
                 target.write(content)
                 target.flush()
                 os.fsync(target.fileno())
+
+    for hook_name in ("19-groundplane-dns", "21-groundplane-dns"):
+        dns_hook = Path("/usr/lib/dhcpcd/dhcpcd-hooks") / hook_name
+        if not os.path.lexists(dns_hook):
+            continue
+        with os.fdopen(os.open(dns_hook, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as saved:
+            metadata = os.fstat(saved.fileno())
+            content = saved.read(8193)
+        if (metadata.st_uid != 0 or not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1
+                or metadata.st_mode & 0o022 or len(content) > 8192
+                or not content.startswith(b"# Groundplane-owned dhcpcd DNS integration.\n")):
+            raise RuntimeError("Reserved GP DNS hook has foreign ownership or content")
+        remove_path(dns_hook)
 
     # Only reserved GP Runner accounts with their actual managed home qualify.
     accounts = [u for u in pwd.getpwall() if re.fullmatch(r"gpr_[a-z0-9]+", u.pw_name)

@@ -77,6 +77,8 @@ data, including databases, Secrets, configuration, Task history, registry storag
 Runner accounts and GP binaries. It works without a healthy Controller or API.
 If host DNS used GP’s resolver, its saved baseline is restored before CoreDNS
 is removed. A missing baseline requires repairing host DNS before continuing.
+On dhcpcd hosts, uninstall also removes GP's DNS guard so DHCP can resume normal
+resolver updates. DHCP, host packages and the network configuration remain installed.
 Docker, Compose, host packages, unrelated Docker resources and shared upstream
 image caches remain installed. Remote backups, GitHub registrations and Cloudflare
 configuration are outside this host reset and remain untouched.

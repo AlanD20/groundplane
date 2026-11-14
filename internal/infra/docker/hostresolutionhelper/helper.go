@@ -11,14 +11,14 @@ import (
 	"path/filepath"
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
-	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/infra/hostresolution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const (
 	ResolverSourcePath = "/etc/resolv.conf"
 	ResolverMountPath  = "/run/groundplane/host-resolver/resolv.conf"
-	StateDirectory     = agentprotocol.StatePath + "/host-resolution"
+	StateDirectory     = hostresolution.StateDirectory
 	BaselinePath       = StateDirectory + "/resolv.conf.previous"
 	maximumBytes       = 64 * 1024
 )
@@ -26,6 +26,10 @@ const (
 var managedResolver = []byte("nameserver 127.0.0.1\n")
 
 func Apply(ctx context.Context) error {
+	return withResolverLock(ctx, func() error { return apply(ctx) })
+}
+
+func apply(ctx context.Context) error {
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
@@ -58,6 +62,10 @@ func Apply(ctx context.Context) error {
 }
 
 func Restore(ctx context.Context) error {
+	return withResolverLock(ctx, func() error { return restore(ctx) })
+}
+
+func restore(ctx context.Context) error {
 	if err := validateContext(ctx); err != nil {
 		return err
 	}

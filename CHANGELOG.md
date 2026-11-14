@@ -47,6 +47,9 @@ Initial single-host release.
   the listener, rootless Docker daemon and builds, with kernel enforcement checks.
 - Retain readable local tags for installed platform images, using each artifact's
   own release or commit identity while keeping execution pinned to digests.
+- Keep dhcpcd lease renewals from overwriting GP's active host DNS. Restore the
+  captured DNS baseline on CoreDNS disable and remove the owned guard on uninstall,
+  without restarting the host network or changing DHCP address allocation.
 - Close Environment creation forms when their background Task is accepted;
   progress remains available in Task notifications.
 - Use consistent empty, loading and error views across Environment collections,
