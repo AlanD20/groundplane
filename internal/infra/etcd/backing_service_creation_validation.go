@@ -13,10 +13,13 @@ func validateBackingServiceAdapterCreationShape(service core.Service, custom boo
 		return nil
 	}
 	health := service.Healthcheck
-	if service.Authentication != "" || service.FactsPrefix != "" || len(service.Mounts) != 0 ||
+	if service.Authentication != "" || service.FactsPrefix != "" || len(service.Mounts) > 1 ||
 		len(service.Command) != 0 || len(service.Expose) != 0 ||
 		!health.Empty() {
-		return errs.New(errs.KindValidationFailed, "custom backing-service creation must be network-only")
+		return errs.New(
+			errs.KindValidationFailed,
+			"custom Backing creation permits one explicit Volume and no adapter-generated settings",
+		)
 	}
 	return nil
 }
@@ -33,7 +36,7 @@ func validateBackingServiceProjection(creation BackingServiceCreation) error {
 	volumeCount := len(projection.Volumes)
 	expectedVolumeCount := 1
 	if creation.Service.Desired.Adapter == "custom" {
-		expectedVolumeCount = 0
+		expectedVolumeCount = len(creation.Service.Desired.Mounts)
 	}
 	if creation.Revision.EnvironmentID != creation.Environment.ID || creation.Revision.RevisionID != creation.Task.ID ||
 		creation.Claim.EnvironmentID != creation.Environment.ID || creation.Claim.RevisionID != creation.Task.ID ||
