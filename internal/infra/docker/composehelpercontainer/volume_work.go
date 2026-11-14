@@ -64,6 +64,14 @@ func (executor *Executor) ExecuteVolumeWork(
 	defer clear(framed)
 	options := createOptions(executor.image, "volume-work-helper", nil)
 	options.Name, options.Config.Labels = name, labels
+	// Application-owned storage may intentionally exclude root from its mode
+	// bits. Inspection still needs to search it; removal additionally needs to
+	// unlink application-owned and sticky-directory entries. The closed helper
+	// keeps its captured Volume/path checks and receives no other capabilities.
+	options.HostConfig.CapAdd = []string{"DAC_READ_SEARCH"}
+	if input.Procedure.Action == agentpb.VolumeWorkAction_VOLUME_WORK_ACTION_REMOVE {
+		options.HostConfig.CapAdd = append(options.HostConfig.CapAdd, "DAC_OVERRIDE", "FOWNER")
+	}
 	options.Config.Env = []string{environmentdirectoryhelper.VolumeRootEnv + "=" + volumeRoot}
 	options.HostConfig.Mounts = append(options.HostConfig.Mounts, mount.Mount{
 		Type: mount.TypeBind, Source: volumeRoot, Target: volumeRoot,
