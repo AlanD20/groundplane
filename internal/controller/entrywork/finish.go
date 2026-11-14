@@ -19,7 +19,9 @@ func (owner *AgentWork) PrepareFinish(
 	_ time.Time,
 ) (workqueue.Change, error) {
 	task := finished.Task.Task
-	if task.ExpectedItems != 1 || len(finished.Items) != 1 || ids.Validate(ids.KindEnvEntry, task.TargetID) != nil ||
+	if task.ExpectedItems != 1 || len(finished.Items) != 1 ||
+		(ids.Validate(ids.KindEnvEntry, task.TargetID) != nil &&
+			(task.Action != workexecution.ActionUpdate || task.TargetID != task.Scope.EnvironmentID)) ||
 		(task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove) {
 		return workqueue.Change{}, errs.New(
 			errs.KindStateConflict,

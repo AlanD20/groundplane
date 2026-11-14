@@ -158,6 +158,18 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 		}
 		adopted := current
 		adopted.BlueprintKey = record.BlueprintKey
+		identity := adopted
+		identity.CurrentValueGenerationID = record.CurrentValueGenerationID
+		identity.Entry.Source, identity.Entry.Exposure = record.Entry.Source, record.Entry.Exposure
+		if !entries.EqualRecord(identity, record) {
+			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry immutable identity changed")
+		}
+		if current.CurrentValueGenerationID == record.CurrentValueGenerationID && read.Values[6] == nil {
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Entry selected value generation disappeared",
+			)
+		}
 		if current.Entry.Secret && current.Entry.Source.Kind == core.SourceLiteral &&
 			record.Entry.Secret && record.Entry.Source.Kind == core.SourceLiteral {
 			// A key-only declaration may narrow or expand exposure without
@@ -182,16 +194,6 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 			"Blueprint Entry lookup belongs to another Environment",
 		)
 	}
-	if read.Values[4] != nil {
-		current, err := entries.DecodeRecord(read.Values[4].Value)
-		if err != nil || (read.Values[6] == nil) ==
-			(current.CurrentValueGenerationID == record.CurrentValueGenerationID) {
-			return workqueue.Change{}, errs.New(
-				errs.KindStateConflict,
-				"Blueprint Entry value generation lineage changed",
-			)
-		}
-	}
 	var generationValue []byte
 	if read.Values[6] == nil {
 		preparedKey, value, err := entries.PrepareEntryGeneration(record, input.Generation)
@@ -203,8 +205,12 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 		}
 		generationValue = value
 	} else {
-		if entryRevision == 0 {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry orphaned value generation exists")
+		// The immutable authored identity above selects the value generation.
+		// Flat Entry rows may lag a completed metadata edit and cannot override
+		// that selection. Require its scoped lookup and validate the immutable
+		// generation itself rather than treating a lagging row as corruption.
+		if read.Values[7] == nil || string(read.Values[7].Value) != record.EnvironmentID {
+			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry selected generation has no authored binding")
 		}
 		if record.Entry.Secret {
 			generation, err := entryvalues.DecodeSecret(read.Values[6].Value)

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
 )
 
@@ -330,7 +331,7 @@ func newEntryEditCmd() *cobra.Command {
 			}
 			exposure := entryExposure(services, all)
 			if len(exposure) == 0 {
-				return fmt.Errorf("exactly one of --all or --service is required")
+				return errs.New(errs.KindValidationFailed, "exactly one of --all or --service is required")
 			}
 			updated, err := app.Client.EditEntry(cmd.Context(), entry.ID, apiTypes.EntryEditRequest{
 				Source: source, Exposure: exposure,

@@ -14,20 +14,23 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entrywork"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 	"time"
 )
 
 type entryDesiredMutationRepository interface {
+	ReadEntryMutationSource(context.Context, string) (etcd.EntryMutationSource, error)
+	PublishUnrenderedEntryWork(
+		context.Context,
+		etcd.EntryMetadataPublication,
+	) (etcd.IdempotencyTransactionResult, error)
 	InitializeEnvironmentDesiredState(
 		context.Context,
 		string,
@@ -51,16 +54,6 @@ type entryDesiredMutationRepository interface {
 		context.Context,
 		string,
 	) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
-	GetEnvironmentComposeProjection(
-		context.Context,
-		string,
-	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
-	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
-	ListEnvironmentComponents(
-		context.Context,
-		string,
-		etcdstore.PageRequest,
-	) (etcdstore.Page[componentrecord.Record], error)
 	ResolveBlueprintEntryEnvironment(context.Context, string) (string, bool, error)
 	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
 	CreateBlueprintEntryValueGeneration(context.Context, entryrecord.EntryValueGeneration) error
@@ -180,10 +173,17 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	current, hasCurrent, err := service.repository.GetEnvironmentComposeProjection(ctx, request.environmentID)
+	source, err := service.repository.ReadEntryMutationSource(ctx, request.environmentID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	if source.Desired.Revision != head.Revision || source.Desired.Record.RevisionID != head.Record.RevisionID {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Entry desired source changed")
+	}
+	if source.Runtime == nil {
+		return service.mutateUnrenderedEntry(ctx, request, source, project, environment)
+	}
+	current, hasCurrent := *source.Runtime, true
 	expectedHeadRevision, generation, err := controllerrevision.NextGeneration(
 		request.environmentID, head, hasHead, current, hasCurrent,
 	)
@@ -212,7 +212,12 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	}
 	now := service.now().UTC()
 	candidateTaskID := ids.New(ids.KindTask)
-	candidateRecord, previous, err := entryDesiredCandidateRecord(current.Record, request, candidateTaskID)
+	candidateRecord, previous, err := entryDesiredCandidateRecord(
+		current.Record.EnvironmentID,
+		current.Record.Entries,
+		request,
+		candidateTaskID,
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -240,7 +245,12 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	candidateRecord, previous, err = entryDesiredCandidateRecord(current.Record, request, claim.TaskID)
+	candidateRecord, previous, err = entryDesiredCandidateRecord(
+		current.Record.EnvironmentID,
+		current.Record.Entries,
+		request,
+		claim.TaskID,
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

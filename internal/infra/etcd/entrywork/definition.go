@@ -34,9 +34,30 @@ func PrepareDefinitionPublication(task workexecution.Task, item workexecution.It
 		removal.EntryID != task.TargetID || removal.RevisionID != task.ID {
 		return workqueue.Change{}, conflict("Entry definition settlement requires its exact removal")
 	}
+	return prepareDefinitionDecision(task, item, removal.EntryID, configurationRevision, marker, at)
+}
+
+// PrepareMetadataPublication settles an Entry authoring action with no host
+// effects. Its publisher owns the proof that no runtime or file is affected.
+func PrepareMetadataPublication(task workexecution.Task, item workexecution.Item,
+	configurationRevision int64, marker idempotency.IdempotencyMarker, at time.Time,
+) (workqueue.Change, error) {
+	if (task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove) ||
+		item.Operation != workexecution.EntryConfiguration ||
+		item.Placement.Executor != workexecution.Controller ||
+		configurationRevision < 0 ||
+		!definitionTarget(task) {
+		return workqueue.Change{}, conflict("Entry metadata requires its exact Controller action")
+	}
+	return prepareMetadataDecision(task, item, configurationRevision, marker, at)
+}
+
+func prepareDefinitionDecision(task workexecution.Task, item workexecution.Item, targetID string,
+	configurationRevision int64, marker idempotency.IdempotencyMarker, at time.Time,
+) (workqueue.Change, error) {
 	value, err := recordcodec.Encode("entry-definition-result", DefinitionResult{
 		TaskID: task.ID, WorkItemID: item.ID, EnvironmentID: task.Scope.EnvironmentID,
-		EntryID: removal.EntryID, RevisionID: removal.RevisionID, ConfigurationRevision: configurationRevision, At: at,
+		EntryID: targetID, RevisionID: task.ID, ConfigurationRevision: configurationRevision, At: at,
 	})
 	if err != nil {
 		return workqueue.Change{}, err
@@ -75,21 +96,27 @@ func (repository *InputRepository) retireDefinition(
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
+	key := DefinitionKey(view.Item.Item.ID)
+	if view.Item.Item.Result != nil && view.Item.Item.Result.ID == metadataResultID(view.Item.Item) {
+		key = MetadataKey(view.Item.Item.ID)
+	}
 	return true, workqueue.Change{Conditions: conditions,
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: DefinitionKey(view.Item.Item.ID)}}}, nil
+		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: key}}}, nil
 }
 
 // DefinitionConditions binds Task completion and later collection to the same
-// immutable removal result, not merely to an apparently settled item.
+// immutable Controller result, not merely to an apparently settled item.
 func (repository *InputRepository) DefinitionConditions(
 	ctx context.Context,
 	view workqueue.View,
 ) ([]keyvalue.Condition, error) {
 	task, item := view.Task.Task, view.Item.Item
+	if item.Result != nil && item.Result.ID == metadataResultID(item) {
+		return repository.metadataConditions(ctx, view)
+	}
 	if task.Validate() != nil || item.Validate() != nil || view.ReadRevision <= 0 || view.Task.Revision <= 0 ||
 		view.Item.Revision <= 0 ||
-		task.Action != workexecution.ActionRemove ||
-		ids.Validate(ids.KindEnvEntry, task.TargetID) != nil ||
+		task.Action != workexecution.ActionRemove || ids.Validate(ids.KindEnvEntry, task.TargetID) != nil ||
 		item.TaskID != task.ID ||
 		item.Operation != workexecution.EntryConfiguration ||
 		item.TargetID != task.Scope.EnvironmentID ||
@@ -101,7 +128,7 @@ func (repository *InputRepository) DefinitionConditions(
 		item.AttemptNumber != 0 ||
 		item.Outcome != workexecution.Succeeded ||
 		item.Cleanup != workexecution.CleanupNone {
-		return nil, conflict("Entry definition requires its settled Controller removal")
+		return nil, conflict("Entry definition requires its settled Controller action")
 	}
 	read, err := repository.read(ctx, []string{DefinitionKey(item.ID)}, view.ReadRevision)
 	if err != nil {
@@ -125,4 +152,13 @@ func (repository *InputRepository) DefinitionConditions(
 		{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision},
 		{Key: DefinitionKey(item.ID), ModRevision: value.ModRevision},
 		{Key: workqueue.AttemptIndexPrefix(item.ID), Prefix: true}}, nil
+}
+
+func definitionTarget(task workexecution.Task) bool {
+	if task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate &&
+		task.Action != workexecution.ActionRemove {
+		return false
+	}
+	return ids.Validate(ids.KindEnvEntry, task.TargetID) == nil ||
+		task.Action == workexecution.ActionUpdate && task.TargetID == task.Scope.EnvironmentID
 }

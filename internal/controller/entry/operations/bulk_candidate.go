@@ -3,7 +3,6 @@ package operations
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,12 +22,13 @@ type entryBulkCandidate struct {
 }
 
 func buildEntryBulkCandidate(
-	current projectionrecord.EnvironmentComposeProjection,
+	environmentID string,
+	current []entryrecord.Record,
 	input entryBulkUpsertInput,
 	revisionID string,
 ) (entryBulkCandidate, error) {
 	byKey := make(map[string]entryrecord.Record)
-	for _, record := range current.Entries {
+	for _, record := range current {
 		if record.Entry.Kind != core.EntryKindEnv {
 			continue
 		}
@@ -77,7 +77,7 @@ func buildEntryBulkCandidate(
 		if persisted.Secret {
 			persisted.Source.Literal = ""
 		}
-		record, err := entryrecord.NewRecord(current.EnvironmentID, persisted, generationID)
+		record, err := entryrecord.NewRecord(environmentID, persisted, generationID)
 		if err != nil {
 			return entryBulkCandidate{}, err
 		}
@@ -86,8 +86,8 @@ func buildEntryBulkCandidate(
 		}
 		changes = append(changes, entryBulkChange{desired: desired, record: record, previous: prior})
 	}
-	entries := make([]entryrecord.Record, 0, len(current.Entries)+len(changes))
-	for _, record := range current.Entries {
+	entries := make([]entryrecord.Record, 0, len(current)+len(changes))
+	for _, record := range current {
 		if _, drop := replaced[record.Entry.ID]; !drop {
 			entries = append(entries, record)
 		}

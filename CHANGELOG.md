@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Allow Entry creation, edits and bulk updates before runtime configuration is
+  prepared when no acknowledged workload or affected managed file needs changing.
+  Read selected values consistently from authored state and retain normal host
+  execution for existing configuration.
 - Preserve an existing key-only secret Entry's protected value when Blueprint
   adoption or an exposure edit changes its metadata.
 - Finish captured work revoked before assignment using a durable no-assignment

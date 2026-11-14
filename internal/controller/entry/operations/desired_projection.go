@@ -2,16 +2,14 @@ package operations
 
 import (
 	"context"
+	"sort"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-
 	"github.com/AlanD20/groundplane/internal/core"
-
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"sort"
 )
 
 func entryDesiredServiceIdentities(
@@ -40,7 +38,8 @@ func entryDesiredServiceIdentities(
 }
 
 func entryDesiredCandidateRecord(
-	current projectionrecord.EnvironmentComposeProjection,
+	environmentID string,
+	current []entryrecord.Record,
 	request entryDesiredMutationRequest,
 	revisionID string,
 ) (*entryrecord.Record, *entryrecord.Record, error) {
@@ -49,9 +48,9 @@ func entryDesiredCandidateRecord(
 	if request.action == entryDesiredMutationCreate {
 		desired.ID = entryStableIDFromRevision(ids.KindEnvEntry, revisionID)
 	} else {
-		for index := range current.Entries {
-			if current.Entries[index].Entry.ID == request.entryID {
-				value := current.Entries[index]
+		for index := range current {
+			if current[index].Entry.ID == request.entryID {
+				value := current[index]
 				previous = &value
 				break
 			}
@@ -69,7 +68,7 @@ func entryDesiredCandidateRecord(
 		persisted.Source.Literal = ""
 	}
 	record, err := entryrecord.NewRecord(
-		current.EnvironmentID, persisted, entryStableIDFromRevision(ids.KindConfig, revisionID),
+		environmentID, persisted, entryStableIDFromRevision(ids.KindConfig, revisionID),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -109,15 +108,13 @@ func (service *entryDesiredMutationService) resolveCurrentEntry(
 	if !found {
 		return "", entryrecord.Record{}, errs.New(errs.KindEntryNotFound, "Entry was not found")
 	}
-	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
+	source, err := service.repository.ReadEntryMutationSource(ctx, environmentID)
 	if err != nil {
 		return "", entryrecord.Record{}, err
 	}
-	if found {
-		for _, record := range projection.Record.Entries {
-			if record.Entry.ID == entryID {
-				return environmentID, record, nil
-			}
+	for _, record := range source.Entries {
+		if record.Entry.ID == entryID {
+			return environmentID, record, nil
 		}
 	}
 	return "", entryrecord.Record{}, errs.New(errs.KindEntryNotFound, "Entry was not found")
@@ -135,27 +132,24 @@ func (service *entryDesiredMutationService) validateExposure(
 	for _, name := range exposure {
 		missing[name] = struct{}{}
 	}
-	cursor := ""
-	for {
-		page, err := service.repository.ListServices(
-			ctx,
-			environmentID,
-			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
-		)
-		if err != nil {
-			return err
-		}
-		for _, item := range page.Items {
-			delete(missing, item.Record.Desired.Name)
-		}
-		if len(missing) == 0 {
-			return nil
-		}
-		if page.NextCursor == "" {
-			return errs.New(errs.KindServiceNotFound, "Entry exposure Service was not found")
-		}
-		cursor = page.NextCursor
+	_, initialized, err := service.repository.GetEnvironmentDesiredInput(ctx, environmentID)
+	if err != nil {
+		return err
 	}
+	if !initialized {
+		return errs.New(errs.KindServiceNotFound, "Entry exposure Service was not found")
+	}
+	source, err := service.repository.ReadEntryMutationSource(ctx, environmentID)
+	if err != nil {
+		return err
+	}
+	for _, identity := range source.Owned.Services {
+		delete(missing, identity.Name)
+	}
+	if len(missing) != 0 {
+		return errs.New(errs.KindServiceNotFound, "Entry exposure Service was not found")
+	}
+	return nil
 }
 
 func entryStableIDFromRevision(kind ids.Kind, revisionID string) string {

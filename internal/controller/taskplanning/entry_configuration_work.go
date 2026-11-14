@@ -30,7 +30,7 @@ func NewEntryConfigurationWork(scope workexecution.Scope, placement workexecutio
 	if blueprints.ValidateEnvironmentBlueprintStageClaim(claim) != nil ||
 		claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		claim.EnvironmentID != scope.EnvironmentID || claim.RevisionID != claim.TaskID ||
-		(placement.Executor != workexecution.Agent && (placement.Executor != workexecution.Controller || action != workexecution.ActionRemove)) ||
+		(placement.Executor != workexecution.Agent && placement.Executor != workexecution.Controller) ||
 		(action != workexecution.ActionCreate && action != workexecution.ActionUpdate && action != workexecution.ActionRemove) {
 		return workexecution.Task{}, workexecution.Item{}, errs.New(
 			errs.KindValidationFailed,

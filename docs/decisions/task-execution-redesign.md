@@ -263,6 +263,14 @@ aggregate Task completion. The finalizer compares the settled work and empty
 attempt index atomically; it preserves the original outcome and leaves captured
 source retirement with the operation owner. No Agent result is invented.
 
+Entry authoring reads declarations and their selected value generations, not
+derived Compose output. Before a runtime projection exists, a Controller
+decision may publish an Entry change only after comparing acknowledged workload
+absence and affected configuration bindings. Its typed receipt joins the desired
+head, Environment fence and replay marker atomically. No empty runtime projection
+is fabricated. The normal Agent path owns existing host configuration. Flat Entry
+rows may lag authoring; they cannot override an immutable authored value selection.
+
 Abort is a request, not proof of termination. Completion can win the race. A Task
 cannot report clean cancellation while effects remain unknown. Task action outcome
 and cleanup status are separate: failure or cancellation can require attention;

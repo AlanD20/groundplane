@@ -149,16 +149,6 @@ func (repository *entryRemovalRetryRepository) ResolveBlueprintEntryEnvironment(
 	return repository.environmentID, true, nil
 }
 
-func (repository *entryRemovalRetryRepository) GetEnvironmentComposeProjection(
-	context.Context,
-	string,
-) (keyvalue.Versioned[environmentprojection.EnvironmentComposeProjection], bool, error) {
-	return keyvalue.Versioned[environmentprojection.EnvironmentComposeProjection]{
-		Record: environmentprojection.EnvironmentComposeProjection{
-			EnvironmentID: repository.environmentID, Entries: []entries.Record{{Entry: core.EnvEntry{ID: repository.entryID}}}},
-	}, true, nil
-}
-
 func (*entryRemovalRetryRepository) InitializeEnvironmentDesiredState(
 	context.Context,
 	string,
@@ -235,6 +225,20 @@ func (*entryRemovalRetryRepository) ListEnvironmentComponents(
 }
 func (*entryRemovalRetryRepository) BlueprintEntryValueGenerationExists(context.Context, entries.Record) (bool, error) {
 	return false, unexpectedEntryRemovalRetryOperation()
+}
+
+func (repository *entryRemovalRetryRepository) ReadEntryMutationSource(
+	context.Context,
+	string,
+) (etcd.EntryMutationSource, error) {
+	return etcd.EntryMutationSource{Entries: []entries.Record{{Entry: core.EnvEntry{ID: repository.entryID}}}}, nil
+}
+
+func (*entryRemovalRetryRepository) PublishUnrenderedEntryWork(
+	context.Context,
+	etcd.EntryMetadataPublication,
+) (etcd.IdempotencyTransactionResult, error) {
+	return etcd.IdempotencyTransactionResult{}, unexpectedEntryRemovalRetryOperation()
 }
 
 func (*entryRemovalRetryRepository) CreateBlueprintEntryValueGeneration(

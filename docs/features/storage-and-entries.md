@@ -98,6 +98,13 @@ proxies. A stopped or absent Service is not started merely because its previous
 Release remains in history. With no selected running workload, the operation only
 materializes files.
 
+Before runtime configuration has been prepared, Entry changes can settle as
+Controller metadata when there is no acknowledged workload or affected managed
+file. This lets operators supply secret values needed by a first deployment or
+failed setup hook. Files are prepared by the next deployment. An existing runtime
+or file still requires its normal captured host operation; missing configuration
+never proves that those resources are absent.
+
 Entry removal is different: it updates or removes the pinned configuration files
 without running Compose or restarting a Service. A running process keeps its
 already-loaded environment until its next Deploy. The shared environment file

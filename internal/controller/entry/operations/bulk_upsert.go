@@ -126,10 +126,17 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	current, hasCurrent, err := service.desired.repository.GetEnvironmentComposeProjection(ctx, input.environmentID)
+	source, err := service.desired.repository.ReadEntryMutationSource(ctx, input.environmentID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	if source.Desired.Revision != head.Revision || source.Desired.Record.RevisionID != head.Record.RevisionID {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Entry desired source changed")
+	}
+	if source.Runtime == nil {
+		return service.bulkUnrenderedEntries(ctx, input, locator, evidence, source, project, environment)
+	}
+	current, hasCurrent := *source.Runtime, true
 	headRevision, generation, err := controllerrevision.NextGeneration(
 		input.environmentID,
 		head,
@@ -152,7 +159,12 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	}
 	now := service.desired.now().UTC()
 	candidateTaskID := ids.New(ids.KindTask)
-	candidateRecords, err := buildEntryBulkCandidate(current.Record, input, candidateTaskID)
+	candidateRecords, err := buildEntryBulkCandidate(
+		current.Record.EnvironmentID,
+		current.Record.Entries,
+		input,
+		candidateTaskID,
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -191,7 +203,12 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	candidateRecords, err = buildEntryBulkCandidate(current.Record, input, claim.TaskID)
+	candidateRecords, err = buildEntryBulkCandidate(
+		current.Record.EnvironmentID,
+		current.Record.Entries,
+		input,
+		claim.TaskID,
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

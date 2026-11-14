@@ -1,0 +1,205 @@
+package etcd
+
+import (
+	"context"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredauthoring"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/entrywork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+type EntryMetadataPublication struct {
+	Source  EntryMutationSource
+	Records []entries.Record
+	Changed []string
+	Task    workexecution.Task
+	Item    workexecution.Item
+	Marker  idempotency.IdempotencyMarker
+	At      time.Time
+}
+
+// PublishUnrenderedEntryWork accepts metadata only after proving that it has no
+// acknowledged host target. The same desired head and epoch fence every fact
+// used by that proof. It never publishes a made-up runtime projection.
+func (repository *EnvironmentBlueprintRepository) PublishUnrenderedEntryWork(
+	ctx context.Context, request EntryMetadataPublication,
+) (IdempotencyTransactionResult, error) {
+	source, task := request.Source, request.Task
+	if source.Runtime != nil || source.Desired.ReadRevision <= 0 || task.Validate() != nil ||
+		request.Item.Validate() != nil || request.Item.Placement.Executor != workexecution.Controller ||
+		task.Scope.EnvironmentID != source.Desired.Record.EnvironmentID || request.Item.TaskID != task.ID ||
+		request.Marker.TaskID != task.ID || task.Intent.SHA256 != request.Marker.Intent.CiphertextDigest ||
+		request.At.IsZero() || !request.At.Equal(task.CreatedAt) || len(request.Changed) == 0 ||
+		(task.TargetID != task.Scope.EnvironmentID && (len(request.Changed) != 1 || request.Changed[0] != task.TargetID)) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Entry metadata publication has invalid authority",
+		)
+	}
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
+		found {
+		return existing, err
+	}
+	authority, err := repository.readEntryMutationSourceAt(ctx, task.Scope.EnvironmentID, source.Desired.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if authority.Runtime != nil || authority.Desired.Revision != source.Desired.Revision ||
+		authority.Desired.Record.RevisionID != source.Desired.Record.RevisionID {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Entry metadata source changed")
+	}
+	source, request.Source = authority, authority
+	if err := repository.validateEntryMetadataRecords(ctx, request); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	fence, err := environmentfence.LoadOrdinary(
+		ctx,
+		repository.store,
+		task.Scope.EnvironmentID,
+		source.Desired.ReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	configuration, runtimeGuards, err := repository.entryMetadataHostProof(ctx, source, request.Changed)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	publication, err := desiredauthoring.PrepareUnrenderedEntries(ctx, repository.store,
+		task.Scope.EnvironmentID, request.Marker, source.Desired.Revision, request.Records)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer keyvalue.ClearMutationValues(publication.Mutations)
+	change, err := entrywork.PrepareMetadataPublication(task, request.Item, configuration,
+		request.Marker, request.At)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer keyvalue.ClearMutationValues(change.Mutations)
+	change.Conditions = append(change.Conditions, publication.Conditions...)
+	change.Conditions = append(change.Conditions, runtimeGuards...)
+	change.Conditions, err = environmentfence.AppendConditions(change.Conditions, fence)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	change.Conditions = append(change.Conditions, keyvalue.Condition{
+		Key: runtimeconfiguration.HeadKey(task.Scope.EnvironmentID), ModRevision: configuration,
+	})
+	for _, mutation := range publication.Mutations {
+		mutation.Value = append([]byte(nil), mutation.Value...)
+		change.Mutations = append(change.Mutations, mutation)
+	}
+	markerConditions, markerMutations, err := idempotency.PreparePublication(request.Marker)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	change.Conditions = append(change.Conditions, markerConditions...)
+	change.Mutations = append(change.Mutations, markerMutations...)
+	if task.Action == workexecution.ActionRemove {
+		removal, err := repository.prepareEntryMetadataRemoval(ctx, request)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		change.Conditions = append(change.Conditions, removal.Conditions...)
+		change.Mutations = append(change.Mutations, removal.Mutations...)
+	}
+	epoch, err := fence.EpochRewriteMutation()
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	change.Mutations = append(change.Mutations, epoch)
+	queue, err := workqueue.NewRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	result, err := queue.Commit(ctx, change)
+	keyvalue.ClearValues(result.FailureReads)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if result.Succeeded {
+		return IdempotencyTransactionResult{kind: idempotencyTransactionApplied, revision: result.Revision}, nil
+	}
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
+		found {
+		return existing, err
+	}
+	return IdempotencyTransactionResult{}, errs.New(
+		errs.KindStateConflict,
+		"Entry metadata changed before atomic acceptance",
+	)
+}
+
+func (repository *EnvironmentBlueprintRepository) entryMetadataHostProof(ctx context.Context,
+	source EntryMutationSource, changed []string,
+) (int64, []keyvalue.Condition, error) {
+	// Compare each observed runtime key in the publication transaction. The
+	// Environment epoch alone does not prove that an acknowledgement stayed absent.
+	var guards []keyvalue.Condition
+	for start := 0; start < len(source.Owned.Services); start += 64 {
+		end := min(start+64, len(source.Owned.Services))
+		keys := make([]string, 0, end-start)
+		for _, identity := range source.Owned.Services[start:end] {
+			keys = append(keys, serviceruntimerecord.Key(identity.ID))
+		}
+		read, err := repository.store.GetMany(
+			ctx,
+			keyvalue.GetManyRequest{Keys: keys, Revision: source.Desired.ReadRevision},
+		)
+		if err != nil {
+			return 0, nil, err
+		}
+		if read == nil || read.ReadRevision != source.Desired.ReadRevision || len(read.Values) != len(keys) {
+			return 0, nil, errs.New(errs.KindInternal, "Entry runtime observation is incomplete")
+		}
+		present := false
+		for _, value := range read.Values {
+			present = present || value != nil
+		}
+		keyvalue.ClearValues(read.Values)
+		for _, key := range keys {
+			guards = append(guards, keyvalue.Condition{Key: key})
+		}
+		if present {
+			return 0, nil, errs.New(
+				errs.KindStateConflict,
+				"Entry change affects acknowledged runtime; finish preparing the Environment configuration",
+			)
+		}
+	}
+	files, err := runtimeconfiguration.New(repository.store)
+	if err != nil {
+		return 0, nil, err
+	}
+	snapshot, head, err := files.ReadAcknowledged(ctx, source.Desired.Record.EnvironmentID, source.Desired.ReadRevision)
+	if err != nil {
+		return 0, nil, err
+	}
+	targets := make(map[string]bool, len(changed))
+	for _, id := range changed {
+		targets[id] = true
+	}
+	for _, file := range snapshot.Files {
+		if file.Source.EntryValue != nil && targets[file.Source.EntryValue.EntryID] {
+			return 0, nil, entryDefinitionConflict()
+		}
+		if generated := file.Source.GeneratedEnvironment; generated != nil {
+			for _, value := range generated.Values {
+				if targets[value.Value.EntryID] {
+					return 0, nil, entryDefinitionConflict()
+				}
+			}
+		}
+	}
+	return head, guards, nil
+}
